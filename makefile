@@ -1,5 +1,7 @@
 .RECIPEPREFIX = >
 
+DEBUG ?= 0
+
 ARCH := $(shell uname -m | tr '[:upper:]' '[:lower:]')
 OS   := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 
@@ -10,17 +12,19 @@ all: acorn
 
 # ACORN BUILDING TARGETS ===============================================================================================================================================================================
 
+.PHONY: acorn docs run test
+
 acorn: zig-bin/zig
-> ./zig-bin/zig build
+> ./zig-bin/zig build $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
 
 docs: zig-bin/zig
-> ./zig-bin/zig build docs
+> ./zig-bin/zig build $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast) docs
 
 run: zig-bin/zig
-> ./zig-bin/zig build run
+> ./zig-bin/zig build $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast) run
 
 test: zig-bin/zig
-> ./zig-bin/zig build test
+> ./zig-bin/zig build $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast) test
 
 # EXTERNAL TARGETS =====================================================================================================================================================================================
 
@@ -30,5 +34,8 @@ zig-bin/zig:
 
 # CLEAN TARGETS ========================================================================================================================================================================================
 
-clean:
-> git clean -dffx
+clean-cache:
+> rm -rf ${HOME}/.cache/zig .zig-cache
+
+clean-root:
+> rm -rf *.all *.json *.mat *.xyz

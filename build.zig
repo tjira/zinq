@@ -2,38 +2,40 @@ const builtin = @import("builtin");
 const std     = @import("std");
 
 const targets: []const std.Target.Query = &.{
+    .{.os_tag = .freebsd, .cpu_arch = .aarch64},
+    .{.os_tag = .freebsd, .cpu_arch = .arm    },
+    .{.os_tag = .freebsd, .cpu_arch = .x86    },
+    .{.os_tag = .freebsd, .cpu_arch = .x86_64 },
     .{.os_tag = .linux,   .cpu_arch = .aarch64},
+    .{.os_tag = .linux,   .cpu_arch = .arm    },
     .{.os_tag = .linux,   .cpu_arch = .riscv64},
+    .{.os_tag = .linux,   .cpu_arch = .x86    },
     .{.os_tag = .linux,   .cpu_arch = .x86_64 },
     .{.os_tag = .macos,   .cpu_arch = .aarch64},
     .{.os_tag = .macos,   .cpu_arch = .x86_64 },
+    .{.os_tag = .netbsd,  .cpu_arch = .aarch64},
+    .{.os_tag = .netbsd,  .cpu_arch = .arm    },
+    .{.os_tag = .netbsd,  .cpu_arch = .x86    },
+    .{.os_tag = .netbsd,  .cpu_arch = .x86_64 },
     .{.os_tag = .windows, .cpu_arch = .aarch64},
+    .{.os_tag = .windows, .cpu_arch = .x86    },
     .{.os_tag = .windows, .cpu_arch = .x86_64 },
 };
 
 pub fn build(builder: *std.Build) !void {
-    const debug = builder.option(bool, "DEBUG", "Build everything in the debug mode") orelse false;
+    const optimize = builder.standardOptimizeOption(.{});
 
     for (targets) |target| {
 
         const main_executable = builder.addExecutable(.{
             .name = "zinq",
             .root_module = builder.createModule(.{
-                .optimize = if (debug) .Debug else .ReleaseFast,
-                .root_source_file = builder.path("src/main.zig"),
-                .strip = !debug,
+                .optimize = optimize,
+                .root_source_file = builder.path("src/zinq.zig"),
+                .strip = optimize != .Debug,
                 .target = builder.resolveTargetQuery(target)
-            })
-        });
-
-        const test_executable = builder.addTest(.{
-            .name = "test",
-            .root_module = builder.createModule(.{
-                .optimize = if (debug) .Debug else .ReleaseFast,
-                .root_source_file = builder.path("src/main.zig"),
-                .strip = !debug,
-                .target = builder.resolveTargetQuery(target)
-            })
+            }),
+            .use_llvm = true
         });
 
         const main_executable_install = builder.addInstallArtifact(main_executable, .{
@@ -43,6 +45,10 @@ pub fn build(builder: *std.Build) !void {
         builder.getInstallStep().dependOn(&main_executable_install.step);
 
         if (builtin.target.cpu.arch == target.cpu_arch and builtin.target.os.tag == target.os_tag) {
+
+            const test_executable = builder.addTest(.{
+                .name = "test", .root_module = main_executable.root_module,
+            });
 
             builder.step("run",  "Run the compiled executable").dependOn(&builder.addRunArtifact(main_executable).step);
             builder.step("test", "Run unit tests"             ).dependOn(&builder.addRunArtifact(test_executable).step);

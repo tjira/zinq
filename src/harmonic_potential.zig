@@ -1,0 +1,26 @@
+//! File with harmonic potential struct and functions.
+
+const std = @import("std");
+
+const classical_particle = @import("classical_particle.zig");
+const real_matrix = @import("real_matrix.zig");
+
+const ClassicalParticle = classical_particle.ClassicalParticle;
+const RealMatrix = real_matrix.RealMatrix;
+
+/// Struct holding parameters for the multidimensional harmonic potential.
+pub fn HarmonicPotential(comptime T: type) type {
+    return struct {
+        k: []const T = &[_]T{1},
+
+        pub fn eval(self: HarmonicPotential(T), U: *RealMatrix(T), system: ClassicalParticle(T), time: T) !void {
+            if (system.ndim != self.k.len) return error.DimensionMismatch;
+
+            _ = time; U.zero();
+
+            for (0..self.k.len) |i| {
+                U.ptr(0, 0).* += 0.5 * self.k[i] * system.position.at(i) * system.position.at(i);
+            }
+        }
+    };
+}
