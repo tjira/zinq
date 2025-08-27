@@ -3,11 +3,16 @@
 const std = @import("std");
 
 const classical_dynamics = @import("classical_dynamics.zig");
+const electronic_potential = @import("electronic_potential.zig");
+const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
+const ElectronicPotential = electronic_potential.ElectronicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
+
+const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
 
 /// Classical particle struct that holds all information about the classical-like coordinates, velocities and masses.
 pub fn ClassicalParticle(comptime T: type) type {
@@ -15,15 +20,17 @@ pub fn ClassicalParticle(comptime T: type) type {
         ndim: usize,
         position: RealVector(T),
         velocity: RealVector(T),
+        acceleration: RealVector(T),
         masses: RealVector(T),
         allocator: std.mem.Allocator,
 
         /// Initialize the system using the number of dimensions, an array of masses, and an allocator. The positions and velocities are undefined after initialization.
-        pub fn init(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !ClassicalParticle(T) {
-            const particle = ClassicalParticle(T){
+        pub fn init(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !@This() {
+            const particle = @This(){
                 .ndim = ndim,
                 .position = try RealVector(T).init(ndim, allocator),
                 .velocity = try RealVector(T).init(ndim, allocator),
+                .acceleration = try RealVector(T).init(ndim, allocator),
                 .masses = try RealVector(T).init(ndim, allocator),
                 .allocator = allocator
             };
@@ -34,27 +41,36 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Initialize the system using the number of dimensions, an array of masses, and an allocator. The positions and velocities are initialized to zero.
-        pub fn initZero(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !ClassicalParticle(T) {
-            var particle = try ClassicalParticle(T).init(ndim, masses, allocator);
+        pub fn initZero(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !@This() {
+            var particle = try @This().init(ndim, masses, allocator);
 
             particle.position.zero();
             particle.velocity.zero();
+            particle.acceleration.zero();
 
             return particle;
         }
 
         /// Free the memory allocated for the system.
-        pub fn deinit(self: ClassicalParticle(T)) void {
+        pub fn deinit(self: @This()) void {
             self.position.deinit();
             self.velocity.deinit();
             self.masses.deinit();
         }
 
-        /// Sets the position of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
-        pub fn setPositionRandn(self: *ClassicalParticle(T), mean: []const T, stdev: []const T, seed: usize) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) return error.DimensionMismatch;
+        /// Propagate the classical particle using velocity verlet algorithm.
+        pub fn propagateVelocityVerlet(self: *@This(), potential: ElectronicPotential(T), current_state: u32, time_step: T) !void {
+            for (0..self.ndim) |i| {
+                self.position.ptr(i).* += (self.velocity.at(i) + 0.5 * self.acceleration.at(i) * time_step) * time_step;
+            }
 
-            var rng = std.Random.DefaultPrng.init(seed); var random = rng.random();
+            _ = potential;
+            _ = current_state;
+        }
+
+        /// Sets the position of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
+        pub fn setPositionRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
+            if (mean.len != self.ndim or stdev.len != self.ndim) return error.DimensionMismatch;
 
             for (0..self.ndim) |i| {
                 self.position.ptr(i).* = mean[i] + stdev[i] * random.floatNorm(T);
@@ -62,10 +78,8 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Sets the momentum of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
-        pub fn setMomentumRandn(self: *ClassicalParticle(T), mean: []const T, stdev: []const T, seed: usize) !void {
+        pub fn setMomentumRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
             if (mean.len != self.ndim or stdev.len != self.ndim) return error.DimensionMismatch;
-
-            var rng = std.Random.DefaultPrng.init(seed); var random = rng.random();
 
             for (0..self.ndim) |i| {
                 self.velocity.ptr(i).* = (mean[i] + stdev[i] * random.floatNorm(T)) / self.masses.at(i);

@@ -16,10 +16,9 @@ pub fn TullyPotential1(comptime T: type) type {
     return struct {
         A: T = 0.01, B: T = 1.6, C: T = 0.005, D: T = 1,
 
-        pub fn eval(self: TullyPotential1(T), U: *RealMatrix(T), system: ClassicalParticle(T), time: T) !void {
-            if (system.ndim != 1) return error.DimensionMismatch;
-
-            _ = time; U.zero();
+        /// Diabatic potential matrix evaluator.
+        pub fn evaluateDiabatic(self: TullyPotential1(T), U: *RealMatrix(T), system: ClassicalParticle(T), time: T) void {
+            _ = time;
 
             U.ptr(0, 0).* = sgn(system.position.at(0)) * self.A * (std.math.exp(-sgn(system.position.at(0)) * self.B * system.position.at(0)));
             U.ptr(0, 1).* = self.C * std.math.exp(-self.D * system.position.at(0) * system.position.at(0));

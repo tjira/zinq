@@ -34,5 +34,5 @@
 </p>
 
 <p align="center">
-Simplicity over complexity. Clarity over speed. A modern zig code for electronic structure theory, quantum chemistry and mathematical algorithms.
+A modern Zig-based framework for electronic structure theory, quantum chemistry, and mathematical algorithms. It prioritizes simplicity over complexity and readability over speed.
 </p>

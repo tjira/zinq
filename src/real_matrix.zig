@@ -53,6 +53,11 @@ pub fn RealMatrix(comptime T: type) type {
             @memset(self.data, value);
         }
 
+        /// Square checker.
+        pub fn isSquare(self: RealMatrix(T)) bool {
+            return self.rows == self.cols;
+        }
+
         /// Get the pointer to the element at (i, j).
         pub fn ptr(self: *RealMatrix(T), i: usize, j: usize) *T {
             return &self.data[i * self.cols + j];

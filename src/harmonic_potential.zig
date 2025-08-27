@@ -13,10 +13,9 @@ pub fn HarmonicPotential(comptime T: type) type {
     return struct {
         k: []const T = &[_]T{1},
 
-        pub fn eval(self: HarmonicPotential(T), U: *RealMatrix(T), system: ClassicalParticle(T), time: T) !void {
-            if (system.ndim != self.k.len) return error.DimensionMismatch;
-
-            _ = time; U.zero();
+        /// Diabatic potential evaluator.
+        pub fn evaluateDiabatic(self: HarmonicPotential(T), U: *RealMatrix(T), system: ClassicalParticle(T), time: T) void {
+            _ = time; U.ptr(0, 0).* = 0;
 
             for (0..self.k.len) |i| {
                 U.ptr(0, 0).* += 0.5 * self.k[i] * system.position.at(i) * system.position.at(i);

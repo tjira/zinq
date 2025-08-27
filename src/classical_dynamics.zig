@@ -31,7 +31,8 @@ pub fn Options(comptime T: type) type {
             state: u32
         };
         pub const LogIntervals = struct {
-            trajectory: u32 = 1, iteration: u32 = 1
+            trajectory: u32 = 1,
+            iteration: u32 = 1
         };
 
         electronic_potential: ElectronicPotential(T),
@@ -43,24 +44,48 @@ pub fn Options(comptime T: type) type {
 
         log_intervals: LogIntervals = .{},
 
-        finite_differences_step: T = 1e-8,
-        seed: u32 = 1
+        seed: u32 = 0,
     };
 }
 
 /// Run classical dynamics simulation.
 pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) !void {
     const ndim = options.electronic_potential.ndim();
+
+    var rng = std.Random.DefaultPrng.init(options.seed); var random = rng.random();
+
+    for (0..options.trajectories) |i| {
+
+        var system = try ClassicalParticle(T).initZero(ndim, options.initial_conditions.mass, allocator); defer system.deinit();
+
+        try system.setPositionRandn(options.initial_conditions.position_mean, options.initial_conditions.position_std, &random);
+        try system.setMomentumRandn(options.initial_conditions.momentum_mean, options.initial_conditions.momentum_std, &random);
+
+        try runTrajectory(T, options, &system, i, allocator);
+    }
+}
+
+/// Run a single trajectory.
+pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalParticle(T), index: usize, allocator: std.mem.Allocator) !void {
+    // const ndim = options.electronic_potential.ndim();
     const nstate = options.electronic_potential.nstate();
 
-    var system = try ClassicalParticle(T).initZero(ndim, options.initial_conditions.mass, allocator); defer system.deinit();
+    const current_state = options.initial_conditions.state;
 
-    try system.setPositionRandn(options.initial_conditions.position_mean, options.initial_conditions.position_std, options.seed + 0);
-    try system.setMomentumRandn(options.initial_conditions.momentum_mean, options.initial_conditions.momentum_std, options.seed + 1);
+    // var diabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer diabatic_potential.deinit();
+    var adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_potential.deinit();
+    // var potential_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer potential_eigenvectors.deinit();
 
-    var U = try RealMatrix(T).init(nstate, nstate, allocator); defer U.deinit();
+    for (0..options.iterations) |i| {
 
-    try options.electronic_potential.eval(&U, system, 0);
+        const time = @as(T, @floatFromInt(i)) * options.time_step;
 
-    try printRealMatrix(T, U);
+        if (i > 0) {
+            try system.propagateVelocityVerlet(options.electronic_potential, current_state, options.time_step);
+        }
+
+        options.electronic_potential.evaluateAdiabatic(&adiabatic_potential, system.*, time);
+
+        std.debug.print("{d:8} {d:8} {d} {d} {d}\n", .{index + 1, i,adiabatic_potential.at(0, 0), system.position.at(0), system.velocity.at(0)});
+    }
 }
