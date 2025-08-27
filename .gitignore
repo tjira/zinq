@@ -1,5 +1,6 @@
-docs/*code
-docs/*site
-docs/*lock
+*.loc*
+*.png*
 
-*zig*
+*cod*/
+*sit*/
+*zig*/
