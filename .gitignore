@@ -1,0 +1,6 @@
+docs/*code
+docs/*site
+docs/*file
+docs/*lock
+
+*zig*

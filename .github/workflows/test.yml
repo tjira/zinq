@@ -1,0 +1,23 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  test_linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Tests
+        run: make test
+
+      - name: Setup Tmate Session
+        if: failure()
+        uses: mxschmitt/action-tmate/detached@v3

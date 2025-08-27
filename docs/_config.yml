@@ -1,0 +1,15 @@
+title: Zinq
+email: tom.jira@gmail.com
+github_username: tjira
+
+url: "https://tjira.github.io"
+baseurl: "/zinq"
+
+plugins:
+  - jekyll-remote-theme
+
+remote_theme: just-the-docs/just-the-docs
+
+aux_links:
+  "Zinq on GitHub":
+    - "//github.com/tjira/zinq"

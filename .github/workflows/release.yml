@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v**'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile the Project
+        run: make
+
+      - name: Rename and Move Binaries
+        run: |
+          mkdir -p bin && cd zig-out && for FOLDER in *linux*;  do mv $FOLDER/acorn     ../bin/acorn-$FOLDER;     done && cd -
+          mkdir -p bin && cd zig-out && for FOLDER in *macos;   do mv $FOLDER/acorn     ../bin/acorn-$FOLDER;     done && cd -
+          mkdir -p bin && cd zig-out && for FOLDER in *windows; do mv $FOLDER/acorn.exe ../bin/acorn-$FOLDER.exe; done && cd -
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: bin
+          path: bin
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Release All Versions of Acorn
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{secrets.GITHUB_TOKEN}}
+          file_glob: true
+          file: bin/acorn*
+          tag: ${{github.ref}}
