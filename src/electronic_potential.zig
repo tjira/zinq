@@ -2,7 +2,6 @@
 
 const std = @import("std");
 
-const classical_particle = @import("classical_particle.zig");
 const global_variables = @import("global_variables.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const linear_algebra = @import("linear_algebra.zig");
@@ -10,7 +9,6 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const tully_potential = @import("tully_potential.zig");
 
-const ClassicalParticle = classical_particle.ClassicalParticle;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;

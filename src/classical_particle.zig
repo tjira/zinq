@@ -2,9 +2,7 @@
 
 const std = @import("std");
 
-const classical_dynamics = @import("classical_dynamics.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const linear_algebra = @import("linear_algebra.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -56,6 +54,7 @@ pub fn ClassicalParticle(comptime T: type) type {
         pub fn deinit(self: @This()) void {
             self.position.deinit();
             self.velocity.deinit();
+            self.acceleration.deinit();
             self.masses.deinit();
         }
 

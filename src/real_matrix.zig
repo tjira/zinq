@@ -32,9 +32,23 @@ pub fn RealMatrix(comptime T: type) type {
             self.allocator.free(self.data);
         }
 
+        /// Add another matrix to this matrix.
+        pub fn add(self: *@This(), other: @This()) void {
+            std.debug.assert(self.rows == other.rows and self.cols == other.cols);
+
+            for (self.data, 0..) |*element, index| {
+                element.* += other.data[index];
+            }
+        }
+
         /// Get the element at (i, j).
         pub fn at(self: @This(), i: usize, j: usize) T {
             return self.data[i * self.cols + j];
+        }
+
+        /// Divide the matrix by a scalar value.
+        pub fn divs(self: *@This(), value: T) void {
+            for (self.data) |*element| element.* /= value;
         }
 
         /// Equality operator for matrices.

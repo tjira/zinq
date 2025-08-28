@@ -8,13 +8,13 @@ OS   := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ZIG_VERSION := 0.15.1
 ZLS_VERSION := 0.15.0
 
-all: acorn
+all: zinq
 
 # ACORN BUILDING TARGETS ===============================================================================================================================================================================
 
 .PHONY: acorn docs run test
 
-acorn: zig-bin/zig
+zinq: zig-bin/zig
 > ./zig-bin/zig build $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
 
 docs: zig-bin/zig
@@ -25,6 +25,11 @@ run: zig-bin/zig
 
 test: zig-bin/zig
 > ./zig-bin/zig build $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast) test
+
+# CUSTOM TARGETS =======================================================================================================================================================================================
+
+serve:
+> cd docs && bundle exec jekyll serve
 
 # EXTERNAL TARGETS =====================================================================================================================================================================================
 
@@ -41,4 +46,4 @@ clean-output:
 > rm -rf zig-out
 
 clean-root:
-> rm -rf *.all *.json *.mat *.xyz
+> rm -rf *.all *.dot *.json *.mat *.out *.xyz

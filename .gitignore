@@ -1,5 +1,7 @@
+*.dot*
 *.loc*
 *.mat*
+*.out*
 *.png*
 
 *cod*/

@@ -10,21 +10,14 @@ pub const device_write = @import("device_write.zig");
 pub const electronic_potential = @import("electronic_potential.zig");
 pub const global_variables = @import("global_variables.zig");
 pub const harmonic_potential = @import("harmonic_potential.zig");
+pub const landau_zener = @import("landau_zener.zig");
 pub const linear_algebra = @import("linear_algebra.zig");
 pub const math_functions = @import("math_functions.zig");
+pub const object_array = @import("object_array.zig");
 pub const real_matrix = @import("real_matrix.zig");
 pub const real_vector = @import("real_vector.zig");
-
-const Complex = std.math.complex.Complex;
-const RealMatrix = real_matrix.RealMatrix;
-const ComplexMatrix = complex_matrix.ComplexMatrix;
-
-const print = device_write.print;
-const exportRealMatrix = device_write.exportRealMatrix;
-const printRealMatrix = device_write.printRealMatrix;
-const mmRealAlloc = linear_algebra.mmRealAlloc;
-
-const MAX_INPUT_FILE_BYTES = global_variables.MAX_INPUT_FILE_BYTES;
+pub const ring_buffer = @import("ring_buffer.zig");
+pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 
 /// Structure to handle different targets.
 const Handler = struct {
@@ -41,9 +34,9 @@ const handlers = [_]struct {key: []const u8, handler: Handler}{
 
 /// Parse the input JSON file and run the corresponding target.
 pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
-    const file_contents = try std.fs.cwd().readFileAlloc(allocator, path, MAX_INPUT_FILE_BYTES); defer allocator.free(file_contents);
+    const file_contents = try std.fs.cwd().readFileAlloc(allocator, path, global_variables.MAX_INPUT_FILE_BYTES); defer allocator.free(file_contents);
 
-    try print("\nPROCESSED FILE: {s}\n", .{path});
+    try device_write.print("\nPROCESSED FILE: {s}\n", .{path});
 
     const input_json = try std.json.parseFromSlice(std.json.Value, allocator, file_contents, .{}); defer input_json.deinit();
 
@@ -71,7 +64,7 @@ pub fn main() !void {
         if (gpa.deinit() == .leak) std.debug.panic("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
-    try print("ZIG VERSION: {d}.{d}.{d}\n", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch});
+    try device_write.print("ZIG VERSION: {d}.{d}.{d}\n", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch});
 
     var argc: usize = 0; var argv = try std.process.argsWithAllocator(allocator); defer argv.deinit(); _ = argv.next();
 
@@ -83,10 +76,10 @@ pub fn main() !void {
 
         if (err != error.FileNotFound) return err;
 
-        try print("\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND\n", .{});
+        try device_write.print("\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND\n", .{});
     };
 
-    try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
+    try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
 }
 
 test {

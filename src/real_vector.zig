@@ -30,9 +30,23 @@ pub fn RealVector(comptime T: type) type {
             self.allocator.free(self.data);
         }
 
+        /// Add another vector to this vector.
+        pub fn add(self: *@This(), other: @This()) void {
+            std.debug.assert(self.len == other.len);
+
+            for (self.data, 0..) |*element, index| {
+                element.* += other.data[index];
+            }
+        }
+
         /// Get the element at index i.
         pub fn at(self: @This(), i: usize) T {
             return self.data[i];
+        }
+
+        /// Divide the vector by a scalar value.
+        pub fn divs(self: *@This(), value: T) void {
+            for (self.data) |*element| element.* /= value;
         }
 
         /// Equality operator for vectors.
@@ -51,9 +65,28 @@ pub fn RealVector(comptime T: type) type {
             @memset(self.data, value);
         }
 
+        /// Calculate the mean of all elements in the vector.
+        pub fn mean(self: @This()) T {
+            return self.sum() / @as(T, @floatFromInt(self.len));
+        }
+
+        /// Multiply the vector by a scalar value.
+        pub fn muls(self: *@This(), value: T) void {
+            for (self.data) |*element| element.* *= value;
+        }
+
         /// Get the pointer to the element at index i.
         pub fn ptr(self: *@This(), i: usize) *T {
             return &self.data[i];
+        }
+
+        /// Calculates the sum of all elements in the vector.
+        pub fn sum(self: @This()) T {
+            var total: T = 0;
+
+            for (self.data) |element| total += element;
+
+            return total;
         }
 
         /// Fills the vector with zeros.
