@@ -60,7 +60,7 @@ pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), B: RealMatr
 pub fn mmRealAlloc(comptime T: type, A: RealMatrix(T), B: RealMatrix(T)) !RealMatrix(T) {
     var C = try RealMatrix(T).init(A.rows, B.cols, A.allocator);
 
-    try mmReal(T, &C, A, B);
+    mmReal(T, &C, A, B);
 
     return C;
 }
