@@ -19,15 +19,18 @@ pub const real_vector = @import("real_vector.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 
+const RealType = f64;
+
 /// Structure to handle different targets.
 const Handler = struct {
-    Options: type, run: fn (comptime type, anytype, std.mem.Allocator) anyerror!void,
+    Options: type, Output: type, run: fn (comptime type, anytype, std.mem.Allocator) anyerror!*anyopaque,
 };
 
 /// Array of handlers for different targets.
 const handlers = [_]struct {key: []const u8, handler: Handler}{
     .{.key = "classical_dynamics", .handler = Handler{
-        .Options = classical_dynamics.Options(f64),
+        .Options = classical_dynamics.Options(RealType),
+        .Output = classical_dynamics.Output(RealType),
         .run = classical_dynamics.run
     }}
 };
@@ -49,7 +52,9 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 
             const options_struct = try std.json.parseFromValue(pair.handler.Options, allocator, options, .{}); defer options_struct.deinit();
 
-            try pair.handler.run(f64, options_struct.value, allocator);
+            const output_pointer = try pair.handler.run(RealType, options_struct.value, allocator);
+
+            const output: *pair.handler.Output = @ptrCast(@alignCast(output_pointer)); defer output.deinit();
         };
     }
 }

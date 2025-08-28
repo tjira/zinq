@@ -28,8 +28,17 @@ test: zig-bin/zig
 
 # CUSTOM TARGETS =======================================================================================================================================================================================
 
-serve:
-> cd docs && bundle exec jekyll serve
+callgrind: zinq
+> @valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq
+
+linguist:
+> @github-linguist
+
+profile: callgrind
+> @gprof2dot --format=callgrind --output=profile.dot --root=zinq.parse callgrind.out && dot -T png profile.dot -o profile.png
+
+serve: docs
+> @cd docs && bundle exec jekyll serve
 
 # EXTERNAL TARGETS =====================================================================================================================================================================================
 
@@ -46,4 +55,4 @@ clean-output:
 > rm -rf zig-out
 
 clean-root:
-> rm -rf *.all *.dot *.json *.mat *.out *.xyz
+> rm -rf *.all *.dot *.json *.mat *.out *.png *.xyz

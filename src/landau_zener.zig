@@ -8,6 +8,14 @@ const object_array = @import("object_array.zig");
 const RealVector = real_vector.RealVector;
 const RingBufferArray = object_array.RingBufferArray;
 
+/// Parameters for the Landau-Zener method.
+pub fn Parameters(comptime T: type) type {
+    return struct {
+        energy_gaps: RingBufferArray(T),
+        time_step: T
+    };
+}
+
 /// Struct holding the Landau-Zener surface hopping algorithm implementation.
 pub fn LandauZener(comptime T: type) type {
     return struct {
@@ -21,21 +29,21 @@ pub fn LandauZener(comptime T: type) type {
         three_state_variant: ThreeStateVariant = .maximum_curvature,
 
         /// Get the jump probabilities for the current state.
-        pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), energy_gaps: RingBufferArray(T), current_state: u32, time_step: T) void {
+        pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: u32) void {
             jump_probabilities.zero(); var maxddZ0: T = -std.math.inf(T); var minZ0: T = std.math.inf(T);
 
             for (0..jump_probabilities.len) |i| if (i != current_state) {
 
                 const coupling_index = current_state + i - 1;
 
-                const Z0 = energy_gaps.at(coupling_index).last(0);
-                const Z1 = energy_gaps.at(coupling_index).last(1);
-                const Z2 = energy_gaps.at(coupling_index).last(2);
+                const Z0 = parameters.energy_gaps.at(coupling_index).last(0);
+                const Z1 = parameters.energy_gaps.at(coupling_index).last(1);
+                const Z2 = parameters.energy_gaps.at(coupling_index).last(2);
 
-                const dZ0 = (Z0 - Z1) / time_step;
-                const dZ1 = (Z1 - Z2) / time_step;
+                const dZ0 = (Z0 - Z1) / parameters.time_step;
+                const dZ1 = (Z1 - Z2) / parameters.time_step;
 
-                const ddZ0 = (Z0 - 2 * Z1 + Z2) / time_step / time_step;
+                const ddZ0 = (Z0 - 2 * Z1 + Z2) / parameters.time_step / parameters.time_step;
 
                 if (dZ0 * dZ1 > 0 or (dZ0 * dZ1 < 0 and ddZ0 < 0)) continue;
 

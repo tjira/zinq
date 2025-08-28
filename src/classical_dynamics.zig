@@ -5,6 +5,7 @@ const std = @import("std");
 const classical_particle = @import("classical_particle.zig");
 const device_write = @import("device_write.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const landau_zener = @import("landau_zener.zig");
 const linear_algebra = @import("linear_algebra.zig");
 const object_array = @import("object_array.zig");
 const real_matrix = @import("real_matrix.zig");
@@ -105,13 +106,13 @@ pub fn Custom(comptime T: type) type {
 }
 
 /// Run classical dynamics simulation.
-pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) !void {
+pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) !*anyopaque {
     try print("\nRUNNING CLASSICAL DYNAMICS WITH {d} TRAJECTORIES OF {d} ITERATIONS EACH\n\n", .{options.trajectories, options.iterations});
 
     const ndim = options.potential.ndim();
     const nstate = options.potential.nstate();
 
-    var output = try Output(T).init(nstate, options.iterations, allocator); defer output.deinit();
+    var output = try Output(T).init(nstate, options.iterations, allocator);
 
     var split_mix = std.Random.SplitMix64.init(options.seed); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
@@ -134,6 +135,8 @@ pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) 
     for (0..nstate) |i| {
         try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(options.iterations, i)});
     }
+
+    return @ptrCast(&output);
 }
 
 /// Run a single trajectory.
@@ -157,6 +160,16 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     var energy_gaps = try RingBufferArray(T).init((2 * nstate - 2) / 2, .{.max_len = 5}, allocator); defer energy_gaps.deinit();
     var jump_probabilities = try RealVector(T).init(nstate, allocator); defer jump_probabilities.deinit();
 
+    const lz_parameters: landau_zener.Parameters(T) = .{
+        .energy_gaps = energy_gaps,
+        .time_step = options.time_step,
+    };
+
+    const surface_hopping_parameters: surface_hopping_algorithm.Parameters(T) = .{
+        .adiabatic_potential = adiabatic_potential,
+        .lz_parameters = lz_parameters,
+    };
+
     var split_mix = std.Random.SplitMix64.init(options.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
     for (0..options.iterations + 1) |i| {
@@ -174,7 +187,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
         };
 
         if (options.surface_hopping) |algorithm| if (i > 2) {
-            current_state = algorithm.jump(system, &jump_probabilities, energy_gaps, current_state, options.time_step, &random);
+            current_state = algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, current_state, &random);
         };
 
         const kinetic_energy = system.kineticEnergy();
