@@ -34,5 +34,5 @@
 </p>
 
 <p align="center">
-A modern Zig-based framework for electronic structure theory, quantum chemistry, and mathematical algorithms. It prioritizes simplicity over complexity and readability over speed.
+A modern Zig framework for electronic structure theory, quantum chemistry, and mathematical algorithms. It prioritizes simplicity over complexity and readability over speed.
 </p>

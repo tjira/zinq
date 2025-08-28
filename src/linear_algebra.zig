@@ -6,29 +6,54 @@ const real_matrix = @import("real_matrix.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
 
+/// Diagonalize a real symmetric matrix A. The provided matrix is overwritten by the diagonal form.
+pub fn diagonalizeSymmetric(comptime T: type, A: *RealMatrix(T)) !void {
+    if (A.rows == 1) return;
+
+    if (A.rows == 2) {
+        diagonalizeSymmetric2x2(T, A);
+    }
+
+    else return error.NotImplemented;
+}
+
+/// Diagonalize a real symmetric 2x2 matrix A using an analytical formula. The provided matrix is overwritten by the diagonal form.
+pub fn diagonalizeSymmetric2x2(comptime T: type, A: *RealMatrix(T)) void {
+    const a = A.at(0, 0); const b = A.at(0, 1); const c = A.at(1, 1);
+
+    const sqrt = std.math.sqrt(a * a + 4 * b * b - 2 * a * c + c * c);
+
+    A.ptr(0, 0).* = 0.5 * (a + c - sqrt);
+    A.ptr(1, 1).* = 0.5 * (a + c + sqrt);
+
+    A.ptr(0, 1).* = 0;
+    A.ptr(1, 0).* = 0;
+}
+
 /// Solve the eigenproblem for a real symmetric system.
-pub fn eighReal(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) !void {
+pub fn eigensystemSymmetric(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) !void {
     if (A.rows == 1) {
         @memcpy(A_eigenvalues.data, A.data); A_eigenvectors.fill(1);
     }
 
     else if (A.rows == 2) {
-        eighReal2x2(T, A_eigenvalues, A_eigenvectors, A);
+        eigensystemSymmetric2x2(T, A_eigenvalues, A_eigenvectors, A);
     }
 
     else return error.NotImplemented;
 }
 
 /// Eigenproblem for a real symmetric 2x2 system using an analytical formula.
-pub fn eighReal2x2(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) void {
+pub fn eigensystemSymmetric2x2(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) void {
     const a = A.at(0, 0); const b = A.at(0, 1); const c = A.at(1, 1);
-
-    A_eigenvalues.fill(0);
 
     const sqrt = std.math.sqrt(a * a + 4 * b * b - 2 * a * c + c * c);
 
     A_eigenvalues.ptr(0, 0).* = 0.5 * (a + c - sqrt);
     A_eigenvalues.ptr(1, 1).* = 0.5 * (a + c + sqrt);
+
+    A_eigenvalues.ptr(0, 1).* = 0;
+    A_eigenvalues.ptr(1, 0).* = 0;
 
     A_eigenvectors.ptr(0, 0).* = 0.5 * (a - c - sqrt) / b;
     A_eigenvectors.ptr(0, 1).* = 0.5 * (a - c + sqrt) / b;

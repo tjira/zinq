@@ -37,5 +37,8 @@ zig-bin/zig:
 clean-cache:
 > rm -rf ${HOME}/.cache/zig .zig-cache
 
+clean-output:
+> rm -rf zig-out
+
 clean-root:
 > rm -rf *.all *.json *.mat *.xyz

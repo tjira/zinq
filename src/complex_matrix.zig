@@ -10,8 +10,8 @@ pub fn ComplexMatrix(comptime T: type) type {
         data: []Complex(T), rows: usize, cols: usize, allocator: std.mem.Allocator,
 
         /// Initialize a matrix with a given number of rows and columns and specify an allocator. The function returns an error if the allocation fails.
-        pub fn init(rows: usize, cols: usize, allocator: std.mem.Allocator) !ComplexMatrix(T) {
-            return ComplexMatrix(T){
+        pub fn init(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
+            return @This(){
                 .data = try allocator.alloc(Complex(T), rows * cols),
                 .rows = rows,
                 .cols = cols,
@@ -20,24 +20,24 @@ pub fn ComplexMatrix(comptime T: type) type {
         }
 
         /// Initialize a matrix and fills it with zeros.
-        pub fn initZero(rows: usize, cols: usize, allocator: std.mem.Allocator) !ComplexMatrix(T) {
-            var A = try ComplexMatrix(T).init(rows, cols, allocator); A.zero();
+        pub fn initZero(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
+            var A = try @This().init(rows, cols, allocator); A.zero();
 
             return A;
         }
 
         /// Free the memory allocated for the matrix.
-        pub fn deinit(self: ComplexMatrix(T)) void {
+        pub fn deinit(self: @This()) void {
             self.allocator.free(self.data);
         }
 
         /// Get the element at (i, j).
-        pub fn at(self: ComplexMatrix(T), i: usize, j: usize) Complex(T) {
+        pub fn at(self: @This(), i: usize, j: usize) Complex(T) {
             return self.data[i * self.cols + j];
         }
 
         /// Equality operator for matrices.
-        pub fn eq(self: ComplexMatrix(T), other: ComplexMatrix(T)) bool {
+        pub fn eq(self: @This(), other: @This()) bool {
             if (self.rows != other.rows or self.cols != other.cols) return false;
 
             for (self.data, 0..) |element, index| {
@@ -48,17 +48,17 @@ pub fn ComplexMatrix(comptime T: type) type {
         }
 
         /// Fill the matrix with a given value.
-        pub fn fill(self: *ComplexMatrix(T), value: Complex(T)) void {
+        pub fn fill(self: *@This(), value: Complex(T)) void {
             for (self.data) |*element| element.* = value;
         }
 
         /// Get the pointer to the element at (i, j).
-        pub fn ptr(self: *Complex(T), i: usize, j: usize) *Complex(T) {
+        pub fn ptr(self: *@This(), i: usize, j: usize) *Complex(T) {
             return &self.data[i * self.cols + j];
         }
 
         /// Fills the matrix with zeros.
-        pub fn zero(self: *Complex(T)) void {
+        pub fn zero(self: *@This()) void {
             self.fill(Complex(T).init(0, 0));
         }
     };

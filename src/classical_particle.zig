@@ -4,6 +4,7 @@ const std = @import("std");
 
 const classical_dynamics = @import("classical_dynamics.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const linear_algebra = @import("linear_algebra.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -58,14 +59,33 @@ pub fn ClassicalParticle(comptime T: type) type {
             self.masses.deinit();
         }
 
+        /// Calculate the kinetic energy of the classical particle.
+        pub fn kineticEnergy(self: @This()) T {
+            var kinetic_energy: T = 0;
+
+            for (0..self.ndim) |i| {
+                kinetic_energy += 0.5 * self.masses.at(i) * self.velocity.at(i) * self.velocity.at(i);
+            }
+
+            return kinetic_energy;
+        }
+
         /// Propagate the classical particle using velocity verlet algorithm.
-        pub fn propagateVelocityVerlet(self: *@This(), potential: ElectronicPotential(T), current_state: u32, time_step: T) !void {
+        pub fn propagateVelocityVerlet(self: *@This(), potential: ElectronicPotential(T), potential_matrix: *RealMatrix(T), time: T, current_state: u32, time_step: T) !void {
             for (0..self.ndim) |i| {
                 self.position.ptr(i).* += (self.velocity.at(i) + 0.5 * self.acceleration.at(i) * time_step) * time_step;
             }
 
-            _ = potential;
-            _ = current_state;
+            for (0..self.ndim) |i| {
+
+                const force = try potential.forceAdiabatic(potential_matrix, self.position, time, current_state, i);
+
+                const previous_acceleration = self.acceleration.at(i);
+
+                self.acceleration.ptr(i).* = force / self.masses.at(i);
+
+                self.velocity.ptr(i).* += 0.5 * (previous_acceleration + self.acceleration.at(i)) * time_step;
+            }
         }
 
         /// Sets the position of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.

@@ -11,8 +11,8 @@ pub fn RealMatrix(comptime T: type) type {
         allocator: std.mem.Allocator,
 
         /// Initialize a matrix with a given number of rows and columns and specify an allocator. The function returns an error if the allocation fails.
-        pub fn init(rows: usize, cols: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
-            return RealMatrix(T){
+        pub fn init(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
+            return @This(){
                 .data = try allocator.alloc(T, rows * cols),
                 .rows = rows,
                 .cols = cols,
@@ -21,24 +21,24 @@ pub fn RealMatrix(comptime T: type) type {
         }
 
         /// Initialize a matrix and fills it with zeros.
-        pub fn initZero(rows: usize, cols: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
-            var A = try RealMatrix(T).init(rows, cols, allocator); A.zero();
+        pub fn initZero(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
+            var A = try @This().init(rows, cols, allocator); A.zero();
 
             return A;
         }
 
         /// Free the memory allocated for the matrix.
-        pub fn deinit(self: RealMatrix(T)) void {
+        pub fn deinit(self: @This()) void {
             self.allocator.free(self.data);
         }
 
         /// Get the element at (i, j).
-        pub fn at(self: RealMatrix(T), i: usize, j: usize) T {
+        pub fn at(self: @This(), i: usize, j: usize) T {
             return self.data[i * self.cols + j];
         }
 
         /// Equality operator for matrices.
-        pub fn eq(self: RealMatrix(T), other: RealMatrix(T)) bool {
+        pub fn eq(self: @This(), other: @This()) bool {
             if (self.rows != other.rows or self.cols != other.cols) return false;
 
             for (self.data, 0..) |element, index| {
@@ -49,22 +49,22 @@ pub fn RealMatrix(comptime T: type) type {
         }
 
         /// Fill the matrix with a given value.
-        pub fn fill(self: *RealMatrix(T), value: T) void {
+        pub fn fill(self: *@This(), value: T) void {
             @memset(self.data, value);
         }
 
         /// Square checker.
-        pub fn isSquare(self: RealMatrix(T)) bool {
+        pub fn isSquare(self: @This()) bool {
             return self.rows == self.cols;
         }
 
         /// Get the pointer to the element at (i, j).
-        pub fn ptr(self: *RealMatrix(T), i: usize, j: usize) *T {
+        pub fn ptr(self: *@This(), i: usize, j: usize) *T {
             return &self.data[i * self.cols + j];
         }
 
         /// Fills the matrix with zeros.
-        pub fn zero(self: *RealMatrix(T)) void {
+        pub fn zero(self: *@This()) void {
             self.fill(0);
         }
     };
