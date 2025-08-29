@@ -5,7 +5,12 @@ github_username: tjira
 url: "https://tjira.github.io"
 baseurl: "/zinq"
 
-theme: just-the-docs/just-the-docs
+plugins:
+  - jekyll-include-cache
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+
+remote_theme: just-the-docs/just-the-docs
 
 aux_links:
   "Zinq on GitHub":
