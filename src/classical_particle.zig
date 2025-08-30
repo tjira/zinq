@@ -70,7 +70,7 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Propagate the classical particle using velocity verlet algorithm.
-        pub fn propagateVelocityVerlet(self: *@This(), potential: ElectronicPotential(T), potential_matrix: *RealMatrix(T), time: T, current_state: u32, time_step: T) !void {
+        pub fn propagateVelocityVerlet(self: *@This(), potential: ElectronicPotential(T), potential_matrix: *RealMatrix(T), time: T, current_state: usize, time_step: T) !void {
             for (0..self.ndim) |i| {
                 self.position.ptr(i).* += (self.velocity.at(i) + 0.5 * self.acceleration.at(i) * time_step) * time_step;
             }

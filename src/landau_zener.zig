@@ -29,7 +29,7 @@ pub fn LandauZener(comptime T: type) type {
         three_state_variant: ThreeStateVariant = .maximum_curvature,
 
         /// Get the jump probabilities for the current state.
-        pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: u32) void {
+        pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) void {
             jump_probabilities.zero(); var maxddZ0: T = -std.math.inf(T); var minZ0: T = std.math.inf(T);
 
             for (0..jump_probabilities.len) |i| if (i != current_state) {

@@ -3,6 +3,11 @@
 const builtin = @import("builtin");
 const std = @import("std");
 
+pub const complex_vector = @import("complex_vector.zig");
+pub const strided_complex_vector = @import("strided_complex_vector.zig");
+pub const fourier_transform = @import("fourier_transform.zig");
+pub const grid_generator = @import("grid_generator.zig");
+pub const quantum_dynamics = @import("quantum_dynamics.zig");
 pub const classical_dynamics = @import("classical_dynamics.zig");
 pub const classical_particle = @import("classical_particle.zig");
 pub const complex_matrix = @import("complex_matrix.zig");
@@ -21,20 +26,6 @@ pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 
 const RealType = f64;
 
-/// Structure to handle different targets.
-const Handler = struct {
-    Options: type, Output: type, run: fn (comptime type, anytype, std.mem.Allocator) anyerror!*anyopaque,
-};
-
-/// Array of handlers for different targets.
-const handlers = [_]struct {key: []const u8, handler: Handler}{
-    .{.key = "classical_dynamics", .handler = Handler{
-        .Options = classical_dynamics.Options(RealType),
-        .Output = classical_dynamics.Output(RealType),
-        .run = classical_dynamics.run
-    }}
-};
-
 /// Parse the input JSON file and run the corresponding target.
 pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
     const file_contents = try std.fs.cwd().readFileAlloc(allocator, path, global_variables.MAX_INPUT_FILE_BYTES); defer allocator.free(file_contents);
@@ -48,14 +39,21 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
         const name = object.object.get("name") orelse return error.MissingTargetName;
         const options = object.object.get("options") orelse return error.MissingTargetOptions;
 
-        inline for (handlers) |pair| if (std.mem.eql(u8, name.string, pair.key)) {
+        if (std.mem.eql(u8, name.string, "classical_dynamics")) {
 
-            const options_struct = try std.json.parseFromValue(pair.handler.Options, allocator, options, .{}); defer options_struct.deinit();
+            const options_struct = try std.json.parseFromValue(classical_dynamics.Options(RealType), allocator, options, .{}); defer options_struct.deinit();
 
-            const output_pointer = try pair.handler.run(RealType, options_struct.value, allocator);
+            const output = try classical_dynamics.run(RealType, options_struct.value, true, allocator); defer output.deinit();
+        }
 
-            const output: *pair.handler.Output = @ptrCast(@alignCast(output_pointer)); defer output.deinit();
-        };
+        else if (std.mem.eql(u8, name.string, "quantum_dynamics")) {
+
+            const options_struct = try std.json.parseFromValue(quantum_dynamics.Options(RealType), allocator, options, .{}); defer options_struct.deinit();
+
+            const output = try quantum_dynamics.run(RealType, options_struct.value, allocator); defer output.deinit();
+        }
+
+        else return error.UnknownTarget;
     }
 }
 

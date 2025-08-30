@@ -2,9 +2,15 @@
 
 const std = @import("std");
 
+const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
+const complex_matrix = @import("complex_matrix.zig");
 
+const Complex = std.math.complex.Complex;
 const RealMatrix = real_matrix.RealMatrix;
+const ComplexMatrix = complex_matrix.ComplexMatrix;
+
+const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// Diagonalize a real symmetric matrix A. The provided matrix is overwritten by the diagonal form.
 pub fn diagonalizeSymmetric(comptime T: type, A: *RealMatrix(T)) !void {
@@ -45,32 +51,59 @@ pub fn eigensystemSymmetric(comptime T: type, A_eigenvalues: *RealMatrix(T), A_e
 
 /// Eigenproblem for a real symmetric 2x2 system using an analytical formula.
 pub fn eigensystemSymmetric2x2(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) void {
-    const a = A.at(0, 0); const b = A.at(0, 1); const c = A.at(1, 1);
+    const a = A.at(0, 0); const b = A.at(0, 1); const c = A.at(1, 1); const d = std.math.hypot(a - c, 2 * b);
 
-    const sqrt = std.math.sqrt(a * a + 4 * b * b - 2 * a * c + c * c);
-
-    A_eigenvalues.ptr(0, 0).* = 0.5 * (a + c - sqrt);
-    A_eigenvalues.ptr(1, 1).* = 0.5 * (a + c + sqrt);
+    A_eigenvalues.ptr(0, 0).* = 0.5 * (a + c - d);
+    A_eigenvalues.ptr(1, 1).* = 0.5 * (a + c + d);
 
     A_eigenvalues.ptr(0, 1).* = 0;
     A_eigenvalues.ptr(1, 0).* = 0;
 
-    A_eigenvectors.ptr(0, 0).* = 0.5 * (a - c - sqrt) / b;
-    A_eigenvectors.ptr(0, 1).* = 0.5 * (a - c + sqrt) / b;
+    A_eigenvectors.ptr(0, 0).* = b; A_eigenvectors.ptr(1, 0).* = A_eigenvalues.at(0, 0) - a;
 
-    const norm1 = std.math.sqrt(A_eigenvectors.at(0, 0) * A_eigenvectors.at(0, 0) + 1);
-    const norm2 = std.math.sqrt(A_eigenvectors.at(0, 1) * A_eigenvectors.at(0, 1) + 1);
+    var norm = std.math.hypot(A_eigenvectors.at(0, 0), A_eigenvectors.at(1, 0));
 
-    A_eigenvectors.ptr(0, 0).* /= norm1;
-    A_eigenvectors.ptr(0, 1).* /= norm2;
+    if (norm == 0) {
 
-    A_eigenvectors.ptr(1, 0).* = 1 / norm1;
-    A_eigenvectors.ptr(1, 1).* = 1 / norm2;
+        A_eigenvectors.ptr(0, 0).* = c - A_eigenvalues.at(0, 0); A_eigenvectors.ptr(1, 0).* = -b;
+
+        norm = std.math.hypot(A_eigenvectors.at(0, 0), A_eigenvectors.at(1, 0));
+    }
+
+    A_eigenvectors.ptr(0, 0).* /= norm;
+    A_eigenvectors.ptr(1, 0).* /= norm;
+
+    A_eigenvectors.ptr(0, 1).* = -A_eigenvectors.at(1, 0);
+    A_eigenvectors.ptr(1, 1).* =  A_eigenvectors.at(0, 0);
 }
 
-/// Multiply two matrices A and B and store the result in C. The function returns an error if the dimensions are incompatible.
+/// Multiply two complex matrices A and B and store the result in C.
+pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), B: ComplexMatrix(T)) void {
+    for (0..A.rows) |i| for (0..B.cols) |j| {
+
+        var sum = Complex(T).init(0, 0);
+
+        for (0..A.cols) |k| {
+            sum = sum.add(A.at(i, k).mul(B.at(k, j)));
+        }
+
+        C.ptr(i, j).* = sum;
+    };
+}
+
+/// Multiply two complex matrices A and B and return the result. The function returns an error if the allocation fails.
+pub fn mmComplexAlloc(comptime T: type, A: ComplexMatrix(T), B: ComplexMatrix(T)) !ComplexMatrix(T) {
+    var C = try ComplexMatrix(T).init(A.rows, B.cols, A.allocator);
+
+    mmComplex(T, &C, A, B);
+
+    return C;
+}
+
+/// Multiply two matrices A and B and store the result in C.
 pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), B: RealMatrix(T)) void {
     for (0..A.rows) |i| for (0..B.cols) |j| {
+
         var sum: T = 0;
 
         for (0..A.cols) |k| {
@@ -81,7 +114,7 @@ pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), B: RealMatr
     };
 }
 
-/// Multiply two matrices A and B and return the result. The function returns an error if the allocation fails or if the dimensions are incompatible.
+/// Multiply two matrices A and B and return the result. The function returns an error if the allocation fails.
 pub fn mmRealAlloc(comptime T: type, A: RealMatrix(T), B: RealMatrix(T)) !RealMatrix(T) {
     var C = try RealMatrix(T).init(A.rows, B.cols, A.allocator);
 
@@ -102,5 +135,5 @@ test "mmRealAlloc" {
 
     var D = try mmRealAlloc(f64, A, B); defer D.deinit();
 
-    try std.testing.expect(C.eq(D));
+    try std.testing.expect(C.eq(D, TEST_TOLERANCE));
 }

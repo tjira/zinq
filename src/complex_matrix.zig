@@ -31,17 +31,25 @@ pub fn ComplexMatrix(comptime T: type) type {
             self.allocator.free(self.data);
         }
 
+        /// Divide the matrix by a scalar value.
+        pub fn divs(self: *@This(), value: Complex(T)) void {
+            for (self.data) |*element| {
+                element.* = element.div(value);
+            }
+        }
+
         /// Get the element at (i, j).
         pub fn at(self: @This(), i: usize, j: usize) Complex(T) {
             return self.data[i * self.cols + j];
         }
 
-        /// Equality operator for matrices.
-        pub fn eq(self: @This(), other: @This()) bool {
+        /// Equality operator for matrices, given a tolerance.
+        pub fn eq(self: @This(), other: @This(), tol: T) bool {
             if (self.rows != other.rows or self.cols != other.cols) return false;
 
             for (self.data, 0..) |element, index| {
-                if (element.re != other.data[index].re or element.im != other.data[index].im) return false;
+                if (@abs(element.re - other.data[index].re) > tol) return false;
+                if (@abs(element.im - other.data[index].im) > tol) return false;
             }
 
             return true;
@@ -50,6 +58,13 @@ pub fn ComplexMatrix(comptime T: type) type {
         /// Fill the matrix with a given value.
         pub fn fill(self: *@This(), value: Complex(T)) void {
             for (self.data) |*element| element.* = value;
+        }
+
+        /// Multiply the matrix by a scalar value.
+        pub fn muls(self: *@This(), value: Complex(T)) void {
+            for (self.data) |*element| {
+                element.* = element.mul(value);
+            }
         }
 
         /// Get the pointer to the element at (i, j).

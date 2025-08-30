@@ -2,3 +2,4 @@
 
 pub const FINITE_DIFFERENCES_STEP = 1e-8;
 pub const MAX_INPUT_FILE_BYTES = 8192;
+pub const TEST_TOLERANCE = 1e-14;

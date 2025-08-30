@@ -1,1 +1,2 @@
 - [x] The RingBufferArray could be probably modified to a more generic ObjectArray that would support any object type and not just ring buffers.
+- [ ] Implement variable number of points in each dimension in quantum dynamics grid.

@@ -4,6 +4,7 @@
 *.loc*
 *.mat*
 *.out*
+*.pdf*
 *.png*
 
 *cod*/

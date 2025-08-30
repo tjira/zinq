@@ -12,13 +12,16 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const ring_buffer = @import("ring_buffer.zig");
 const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
+const tully_potential = @import("tully_potential.zig");
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
+const LandauZener = landau_zener.LandauZener;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const RingBufferArray = object_array.RingBufferArray;
 const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorithm;
+const TullyPotential1 = tully_potential.TullyPotential1;
 
 const print = device_write.print;
 
@@ -80,7 +83,7 @@ pub fn Custom(comptime T: type) type {
             iteration: usize,
             kinetic_energy: T,
             potential_energy: T,
-            state: u32,
+            state: usize,
             system: ClassicalParticle(T),
             time: T,
             trajectory: usize,
@@ -106,8 +109,8 @@ pub fn Custom(comptime T: type) type {
 }
 
 /// Run classical dynamics simulation.
-pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) !*anyopaque {
-    try print("\nRUNNING CLASSICAL DYNAMICS WITH {d} TRAJECTORIES OF {d} ITERATIONS EACH\n\n", .{options.trajectories, options.iterations});
+pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try print("\nRUNNING CLASSICAL DYNAMICS WITH {d} TRAJECTORIES OF {d} ITERATIONS EACH\n\n", .{options.trajectories, options.iterations});
 
     const ndim = options.potential.ndim();
     const nstate = options.potential.nstate();
@@ -116,7 +119,7 @@ pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) 
 
     var split_mix = std.Random.SplitMix64.init(options.seed); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
-    try printIterationHeader(ndim);
+    if (enable_printing) try printIterationHeader(ndim);
 
     for (0..options.trajectories) |i| {
 
@@ -125,27 +128,27 @@ pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) 
         try system.setPositionRandn(options.initial_conditions.position_mean, options.initial_conditions.position_std, &random);
         try system.setMomentumRandn(options.initial_conditions.momentum_mean, options.initial_conditions.momentum_std, &random);
 
-        const trajectory_output = try runTrajectory(T, options, &system, i, allocator); defer trajectory_output.deinit();
+        const trajectory_output = try runTrajectory(T, options, &system, i, enable_printing, allocator); defer trajectory_output.deinit();
 
         output.population_mean.add(trajectory_output.population);
     }
 
     output.population_mean.divs(@as(T, @floatFromInt(options.trajectories)));
 
-    for (0..nstate) |i| {
+    if (enable_printing) for (0..nstate) |i| {
         try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(options.iterations, i)});
-    }
+    };
 
-    return @ptrCast(&output);
+    return output;
 }
 
 /// Run a single trajectory.
-pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalParticle(T), index: usize, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
+pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalParticle(T), index: usize, enable_printing: bool, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
     const nstate = options.potential.nstate();
 
     var output = try Custom(T).TrajectoryOutput.init(nstate, options.iterations, allocator);
 
-    var current_state = options.initial_conditions.state;
+    var current_state: usize = @intCast(options.initial_conditions.state);
 
     var diabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer diabatic_potential.deinit();
     var adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_potential.deinit();
@@ -195,7 +198,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 
         output.population.ptr(i, current_state).* += 1;
 
-        if ((index > 0 and (index + 1) % options.log_intervals.trajectory != 0) or (i > 0 and i % options.log_intervals.iteration != 0)) continue;
+        if (!enable_printing or (index > 0 and (index + 1) % options.log_intervals.trajectory != 0) or (i > 0 and i % options.log_intervals.iteration != 0)) continue;
 
         const iteration_info = Custom(T).IterationInfo{
             .iteration = i,
@@ -253,4 +256,31 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo) !void
     try writer.print("]", .{});
 
     try print("{s}\n", .{writer.buffered()});
+}
+
+test "landau-zener" {
+    const options = Options(f64){
+        .potential = .{.tully_1 = TullyPotential1(f64){}},
+        .initial_conditions = .{
+            .mass = &.{2000},
+            .momentum_mean = &.{15},
+            .momentum_std = &.{1},
+            .position_mean = &.{-10},
+            .position_std = &.{0.5},
+            .state = 1
+        },
+        .log_intervals = .{
+            .iteration = 500,
+            .trajectory = 500
+        },
+        .iterations = 3500,
+        .time_step = 1,
+        .trajectories = 1000,
+        .surface_hopping = .{.landau_zener = LandauZener(f64){}},
+    };
+
+    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+
+    try std.testing.expect(output.population_mean.at(options.iterations, 0) == 0.486);
+    try std.testing.expect(output.population_mean.at(options.iterations, 1) == 0.514);
 }

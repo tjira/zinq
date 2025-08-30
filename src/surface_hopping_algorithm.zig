@@ -28,20 +28,20 @@ pub fn SurfaceHoppingAlgorithm(comptime T: type) type {
         landau_zener: LandauZener(T),
 
         /// Get the jump probabilities for the current state.
-        pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: u32) void {
+        pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) void {
             switch (self) {
                 .landau_zener => |field| field.getJumpProbabilities(jump_probabilities, parameters.lz_parameters, current_state)
             }
         }
 
         /// Perform the jump based on the probabilities and adjust the momentum accordingly.
-        pub fn jump(self: @This(), system: *ClassicalParticle(T), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: u32, random: *std.Random) u32 {
+        pub fn jump(self: @This(), system: *ClassicalParticle(T), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize, random: *std.Random) usize {
             getJumpProbabilities(self, jump_probabilities, parameters, current_state);
 
             if (jump_probabilities.sum() == 0) return current_state;
 
             var cumulative_probability: T = 0;
-            var new_state: u32 = current_state;
+            var new_state: usize = current_state;
             const random_number = random.float(T);
 
             for (0..jump_probabilities.len) |i| {

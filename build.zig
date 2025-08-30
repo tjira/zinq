@@ -19,11 +19,11 @@ pub fn build(builder: *std.Build) !void {
             .name = "zinq",
             .root_module = builder.createModule(.{
                 .optimize = optimize,
-                .root_source_file = builder.path("src/zinq.zig"),
+                .root_source_file = builder.path("src/main.zig"),
                 .strip = optimize != .Debug,
                 .target = builder.resolveTargetQuery(target)
             }),
-            .use_llvm = true
+            .use_llvm = true // needed for valgrind for now
         });
 
         const main_executable_install = builder.addInstallArtifact(main_executable, .{
@@ -40,16 +40,6 @@ pub fn build(builder: *std.Build) !void {
 
             builder.step("run",  "Run the compiled executable").dependOn(&builder.addRunArtifact(main_executable).step);
             builder.step("test", "Run unit tests"             ).dependOn(&builder.addRunArtifact(test_executable).step);
-
-            const docs = builder.addInstallDirectory(.{
-                .install_dir = .{
-                    .custom = "../docs"
-                },
-                .install_subdir = "code",
-                .source_dir = main_executable.getEmittedDocs()
-            });
-
-            builder.step("docs", "Install the code documentation").dependOn(&docs.step);
         }
     }
 }

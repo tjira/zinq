@@ -2,6 +2,10 @@
 
 const std = @import("std");
 
+const real_vector = @import("real_vector.zig");
+
+const RealVector = real_vector.RealVector;
+
 /// Real matrix class. The matrix is stored in a flat array in row-major order.
 pub fn RealMatrix(comptime T: type) type {
     return struct {
@@ -51,12 +55,12 @@ pub fn RealMatrix(comptime T: type) type {
             for (self.data) |*element| element.* /= value;
         }
 
-        /// Equality operator for matrices.
-        pub fn eq(self: @This(), other: @This()) bool {
+        /// Equality operator for matrices, given a tolerance.
+        pub fn eq(self: @This(), other: @This(), tol: T) bool {
             if (self.rows != other.rows or self.cols != other.cols) return false;
 
             for (self.data, 0..) |element, index| {
-                if (element != other.data[index]) return false;
+                if (@abs(element - other.data[index]) > tol) return false;
             }
 
             return true;
@@ -75,6 +79,11 @@ pub fn RealMatrix(comptime T: type) type {
         /// Get the pointer to the element at (i, j).
         pub fn ptr(self: *@This(), i: usize, j: usize) *T {
             return &self.data[i * self.cols + j];
+        }
+
+        /// Get a row as view to a a real vector.
+        pub fn row(self: @This(), i: usize) RealVector(T) {
+            return RealVector(T){.data = self.data[i * self.cols..(i + 1) * self.cols], .len = self.cols, .allocator = self.allocator};
         }
 
         /// Fills the matrix with zeros.
