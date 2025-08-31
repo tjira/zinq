@@ -5,11 +5,15 @@ const std = @import("std");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const complex_matrix = @import("complex_matrix.zig");
+const math_functions = @import("math_functions.zig");
 
 const Complex = std.math.complex.Complex;
 const RealMatrix = real_matrix.RealMatrix;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 
+const sgn = math_functions.sgn;
+
+const JACOBI_EIGENPROBLEM_TOLERANCE = global_variables.JACOBI_EIGENPROBLEM_TOLERANCE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// Diagonalize a real symmetric matrix A. The provided matrix is overwritten by the diagonal form.
@@ -51,30 +55,32 @@ pub fn eigensystemSymmetric(comptime T: type, A_eigenvalues: *RealMatrix(T), A_e
 
 /// Eigenproblem for a real symmetric 2x2 system using an analytical formula.
 pub fn eigensystemSymmetric2x2(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) void {
-    const a = A.at(0, 0); const b = A.at(0, 1); const c = A.at(1, 1); const d = std.math.hypot(a - c, 2 * b);
+    const a00 = A.at(0, 0); const a01 = A.at(0, 1); const a11 = A.at(1, 1);
 
-    A_eigenvalues.ptr(0, 0).* = 0.5 * (a + c - d);
-    A_eigenvalues.ptr(1, 1).* = 0.5 * (a + c + d);
+    if (@abs(a01) < JACOBI_EIGENPROBLEM_TOLERANCE) {
 
-    A_eigenvalues.ptr(0, 1).* = 0;
-    A_eigenvalues.ptr(1, 0).* = 0;
+        A_eigenvalues.ptr(0, 0).* = a00;
+        A_eigenvalues.ptr(1, 1).* = a11;
 
-    A_eigenvectors.ptr(0, 0).* = b; A_eigenvectors.ptr(1, 0).* = A_eigenvalues.at(0, 0) - a;
+        A_eigenvectors.ptr(0, 0).* = 1; A_eigenvectors.ptr(0, 1).* = 0;
+        A_eigenvectors.ptr(1, 0).* = 0; A_eigenvectors.ptr(1, 1).* = 1;
 
-    var norm = std.math.hypot(A_eigenvectors.at(0, 0), A_eigenvectors.at(1, 0));
-
-    if (norm == 0) {
-
-        A_eigenvectors.ptr(0, 0).* = c - A_eigenvalues.at(0, 0); A_eigenvectors.ptr(1, 0).* = -b;
-
-        norm = std.math.hypot(A_eigenvectors.at(0, 0), A_eigenvectors.at(1, 0));
+        return;
     }
 
-    A_eigenvectors.ptr(0, 0).* /= norm;
-    A_eigenvectors.ptr(1, 0).* /= norm;
+    const tau = 0.5 * (a11 - a00) / a01;
 
-    A_eigenvectors.ptr(0, 1).* = -A_eigenvectors.at(1, 0);
-    A_eigenvectors.ptr(1, 1).* =  A_eigenvectors.at(0, 0);
+    const t = sgn(tau) / (@abs(tau) + std.math.hypot(1, tau));
+
+    const c = 1 / std.math.sqrt(1 + t * t); const s = t * c;
+
+    A_eigenvalues.ptr(0, 0).* = a00 - t * a01;
+    A_eigenvalues.ptr(1, 1).* = a11 + t * a01;
+
+    A_eigenvectors.ptr(0, 0).* =  c;
+    A_eigenvectors.ptr(0, 1).* =  s;
+    A_eigenvectors.ptr(1, 0).* = -s;
+    A_eigenvectors.ptr(1, 1).* =  c;
 }
 
 /// Multiply two complex matrices A and B and store the result in C.

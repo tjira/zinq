@@ -4,7 +4,7 @@
             "name" : "quantum_dynamics",
             "options" : {
                 "grid" : {
-                    "limits" : [[-24, 24]],
+                    "limits" : [[-24, 32]],
                     "points" : 2048
                 },
                 "initial_conditions" : {
