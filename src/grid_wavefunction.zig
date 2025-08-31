@@ -6,7 +6,6 @@ const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const fourier_transform = @import("fourier_transform.zig");
-const linear_algebra = @import("linear_algebra.zig");
 const real_matrix = @import("real_matrix.zig");
 const grid_wavefunction_propagator = @import("grid_wavefunction_propagator.zig");
 const real_vector = @import("real_vector.zig");
@@ -20,10 +19,6 @@ const FourierTransform = fourier_transform.FourierTransform;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
-const mmRealAlloc = linear_algebra.mmRealAlloc;
-const mmReal = linear_algebra.mmReal;
-const mmComplexAlloc = linear_algebra.mmComplexAlloc;
-const eigensystemSymmetric = linear_algebra.eigensystemSymmetric;
 const cfftn = fourier_transform.cfftn;
 
 /// A wavefunction defined on a grid.

@@ -2,21 +2,20 @@
 
 const std = @import("std");
 
-const complex_vector = @import("complex_vector.zig");
-const linear_algebra = @import("linear_algebra.zig");
 const complex_matrix = @import("complex_matrix.zig");
-const real_matrix = @import("real_matrix.zig");
-const grid_wavefunction = @import("grid_wavefunction.zig");
+const complex_vector = @import("complex_vector.zig");
+const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const grid_wavefunction = @import("grid_wavefunction.zig");
+const real_matrix = @import("real_matrix.zig");
 
-const RealMatrix = real_matrix.RealMatrix;
 const Complex = std.math.complex.Complex;
-const ComplexVector = complex_vector.ComplexVector;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
-const GridWavefunction = grid_wavefunction.GridWavefunction;
-const eigensystemSymmetric = linear_algebra.eigensystemSymmetric;
-const mmComplex = linear_algebra.mmReal;
+const ComplexVector = complex_vector.ComplexVector;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
+const GridWavefunction = grid_wavefunction.GridWavefunction;
+const RealMatrix = real_matrix.RealMatrix;
+const eigensystemSymmetric = eigenproblem_solver.eigensystemSymmetric;
 
 /// Propagator for grid-based wavefunctions.
 pub fn GridWavefunctionPropagator(comptime T: type) type {
@@ -61,6 +60,7 @@ pub fn GridWavefunctionPropagator(comptime T: type) type {
             for (0..wavefunction.data.rows) |i| {
 
                 potential.evaluateDiabatic(&diabatic_potential, wavefunction.position_grid_pointer.?.row(i), time);
+
                 try eigensystemSymmetric(T, &adiabatic_potential, &adiabatic_eigenvectors, diabatic_potential);
 
                 for (0..wavefunction.nstate) |j| {
@@ -77,26 +77,26 @@ pub fn GridWavefunctionPropagator(comptime T: type) type {
                     self.position_propagators[i].ptr(j, j).* = std.math.complex.exp(Complex(T).init(adiabatic_potential.at(j, j), 0).mul(Complex(T).init(-0.5 * time_step, 0)).mul(unit));
                 }
 
-                for (0..adiabatic_eigenvectors.rows) |k| for (0..self.position_propagators[i].cols) |l| {
+                for (0..adiabatic_eigenvectors.rows) |j| for (0..self.position_propagators[i].cols) |k| {
 
                     var sum = Complex(T).init(0, 0);
 
-                    for (0..adiabatic_eigenvectors.cols) |m| {
-                        sum = sum.add(Complex(T).init(adiabatic_eigenvectors.at(k, m), 0).mul(self.position_propagators[i].at(m, l)));
+                    for (0..adiabatic_eigenvectors.cols) |l| {
+                        sum = sum.add(Complex(T).init(adiabatic_eigenvectors.at(j, l), 0).mul(self.position_propagators[i].at(l, k)));
                     }
 
-                    temporary_multiplication_matrix.ptr(k, l).* = sum;
+                    temporary_multiplication_matrix.ptr(j, k).* = sum;
                 };
 
-                for (0..temporary_multiplication_matrix.rows) |k| for (0..adiabatic_eigenvectors.rows) |l| {
+                for (0..temporary_multiplication_matrix.rows) |j| for (0..adiabatic_eigenvectors.rows) |k| {
 
                     var sum = Complex(T).init(0, 0);
 
-                    for (0..temporary_multiplication_matrix.cols) |m| {
-                        sum = sum.add(temporary_multiplication_matrix.at(k, m).mul(Complex(T).init(adiabatic_eigenvectors.at(l, m), 0)));
+                    for (0..temporary_multiplication_matrix.cols) |l| {
+                        sum = sum.add(temporary_multiplication_matrix.at(j, l).mul(Complex(T).init(adiabatic_eigenvectors.at(k, l), 0)));
                     }
 
-                    self.position_propagators[i].ptr(k, l).* = sum;
+                    self.position_propagators[i].ptr(j, k).* = sum;
                 };
             }
         }

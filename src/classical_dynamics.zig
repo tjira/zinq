@@ -6,7 +6,6 @@ const classical_particle = @import("classical_particle.zig");
 const device_write = @import("device_write.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const landau_zener = @import("landau_zener.zig");
-const linear_algebra = @import("linear_algebra.zig");
 const object_array = @import("object_array.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");

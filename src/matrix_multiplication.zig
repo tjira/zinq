@@ -1,0 +1,74 @@
+//! Algorithms for matrix multiplication.
+
+const std = @import("std");
+
+const real_matrix = @import("real_matrix.zig");
+const complex_matrix = @import("complex_matrix.zig");
+const global_variables = @import("global_variables.zig");
+
+const RealMatrix = real_matrix.RealMatrix;
+const ComplexMatrix = complex_matrix.ComplexMatrix;
+const Complex = std.math.complex.Complex;
+
+const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
+
+/// Multiply two complex matrices A and B and store the result in C.
+pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), B: ComplexMatrix(T)) void {
+    for (0..A.rows) |i| for (0..B.cols) |j| {
+
+        var sum = Complex(T).init(0, 0);
+
+        for (0..A.cols) |k| {
+            sum = sum.add(A.at(i, k).mul(B.at(k, j)));
+        }
+
+        C.ptr(i, j).* = sum;
+    };
+}
+
+/// Multiply two complex matrices A and B and return the result. The function returns an error if the allocation fails.
+pub fn mmComplexAlloc(comptime T: type, A: ComplexMatrix(T), B: ComplexMatrix(T)) !ComplexMatrix(T) {
+    var C = try ComplexMatrix(T).init(A.rows, B.cols, A.allocator);
+
+    mmComplex(T, &C, A, B);
+
+    return C;
+}
+
+/// Multiply two matrices A and B and store the result in C.
+pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), B: RealMatrix(T)) void {
+    for (0..A.rows) |i| for (0..B.cols) |j| {
+
+        var sum: T = 0;
+
+        for (0..A.cols) |k| {
+            sum += A.at(i, k) * B.at(k, j);
+        }
+
+        C.ptr(i, j).* = sum;
+    };
+}
+
+/// Multiply two matrices A and B and return the result. The function returns an error if the allocation fails.
+pub fn mmRealAlloc(comptime T: type, A: RealMatrix(T), B: RealMatrix(T)) !RealMatrix(T) {
+    var C = try RealMatrix(T).init(A.rows, B.cols, A.allocator);
+
+    mmReal(T, &C, A, B);
+
+    return C;
+}
+
+test "mmRealAlloc" {
+    var A = try RealMatrix(f64).init(2, 2, std.testing.allocator); defer A.deinit();
+    var B = try RealMatrix(f64).init(2, 2, std.testing.allocator); defer B.deinit();
+    var C = try RealMatrix(f64).init(2, 2, std.testing.allocator); defer C.deinit();
+
+    A.ptr(0, 0).* = 1; A.ptr(0, 1).* = 2; A.ptr(1, 0).* = 3; A.ptr(1, 1).* = 4;
+    B.ptr(0, 0).* = 5; B.ptr(0, 1).* = 6; B.ptr(1, 0).* = 7; B.ptr(1, 1).* = 8;
+
+    C.ptr(0, 0).* = 19; C.ptr(0, 1).* = 22; C.ptr(1, 0).* = 43; C.ptr(1, 1).* = 50;
+
+    var D = try mmRealAlloc(f64, A, B); defer D.deinit();
+
+    try std.testing.expect(C.eq(D, TEST_TOLERANCE));
+}
