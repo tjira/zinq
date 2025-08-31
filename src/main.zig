@@ -51,7 +51,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 
             const options_struct = try std.json.parseFromValue(quantum_dynamics.Options(RealType), allocator, options, .{}); defer options_struct.deinit();
 
-            const output = try quantum_dynamics.run(RealType, options_struct.value, allocator); defer output.deinit();
+            const output = try quantum_dynamics.run(RealType, options_struct.value, true, allocator); defer output.deinit();
         }
 
         else return error.UnknownTarget;

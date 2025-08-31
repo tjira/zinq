@@ -83,7 +83,11 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Get a row as view to a a real vector.
         pub fn row(self: @This(), i: usize) RealVector(T) {
-            return RealVector(T){.data = self.data[i * self.cols..(i + 1) * self.cols], .len = self.cols, .allocator = self.allocator};
+            return RealVector(T){
+                .data = self.data[i * self.cols..(i + 1) * self.cols],
+                .len = self.cols,
+                .allocator = self.allocator
+            };
         }
 
         /// Fills the matrix with zeros.

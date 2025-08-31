@@ -13,7 +13,7 @@ const Complex = std.math.complex.Complex;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// Multiply two complex matrices A and B and store the result in C.
-pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), B: ComplexMatrix(T)) void {
+pub fn mmComplexComplex(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), B: ComplexMatrix(T)) void {
     for (0..A.rows) |i| for (0..B.cols) |j| {
 
         var sum = Complex(T).init(0, 0);
@@ -27,16 +27,58 @@ pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), B:
 }
 
 /// Multiply two complex matrices A and B and return the result. The function returns an error if the allocation fails.
-pub fn mmComplexAlloc(comptime T: type, A: ComplexMatrix(T), B: ComplexMatrix(T)) !ComplexMatrix(T) {
+pub fn mmComplexComplexAlloc(comptime T: type, A: ComplexMatrix(T), B: ComplexMatrix(T)) !ComplexMatrix(T) {
     var C = try ComplexMatrix(T).init(A.rows, B.cols, A.allocator);
 
-    mmComplex(T, &C, A, B);
+    mmComplexComplex(T, &C, A, B);
 
     return C;
 }
 
+/// Multiply one complex matrix A by a real matrix B and store the result in C.
+pub fn mmComplexReal(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), B: RealMatrix(T)) void {
+    for (0..A.rows) |i| for (0..B.cols) |j| {
+
+        var sum = Complex(T).init(0, 0);
+
+        for (0..A.cols) |k| {
+            sum = sum.add(A.at(i, k).mul(Complex(T).init(B.at(k, j), 0)));
+        }
+
+        C.ptr(i, j).* = sum;
+    };
+}
+
+/// Multiply one complex matrix A by a transposed real matrix BT and store the result in C.
+pub fn mmComplexRealTrans(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), BT: RealMatrix(T)) void {
+    for (0..A.rows) |i| for (0..BT.rows) |j| {
+
+        var sum = Complex(T).init(0, 0);
+
+        for (0..A.cols) |k| {
+            sum = sum.add(A.at(i, k).mul(Complex(T).init(BT.at(j, k), 0)));
+        }
+
+        C.ptr(i, j).* = sum;
+    };
+}
+
+/// Multiply one real matrix A by a complex matrix B and store the result in C.
+pub fn mmRealComplex(comptime T: type, C: *ComplexMatrix(T), A: RealMatrix(T), B: ComplexMatrix(T)) void {
+    for (0..A.rows) |i| for (0..B.cols) |j| {
+
+        var sum = Complex(T).init(0, 0);
+
+        for (0..A.cols) |k| {
+            sum = sum.add(Complex(T).init(A.at(i, k), 0).mul(B.at(k, j)));
+        }
+
+        C.ptr(i, j).* = sum;
+    };
+}
+
 /// Multiply two matrices A and B and store the result in C.
-pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), B: RealMatrix(T)) void {
+pub fn mmRealReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), B: RealMatrix(T)) void {
     for (0..A.rows) |i| for (0..B.cols) |j| {
 
         var sum: T = 0;
@@ -50,15 +92,29 @@ pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), B: RealMatr
 }
 
 /// Multiply two matrices A and B and return the result. The function returns an error if the allocation fails.
-pub fn mmRealAlloc(comptime T: type, A: RealMatrix(T), B: RealMatrix(T)) !RealMatrix(T) {
+pub fn mmRealRealAlloc(comptime T: type, A: RealMatrix(T), B: RealMatrix(T)) !RealMatrix(T) {
     var C = try RealMatrix(T).init(A.rows, B.cols, A.allocator);
 
-    mmReal(T, &C, A, B);
+    mmRealReal(T, &C, A, B);
 
     return C;
 }
 
-test "mmRealAlloc" {
+/// Multiply one transposed real matrix A by a complex matrix B and store the result in C.
+pub fn mmRealTransComplex(comptime T: type, C: *ComplexMatrix(T), AT: RealMatrix(T), B: ComplexMatrix(T)) void {
+    for (0..AT.cols) |i| for (0..B.cols) |j| {
+
+        var sum = Complex(T).init(0, 0);
+
+        for (0..AT.rows) |k| {
+            sum = sum.add(Complex(T).init(AT.at(k, i), 0).mul(B.at(k, j)));
+        }
+
+        C.ptr(i, j).* = sum;
+    };
+}
+
+test "mmRealRealAlloc" {
     var A = try RealMatrix(f64).init(2, 2, std.testing.allocator); defer A.deinit();
     var B = try RealMatrix(f64).init(2, 2, std.testing.allocator); defer B.deinit();
     var C = try RealMatrix(f64).init(2, 2, std.testing.allocator); defer C.deinit();
@@ -68,7 +124,7 @@ test "mmRealAlloc" {
 
     C.ptr(0, 0).* = 19; C.ptr(0, 1).* = 22; C.ptr(1, 0).* = 43; C.ptr(1, 1).* = 50;
 
-    var D = try mmRealAlloc(f64, A, B); defer D.deinit();
+    var D = try mmRealRealAlloc(f64, A, B); defer D.deinit();
 
     try std.testing.expect(C.eq(D, TEST_TOLERANCE));
 }

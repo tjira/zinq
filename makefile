@@ -9,6 +9,8 @@ OS   := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 ZIG_VERSION := 0.15.1
 ZLS_VERSION := 0.15.0
 
+ZIG_FLAGS := --summary $(if $(filter 1,$(SUMMARY)),all,none) $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
+
 all: zinq
 
 # ACORN BUILDING TARGETS ===============================================================================================================================================================================
@@ -16,7 +18,7 @@ all: zinq
 .PHONY: acorn run test
 
 zinq: zig-bin/zig clean-output
-> ./zig-bin/zig build $(if $(filter 1,$(SUMMARY)),--summary all) $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
+> ./zig-bin/zig build $(ZIG_FLAGS)
 
 run: zig-bin/zig
 > ./zig-bin/zig build $(if $(filter 1,$(SUMMARY)),--summary all) $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast) run

@@ -257,7 +257,7 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo) !void
     try print("{s}\n", .{writer.buffered()});
 }
 
-test "landau-zener" {
+test "landau-zener surface hopping with Tully's first potential" {
     const options = Options(f64){
         .potential = .{.tully_1 = TullyPotential1(f64){}},
         .initial_conditions = .{

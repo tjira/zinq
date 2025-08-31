@@ -2,7 +2,10 @@
 
 const std = @import("std");
 
+const complex_vector = @import("complex_vector.zig");
+
 const Complex = std.math.complex.Complex;
+const ComplexVector = complex_vector.ComplexVector;
 
 /// Complex matrix class. The matrix is stored in a flat array in row-major order.
 pub fn ComplexMatrix(comptime T: type) type {
@@ -70,6 +73,15 @@ pub fn ComplexMatrix(comptime T: type) type {
         /// Get the pointer to the element at (i, j).
         pub fn ptr(self: *@This(), i: usize, j: usize) *Complex(T) {
             return &self.data[i * self.cols + j];
+        }
+
+        /// Returns the row of the matrix as a complex vector.
+        pub fn row(self: @This(), i: usize) ComplexVector(T) {
+            return ComplexVector(T){
+                .data = self.data[i * self.cols .. (i + 1) * self.cols],
+                .len = self.cols,
+                .allocator = self.allocator
+            };
         }
 
         /// Fills the matrix with zeros.

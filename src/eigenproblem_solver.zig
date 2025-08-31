@@ -27,10 +27,12 @@ pub fn diagonalizeSymmetric(comptime T: type, A: *RealMatrix(T)) !void {
 pub fn diagonalizeSymmetric2x2(comptime T: type, A: *RealMatrix(T)) void {
     const a00 = A.at(0, 0); const a01 = A.at(0, 1); const a11 = A.at(1, 1);
 
-    if (@abs(a01) < JACOBI_EIGENPROBLEM_TOLERANCE) {
+    const tol = 16 * @max(@max(@abs(a00), @abs(a11)), @abs(a01)) * std.math.floatEps(T);
 
-        A.ptr(0, 0).* = a00;
-        A.ptr(1, 1).* = a11;
+    if (@abs(a01) < tol) {
+
+        A.ptr(0, 0).* = if (a00 < a11) a00 else a11;
+        A.ptr(1, 1).* = if (a00 < a11) a11 else a00;
 
         A.ptr(0, 1).* = 0;
         A.ptr(1, 0).* = 0;
@@ -66,13 +68,17 @@ pub fn eigensystemSymmetric(comptime T: type, A_eigenvalues: *RealMatrix(T), A_e
 pub fn eigensystemSymmetric2x2(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) void {
     const a00 = A.at(0, 0); const a01 = A.at(0, 1); const a11 = A.at(1, 1);
 
-    if (@abs(a01) < JACOBI_EIGENPROBLEM_TOLERANCE) {
+    const tol = 16 * @max(@max(@abs(a00), @abs(a11)), @abs(a01)) * std.math.floatEps(T);
 
-        A_eigenvalues.ptr(0, 0).* = a00;
-        A_eigenvalues.ptr(1, 1).* = a11;
+    if (@abs(a01) < tol) {
 
-        A_eigenvectors.ptr(0, 0).* = 1; A_eigenvectors.ptr(0, 1).* = 0;
-        A_eigenvectors.ptr(1, 0).* = 0; A_eigenvectors.ptr(1, 1).* = 1;
+        A_eigenvalues.ptr(0, 0).* = if (a00 < a11) a00 else a11;
+        A_eigenvalues.ptr(1, 1).* = if (a00 < a11) a11 else a00;
+
+        A_eigenvectors.ptr(0, 0).* = if (a00 < a11) 1 else 0;
+        A_eigenvectors.ptr(0, 1).* = if (a00 < a11) 0 else 1;
+        A_eigenvectors.ptr(1, 0).* = if (a00 < a11) 0 else 1;
+        A_eigenvectors.ptr(1, 1).* = if (a00 < a11) 1 else 0;
 
         return;
     }
@@ -85,6 +91,9 @@ pub fn eigensystemSymmetric2x2(comptime T: type, A_eigenvalues: *RealMatrix(T), 
 
     A_eigenvalues.ptr(0, 0).* = a00 - t * a01;
     A_eigenvalues.ptr(1, 1).* = a11 + t * a01;
+
+    A_eigenvalues.ptr(0, 1).* = 0;
+    A_eigenvalues.ptr(1, 0).* = 0;
 
     A_eigenvectors.ptr(0, 0).* =  c;
     A_eigenvectors.ptr(0, 1).* =  s;

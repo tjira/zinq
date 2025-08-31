@@ -2,9 +2,11 @@
 
 const std = @import("std");
 
+const complex_matrix = @import("complex_matrix.zig");
 const strided_complex_vector = @import("strided_complex_vector.zig");
 
 const Complex = std.math.Complex;
+const ComplexMatrix = complex_matrix.ComplexMatrix;
 const StridedComplexVector = strided_complex_vector.StridedComplexVector;
 
 /// Complex vector class.
@@ -26,6 +28,16 @@ pub fn ComplexVector(comptime T: type) type {
         /// Free the memory allocated for the vector.
         pub fn deinit(self: @This()) void {
             self.allocator.free(self.data);
+        }
+
+        /// Create a matrix view of the vector with one column.
+        pub fn asMatrix(self: @This()) ComplexMatrix(T) {
+            return ComplexMatrix(T){
+                .data = self.data,
+                .rows = self.len,
+                .cols = 1,
+                .allocator = self.allocator,
+            };
         }
 
         /// Create a strided view of the vector.

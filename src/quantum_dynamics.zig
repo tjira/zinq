@@ -2,28 +2,30 @@
 
 const std = @import("std");
 
+const complex_matrix = @import("complex_matrix.zig");
+const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
-const real_matrix = @import("real_matrix.zig");
-const complex_vector = @import("complex_vector.zig");
 const grid_wavefunction = @import("grid_wavefunction.zig");
-const complex_matrix = @import("complex_matrix.zig");
+const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
-const grid_wavefunction_propagator = @import("grid_wavefunction_propagator.zig");
+const tully_potential = @import("tully_potential.zig");
 
+const ComplexMatrix = complex_matrix.ComplexMatrix;
+const ComplexVector = complex_vector.ComplexVector;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
-const GridWavefunctionPropagator = grid_wavefunction_propagator.GridWavefunctionPropagator;
 const GridWavefunction = grid_wavefunction.GridWavefunction;
 const RealMatrix = real_matrix.RealMatrix;
-const ComplexVector = complex_vector.ComplexVector;
-const ComplexMatrix = complex_matrix.ComplexMatrix;
 const RealVector = real_vector.RealVector;
+const TullyPotential1 = tully_potential.TullyPotential1;
 
 const momentumGridAlloc = grid_generator.momentumGridAlloc;
 const positionGridAlloc = grid_generator.positionGridAlloc;
-const printRealMatrix = device_write.printRealMatrix;
 const print = device_write.print;
+
+const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// The quantum dynamics options struct.
 pub fn Options(comptime T: type) type {
@@ -59,20 +61,20 @@ pub fn Options(comptime T: type) type {
 }
 
 /// The quantum dynamics output struct.
-pub fn Output(comptime _: type) type {
+pub fn Output(comptime T: type) type {
     return struct {
+        population: RealMatrix(f64),
 
         /// Allocate the output structure.
-        pub fn init(allocator: std.mem.Allocator) !@This() {
-            _ = allocator;
-
+        pub fn init(nstate: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
+                .population = try RealMatrix(T).init(iterations + 1, nstate, allocator),
             };
         }
 
         /// Deallocate the output structure.
         pub fn deinit(self: @This()) void {
-            _ = self;
+            self.population.deinit();
         }
     };
 }
@@ -94,14 +96,20 @@ pub fn Custom(comptime T: type) type {
     };
 }
 
+const printRealMatrix = device_write.printRealMatrix;
+
 /// Run quantum dynamics simulation.
-pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) !Output(T) {
-    try print("\nRUNNING QUANTUM DYNAMICS SIMULATION ON A {d}-DIMENSIONAL GRID WITH {d} POINTS\n\n", .{options.grid.limits.len, options.grid.points});
+pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try print("\nRUNNING QUANTUM DYNAMICS SIMULATION ON A {d}-DIMENSIONAL GRID WITH {d} POINTS\n\n", .{options.grid.limits.len, options.grid.points});
 
     const ndim = options.potential.ndim();
     const nstate = options.potential.nstate();
 
-    var output = try Output(T).init(allocator); defer output.deinit();
+    if (options.grid.limits.len != ndim) return error.IncompatibleDimension;
+    if (options.initial_conditions.momentum.len != ndim) return error.IncompatibleDimension;
+    if (options.initial_conditions.position.len != ndim) return error.IncompatibleDimension;
+
+    var output = try Output(T).init(nstate, @intCast(options.iterations), allocator);
 
     const position_grid = try positionGridAlloc(T, options.grid.limits, @intCast(options.grid.points), allocator); defer position_grid.deinit();
     const momentum_grid = try momentumGridAlloc(T, options.grid.limits, @intCast(options.grid.points), allocator); defer momentum_grid.deinit();
@@ -112,21 +120,19 @@ pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) 
 
     wavefunction.initialGaussian(options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.state, options.initial_conditions.gamma);
 
-    var propagator = try GridWavefunctionPropagator(T).init(@intCast(options.grid.points), ndim, nstate, allocator); defer propagator.deinit();
-
-    try propagator.generate(wavefunction, options.potential, 0, options.time_step, options.imaginary);
+    if (options.adiabatic) try wavefunction.transformRepresentation(options.potential, 0, false);
 
     var temporary_wavefunction_column = try ComplexVector(T).init(wavefunction.data.rows, allocator); defer temporary_wavefunction_column.deinit();
 
-    try printIterationHeader(ndim, nstate);
+    if (enable_printing) try printIterationHeader(ndim, nstate);
 
     for (0..options.iterations + 1) |i| {
 
         const time = @as(T, @floatFromInt(i)) * options.time_step;
 
-        if (i > 0) try wavefunction.propagate(propagator, options.imaginary, &temporary_wavefunction_column);
+        if (i > 0) try wavefunction.propagate(options.potential, time, options.time_step, options.imaginary, &temporary_wavefunction_column);
 
-        const density_matrix = try wavefunction.density(); defer density_matrix.deinit();
+        const density_matrix = try wavefunction.density(options.potential, time, options.adiabatic); defer density_matrix.deinit();
 
         const potential_energy = try wavefunction.potentialEnergy(options.potential, time);
         const kinetic_energy = try wavefunction.kineticEnergy(&temporary_wavefunction_column);
@@ -134,7 +140,11 @@ pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) 
         const position = try wavefunction.positionMean(); defer position.deinit();
         const momentum = try wavefunction.momentumMean(&temporary_wavefunction_column); defer momentum.deinit();
 
-        if (i > 0 and i % options.log_intervals.iteration != 0) continue;
+        for (0..nstate) |j| {
+            output.population.ptr(i, j).* = density_matrix.at(j, j).re;
+        }
+
+        if (!enable_printing or (i > 0 and i % options.log_intervals.iteration != 0)) continue;
 
         const iteration_info = Custom(T).IterationInfo{
             .density_matrix = density_matrix,
@@ -148,6 +158,10 @@ pub fn run(comptime T: type, options: Options(T), allocator: std.mem.Allocator) 
 
         try printIterationInfo(T, iteration_info);
     }
+
+    if (enable_printing) for (0..nstate) |i| {
+        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population.at(options.iterations, i)});
+    };
 
     return output;
 }
@@ -197,4 +211,28 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo) !void
     try writer.print("]", .{});
 
     try print("{s}\n", .{writer.buffered()});
+}
+
+test "exact nonadiabatic dynamics on Tully's first potential" {
+    const options = Options(f64){
+        .potential = .{.tully_1 = TullyPotential1(f64){}},
+        .grid = .{
+            .limits = &.{&.{-24.0, 32.0}},
+            .points = 2048
+        },
+        .initial_conditions = .{
+            .mass = 2000,
+            .momentum = &.{15.0},
+            .position = &.{-10.0},
+            .state = 1,
+            .gamma = 2
+        },
+        .iterations = 350,
+        .time_step = 10,
+    };
+
+    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+
+    try std.testing.expect(@abs(output.population.at(options.iterations, 0) - 0.58949426578088) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(options.iterations, 1) - 0.41050573421579) < TEST_TOLERANCE);
 }
