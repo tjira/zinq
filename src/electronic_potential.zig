@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const global_variables = @import("global_variables.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
@@ -18,6 +19,7 @@ const TullyPotential1 = tully_potential.TullyPotential1;
 
 const diagonalizeSymmetric = eigenproblem_solver.diagonalizeSymmetric;
 const eigensystemSymmetric = eigenproblem_solver.eigensystemSymmetric;
+const printRealMatrix = device_write.printRealMatrix;
 
 const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
 

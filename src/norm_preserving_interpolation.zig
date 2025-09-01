@@ -15,11 +15,13 @@ pub fn NormPreservingInterpolation(comptime T: type) type {
         pub fn evaluate(self: @This(), TDC: *RealMatrix(T), S: RealMatrix(T), time_step: T) !void {
             if (TDC.rows != 2) return error.NotImplemented;
 
+            _ = self; TDC.zero();
+
+            if (S.at(0, 1) == 0) return;
+
             const a = Complex(T).init(S.at(0, 0), 0);
             const b = Complex(T).init(S.at(0, 1), 0);
             const c = Complex(T).init(S.at(1, 1), 0);
-
-            _ = self; TDC.zero();
 
             const tau = std.math.complex.sqrt(a.sub(c).mul(a.sub(c)).sub(b.mul(b).mul(Complex(T).init(4, 0))));
 

@@ -26,6 +26,13 @@ pub fn ComplexVector(comptime T: type) type {
             };
         }
 
+        /// Initialize a vector and fills it with zeros.
+        pub fn initZero(len: usize, allocator: std.mem.Allocator) !@This() {
+            var v = try @This().init(len, allocator); v.zero();
+
+            return v;
+        }
+
         /// Free the memory allocated for the vector.
         pub fn deinit(self: @This()) void {
             self.allocator.free(self.data);
@@ -68,9 +75,19 @@ pub fn ComplexVector(comptime T: type) type {
             return true;
         }
 
+        /// Fill the vector with a given value.
+        pub fn fill(self: *@This(), value: Complex(T)) void {
+            for (self.data) |*element| element.* = value;
+        }
+
         /// Get the pointer to the element at the specified index.
         pub fn ptr(self: @This(), i: usize) *Complex(T) {
             return &self.data[i];
+        }
+
+        /// Fills the vector with zeros.
+        pub fn zero(self: *@This()) void {
+            self.fill(Complex(T).init(0, 0));
         }
     };
 }

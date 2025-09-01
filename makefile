@@ -21,10 +21,10 @@ zinq: zig-bin/zig clean-output
 > ./zig-bin/zig build $(ZIG_FLAGS)
 
 run: zig-bin/zig
-> ./zig-bin/zig build $(if $(filter 1,$(SUMMARY)),--summary all) $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast) run
+> ./zig-bin/zig build $(ZIG_FLAGS) run
 
 test: zig-bin/zig
-> ./zig-bin/zig build $(if $(filter 1,$(SUMMARY)),--summary all) $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast) test
+> ./zig-bin/zig build $(ZIG_FLAGS) test
 
 # CUSTOM TARGETS =======================================================================================================================================================================================
 

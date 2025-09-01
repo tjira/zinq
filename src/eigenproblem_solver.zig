@@ -49,6 +49,8 @@ pub fn diagonalizeSymmetric2x2(comptime T: type, A: *RealMatrix(T)) void {
 
     A.ptr(0, 1).* = 0;
     A.ptr(1, 0).* = 0;
+
+    if (A.at(0, 0) > A.at(1, 1)) std.mem.swap(T, A.ptr(0, 0), A.ptr(1, 1));
 }
 
 /// Solve the eigenproblem for a real symmetric system.

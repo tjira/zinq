@@ -5,7 +5,10 @@ const std = @import("std");
 const classical_particle = @import("classical_particle.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
+const complex_runge_kutta = @import("complex_runge_kutta.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const complex_vector = @import("complex_vector.zig");
+const fewest_switches = @import("fewest_switches.zig");
 const landau_zener = @import("landau_zener.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const object_array = @import("object_array.zig");
@@ -16,7 +19,10 @@ const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 const time_derivative_coupling = @import("time_derivative_coupling.zig");
 const tully_potential = @import("tully_potential.zig");
 
+const Complex = std.math.complex.Complex;
 const ClassicalParticle = classical_particle.ClassicalParticle;
+const ComplexRungeKutta = complex_runge_kutta.ComplexRungeKutta;
+const ComplexVector = complex_vector.ComplexVector;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
 const LandauZener = landau_zener.LandauZener;
 const RealMatrix = real_matrix.RealMatrix;
@@ -94,6 +100,7 @@ pub fn Custom(comptime T: type) type {
             system: ClassicalParticle(T),
             time: T,
             trajectory: usize,
+            amplitudes: ComplexVector(T)
         };
 
         /// Structure to hold a single trajectory output.
@@ -124,9 +131,9 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     var output = try Output(T).init(nstate, options.iterations, allocator);
 
-    var rng = std.Random.DefaultPrng.init(options.seed); var random = rng.random();
+    var split_mix = std.Random.SplitMix64.init(options.seed); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
-    if (enable_printing) try printIterationHeader(ndim);
+    if (enable_printing) try printIterationHeader(ndim, nstate);
 
     for (0..options.trajectories) |i| {
 
@@ -143,7 +150,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     output.population_mean.divs(@as(T, @floatFromInt(options.trajectories)));
 
     if (enable_printing) for (0..nstate) |i| {
-        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(options.iterations, i)});
+        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(options.iterations, i)});
     };
 
     return output;
@@ -161,6 +168,8 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     var adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_potential.deinit();
     var adiabatic_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_eigenvectors.deinit();
     var previous_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer previous_eigenvectors.deinit();
+    var eigenvector_overlap = try RealMatrix(T).init(nstate, nstate, allocator); defer eigenvector_overlap.deinit();
+    var derivative_coupling = try RealMatrix(T).initZero(nstate, nstate, allocator); defer derivative_coupling.deinit();
 
     var potential_eigensystem = .{
         .diabatic_potential = diabatic_potential,
@@ -170,18 +179,25 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 
     var energy_gaps = try RingBufferArray(T).init((2 * nstate - 2) / 2, .{.max_len = 5}, allocator); defer energy_gaps.deinit();
     var jump_probabilities = try RealVector(T).init(nstate, allocator); defer jump_probabilities.deinit();
+    var runge_kutta_solver = try ComplexRungeKutta(T).init(nstate, allocator); defer runge_kutta_solver.deinit();
+    var amplitudes = try ComplexVector(T).initZero(nstate, allocator); defer amplitudes.deinit();
 
-    var S = try RealMatrix(T).initZero(nstate, nstate, allocator); defer S.deinit();
-    var TDC = try RealMatrix(T).initZero(nstate, nstate, allocator); defer TDC.deinit();
+    amplitudes.ptr(current_state).* = Complex(T).init(1, 0);
+
+    const fs_parameters: fewest_switches.Parameters(T) = .{
+        .derivative_coupling = derivative_coupling,
+        .time_step = options.time_step,
+        .amplitudes = amplitudes
+    };
 
     const lz_parameters: landau_zener.Parameters(T) = .{
         .energy_gaps = energy_gaps,
-        .time_step = options.time_step,
+        .time_step = options.time_step
     };
 
     const surface_hopping_parameters: surface_hopping_algorithm.Parameters(T) = .{
-        .adiabatic_potential = adiabatic_potential,
-        .lz_parameters = lz_parameters,
+        .fs_parameters = fs_parameters,
+        .lz_parameters = lz_parameters
     };
 
     var split_mix = std.Random.SplitMix64.init(options.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
@@ -199,20 +215,23 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
         try options.potential.evaluateEigensystem(&potential_eigensystem, system.position, time);
 
         if (i > 0) {
+
             fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
-            mmRealTransReal(T, &S, previous_eigenvectors, adiabatic_eigenvectors);
+            mmRealTransReal(T, &eigenvector_overlap, previous_eigenvectors, adiabatic_eigenvectors);
+
+            if (options.time_derivative_coupling) |tdc_algorithm| try tdc_algorithm.evaluate(&derivative_coupling, eigenvector_overlap, options.time_step);
         }
-
-        if (options.time_derivative_coupling) |tdc_algorithm| try tdc_algorithm.evaluate(&TDC, S, options.time_step);
-
-        // try printRealMatrix(T, TDC);
 
         for (0..nstate) |j| for (j + 1..nstate) |k| {
             energy_gaps.ptr(j + k - 1).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
         };
 
+        if (i > 0) if (options.surface_hopping) |algorithm| if (algorithm == .fewest_switches) {
+            propagateAmplitudes(T, &amplitudes, adiabatic_potential, derivative_coupling, &runge_kutta_solver, algorithm.fewest_switches.substeps, options.time_step);
+        };
+
         if (options.surface_hopping) |algorithm| if (i > 1) {
-            current_state = algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, current_state, &random);
+            current_state = algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, adiabatic_potential, current_state, &random);
         };
 
         const kinetic_energy = system.kineticEnergy();
@@ -230,6 +249,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
             .system = system.*,
             .time = time,
             .trajectory = index,
+            .amplitudes = amplitudes
         };
 
         try printIterationInfo(T, iteration_info);
@@ -238,8 +258,22 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     return output;
 }
 
+/// Right-hand side of the electronic coefficient ODE.
+pub fn coefficientDerivative(comptime T: type, k: *ComplexVector(T), amplitudes: ComplexVector(T), parameters: anytype) void {
+    const adiabatic_potential = parameters.adiabatic_potential;
+    const derivative_coupling = parameters.derivative_coupling;
+
+    for (0..amplitudes.len) |i| {
+        k.ptr(i).* = amplitudes.at(i).mul(Complex(T).init(adiabatic_potential.at(i, i), 0)).mulbyi().neg();
+    }
+
+    for (0..amplitudes.len) |i| for (0..amplitudes.len) |j| {
+        k.ptr(i).* = k.at(i).sub(amplitudes.at(j).mul(Complex(T).init(derivative_coupling.at(i, j), 0)));
+    };
+}
+
 /// Print header for iteration info.
-pub fn printIterationHeader(ndim: usize) !void {
+pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
     var buffer: [128]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
@@ -248,7 +282,9 @@ pub fn printIterationHeader(ndim: usize) !void {
     try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
     try writer.print("{s:5} ", .{"STATE"});
     try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]}", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
+    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
+
+    try writer.print(" {[value]s:[width]}", .{.value = "|COEFS|^2", .width = 7 * nstate + 2 * (nstate - 1) + 2});
 
     try print("{s}\n", .{writer.buffered()});
 }
@@ -275,9 +311,34 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo) !void
         try writer.print("{d:9.4}{s}", .{info.system.velocity.at(i) * info.system.masses.at(i), if (i == info.system.ndim - 1) "" else ", "});
     }
 
+    try writer.print("] [", .{});
+
+    for (0..info.amplitudes.len) |i| {
+        try writer.print("{d:7.4}{s}", .{std.math.pow(T, info.amplitudes.at(i).magnitude(), 2), if (i == info.amplitudes.len - 1) "" else ", "});
+    }
+
     try writer.print("]", .{});
 
     try print("{s}\n", .{writer.buffered()});
+}
+
+/// Function to propagate the electronic amplitudes.
+pub fn propagateAmplitudes(comptime T: type,
+    amplitudes: *ComplexVector(T),
+    adiabatic_potential: RealMatrix(T),
+    derivative_coupling: RealMatrix(T),
+    rk_solver: *ComplexRungeKutta(T),
+    steps: usize,
+    time_step: T
+) void {
+    const coefficient_derivative_parameters = .{
+        .adiabatic_potential = adiabatic_potential,
+        .derivative_coupling = derivative_coupling
+    };
+
+    for (0..steps) |_| {
+        rk_solver.propagate(amplitudes, coefficientDerivative, coefficient_derivative_parameters, time_step / @as(T, @floatFromInt(steps)));
+    }
 }
 
 test "landau-zener surface hopping with Tully's first potential" {
