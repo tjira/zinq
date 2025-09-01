@@ -7,11 +7,13 @@ const global_variables = @import("global_variables.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
+const time_linear_potential = @import("time_linear_potential.zig");
 const tully_potential = @import("tully_potential.zig");
 
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
+const TimeLinearPotential = time_linear_potential.TimeLinearPotential;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
 const diagonalizeSymmetric = eigenproblem_solver.diagonalizeSymmetric;
@@ -23,6 +25,7 @@ const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
 pub fn ElectronicPotential(comptime T: type) type {
     return union(enum) {
         harmonic: HarmonicPotential(T),
+        time_linear: TimeLinearPotential(T),
         tully_1: TullyPotential1(T),
 
         /// Evaluate the adabatic potential energy matrix at given system state and time.
@@ -71,7 +74,8 @@ pub fn ElectronicPotential(comptime T: type) type {
         pub fn ndim(self: @This()) usize {
             return switch (self) {
                 .harmonic => |field| field.k.len,
-                .tully_1 => 1
+                .tully_1 => 1,
+                .time_linear => 1
             };
         }
 
@@ -79,7 +83,8 @@ pub fn ElectronicPotential(comptime T: type) type {
         pub fn nstate(self: @This()) usize {
             return switch (self) {
                 .harmonic => |_| 1,
-                .tully_1 => |_| 2
+                .tully_1 => |_| 2,
+                .time_linear => |_| 2
             };
         }
     };

@@ -17,7 +17,7 @@ pub fn TullyPotential1(comptime T: type) type {
         A: T = 0.01, B: T = 1.6, C: T = 0.005, D: T = 1,
 
         /// Diabatic potential matrix evaluator.
-        pub fn evaluateDiabatic(self: TullyPotential1(T), U: *RealMatrix(T), position: RealVector(T), time: T) void {
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) void {
             _ = time;
 
             U.ptr(0, 0).* = sgn(position.at(0)) * self.A * (1 - std.math.exp(-sgn(position.at(0)) * self.B * position.at(0)));

@@ -116,7 +116,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     var output = try Output(T).init(nstate, options.iterations, allocator);
 
-    var split_mix = std.Random.SplitMix64.init(options.seed); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
+    var rng = std.Random.DefaultPrng.init(options.seed); var random = rng.random();
 
     if (enable_printing) try printIterationHeader(ndim);
 

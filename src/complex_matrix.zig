@@ -10,7 +10,11 @@ const ComplexVector = complex_vector.ComplexVector;
 /// Complex matrix class. The matrix is stored in a flat array in row-major order.
 pub fn ComplexMatrix(comptime T: type) type {
     return struct {
-        data: []Complex(T), rows: usize, cols: usize, allocator: std.mem.Allocator,
+        data: []Complex(T),
+        rows: usize,
+        cols: usize,
+
+        allocator: std.mem.Allocator,
 
         /// Initialize a matrix with a given number of rows and columns and specify an allocator. The function returns an error if the allocation fails.
         pub fn init(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {

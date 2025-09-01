@@ -12,6 +12,7 @@ pub fn RealMatrix(comptime T: type) type {
         data: []T,
         rows: usize,
         cols: usize,
+
         allocator: std.mem.Allocator,
 
         /// Initialize a matrix with a given number of rows and columns and specify an allocator. The function returns an error if the allocation fails.

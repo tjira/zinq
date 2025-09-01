@@ -14,6 +14,7 @@ pub fn ComplexVector(comptime T: type) type {
     return struct {
         data: []Complex(T),
         len: usize,
+
         allocator: std.mem.Allocator,
 
         /// Initialize a vector with a given length and specify an allocator. The function returns an error if the allocation fails.

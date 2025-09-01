@@ -7,6 +7,7 @@ pub fn RealVector(comptime T: type) type {
     return struct {
         data: []T,
         len: usize,
+
         allocator: std.mem.Allocator,
 
         /// Initialize a vector with a given length and specify an allocator. The function returns an error if the allocation fails.

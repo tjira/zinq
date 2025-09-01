@@ -56,7 +56,7 @@ clean-cache:
 > @rm -rf ${HOME}/.cache/zig .zig-cache
 
 clean-docs:
-> @rm -rf docs/_site docs/.jekyll-cache docs/code docs/*.locked
+> @rm -rf docs/_site docs/.jekyll-cache docs/code docs/tex docs/*.locked
 
 clean-output:
 > @rm -rf zig-out

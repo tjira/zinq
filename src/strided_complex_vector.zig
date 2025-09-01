@@ -7,7 +7,10 @@ const Complex = std.math.Complex;
 /// Complex strided vector class.
 pub fn StridedComplexVector(comptime T: type) type {
     return struct {
-        data: []Complex(T), len: usize, stride: usize, zero: usize,
+        data: []Complex(T),
+        len: usize,
+        stride: usize,
+        zero: usize,
 
         /// Get the element at the specified index as a value.
         pub fn at(self: @This(), i: usize) Complex(T) {

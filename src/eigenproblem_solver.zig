@@ -42,7 +42,7 @@ pub fn diagonalizeSymmetric2x2(comptime T: type, A: *RealMatrix(T)) void {
 
     const tau = 0.5 * (a11 - a00) / a01;
 
-    const t = sgn(tau) / (@abs(tau) + std.math.hypot(1, tau));
+    const t = std.math.copysign(@as(T, 1), tau) / (@abs(tau) + std.math.hypot(1, tau));
 
     A.ptr(0, 0).* = a00 - t * a01;
     A.ptr(1, 1).* = a11 + t * a01;
@@ -85,7 +85,7 @@ pub fn eigensystemSymmetric2x2(comptime T: type, A_eigenvalues: *RealMatrix(T), 
 
     const tau = 0.5 * (a11 - a00) / a01;
 
-    const t = sgn(tau) / (@abs(tau) + std.math.hypot(1, tau));
+    const t = std.math.copysign(@as(T, 1), tau) / (@abs(tau) + std.math.hypot(1, tau));
 
     const c = 1 / std.math.sqrt(1 + t * t); const s = t * c;
 

@@ -8,6 +8,7 @@ pub fn RingBuffer(comptime T: type) type {
         data: []T,
         len: usize,
         head: usize,
+
         allocator: std.mem.Allocator,
 
         /// Initialize the ring buffer.
