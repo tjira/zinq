@@ -17,6 +17,7 @@ pub const harmonic_potential = @import("harmonic_potential.zig");
 pub const landau_zener = @import("landau_zener.zig");
 pub const math_functions = @import("math_functions.zig");
 pub const matrix_multiplication = @import("matrix_multiplication.zig");
+pub const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 pub const object_array = @import("object_array.zig");
 pub const quantum_dynamics = @import("quantum_dynamics.zig");
 pub const real_matrix = @import("real_matrix.zig");
@@ -24,6 +25,7 @@ pub const real_vector = @import("real_vector.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
 pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
+pub const time_derivative_coupling = @import("time_derivative_coupling.zig");
 
 const RealType = f64;
 

@@ -2,6 +2,10 @@
 
 const std = @import("std");
 
+const real_matrix = @import("real_matrix.zig");
+
+const RealMatrix = real_matrix.RealMatrix;
+
 /// Real vector class.
 pub fn RealVector(comptime T: type) type {
     return struct {
@@ -38,6 +42,16 @@ pub fn RealVector(comptime T: type) type {
             for (self.data, 0..) |*element, index| {
                 element.* += other.data[index];
             }
+        }
+
+        /// Return a view of the internal data as a column matrix.
+        pub fn asMatrix(self: @This()) RealMatrix(T) {
+            return RealMatrix(T){
+                .data = self.data,
+                .rows = self.len,
+                .cols = 1,
+                .allocator = self.allocator,
+            };
         }
 
         /// Get the element at index i.

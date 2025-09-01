@@ -114,6 +114,20 @@ pub fn mmRealTransComplex(comptime T: type, C: *ComplexMatrix(T), AT: RealMatrix
     };
 }
 
+/// Multiply one transposed real matrix A by a real matrix B and store the result in C.
+pub fn mmRealTransReal(comptime T: type, C: *RealMatrix(T), AT: RealMatrix(T), B: RealMatrix(T)) void {
+    for (0..AT.cols) |i| for (0..B.cols) |j| {
+
+        var sum: T = 0;
+
+        for (0..AT.rows) |k| {
+            sum += AT.at(k, i) * B.at(k, j);
+        }
+
+        C.ptr(i, j).* = sum;
+    };
+}
+
 test "mmRealRealAlloc" {
     var A = try RealMatrix(f64).init(2, 2, std.testing.allocator); defer A.deinit();
     var B = try RealMatrix(f64).init(2, 2, std.testing.allocator); defer B.deinit();

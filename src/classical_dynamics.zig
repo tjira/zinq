@@ -4,13 +4,16 @@ const std = @import("std");
 
 const classical_particle = @import("classical_particle.zig");
 const device_write = @import("device_write.zig");
+const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const landau_zener = @import("landau_zener.zig");
+const matrix_multiplication = @import("matrix_multiplication.zig");
 const object_array = @import("object_array.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const ring_buffer = @import("ring_buffer.zig");
 const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
+const time_derivative_coupling = @import("time_derivative_coupling.zig");
 const tully_potential = @import("tully_potential.zig");
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
@@ -20,8 +23,12 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const RingBufferArray = object_array.RingBufferArray;
 const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorithm;
+const TimeDerivativeCoupling = time_derivative_coupling.TimeDerivativeCoupling;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
+const mmRealTransReal = matrix_multiplication.mmRealTransReal;
+const fixGauge = eigenproblem_solver.fixGauge;
+const printRealMatrix = device_write.printRealMatrix;
 const print = device_write.print;
 
 /// Classical dynamics option struct.
@@ -49,6 +56,7 @@ pub fn Options(comptime T: type) type {
 
         log_intervals: LogIntervals = .{},
         surface_hopping: ?SurfaceHoppingAlgorithm(T) = null,
+        time_derivative_coupling: ?TimeDerivativeCoupling(T) = null,
 
         seed: u32 = 0,
     };
@@ -62,7 +70,7 @@ pub fn Output(comptime T: type) type {
         /// Allocate the output structure.
         pub fn init(nstate: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
-                .population_mean = try RealMatrix(T).init(iterations + 1, nstate, allocator)
+                .population_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator)
             };
         }
 
@@ -95,7 +103,7 @@ pub fn Custom(comptime T: type) type {
             /// Allocate the trajectory output structure.
             pub fn init(nstate: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
                 return @This(){
-                    .population = try RealMatrix(T).init(iterations + 1, nstate, allocator)
+                    .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator)
                 };
             }
 
@@ -152,6 +160,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     var diabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer diabatic_potential.deinit();
     var adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_potential.deinit();
     var adiabatic_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_eigenvectors.deinit();
+    var previous_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer previous_eigenvectors.deinit();
 
     var potential_eigensystem = .{
         .diabatic_potential = diabatic_potential,
@@ -161,6 +170,9 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 
     var energy_gaps = try RingBufferArray(T).init((2 * nstate - 2) / 2, .{.max_len = 5}, allocator); defer energy_gaps.deinit();
     var jump_probabilities = try RealVector(T).init(nstate, allocator); defer jump_probabilities.deinit();
+
+    var S = try RealMatrix(T).initZero(nstate, nstate, allocator); defer S.deinit();
+    var TDC = try RealMatrix(T).initZero(nstate, nstate, allocator); defer TDC.deinit();
 
     const lz_parameters: landau_zener.Parameters(T) = .{
         .energy_gaps = energy_gaps,
@@ -178,17 +190,28 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 
         const time = @as(T, @floatFromInt(i)) * options.time_step;
 
+        @memcpy(previous_eigenvectors.data, adiabatic_eigenvectors.data);
+
         if (i > 0) {
             try system.propagateVelocityVerlet(options.potential, &adiabatic_potential, time, current_state, options.time_step);
         }
 
         try options.potential.evaluateEigensystem(&potential_eigensystem, system.position, time);
 
+        if (i > 0) {
+            fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
+            mmRealTransReal(T, &S, previous_eigenvectors, adiabatic_eigenvectors);
+        }
+
+        if (options.time_derivative_coupling) |tdc_algorithm| try tdc_algorithm.evaluate(&TDC, S, options.time_step);
+
+        // try printRealMatrix(T, TDC);
+
         for (0..nstate) |j| for (j + 1..nstate) |k| {
             energy_gaps.ptr(j + k - 1).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
         };
 
-        if (options.surface_hopping) |algorithm| if (i > 2) {
+        if (options.surface_hopping) |algorithm| if (i > 1) {
             current_state = algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, current_state, &random);
         };
 

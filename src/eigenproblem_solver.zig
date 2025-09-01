@@ -108,3 +108,22 @@ pub fn eigensystemSymmetric2x2(comptime T: type, A_eigenvalues: *RealMatrix(T), 
         std.mem.swap(T, A_eigenvectors.ptr(1, 0), A_eigenvectors.ptr(1, 1));
     }
 }
+
+/// Function to fix the gauge of eigenvectors.
+pub fn fixGauge(comptime T: type, eigenvectors: *RealMatrix(T), reference: RealMatrix(T)) void {
+    std.debug.assert(eigenvectors.rows == reference.rows);
+    std.debug.assert(eigenvectors.cols == reference.cols);
+
+    for (0..eigenvectors.cols) |i| {
+
+        var dot_product: T = 0;
+
+        for (0..eigenvectors.rows) |j| {
+            dot_product += eigenvectors.at(j, i) * reference.at(j, i);
+        }
+
+        if (dot_product < 0) for (0..eigenvectors.rows) |j| {
+            eigenvectors.ptr(j, i).* *= -1;
+        };
+    }
+}

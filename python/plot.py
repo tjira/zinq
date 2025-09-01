@@ -16,7 +16,7 @@ plt.rcParams.update({
 
 # create the parser
 parser = ap.ArgumentParser(
-    prog="Zinq Plotter", description="Plotting script for the Zinq package.",
+    prog="plot.py", description="Plotting script for the Zinq package.",
     formatter_class=lambda prog: ap.HelpFormatter(prog, max_help_position=128),
     add_help=False, allow_abbrev=False
 )
