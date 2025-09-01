@@ -55,7 +55,7 @@ pub fn Options(comptime T: type) type {
 
         log_intervals: LogIntervals = .{},
 
-        adiabatic: bool = true,
+        adiabatic: bool = false,
         imaginary: bool = false,
     };
 }
