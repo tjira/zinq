@@ -22,7 +22,7 @@ pub fn Parameters(comptime T: type) type {
         adiabatic_potential: RealMatrix(T),
         amplitudes: *ComplexVector(T),
         derivative_coupling: RealMatrix(T),
-        runge_kutta: *ComplexRungeKutta(T),
+        runge_kutta: ComplexRungeKutta(T),
         time_step: T
     };
 }
@@ -35,6 +35,8 @@ pub fn FewestSwitches(comptime T: type) type {
         /// Get the jump probabilities for the current state.
         pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) void {
             jump_probabilities.zero();
+
+            const quantum_step = parameters.time_step / @as(T, @floatFromInt(self.substeps));
 
             const coefficient_derivative = struct {
                 pub fn get(k: *ComplexVector(T), amplitudes: ComplexVector(T), derivative_parameters: anytype) void {
@@ -56,7 +58,7 @@ pub fn FewestSwitches(comptime T: type) type {
                 .derivative_coupling = parameters.derivative_coupling
             };
 
-            parameters.runge_kutta.propagate(parameters.amplitudes, coefficient_derivative.get, coefficient_derivative_parameters, parameters.time_step / @as(T, @floatFromInt(self.substeps)));
+            @constCast(&parameters.runge_kutta).propagate(parameters.amplitudes, coefficient_derivative.get, coefficient_derivative_parameters, quantum_step);
 
             for (0..parameters.amplitudes.len) |j| if (j != current_state) {
 
@@ -64,7 +66,7 @@ pub fn FewestSwitches(comptime T: type) type {
 
                 const denominator = std.math.pow(T, parameters.amplitudes.at(current_state).magnitude(), 2) + FSSH_DENOMINATOR_OFFSET;
 
-                const p = 2 * parameters.derivative_coupling.at(current_state, j) * re / denominator * parameters.time_step / @as(T, @floatFromInt(self.substeps));
+                const p = 2 * parameters.derivative_coupling.at(current_state, j) * re / denominator * quantum_step;
 
                 jump_probabilities.ptr(j).* = @max(p, 0);
             };

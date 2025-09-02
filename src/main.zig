@@ -14,6 +14,7 @@ pub const electronic_potential = @import("electronic_potential.zig");
 pub const fourier_transform = @import("fourier_transform.zig");
 pub const global_variables = @import("global_variables.zig");
 pub const grid_generator = @import("grid_generator.zig");
+pub const hammes_schiffer_tully = @import("hammes_schiffer_tully.zig");
 pub const harmonic_potential = @import("harmonic_potential.zig");
 pub const landau_zener = @import("landau_zener.zig");
 pub const math_functions = @import("math_functions.zig");

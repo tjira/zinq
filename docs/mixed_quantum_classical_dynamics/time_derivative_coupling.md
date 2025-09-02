@@ -48,7 +48,7 @@ The Time Derivative Coupling $$\sigma_{jk}=\Braket{\phi_j\\|\frac{\partial \phi_
 
 $$
 \begin{equation}\label{eq:hst_tdc}
-\sigma_{jk}\left(t+\frac{\Delta t}{2}\right)=\frac{1}{2\Delta t}\left(\Braket{\phi_j(t+\Delta t)\\|\phi_k(t)}-\Braket{\phi_j(t+\Delta t)\\|\phi_k(t)}\right).
+\sigma_{jk}\left(t+\frac{\Delta t}{2}\right)=\frac{1}{2\Delta t}\left(\Braket{\phi_j(t)\\|\phi_k(t+\Delta t)}-\Braket{\phi_j(t+\Delta t)\\|\phi_k(t)}\right).
 \end{equation}
 $$
 

@@ -12,25 +12,25 @@ pub fn NormPreservingInterpolation(comptime T: type) type {
     return struct {
 
         /// Evaluate the time derivative coupling.
-        pub fn evaluate(self: @This(), TDC: *RealMatrix(T), S: RealMatrix(T), time_step: T) !void {
-            if (TDC.rows != 2) return error.NotImplemented;
+        pub fn evaluate(self: @This(), derivative_coupling: *RealMatrix(T), eigenvector_overlap: RealMatrix(T), time_step: T) !void {
+            if (derivative_coupling.rows != 2) return error.NotImplemented;
 
-            _ = self; TDC.zero();
+            _ = self; derivative_coupling.zero();
 
-            if (S.at(0, 1) == 0) return;
+            if (eigenvector_overlap.at(0, 1) == 0) return;
 
-            const a = Complex(T).init(S.at(0, 0), 0);
-            const b = Complex(T).init(S.at(0, 1), 0);
-            const c = Complex(T).init(S.at(1, 1), 0);
+            const a = Complex(T).init(eigenvector_overlap.at(0, 0), 0);
+            const b = Complex(T).init(eigenvector_overlap.at(0, 1), 0);
+            const c = Complex(T).init(eigenvector_overlap.at(1, 1), 0);
 
             const tau = std.math.complex.sqrt(a.sub(c).mul(a.sub(c)).sub(b.mul(b).mul(Complex(T).init(4, 0))));
 
             const log1 = std.math.complex.log(a.add(c).add(tau));
             const log2 = std.math.complex.log(a.add(c).sub(tau));
 
-            TDC.ptr(0, 1).* = b.mul(log1.sub(log2)).div(tau).re / time_step;
+            derivative_coupling.ptr(0, 1).* = b.mul(log1.sub(log2)).div(tau).re / time_step;
 
-            TDC.ptr(1, 0).* = -TDC.at(0, 1);
+            derivative_coupling.ptr(1, 0).* = -derivative_coupling.at(0, 1);
         }
     };
 }

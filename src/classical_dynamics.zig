@@ -10,6 +10,7 @@ const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const fewest_switches = @import("fewest_switches.zig");
+const harmonic_potential = @import("harmonic_potential.zig");
 const landau_zener = @import("landau_zener.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
@@ -27,6 +28,7 @@ const ComplexVector = complex_vector.ComplexVector;
 const DerivativeCoupling = derivative_coupling.DerivativeCoupling;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
 const FewestSwitches = fewest_switches.FewestSwitches;
+const HarmonicPotential = harmonic_potential.HarmonicPotential;
 const LandauZener = landau_zener.LandauZener;
 const NormPreservingInterpolation = norm_preserving_interpolation.NormPreservingInterpolation;
 const RealMatrix = real_matrix.RealMatrix;
@@ -37,6 +39,8 @@ const TullyPotential1 = tully_potential.TullyPotential1;
 
 const fixGauge = eigenproblem_solver.fixGauge;
 const mmRealTransReal = matrix_multiplication.mmRealTransReal;
+const exportRealMatrix = device_write.exportRealMatrix;
+const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const print = device_write.print;
 
 /// Classical dynamics option struct.
@@ -54,6 +58,9 @@ pub fn Options(comptime T: type) type {
             trajectory: u32 = 1,
             iteration: u32 = 1
         };
+        pub const Write = struct {
+            population_mean: ?[]const u8 = null
+        };
 
         potential: ElectronicPotential(T),
         initial_conditions: InitialConditions,
@@ -62,9 +69,10 @@ pub fn Options(comptime T: type) type {
         iterations: u32,
         time_step: T,
 
+        derivative_coupling: ?DerivativeCoupling(T) = null,
         log_intervals: LogIntervals = .{},
         surface_hopping: ?SurfaceHoppingAlgorithm(T) = null,
-        derivative_coupling: ?DerivativeCoupling(T) = null,
+        write: Write = .{},
 
         seed: u32 = 0,
     };
@@ -135,7 +143,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     var split_mix = std.Random.SplitMix64.init(options.seed); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
-    if (enable_printing) try printIterationHeader(ndim, nstate);
+    if (enable_printing) try printIterationHeader(T, ndim, nstate, options.surface_hopping);
 
     for (0..options.trajectories) |i| {
 
@@ -154,6 +162,10 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     if (enable_printing) for (0..nstate) |i| {
         try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(options.iterations, i)});
     };
+
+    const end_time = @as(T, @floatFromInt(options.iterations)) * options.time_step;
+
+    if (options.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population_mean, 0, end_time, options.iterations + 1);
 
     return output;
 }
@@ -190,7 +202,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
         .adiabatic_potential = adiabatic_potential,
         .amplitudes = &amplitudes,
         .derivative_coupling = time_derivative_coupling,
-        .runge_kutta = &runge_kutta_solver,
+        .runge_kutta = runge_kutta_solver,
         .time_step = options.time_step
     };
 
@@ -223,7 +235,9 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
             fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
             mmRealTransReal(T, &eigenvector_overlap, previous_eigenvectors, adiabatic_eigenvectors);
 
-            if (options.derivative_coupling) |tdc_algorithm| try tdc_algorithm.evaluate(&time_derivative_coupling, eigenvector_overlap, options.time_step);
+            if (options.derivative_coupling) |tdc_algorithm| {
+                try tdc_algorithm.evaluate(&time_derivative_coupling, eigenvector_overlap, options.time_step);
+            }
         }
 
         for (0..nstate) |j| for (j + 1..nstate) |k| {
@@ -252,14 +266,14 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
             .amplitudes = amplitudes
         };
 
-        try printIterationInfo(T, iteration_info);
+        try printIterationInfo(T, iteration_info, options.surface_hopping);
     }
 
     return output;
 }
 
 /// Print header for iteration info.
-pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
+pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surface_hopping: ?SurfaceHoppingAlgorithm(T)) !void {
     var buffer: [128]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
@@ -268,15 +282,18 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
     try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
     try writer.print("{s:5} ", .{"STATE"});
     try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
+    try writer.print("{[value]s:[width]}", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
 
-    try writer.print(" {[value]s:[width]}", .{.value = "|COEFS|^2", .width = 7 * nstate + 2 * (nstate - 1) + 2});
+    if (surface_hopping) |algorithm| switch (algorithm) {
+        .fewest_switches => try writer.print(" {[value]s:[width]}", .{.value = "|COEFS|^2", .width = 7 * nstate + 2 * (nstate - 1) + 2}),
+        else => {}
+    };
 
     try print("{s}\n", .{writer.buffered()});
 }
 
 /// Prints the iteration info to standard output.
-pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo) !void {
+pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T)) !void {
     var buffer: [128]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
@@ -297,10 +314,13 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo) !void
         try writer.print("{d:9.4}{s}", .{info.system.velocity.at(i) * info.system.masses.at(i), if (i == info.system.ndim - 1) "" else ", "});
     }
 
-    try writer.print("] [", .{});
+    if (surface_hopping) |algorithm| {
 
-    for (0..info.amplitudes.len) |i| {
-        try writer.print("{d:7.4}{s}", .{std.math.pow(T, info.amplitudes.at(i).magnitude(), 2), if (i == info.amplitudes.len - 1) "" else ", "});
+        if (algorithm == .fewest_switches) try writer.print("] [", .{});
+
+        if (algorithm == .fewest_switches) for (0..info.amplitudes.len) |i| {
+            try writer.print("{d:7.4}{s}", .{std.math.pow(T, info.amplitudes.at(i).magnitude(), 2), if (i == info.amplitudes.len - 1) "" else ", "});
+        };
     }
 
     try writer.print("]", .{});
@@ -320,10 +340,6 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
             .position_mean = &.{-10},
             .position_std = &.{0.5},
             .state = 1
-        },
-        .log_intervals = .{
-            .iteration = 500,
-            .trajectory = 500
         },
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
@@ -351,10 +367,6 @@ test "Landau-Lener Surface Hopping on Tully's First Potential" {
             .position_mean = &.{-10},
             .position_std = &.{0.5},
             .state = 1
-        },
-        .log_intervals = .{
-            .iteration = 500,
-            .trajectory = 500
         },
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
