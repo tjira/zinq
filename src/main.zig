@@ -7,6 +7,7 @@ pub const classical_dynamics = @import("classical_dynamics.zig");
 pub const classical_particle = @import("classical_particle.zig");
 pub const complex_matrix = @import("complex_matrix.zig");
 pub const complex_vector = @import("complex_vector.zig");
+pub const derivative_coupling = @import("derivative_coupling.zig");
 pub const device_write = @import("device_write.zig");
 pub const eigenproblem_solver = @import("eigenproblem_solver.zig");
 pub const electronic_potential = @import("electronic_potential.zig");
@@ -25,7 +26,6 @@ pub const real_vector = @import("real_vector.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
 pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
-pub const time_derivative_coupling = @import("time_derivative_coupling.zig");
 
 const RealType = f64;
 

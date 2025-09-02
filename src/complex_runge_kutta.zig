@@ -45,25 +45,25 @@ pub fn ComplexRungeKutta(comptime T: type) type {
         pub fn propagate(self: *@This(), amplitudes: *ComplexVector(T), function: anytype, parameters: anytype, time_step: T) void {
             self.k1.zero(); self.k2.zero(); self.k3.zero(); self.k4.zero();
 
-            function(T, &self.k1, amplitudes.*, parameters);
+            function(&self.k1, amplitudes.*, parameters);
 
             for (0..amplitudes.len) |j| {
                 self.y1.ptr(j).* = amplitudes.at(j).add(self.k1.at(j).mul(Complex(T).init(time_step / 2, 0)));
             }
 
-            function(T, &self.k2, self.y1, parameters);
+            function(&self.k2, self.y1, parameters);
 
             for (0..amplitudes.len) |j| {
                 self.y2.ptr(j).* = amplitudes.at(j).add(self.k2.at(j).mul(Complex(T).init(time_step / 2, 0)));
             }
 
-            function(T, &self.k3, self.y2, parameters);
+            function(&self.k3, self.y2, parameters);
 
             for (0..amplitudes.len) |j| {
                 self.y3.ptr(j).* = amplitudes.at(j).add(self.k3.at(j).mul(Complex(T).init(time_step, 0)));
             }
 
-            function(T, &self.k4, self.y3, parameters);
+            function(&self.k4, self.y3, parameters);
 
             for (0..amplitudes.len) |j| {
 

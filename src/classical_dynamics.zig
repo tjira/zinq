@@ -3,38 +3,40 @@
 const std = @import("std");
 
 const classical_particle = @import("classical_particle.zig");
+const complex_runge_kutta = @import("complex_runge_kutta.zig");
+const complex_vector = @import("complex_vector.zig");
+const derivative_coupling = @import("derivative_coupling.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
-const complex_runge_kutta = @import("complex_runge_kutta.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const complex_vector = @import("complex_vector.zig");
 const fewest_switches = @import("fewest_switches.zig");
 const landau_zener = @import("landau_zener.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
+const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 const object_array = @import("object_array.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const ring_buffer = @import("ring_buffer.zig");
 const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
-const time_derivative_coupling = @import("time_derivative_coupling.zig");
 const tully_potential = @import("tully_potential.zig");
 
-const Complex = std.math.complex.Complex;
 const ClassicalParticle = classical_particle.ClassicalParticle;
+const Complex = std.math.complex.Complex;
 const ComplexRungeKutta = complex_runge_kutta.ComplexRungeKutta;
 const ComplexVector = complex_vector.ComplexVector;
+const DerivativeCoupling = derivative_coupling.DerivativeCoupling;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
+const FewestSwitches = fewest_switches.FewestSwitches;
 const LandauZener = landau_zener.LandauZener;
+const NormPreservingInterpolation = norm_preserving_interpolation.NormPreservingInterpolation;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const RingBufferArray = object_array.RingBufferArray;
 const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorithm;
-const TimeDerivativeCoupling = time_derivative_coupling.TimeDerivativeCoupling;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
-const mmRealTransReal = matrix_multiplication.mmRealTransReal;
 const fixGauge = eigenproblem_solver.fixGauge;
-const printRealMatrix = device_write.printRealMatrix;
+const mmRealTransReal = matrix_multiplication.mmRealTransReal;
 const print = device_write.print;
 
 /// Classical dynamics option struct.
@@ -62,7 +64,7 @@ pub fn Options(comptime T: type) type {
 
         log_intervals: LogIntervals = .{},
         surface_hopping: ?SurfaceHoppingAlgorithm(T) = null,
-        time_derivative_coupling: ?TimeDerivativeCoupling(T) = null,
+        derivative_coupling: ?DerivativeCoupling(T) = null,
 
         seed: u32 = 0,
     };
@@ -169,7 +171,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     var adiabatic_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_eigenvectors.deinit();
     var previous_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer previous_eigenvectors.deinit();
     var eigenvector_overlap = try RealMatrix(T).init(nstate, nstate, allocator); defer eigenvector_overlap.deinit();
-    var derivative_coupling = try RealMatrix(T).initZero(nstate, nstate, allocator); defer derivative_coupling.deinit();
+    var time_derivative_coupling = try RealMatrix(T).initZero(nstate, nstate, allocator); defer time_derivative_coupling.deinit();
 
     var potential_eigensystem = .{
         .diabatic_potential = diabatic_potential,
@@ -185,9 +187,11 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     amplitudes.ptr(current_state).* = Complex(T).init(1, 0);
 
     const fs_parameters: fewest_switches.Parameters(T) = .{
-        .derivative_coupling = derivative_coupling,
-        .time_step = options.time_step,
-        .amplitudes = amplitudes
+        .adiabatic_potential = adiabatic_potential,
+        .amplitudes = &amplitudes,
+        .derivative_coupling = time_derivative_coupling,
+        .runge_kutta = &runge_kutta_solver,
+        .time_step = options.time_step
     };
 
     const lz_parameters: landau_zener.Parameters(T) = .{
@@ -219,15 +223,11 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
             fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
             mmRealTransReal(T, &eigenvector_overlap, previous_eigenvectors, adiabatic_eigenvectors);
 
-            if (options.time_derivative_coupling) |tdc_algorithm| try tdc_algorithm.evaluate(&derivative_coupling, eigenvector_overlap, options.time_step);
+            if (options.derivative_coupling) |tdc_algorithm| try tdc_algorithm.evaluate(&time_derivative_coupling, eigenvector_overlap, options.time_step);
         }
 
         for (0..nstate) |j| for (j + 1..nstate) |k| {
             energy_gaps.ptr(j + k - 1).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
-        };
-
-        if (i > 0) if (options.surface_hopping) |algorithm| if (algorithm == .fewest_switches) {
-            propagateAmplitudes(T, &amplitudes, adiabatic_potential, derivative_coupling, &runge_kutta_solver, algorithm.fewest_switches.substeps, options.time_step);
         };
 
         if (options.surface_hopping) |algorithm| if (i > 1) {
@@ -256,20 +256,6 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     }
 
     return output;
-}
-
-/// Right-hand side of the electronic coefficient ODE.
-pub fn coefficientDerivative(comptime T: type, k: *ComplexVector(T), amplitudes: ComplexVector(T), parameters: anytype) void {
-    const adiabatic_potential = parameters.adiabatic_potential;
-    const derivative_coupling = parameters.derivative_coupling;
-
-    for (0..amplitudes.len) |i| {
-        k.ptr(i).* = amplitudes.at(i).mul(Complex(T).init(adiabatic_potential.at(i, i), 0)).mulbyi().neg();
-    }
-
-    for (0..amplitudes.len) |i| for (0..amplitudes.len) |j| {
-        k.ptr(i).* = k.at(i).sub(amplitudes.at(j).mul(Complex(T).init(derivative_coupling.at(i, j), 0)));
-    };
 }
 
 /// Print header for iteration info.
@@ -322,28 +308,11 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo) !void
     try print("{s}\n", .{writer.buffered()});
 }
 
-/// Function to propagate the electronic amplitudes.
-pub fn propagateAmplitudes(comptime T: type,
-    amplitudes: *ComplexVector(T),
-    adiabatic_potential: RealMatrix(T),
-    derivative_coupling: RealMatrix(T),
-    rk_solver: *ComplexRungeKutta(T),
-    steps: usize,
-    time_step: T
-) void {
-    const coefficient_derivative_parameters = .{
-        .adiabatic_potential = adiabatic_potential,
-        .derivative_coupling = derivative_coupling
-    };
-
-    for (0..steps) |_| {
-        rk_solver.propagate(amplitudes, coefficientDerivative, coefficient_derivative_parameters, time_step / @as(T, @floatFromInt(steps)));
-    }
-}
-
-test "landau-zener surface hopping with Tully's first potential" {
+test "Fewest Switches Surface Hopping on Tully's First Potential" {
     const options = Options(f64){
-        .potential = .{.tully_1 = TullyPotential1(f64){}},
+        .derivative_coupling = .{
+            .npi = NormPreservingInterpolation(f64){}
+        },
         .initial_conditions = .{
             .mass = &.{2000},
             .momentum_mean = &.{15},
@@ -356,14 +325,50 @@ test "landau-zener surface hopping with Tully's first potential" {
             .iteration = 500,
             .trajectory = 500
         },
+        .potential = .{
+            .tully_1 = TullyPotential1(f64){}
+        },
+        .surface_hopping = .{
+            .fewest_switches = FewestSwitches(f64){}
+        },
         .iterations = 3500,
         .time_step = 1,
-        .trajectories = 1000,
-        .surface_hopping = .{.landau_zener = LandauZener(f64){}},
+        .trajectories = 1000
     };
 
     const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(output.population_mean.at(options.iterations, 0) == 0.486);
-    try std.testing.expect(output.population_mean.at(options.iterations, 1) == 0.514);
+    try std.testing.expect(output.population_mean.at(options.iterations, 0) == 0.379);
+    try std.testing.expect(output.population_mean.at(options.iterations, 1) == 0.621);
+}
+
+test "Landau-Lener Surface Hopping on Tully's First Potential" {
+    const options = Options(f64){
+        .initial_conditions = .{
+            .mass = &.{2000},
+            .momentum_mean = &.{15},
+            .momentum_std = &.{1},
+            .position_mean = &.{-10},
+            .position_std = &.{0.5},
+            .state = 1
+        },
+        .log_intervals = .{
+            .iteration = 500,
+            .trajectory = 500
+        },
+        .potential = .{
+            .tully_1 = TullyPotential1(f64){}
+        },
+        .surface_hopping = .{
+            .landau_zener = LandauZener(f64){}
+        },
+        .iterations = 3500,
+        .time_step = 1,
+        .trajectories = 1000
+    };
+
+    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+
+    try std.testing.expect(output.population_mean.at(options.iterations, 0) == 0.498);
+    try std.testing.expect(output.population_mean.at(options.iterations, 1) == 0.502);
 }

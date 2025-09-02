@@ -8,15 +8,15 @@ const real_matrix = @import("real_matrix.zig");
 const NormPreservingInterpolation = norm_preserving_interpolation.NormPreservingInterpolation;
 const RealMatrix = real_matrix.RealMatrix;
 
-/// Electronic potential mode union.
-pub fn TimeDerivativeCoupling(comptime T: type) type {
+/// Time derivative coupling union.
+pub fn DerivativeCoupling(comptime T: type) type {
     return union(enum) {
         npi: NormPreservingInterpolation(T),
 
         /// Evaluate the time derivative coupling.
-        pub fn evaluate(self: @This(), TDC: *RealMatrix(T), S: RealMatrix(T), time_step: T) !void {
+        pub fn evaluate(self: @This(), derivative_coupling: *RealMatrix(T), S: RealMatrix(T), time_step: T) !void {
             switch (self) {
-                inline else => |field| try field.evaluate(TDC, S, time_step)
+                inline else => |field| try field.evaluate(derivative_coupling, S, time_step)
             }
         }
     };
