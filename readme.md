@@ -12,7 +12,7 @@
     <a href="https://github.com/tjira/zinq/pulse">
         <img src="https://img.shields.io/github/last-commit/tjira/zinq?style=for-the-badge"/>
     </a>
-    <a href="https://github.com/tjira/zinq/blob/master/LICENSE.md">
+    <a href="https://github.com/tjira/zinq/blob/master/license">
         <img src="https://img.shields.io/github/license/tjira/zinq?style=for-the-badge"/>
     </a>
     <a href="https://github.com/tjira/zinq/actions/workflows/test.yml">
