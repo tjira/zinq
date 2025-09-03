@@ -11,26 +11,34 @@ const ElectronicPotential = electronic_potential.ElectronicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
+const A2AU = global_variables.A2AU;
+const AN2M = global_variables.AN2M;
 const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
+const SM2AN = global_variables.SM2AN;
 
 /// Classical particle struct that holds all information about the classical-like coordinates, velocities and masses.
 pub fn ClassicalParticle(comptime T: type) type {
     return struct {
+        atoms: ?[]usize,
+        acceleration: RealVector(T),
+        charge: i32,
+        masses: RealVector(T),
         ndim: usize,
         position: RealVector(T),
         velocity: RealVector(T),
-        acceleration: RealVector(T),
-        masses: RealVector(T),
+
         allocator: std.mem.Allocator,
 
         /// Initialize the system using the number of dimensions, an array of masses, and an allocator. The positions and velocities are undefined after initialization.
         pub fn init(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !@This() {
             const particle = @This(){
+                .atoms = null,
+                .acceleration = try RealVector(T).init(ndim, allocator),
+                .charge = 0,
+                .masses = try RealVector(T).init(ndim, allocator),
                 .ndim = ndim,
                 .position = try RealVector(T).init(ndim, allocator),
                 .velocity = try RealVector(T).init(ndim, allocator),
-                .acceleration = try RealVector(T).init(ndim, allocator),
-                .masses = try RealVector(T).init(ndim, allocator),
                 .allocator = allocator
             };
 
@@ -52,6 +60,8 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Free the memory allocated for the system.
         pub fn deinit(self: @This()) void {
+            if (self.atoms) |atoms| self.allocator.free(atoms);
+
             self.position.deinit();
             self.velocity.deinit();
             self.acceleration.deinit();
@@ -105,4 +115,40 @@ pub fn ClassicalParticle(comptime T: type) type {
             }
         }
     };
+}
+
+/// Read the system from a .xyz file.
+pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.Allocator) !ClassicalParticle(T) {
+    const file = try std.fs.cwd().openFile(path, .{}); defer file.close();
+
+    var buffer: [1024]u8 = undefined; var reader = file.reader(&buffer); var reader_interface = &reader.interface;
+
+    const natom = try std.fmt.parseInt(u32, try reader_interface.takeDelimiterExclusive('\n'), 10);
+
+    var atoms = try allocator.alloc(usize, natom);
+
+    _ = try reader_interface.discardDelimiterInclusive('\n');
+
+    var position = try RealVector(T).init(3 * natom, allocator); defer position.deinit();
+
+    for (0..natom) |i| {
+
+        var it = std.mem.tokenizeAny(u8, try reader_interface.takeDelimiterExclusive('\n'), " "); 
+
+        atoms[i] = SM2AN.get(it.next().?).?;
+
+        for (0..3) |j| {
+            position.ptr(3 * i + j).* = try std.fmt.parseFloat(T, it.next().?) * A2AU;
+        }
+    }
+
+    var masses = try allocator.alloc(T, 3 * natom); defer allocator.free(masses);
+
+    for (0..3 * natom) |i| masses[i] = AN2M[atoms[i / 3]];
+
+    var system = try ClassicalParticle(T).initZero(3 * natom, masses, allocator);
+
+    system.atoms = atoms; system.charge = charge; @memcpy(system.position.data, position.data);
+
+    return system;
 }
