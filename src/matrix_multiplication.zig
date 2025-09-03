@@ -105,6 +105,15 @@ pub fn mmRealRealTrans(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), BT
     };
 }
 
+/// Multiply two matrices A and B^T and return the result. The function returns an error if the allocation fails.
+pub fn mmRealRealTransAlloc(comptime T: type, A: RealMatrix(T), B: RealMatrix(T)) !RealMatrix(T) {
+    var C = try RealMatrix(T).init(A.rows, B.rows, A.allocator);
+
+    mmRealRealTrans(T, &C, A, B);
+
+    return C;
+}
+
 /// Multiply two matrices A and B and return the result. The function returns an error if the allocation fails.
 pub fn mmRealRealAlloc(comptime T: type, A: RealMatrix(T), B: RealMatrix(T)) !RealMatrix(T) {
     var C = try RealMatrix(T).init(A.rows, B.cols, A.allocator);
@@ -140,6 +149,15 @@ pub fn mmRealTransReal(comptime T: type, C: *RealMatrix(T), AT: RealMatrix(T), B
 
         C.ptr(i, j).* = sum;
     };
+}
+
+/// Multiply two matrices A^T and B and return the result. The function returns an error if the allocation fails.
+pub fn mmRealTransRealAlloc(comptime T: type, A: RealMatrix(T), B: RealMatrix(T)) !RealMatrix(T) {
+    var C = try RealMatrix(T).init(A.cols, B.cols, A.allocator);
+
+    mmRealTransReal(T, &C, A, B);
+
+    return C;
 }
 
 test "mmRealRealAlloc" {
