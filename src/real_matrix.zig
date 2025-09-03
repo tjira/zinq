@@ -72,9 +72,52 @@ pub fn RealMatrix(comptime T: type) type {
             @memset(self.data, value);
         }
 
+        /// Calculate the Frobenius norm of the matrix.
+        pub fn frobeniusNorm(self: @This()) T {
+            return std.math.sqrt(self.frobeniusNormSquared());
+        }
+
+        /// Calculate square of the Frobenius norm of the matrix.
+        pub fn frobeniusNormSquared(self: @This()) T {
+            var sum: T = 0;
+
+            for (self.data) |element| {
+                sum += element * element;
+            }
+
+            return sum;
+        }
+
+        /// Set the matrix to the identity matrix. The matrix must be square.
+        pub fn identity(self: *@This()) void {
+            std.debug.assert(self.isSquare());
+
+            self.zero();
+
+            for (0..self.rows) |i| {
+                self.ptr(i, i).* = 1;
+            }
+        }
+
         /// Square checker.
         pub fn isSquare(self: @This()) bool {
             return self.rows == self.cols;
+        }
+
+        /// Calculate the Frobenius norm of the off-diagonal elements of the matrix.
+        pub fn offDiagonalFrobeniusNorm(self: @This()) T {
+            return std.math.sqrt(self.offDiagonalFrobeniusNormSquared());
+        }
+
+        /// Calculate square of the Frobenius norm of the off-diagonal elements of the matrix.
+        pub fn offDiagonalFrobeniusNormSquared(self: @This()) T {
+            var sum: T = 0;
+
+            for (0..self.rows) |i| for (0..self.cols) |j| if (i != j) {
+                sum += self.at(i, j) * self.at(i, j);
+            };
+
+            return sum;
         }
 
         /// Get the pointer to the element at (i, j).

@@ -2,113 +2,124 @@
 
 const std = @import("std");
 
-const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
-const math_functions = @import("math_functions.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
 
-const sgn = math_functions.sgn;
+/// Solve the eigenproblem for a real symmetric system using the Jacobi method.
+pub fn diagonalizeJacobi(comptime T: type, A: *RealMatrix(T)) void {
+    std.debug.assert(A.rows == A.cols);
 
-const JACOBI_EIGENPROBLEM_TOLERANCE = global_variables.JACOBI_EIGENPROBLEM_TOLERANCE;
+    const n = A.rows;
+
+    if (n == 1) return;
+
+    const tol = 16 * std.math.floatEps(T) * A.frobeniusNorm();
+
+    while (A.offDiagonalFrobeniusNorm() > tol) for (0..n - 1) |i| for (i + 1..n) |j| {
+
+        const a = A.at(i, i); const b = A.at(j, j); const g = A.at(i, j);
+
+        if (@abs(g) < std.math.floatEps(T) * std.math.sqrt(a * a + b * b)) continue;
+
+        const tau = 0.5 * (b - a) / g;
+
+        const t = std.math.copysign(@as(T, 1), tau) / (@abs(tau) + std.math.hypot(1, tau));
+
+        const c = 1 / std.math.sqrt(1 + t * t); const s = t * c;
+
+        for (0..n) |k| {
+
+            if (k == i or k == j) continue;
+
+            const u = A.at(k, i);
+            const v = A.at(k, j);
+
+            const uk = c * u - s * v;
+            const vk = s * u + c * v;
+
+            A.ptr(k, i).* = uk; A.ptr(k, j).* = vk;
+            A.ptr(i, k).* = uk; A.ptr(j, k).* = vk;
+        }
+
+        A.ptr(i, i).* = a - t * g; A.ptr(i, j).* = 0;
+        A.ptr(j, j).* = b + t * g; A.ptr(j, i).* = 0;
+    };
+
+    for (0..n - 1) |_| for (0..n - 1) |j| if (A.at(j, j) > A.at(j + 1, j + 1)) {
+        std.mem.swap(T, A.ptr(j, j), A.ptr(j + 1, j + 1));
+    };
+}
 
 /// Diagonalize a real symmetric matrix A. The provided matrix is overwritten by the diagonal form.
 pub fn diagonalizeSymmetric(comptime T: type, A: *RealMatrix(T)) !void {
-    if (A.rows == 1) return;
-
-    if (A.rows == 2) {
-        diagonalizeSymmetric2x2(T, A);
-    }
-
-    else return error.NotImplemented;
+    diagonalizeJacobi(T, A);
 }
 
-/// Diagonalize a real symmetric 2x2 matrix A using an analytical formula. The provided matrix is overwritten by the diagonal form.
-pub fn diagonalizeSymmetric2x2(comptime T: type, A: *RealMatrix(T)) void {
-    const a00 = A.at(0, 0); const a01 = A.at(0, 1); const a11 = A.at(1, 1);
+/// Solve the eigenproblem for a real symmetric system using the Jacobi method.
+pub fn eigensystemJacobi(comptime T: type, J: *RealMatrix(T), C: *RealMatrix(T), A: RealMatrix(T)) void {
+    std.debug.assert(A.rows == A.cols);
+    std.debug.assert(J.rows == A.rows);
+    std.debug.assert(J.cols == A.cols);
+    std.debug.assert(C.rows == A.rows);
+    std.debug.assert(C.cols == A.cols);
 
-    const tol = 16 * @max(@max(@abs(a00), @abs(a11)), @abs(a01)) * std.math.floatEps(T);
+    const n = A.rows; @memcpy(J.data, A.data); C.identity();
 
-    if (@abs(a01) < tol) {
+    if (n == 1) return;
 
-        A.ptr(0, 0).* = if (a00 < a11) a00 else a11;
-        A.ptr(1, 1).* = if (a00 < a11) a11 else a00;
+    const tol = 16 * std.math.floatEps(T) * A.frobeniusNorm();
 
-        A.ptr(0, 1).* = 0;
-        A.ptr(1, 0).* = 0;
+    while (J.offDiagonalFrobeniusNorm() > tol) for (0..n - 1) |i| for (i + 1..n) |j| {
 
-        return;
-    }
+        const a = J.at(i, i); const b = J.at(j, j); const g = J.at(i, j);
 
-    const tau = 0.5 * (a11 - a00) / a01;
+        if (@abs(g) < std.math.floatEps(T) * std.math.sqrt(a * a + b * b)) continue;
 
-    const t = std.math.copysign(@as(T, 1), tau) / (@abs(tau) + std.math.hypot(1, tau));
+        const tau = 0.5 * (b - a) / g;
 
-    A.ptr(0, 0).* = a00 - t * a01;
-    A.ptr(1, 1).* = a11 + t * a01;
+        const t = std.math.copysign(@as(T, 1), tau) / (@abs(tau) + std.math.hypot(1, tau));
 
-    A.ptr(0, 1).* = 0;
-    A.ptr(1, 0).* = 0;
+        const c = 1 / std.math.sqrt(1 + t * t); const s = t * c;
 
-    if (A.at(0, 0) > A.at(1, 1)) std.mem.swap(T, A.ptr(0, 0), A.ptr(1, 1));
+        for (0..n) |k| {
+
+            if (k == i or k == j) continue;
+
+            const u = J.at(k, i);
+            const v = J.at(k, j);
+
+            const uk = c * u - s * v;
+            const vk = s * u + c * v;
+
+            J.ptr(k, i).* = uk; J.ptr(k, j).* = vk;
+            J.ptr(i, k).* = uk; J.ptr(j, k).* = vk;
+        }
+
+        J.ptr(i, i).* = a - t * g; J.ptr(i, j).* = 0;
+        J.ptr(j, j).* = b + t * g; J.ptr(j, i).* = 0;
+
+        for (0..n) |k| {
+
+            const u = C.at(k, i);
+            const v = C.at(k, j);
+
+            C.ptr(k, i).* = c * u - s * v;
+            C.ptr(k, j).* = s * u + c * v;
+        }
+    };
+
+    for (0..n - 1) |_| for (0..n - 1) |j| if (J.at(j, j) > J.at(j + 1, j + 1)) {
+
+        std.mem.swap(T, J.ptr(j, j), J.ptr(j + 1, j + 1));
+
+        for (0..n) |k| std.mem.swap(T, C.ptr(k, j), C.ptr(k, j + 1));
+    };
 }
 
 /// Solve the eigenproblem for a real symmetric system.
 pub fn eigensystemSymmetric(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) !void {
-    if (A.rows == 1) {
-        @memcpy(A_eigenvalues.data, A.data); A_eigenvectors.fill(1);
-    }
-
-    else if (A.rows == 2) {
-        eigensystemSymmetric2x2(T, A_eigenvalues, A_eigenvectors, A);
-    }
-
-    else return error.NotImplemented;
-}
-
-/// Eigenproblem for a real symmetric 2x2 system using an analytical formula.
-pub fn eigensystemSymmetric2x2(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) void {
-    const a00 = A.at(0, 0); const a01 = A.at(0, 1); const a11 = A.at(1, 1);
-
-    const tol = 16 * @max(@max(@abs(a00), @abs(a11)), @abs(a01)) * std.math.floatEps(T);
-
-    if (@abs(a01) < tol) {
-
-        A_eigenvalues.ptr(0, 0).* = if (a00 < a11) a00 else a11;
-        A_eigenvalues.ptr(1, 1).* = if (a00 < a11) a11 else a00;
-
-        A_eigenvectors.ptr(0, 0).* = if (a00 < a11) 1 else 0;
-        A_eigenvectors.ptr(0, 1).* = if (a00 < a11) 0 else 1;
-        A_eigenvectors.ptr(1, 0).* = if (a00 < a11) 0 else 1;
-        A_eigenvectors.ptr(1, 1).* = if (a00 < a11) 1 else 0;
-
-        return;
-    }
-
-    const tau = 0.5 * (a11 - a00) / a01;
-
-    const t = std.math.copysign(@as(T, 1), tau) / (@abs(tau) + std.math.hypot(1, tau));
-
-    const c = 1 / std.math.sqrt(1 + t * t); const s = t * c;
-
-    A_eigenvalues.ptr(0, 0).* = a00 - t * a01;
-    A_eigenvalues.ptr(1, 1).* = a11 + t * a01;
-
-    A_eigenvalues.ptr(0, 1).* = 0;
-    A_eigenvalues.ptr(1, 0).* = 0;
-
-    A_eigenvectors.ptr(0, 0).* =  c;
-    A_eigenvectors.ptr(0, 1).* =  s;
-    A_eigenvectors.ptr(1, 0).* = -s;
-    A_eigenvectors.ptr(1, 1).* =  c;
-
-    if (A_eigenvalues.at(0, 0) > A_eigenvalues.at(1, 1)) {
-
-        std.mem.swap(T, A_eigenvalues.ptr(0, 0), A_eigenvalues.ptr(1, 1));
-
-        std.mem.swap(T, A_eigenvectors.ptr(0, 0), A_eigenvectors.ptr(0, 1));
-        std.mem.swap(T, A_eigenvectors.ptr(1, 0), A_eigenvectors.ptr(1, 1));
-    }
+    eigensystemJacobi(T, A_eigenvalues, A_eigenvectors, A);
 }
 
 /// Function to fix the gauge of eigenvectors.

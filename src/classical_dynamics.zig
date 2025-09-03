@@ -37,10 +37,10 @@ const RingBufferArray = object_array.RingBufferArray;
 const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorithm;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
-const fixGauge = eigenproblem_solver.fixGauge;
-const mmRealTransReal = matrix_multiplication.mmRealTransReal;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
+const fixGauge = eigenproblem_solver.fixGauge;
+const mmRealTransReal = matrix_multiplication.mmRealTransReal;
 const print = device_write.print;
 
 /// Classical dynamics option struct.
