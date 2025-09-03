@@ -118,8 +118,8 @@ pub fn eigensystemJacobi(comptime T: type, J: *RealMatrix(T), C: *RealMatrix(T),
 }
 
 /// Solve the eigenproblem for a real symmetric system.
-pub fn eigensystemSymmetric(comptime T: type, A_eigenvalues: *RealMatrix(T), A_eigenvectors: *RealMatrix(T), A: RealMatrix(T)) !void {
-    eigensystemJacobi(T, A_eigenvalues, A_eigenvectors, A);
+pub fn eigensystemSymmetric(comptime T: type, J: *RealMatrix(T), C: *RealMatrix(T), A: RealMatrix(T)) !void {
+    eigensystemJacobi(T, J, C, A);
 }
 
 /// Function to fix the gauge of eigenvectors.

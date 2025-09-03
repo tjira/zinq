@@ -91,6 +91,20 @@ pub fn mmRealReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), B: Real
     };
 }
 
+/// Multiply one real matrix A by a transposed real matrix BT and store the result in C.
+pub fn mmRealRealTrans(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), BT: RealMatrix(T)) void {
+    for (0..A.rows) |i| for (0..BT.rows) |j| {
+
+        var sum: T = 0;
+
+        for (0..A.cols) |k| {
+            sum += A.at(i, k) * BT.at(j, k);
+        }
+
+        C.ptr(i, j).* = sum;
+    };
+}
+
 /// Multiply two matrices A and B and return the result. The function returns an error if the allocation fails.
 pub fn mmRealRealAlloc(comptime T: type, A: RealMatrix(T), B: RealMatrix(T)) !RealMatrix(T) {
     var C = try RealMatrix(T).init(A.rows, B.cols, A.allocator);
