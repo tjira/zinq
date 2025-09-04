@@ -3,9 +3,11 @@
 const std = @import("std");
 
 const real_matrix = @import("real_matrix.zig");
+const real_tensor_four = @import("real_tensor_four.zig");
 const real_vector = @import("real_vector.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
+const RealTensor4 = real_tensor_four.RealTensor4;
 const RealVector = real_vector.RealVector;
 
 /// Exports the real matrix to a file.
@@ -20,6 +22,13 @@ pub fn exportRealMatrixWithLinspacedLeftColumn(comptime T: type, path: []const u
     var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
 
     try writeRealMatrixWithLinspacedLeftColumn(T, file, A, start, end, points);
+}
+
+/// Exports the real 4th order tensor to a file.
+pub fn exportRealTensorFour(comptime T: type, path: []const u8, A: RealTensor4(T)) !void {
+    var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
+
+    try writeRealTensorFour(T, file, A);
 }
 
 /// Print the formatted line to the standard output.
@@ -57,7 +66,7 @@ pub fn writeRealMatrix(comptime T: type, device: std.fs.File, A: RealMatrix(T)) 
     try writer_interface.print("{d} {d}\n", .{A.rows, A.cols});
 
     for (0..A.rows) |i| for (0..A.cols) |j| {
-        try writer_interface.print("{d:20.14}{s}", .{A.at(i, j), if(j == A.cols - 1) "\n" else " "});
+        try writer_interface.print("{d:20.14}{s}", .{A.at(i, j), if (j == A.cols - 1) "\n" else " "});
     };
 
     try writer_interface.flush();
@@ -78,9 +87,24 @@ pub fn writeRealMatrixWithLinspacedLeftColumn(comptime T: type, device: std.fs.F
         try writer_interface.print("{d:20.14}", .{x});
 
         for (0..A.cols) |j| {
-            try writer_interface.print(" {d:20.14}{s}", .{A.at(i, j), if(j == A.cols - 1) "\n" else ""});
+            try writer_interface.print(" {d:20.14}{s}", .{A.at(i, j), if (j == A.cols - 1) "\n" else ""});
         }
     }
+
+    try writer_interface.flush();
+}
+
+/// Print the formatted real 4th order tensor to the specified device.
+pub fn writeRealTensorFour(comptime T: type, device: std.fs.File, A: RealTensor4(T)) !void {
+    var buffer: [32768]u8 = undefined;
+
+    var writer = device.writer(&buffer); var writer_interface = &writer.interface;
+
+    try writer_interface.print("{d} {d} {d} {d}\n", .{A.shape[0], A.shape[1], A.shape[2], A.shape[3]});
+
+    for (0..A.shape[0]) |i| for (0..A.shape[1]) |j| for (0..A.shape[2]) |k| for (0..A.shape[3]) |l| {
+        try writer_interface.print("{d:20.14}{s}", .{A.at(i, j, k, l), if (k == A.shape[2] - 1 and l == A.shape[3] - 1) "\n" else " "});
+    };
 
     try writer_interface.flush();
 }

@@ -8,6 +8,7 @@
 *.pdf*
 *.png*
 
+*bas*/
 *cod*/
 *sit*/
 *tex*/

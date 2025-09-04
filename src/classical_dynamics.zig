@@ -159,8 +159,10 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     output.population_mean.divs(@as(T, @floatFromInt(options.trajectories)));
 
+    const population_error = 1.96 * std.math.sqrt(output.population_mean.at(options.iterations, 0) * (1 - output.population_mean.at(options.iterations, 0)) / @as(T, @floatFromInt(options.trajectories)));
+
     if (enable_printing) for (0..nstate) |i| {
-        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(options.iterations, i)});
+        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} ± {:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(options.iterations, i), population_error});
     };
 
     const end_time = @as(T, @floatFromInt(options.iterations)) * options.time_step;

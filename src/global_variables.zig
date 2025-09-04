@@ -4,6 +4,7 @@ const std = @import("std");
 
 pub const FINITE_DIFFERENCES_STEP = 1e-8;
 pub const FSSH_DENOMINATOR_OFFSET = 1e-14;
+pub const GAMMAINC_CUTOFF = 1e-14;
 pub const MAX_INPUT_FILE_BYTES = 8192;
 pub const TEST_TOLERANCE = 1e-14;
 
@@ -76,3 +77,12 @@ pub const AN2M = [_]f64{std.math.nan(f64),
     79.904000000, // Br
     83.798000000, // Kr
 };
+
+/// Function to revert the SM2AN map to get the symbol from the atomic number.
+pub fn AN2SM(AN: usize) ![]const u8 {
+    for (SM2AN.keys(), SM2AN.values()) |key, value| if (value == AN) {
+        return key;
+    };
+
+    return error.InvalidAtomicNumber;
+}

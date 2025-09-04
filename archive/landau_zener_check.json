@@ -21,6 +21,9 @@
                 "surface_hopping" : {
                     "landau_zener" : {}
                 },
+                "write" : {
+                    "population_mean" : "POPULATION_MEAN.mat"
+                },
                 "iterations" : 2000,
                 "time_step" : 0.01,
                 "trajectories" : 10000
@@ -45,6 +48,9 @@
                 },
                 "potential" : {
                     "time_linear" : {}
+                },
+                "write" : {
+                    "population" : "POPULATION.mat"
                 },
                 "iterations" : 2000,
                 "time_step" : 0.01,

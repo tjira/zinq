@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const array_functions = @import("array_functions.zig");
 const complex_vector = @import("complex_vector.zig");
 const global_variables = @import("global_variables.zig");
 const math_functions = @import("math_functions.zig");
@@ -13,8 +14,8 @@ const ComplexVector = complex_vector.ComplexVector;
 const StridedComplexVector = strided_complex_vector.StridedComplexVector;
 const RealVector = real_vector.RealVector;
 
-const prod = math_functions.prod;
-const reverse_bits = math_functions.reverse_bits;
+const prod = array_functions.prod;
+const revk = math_functions.revk;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
@@ -28,7 +29,7 @@ pub fn cfft1(comptime T: type, vector: *StridedComplexVector(T), factor: i32) !v
 
     for (0..n) |i| {
 
-        const j = reverse_bits(i, bit_count);
+        const j = revk(i, bit_count);
 
         if (i < j) {
             std.mem.swap(std.math.Complex(T), vector.ptr(j), vector.ptr(i));
