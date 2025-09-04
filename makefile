@@ -50,7 +50,10 @@ zig-bin/zig:
 
 # CLEAN TARGETS ========================================================================================================================================================================================
 
-clean: clean-cache clean-docs clean-output clean-root clean-zig
+clean: clean-archive clean-cache clean-docs clean-output clean-root clean-zig
+
+clean-archive:
+> @rm -rf archive/*.mat
 
 clean-cache:
 > @rm -rf ${HOME}/.cache/zig .zig-cache
