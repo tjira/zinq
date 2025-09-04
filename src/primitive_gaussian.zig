@@ -11,7 +11,6 @@ const ClassicalParticle = classical_particle.ClassicalParticle;
 
 const dfact = math_functions.dfact;
 const boys = integral_functions.boys;
-const powi = math_functions.powi;
 const sum = array_functions.sum;
 
 /// Primitive Gaussian type.
