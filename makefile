@@ -62,7 +62,7 @@ clean-output:
 > @rm -rf zig-out
 
 clean-root:
-> @rm -rf *.all *.dot *.json *.mat *.out *.png *.xyz
+> @rm -rf *.all *.dot *.json *.mat *.out *.pdf *.png *.xyz
 
 clean-zig:
 > @rm -rf zig-bin

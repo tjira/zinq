@@ -53,7 +53,7 @@ pub fn PrimitiveGaussian(comptime T: type) type {
 
                                     const sign = std.math.pow(T, -1, @as(T, @floatFromInt(tau + nu + phi)));
 
-                                    e += sign * Eij * Ekl * Emn * Eop * Eqr * Est * germite_integral([3]T{@floatFromInt(t + tau), @floatFromInt(u + nu), @floatFromInt(v + phi)}, RPQ, beta, 0);
+                                    e += sign * Eij * Ekl * Emn * Eop * Eqr * Est * hermite_integral([3]T{@floatFromInt(t + tau), @floatFromInt(u + nu), @floatFromInt(v + phi)}, RPQ, beta, 0);
                                 }
                             }
                         }
@@ -92,21 +92,21 @@ pub fn PrimitiveGaussian(comptime T: type) type {
         }
 
         /// Compute the Hermite integrals.
-        pub fn germite_integral(tuv: [3]T, RPC: [3]T, p: T, n: T) T {
+        pub fn hermite_integral(tuv: [3]T, RPC: [3]T, p: T, n: T) T {
             if (tuv[0] == 0 and tuv[1] == 0 and tuv[2] == 0) {
                 return std.math.pow(T, -2 * p, n) * boys(T, p * (RPC[0] * RPC[0] + RPC[1] * RPC[1] + RPC[2] * RPC[2]), n);
             }
 
             else if (tuv[0] > 0){
-                return (tuv[0] - 1) * germite_integral(.{tuv[0] - 2, tuv[1], tuv[2]}, RPC, p, n + 1) + RPC[0] * germite_integral(.{tuv[0] - 1, tuv[1], tuv[2]}, RPC, p, n + 1);
+                return (tuv[0] - 1) * hermite_integral(.{tuv[0] - 2, tuv[1], tuv[2]}, RPC, p, n + 1) + RPC[0] * hermite_integral(.{tuv[0] - 1, tuv[1], tuv[2]}, RPC, p, n + 1);
             }
 
             else if (tuv[1] > 0) {
-                return (tuv[1] - 1) * germite_integral(.{tuv[0], tuv[1] - 2, tuv[2]}, RPC, p, n + 1) + RPC[1] * germite_integral(.{tuv[0], tuv[1] - 1, tuv[2]}, RPC, p, n + 1);
+                return (tuv[1] - 1) * hermite_integral(.{tuv[0], tuv[1] - 2, tuv[2]}, RPC, p, n + 1) + RPC[1] * hermite_integral(.{tuv[0], tuv[1] - 1, tuv[2]}, RPC, p, n + 1);
             }
 
             else if (tuv[2] > 0) {
-                return (tuv[2] - 1) * germite_integral(.{tuv[0], tuv[1], tuv[2] - 2}, RPC, p, n + 1) + RPC[2] * germite_integral(.{tuv[0], tuv[1], tuv[2] - 1}, RPC, p, n + 1);
+                return (tuv[2] - 1) * hermite_integral(.{tuv[0], tuv[1], tuv[2] - 2}, RPC, p, n + 1) + RPC[2] * hermite_integral(.{tuv[0], tuv[1], tuv[2] - 1}, RPC, p, n + 1);
             }
 
             return 0;
@@ -159,7 +159,7 @@ pub fn PrimitiveGaussian(comptime T: type) type {
                             const Ekl = hermite_coef(.{self.a[1], other.a[1]}, .{self.alpha, other.alpha}, self.A[1] - other.A[1], @floatFromInt(u));
                             const Emn = hermite_coef(.{self.a[2], other.a[2]}, .{self.alpha, other.alpha}, self.A[2] - other.A[2], @floatFromInt(v));
 
-                            n -= @as(T, @floatFromInt(system.atoms.?[i])) * Eij * Ekl * Emn * germite_integral([3]T{@floatFromInt(t), @floatFromInt(u), @floatFromInt(v)}, RPC, self.alpha + other.alpha, 0);
+                            n -= @as(T, @floatFromInt(system.atoms.?[i])) * Eij * Ekl * Emn * hermite_integral([3]T{@floatFromInt(t), @floatFromInt(u), @floatFromInt(v)}, RPC, self.alpha + other.alpha, 0);
                         }
                     }
                 }

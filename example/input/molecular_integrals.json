@@ -4,7 +4,7 @@
             "name" : "molecular_integrals",
             "options" : {
                 "system" : "molecule.xyz",
-                "basis" : "basis/sto-3g.json",
+                "basis" : "sto-3g.json",
                 "write" : {
                     "coulomb" : "J_AO.mat",
                     "kinetic" : "T_AO.mat",
