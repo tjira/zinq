@@ -32,7 +32,6 @@ pub const real_matrix = @import("real_matrix.zig");
 pub const real_tensor_four = @import("real_tensor_four.zig");
 pub const real_vector = @import("real_vector.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
-pub const singular_value_decomposition = @import("singular_value_decomposition.zig");
 pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 
