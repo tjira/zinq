@@ -37,6 +37,20 @@ pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 
 const RealType = f64;
 
+/// Available targets in the program.
+const Target = enum {
+    classical_dynamics,
+    molecular_integrals,
+    quantum_dynamics,
+};
+
+/// Handle a specific module by parsing its options and running it.
+fn handle(comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
+    var parsed = try std.json.parseFromValue(Module.Options(RealType), allocator, options, .{}); defer parsed.deinit();
+
+    var output = try Module.run(RealType, parsed.value, true, allocator); defer output.deinit();
+}
+
 /// Parse the input JSON file and run the corresponding target.
 pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
     const file_contents = try std.fs.cwd().readFileAlloc(allocator, path, global_variables.MAX_INPUT_FILE_BYTES); defer allocator.free(file_contents);
@@ -50,28 +64,13 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
         const name = object.object.get("name") orelse return error.MissingTargetName;
         const options = object.object.get("options") orelse return error.MissingTargetOptions;
 
-        if (std.mem.eql(u8, name.string, "classical_dynamics")) {
+        const tag = std.meta.stringToEnum(Target, name.string) orelse return error.UnknownTarget;
 
-            const options_struct = try std.json.parseFromValue(classical_dynamics.Options(RealType), allocator, options, .{}); defer options_struct.deinit();
-
-            const output = try classical_dynamics.run(RealType, options_struct.value, true, allocator); defer output.deinit();
+        switch (tag) {
+            .classical_dynamics => try handle(classical_dynamics, options, allocator),
+            .molecular_integrals => try handle(molecular_integrals, options, allocator),
+            .quantum_dynamics => try handle(quantum_dynamics, options, allocator)
         }
-
-        else if (std.mem.eql(u8, name.string, "molecular_integrals")) {
-
-            const options_struct = try std.json.parseFromValue(molecular_integrals.Options(RealType), allocator, options, .{}); defer options_struct.deinit();
-
-            const output = try molecular_integrals.run(RealType, options_struct.value, true, allocator); defer output.deinit();
-        }
-
-        else if (std.mem.eql(u8, name.string, "quantum_dynamics")) {
-
-            const options_struct = try std.json.parseFromValue(quantum_dynamics.Options(RealType), allocator, options, .{}); defer options_struct.deinit();
-
-            const output = try quantum_dynamics.run(RealType, options_struct.value, true, allocator); defer output.deinit();
-        }
-
-        else return error.UnknownTarget;
     }
 }
 
