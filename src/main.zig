@@ -27,6 +27,7 @@ pub const molecular_integrals = @import("molecular_integrals.zig");
 pub const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 pub const object_array = @import("object_array.zig");
 pub const primitive_gaussian = @import("primitive_gaussian.zig");
+pub const prime_numbers = @import("prime_numbers.zig");
 pub const quantum_dynamics = @import("quantum_dynamics.zig");
 pub const real_matrix = @import("real_matrix.zig");
 pub const real_tensor_four = @import("real_tensor_four.zig");
@@ -35,20 +36,19 @@ pub const ring_buffer = @import("ring_buffer.zig");
 pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 
-const RealType = f64;
-
 /// Available targets in the program.
 const Target = enum {
     classical_dynamics,
     molecular_integrals,
-    quantum_dynamics,
+    prime_numbers,
+    quantum_dynamics
 };
 
 /// Handle a specific module by parsing its options and running it.
-fn handle(comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
-    var parsed = try std.json.parseFromValue(Module.Options(RealType), allocator, options, .{}); defer parsed.deinit();
+fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
+    var parsed = try std.json.parseFromValue(Module.Options(T), allocator, options, .{}); defer parsed.deinit();
 
-    var output = try Module.run(RealType, parsed.value, true, allocator); defer output.deinit();
+    var output = try Module.run(T, parsed.value, true, allocator); defer output.deinit();
 }
 
 /// Parse the input JSON file and run the corresponding target.
@@ -67,9 +67,10 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
         const tag = std.meta.stringToEnum(Target, name.string) orelse return error.UnknownTarget;
 
         switch (tag) {
-            .classical_dynamics => try handle(classical_dynamics, options, allocator),
-            .molecular_integrals => try handle(molecular_integrals, options, allocator),
-            .quantum_dynamics => try handle(quantum_dynamics, options, allocator)
+            .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
+            .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
+            .prime_numbers => try handle(u64, prime_numbers, options, allocator),
+            .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator)
         }
     }
 }

@@ -46,7 +46,7 @@ pub fn Output(comptime T: type) type {
 
         /// Initialize the output struct.
         pub fn init(allocator: std.mem.Allocator) @This() {
-            return Output(T){
+            return @This(){
                 .S = null,
                 .K = null,
                 .V = null,
