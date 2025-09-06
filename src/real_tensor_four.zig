@@ -2,7 +2,7 @@
 
 const std = @import("std");
 
-/// Real matrix class. The matrix is stored in a flat array in row-major order.
+/// Real tensor class. The tensor is stored in a flat array in row-major order.
 pub fn RealTensor4(comptime T: type) type {
     return struct {
         data: []T,

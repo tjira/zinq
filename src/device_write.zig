@@ -4,9 +4,11 @@ const std = @import("std");
 
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
+const real_tensor_three = @import("real_tensor_three.zig");
 const real_vector = @import("real_vector.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
+const RealTensor3 = real_tensor_three.RealTensor3;
 const RealTensor4 = real_tensor_four.RealTensor4;
 const RealVector = real_vector.RealVector;
 
@@ -29,6 +31,13 @@ pub fn exportRealTensorFour(comptime T: type, path: []const u8, A: RealTensor4(T
     var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
 
     try writeRealTensorFour(T, file, A);
+}
+
+/// Exports the real 3rd order tensor to a file as a PPM image.
+pub fn exportRealTensorThreeAsPPM(comptime T: type, path: []const u8, A: RealTensor3(T)) !void {
+    var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
+
+    try writeRealTensorThreeAsPPM(T, file, A);
 }
 
 /// Exports the real vector to a file.
@@ -112,6 +121,21 @@ pub fn writeRealTensorFour(comptime T: type, device: std.fs.File, A: RealTensor4
     for (0..A.shape[0]) |i| for (0..A.shape[1]) |j| for (0..A.shape[2]) |k| for (0..A.shape[3]) |l| {
         try writer_interface.print("{d:20.14}{s}", .{A.at(i, j, k, l), if (k == A.shape[2] - 1 and l == A.shape[3] - 1) "\n" else " "});
     };
+
+    try writer_interface.flush();
+}
+
+/// Print the formatted real 3rd order tensor to the specified device as a PPM image.
+pub fn writeRealTensorThreeAsPPM(comptime T: type, device: std.fs.File, A: RealTensor3(T)) !void {
+    var buffer: [32768]u8 = undefined;
+
+    var writer = device.writer(&buffer); var writer_interface = &writer.interface;
+
+    try writer_interface.print("P3 {d} {d} 255\n{d}", .{A.shape[0], A.shape[1], A.data[0]});
+
+    for (A.data[1..A.data.len]) |value| try writer_interface.print(" {d}", .{value});
+
+    try writer_interface.print("\n", .{});
 
     try writer_interface.flush();
 }
