@@ -37,5 +37,32 @@
 </p>
 
 <p align="center">
-A modern Zig framework for electronic structure theory, quantum chemistry, and mathematical algorithms. It prioritizes simplicity over complexity and readability over speed.
+A lightweight Zig framework for electronic structure theory, quantum chemistry, and mathematical algorithms. Written from scratch, it favors simple design and transparent implementation while relying on efficient algorithms.
 </p>
+
+## Features
+
+Zinq provides tools for both time-independent and time-dependent quantum mechanical simulations.
+
+### Time-Independent Quantum Mechanics
+
+* **Integrals over Gaussian Basis Functions**
+  Compute integrals over Gaussian basis functions from .xyz geometries and basis files.
+
+### Time-Dependent Quantum Mechanics
+
+* **Quantum Dynamics**
+  Simulate wavepacket dynamics in arbitrary dimensions and across multiple electronic states.
+
+* **Surface Hopping**
+  Run nonadiabatic dynamics with Fewest Switches (FSSH) or Landau-Zener (LZSH) algorithms.
+
+## Getting Zinq
+
+### Prebuilt Releases
+
+You can download the latest binaries from the [releases](https://github.com/tjira/zinq/releases/latest) page. The releases are provided for Linux, Windows and MacOS with the common CPU architectures. All binaries are statically linked with no external runtime dependencies. For less common platforms, see the [compilation](#Compilation) section.
+
+### Compilation
+
+If you already have the Zig compiler installed, you can build Zinq by running `zig build -Doptimize=ReleaseFast`, which creates optimized binaries. If the compiler is not installed, running `make` will automatically download it to the project root and compile the binaries. The resulting executables are placed in the `zig-out` directory, organized by operating system and architecture. On Linux and Windows, most users will want the `x86_64` binary, while on MacOS the `aarch64` binary is usually appropriate. To verify the build, execute `./zig-out/<arch-os>/zinq` and check that the version and execution time are displayed. If they appear, the program is compiled correctly.
