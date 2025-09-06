@@ -3,18 +3,24 @@
 const std = @import("std");
 
 const device_write = @import("device_write.zig");
+const real_vector = @import("real_vector.zig");
 
+const RealVector = real_vector.RealVector;
+
+const exportRealVector = device_write.exportRealVector;
 const print = device_write.print;
 
 /// Options for the prime number generation target.
 pub fn Options(comptime _: type) type {
     return struct {
         pub const Filter = enum {
-            all
+            all,
+            mersenne
         };
 
-        count: u32 = 100,
-        log_interval: u32 = 10,
+        count: u32 = 10,
+        log_interval: u32 = 1,
+        output: ?[]const u8 = null,
         start: u32 = 2,
 
         filter: Filter = .all,
@@ -24,45 +30,97 @@ pub fn Options(comptime _: type) type {
 /// Output structure for the prime number generation target.
 pub fn Output(comptime T: type) type {
     return struct {
-        prime_numbers: []T,
+        prime_numbers: RealVector(T),
 
         allocator: std.mem.Allocator,
 
         /// Initialize the output structure.
-        pub fn init(count: T, allocator: std.mem.Allocator) !@This() {
+        pub fn init(count: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
-                .prime_numbers = try allocator.alloc(T, count),
+                .prime_numbers = try RealVector(T).init(count, allocator),
                 .allocator = allocator
             };
         }
 
         /// Free the output structure.
         pub fn deinit(self: @This()) void {
-            self.allocator.free(self.prime_numbers);
+            self.prime_numbers.deinit();
         }
     };
 }
 
 /// Run the prime number generation target.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try print("\nGENERATING {d} PRIME NUMBERS STARTING FROM {d}\n\n", .{options.count, options.start});
+    if (enable_printing) try print("\nGENERATING {d} {s} PRIME NUMBERS STARTING FROM {d}\n\n", .{options.count, if (options.filter == .mersenne) "MERSENNE" else "", options.start});
 
     if (enable_printing) try print("{s:9} {s:18}\n", .{"INDEX", "PRIME NUMBER"});
 
-    const output = try Output(T).init(@as(T, options.count), allocator);
+    var output = try Output(T).init(@as(usize, @intCast(options.count)), allocator);
 
-    var p = @as(T, if (options.start < 2) 2 else options.start); var i: usize = 0;
+    output.prime_numbers.ptr(0).* = @as(T, if (options.start < 2) 2 else options.start);
 
-    while (i < options.count) : (p = nextPrime(T, p)) {
+    for (0..options.count) |i| {
 
-        output.prime_numbers[i] = p; i += 1;
+        if (i > 0) output.prime_numbers.ptr(i).* = switch (options.filter) {
+            .all => nextPrime(T, output.prime_numbers.at(i - 1)),
+            .mersenne => try nextMersenne(T, output.prime_numbers.at(i - 1), allocator),
+        };
 
-        if (enable_printing and (i == 1 or i % options.log_interval == 0)) {
-            try print("{d:9} {d:18}\n", .{i, p});
+        if (enable_printing and (i == 0 or (i + 1) % options.log_interval == 0)) {
+            try print("{d:9} {d:18}\n", .{i + 1, output.prime_numbers.at(i)});
         }
     }
 
+    if (options.output) |path| try exportRealVector(T, path, output.prime_numbers);
+
     return output;
+}
+
+/// Check if the number is prime.
+pub fn isPrime(comptime T: type, p: T) bool {
+    return trialDivision(T, p);
+}
+
+/// Check if the number is Mersenne prime.
+pub fn isMersenne(comptime T: type, p: T, allocator: std.mem.Allocator) !bool {
+    return try lucasLehmer(T, p, allocator);
+}
+
+/// The Lucas-Lehmer test for Mersenne primes.
+pub fn lucasLehmer(comptime T: type, p: T, allocator: std.mem.Allocator) !bool {
+    if (!isPrime(T, p)) return false;
+
+    var M = try std.math.big.int.Managed.initSet(allocator, 2); defer M.deinit();
+    var s = try std.math.big.int.Managed.initSet(allocator, 4); defer s.deinit();
+
+    var q = try std.math.big.int.Managed.init(allocator); defer q.deinit();
+
+    try std.math.big.int.Managed.shiftLeft(&M, &M, @as(u32, @intCast(p - 1)));
+    try std.math.big.int.Managed.addScalar(&M, &M, @as(i32, @intCast(0 - 1)));
+
+    for (0..@as(usize, @intCast(p - 2))) |_| {
+
+        try std.math.big.int.Managed.mul(&s, &s, &s);
+
+        try std.math.big.int.Managed.addScalar(&s, &s, -2);
+
+        try std.math.big.int.Managed.divFloor(&q, &s, &s, &M);
+    }
+
+    return std.math.big.int.Managed.eqlZero(s) or p == 2;
+}
+
+/// Get the next Mersenne prime number after a given number.
+pub fn nextMersenne(comptime T: type, p: T, allocator: std.mem.Allocator) !T {
+    if (p < 2) return 2;
+
+    if (p == 2) return 3;
+
+    var candidate: T = if (p % 2 == 0) p + 1 else p + 2;
+
+    while (true) : (candidate += 2) {
+        if (try isMersenne(T, candidate, allocator)) return candidate;
+    }
 }
 
 /// Get the next prime number after a given number.
@@ -74,7 +132,7 @@ pub fn nextPrime(comptime T: type, p: T) T {
     var candidate: T = if (p % 2 == 0) p + 1 else p + 2;
 
     while (true) : (candidate += 2) {
-        if (trialDivision(T, candidate)) return candidate;
+        if (isPrime(T, candidate)) return candidate;
     }
 }
 

@@ -31,6 +31,13 @@ pub fn exportRealTensorFour(comptime T: type, path: []const u8, A: RealTensor4(T
     try writeRealTensorFour(T, file, A);
 }
 
+/// Exports the real vector to a file.
+pub fn exportRealVector(comptime T: type, path: []const u8, v: RealVector(T)) !void {
+    var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
+
+    try writeRealVector(T, file, v);
+}
+
 /// Print the formatted line to the standard output.
 pub fn print(comptime format: []const u8, args: anytype) !void {
     try write(std.fs.File.stdout(), format, args);

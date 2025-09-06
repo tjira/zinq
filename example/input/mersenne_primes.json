@@ -1,0 +1,10 @@
+{
+    "zinq" : [
+        {
+            "name" : "prime_numbers",
+            "options" : {
+                "filter" : "mersenne"
+            }
+        }
+    ]
+}
