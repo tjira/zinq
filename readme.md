@@ -46,15 +46,15 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 
 ### Time-Independent Quantum Mechanics
 
-* **Integrals over Gaussian Basis Functions**
+* **Integrals over Gaussian Basis Functions**  
   Compute integrals over Gaussian basis functions from .xyz geometries and basis files.
 
 ### Time-Dependent Quantum Mechanics
 
-* **Quantum Dynamics**
+* **Quantum Dynamics**  
   Simulate wavepacket dynamics in arbitrary dimensions and across multiple electronic states.
 
-* **Surface Hopping**
+* **Surface Hopping**  
   Run nonadiabatic dynamics with Fewest Switches (FSSH) or Landau-Zener (LZSH) algorithms.
 
 ## Getting Zinq
