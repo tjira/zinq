@@ -65,4 +65,12 @@ You can download the latest binaries from the [releases](https://github.com/tjir
 
 ### Compilation
 
-If you already have the Zig compiler installed, you can build Zinq by running `zig build -Doptimize=ReleaseFast`, which creates optimized binaries. If the compiler is not installed, running `make` will automatically download it to the project root and compile the binaries. The resulting executables are placed in the `zig-out` directory, organized by operating system and architecture. On Linux and Windows, most users will want the `x86_64` binary, while on MacOS the `aarch64` binary is usually appropriate. To verify the build, execute `./zig-out/<arch-os>/zinq` and check that the version and execution time are displayed. If they appear, the program is compiled correctly.
+If you already have the Zig compiler installed, you can build Zinq by running
+
+```zig build -Doptimize=ReleaseFast```
+
+which creates optimized binaries. If the compiler is not installed, running `make` will automatically download it to the project root and compile the binaries. The resulting executables are placed in the `zig-out` directory, organized by operating system and architecture. On Linux and Windows, most users will want the `x86_64` binary, while on MacOS the `aarch64` binary is usually appropriate. To verify the build, execute
+
+```./zig-out/<arch-os>/zinq```
+
+and check that the version and execution time are displayed. If they appear, the program is compiled correctly.
