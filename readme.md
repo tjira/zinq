@@ -65,7 +65,7 @@ You can download the latest binaries from the [releases](https://github.com/tjir
 
 ### Compilation
 
-Compiling Zinq is simple, running `make` will automatically download the Zig compiler it to the project root and compile the Zinq binaries. The resulting executables are placed in the `zig-out` directory, organized by operating system and architecture. On Linux and Windows, most users will want the `x86_64` binary, while on MacOS the `aarch64` binary is usually appropriate. To verify the build, execute
+Compiling Zinq is simple, running `make` will automatically download the Zig compiler to the project root and compile the Zinq binaries. The resulting executables are placed in the `zig-out` directory, organized by operating system and architecture. On Linux and Windows, most users will want the `x86_64` binary, while on MacOS the `aarch64` binary is usually appropriate. To verify the build, execute
 
 ```bash
 ./zig-out/<arch-os>/zinq
