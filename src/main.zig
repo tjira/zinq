@@ -24,6 +24,7 @@ pub const landau_zener = @import("landau_zener.zig");
 pub const math_functions = @import("math_functions.zig");
 pub const matrix_multiplication = @import("matrix_multiplication.zig");
 pub const molecular_integrals = @import("molecular_integrals.zig");
+pub const morse_potential = @import("morse_potential.zig");
 pub const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 pub const object_array = @import("object_array.zig");
 pub const prime_numbers = @import("prime_numbers.zig");
@@ -36,6 +37,11 @@ pub const real_vector = @import("real_vector.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
 pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
+
+pub const ClassicalDynamicsOptions = classical_dynamics.Options;
+pub const MolecularIntegralsOptions = molecular_integrals.Options;
+pub const PrimeNumbersOptions = prime_numbers.Options;
+pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 
 /// Available targets in the program.
 const Target = enum {

@@ -6,12 +6,14 @@ const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const global_variables = @import("global_variables.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
+const morse_potential = @import("morse_potential.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const time_linear_potential = @import("time_linear_potential.zig");
 const tully_potential = @import("tully_potential.zig");
 
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
+const MorsePotential = morse_potential.MorsePotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const TimeLinearPotential = time_linear_potential.TimeLinearPotential;
@@ -27,6 +29,7 @@ const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
 pub fn ElectronicPotential(comptime T: type) type {
     return union(enum) {
         harmonic: HarmonicPotential(T),
+        morse: MorsePotential(T),
         time_linear: TimeLinearPotential(T),
         tully_1: TullyPotential1(T),
 
@@ -76,6 +79,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         pub fn ndim(self: @This()) usize {
             return switch (self) {
                 .harmonic => |field| field.k.len,
+                .morse => 1,
                 .tully_1 => 1,
                 .time_linear => 1
             };
@@ -84,9 +88,10 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Getter for number of electronic states.
         pub fn nstate(self: @This()) usize {
             return switch (self) {
-                .harmonic => |_| 1,
-                .tully_1 => |_| 2,
-                .time_linear => |_| 2
+                .harmonic => 1,
+                .morse => 1,
+                .tully_1 => 2,
+                .time_linear => 2
             };
         }
     };
