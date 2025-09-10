@@ -17,7 +17,7 @@ pub fn TullyPotential1(comptime T: type) type {
         pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) void {
             _ = time;
 
-            U.ptr(0, 0).* = std.math.sign(position.at(0)) * self.A * (1 - std.math.exp(-std.math.sign(position.at(0)) * self.B * position.at(0)));
+            U.ptr(0, 0).* = std.math.sign(position.at(0)) * self.A * (1 - std.math.exp(-self.B * @abs(position.at(0))));
             U.ptr(0, 1).* = self.C * std.math.exp(-self.D * position.at(0) * position.at(0));
             U.ptr(1, 0).* = U.at(0, 1);
             U.ptr(1, 1).* = -U.at(0, 0);
