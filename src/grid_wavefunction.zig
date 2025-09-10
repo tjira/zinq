@@ -125,7 +125,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
                     exp.re -= 0.5 * gamma * (self.position_grid_pointer.?.at(i, k) - position[k]) * (self.position_grid_pointer.?.at(i, k) - position[k]);
 
-                    exp.im += momentum[k] * self.position_grid_pointer.?.at(i, k);
+                    exp.im += momentum[k] * (self.position_grid_pointer.?.at(i, k) - position[k]);
                 }
 
                 self.data.ptr(i, j).* = std.math.complex.exp(exp);
