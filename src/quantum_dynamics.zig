@@ -5,11 +5,13 @@ const std = @import("std");
 const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
+const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
 const grid_wavefunction = @import("grid_wavefunction.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
+const matrix_multiplication = @import("matrix_multiplication.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const tully_potential = @import("tully_potential.zig");
@@ -23,7 +25,10 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
+const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
+const fixGauge = eigenproblem_solver.fixGauge;
+const mmRealTransComplex = matrix_multiplication.mmRealTransComplex;
 const momentumGridAlloc = grid_generator.momentumGridAlloc;
 const positionGridAlloc = grid_generator.positionGridAlloc;
 const print = device_write.print;
@@ -49,7 +54,8 @@ pub fn Options(comptime T: type) type {
             iteration: u32 = 1
         };
         pub const Write = struct {
-            population: ?[]const u8 = null
+            population: ?[]const u8 = null,
+            wavefunction: ?[]const u8 = null
         };
 
         potential: ElectronicPotential(T),
@@ -105,8 +111,6 @@ pub fn Custom(comptime T: type) type {
     };
 }
 
-const printRealMatrix = device_write.printRealMatrix;
-
 /// Run quantum dynamics simulation.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try print("\nRUNNING QUANTUM DYNAMICS SIMULATION ON A {d}-DIMENSIONAL GRID WITH {d} POINTS\n\n", .{options.grid.limits.len, options.grid.points});
@@ -131,6 +135,8 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     if (options.adiabatic) try wavefunction.transformRepresentation(options.potential, 0, false);
 
+    var wavefunction_dynamics: ?RealMatrix(T) = if (options.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, wavefunction, options.iterations, allocator) else null;
+
     var temporary_wavefunction_column = try ComplexVector(T).init(wavefunction.data.rows, allocator); defer temporary_wavefunction_column.deinit();
 
     if (enable_printing) try printIterationHeader(ndim, nstate);
@@ -152,6 +158,8 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
         for (0..nstate) |j| {
             output.population.ptr(i, j).* = density_matrix.at(j, j).re;
         }
+
+        if (options.write.wavefunction != null) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, options.potential, i, time, options.adiabatic);
 
         if (i == options.iterations) {
             output.kinetic_energy = kinetic_energy;
@@ -180,8 +188,59 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     const end_time = @as(T, @floatFromInt(options.iterations)) * options.time_step;
 
     if (options.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time, options.iterations + 1);
+    if (options.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
+
+    if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit();
 
     return output;
+}
+
+/// Assign current wavefunction to the wavefunction dynamics matrix.
+pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatrix(T), wavefunction: GridWavefunction(T), potential: ElectronicPotential(T), iter: usize, time: T, adiabatic: bool) !void {
+    var diabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer diabatic_potential.deinit();
+    var adiabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer adiabatic_potential.deinit();
+    var adiabatic_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer adiabatic_eigenvectors.deinit();
+    var previous_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer previous_eigenvectors.deinit();
+
+    var potential_eigensystem = .{
+        .diabatic_potential = diabatic_potential,
+        .adiabatic_potential = adiabatic_potential,
+        .adiabatic_eigenvectors = adiabatic_eigenvectors
+    };
+
+    var wavefunction_row = try ComplexMatrix(T).init(wavefunction.nstate, 1, wavefunction.allocator); defer wavefunction_row.deinit();
+
+    for (0..wavefunction.data.rows) |i| {
+
+        for (0..wavefunction.nstate) |j| wavefunction_row.ptr(j, 0).* = wavefunction.data.at(i, j);
+
+        if (adiabatic) {
+
+            @memcpy(previous_eigenvectors.data, adiabatic_eigenvectors.data);
+
+            try potential.evaluateEigensystem(&potential_eigensystem, wavefunction.position_grid_pointer.?.row(i), time);
+
+            if (i > 0) fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
+
+            mmRealTransComplex(T, &wavefunction_row, adiabatic_eigenvectors, wavefunction.data.row(i).asMatrix());
+        }
+
+        for (0..wavefunction.data.cols) |j| {
+            wavefunction_dynamics.ptr(i, wavefunction.ndim + 2 * wavefunction.nstate * iter + 2 * j + 0).* = wavefunction_row.at(j, 0).re;
+            wavefunction_dynamics.ptr(i, wavefunction.ndim + 2 * wavefunction.nstate * iter + 2 * j + 1).* = wavefunction_row.at(j, 0).im;
+        }
+    }
+}
+
+/// Initialize the container for the wavefunction dynamics.
+pub fn initializeWavefunctionDynamicsContainer(comptime T: type, wavefunction: GridWavefunction(T), iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
+    var wavefunction_dynamics: RealMatrix(T) = try RealMatrix(T).init(wavefunction.data.rows, wavefunction.ndim + 2 * wavefunction.nstate * (iterations + 1), allocator);
+
+    for (0..wavefunction.position_grid_pointer.?.rows) |i| for (0..wavefunction.position_grid_pointer.?.cols) |j| {
+        wavefunction_dynamics.ptr(i, j).* = wavefunction.position_grid_pointer.?.at(i, j);
+    };
+
+    return wavefunction_dynamics;
 }
 
 /// Print header for iteration info.
