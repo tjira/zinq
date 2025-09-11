@@ -48,10 +48,10 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Evaluate adiabatic eigensystem at given system state and time.
-        pub fn evaluateEigensystem(self: @This(), potential_eigensystem: anytype, position: RealVector(T), time: T) !void {
-            self.evaluateDiabatic(&potential_eigensystem.diabatic_potential, position, time);
+        pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T) !void {
+            self.evaluateDiabatic(diabatic, position, time);
 
-            try eigensystemSymmetric(T, &potential_eigensystem.adiabatic_potential, &potential_eigensystem.adiabatic_eigenvectors, potential_eigensystem.diabatic_potential);
+            try eigensystemSymmetric(T, adiabatic, eigenvectors, diabatic.*);
         }
 
         /// Evaluate the adabatic potential energy gradient for a specific coordinate index. The adiabatic potential matrix will hold the potential at the r + dr point.

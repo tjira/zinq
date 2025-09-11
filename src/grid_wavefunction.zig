@@ -70,12 +70,6 @@ pub fn GridWavefunction(comptime T: type) type {
             var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_potential.deinit();
             var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_eigenvectors.deinit();
 
-            var potential_eigensystem = .{
-                .diabatic_potential = diabatic_potential,
-                .adiabatic_potential = adiabatic_potential,
-                .adiabatic_eigenvectors = adiabatic_eigenvectors
-            };
-
             var wavefunction_row = try ComplexMatrix(T).init(self.nstate, 1, self.allocator); defer wavefunction_row.deinit();
             
             for (0..self.data.rows) |i| {
@@ -84,7 +78,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
                 if (adiabatic) {
 
-                    try potential.evaluateEigensystem(&potential_eigensystem, self.position_grid_pointer.?.row(i), time);
+                    try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, self.position_grid_pointer.?.row(i), time);
 
                     mmRealTransComplex(T, &wavefunction_row, adiabatic_eigenvectors, self.data.row(i).asMatrix());
                 }
@@ -297,19 +291,13 @@ pub fn GridWavefunction(comptime T: type) type {
 
             var R = try ComplexMatrix(T).init(self.nstate, self.nstate, self.allocator); defer R.deinit();
 
-            var potential_eigensystem = .{
-                .diabatic_potential = diabatic_potential,
-                .adiabatic_potential = adiabatic_potential,
-                .adiabatic_eigenvectors = adiabatic_eigenvectors
-            };
-
             var mm_temporary = try ComplexMatrix(T).init(self.nstate, self.nstate, self.allocator); defer mm_temporary.deinit();
 
             for (0..self.data.rows) |i| {
 
-                try potential.evaluateEigensystem(&potential_eigensystem, self.position_grid_pointer.?.row(i), time);
+                try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, self.position_grid_pointer.?.row(i), time);
 
-                getPositionPropagator(T, &R, potential_eigensystem, time_step, unit, &mm_temporary);
+                getPositionPropagator(T, &R, adiabatic_potential, adiabatic_eigenvectors, time_step, unit, &mm_temporary);
 
                 for (0..self.nstate) |j| {
 
@@ -330,17 +318,11 @@ pub fn GridWavefunction(comptime T: type) type {
             var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_potential.deinit();
             var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_eigenvectors.deinit();
 
-            var potential_eigensystem = .{
-                .diabatic_potential = diabatic_potential,
-                .adiabatic_potential = adiabatic_potential,
-                .adiabatic_eigenvectors = adiabatic_eigenvectors
-            };
-
             var mm_temporary = try ComplexMatrix(T).init(self.nstate, 1, self.allocator); defer mm_temporary.deinit();
 
             for (0..self.data.rows) |i| {
 
-                try potential.evaluateEigensystem(&potential_eigensystem, self.position_grid_pointer.?.row(i), time);
+                try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, self.position_grid_pointer.?.row(i), time);
 
                 if (to_adiabatic) {
                     mmRealTransComplex(T, &mm_temporary, adiabatic_eigenvectors, self.data.row(i).asMatrix());
@@ -369,16 +351,13 @@ pub fn getMomentumPropagator(comptime T: type, K: *ComplexMatrix(T), momentum: R
 }
 
 /// Returns a wavefunction propagator for a half step in position space.
-pub fn getPositionPropagator(comptime T: type, R: *ComplexMatrix(T), potential_eigensystem: anytype, time_step: T, unit: Complex(T), mm_temporary: *ComplexMatrix(T)) void {
-    const adiabatic_potential = potential_eigensystem.adiabatic_potential;
-    const adiabatic_eigenvectors = potential_eigensystem.adiabatic_eigenvectors;
-
+pub fn getPositionPropagator(comptime T: type, R: *ComplexMatrix(T), adiabatic_potential: RealMatrix(T), eigenvectors: RealMatrix(T), time_step: T, unit: Complex(T), mm_temporary: *ComplexMatrix(T)) void {
     R.zero();
 
     for (0..R.rows) |j| {
         R.ptr(j, j).* = std.math.complex.exp(Complex(T).init(adiabatic_potential.at(j, j), 0).mul(Complex(T).init(-0.5 * time_step, 0)).mul(unit));
     }
 
-    mmRealComplex(T, mm_temporary, adiabatic_eigenvectors, R.*);
-    mmComplexRealTrans(T, R, mm_temporary.*, adiabatic_eigenvectors);
+    mmRealComplex(T, mm_temporary, eigenvectors, R.*);
+    mmComplexRealTrans(T, R, mm_temporary.*, eigenvectors);
 }

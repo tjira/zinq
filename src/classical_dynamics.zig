@@ -187,12 +187,6 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     var eigenvector_overlap = try RealMatrix(T).init(nstate, nstate, allocator); defer eigenvector_overlap.deinit();
     var time_derivative_coupling = try RealMatrix(T).initZero(nstate, nstate, allocator); defer time_derivative_coupling.deinit();
 
-    var potential_eigensystem = .{
-        .diabatic_potential = diabatic_potential,
-        .adiabatic_potential = adiabatic_potential,
-        .adiabatic_eigenvectors = adiabatic_eigenvectors
-    };
-
     var energy_gaps = try RingBufferArray(T).init((2 * nstate - 2) / 2, .{.max_len = 5}, allocator); defer energy_gaps.deinit();
     var jump_probabilities = try RealVector(T).init(nstate, allocator); defer jump_probabilities.deinit();
     var runge_kutta_solver = try ComplexRungeKutta(T).init(nstate, allocator); defer runge_kutta_solver.deinit();
@@ -230,7 +224,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
             try system.propagateVelocityVerlet(options.potential, &adiabatic_potential, time, current_state, options.time_step);
         }
 
-        try options.potential.evaluateEigensystem(&potential_eigensystem, system.position, time);
+        try options.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time);
 
         if (i > 0) {
 

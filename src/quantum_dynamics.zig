@@ -202,12 +202,6 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
     var adiabatic_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer adiabatic_eigenvectors.deinit();
     var previous_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer previous_eigenvectors.deinit();
 
-    var potential_eigensystem = .{
-        .diabatic_potential = diabatic_potential,
-        .adiabatic_potential = adiabatic_potential,
-        .adiabatic_eigenvectors = adiabatic_eigenvectors
-    };
-
     var wavefunction_row = try ComplexMatrix(T).init(wavefunction.nstate, 1, wavefunction.allocator); defer wavefunction_row.deinit();
 
     for (0..wavefunction.data.rows) |i| {
@@ -218,7 +212,7 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
 
             @memcpy(previous_eigenvectors.data, adiabatic_eigenvectors.data);
 
-            try potential.evaluateEigensystem(&potential_eigensystem, wavefunction.position_grid_pointer.?.row(i), time);
+            try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, wavefunction.position_grid_pointer.?.row(i), time);
 
             if (i > 0) fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
 
