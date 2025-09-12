@@ -8,7 +8,7 @@ ClearAll["Global`*"]
 (*Assumptions*)
 
 
-$Assumptions={k\[Element]Reals,m\[Element]Reals,x\[Element]Reals,q[t]\[Element]Reals,p[t]\[Element]Reals,gamma\[Element]Reals,gamma>0};
+$Assumptions={k\[Element]Reals,m\[Element]Reals,x\[Element]Reals,q[t]\[Element]Reals,p[t]\[Element]Reals,\[Gamma]\[Element]Reals,\[Gamma]>0};
 
 
 (* ::Section:: *)
@@ -22,10 +22,10 @@ V=k*x^2/2;
 (*Wavefunction and Parameters*)
 
 
-psi=Exp[-gamma/2*(x-q[t])^2+I*p[t]*x];
+psi=Exp[-\[Gamma]/2*(x-q[t])^2+I*p[t]*(x-q[t])];
 
 
-psi=psi/Sqrt@Integrate[Conjugate@psi*psi,{x,-Infinity,Infinity}]
+psi=psi/Sqrt@Integrate[Conjugate@psi*psi,{x,-Infinity,Infinity}];
 
 
 phi={q[t],p[t]};
@@ -38,10 +38,16 @@ phi={q[t],p[t]};
 S=Table[Integrate[FullSimplify[Conjugate@D[psi,phi[[i]]]*D[psi,phi[[j]]]],{x,-Infinity,Infinity}],{i,1,Length@phi},{j,1,Length@phi}];
 
 
-dE=Transpose@{Grad[Integrate[FullSimplify[Conjugate@psi*(V*psi-D[psi,{x,2}]/(2*m))],{x,-Infinity,Infinity}],phi]};dE//MatrixForm
+dEkin=Transpose@{Grad[Integrate[FullSimplify[Conjugate@psi*(-D[psi,{x,2}]/(2*m))],{x,-Infinity,Infinity}],phi]};
+
+
+dEpot=Transpose@{Grad[Integrate[FullSimplify[Conjugate@psi*V*psi],{x,-Infinity,Infinity}],phi]};
+
+
+dE=dEkin+dEpot;dE//MatrixForm
 
 
 F=-2*FullSimplify@Im@S;F//MatrixForm
 
 
-dPhi=Inverse@F . dE;dPhi//MatrixForm
+dPhi=Dot[Inverse@F,dE];dPhi//MatrixForm
