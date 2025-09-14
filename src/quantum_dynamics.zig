@@ -30,6 +30,7 @@ const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWit
 const fixGauge = eigenproblem_solver.fixGauge;
 const mmRealTransComplex = matrix_multiplication.mmRealTransComplex;
 const momentumGridAlloc = grid_generator.momentumGridAlloc;
+const positionAtRow = grid_generator.positionAtRow;
 const positionGridAlloc = grid_generator.positionGridAlloc;
 const print = device_write.print;
 
@@ -127,11 +128,9 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     const position_grid = try positionGridAlloc(T, options.grid.limits, @intCast(options.grid.points), allocator); defer position_grid.deinit();
     const momentum_grid = try momentumGridAlloc(T, options.grid.limits, @intCast(options.grid.points), allocator); defer momentum_grid.deinit();
 
-    var wavefunction = try GridWavefunction(T).init(@intCast(options.grid.points), nstate, ndim, options.initial_conditions.mass, allocator); defer wavefunction.deinit();
+    var wavefunction = try GridWavefunction(T).init(@intCast(options.grid.points), nstate, ndim, options.grid.limits, options.initial_conditions.mass, allocator); defer wavefunction.deinit();
 
-    wavefunction.attachGrids(&position_grid, &momentum_grid);
-
-    wavefunction.initialGaussian(options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.state, options.initial_conditions.gamma);
+    try wavefunction.initialGaussian(options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.state, options.initial_conditions.gamma);
 
     if (options.adiabatic) try wavefunction.transformRepresentation(options.potential, 0, false);
 
@@ -202,6 +201,8 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
     var adiabatic_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer adiabatic_eigenvectors.deinit();
     var previous_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer previous_eigenvectors.deinit();
 
+    var position_at_row = try RealVector(T).init(wavefunction.ndim, wavefunction.allocator); defer position_at_row.deinit();
+
     var wavefunction_row = try ComplexMatrix(T).init(wavefunction.nstate, 1, wavefunction.allocator); defer wavefunction_row.deinit();
 
     for (0..wavefunction.data.rows) |i| {
@@ -212,7 +213,9 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
 
             @memcpy(previous_eigenvectors.data, adiabatic_eigenvectors.data);
 
-            try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, wavefunction.position_grid_pointer.?.row(i), time);
+            positionAtRow(T, &position_at_row, i, wavefunction.ndim, wavefunction.npoint, wavefunction.limits);
+
+            try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position_at_row, time);
 
             if (i > 0) fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
 
@@ -230,9 +233,16 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
 pub fn initializeWavefunctionDynamicsContainer(comptime T: type, wavefunction: GridWavefunction(T), iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var wavefunction_dynamics: RealMatrix(T) = try RealMatrix(T).init(wavefunction.data.rows, wavefunction.ndim + 2 * wavefunction.nstate * (iterations + 1), allocator);
 
-    for (0..wavefunction.position_grid_pointer.?.rows) |i| for (0..wavefunction.position_grid_pointer.?.cols) |j| {
-        wavefunction_dynamics.ptr(i, j).* = wavefunction.position_grid_pointer.?.at(i, j);
-    };
+    var position_at_row = try RealVector(T).init(wavefunction.ndim, allocator); defer position_at_row.deinit();
+
+    for (0..wavefunction.data.rows) |i| {
+
+        positionAtRow(T, &position_at_row, i, wavefunction.ndim, wavefunction.npoint, wavefunction.limits);
+
+        for (0..wavefunction.ndim) |j| {
+            wavefunction_dynamics.ptr(i, j).* = position_at_row.at(j);
+        }
+    }
 
     return wavefunction_dynamics;
 }
