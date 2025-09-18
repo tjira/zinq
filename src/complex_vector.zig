@@ -15,19 +15,19 @@ pub fn ComplexVector(comptime T: type) type {
         data: []Complex(T),
         len: usize,
 
-        allocator: std.mem.Allocator,
+        allocator: ?std.mem.Allocator,
 
         /// Initialize a vector with a given length and specify an allocator. The function returns an error if the allocation fails.
-        pub fn init(len: usize, allocator: std.mem.Allocator) !@This() {
+        pub fn init(len: usize, allocator: ?std.mem.Allocator) !@This() {
             return @This(){
-                .data = try allocator.alloc(Complex(T), len),
+                .data = try allocator.?.alloc(Complex(T), len),
                 .len = len,
                 .allocator = allocator
             };
         }
 
         /// Initialize a vector and fills it with zeros.
-        pub fn initZero(len: usize, allocator: std.mem.Allocator) !@This() {
+        pub fn initZero(len: usize, allocator: ?std.mem.Allocator) !@This() {
             var v = try @This().init(len, allocator); v.zero();
 
             return v;
@@ -35,7 +35,7 @@ pub fn ComplexVector(comptime T: type) type {
 
         /// Free the memory allocated for the vector.
         pub fn deinit(self: @This()) void {
-            self.allocator.free(self.data);
+            if (self.allocator) |allocator| allocator.free(self.data);
         }
 
         /// Create a matrix view of the vector with one column.

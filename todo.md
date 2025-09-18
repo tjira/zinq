@@ -2,3 +2,4 @@
 - [ ] Implement variable number of points in each dimension in quantum dynamics grid.
 - [ ] Remove the need to store the full grid in memory for quantum dynamics simulations. This would allow to simulate larger systems.
 - [x] Jumps in FSSH should attempt each quantum step, not each classical step.
+- [ ] Implement multilinear interpolation for specifying themulti-dimensional potential energy surfaces from files.

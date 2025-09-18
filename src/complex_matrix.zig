@@ -14,12 +14,12 @@ pub fn ComplexMatrix(comptime T: type) type {
         rows: usize,
         cols: usize,
 
-        allocator: std.mem.Allocator,
+        allocator: ?std.mem.Allocator,
 
         /// Initialize a matrix with a given number of rows and columns and specify an allocator. The function returns an error if the allocation fails.
-        pub fn init(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
+        pub fn init(rows: usize, cols: usize, allocator: ?std.mem.Allocator) !@This() {
             return @This(){
-                .data = try allocator.alloc(Complex(T), rows * cols),
+                .data = try allocator.?.alloc(Complex(T), rows * cols),
                 .rows = rows,
                 .cols = cols,
                 .allocator = allocator
@@ -27,7 +27,7 @@ pub fn ComplexMatrix(comptime T: type) type {
         }
 
         /// Initialize a matrix and fills it with zeros.
-        pub fn initZero(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
+        pub fn initZero(rows: usize, cols: usize, allocator: ?std.mem.Allocator) !@This() {
             var A = try @This().init(rows, cols, allocator); A.zero();
 
             return A;
@@ -35,7 +35,7 @@ pub fn ComplexMatrix(comptime T: type) type {
 
         /// Free the memory allocated for the matrix.
         pub fn deinit(self: @This()) void {
-            self.allocator.free(self.data);
+            if (self.allocator) |allocator| allocator.free(self.data);
         }
 
         /// Divide the matrix by a scalar value.

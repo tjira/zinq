@@ -136,8 +136,16 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try print("\nRUNNING CLASSICAL DYNAMICS WITH {d} TRAJECTORIES OF {d} ITERATIONS EACH\n\n", .{options.trajectories, options.iterations});
 
-    const ndim = options.potential.ndim();
-    const nstate = options.potential.nstate();
+    var potential = options.potential;
+    const ndim = potential.ndim();
+    const nstate = potential.nstate();
+
+    if (options.initial_conditions.momentum_mean.len != ndim) return error.IncompatibleDimension;
+    if (options.initial_conditions.position_mean.len != ndim) return error.IncompatibleDimension;
+    if (options.initial_conditions.momentum_std.len != ndim) return error.IncompatibleDimension;
+    if (options.initial_conditions.position_std.len != ndim) return error.IncompatibleDimension;
+
+    const file_potential = if (potential == .file) try potential.file.read(allocator) else null; defer if (file_potential) |U| U.deinit();
 
     var output = try Output(T).init(nstate, options.iterations, allocator);
 
@@ -152,7 +160,9 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
         try system.setPositionRandn(options.initial_conditions.position_mean, options.initial_conditions.position_std, &random);
         try system.setMomentumRandn(options.initial_conditions.momentum_mean, options.initial_conditions.momentum_std, &random);
 
-        const trajectory_output = try runTrajectory(T, options, &system, i, enable_printing, allocator); defer trajectory_output.deinit();
+        var options_copy = options; options_copy.potential = potential;
+
+        const trajectory_output = try runTrajectory(T, options_copy, &system, i, enable_printing, allocator); defer trajectory_output.deinit();
 
         output.population_mean.add(trajectory_output.population);
     }

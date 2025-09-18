@@ -8,19 +8,19 @@ pub fn RealTensor4(comptime T: type) type {
         data: []T,
         shape: [4]usize,
 
-        allocator: std.mem.Allocator,
+        allocator: ?std.mem.Allocator,
 
         /// Initialize a 4th order tensor with a given shape and specify an allocator. The function returns an error if the allocation fails.
-        pub fn init(shape: [4]usize, allocator: std.mem.Allocator) !@This() {
+        pub fn init(shape: [4]usize, allocator: ?std.mem.Allocator) !@This() {
             return @This(){
-                .data = try allocator.alloc(T, shape[0] * shape[1] * shape[2] * shape[3]),
+                .data = try allocator.?.alloc(T, shape[0] * shape[1] * shape[2] * shape[3]),
                 .shape = shape,
                 .allocator = allocator
             };
         }
 
         /// Initialize a 4th order tensor and fills it with zeros.
-        pub fn initZero(shape: [4]usize, allocator: std.mem.Allocator) !@This() {
+        pub fn initZero(shape: [4]usize, allocator: ?std.mem.Allocator) !@This() {
             var A = try @This().init(shape, allocator); A.zero();
 
             return A;
@@ -28,7 +28,7 @@ pub fn RealTensor4(comptime T: type) type {
 
         /// Free the memory allocated for the tensor.
         pub fn deinit(self: @This()) void {
-            self.allocator.free(self.data);
+            if (self.allocator) |allocator| allocator.free(self.data);
         }
 
         /// Get the element at (i, j, k, l).
