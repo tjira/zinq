@@ -3,7 +3,6 @@
 const std = @import("std");
 
 const device_read = @import("device_read.zig");
-const device_write = @import("device_write.zig");
 const linear_interpolation = @import("linear_interpolation.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -12,7 +11,6 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
 const lerp = linear_interpolation.lerp;
-const printRealMatrix = device_write.printRealMatrix;
 const readRealMatrix = device_read.readRealMatrix;
 
 /// Struct holding parameters for the file potential.
