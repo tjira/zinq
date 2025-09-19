@@ -77,5 +77,10 @@ pub fn BasisSet(comptime T: type) type {
 
             self.allocator.free(self.contracted_gaussians);
         }
+
+        /// Get the number of basis functions.
+        pub fn nbf(self: BasisSet(T)) usize {
+            return self.contracted_gaussians.len;
+        }
     };
 }

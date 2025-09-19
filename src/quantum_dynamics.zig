@@ -115,7 +115,7 @@ pub fn Custom(comptime T: type) type {
 
 /// Run quantum dynamics simulation.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) {try print("\n", .{}); try printJson(options); try print("\n", .{});}
+    if (enable_printing) {try print("\n", .{}); try printJson(options);}
 
     var potential = options.potential;
     const ndim = potential.ndim();
@@ -253,7 +253,7 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
 
     var writer = std.io.Writer.fixed(&buffer);
 
-    try writer.print("{s:8} ", .{"ITER"});
+    try writer.print("\n{s:8} ", .{"ITER"});
     try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
     try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * ndim + 2 * (ndim - 1) + 2});
     try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});

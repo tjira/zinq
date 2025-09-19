@@ -20,7 +20,7 @@ const exportRealTensorFour = device_write.exportRealTensorFour;
 const print = device_write.print;
 const printJson = device_write.printJson;
 
-/// Integral engine target oprions.
+/// Integral engine target options.
 pub fn Options(comptime _: type) type {
     return struct {
         const Write = struct {
@@ -70,7 +70,7 @@ pub fn Output(comptime T: type) type {
 
 /// Run the integral engine target.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) {try print("\n", .{}); try printJson(options); try print("\n", .{});}
+    if (enable_printing) {try print("\n", .{}); try printJson(options);}
 
     const system = try classical_particle.read(T, options.system, 0, allocator); defer system.deinit();
     var basis = try BasisSet(T).init(system, options.basis, allocator); defer basis.deinit();
@@ -110,7 +110,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
 /// Compute the coulomb tensor.
 pub fn coulomb(comptime T: type, basis: BasisSet(T), allocator: std.mem.Allocator) !RealTensor4(T) {
-    var J = try RealTensor4(T).init(.{basis.contracted_gaussians.len, basis.contracted_gaussians.len, basis.contracted_gaussians.len, basis.contracted_gaussians.len}, allocator);
+    var J = try RealTensor4(T).init(.{basis.nbf(), basis.nbf(), basis.nbf(), basis.nbf()}, allocator);
 
     for (0..J.shape[0]) |i| for (i..J.shape[1]) |j| for (i..J.shape[2]) |k| for ((if (i == k) j else k)..J.shape[3]) |l| {
 
@@ -132,7 +132,7 @@ pub fn coulomb(comptime T: type, basis: BasisSet(T), allocator: std.mem.Allocato
 
 /// Compute the kinetic matrix.
 pub fn kinetic(comptime T: type, basis: BasisSet(T), allocator: std.mem.Allocator) !RealMatrix(T) {
-    var K = try RealMatrix(T).init(basis.contracted_gaussians.len, basis.contracted_gaussians.len, allocator);
+    var K = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
     for (0..K.rows) |i| for (i..K.cols) |j| {
         K.ptr(i, j).* = basis.contracted_gaussians[i].kinetic(basis.contracted_gaussians[j]); K.ptr(j, i).* = K.at(i, j);
@@ -143,7 +143,7 @@ pub fn kinetic(comptime T: type, basis: BasisSet(T), allocator: std.mem.Allocato
 
 /// Compute the kinetic matrix.
 pub fn nuclear(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), allocator: std.mem.Allocator) !RealMatrix(T) {
-    var V = try RealMatrix(T).init(basis.contracted_gaussians.len, basis.contracted_gaussians.len, allocator);
+    var V = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
     for (0.. V.rows) |i| for (i..V.cols) |j| {
         V.ptr(i, j).* = basis.contracted_gaussians[i].nuclear(basis.contracted_gaussians[j], system); V.ptr(j, i).* = V.at(i, j);
@@ -154,7 +154,7 @@ pub fn nuclear(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T
 
 /// Compute the overlap matrix.
 pub fn overlap(comptime T: type, basis: BasisSet(T), allocator: std.mem.Allocator) !RealMatrix(T) {
-    var S = try RealMatrix(T).init(basis.contracted_gaussians.len, basis.contracted_gaussians.len, allocator);
+    var S = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
     for (0..S.rows) |i| for (i..S.cols) |j| {
         S.ptr(i, j).* = basis.contracted_gaussians[i].overlap(basis.contracted_gaussians[j]); S.ptr(j, i).* = S.at(i, j);

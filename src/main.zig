@@ -21,6 +21,7 @@ pub const global_variables = @import("global_variables.zig");
 pub const grid_generator = @import("grid_generator.zig");
 pub const hammes_schiffer_tully = @import("hammes_schiffer_tully.zig");
 pub const harmonic_potential = @import("harmonic_potential.zig");
+pub const hartree_fock = @import("hartree_fock.zig");
 pub const integral_functions = @import("integral_functions.zig");
 pub const landau_zener = @import("landau_zener.zig");
 pub const linear_interpolation = @import("linear_interpolation.zig");
@@ -49,6 +50,7 @@ pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 /// Available targets in the program.
 const Target = enum {
     classical_dynamics,
+    hartree_fock,
     molecular_integrals,
     prime_numbers,
     quantum_dynamics
@@ -78,6 +80,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 
         switch (tag) {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
+            .hartree_fock => try handle(f64, hartree_fock, options, allocator),
             .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
             .prime_numbers => try handle(u64, prime_numbers, options, allocator),
             .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator)

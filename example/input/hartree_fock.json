@@ -1,0 +1,11 @@
+{
+    "zinq" : [
+        {
+            "name" : "hartree_fock",
+            "options" : {
+                "system" : "molecule.xyz",
+                "basis" : "sto-3g.json"
+            }
+        }
+    ]
+}

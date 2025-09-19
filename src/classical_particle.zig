@@ -79,6 +79,37 @@ pub fn ClassicalParticle(comptime T: type) type {
             return kinetic_energy;
         }
 
+        /// Get the number of occupied spatial orbitals.
+        pub fn nocc(self: @This()) usize {
+            if (self.atoms == null) return 0;
+
+            var sum: usize = 0;
+
+            for (0..self.atoms.?.len) |i| sum += self.atoms.?[i];
+
+            return @intCast(@divFloor(@as(i32, @intCast(sum)) - self.charge, 2));
+        }
+
+        /// Get the nuclear repulsion energy of the classical particle.
+        pub fn nuclearRepulsionEnergy(self: @This()) T {
+            if (self.atoms == null) return 0;
+
+            var energy: T = 0;
+
+            for (0..self.atoms.?.len) |i| for (i + 1..self.atoms.?.len) |j| {
+
+                const dx = self.position.at(3 * i + 0) - self.position.at(3 * j + 0);
+                const dy = self.position.at(3 * i + 1) - self.position.at(3 * j + 1);
+                const dz = self.position.at(3 * i + 2) - self.position.at(3 * j + 2);
+
+                const r = std.math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                energy += @as(T, @floatFromInt(self.atoms.?[i] * self.atoms.?[j])) / r;
+            };
+
+            return energy;
+        }
+
         /// Propagate the classical particle using velocity verlet algorithm.
         pub fn propagateVelocityVerlet(self: *@This(), potential: ElectronicPotential(T), potential_matrix: *RealMatrix(T), time: T, current_state: usize, time_step: T) !void {
             for (0..self.ndim) |i| {
