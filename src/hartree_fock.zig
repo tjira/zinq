@@ -54,6 +54,7 @@ pub fn Options(comptime T: type) type {
 pub fn Output(comptime T: type) type {
     return struct {
         C: RealMatrix(T),
+        E: RealMatrix(T),
         F: RealMatrix(T),
         K: RealMatrix(T),
         P: RealMatrix(T),
@@ -66,6 +67,7 @@ pub fn Output(comptime T: type) type {
         /// Deinitialize the output struct.
         pub fn deinit(self: @This()) void {
             self.C.deinit();
+            self.E.deinit();
             self.F.deinit();
             self.K.deinit();
             self.P.deinit();
@@ -85,14 +87,14 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     const S = try overlap(T, basis, allocator);
     const K = try kinetic(T, basis, allocator);
-    const V = try nuclear(T, system, basis, allocator);
     const J = try coulomb(T, basis, allocator);
 
+    const V = try nuclear(T, system, basis, allocator);
+
     var C = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
+    var E = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
     var F = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
     var P = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
-
-    var FX = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator); defer FX.deinit();
 
     var X = try getXMatrix(T, S, allocator); defer X.deinit();
 
@@ -119,41 +121,40 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
             };
         };
 
-        mmRealReal(T, &C, F, X); mmRealReal(T, &FX, X, C);
+        try solveRoothaan(T, &E, &C, F, X);
 
-        try eigensystemSymmetric(T, &P, &C, FX);
+        getDensityMatrix(T, &P, C, system.nocc());
 
-        mmRealReal(T, &P, X, C); @memcpy(C.data, P.data);
-
-        for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| {
-
-            P.ptr(i, j).* = 0;
-
-            for (0..system.nocc()) |m| {
-                P.ptr(i, j).* += C.at(i, m) * C.at(j, m);
-            }
-        };
-
-        energy_prev = energy; energy = 0;
-
-        for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| {
-            energy += P.at(i, j) * (K.at(i, j) + V.at(i, j) + F.at(i, j));
-        };
+        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P);
 
         if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {D}\n", .{iter + 1, energy + VNN, @abs(energy - energy_prev), timer.read()});
     }
 
     if (enable_printing) try print("\nHF ENERGY: {d:.14}\n", .{energy + VNN});
 
-    return .{
-        .C = C,
-        .F = F,
-        .K = K,
-        .P = P,
-        .S = S,
-        .V = V,
-        .J = J,
-        .allocator = allocator,
+    return .{.C = C, .E = E, .F = F, .K = K, .P = P, .S = S, .V = V, .J = J, .allocator = allocator};
+}
+
+/// Calculates the energy from the density matrix, Fock matrix and core Hamiltonian.
+pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: RealMatrix(T), P: RealMatrix(T)) T {
+    var energy: T = 0;
+
+    for (0..P.rows) |i| for (0..P.cols) |j| {
+        energy += P.at(i, j) * (K.at(i, j) + V.at(i, j) + F.at(i, j));
+    };
+
+    return energy;
+}
+
+/// Calculate the density matrix.
+pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), nocc: usize) void {
+    for (0..P.rows) |i| for (0..P.cols) |j| {
+
+        P.ptr(i, j).* = 0;
+
+        for (0..nocc) |m| {
+            P.ptr(i, j).* += C.at(i, m) * C.at(j, m);
+        }
     };
 }
 
@@ -173,4 +174,16 @@ pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocat
     mmRealReal(T, &X, S_C, mm_temp);
 
     return X;
+}
+
+/// Solver for the Roothaan equations.
+pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: RealMatrix(T), X: RealMatrix(T)) !void {
+    var FX  = try RealMatrix(T).init(F.rows, F.cols, F.allocator); defer  FX.deinit();
+    var FXC = try RealMatrix(T).init(F.rows, F.cols, F.allocator); defer FXC.deinit();
+
+    mmRealReal(T, C, F, X); mmRealReal(T, &FX, X, C.*);
+
+    try eigensystemSymmetric(T, E, &FXC, FX);
+
+    mmRealReal(T, C, X, FXC);
 }
