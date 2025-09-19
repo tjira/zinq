@@ -15,7 +15,7 @@ pub fn diagonalizeSymmetric(comptime T: type, A: *RealMatrix(T)) !void {
 pub fn eigensystemJacobi(comptime T: type, J: *RealMatrix(T), C: ?*RealMatrix(T), A: RealMatrix(T)) void {
     std.debug.assert(A.rows == A.cols);
 
-    const n = A.rows; @memcpy(J.data, A.data);
+    const n = A.rows; if (J.data.ptr != A.data.ptr) @memcpy(J.data, A.data);
 
     if (C != null) C.?.identity(); if (n == 1) return;
 

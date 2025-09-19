@@ -74,18 +74,13 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Calculate the Frobenius norm of the matrix.
         pub fn frobeniusNorm(self: @This()) T {
-            return std.math.sqrt(self.frobeniusNormSquared());
-        }
-
-        /// Calculate square of the Frobenius norm of the matrix.
-        pub fn frobeniusNormSquared(self: @This()) T {
             var sum: T = 0;
 
             for (self.data) |element| {
                 sum += element * element;
             }
 
-            return sum;
+            return std.math.sqrt(sum);
         }
 
         /// Set the matrix to the identity matrix. The matrix must be square.
@@ -125,7 +120,7 @@ pub fn RealMatrix(comptime T: type) type {
             return RealVector(T){
                 .data = self.data[i * self.cols..(i + 1) * self.cols],
                 .len = self.cols,
-                .allocator = self.allocator
+                .allocator = null
             };
         }
 

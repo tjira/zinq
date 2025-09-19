@@ -33,6 +33,7 @@ const momentumGridAlloc = grid_generator.momentumGridAlloc;
 const positionAtRow = grid_generator.positionAtRow;
 const positionGridAlloc = grid_generator.positionGridAlloc;
 const print = device_write.print;
+const printJson = device_write.printJson;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
@@ -114,17 +115,13 @@ pub fn Custom(comptime T: type) type {
 
 /// Run quantum dynamics simulation.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try print("\nRUNNING QUANTUM DYNAMICS SIMULATION ON A {d}-DIMENSIONAL GRID WITH {d} POINTS\n\n", .{options.grid.limits.len, options.grid.points});
+    if (enable_printing) {try print("\n", .{}); try printJson(options); try print("\n", .{});}
 
     var potential = options.potential;
     const ndim = potential.ndim();
     const nstate = potential.nstate();
 
-    if (options.grid.limits.len != ndim) return error.IncompatibleDimension;
-    if (options.initial_conditions.momentum.len != ndim) return error.IncompatibleDimension;
-    if (options.initial_conditions.position.len != ndim) return error.IncompatibleDimension;
-
-    const file_potential = if (potential == .file) try potential.file.read(allocator) else null; defer if (file_potential) |U| U.deinit();
+    const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
 
     var output = try Output(T).init(nstate, @intCast(options.iterations), allocator);
 

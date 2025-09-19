@@ -16,12 +16,15 @@ const readRealMatrix = device_read.readRealMatrix;
 /// Struct holding parameters for the file potential.
 pub fn FilePotential(comptime T: type) type {
     return struct {
-        ndim: u32, nstate: u32, path: ?[]const u8, data: ?[]T = null,
+        ndim: u32,
+        nstate: u32,
+        source : union(enum) {
+            path: []const u8,
+            data: []T,
+        },
 
         /// Diabatic potential matrix evaluator.
-        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
-            _ = time;
-
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), _: T) !void {
             const potential_matrix = try self.getMatrix();
 
             for (0..U.rows) |i| for (i..U.cols) |j| {
@@ -31,21 +34,21 @@ pub fn FilePotential(comptime T: type) type {
 
         /// Returns the data represented as a matrix. The pointer to the matrix data is stored within this struct.
         pub fn getMatrix(self: @This()) !RealMatrix(T) {
-            if (self.data == null) return error.DataNotRead;
+            if (self.source == .path) return error.DataNotRead;
 
             return RealMatrix(T){
-                .data = self.data.?,
-                .rows = self.data.?.len / (self.nstate * self.nstate + self.ndim),
+                .data = self.source.data,
+                .rows = self.source.data.len / (self.nstate * self.nstate + self.ndim),
                 .cols = self.nstate * self.nstate + self.ndim,
                 .allocator = null
             };
         }
 
-        /// Read the potential data from file. The function returns the read matrix and the pointer to the matrix data is stored within this struct.
-        pub fn read(self: *@This(), allocator: std.mem.Allocator) !RealMatrix(T) {
-            const U = try readRealMatrix(T, self.path.?, allocator);
+        /// Read the potential data from file, if the file path is specified. Otherwise, just return the matrix from the data pointer.
+        pub fn init(self: *@This(), allocator: std.mem.Allocator) !RealMatrix(T) {
+            const U = if (self.source == .path) try readRealMatrix(T, self.source.path, allocator) else return self.getMatrix();
 
-            self.data = U.data;
+            if (self.source == .path) self.source = .{.data = U.data};
 
             return U;
         }

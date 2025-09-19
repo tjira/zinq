@@ -14,8 +14,8 @@ pub fn HarmonicPotential(comptime T: type) type {
         k: []const T = &[_]T{1},
 
         /// Diabatic potential evaluator.
-        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) void {
-            _ = time; U.ptr(0, 0).* = 0;
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), _: T) void {
+            U.ptr(0, 0).* = 0;
 
             for (0..self.k.len) |i| {
                 U.ptr(0, 0).* += 0.5 * self.k[i] * position.at(i) * position.at(i);

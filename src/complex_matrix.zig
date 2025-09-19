@@ -84,7 +84,7 @@ pub fn ComplexMatrix(comptime T: type) type {
             return ComplexVector(T){
                 .data = self.data[i * self.cols .. (i + 1) * self.cols],
                 .len = self.cols,
-                .allocator = self.allocator
+                .allocator = null
             };
         }
 

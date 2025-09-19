@@ -44,7 +44,7 @@ pub fn ComplexVector(comptime T: type) type {
                 .data = self.data,
                 .rows = self.len,
                 .cols = 1,
-                .allocator = self.allocator,
+                .allocator = null,
             };
         }
 

@@ -42,6 +42,7 @@ const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWit
 const fixGauge = eigenproblem_solver.fixGauge;
 const mmRealTransReal = matrix_multiplication.mmRealTransReal;
 const print = device_write.print;
+const printJson = device_write.printJson;
 
 /// Classical dynamics option struct.
 pub fn Options(comptime T: type) type {
@@ -134,18 +135,13 @@ pub fn Custom(comptime T: type) type {
 
 /// Run classical dynamics simulation.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try print("\nRUNNING CLASSICAL DYNAMICS WITH {d} TRAJECTORIES OF {d} ITERATIONS EACH\n\n", .{options.trajectories, options.iterations});
+    if (enable_printing) {try print("\n", .{}); try printJson(options); try print("\n", .{});}
 
     var potential = options.potential;
     const ndim = potential.ndim();
     const nstate = potential.nstate();
 
-    if (options.initial_conditions.momentum_mean.len != ndim) return error.IncompatibleDimension;
-    if (options.initial_conditions.position_mean.len != ndim) return error.IncompatibleDimension;
-    if (options.initial_conditions.momentum_std.len != ndim) return error.IncompatibleDimension;
-    if (options.initial_conditions.position_std.len != ndim) return error.IncompatibleDimension;
-
-    const file_potential = if (potential == .file) try potential.file.read(allocator) else null; defer if (file_potential) |U| U.deinit();
+    const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
 
     var output = try Output(T).init(nstate, options.iterations, allocator);
 

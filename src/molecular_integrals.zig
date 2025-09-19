@@ -14,8 +14,11 @@ const ClassicalParticle = classical_particle.ClassicalParticle;
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
 const RealMatrix = real_matrix.RealMatrix;
 const RealTensor4 = real_tensor_four.RealTensor4;
+
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealTensorFour = device_write.exportRealTensorFour;
+const print = device_write.print;
+const printJson = device_write.printJson;
 
 /// Integral engine target oprions.
 pub fn Options(comptime _: type) type {
@@ -66,7 +69,9 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the integral engine target.
-pub fn run(comptime T: type, options: Options(T), _: bool, allocator: std.mem.Allocator) !Output(T) {
+pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) {try print("\n", .{}); try printJson(options); try print("\n", .{});}
+
     const system = try classical_particle.read(T, options.system, 0, allocator); defer system.deinit();
     var basis = try BasisSet(T).init(system, options.basis, allocator); defer basis.deinit();
 

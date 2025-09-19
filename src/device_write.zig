@@ -52,6 +52,11 @@ pub fn print(comptime format: []const u8, args: anytype) !void {
     try write(std.fs.File.stdout(), format, args);
 }
 
+/// Print the formatted json to the standard output.
+pub fn printJson(object: anytype) !void {
+    try writeJson(std.fs.File.stdout(), object);
+}
+
 /// Print the formatted real matrix to the standard output.
 pub fn printRealMatrix(comptime T: type, A: RealMatrix(T)) !void {
     try writeRealMatrix(T, std.fs.File.stdout(), A);
@@ -69,6 +74,19 @@ pub fn write(device: std.fs.File, comptime format: []const u8, args: anytype) !v
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
     try writer_interface.print(format, args);
+
+    try writer_interface.flush();
+}
+
+/// Print a formatted json into the specified device.
+pub fn writeJson(device: std.fs.File, object: anytype) !void {
+    var buffer: [32768]u8 = undefined;
+
+    var writer = device.writer(&buffer); var writer_interface = &writer.interface;
+
+    try std.json.Stringify.value(object, .{.whitespace = .indent_2}, writer_interface);
+
+    try writer_interface.print("\n", .{});
 
     try writer_interface.flush();
 }
