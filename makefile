@@ -36,7 +36,7 @@ linguist:
 
 profile: zinq
 > @valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq
-> @gprof2dot --format=callgrind --output=profile.dot --root=main.main callgrind.out
+> @gprof2dot -e 1 -f callgrind -n 5 -o profile.dot -z main.main callgrind.out
 > @dot -T pdf profile.dot -o profile.pdf
 
 serve: docs
