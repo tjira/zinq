@@ -29,7 +29,6 @@ const nuclear = molecular_integrals.nuclear;
 const overlap = molecular_integrals.overlap;
 const print = device_write.print;
 const printJson = device_write.printJson;
-const printRealMatrix = device_write.printRealMatrix;
 
 /// Hartree-Fock target options.
 pub fn Options(comptime T: type) type {
@@ -45,6 +44,7 @@ pub fn Options(comptime T: type) type {
 
         maxiter: u32 = 100,
         threshold: T = 1e-8,
+        direct: bool = false,
 
         write: Write = .{}
     };
@@ -60,7 +60,7 @@ pub fn Output(comptime T: type) type {
         P: RealMatrix(T),
         S: RealMatrix(T),
         V: RealMatrix(T),
-        J: RealTensor4(T),
+        J: ?RealTensor4(T),
 
         allocator: std.mem.Allocator,
 
@@ -73,7 +73,8 @@ pub fn Output(comptime T: type) type {
             self.P.deinit();
             self.S.deinit();
             self.V.deinit();
-            self.J.deinit();
+
+            if (self.J) |J| J.deinit();
         }
     };
 }
@@ -87,9 +88,9 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     const S = try overlap(T, basis, allocator);
     const K = try kinetic(T, basis, allocator);
-    const J = try coulomb(T, basis, allocator);
-
     const V = try nuclear(T, system, basis, allocator);
+
+    const J = if (!options.direct) try coulomb(T, basis, allocator) else null;
 
     var C = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
     var E = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
@@ -110,16 +111,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
         var timer = try std.time.Timer.start();
 
-        F.zero();
-
-        for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| {
-
-            F.ptr(i, j).* += V.at(i, j) + K.at(i, j);
-
-            for (0..basis.nbf()) |k| for (0..basis.nbf()) |l| {
-                F.ptr(k, l).* += P.at(i, j) * (2.0 * J.at(i, j, k, l) - J.at(i, l, k, j));
-            };
-        };
+        getFockMatrix(T, &F, K, V, P, J, basis);
 
         try solveRoothaan(T, &E, &C, F, X);
 
@@ -131,6 +123,10 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     }
 
     if (enable_printing) try print("\nHF ENERGY: {d:.14}\n", .{energy + VNN});
+
+    if (options.write.coefficient) |path| try exportRealMatrix(T, path, C);
+    if (options.write.density) |path| try exportRealMatrix(T, path, P);
+    if (options.write.fock) |path| try exportRealMatrix(T, path, F);
 
     return .{.C = C, .E = E, .F = F, .K = K, .P = P, .S = S, .V = V, .J = J, .allocator = allocator};
 }
@@ -155,6 +151,25 @@ pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), n
         for (0..nocc) |m| {
             P.ptr(i, j).* += C.at(i, m) * C.at(j, m);
         }
+    };
+}
+
+/// Obtain the Fock matrix form core Hamiltonian and density matrix.
+pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: ?RealTensor4(T), basis: BasisSet(T)) void {
+    for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| {
+        F.ptr(i, j).* = V.at(i, j) + K.at(i, j);
+    };
+
+    if (J == null) for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| for (0..basis.nbf()) |k| for (0..basis.nbf()) |l| {
+
+        const j_int = basis.contracted_gaussians[i].coulomb(basis.contracted_gaussians[j], basis.contracted_gaussians[k], basis.contracted_gaussians[l]);
+        const k_int = basis.contracted_gaussians[i].coulomb(basis.contracted_gaussians[l], basis.contracted_gaussians[k], basis.contracted_gaussians[j]);
+
+        F.ptr(k, l).* += P.at(i, j) * (2.0 * j_int - k_int);
+    };
+
+    if (J != null) for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| for (0..basis.nbf()) |k| for (0..basis.nbf()) |l| {
+        F.ptr(k, l).* += P.at(i, j) * (2.0 * J.?.at(i, j, k, l) - J.?.at(i, l, k, j));
     };
 }
 
