@@ -49,8 +49,8 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 * **Integrals over Gaussian Basis Functions**  
   Compute integrals over Gaussian basis functions from .xyz geometries and basis files.
 
-* **Hartree–Fock Methods**
-  Perform restricted or generalized Hartree-Fock calculation with full Coulomb tensor or on-the-fly integral calculation.
+* **Hartree–Fock Methods**  
+  Perform restricted or generalized Hartree-Fock calculation with the option for direct SCF.
 
 ### Time-Dependent Quantum Mechanics
 
