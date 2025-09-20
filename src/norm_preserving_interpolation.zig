@@ -2,20 +2,23 @@
 
 const std = @import("std");
 
+const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 
 const Complex = std.math.Complex;
 const RealMatrix = real_matrix.RealMatrix;
+
+const throw = error_handling.throw;
 
 /// Norm Preserving interpolation coupling implementation.
 pub fn NormPreservingInterpolation(comptime T: type) type {
     return struct {
 
         /// Evaluate the time derivative coupling.
-        pub fn evaluate(self: @This(), derivative_coupling: *RealMatrix(T), eigenvector_overlap: RealMatrix(T), time_step: T) !void {
-            if (derivative_coupling.rows != 2) return error.NotImplemented;
+        pub fn evaluate(_: @This(), derivative_coupling: *RealMatrix(T), eigenvector_overlap: RealMatrix(T), time_step: T) !void {
+            if (derivative_coupling.rows != 2) return throw(void, "NORM PRESERVING INTERPOLATION ONLY IMPLEMENTED FOR 2 STATES", .{});
 
-            _ = self; derivative_coupling.zero();
+            derivative_coupling.zero();
 
             if (eigenvector_overlap.at(0, 1) == 0) return;
 

@@ -2,9 +2,12 @@
 
 const std = @import("std");
 
+const device_write = @import("device_write.zig");
 const ring_buffer = @import("ring_buffer.zig");
 
 const RingBuffer = ring_buffer.RingBuffer;
+
+const throw = device_write.throw;
 
 /// Array for storing object in an array.
 pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
@@ -19,7 +22,7 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
 
             for (data) |*element| switch (O(T)) {
                 RingBuffer(T) => |object| element.* = try object.init(params.max_len, allocator),
-                else => return error.InvalidType
+                else => return throw(@This(), "UNSUPPORTED OBJECT TYPE FOR OBJECTARRAY", .{}),
             };
 
             return @This(){

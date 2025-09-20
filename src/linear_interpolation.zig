@@ -2,8 +2,11 @@
 
 const std = @import("std");
 
+const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
+
+const throw = error_handling.throw;
 
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
@@ -14,7 +17,7 @@ pub fn lerp(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(
         1 => return lerp1D(T, grid, column, r),
         2 => return lerp2D(T, grid, column, r),
         3 => return lerp3D(T, grid, column, r),
-        else => return error.InvalidDimension,
+        else => return throw(T, "LINEAR INTERPOLATION ONLY IMPLEMENTED FOR 1D, 2D, AND 3D DATA", .{})
     }
 }
 

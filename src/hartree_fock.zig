@@ -1,4 +1,4 @@
-//! Integral engine.
+//! Hartree-Fock self-consistent field method implementation.
 
 const std = @import("std");
 
@@ -7,6 +7,8 @@ const classical_particle = @import("classical_particle.zig");
 const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
+const errror_handling = @import("error_handling.zig");
+const integral_transform = @import("integral_transform.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const molecular_integrals = @import("molecular_integrals.zig");
 const real_matrix = @import("real_matrix.zig");
@@ -26,9 +28,12 @@ const kinetic = molecular_integrals.kinetic;
 const mmRealReal = matrix_multiplication.mmRealReal;
 const mmRealRealTrans = matrix_multiplication.mmRealRealTrans;
 const nuclear = molecular_integrals.nuclear;
+const oneAO2AS = integral_transform.oneAO2AS;
 const overlap = molecular_integrals.overlap;
 const print = device_write.print;
 const printJson = device_write.printJson;
+const throw = errror_handling.throw;
+const twoAO2AS = integral_transform.twoAO2AS;
 
 /// Hartree-Fock target options.
 pub fn Options(comptime T: type) type {
@@ -42,9 +47,11 @@ pub fn Options(comptime T: type) type {
         system: []const u8,
         basis: []const u8,
 
+        charge: i32 = 0,
+        direct: bool = false,
+        generalized: bool = false,
         maxiter: u32 = 100,
         threshold: T = 1e-8,
-        direct: bool = false,
 
         write: Write = .{}
     };
@@ -83,19 +90,30 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) {try print("\n", .{}); try printJson(options);}
 
-    const system = try classical_particle.read(T, options.system, 0, allocator); defer system.deinit();
+    const system = try classical_particle.read(T, options.system, options.charge, allocator); defer system.deinit();
     var basis = try BasisSet(T).init(system, options.basis, allocator); defer basis.deinit();
 
-    const S = try overlap(T, basis, allocator);
-    const K = try kinetic(T, basis, allocator);
-    const V = try nuclear(T, system, basis, allocator);
+    const nbf = if (options.generalized) 2 * basis.nbf() else basis.nbf();
+    const nocc = if (options.generalized) system.noccSpin() else system.noccSpatial();
 
-    const J = if (!options.direct) try coulomb(T, basis, allocator) else null;
+    var S = try overlap(T, basis, allocator);
+    var K = try kinetic(T, basis, allocator);
+    var V = try nuclear(T, system, basis, allocator);
 
-    var C = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
-    var E = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
-    var F = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
-    var P = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
+    if (options.generalized) {
+        try oneAO2AS(T, &S);
+        try oneAO2AS(T, &K);
+        try oneAO2AS(T, &V);
+    }
+
+    var J = if (!options.direct) try coulomb(T, basis, allocator) else null;
+
+    if (!options.direct and options.generalized) try twoAO2AS(T, &J.?);
+
+    var C = try RealMatrix(T).initZero(nbf, nbf, allocator);
+    var E = try RealMatrix(T).initZero(nbf, nbf, allocator);
+    var F = try RealMatrix(T).initZero(nbf, nbf, allocator);
+    var P = try RealMatrix(T).initZero(nbf, nbf, allocator);
 
     var X = try getXMatrix(T, S, allocator); defer X.deinit();
 
@@ -107,7 +125,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     while (@abs(energy - energy_prev) > options.threshold) : (iter += 1) {
 
-        if (iter >= options.maxiter) return error.HartreeFockNotConverged;
+        if (iter >= options.maxiter) return throw(Output(T), "HARTREE-FOCK DID NOT CONVERGE IN {d} ITERATIONS", .{options.maxiter});
 
         var timer = try std.time.Timer.start();
 
@@ -115,9 +133,9 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
         try solveRoothaan(T, &E, &C, F, X);
 
-        getDensityMatrix(T, &P, C, system.nocc());
+        getDensityMatrix(T, &P, C, nocc);
 
-        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P);
+        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, options.generalized);
 
         if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {D}\n", .{iter + 1, energy + VNN, @abs(energy - energy_prev), timer.read()});
     }
@@ -132,11 +150,13 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 }
 
 /// Calculates the energy from the density matrix, Fock matrix and core Hamiltonian.
-pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: RealMatrix(T), P: RealMatrix(T)) T {
+pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: RealMatrix(T), P: RealMatrix(T), generalized: bool) T {
     var energy: T = 0;
 
+    const factor: T = if (generalized) 0.5 else 1;
+
     for (0..P.rows) |i| for (0..P.cols) |j| {
-        energy += P.at(i, j) * (K.at(i, j) + V.at(i, j) + F.at(i, j));
+        energy += factor * P.at(i, j) * (K.at(i, j) + V.at(i, j) + F.at(i, j));
     };
 
     return energy;
@@ -156,20 +176,30 @@ pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), n
 
 /// Obtain the Fock matrix form core Hamiltonian and density matrix.
 pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: ?RealTensor4(T), basis: BasisSet(T)) void {
-    for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| {
+    for (0..F.rows) |i| for (0..F.cols) |j| {
         F.ptr(i, j).* = V.at(i, j) + K.at(i, j);
     };
+
+    const factor: T = if (P.rows == 2 * basis.nbf()) 1 else 2;
 
     if (J == null) for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| for (0..basis.nbf()) |k| for (0..basis.nbf()) |l| {
 
         const j_int = basis.contracted_gaussians[i].coulomb(basis.contracted_gaussians[j], basis.contracted_gaussians[k], basis.contracted_gaussians[l]);
         const k_int = basis.contracted_gaussians[i].coulomb(basis.contracted_gaussians[l], basis.contracted_gaussians[k], basis.contracted_gaussians[j]);
 
-        F.ptr(k, l).* += P.at(i, j) * (2.0 * j_int - k_int);
+        for (0..F.rows / basis.nbf()) |s| for (0..F.rows / basis.nbf()) |t| {
+
+            const ii = s * basis.nbf() + i; const jj = s * basis.nbf() + j;
+            const kk = t * basis.nbf() + k; const ll = t * basis.nbf() + l;
+
+            F.ptr(kk, ll).* += factor * P.at(ii, jj) * j_int;
+
+            if (s == t) F.ptr(kk, ll).* -= P.at(ii, jj) * k_int;
+        };
     };
 
-    if (J != null) for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| for (0..basis.nbf()) |k| for (0..basis.nbf()) |l| {
-        F.ptr(k, l).* += P.at(i, j) * (2.0 * J.?.at(i, j, k, l) - J.?.at(i, l, k, j));
+    if (J != null) for (0..J.?.shape[0]) |i| for (0..J.?.shape[1]) |j| for (0..J.?.shape[2]) |k| for (0..J.?.shape[3]) |l| {
+        F.ptr(k, l).* += P.at(i, j) * (factor * J.?.at(i, j, k, l) - J.?.at(i, l, k, j));
     };
 }
 
@@ -197,6 +227,8 @@ pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: 
     var FXC = try RealMatrix(T).init(F.rows, F.cols, F.allocator); defer FXC.deinit();
 
     mmRealReal(T, C, F, X); mmRealReal(T, &FX, X, C.*);
+
+    FXC.symmetrize();
 
     try eigensystemSymmetric(T, E, &FXC, FX);
 

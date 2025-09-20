@@ -124,6 +124,18 @@ pub fn RealMatrix(comptime T: type) type {
             };
         }
 
+        /// Symmetrize the matrix: A = 0.5 * (A + A^T)
+        pub fn symmetrize(self: *@This()) void {
+            std.debug.assert(self.isSquare());
+
+            for (0..self.rows) |i| for (i + 1..self.cols) |j| {
+
+                const avg = 0.5 * (self.at(i, j) + self.at(j, i));
+
+                self.ptr(i, j).* = avg; self.ptr(j, i).* = avg;
+            };
+        }
+
         /// Fills the matrix with zeros.
         pub fn zero(self: *@This()) void {
             self.fill(0);

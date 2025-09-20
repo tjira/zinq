@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const electronic_potential = @import("electronic_potential.zig");
+const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -10,6 +11,8 @@ const real_vector = @import("real_vector.zig");
 const ElectronicPotential = electronic_potential.ElectronicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
+
+const throw = error_handling.throw;
 
 const A2AU = global_variables.A2AU;
 const AN2M = global_variables.AN2M;
@@ -80,14 +83,19 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Get the number of occupied spatial orbitals.
-        pub fn nocc(self: @This()) usize {
+        pub fn noccSpatial(self: @This()) usize {
+            return self.noccSpin() / 2;
+        }
+
+        /// Get the number of occupied spatial orbitals.
+        pub fn noccSpin(self: @This()) usize {
             if (self.atoms == null) return 0;
 
             var sum: usize = 0;
 
             for (0..self.atoms.?.len) |i| sum += self.atoms.?[i];
 
-            return @intCast(@divFloor(@as(i32, @intCast(sum)) - self.charge, 2));
+            return @intCast(@as(i32, @intCast(sum)) - self.charge);
         }
 
         /// Get the nuclear repulsion energy of the classical particle.
@@ -130,7 +138,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Sets the position of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
         pub fn setPositionRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) return error.DimensionMismatch;
+            if (mean.len != self.ndim or stdev.len != self.ndim) return throw(void, "POSITION MEAN AND STDEV MUST HAVE THE SAME DIMENSION AS THE SYSTEM", .{});
 
             for (0..self.ndim) |i| {
                 self.position.ptr(i).* = mean[i] + stdev[i] * random.floatNorm(T);
@@ -139,7 +147,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Sets the momentum of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
         pub fn setMomentumRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) return error.DimensionMismatch;
+            if (mean.len != self.ndim or stdev.len != self.ndim) return throw(void, "MOMENTUM MEAN AND STDEV MUST HAVE THE SAME DIMENSION AS THE SYSTEM", .{});
 
             for (0..self.ndim) |i| {
                 self.velocity.ptr(i).* = (mean[i] + stdev[i] * random.floatNorm(T)) / self.masses.at(i);

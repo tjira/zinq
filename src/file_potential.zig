@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const device_read = @import("device_read.zig");
+const error_handling = @import("error_handling.zig");
 const linear_interpolation = @import("linear_interpolation.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -12,6 +13,7 @@ const RealVector = real_vector.RealVector;
 
 const lerp = linear_interpolation.lerp;
 const readRealMatrix = device_read.readRealMatrix;
+const throw = error_handling.throw;
 
 /// Struct holding parameters for the file potential.
 pub fn FilePotential(comptime T: type) type {
@@ -34,7 +36,7 @@ pub fn FilePotential(comptime T: type) type {
 
         /// Returns the data represented as a matrix. The pointer to the matrix data is stored within this struct.
         pub fn getMatrix(self: @This()) !RealMatrix(T) {
-            if (self.source == .path) return error.DataNotRead;
+            if (self.source == .path) return throw(RealMatrix(T), "POTENTIAL DATA NOT INITIALIZED, CALL init() FIRST", .{});
 
             return RealMatrix(T){
                 .data = self.source.data,

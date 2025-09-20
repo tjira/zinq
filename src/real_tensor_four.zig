@@ -36,9 +36,19 @@ pub fn RealTensor4(comptime T: type) type {
             return self.data[((i * self.shape[1] + j) * self.shape[2] + k) * self.shape[3] + l];
         }
 
+        /// Fills the tensor with constants.
+        pub fn fill(self: *@This(), value: T) void {
+            @memset(self.data, value);
+        }
+
         /// Get a pointer to the element at (i, j, k, l).
         pub fn ptr(self: *@This(), i: usize, j: usize, k: usize, l: usize) *T {
             return &self.data[((i * self.shape[1] + j) * self.shape[2] + k) * self.shape[3] + l];
+        }
+
+        /// Set all elements to zero.
+        pub fn zero(self: *@This()) void {
+            self.fill(0);
         }
     };
 }

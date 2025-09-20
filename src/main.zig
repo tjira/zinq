@@ -15,14 +15,17 @@ pub const device_read = @import("device_read.zig");
 pub const device_write = @import("device_write.zig");
 pub const eigenproblem_solver = @import("eigenproblem_solver.zig");
 pub const electronic_potential = @import("electronic_potential.zig");
+pub const error_handling = @import("error_handling.zig");
 pub const file_potential = @import("file_potential.zig");
 pub const fourier_transform = @import("fourier_transform.zig");
 pub const global_variables = @import("global_variables.zig");
 pub const grid_generator = @import("grid_generator.zig");
+pub const grid_wavefunction = @import("grid_wavefunction.zig");
 pub const hammes_schiffer_tully = @import("hammes_schiffer_tully.zig");
 pub const harmonic_potential = @import("harmonic_potential.zig");
 pub const hartree_fock = @import("hartree_fock.zig");
 pub const integral_functions = @import("integral_functions.zig");
+pub const integral_transform = @import("integral_transform.zig");
 pub const landau_zener = @import("landau_zener.zig");
 pub const linear_interpolation = @import("linear_interpolation.zig");
 pub const math_functions = @import("math_functions.zig");
@@ -41,6 +44,8 @@ pub const real_vector = @import("real_vector.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
 pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
+pub const time_linear_potential = @import("time_linear_potential.zig");
+pub const tully_potential = @import("tully_potential.zig");
 
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
 pub const MolecularIntegralsOptions = molecular_integrals.Options;
@@ -65,7 +70,7 @@ fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allo
 
 /// Parse the input JSON file and run the corresponding target.
 pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
-    const file_contents = try std.fs.cwd().readFileAlloc(allocator, path, global_variables.MAX_INPUT_FILE_BYTES); defer allocator.free(file_contents);
+    const file_contents = std.fs.cwd().readFileAlloc(allocator, path, global_variables.MAX_INPUT_FILE_BYTES) catch return error.InputFileNotFound;
 
     try device_write.print("\nPROCESSED FILE: {s}\n", .{path});
 
@@ -86,6 +91,8 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
             .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator)
         }
     }
+
+    allocator.free(file_contents);
 }
 
 /// Main function of the program.

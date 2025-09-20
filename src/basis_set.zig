@@ -4,10 +4,13 @@ const std = @import("std");
 
 const contracted_gaussian = @import("contracted_gaussian.zig");
 const classical_particle = @import("classical_particle.zig");
+const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
 const ClassicalParticle = classical_particle.ClassicalParticle;
+
+const throw = error_handling.throw;
 
 const AN2SM = global_variables.AN2SM;
 
@@ -32,7 +35,9 @@ pub fn BasisSet(comptime T: type) type {
 
                 const atomic_number_length = (try std.fmt.bufPrint(&atomic_number_string, "{d}", .{system.atoms.?[i]})).len;
 
-                if (basis_json.value.object.get("elements").?.object.get(atomic_number_string[0..atomic_number_length]) == null) return error.AtomNotFoundInBasis;
+                if (basis_json.value.object.get("elements").?.object.get(atomic_number_string[0..atomic_number_length]) == null) {
+                    return throw(BasisSet(T), "ATOMIC NUMBER {d} ({s}) NOT FOUND IN BASIS SET FILE", .{system.atoms.?[i], try AN2SM(system.atoms.?[i])});
+                }
 
                 const shells = basis_json.value.object.get("elements").?.object.get(atomic_number_string[0..atomic_number_length]).?.object.get("electron_shells").?.array.items;
 

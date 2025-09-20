@@ -2,6 +2,10 @@
 
 const std = @import("std");
 
+const error_handling = @import("error_handling.zig");
+
+const throw = error_handling.throw;
+
 pub const FINITE_DIFFERENCES_STEP = 1e-8;
 pub const FSSH_DENOMINATOR_OFFSET = 1e-14;
 pub const GAMMAINC_CUTOFF = 1e-14;
@@ -84,5 +88,5 @@ pub fn AN2SM(AN: usize) ![]const u8 {
         return key;
     };
 
-    return error.InvalidAtomicNumber;
+    return throw([]const u8, "ATOMIC NUMBER {d} NOT FOUND IN SM2AN MAP", .{AN});
 }
