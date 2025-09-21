@@ -228,7 +228,7 @@ pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: 
 
     try mmRealReal(T, C, F, X); try mmRealReal(T, &FX, X, C.*);
 
-    try FXC.symmetrize();
+    try FX.symmetrize();
 
     try eigensystemSymmetric(T, E, &FXC, FX);
 
