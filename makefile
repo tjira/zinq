@@ -4,6 +4,14 @@ SUMMARY ?= 0
 ARCH := $(shell uname -m | tr '[:upper:]' '[:lower:]')
 OS   := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 
+ifeq ($(ARCH), arm64)
+	ARCH := aarch64
+endif
+
+ifeq ($(OS), darwin)
+	OS := macos
+endif
+
 ZIG_VERSION := 0.15.1
 ZLS_VERSION := 0.15.0
 
