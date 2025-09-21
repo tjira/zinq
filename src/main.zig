@@ -8,6 +8,7 @@ pub const basis_set = @import("basis_set.zig");
 pub const classical_dynamics = @import("classical_dynamics.zig");
 pub const classical_particle = @import("classical_particle.zig");
 pub const complex_matrix = @import("complex_matrix.zig");
+pub const complex_runge_kutta = @import("complex_runge_kutta.zig");
 pub const complex_vector = @import("complex_vector.zig");
 pub const contracted_gaussian = @import("contracted_gaussian.zig");
 pub const derivative_coupling = @import("derivative_coupling.zig");
@@ -16,6 +17,7 @@ pub const device_write = @import("device_write.zig");
 pub const eigenproblem_solver = @import("eigenproblem_solver.zig");
 pub const electronic_potential = @import("electronic_potential.zig");
 pub const error_handling = @import("error_handling.zig");
+pub const fewest_switches = @import("fewest_switches.zig");
 pub const file_potential = @import("file_potential.zig");
 pub const fourier_transform = @import("fourier_transform.zig");
 pub const global_variables = @import("global_variables.zig");
@@ -48,6 +50,7 @@ pub const time_linear_potential = @import("time_linear_potential.zig");
 pub const tully_potential = @import("tully_potential.zig");
 
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
+pub const HartreeFockOptions = hartree_fock.Options;
 pub const MolecularIntegralsOptions = molecular_integrals.Options;
 pub const PrimeNumbersOptions = prime_numbers.Options;
 pub const QuantumDynamicsOptions = quantum_dynamics.Options;
@@ -115,9 +118,9 @@ pub fn main() !void {
 
     if (argc == 0) parse("input.json", allocator) catch |err| {
 
-        if (err != error.FileNotFound) return err;
+        if (err != error.InputFileNotFound) return err;
 
-        try device_write.print("\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND\n", .{});
+        try error_handling.throw(void, "\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND", .{});
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
