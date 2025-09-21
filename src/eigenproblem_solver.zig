@@ -2,20 +2,26 @@
 
 const std = @import("std");
 
+const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
 
+const throw = error_handling.throw;
+
 /// Diagonalize a real symmetric matrix A. The provided matrix is overwritten by the diagonal form.
 pub fn diagonalizeSymmetric(comptime T: type, A: *RealMatrix(T)) !void {
-    eigensystemJacobi(T, A, null, A.*);
+    try eigensystemJacobi(T, A, null, A.*);
 }
 
 /// Solve the eigenproblem for a real symmetric system using the Jacobi method.
-pub fn eigensystemJacobi(comptime T: type, J: *RealMatrix(T), C: ?*RealMatrix(T), A: RealMatrix(T)) void {
-    std.debug.assert(A.rows == A.cols);
+pub fn eigensystemJacobi(comptime T: type, J: *RealMatrix(T), C: ?*RealMatrix(T), A: RealMatrix(T)) !void {
+    if (!A.isSquare()) return throw(void, "MATRIX MUST BE SQUARE TO SOLVE THE EIGENPROBLEM", .{});
+    if (!A.isSymmetric(0)) return throw(void, "THEM MATRIX YOU ARE PASSING TO THE JACOBI EIGENSOLVER IS NOT SYMMETRIC", .{});
+    if (A.rows != J.rows or A.cols != J.cols) return throw(void, "EIGENVALUE MATRIX MUST HAVE THE SAME DIMENSIONS AS THE INPUT MATRIX", .{});
+    if (C != null and (C.?.rows != A.rows or C.?.cols != A.cols)) return throw(void, "EIGENVECTOR MATRIX MUST HAVE THE SAME DIMENSIONS AS THE INPUT MATRIX", .{});
 
-    const n = A.rows; if (J.data.ptr != A.data.ptr) @memcpy(J.data, A.data);
+    const n = A.rows; if (J.data.ptr != A.data.ptr) try A.copyTo(J);
 
     if (C != null) C.?.identity(); if (n == 1) return;
 
@@ -72,13 +78,14 @@ pub fn eigensystemJacobi(comptime T: type, J: *RealMatrix(T), C: ?*RealMatrix(T)
 
 /// Solve the eigenproblem for a real symmetric system.
 pub fn eigensystemSymmetric(comptime T: type, J: *RealMatrix(T), C: *RealMatrix(T), A: RealMatrix(T)) !void {
-    eigensystemJacobi(T, J, C, A);
+    try eigensystemJacobi(T, J, C, A);
 }
 
 /// Function to fix the gauge of eigenvectors.
-pub fn fixGauge(comptime T: type, eigenvectors: *RealMatrix(T), reference: RealMatrix(T)) void {
-    std.debug.assert(eigenvectors.rows == reference.rows);
-    std.debug.assert(eigenvectors.cols == reference.cols);
+pub fn fixGauge(comptime T: type, eigenvectors: *RealMatrix(T), reference: RealMatrix(T)) !void {
+    if (eigenvectors.rows != reference.rows or eigenvectors.cols != reference.cols) {
+        return throw(void, "EIGENVECTOR AND REFERENCE MATRICES MUST HAVE THE SAME DIMENSIONS TO FIX THE GAUGE", .{});
+    }
 
     for (0..eigenvectors.cols) |i| {
 

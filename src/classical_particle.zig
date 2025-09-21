@@ -34,7 +34,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Initialize the system using the number of dimensions, an array of masses, and an allocator. The positions and velocities are undefined after initialization.
         pub fn init(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !@This() {
-            const particle = @This(){
+            var particle = @This(){
                 .atoms = null,
                 .acceleration = try RealVector(T).init(ndim, allocator),
                 .charge = 0,
@@ -45,7 +45,7 @@ pub fn ClassicalParticle(comptime T: type) type {
                 .allocator = allocator
             };
 
-            @memcpy(particle.masses.data, masses);
+            for (masses, 0..) |mi, i| particle.masses.ptr(i).* = mi;
 
             return particle;
         }
@@ -83,17 +83,27 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Get the number of occupied spatial orbitals.
-        pub fn noccSpatial(self: @This()) usize {
-            return self.noccSpin() / 2;
+        pub fn noccSpatial(self: @This()) !usize {
+            const spin = try self.noccSpin();
+
+            if (spin % 2 != 0) {
+                return throw(usize, "THE NUMBER OF OCCUPIED SPIN ORBITALS MUST BE EVEN TO GET THE NUMBER OF OCCUPIED SPATIAL ORBITALS", .{});
+            }
+
+            return spin / 2;
         }
 
         /// Get the number of occupied spatial orbitals.
-        pub fn noccSpin(self: @This()) usize {
+        pub fn noccSpin(self: @This()) !usize {
             if (self.atoms == null) return 0;
 
             var sum: usize = 0;
 
             for (0..self.atoms.?.len) |i| sum += self.atoms.?[i];
+
+            if (self.charge > @as(i32, @intCast(sum))) {
+                return throw(usize, "THE SYSTEM CHARGE CAN'T BE LARGER THAN THE NUMBER OF ELECTRONS", .{});
+            }
 
             return @intCast(@as(i32, @intCast(sum)) - self.charge);
         }
@@ -187,7 +197,7 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.
 
     var system = try ClassicalParticle(T).initZero(3 * natom, masses, allocator);
 
-    system.atoms = atoms; system.charge = charge; @memcpy(system.position.data, position.data);
+    system.atoms = atoms; system.charge = charge; try position.copyTo(&system.position);
 
     return system;
 }

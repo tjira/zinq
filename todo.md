@@ -4,3 +4,5 @@
 - [x] Jumps in FSSH should attempt each quantum step, not each classical step.
 - [ ] Implement general multilinear interpolation for specifying the multi-dimensional potential energy surfaces from files.
 - [ ] Implement binary search for searching corners in multi-dimensional interpolation.
+- [ ] Jacobi eigensolver should have a maximum number of iterations to avoid infinite loops.
+- [ ] Make the basis sets embedded in the code.

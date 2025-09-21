@@ -35,13 +35,11 @@ pub fn RingBuffer(comptime T: type) type {
 
         /// Fill the ring buffer with a specific value.
         pub fn fill(self: *@This(), value: T) void {
-            @memset(self.data, value);
+            for (self.data) |*elem| elem.* = value;
         }
 
         /// Element access operator to get the i-th last element added (0 is the most recent).
         pub fn last(self: @This(), i: usize) T {
-            std.debug.assert(i < self.len);
-
             return self.data[(self.head + self.data.len - i - 1) % self.data.len];
         }
 

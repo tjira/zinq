@@ -160,7 +160,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
         const trajectory_output = try runTrajectory(T, options_copy, &system, i, enable_printing, allocator); defer trajectory_output.deinit();
 
-        output.population_mean.add(trajectory_output.population);
+        try output.population_mean.add(trajectory_output.population);
     }
 
     output.population_mean.divs(@as(T, @floatFromInt(options.trajectories)));
@@ -224,7 +224,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 
         const time = @as(T, @floatFromInt(i)) * options.time_step;
 
-        @memcpy(previous_eigenvectors.data, adiabatic_eigenvectors.data);
+        try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
         if (i > 0) {
             try system.propagateVelocityVerlet(options.potential, &adiabatic_potential, time, current_state, options.time_step);
@@ -234,8 +234,8 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 
         if (i > 0) {
 
-            fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
-            mmRealTransReal(T, &eigenvector_overlap, previous_eigenvectors, adiabatic_eigenvectors);
+            try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
+            try mmRealTransReal(T, &eigenvector_overlap, previous_eigenvectors, adiabatic_eigenvectors);
 
             if (options.derivative_coupling) |tdc_algorithm| {
                 try tdc_algorithm.evaluate(&time_derivative_coupling, eigenvector_overlap, options.time_step);

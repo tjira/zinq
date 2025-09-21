@@ -211,15 +211,15 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
 
         if (adiabatic) {
 
-            @memcpy(previous_eigenvectors.data, adiabatic_eigenvectors.data);
+            try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
             positionAtRow(T, &position_at_row, i, wavefunction.ndim, wavefunction.npoint, wavefunction.limits);
 
             try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position_at_row, time);
 
-            if (i > 0) fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
+            if (i > 0) try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
 
-            mmRealTransComplex(T, &wavefunction_row, adiabatic_eigenvectors, wavefunction.data.row(i).asMatrix());
+            try mmRealTransComplex(T, &wavefunction_row, adiabatic_eigenvectors, wavefunction.data.row(i).asMatrix());
         }
 
         for (0..wavefunction.data.cols) |j| {

@@ -38,7 +38,7 @@ pub fn RealTensor4(comptime T: type) type {
 
         /// Fills the tensor with constants.
         pub fn fill(self: *@This(), value: T) void {
-            @memset(self.data, value);
+            for (self.data) |*element| element.* = value;
         }
 
         /// Get a pointer to the element at (i, j, k, l).

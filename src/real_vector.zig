@@ -2,9 +2,12 @@
 
 const std = @import("std");
 
+const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
+
+const throw = error_handling.throw;
 
 /// Real vector class.
 pub fn RealVector(comptime T: type) type {
@@ -59,6 +62,15 @@ pub fn RealVector(comptime T: type) type {
             return self.data[i];
         }
 
+        /// Copy the contents of this vector to another vector.
+        pub fn copyTo(self: @This(), other: *@This()) !void {
+            if (self.len != other.len) return throw(void, "CAN'T COPY A VECTOR OF LENGTH {d} TO A VECTOR OF LENGTH {d}", .{self.len, other.len});
+
+            for (self.data, 0..) |element, index| {
+                other.data[index] = element;
+            }
+        }
+
         /// Divide the vector by a scalar value.
         pub fn divs(self: *@This(), value: T) void {
             for (self.data) |*element| element.* /= value;
@@ -77,7 +89,7 @@ pub fn RealVector(comptime T: type) type {
 
         /// Fill the vector with a given value.
         pub fn fill(self: *@This(), value: T) void {
-            @memset(self.data, value);
+            for (self.data) |*element| element.* = value;
         }
 
         /// Calculate the mean of all elements in the vector.

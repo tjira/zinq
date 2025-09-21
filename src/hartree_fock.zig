@@ -94,7 +94,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     var basis = try BasisSet(T).init(system, options.basis, allocator); defer basis.deinit();
 
     const nbf = if (options.generalized) 2 * basis.nbf() else basis.nbf();
-    const nocc = if (options.generalized) system.noccSpin() else system.noccSpatial();
+    const nocc = if (options.generalized) try system.noccSpin() else try system.noccSpatial();
 
     var S = try overlap(T, basis, allocator);
     var K = try kinetic(T, basis, allocator);
@@ -215,8 +215,8 @@ pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocat
 
     for (0..S.rows) |i| X.ptr(i, i).* = 1.0 / std.math.sqrt(X.at(i, i));
 
-    mmRealRealTrans(T, &mm_temp, X, S_C);
-    mmRealReal(T, &X, S_C, mm_temp);
+    try mmRealRealTrans(T, &mm_temp, X, S_C);
+    try mmRealReal(T, &X, S_C, mm_temp);
 
     return X;
 }
@@ -226,11 +226,11 @@ pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: 
     var FX  = try RealMatrix(T).init(F.rows, F.cols, F.allocator); defer  FX.deinit();
     var FXC = try RealMatrix(T).init(F.rows, F.cols, F.allocator); defer FXC.deinit();
 
-    mmRealReal(T, C, F, X); mmRealReal(T, &FX, X, C.*);
+    try mmRealReal(T, C, F, X); try mmRealReal(T, &FX, X, C.*);
 
-    FXC.symmetrize();
+    try FXC.symmetrize();
 
     try eigensystemSymmetric(T, E, &FXC, FX);
 
-    mmRealReal(T, C, X, FXC);
+    try mmRealReal(T, C, X, FXC);
 }

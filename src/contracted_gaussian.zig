@@ -4,12 +4,14 @@ const std = @import("std");
 
 const array_functions = @import("array_functions.zig");
 const classical_particle = @import("classical_particle.zig");
+const error_handling = @import("error_handling.zig");
 const primitive_gaussian = @import("primitive_gaussian.zig");
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const PrimitiveGaussian = primitive_gaussian.PrimitiveGaussian;
 
 const sum = array_functions.sum;
+const throw = error_handling.throw;
 
 /// Contracted Gaussian type.
 pub fn ContractedGaussian(comptime T: type) type {
@@ -24,6 +26,9 @@ pub fn ContractedGaussian(comptime T: type) type {
 
         /// Initialize a contracted Gaussian.
         pub fn init(A: [3]T, a: [3]T, c: []const T, alpha: []const T, allocator: std.mem.Allocator) !ContractedGaussian(T) {
+            if (c.len != alpha.len) {
+                return throw(ContractedGaussian(T), "THE LENGTH OF THE COEFFICIENTS AND EXPONENTS MUST BE THE SAME", .{});
+            }
 
             const cg = ContractedGaussian(T) {
                 .A = A,
@@ -34,7 +39,9 @@ pub fn ContractedGaussian(comptime T: type) type {
                 .allocator = allocator
             };
 
-            @memcpy(cg.c, c); @memcpy(cg.alpha, alpha); var N: T = 0;
+            var N: T = 0;
+
+            for (c, 0..) |ci, i| cg.c[i] = ci; for (alpha, 0..) |ai, i| cg.alpha[i] = ai;
 
             for (cg.c, 0..) |ci, i| for (cg.c, 0..) |cj, j| {
 

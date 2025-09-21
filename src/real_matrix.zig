@@ -2,9 +2,12 @@
 
 const std = @import("std");
 
+const error_handling = @import("error_handling.zig");
 const real_vector = @import("real_vector.zig");
 
 const RealVector = real_vector.RealVector;
+
+const throw = error_handling.throw;
 
 /// Real matrix class. The matrix is stored in a flat array in row-major order.
 pub fn RealMatrix(comptime T: type) type {
@@ -38,8 +41,10 @@ pub fn RealMatrix(comptime T: type) type {
         }
 
         /// Add another matrix to this matrix.
-        pub fn add(self: *@This(), other: @This()) void {
-            std.debug.assert(self.rows == other.rows and self.cols == other.cols);
+        pub fn add(self: *@This(), other: @This()) !void {
+            if (self.rows != other.rows or self.cols != other.cols) {
+                return throw(void, "CAN'T ADD A {d}x{d} MATRIX TO A {d}x{d} MATRIX", .{other.rows, other.cols, self.rows, self.cols});
+            }
 
             for (self.data, 0..) |*element, index| {
                 element.* += other.data[index];
@@ -49,6 +54,17 @@ pub fn RealMatrix(comptime T: type) type {
         /// Get the element at (i, j).
         pub fn at(self: @This(), i: usize, j: usize) T {
             return self.data[i * self.cols + j];
+        }
+
+        /// Copy the contents of this matrix to another matrix.
+        pub fn copyTo(self: @This(), other: *@This()) !void {
+            if (self.rows != other.rows or self.cols != other.cols) {
+                return throw(void, "CAN'T COPY A {d}x{d} MATRIX TO A {d}x{d} MATRIX", .{self.rows, self.cols, other.rows, other.cols});
+            }
+
+            for (self.data, 0..) |element, index| {
+                other.data[index] = element;
+            }
         }
 
         /// Divide the matrix by a scalar value.
@@ -69,7 +85,7 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Fill the matrix with a given value.
         pub fn fill(self: *@This(), value: T) void {
-            @memset(self.data, value);
+            for (self.data) |*element| element.* = value;
         }
 
         /// Calculate the Frobenius norm of the matrix.
@@ -85,11 +101,9 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Set the matrix to the identity matrix. The matrix must be square.
         pub fn identity(self: *@This()) void {
-            std.debug.assert(self.isSquare());
+            self.fill(0);
 
-            self.zero();
-
-            for (0..self.rows) |i| {
+            for (0..@min(self.rows, self.cols)) |i| {
                 self.ptr(i, i).* = 1;
             }
         }
@@ -97,6 +111,17 @@ pub fn RealMatrix(comptime T: type) type {
         /// Square checker.
         pub fn isSquare(self: @This()) bool {
             return self.rows == self.cols;
+        }
+
+        /// Symmetric checker.
+        pub fn isSymmetric(self: @This(), tol: T) bool {
+            if (!self.isSquare()) return false;
+
+            for (0..self.rows) |i| for (i + 1..self.cols) |j| {
+                if (@abs(self.at(i, j) - self.at(j, i)) > tol) return false;
+            };
+
+            return true;
         }
 
         /// Calculate the Frobenius norm of the off-diagonal elements of the matrix.
@@ -125,8 +150,10 @@ pub fn RealMatrix(comptime T: type) type {
         }
 
         /// Symmetrize the matrix: A = 0.5 * (A + A^T)
-        pub fn symmetrize(self: *@This()) void {
-            std.debug.assert(self.isSquare());
+        pub fn symmetrize(self: *@This()) !void {
+            if (!self.isSquare()) {
+                return throw(void, "CAN'T SYMMETRIZE A NON-SQUARE {d}x{d} MATRIX", .{self.rows, self.cols});
+            }
 
             for (0..self.rows) |i| for (i + 1..self.cols) |j| {
 
