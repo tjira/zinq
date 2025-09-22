@@ -96,6 +96,12 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     const nbf = if (options.generalized) 2 * basis.nbf() else basis.nbf();
     const nocc = if (options.generalized) try system.noccSpin() else try system.noccSpatial();
 
+    if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{nbf});
+
+    if (enable_printing) try print("\nONE-ELECTRON INTEGRALS: ", .{});
+
+    var timer = try std.time.Timer.start();
+
     var S = try overlap(T, basis, allocator);
     var K = try kinetic(T, basis, allocator);
     var V = try nuclear(T, system, basis, allocator);
@@ -106,9 +112,15 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
         try oneAO2AS(T, &V);
     }
 
+    if (enable_printing) try print("{D}\n", .{timer.read()}); timer.reset();
+
+    if (enable_printing and !options.direct) try print("TWO-ELECTRON INTEGRALS: ", .{});
+
     var J = if (!options.direct) try coulomb(T, basis, allocator) else null;
 
     if (!options.direct and options.generalized) try twoAO2AS(T, &J.?);
+
+    if (enable_printing and !options.direct) try print("{D}\n", .{timer.read()});
 
     var C = try RealMatrix(T).initZero(nbf, nbf, allocator);
     var E = try RealMatrix(T).initZero(nbf, nbf, allocator);
@@ -127,7 +139,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
         if (iter >= options.maxiter) return throw(Output(T), "HARTREE-FOCK DID NOT CONVERGE IN {d} ITERATIONS", .{options.maxiter});
 
-        var timer = try std.time.Timer.start();
+        timer.reset();
 
         getFockMatrix(T, &F, K, V, P, J, basis);
 

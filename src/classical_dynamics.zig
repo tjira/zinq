@@ -9,6 +9,7 @@ const derivative_coupling = @import("derivative_coupling.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const error_handling = @import("error_handling.zig");
 const fewest_switches = @import("fewest_switches.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const landau_zener = @import("landau_zener.zig");
@@ -43,6 +44,7 @@ const fixGauge = eigenproblem_solver.fixGauge;
 const mmRealTransReal = matrix_multiplication.mmRealTransReal;
 const print = device_write.print;
 const printJson = device_write.printJson;
+const throw = error_handling.throw;
 
 /// Classical dynamics option struct.
 pub fn Options(comptime T: type) type {
@@ -185,6 +187,8 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     var output = try Custom(T).TrajectoryOutput.init(nstate, options.iterations, allocator);
 
     var current_state: usize = @intCast(options.initial_conditions.state);
+
+    if (current_state >= nstate) return throw(Custom(T).TrajectoryOutput, "ACTIVE STATE MUST NOT BE HIGHER THAN THE TOTAL NUMBER OF STATES", .{});
 
     var diabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer diabatic_potential.deinit();
     var adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_potential.deinit();

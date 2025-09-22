@@ -6,6 +6,7 @@ const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
 const eigensystem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const error_handling = @import("error_handling.zig");
 const fourier_transform = @import("fourier_transform.zig");
 const grid_generator = @import("grid_generator.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
@@ -27,6 +28,7 @@ const mmRealTransComplex = matrix_multiplication.mmRealTransComplex;
 const mmRealComplex = matrix_multiplication.mmRealComplex;
 const momentumAtRow = grid_generator.momentumAtRow;
 const positionAtRow = grid_generator.positionAtRow;
+const throw = error_handling.throw;
 
 /// A wavefunction defined on a grid.
 pub fn GridWavefunction(comptime T: type) type {
@@ -42,6 +44,10 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Allocate a wavefunction on a grid.
         pub fn init(npoint: usize, nstate: usize, ndim: usize, limits: []const []const T, mass: T, allocator: std.mem.Allocator) !@This() {
+            if (limits.len != ndim) return throw(@This(), "LIMITS LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
+            for (0..ndim) |i| if (limits[i].len != 2) return throw(@This(), "EACH LIMIT MUST HAVE A LENGTH OF 2", .{});
+            if (npoint < 2) return throw(@This(), "NUMBER OF POINTS MUST BE AT LEAST 2", .{});
+
             return @This(){
                 .data = try ComplexMatrix(T).init(std.math.pow(usize, npoint, ndim), nstate, allocator),
                 .limits = limits,
@@ -115,6 +121,10 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Initialize the position of the wavefunction as a Gaussian wavepacket.
         pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: T) !void {
+            if (position.len != self.ndim) return throw(void, "POSITION LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
+            if (momentum.len != self.ndim) return throw(void, "MOMENTUM LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
+            if (state >= self.nstate) return throw(void, "STATE INDEX OUT OF BOUNDS", .{});
+
             var position_at_row = try RealVector(T).init(self.ndim, self.allocator); defer position_at_row.deinit();
 
             for (0..self.data.rows) |i| {

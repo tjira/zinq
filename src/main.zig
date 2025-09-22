@@ -16,6 +16,7 @@ pub const device_read = @import("device_read.zig");
 pub const device_write = @import("device_write.zig");
 pub const eigenproblem_solver = @import("eigenproblem_solver.zig");
 pub const electronic_potential = @import("electronic_potential.zig");
+pub const embedded_files = @import("embedded_files.zig");
 pub const error_handling = @import("error_handling.zig");
 pub const fewest_switches = @import("fewest_switches.zig");
 pub const file_potential = @import("file_potential.zig");

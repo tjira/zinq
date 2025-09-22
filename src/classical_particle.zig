@@ -34,6 +34,8 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Initialize the system using the number of dimensions, an array of masses, and an allocator. The positions and velocities are undefined after initialization.
         pub fn init(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !@This() {
+            if (ndim != masses.len) return throw(@This(), "THE LENGTH OF MASSES VECTOR MUST BE THE SAME AS NUMBER OF DIMENSIONS", .{});
+
             var particle = @This(){
                 .atoms = null,
                 .acceleration = try RealVector(T).init(ndim, allocator),

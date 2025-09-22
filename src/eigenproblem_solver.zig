@@ -3,11 +3,14 @@
 const std = @import("std");
 
 const error_handling = @import("error_handling.zig");
+const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
 
 const throw = error_handling.throw;
+
+const MAX_JACOBI_ITERATIONS = global_variables.MAX_JACOBI_ITERATIONS;
 
 /// Diagonalize a real symmetric matrix A. The provided matrix is overwritten by the diagonal form.
 pub fn diagonalizeSymmetric(comptime T: type, A: *RealMatrix(T)) !void {
@@ -21,13 +24,17 @@ pub fn eigensystemJacobi(comptime T: type, J: *RealMatrix(T), C: ?*RealMatrix(T)
     if (A.rows != J.rows or A.cols != J.cols) return throw(void, "EIGENVALUE MATRIX MUST HAVE THE SAME DIMENSIONS AS THE INPUT MATRIX", .{});
     if (C != null and (C.?.rows != A.rows or C.?.cols != A.cols)) return throw(void, "EIGENVECTOR MATRIX MUST HAVE THE SAME DIMENSIONS AS THE INPUT MATRIX", .{});
 
-    const n = A.rows; if (J.data.ptr != A.data.ptr) try A.copyTo(J);
+    const n = A.rows; var iter: usize = 0; if (J.data.ptr != A.data.ptr) try A.copyTo(J);
 
     if (C != null) C.?.identity(); if (n == 1) return;
 
     const tol = 16 * std.math.floatEps(T) * A.frobeniusNorm();
 
-    while (J.offDiagonalFrobeniusNorm() > tol) for (0..n - 1) |i| for (i + 1..n) |j| {
+    while (J.offDiagonalFrobeniusNorm() > tol) : (iter += 1) for (0..n - 1) |i| for (i + 1..n) |j| {
+
+        if (iter == MAX_JACOBI_ITERATIONS) {
+            return throw(void, "JACOBI EIGENSOLVER DID NOT CONVERGE IN {d} ITERATIONS WITH {e:5.3} OFF-DIAGONAL NORM", .{MAX_JACOBI_ITERATIONS, J.offDiagonalFrobeniusNorm()});
+        }
 
         const a = J.at(i, i); const b = J.at(j, j); const g = J.at(i, j);
 
@@ -65,6 +72,8 @@ pub fn eigensystemJacobi(comptime T: type, J: *RealMatrix(T), C: ?*RealMatrix(T)
             C.?.ptr(k, j).* = s * u + c * v;
         };
     };
+
+    for (0..n) |i| for (0..n) |j| if (i != j) {J.ptr(i, j).* = 0;};
 
     for (0..n - 1) |_| for (0..n - 1) |j| if (J.at(j, j) > J.at(j + 1, j + 1)) {
 

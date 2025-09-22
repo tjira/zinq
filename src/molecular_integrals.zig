@@ -77,30 +77,60 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     var output = Output(T).init(allocator);
 
+    if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{basis.nbf()});
+
+    if (enable_printing and (options.write.overlap != null or options.write.kinetic != null or options.write.nuclear != null or options.write.coulomb != null)) {
+        try print("\n", .{});
+    }
+
     if (options.write.overlap) |path| {
 
+        var timer = try std.time.Timer.start();
+
+        if (enable_printing) try print("OVERLAP INTEGRALS: ", .{});
+
         output.S = try overlap(T, basis, allocator);
+
+        if (enable_printing) try print("{D}\n", .{timer.read()});
 
         try exportRealMatrix(T, path, output.S.?);
     }
 
     if (options.write.kinetic) |path| {
 
+        var timer = try std.time.Timer.start();
+
+        if (enable_printing) try print("KINETIC INTEGRALS: ", .{});
+
         output.K = try kinetic(T, basis, allocator);
+
+        if (enable_printing) try print("{D}\n", .{timer.read()});
 
         try exportRealMatrix(T, path, output.K.?);
     }
 
     if (options.write.nuclear) |path| {
 
+        var timer = try std.time.Timer.start();
+
+        if (enable_printing) try print("NUCLEAR INTEGRALS: ", .{});
+
         output.V = try nuclear(T, system, basis, allocator);
+
+        if (enable_printing) try print("{D}\n", .{timer.read()});
 
         try exportRealMatrix(T, path, output.V.?);
     }
 
     if (options.write.coulomb) |path| {
 
+        var timer = try std.time.Timer.start();
+
+        if (enable_printing) try print("COULOMB INTEGRALS: ", .{});
+
         output.J = try coulomb(T, basis, allocator);
+
+        if (enable_printing) try print("{D}\n", .{timer.read()});
 
         try exportRealTensorFour(T, path, output.J.?);
     }
