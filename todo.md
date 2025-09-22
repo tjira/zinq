@@ -6,3 +6,4 @@
 - [ ] Implement binary search for searching corners in multi-dimensional interpolation.
 - [x] Jacobi eigensolver should have a maximum number of iterations to avoid infinite loops.
 - [x] Make the basis sets embedded in the code.
+- [x] Implement the potential plotting target.

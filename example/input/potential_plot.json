@@ -1,0 +1,18 @@
+{
+    "zinq" : [
+        {
+            "name" : "potential_plot",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8]],
+                    "points" : 2048
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "output" : "U.mat",
+                "adiabatic" : true
+            }
+        }
+    ]
+}

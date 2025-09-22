@@ -140,6 +140,14 @@ pub fn RealMatrix(comptime T: type) type {
             return &self.data[i * self.cols + j];
         }
 
+        /// Reshape the matrix.
+        pub fn reshape(self: *@This(), m: usize, n: usize) !void {
+            if (m * n != self.rows * self.cols) return throw(void, "CAN'T RESHAPE A {d}x{d} MATRIX INTO A {d}x{d} MATRIX", .{self.rows, self.cols, m, n});
+
+            self.rows = m;
+            self.cols = n;
+        }
+
         /// Get a row as view to a a real vector.
         pub fn row(self: @This(), i: usize) RealVector(T) {
             return RealVector(T){

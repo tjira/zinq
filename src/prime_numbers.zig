@@ -52,7 +52,7 @@ pub fn Output(comptime T: type) type {
 
 /// Run the prime number generation target.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) {try print("\n", .{}); try printJson(options);}
+    if (enable_printing) try printJson(options);
 
     if (enable_printing) try print("\n{s:9} {s:18}\n", .{"INDEX", "PRIME NUMBER"});
 

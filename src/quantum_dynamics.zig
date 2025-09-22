@@ -79,7 +79,7 @@ pub fn Options(comptime T: type) type {
 pub fn Output(comptime T: type) type {
     return struct {
         kinetic_energy: T = undefined,
-        population: RealMatrix(f64),
+        population: RealMatrix(T),
         potential_energy: T = undefined,
 
         /// Allocate the output structure.
@@ -115,7 +115,7 @@ pub fn Custom(comptime T: type) type {
 
 /// Run quantum dynamics simulation.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) {try print("\n", .{}); try printJson(options);}
+    if (enable_printing) try printJson(options);
 
     var potential = options.potential;
     const ndim = potential.ndim();
@@ -124,9 +124,6 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
 
     var output = try Output(T).init(nstate, @intCast(options.iterations), allocator);
-
-    const position_grid = try positionGridAlloc(T, options.grid.limits, @intCast(options.grid.points), allocator); defer position_grid.deinit();
-    const momentum_grid = try momentumGridAlloc(T, options.grid.limits, @intCast(options.grid.points), allocator); defer momentum_grid.deinit();
 
     var wavefunction = try GridWavefunction(T).init(@intCast(options.grid.points), nstate, ndim, options.grid.limits, options.initial_conditions.mass, allocator); defer wavefunction.deinit();
 

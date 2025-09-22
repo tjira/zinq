@@ -107,6 +107,15 @@ pub fn RealVector(comptime T: type) type {
             return &self.data[i];
         }
 
+        /// Get a slice of the internal data in the form of a vector.
+        pub fn slice(self: @This(), start: usize, end: usize) @This() {
+            return @This(){
+                .data = self.data[start..end],
+                .len = end - start,
+                .allocator = null,
+            };
+        }
+
         /// Calculates the sum of all elements in the vector.
         pub fn sum(self: @This()) T {
             var total: T = 0;

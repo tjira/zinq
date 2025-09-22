@@ -37,6 +37,7 @@ pub const molecular_integrals = @import("molecular_integrals.zig");
 pub const morse_potential = @import("morse_potential.zig");
 pub const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 pub const object_array = @import("object_array.zig");
+pub const potential_plot = @import("potential_plot.zig");
 pub const prime_numbers = @import("prime_numbers.zig");
 pub const primitive_gaussian = @import("primitive_gaussian.zig");
 pub const quantum_dynamics = @import("quantum_dynamics.zig");
@@ -53,6 +54,7 @@ pub const tully_potential = @import("tully_potential.zig");
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
 pub const HartreeFockOptions = hartree_fock.Options;
 pub const MolecularIntegralsOptions = molecular_integrals.Options;
+pub const PotentialPlotOptions = potential_plot.Options;
 pub const PrimeNumbersOptions = prime_numbers.Options;
 pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 
@@ -61,6 +63,7 @@ const Target = enum {
     classical_dynamics,
     hartree_fock,
     molecular_integrals,
+    potential_plot,
     prime_numbers,
     quantum_dynamics
 };
@@ -80,7 +83,9 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 
     const input_json = try std.json.parseFromSlice(std.json.Value, allocator, file_contents, .{}); defer input_json.deinit();
 
-    for (input_json.value.object.get("zinq").?.array.items) |object| {
+    for (input_json.value.object.get("zinq").?.array.items, 1..) |object, i| {
+
+        try device_write.print("\nINPUT #{d}:\n", .{i});
 
         const name = object.object.get("name") orelse return error.MissingTargetName;
         const options = object.object.get("options") orelse return error.MissingTargetOptions;
@@ -91,6 +96,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
             .hartree_fock => try handle(f64, hartree_fock, options, allocator),
             .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
+            .potential_plot => try handle(f64, potential_plot, options, allocator),
             .prime_numbers => try handle(u64, prime_numbers, options, allocator),
             .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator)
         }

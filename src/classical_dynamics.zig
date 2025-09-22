@@ -137,7 +137,7 @@ pub fn Custom(comptime T: type) type {
 
 /// Run classical dynamics simulation.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) {try print("\n", .{}); try printJson(options);}
+    if (enable_printing) try printJson(options);
 
     var potential = options.potential;
     const ndim = potential.ndim();
