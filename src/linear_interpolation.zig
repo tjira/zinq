@@ -23,9 +23,7 @@ pub fn lerp(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(
 
 /// Function to get a function value of a point in a grid using 1D linear interpolation.
 pub fn lerp1D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(T)) T {
-    var i: usize = 1;
-
-    while (i < grid.rows and r.at(0) > grid.at(i, r.len - 1)) : (i += 1) {}
+    var i = grid.column(r.len - 1).bisectRight(r.at(0));
 
     if (i >= grid.rows) i = grid.rows - 1;
 
@@ -44,11 +42,8 @@ pub fn lerp1D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVecto
 pub fn lerp2D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(T)) T {
     const size: usize = @as(usize, @intFromFloat(@round(std.math.pow(T, @as(T, @floatFromInt(grid.rows)), 1.0 / 2.0))));
 
-    var i: usize = 1;
-    var j: usize = 1;
-
-    while (i < grid.rows and r.at(0) > grid.at(i, r.len - 1)) : (i += 1) {}
-    while (j < grid.rows and r.at(1) > grid.at(j, r.len - 1)) : (j += 1) {}
+    var i = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(0));
+    var j = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(1));
 
     if (i >= grid.rows) i = grid.rows - 1;
     if (j >= grid.rows) j = grid.rows - 1;
@@ -77,13 +72,9 @@ pub fn lerp2D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVecto
 pub fn lerp3D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(T)) T {
     const size: usize = @as(usize, @intFromFloat(@round(std.math.pow(T, @as(T, @floatFromInt(grid.rows)), 1.0 / 3.0))));
 
-    var i: usize = 1;
-    var j: usize = 1;
-    var k: usize = 1;
-
-    while (i < grid.rows and r.at(0) > grid.at(i, r.len - 1)) : (i += 1) {}
-    while (j < grid.rows and r.at(1) > grid.at(j, r.len - 1)) : (j += 1) {}
-    while (k < grid.rows and r.at(2) > grid.at(k, r.len - 1)) : (k += 1) {}
+    var i = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(0));
+    var j = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(1));
+    var k = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(2));
 
     if (i >= grid.rows) i = grid.rows - 1;
     if (j >= grid.rows) j = grid.rows - 1;

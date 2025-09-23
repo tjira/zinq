@@ -4,8 +4,10 @@ const std = @import("std");
 
 const error_handling = @import("error_handling.zig");
 const real_vector = @import("real_vector.zig");
+const strided_real_vector = @import("strided_real_vector.zig");
 
 const RealVector = real_vector.RealVector;
+const StridedRealVector = strided_real_vector.StridedRealVector;
 
 const throw = error_handling.throw;
 
@@ -54,6 +56,16 @@ pub fn RealMatrix(comptime T: type) type {
         /// Get the element at (i, j).
         pub fn at(self: @This(), i: usize, j: usize) T {
             return self.data[i * self.cols + j];
+        }
+
+        /// Returns the column as a view to a strided real vector.
+        pub fn column(self: @This(), j: usize) StridedRealVector(T) {
+            return StridedRealVector(T){
+                .data = self.data,
+                .len = self.rows,
+                .stride = self.cols,
+                .zero = j
+            };
         }
 
         /// Copy the contents of this matrix to another matrix.

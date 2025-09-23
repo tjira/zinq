@@ -3,7 +3,8 @@
 - [x] Remove the need to store the full grid in memory for quantum dynamics simulations. This would allow to simulate larger systems.
 - [x] Jumps in FSSH should attempt each quantum step, not each classical step.
 - [ ] Implement general multilinear interpolation for specifying the multi-dimensional potential energy surfaces from files.
-- [ ] Implement binary search for searching corners in multi-dimensional interpolation.
+- [x] Implement binary search for searching corners in multi-dimensional interpolation.
 - [x] Jacobi eigensolver should have a maximum number of iterations to avoid infinite loops.
 - [x] Make the basis sets embedded in the code.
 - [x] Implement the potential plotting target.
+- [ ] Ad timer to the quantum dynamics and classical dynamics iterations.
