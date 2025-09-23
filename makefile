@@ -1,8 +1,12 @@
 .SHELLFLAGS := $(if $(filter $(OS),Windows_NT),-NoProfile -Command,-c)
 
-DEBUG   ?= 0
-SUMMARY ?= 0
-WATCH   ?= 0
+CROSS       ?= 0
+DEBUG       ?= 0
+INCREMENTAL ?= 0
+SUMMARY     ?= 0
+TIME_REPORT ?= 0
+WATCH       ?= 0
+WEBUI	    ?= 0
 
 SHELL := $(if $(filter $(OS),Windows_NT),powershell.exe,sh)
 
@@ -12,9 +16,13 @@ OS   := $(if $(filter $(OS),Windows_NT),windows,$(shell uname -s | tr '[:upper:]
 ZIG_VERSION := 0.15.1
 ZLS_VERSION := 0.15.0
 
-ZIG_FLAGS := --summary $(if $(filter 1,$(SUMMARY)),all,none) $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
-
+ZIG_FLAGS := $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
+ZIG_FLAGS := $(if $(filter 1,$(CROSS)),$(ZIG_FLAGS),$(ZIG_FLAGS) -Dtarget=$(ARCH)-$(OS))
+ZIG_FLAGS := $(if $(filter 1,$(INCREMENTAL)),$(ZIG_FLAGS) -fincremental,$(ZIG_FLAGS))
+ZIG_FLAGS := $(if $(filter 1,$(SUMMARY)),$(ZIG_FLAGS) --summary all,$(ZIG_FLAGS))
+ZIG_FLAGS := $(if $(filter 1,$(TIME_REPORT)),$(ZIG_FLAGS) --time-report,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(WATCH)),$(ZIG_FLAGS) --watch,$(ZIG_FLAGS))
+ZIG_FLAGS := $(if $(filter 1,$(WEBUI)),$(ZIG_FLAGS) --webui=[::1]:12345,$(ZIG_FLAGS))
 
 all: zinq
 

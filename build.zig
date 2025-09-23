@@ -22,8 +22,11 @@ const targets: []const std.Target.Query = &.{
 
 pub fn build(builder: *std.Build) !void {
     const optimize = builder.standardOptimizeOption(.{});
+    const target = builder.standardTargetOptions(.{});
 
-    for (targets) |target| {
+    for (0..targets.len) |i| {
+
+        const target_query = if (target.query.cpu_arch == null) targets[i] else target.query;
 
         const main_executable = builder.addExecutable(.{
             .name = "zinq",
@@ -31,18 +34,18 @@ pub fn build(builder: *std.Build) !void {
                 .optimize = optimize,
                 .root_source_file = builder.path("src/main.zig"),
                 .strip = optimize != .Debug,
-                .target = builder.resolveTargetQuery(target)
+                .target = builder.resolveTargetQuery(target_query)
             }),
             .use_llvm = true // needed for valgrind for now
         });
 
         const main_executable_install = builder.addInstallArtifact(main_executable, .{
-            .dest_dir = .{.override = .{.custom = try target.zigTriple(builder.allocator)}}
+            .dest_dir = .{.override = .{.custom = try target_query.zigTriple(builder.allocator)}}
         });
 
         builder.getInstallStep().dependOn(&main_executable_install.step);
 
-        if (builtin.target.cpu.arch == target.cpu_arch and builtin.target.os.tag == target.os_tag) {
+        if (builtin.target.cpu.arch == target_query.cpu_arch and builtin.target.os.tag == target_query.os_tag) {
 
             const test_executable = builder.addTest(.{
                 .name = "test", .root_module = main_executable.root_module,
@@ -51,5 +54,7 @@ pub fn build(builder: *std.Build) !void {
             builder.step("run",  "Run the compiled executable").dependOn(&builder.addRunArtifact(main_executable).step);
             builder.step("test", "Run unit tests"             ).dependOn(&builder.addRunArtifact(test_executable).step);
         }
+
+        if (target.query.cpu_arch != null) break;
     }
 }

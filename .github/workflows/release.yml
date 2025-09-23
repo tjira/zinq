@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Compile the Project
-        run: make
+        run: make CROSS=1
 
       - name: Rename and Move Binaries
         run: |
