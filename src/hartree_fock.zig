@@ -25,8 +25,7 @@ const eigensystemSymmetric = eigenproblem_solver.eigensystemSymmetric;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealTensorFour = device_write.exportRealTensorFour;
 const kinetic = molecular_integrals.kinetic;
-const mmRealReal = matrix_multiplication.mmRealReal;
-const mmRealRealTrans = matrix_multiplication.mmRealRealTrans;
+const mm = matrix_multiplication.mm;
 const nuclear = molecular_integrals.nuclear;
 const oneAO2AS = integral_transform.oneAO2AS;
 const overlap = molecular_integrals.overlap;
@@ -227,8 +226,8 @@ pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocat
 
     for (0..S.rows) |i| X.ptr(i, i).* = 1.0 / std.math.sqrt(X.at(i, i));
 
-    try mmRealRealTrans(T, &mm_temp, X, S_C);
-    try mmRealReal(T, &X, S_C, mm_temp);
+    try mm(T, &mm_temp, X, false, S_C, true);
+    try mm(T, &X, S_C, false, mm_temp, false);
 
     return X;
 }
@@ -238,11 +237,11 @@ pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: 
     var FX  = try RealMatrix(T).init(F.rows, F.cols, F.allocator); defer  FX.deinit();
     var FXC = try RealMatrix(T).init(F.rows, F.cols, F.allocator); defer FXC.deinit();
 
-    try mmRealReal(T, C, F, X); try mmRealReal(T, &FX, X, C.*);
+    try mm(T, C, F, false, X, false); try mm(T, &FX, X, false, C.*, false);
 
     try FX.symmetrize();
 
     try eigensystemSymmetric(T, E, &FXC, FX);
 
-    try mmRealReal(T, C, X, FXC);
+    try mm(T, C, X, false, FXC, false);
 }

@@ -28,7 +28,7 @@ const TullyPotential1 = tully_potential.TullyPotential1;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const fixGauge = eigenproblem_solver.fixGauge;
-const mmRealTransComplex = matrix_multiplication.mmRealTransComplex;
+const mm = matrix_multiplication.mm;
 const momentumGridAlloc = grid_generator.momentumGridAlloc;
 const positionAtRow = grid_generator.positionAtRow;
 const positionGridAlloc = grid_generator.positionGridAlloc;
@@ -216,7 +216,7 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
 
             if (i > 0) try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
 
-            try mmRealTransComplex(T, &wavefunction_row, adiabatic_eigenvectors, wavefunction.data.row(i).asMatrix());
+            try mm(T, &wavefunction_row, adiabatic_eigenvectors, true, wavefunction.data.row(i).asMatrix(), false);
         }
 
         for (0..wavefunction.data.cols) |j| {

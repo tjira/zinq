@@ -23,9 +23,7 @@ const RealVector = real_vector.RealVector;
 
 const cfftn = fourier_transform.cfftn;
 const eigensystemSymmetric = eigensystem_solver.eigensystemSymmetric;
-const mmComplexRealTrans = matrix_multiplication.mmComplexRealTrans;
-const mmRealTransComplex = matrix_multiplication.mmRealTransComplex;
-const mmRealComplex = matrix_multiplication.mmRealComplex;
+const mm = matrix_multiplication.mm;
 const momentumAtRow = grid_generator.momentumAtRow;
 const positionAtRow = grid_generator.positionAtRow;
 const throw = error_handling.throw;
@@ -86,7 +84,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
                     try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position_at_row, time);
 
-                    try mmRealTransComplex(T, &wavefunction_row, adiabatic_eigenvectors, self.data.row(i).asMatrix());
+                    try mm(T, &wavefunction_row, adiabatic_eigenvectors, true, self.data.row(i).asMatrix(), false);
                 }
 
                 for (0..self.nstate) |j| for (0..self.nstate) |k| {
@@ -378,9 +376,9 @@ pub fn GridWavefunction(comptime T: type) type {
                 try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position_at_row, time);
 
                 if (to_adiabatic) {
-                    try mmRealTransComplex(T, &mm_temporary, adiabatic_eigenvectors, self.data.row(i).asMatrix());
+                    try mm(T, &mm_temporary, adiabatic_eigenvectors, true, self.data.row(i).asMatrix(), false);
                 } else {
-                    try mmRealComplex(T, &mm_temporary, adiabatic_eigenvectors, self.data.row(i).asMatrix());
+                    try mm(T, &mm_temporary, adiabatic_eigenvectors, false, self.data.row(i).asMatrix(), false);
                 }
 
                 for (0..self.nstate) |j| self.data.ptr(i, j).* = mm_temporary.at(j, 0);
@@ -411,6 +409,6 @@ pub fn getPositionPropagator(comptime T: type, R: *ComplexMatrix(T), adiabatic: 
         R.ptr(j, j).* = std.math.complex.exp(Complex(T).init(adiabatic.at(j, j), 0).mul(Complex(T).init(-0.5 * time_step, 0)).mul(unit));
     }
 
-    try mmRealComplex(T, mm_temporary, eigenvectors, R.*);
-    try mmComplexRealTrans(T, R, mm_temporary.*, eigenvectors);
+    try mm(T, mm_temporary, eigenvectors, false, R.*, false);
+    try mm(T, R, mm_temporary.*, false, eigenvectors, true);
 }

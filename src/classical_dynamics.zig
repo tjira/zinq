@@ -41,7 +41,7 @@ const TullyPotential1 = tully_potential.TullyPotential1;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const fixGauge = eigenproblem_solver.fixGauge;
-const mmRealTransReal = matrix_multiplication.mmRealTransReal;
+const mm = matrix_multiplication.mm;
 const print = device_write.print;
 const printJson = device_write.printJson;
 const throw = error_handling.throw;
@@ -239,7 +239,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
         if (i > 0) {
 
             try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
-            try mmRealTransReal(T, &eigenvector_overlap, previous_eigenvectors, adiabatic_eigenvectors);
+            try mm(T, &eigenvector_overlap, previous_eigenvectors, true, adiabatic_eigenvectors, false);
 
             if (options.derivative_coupling) |tdc_algorithm| {
                 try tdc_algorithm.evaluate(&time_derivative_coupling, eigenvector_overlap, options.time_step);
