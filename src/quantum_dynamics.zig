@@ -137,6 +137,8 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     if (enable_printing) try printIterationHeader(ndim, nstate);
 
+    var timer = try std.time.Timer.start();
+
     for (0..options.iterations + 1) |i| {
 
         const time = @as(T, @floatFromInt(i)) * options.time_step;
@@ -174,7 +176,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
             .time = time
         };
 
-        try printIterationInfo(T, iteration_info);
+        try printIterationInfo(T, iteration_info, &timer);
     }
 
     if (enable_printing) for (0..nstate) |i| {
@@ -254,13 +256,14 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
     try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
     try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * ndim + 2 * (ndim - 1) + 2});
     try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]}", .{.value = "POPULATION", .width = 9 * nstate + 2 * (nstate - 1) + 2});
+    try writer.print("{[value]s:[width]} ", .{.value = "POPULATION", .width = 9 * nstate + 2 * (nstate - 1) + 2});
+    try writer.print("{s:4}", .{"TIME"});
 
     try print("{s}\n", .{writer.buffered()});
 }
 
 /// Prints the iteration info to standard output.
-pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo) !void {
+pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer: *std.time.Timer) !void {
     var buffer: [128]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
@@ -286,7 +289,7 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo) !void
         try writer.print("{d:9.4}{s}", .{info.density_matrix.at(i, i).re, if (i == info.density_matrix.rows - 1) "" else ", "});
     }
 
-    try writer.print("]", .{});
+    try writer.print("] {D}", .{timer.read()}); timer.reset();
 
     try print("{s}\n", .{writer.buffered()});
 }

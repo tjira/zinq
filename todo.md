@@ -7,4 +7,4 @@
 - [x] Jacobi eigensolver should have a maximum number of iterations to avoid infinite loops.
 - [x] Make the basis sets embedded in the code.
 - [x] Implement the potential plotting target.
-- [ ] Ad timer to the quantum dynamics and classical dynamics iterations.
+- [x] Add timer to the quantum dynamics and classical dynamics iterations.

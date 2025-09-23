@@ -224,6 +224,8 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 
     var split_mix = std.Random.SplitMix64.init(options.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
+    var timer = try std.time.Timer.start();
+
     for (0..options.iterations + 1) |i| {
 
         const time = @as(T, @floatFromInt(i)) * options.time_step;
@@ -272,7 +274,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
             .amplitudes = amplitudes
         };
 
-        try printIterationInfo(T, iteration_info, options.surface_hopping);
+        try printIterationInfo(T, iteration_info, options.surface_hopping, &timer);
     }
 
     return output;
@@ -288,18 +290,20 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
     try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
     try writer.print("{s:5} ", .{"STATE"});
     try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]}", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
+    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
 
     if (surface_hopping) |algorithm| switch (algorithm) {
-        .fewest_switches => try writer.print(" {[value]s:[width]}", .{.value = "|COEFS|^2", .width = 7 * nstate + 2 * (nstate - 1) + 2}),
+        .fewest_switches => try writer.print("{[value]s:[width]} ", .{.value = "|COEFS|^2", .width = 7 * nstate + 2 * (nstate - 1) + 2}),
         else => {}
     };
+
+    try writer.print("{s:4}", .{"TIME"});
 
     try print("{s}\n", .{writer.buffered()});
 }
 
 /// Prints the iteration info to standard output.
-pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T)) !void {
+pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T), timer: *std.time.Timer) !void {
     var buffer: [128]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
@@ -329,7 +333,7 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surfa
         };
     }
 
-    try writer.print("]", .{});
+    try writer.print("] {D}", .{timer.read()}); timer.reset();
 
     try print("{s}\n", .{writer.buffered()});
 }
