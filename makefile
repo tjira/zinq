@@ -2,6 +2,7 @@
 
 DEBUG   ?= 0
 SUMMARY ?= 0
+WATCH   ?= 0
 
 SHELL := $(if $(filter $(OS),Windows_NT),powershell.exe,sh)
 
@@ -12,6 +13,8 @@ ZIG_VERSION := 0.15.1
 ZLS_VERSION := 0.15.0
 
 ZIG_FLAGS := --summary $(if $(filter 1,$(SUMMARY)),all,none) $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
+
+ZIG_FLAGS := $(if $(filter 1,$(WATCH)),$(ZIG_FLAGS) --watch,$(ZIG_FLAGS))
 
 all: zinq
 
