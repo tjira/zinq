@@ -49,6 +49,7 @@ pub const real_vector = @import("real_vector.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
 pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const strided_real_vector = @import("strided_real_vector.zig");
+pub const string_manipulation = @import("string_manipulation.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 pub const time_linear_potential = @import("time_linear_potential.zig");
 pub const tully_potential = @import("tully_potential.zig");

@@ -7,12 +7,14 @@ const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
+const string_manipulation = @import("string_manipulation.zig");
 
 const ElectronicPotential = electronic_potential.ElectronicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
 const throw = error_handling.throw;
+const uncr = string_manipulation.uncr;
 
 const A2AU = global_variables.A2AU;
 const AN2M = global_variables.AN2M;
@@ -174,7 +176,7 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.
 
     var buffer: [1024]u8 = undefined; var reader = file.reader(&buffer); var reader_interface = &reader.interface;
 
-    const natom = try std.fmt.parseInt(u32, try reader_interface.takeDelimiterExclusive('\n'), 10);
+    const natom = try std.fmt.parseInt(u32, uncr(try reader_interface.takeDelimiterExclusive('\n')), 10);
 
     var atoms = try allocator.alloc(usize, natom);
 
@@ -189,7 +191,7 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.
         atoms[i] = SM2AN.get(it.next().?).?;
 
         for (0..3) |j| {
-            position.ptr(3 * i + j).* = try std.fmt.parseFloat(T, it.next().?) * A2AU;
+            position.ptr(3 * i + j).* = try std.fmt.parseFloat(T, uncr(it.next().?)) * A2AU;
         }
     }
 

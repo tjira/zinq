@@ -209,11 +209,11 @@ pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: 
 pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: []RealMatrix(T), DIIS_E: []RealMatrix(T), iter: usize, allocator: std.mem.Allocator) !void {
     const size = @min(DIIS_F.len, iter);
 
-    var A = try RealMatrix(T).init(size + 1, size + 1, allocator); defer A.deinit();
-    var b = try RealVector(T).init(size + 1,           allocator); defer b.deinit();
-    var c = try RealVector(T).init(size + 1,           allocator); defer c.deinit();
+    var A = try RealMatrix(T).initZero(size + 1, size + 1, allocator); defer A.deinit();
+    var b = try RealVector(T).initZero(size + 1,           allocator); defer b.deinit();
+    var c = try RealVector(T).initZero(size + 1,           allocator); defer c.deinit();
 
-    var temporary = try RealVector(T).init(c.len, allocator); defer temporary.deinit();
+    var temporary = try RealVector(T).initZero(c.len, allocator); defer temporary.deinit();
 
     A.fill(1); b.fill(0); A.ptr(A.rows - 1, A.cols - 1).* = 0; b.ptr(b.len - 1).* = 1;
 
