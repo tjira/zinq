@@ -64,7 +64,7 @@ pub fn Options(comptime T: type) type {
         direct: bool = false,
         generalized: bool = false,
         maxiter: u32 = 100,
-        threshold: T = 1e-12,
+        threshold: T = 1e-8,
 
         diis: ?Diis = .{},
         write: Write = .{}
@@ -337,20 +337,22 @@ test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
     const options = Options(f64){
         .system = "example/molecule/water.xyz",
         .basis = "sto-3g",
+        .threshold = 1e-14,
     };
 
     var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.energy + 74.96590121728451) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.energy + 74.96590121728457) < TEST_TOLERANCE);
 }
 
 test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
     const options = Options(f64){
         .system = "example/molecule/methane.xyz",
         .basis = "6-31g*",
+        .threshold = 1e-14,
     };
 
     var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.energy + 40.19517074970690) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.energy + 40.19517074970709) < TEST_TOLERANCE);
 }
