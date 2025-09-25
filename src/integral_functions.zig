@@ -5,6 +5,7 @@ const std = @import("std");
 const global_variables = @import("global_variables.zig");
 
 const GAMMAINC_CUTOFF = global_variables.GAMMAINC_CUTOFF;
+const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// Boys function with zero n.
 pub fn boys(comptime T: type, x: T, a: T) T {
@@ -34,4 +35,8 @@ pub fn gammainc(comptime T: type, x: T, a: T) T {
 
         return 1 - std.math.exp(-x + a * std.math.log(T, std.math.e, x) - std.math.log(T, std.math.e, std.math.gamma(T, a))) * e;
     }
+}
+
+test "Several Values of the Regularized Lower Incomplete Gamma Function" {
+    try std.testing.expect(@abs(gammainc(f64, 0.5, 0.5) - 0.6826894921370859) < TEST_TOLERANCE);
 }

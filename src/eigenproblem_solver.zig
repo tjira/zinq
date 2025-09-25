@@ -90,6 +90,16 @@ pub fn eigensystemSymmetric(comptime T: type, J: *RealMatrix(T), C: *RealMatrix(
     try eigensystemJacobi(T, J, C, A);
 }
 
+/// Solve the eigenproblem for a real symmetric system, returning the eigenvalues and eigenvectors.
+pub fn eigensystemSymmetricAlloc(comptime T: type, A: RealMatrix(T), allocator: std.mem.Allocator) !struct {J: RealMatrix(T), C: RealMatrix(T)} {
+    var J = try RealMatrix(T).init(A.rows, A.cols, allocator);
+    var C = try RealMatrix(T).init(A.rows, A.cols, allocator);
+
+    try eigensystemSymmetric(T, &J, &C, A);
+
+    return .{.J = J, .C = C};
+}
+
 /// Function to fix the gauge of eigenvectors.
 pub fn fixGauge(comptime T: type, eigenvectors: *RealMatrix(T), reference: RealMatrix(T)) !void {
     if (eigenvectors.rows != reference.rows or eigenvectors.cols != reference.cols) {

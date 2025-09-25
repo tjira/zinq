@@ -8,24 +8,31 @@ const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const errror_handling = @import("error_handling.zig");
+const global_variables = @import("global_variables.zig");
 const integral_transform = @import("integral_transform.zig");
+const linear_solve = @import("linear_solve.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const molecular_integrals = @import("molecular_integrals.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
+const real_vector = @import("real_vector.zig");
 
 const BasisSet = basis_set.BasisSet;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
 const RealMatrix = real_matrix.RealMatrix;
 const RealTensor4 = real_tensor_four.RealTensor4;
+const RealVector = real_vector.RealVector;
 
 const coulomb = molecular_integrals.coulomb;
 const eigensystemSymmetric = eigenproblem_solver.eigensystemSymmetric;
+const eigensystemSymmetricAlloc = eigenproblem_solver.eigensystemSymmetricAlloc;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealTensorFour = device_write.exportRealTensorFour;
 const kinetic = molecular_integrals.kinetic;
+const linearSolveSymmetric = linear_solve.linearSolveSymmetric;
 const mm = matrix_multiplication.mm;
+const mmAlloc = matrix_multiplication.mmAlloc;
 const nuclear = molecular_integrals.nuclear;
 const oneAO2AS = integral_transform.oneAO2AS;
 const overlap = molecular_integrals.overlap;
@@ -34,9 +41,16 @@ const printJson = device_write.printJson;
 const throw = errror_handling.throw;
 const twoAO2AS = integral_transform.twoAO2AS;
 
+const SINGULARITY_TOLERANCE = global_variables.SINGULARITY_TOLERANCE;
+const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
+
 /// Hartree-Fock target options.
 pub fn Options(comptime T: type) type {
     return struct {
+        const Diis = struct {
+            size: u32 = 5,
+            start: u32 = 1,
+        };
         const Write = struct {
             coefficient: ?[]const u8 = null,
             density: ?[]const u8 = null,
@@ -50,8 +64,9 @@ pub fn Options(comptime T: type) type {
         direct: bool = false,
         generalized: bool = false,
         maxiter: u32 = 100,
-        threshold: T = 1e-8,
+        threshold: T = 1e-12,
 
+        diis: ?Diis = .{},
         write: Write = .{}
     };
 }
@@ -67,6 +82,7 @@ pub fn Output(comptime T: type) type {
         S: RealMatrix(T),
         V: RealMatrix(T),
         J: ?RealTensor4(T),
+        energy: T,
 
         allocator: std.mem.Allocator,
 
@@ -128,6 +144,12 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     var X = try getXMatrix(T, S, allocator); defer X.deinit();
 
+    var DIIS_F = try allocator.alloc(RealMatrix(T), if (options.diis != null) options.diis.?.size else 0); defer allocator.free(DIIS_F); defer for (0..DIIS_F.len) |i| DIIS_F[i].deinit();
+    var DIIS_E = try allocator.alloc(RealMatrix(T), if (options.diis != null) options.diis.?.size else 0); defer allocator.free(DIIS_E); defer for (0..DIIS_E.len) |i| DIIS_E[i].deinit();
+
+    for (0..DIIS_F.len) |i| DIIS_F[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
+    for (0..DIIS_E.len) |i| DIIS_E[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
+
     const VNN = system.nuclearRepulsionEnergy();
 
     var energy: T = 0; var energy_prev: T = 1; var iter: usize = 0;
@@ -142,7 +164,17 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
         getFockMatrix(T, &F, K, V, P, J, basis);
 
-        try solveRoothaan(T, &E, &C, F, X);
+        if (options.diis != null) {
+
+            const e = try errorVector(T, S, F, P, allocator); defer e.deinit();
+
+            try F.copyTo(&DIIS_F[iter % DIIS_F.len]);
+            try e.copyTo(&DIIS_E[iter % DIIS_E.len]);
+
+            if (iter >= options.diis.?.start) try diisExtrapolate(T, &F, DIIS_F, DIIS_E, iter, allocator);
+        }
+
+        try solveRoothaan(T, &E, &C, F, X, allocator);
 
         getDensityMatrix(T, &P, C, nocc);
 
@@ -157,7 +189,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     if (options.write.density) |path| try exportRealMatrix(T, path, P);
     if (options.write.fock) |path| try exportRealMatrix(T, path, F);
 
-    return .{.C = C, .E = E, .F = F, .K = K, .P = P, .S = S, .V = V, .J = J, .allocator = allocator};
+    return .{.C = C, .E = E, .F = F, .K = K, .P = P, .S = S, .V = V, .J = J, .energy = energy + VNN, .allocator = allocator};
 }
 
 /// Calculates the energy from the density matrix, Fock matrix and core Hamiltonian.
@@ -171,6 +203,63 @@ pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: 
     };
 
     return energy;
+}
+
+/// Extrapolate the DIIS error to obtain a new Fock matrix. The error vector from the first iteration is ignored, since it is zero.
+pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: []RealMatrix(T), DIIS_E: []RealMatrix(T), iter: usize, allocator: std.mem.Allocator) !void {
+    const size = @min(DIIS_F.len, iter);
+
+    var A = try RealMatrix(T).init(size + 1, size + 1, allocator); defer A.deinit();
+    var b = try RealVector(T).init(size + 1,           allocator); defer b.deinit();
+    var c = try RealVector(T).init(size + 1,           allocator); defer c.deinit();
+
+    var temporary = try RealVector(T).init(c.len, allocator); defer temporary.deinit();
+
+    A.fill(1); b.fill(0); A.ptr(A.rows - 1, A.cols - 1).* = 0; b.ptr(b.len - 1).* = 1;
+
+    for (0..size) |i| for (0..size) |j| {
+
+        A.ptr(i, j).* = 0;
+
+        const ii = (iter - size + i + 1) % DIIS_E.len;
+        const jj = (iter - size + j + 1) % DIIS_E.len;
+
+        for (0..DIIS_E[0].rows) |k| for (0..DIIS_E[0].cols) |l| {
+            A.ptr(i, j).* += DIIS_E[ii].at(k, l) * DIIS_E[jj].at(k, l);
+        };
+    };
+
+    const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(); defer AJC.C.deinit();
+
+    for (0..b.len) |i| if (@abs(AJC.J.at(i, i)) < SINGULARITY_TOLERANCE) return;
+
+    try linearSolveSymmetric(T, &c, A, AJC.J, AJC.C, b, &temporary); F.zero();
+
+    for (0..size) |i| {
+
+        const ii = (iter - size + i + 1) % DIIS_E.len;
+
+        for (0..F.rows) |j| for (0..F.cols) |k| {
+            F.ptr(j, k).* += c.at(i) * DIIS_F[ii].at(j, k);
+        };
+    }
+}
+
+/// Function to calculate the error vector.
+pub fn errorVector(comptime T: type, S: RealMatrix(T), F: RealMatrix(T), P: RealMatrix(T), allocator: std.mem.Allocator) !RealMatrix(T) {
+    const SP = try mmAlloc(T, S, false, P, false, allocator); defer SP.deinit();
+    const FP = try mmAlloc(T, F, false, P, false, allocator); defer FP.deinit();
+
+    const SPF = try mmAlloc(T, SP, false, F, false, allocator); defer SPF.deinit();
+    const FPS = try mmAlloc(T, FP, false, S, false, allocator); defer FPS.deinit();
+
+    var e = try RealMatrix(T).initZero(P.rows, P.cols, allocator);
+
+    for (0..e.rows) |i| for (0..e.cols) |j| {
+        e.ptr(i, j).* = SPF.at(i, j) - FPS.at(i, j);
+    };
+
+    return e;
 }
 
 /// Calculate the density matrix.
@@ -233,15 +322,35 @@ pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocat
 }
 
 /// Solver for the Roothaan equations.
-pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: RealMatrix(T), X: RealMatrix(T)) !void {
-    var FX  = try RealMatrix(T).init(F.rows, F.cols, F.allocator); defer  FX.deinit();
-    var FXC = try RealMatrix(T).init(F.rows, F.cols, F.allocator); defer FXC.deinit();
+pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: RealMatrix(T), X: RealMatrix(T), allocator: std.mem.Allocator) !void {
+    const FX = try mmAlloc(T, F, false, X, false, allocator); defer FX.deinit();
+    var XFX = try mmAlloc(T, X, false, FX, false, allocator); defer XFX.deinit();
 
-    try mm(T, C, F, false, X, false); try mm(T, &FX, X, false, C.*, false);
+    try XFX.symmetrize();
 
-    try FX.symmetrize();
+    const XFXJC = try eigensystemSymmetricAlloc(T, XFX, allocator); defer XFXJC.J.deinit(); defer XFXJC.C.deinit();
 
-    try eigensystemSymmetric(T, E, &FXC, FX);
+    try mm(T, C, X, false, XFXJC.C, false); try XFXJC.J.copyTo(E);
+}
 
-    try mm(T, C, X, false, FXC, false);
+test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
+    const options = Options(f64){
+        .system = "example/molecule/water.xyz",
+        .basis = "sto-3g",
+    };
+
+    var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+
+    try std.testing.expect(@abs(output.energy + 74.96590121728451) < TEST_TOLERANCE);
+}
+
+test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
+    const options = Options(f64){
+        .system = "example/molecule/methane.xyz",
+        .basis = "6-31g*",
+    };
+
+    var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+
+    try std.testing.expect(@abs(output.energy + 40.19517074970690) < TEST_TOLERANCE);
 }

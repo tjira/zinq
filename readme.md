@@ -74,4 +74,4 @@ Compiling Zinq is simple, running `make` will automatically download the Zig com
 ./zig-out/<arch-os>/zinq
 ```
 
-and check that the Zig version and an error about missing input is displayed. If the message appears, the program is compiled correctly.
+and check that the missing input message is displayed. If the message appears, the program is compiled correctly.

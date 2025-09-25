@@ -31,6 +31,7 @@ pub const integral_functions = @import("integral_functions.zig");
 pub const integral_transform = @import("integral_transform.zig");
 pub const landau_zener = @import("landau_zener.zig");
 pub const linear_interpolation = @import("linear_interpolation.zig");
+pub const linear_solve = @import("linear_solve.zig");
 pub const math_functions = @import("math_functions.zig");
 pub const matrix_multiplication = @import("matrix_multiplication.zig");
 pub const molecular_integrals = @import("molecular_integrals.zig");
@@ -128,7 +129,7 @@ pub fn main() !void {
 
         if (err != error.InputFileNotFound) return err;
 
-        try error_handling.throw(void, "\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND", .{});
+        try device_write.print("\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND\n", .{});
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});

@@ -77,11 +77,11 @@ pub fn RealVector(comptime T: type) type {
         }
 
         /// Equality operator for vectors.
-        pub fn eq(self: @This(), other: @This()) bool {
+        pub fn eq(self: @This(), other: @This(), tol: T) bool {
             if (self.len != other.len) return false;
 
             for (self.data, 0..) |element, index| {
-                if (element != other.data[index]) return false;
+                if (@abs(element - other.data[index]) > tol) return false;
             }
 
             return true;

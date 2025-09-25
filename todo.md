@@ -8,3 +8,7 @@
 - [x] Make the basis sets embedded in the code.
 - [x] Implement the potential plotting target.
 - [x] Add timer to the quantum dynamics and classical dynamics iterations.
+- [x] Implement the mmAlloc function that allocates the resullting matrix.
+- [x] Implement the eigensystemSymmetricAlloc function that allocates the resulting eigenvalues and eigenvectors.
+- [x] Implement the linsolveSymmetric function.
+- [x] Implement the DIIS for HF method.
