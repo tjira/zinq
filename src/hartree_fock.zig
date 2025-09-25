@@ -64,7 +64,7 @@ pub fn Options(comptime T: type) type {
         direct: bool = false,
         generalized: bool = false,
         maxiter: u32 = 100,
-        threshold: T = 1e-8,
+        threshold: T = 1e-12,
 
         diis: ?Diis = .{},
         write: Write = .{}
@@ -162,7 +162,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
         timer.reset();
 
-        getFockMatrix(T, &F, K, V, P, J, basis);
+        try getFockMatrix(T, &F, K, V, P, J, basis);
 
         if (options.diis != null) {
 
@@ -176,7 +176,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
         try solveRoothaan(T, &E, &C, F, X, allocator);
 
-        getDensityMatrix(T, &P, C, nocc);
+        try getDensityMatrix(T, &P, C, nocc);
 
         energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, options.generalized);
 
@@ -243,6 +243,8 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: []RealMatrix
             F.ptr(j, k).* += c.at(i) * DIIS_F[ii].at(j, k);
         };
     }
+
+    try F.symmetrize();
 }
 
 /// Function to calculate the error vector.
@@ -263,7 +265,7 @@ pub fn errorVector(comptime T: type, S: RealMatrix(T), F: RealMatrix(T), P: Real
 }
 
 /// Calculate the density matrix.
-pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), nocc: usize) void {
+pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), nocc: usize) !void {
     for (0..P.rows) |i| for (0..P.cols) |j| {
 
         P.ptr(i, j).* = 0;
@@ -272,10 +274,12 @@ pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), n
             P.ptr(i, j).* += C.at(i, m) * C.at(j, m);
         }
     };
+
+    try P.symmetrize();
 }
 
 /// Obtain the Fock matrix form core Hamiltonian and density matrix.
-pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: ?RealTensor4(T), basis: BasisSet(T)) void {
+pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: ?RealTensor4(T), basis: BasisSet(T)) !void {
     for (0..F.rows) |i| for (0..F.cols) |j| {
         F.ptr(i, j).* = V.at(i, j) + K.at(i, j);
     };
@@ -301,6 +305,8 @@ pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: R
     if (J != null) for (0..J.?.shape[0]) |i| for (0..J.?.shape[1]) |j| for (0..J.?.shape[2]) |k| for (0..J.?.shape[3]) |l| {
         F.ptr(k, l).* += P.at(i, j) * (factor * J.?.at(i, j, k, l) - J.?.at(i, l, k, j));
     };
+
+    try F.symmetrize();
 }
 
 /// Function to get the X matrix.
@@ -341,7 +347,7 @@ test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
 
     var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.energy + 74.96590121741040) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.energy + 74.96590121728434) < TEST_TOLERANCE);
 }
 
 test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
@@ -352,5 +358,5 @@ test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
 
     var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.energy + 40.19517074777475) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.energy + 40.19517074970682) < TEST_TOLERANCE);
 }
