@@ -98,10 +98,10 @@ pub fn mmResultType(comptime T: type, comptime A_type: type, comptime B_type: ty
 }
 
 test "3x3 Real Matrix Multiplication" {
-    var A = try RealMatrix(f64).init(3, 3, std.testing.allocator);
-    var B = try RealMatrix(f64).init(3, 3, std.testing.allocator);
+    var A = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer A.deinit();
+    var B = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer B.deinit();
 
-    var C_expected = try RealMatrix(f64).init(3, 3, std.testing.allocator);
+    var C_expected = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer C_expected.deinit();
 
     A.ptr(0, 0).* = 1; A.ptr(0, 1).* = 2; A.ptr(0, 2).* = 3;
     A.ptr(1, 0).* = 4; A.ptr(1, 1).* = 5; A.ptr(1, 2).* = 6;
@@ -115,7 +115,7 @@ test "3x3 Real Matrix Multiplication" {
     C_expected.ptr(1, 0).* =  84; C_expected.ptr(1, 1).* =  69; C_expected.ptr(1, 2).* = 54;
     C_expected.ptr(2, 0).* = 138; C_expected.ptr(2, 1).* = 114; C_expected.ptr(2, 2).* = 90;
 
-    const C = try mmAlloc(f64, A, false, B, false, std.testing.allocator);
+    const C = try mmAlloc(f64, A, false, B, false, std.testing.allocator); defer C.deinit();
 
     try std.testing.expect(C.eq(C_expected, TEST_TOLERANCE));
 }
