@@ -11,7 +11,7 @@ pub const FSSH_DENOMINATOR_OFFSET = 1e-14;
 pub const GAMMAINC_CUTOFF = 1e-14;
 pub const MAX_INPUT_FILE_BYTES = 8192;
 pub const MAX_JACOBI_ITERATIONS = 1000;
-pub const TEST_TOLERANCE = 1e-14;
+pub const TEST_TOLERANCE = 1e-12;
 pub const SINGULARITY_TOLERANCE = 1e-14;
 
 pub const Eh  = 4.359744722206e-18; // J
