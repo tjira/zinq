@@ -176,7 +176,7 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
         try solveRoothaan(T, &E, &C, F, X, allocator);
 
-        try getDensityMatrix(T, &P, C, nocc);
+        getDensityMatrix(T, &P, C, nocc);
 
         energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, options.generalized);
 
@@ -265,17 +265,17 @@ pub fn errorVector(comptime T: type, S: RealMatrix(T), F: RealMatrix(T), P: Real
 }
 
 /// Calculate the density matrix.
-pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), nocc: usize) !void {
-    for (0..P.rows) |i| for (0..P.cols) |j| {
+pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), nocc: usize) void {
+    for (0..P.rows) |i| for (i..P.cols) |j| {
 
         P.ptr(i, j).* = 0;
 
         for (0..nocc) |m| {
             P.ptr(i, j).* += C.at(i, m) * C.at(j, m);
         }
-    };
 
-    try P.symmetrize();
+        P.ptr(j, i).* = P.at(i, j);
+    };
 }
 
 /// Obtain the Fock matrix form core Hamiltonian and density matrix.
