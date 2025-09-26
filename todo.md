@@ -12,3 +12,4 @@
 - [x] Implement the eigensystemSymmetricAlloc function that allocates the resulting eigenvalues and eigenvectors.
 - [x] Implement the linsolveSymmetric function.
 - [x] Implement the DIIS for HF method.
+- [ ] Compress the basis set data to reduce the size of the executable.

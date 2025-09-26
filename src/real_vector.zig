@@ -62,6 +62,15 @@ pub fn RealVector(comptime T: type) type {
             return self.data[i];
         }
 
+        /// Clone the vector.
+        pub fn clone(self: @This()) !@This() {
+            var v = try @This().init(self.len, self.allocator);
+
+            try self.copyTo(&v);
+
+            return v;
+        }
+
         /// Copy the contents of this vector to another vector.
         pub fn copyTo(self: @This(), other: *@This()) !void {
             if (self.len != other.len) return throw(void, "CAN'T COPY A VECTOR OF LENGTH {d} TO A VECTOR OF LENGTH {d}", .{self.len, other.len});
@@ -102,6 +111,15 @@ pub fn RealVector(comptime T: type) type {
             for (self.data) |*element| element.* *= value;
         }
 
+        /// Calculate the norm of the vector.
+        pub fn norm(self: @This()) T {
+            var total: T = 0;
+
+            for (self.data) |element| total += element * element;
+
+            return std.math.sqrt(total);
+        }
+
         /// Get the pointer to the element at index i.
         pub fn ptr(self: *@This(), i: usize) *T {
             return &self.data[i];
@@ -114,6 +132,15 @@ pub fn RealVector(comptime T: type) type {
                 .len = end - start,
                 .allocator = null,
             };
+        }
+
+        /// Subtract another vector from this vector.
+        pub fn sub(self: *@This(), other: @This()) !void {
+            if (self.len != other.len) return throw(void, "CAN'T SUBTRACT A VECTOR OF LENGTH {d} FROM A VECTOR OF LENGTH {d}", .{other.len, self.len});
+
+            for (self.data, 0..) |*element, index| {
+                element.* -= other.data[index];
+            }
         }
 
         /// Calculates the sum of all elements in the vector.

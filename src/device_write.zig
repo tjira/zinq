@@ -2,15 +2,21 @@
 
 const std = @import("std");
 
+const classical_particle = @import("classical_particle.zig");
+const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
 const real_tensor_three = @import("real_tensor_three.zig");
 const real_vector = @import("real_vector.zig");
 
+const ClassicalParticle = classical_particle.ClassicalParticle;
 const RealMatrix = real_matrix.RealMatrix;
 const RealTensor3 = real_tensor_three.RealTensor3;
 const RealTensor4 = real_tensor_four.RealTensor4;
 const RealVector = real_vector.RealVector;
+
+const AN2SM = global_variables.AN2SM;
+const A2AU = global_variables.A2AU;
 
 /// Exports the real matrix to a file.
 pub fn exportRealMatrix(comptime T: type, path: []const u8, A: RealMatrix(T)) !void {
@@ -52,6 +58,11 @@ pub fn print(comptime format: []const u8, args: anytype) !void {
     try write(std.fs.File.stdout(), format, args);
 }
 
+/// Print a classical particle into a terminal.
+pub fn printClassicalParticleAsMolecule(comptime T: type, object: ClassicalParticle(T), comment: ?[]const u8) !void {
+    try writeClassicalParticleAsMolecule(T, std.fs.File.stdout(), object, comment);
+}
+
 /// Print the formatted json to the standard output.
 pub fn printJson(object: anytype) !void {
     try writeJson(std.fs.File.stdout(), object);
@@ -74,6 +85,28 @@ pub fn write(device: std.fs.File, comptime format: []const u8, args: anytype) !v
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
     try writer_interface.print(format, args);
+
+    try writer_interface.flush();
+}
+
+/// Write the classical particle as a .xyz molecule file into the specified device with an optional comment line.
+pub fn writeClassicalParticleAsMolecule(comptime T: type, device: std.fs.File, object: ClassicalParticle(T), comment: ?[]const u8) !void {
+    var buffer: [32768]u8 = undefined;
+
+    var writer = device.writer(&buffer); var writer_interface = &writer.interface;
+
+    if (comment != null) {
+        try writer_interface.print("{d}\n{s}\n", .{object.atoms.?.len, comment.?});
+    }
+
+    for (0..object.atoms.?.len) |i| {
+
+        const x = object.position.at(3 * i + 0) / A2AU;
+        const y = object.position.at(3 * i + 1) / A2AU;
+        const z = object.position.at(3 * i + 2) / A2AU;
+
+        try writer_interface.print("{s} {d:20.14} {d:20.14} {d:20.14}\n", .{try AN2SM(object.atoms.?[i]), x, y, z});
+    }
 
     try writer_interface.flush();
 }

@@ -7,12 +7,15 @@ const classical_particle = @import("classical_particle.zig");
 const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
+const energy_derivative = @import("energy_derivative.zig");
 const errror_handling = @import("error_handling.zig");
+const frequency_analysis = @import("frequency_analysis.zig");
 const global_variables = @import("global_variables.zig");
 const integral_transform = @import("integral_transform.zig");
 const linear_solve = @import("linear_solve.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const molecular_integrals = @import("molecular_integrals.zig");
+const particle_optimization = @import("particle_optimization.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
 const real_vector = @import("real_vector.zig");
@@ -34,10 +37,17 @@ const linearSolveSymmetric = linear_solve.linearSolveSymmetric;
 const mm = matrix_multiplication.mm;
 const mmAlloc = matrix_multiplication.mmAlloc;
 const nuclear = molecular_integrals.nuclear;
+const nuclearGradient = energy_derivative.nuclearGradient;
+const nuclearHessian = energy_derivative.nuclearHessian;
 const oneAO2AS = integral_transform.oneAO2AS;
 const overlap = molecular_integrals.overlap;
+const particleHarmonicFrequencies = frequency_analysis.particleHarmonicFrequencies;
+const particleSteepestDescent = particle_optimization.particleSteepestDescent;
 const print = device_write.print;
+const printClassicalParticleAsMolecule = device_write.printClassicalParticleAsMolecule;
 const printJson = device_write.printJson;
+const printRealMatrix = device_write.printRealMatrix;
+const printRealVector = device_write.printRealVector;
 const throw = errror_handling.throw;
 const twoAO2AS = integral_transform.twoAO2AS;
 
@@ -50,6 +60,23 @@ pub fn Options(comptime T: type) type {
         const Diis = struct {
             size: u32 = 5,
             start: u32 = 1,
+        };
+        const Gradient = union(enum) {
+            numeric: struct {
+                step: T = 1e-3,
+            },
+            analytic: struct {}
+        };
+        const Hessian = union(enum) {
+            numeric: struct {
+                step: T = 1e-3,
+            },
+            analytic: struct {}
+        };
+        const Optimize = struct {
+            maxiter: u32 = 100,
+            step: T = 1,
+            threshold: T = 1e-6,
         };
         const Write = struct {
             coefficient: ?[]const u8 = null,
@@ -67,6 +94,9 @@ pub fn Options(comptime T: type) type {
         threshold: T = 1e-12,
 
         diis: ?Diis = .{},
+        gradient: ?Gradient = null,
+        hessian: ?Hessian = null,
+        optimize: ?Optimize = null,
         write: Write = .{}
     };
 }
@@ -74,29 +104,20 @@ pub fn Options(comptime T: type) type {
 /// Hartree-Fock target output.
 pub fn Output(comptime T: type) type {
     return struct {
-        C: RealMatrix(T),
-        E: RealMatrix(T),
-        F: RealMatrix(T),
-        K: RealMatrix(T),
-        P: RealMatrix(T),
-        S: RealMatrix(T),
-        V: RealMatrix(T),
-        J: ?RealTensor4(T),
-        energy: T,
+        C: RealMatrix(T), F: RealMatrix(T), J: ?RealTensor4(T), K: RealMatrix(T), P: RealMatrix(T),
+        S: RealMatrix(T), V: RealMatrix(T), G: ?RealMatrix(T) = null, H: ?RealMatrix(T) = null,
+        energy: T, epsilon: RealMatrix(T), frequencies: ?RealVector(T) = null,
 
         allocator: std.mem.Allocator,
 
         /// Deinitialize the output struct.
         pub fn deinit(self: @This()) void {
-            self.C.deinit();
-            self.E.deinit();
-            self.F.deinit();
-            self.K.deinit();
-            self.P.deinit();
-            self.S.deinit();
-            self.V.deinit();
-
-            if (self.J) |J| J.deinit();
+            self.C.deinit(); self.F.deinit(); self.K.deinit(); self.P.deinit();
+            self.S.deinit(); self.V.deinit(); self.epsilon.deinit();
+            if (self.G != null) self.G.?.deinit();
+            if (self.H != null) self.H.?.deinit();
+            if (self.J != null) self.J.?.deinit();
+            if (self.frequencies != null) self.frequencies.?.deinit();
         }
     };
 }
@@ -104,92 +125,40 @@ pub fn Output(comptime T: type) type {
 /// Run the Hartree-Fock target.
 pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(options);
+    
+    if (options.gradient != null and options.gradient.? == .analytic) return throw(Output(T), "ANALYTIC GRADIENT NOT IMPLEMENTED", .{});
+    if (options.hessian != null and options.hessian.? == .analytic) return throw(Output(T), "ANALYTIC HESSIAN NOT IMPLEMENTED", .{});
 
-    const system = try classical_particle.read(T, options.system, options.charge, allocator); defer system.deinit();
-    var basis = try BasisSet(T).init(system, options.basis, allocator); defer basis.deinit();
+    var system = try classical_particle.read(T, options.system, options.charge, allocator); defer system.deinit();
 
-    const nbf = if (options.generalized) 2 * basis.nbf() else basis.nbf();
-    const nocc = if (options.generalized) try system.noccSpin() else try system.noccSpatial();
+    if (enable_printing) {try print("\nINPUT GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
-    if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{nbf});
+    if (options.optimize != null) {
 
-    if (enable_printing) try print("\nONE-ELECTRON INTEGRALS: ", .{});
+        const optimized_system = try particleSteepestDescent(T, options, system, scf, "HARTREE-FOCK", enable_printing, allocator);
 
-    var timer = try std.time.Timer.start();
-
-    var S = try overlap(T, basis, allocator);
-    var K = try kinetic(T, basis, allocator);
-    var V = try nuclear(T, system, basis, allocator);
-
-    if (options.generalized) {
-        try oneAO2AS(T, &S);
-        try oneAO2AS(T, &K);
-        try oneAO2AS(T, &V);
+        system.deinit(); system = optimized_system;
     }
 
-    if (enable_printing) try print("{D}\n", .{timer.read()}); timer.reset();
+    if (enable_printing and options.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
-    if (enable_printing and !options.direct) try print("TWO-ELECTRON INTEGRALS: ", .{});
+    var output = try scf(T, options, system, enable_printing, allocator);
 
-    var J = if (!options.direct) try coulomb(T, basis, allocator) else null;
+    output.G = if (options.gradient != null) try nuclearGradient(T, options, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
 
-    if (!options.direct and options.generalized) try twoAO2AS(T, &J.?);
+    if (output.G) |G| {try print("\nHARTREE-FOCK NUCLEAR GRADIENT (Eh/Bohr):\n", .{}); try printRealMatrix(T, G);}
 
-    if (enable_printing and !options.direct) try print("{D}\n", .{timer.read()});
+    output.H = if (options.hessian != null) try nuclearHessian(T, options, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
 
-    var C = try RealMatrix(T).initZero(nbf, nbf, allocator);
-    var E = try RealMatrix(T).initZero(nbf, nbf, allocator);
-    var F = try RealMatrix(T).initZero(nbf, nbf, allocator);
-    var P = try RealMatrix(T).initZero(nbf, nbf, allocator);
+    if (output.H) |H| output.frequencies = try particleHarmonicFrequencies(T, system, H, allocator);
 
-    var X = try getXMatrix(T, S, allocator); defer X.deinit();
+    if (output.frequencies) |freqs| {try print("\nHARTREE-FOCK VIBRATIONAL FREQUENCIES (CM^-1):\n", .{}); try printRealVector(T, freqs);}
 
-    var DIIS_F = try allocator.alloc(RealMatrix(T), if (options.diis != null) options.diis.?.size else 0); defer allocator.free(DIIS_F); defer for (0..DIIS_F.len) |i| DIIS_F[i].deinit();
-    var DIIS_E = try allocator.alloc(RealMatrix(T), if (options.diis != null) options.diis.?.size else 0); defer allocator.free(DIIS_E); defer for (0..DIIS_E.len) |i| DIIS_E[i].deinit();
+    if (options.write.coefficient) |path| try exportRealMatrix(T, path, output.C);
+    if (options.write.density) |path| try exportRealMatrix(T, path, output.P);
+    if (options.write.fock) |path| try exportRealMatrix(T, path, output.F);
 
-    for (0..DIIS_F.len) |i| DIIS_F[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
-    for (0..DIIS_E.len) |i| DIIS_E[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
-
-    const VNN = system.nuclearRepulsionEnergy();
-
-    var energy: T = 0; var energy_prev: T = 1; var iter: usize = 0;
-
-    if (enable_printing) try print("\n{s:4} {s:20} {s:8} {s:4}\n", .{"ITER", "ENERGY", "|DELTA E|", "TIME"});
-
-    while (@abs(energy - energy_prev) > options.threshold) : (iter += 1) {
-
-        if (iter >= options.maxiter) return throw(Output(T), "HARTREE-FOCK DID NOT CONVERGE IN {d} ITERATIONS", .{options.maxiter});
-
-        timer.reset();
-
-        try getFockMatrix(T, &F, K, V, P, J, basis);
-
-        if (options.diis != null) {
-
-            const e = try errorVector(T, S, F, P, allocator); defer e.deinit();
-
-            try F.copyTo(&DIIS_F[iter % DIIS_F.len]);
-            try e.copyTo(&DIIS_E[iter % DIIS_E.len]);
-
-            if (iter >= options.diis.?.start) try diisExtrapolate(T, &F, DIIS_F, DIIS_E, iter, allocator);
-        }
-
-        try solveRoothaan(T, &E, &C, F, X, allocator);
-
-        getDensityMatrix(T, &P, C, nocc);
-
-        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, options.generalized);
-
-        if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {D}\n", .{iter + 1, energy + VNN, @abs(energy - energy_prev), timer.read()});
-    }
-
-    if (enable_printing) try print("\nHF ENERGY: {d:.14}\n", .{energy + VNN});
-
-    if (options.write.coefficient) |path| try exportRealMatrix(T, path, C);
-    if (options.write.density) |path| try exportRealMatrix(T, path, P);
-    if (options.write.fock) |path| try exportRealMatrix(T, path, F);
-
-    return .{.C = C, .E = E, .F = F, .K = K, .P = P, .S = S, .V = V, .J = J, .energy = energy + VNN, .allocator = allocator};
+    return output;
 }
 
 /// Calculates the energy from the density matrix, Fock matrix and core Hamiltonian.
@@ -209,15 +178,15 @@ pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: 
 pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: []RealMatrix(T), DIIS_E: []RealMatrix(T), iter: usize, allocator: std.mem.Allocator) !void {
     const size = @min(DIIS_F.len, iter);
 
-    var A = try RealMatrix(T).initZero(size + 1, size + 1, allocator); defer A.deinit();
-    var b = try RealVector(T).initZero(size + 1,           allocator); defer b.deinit();
-    var c = try RealVector(T).initZero(size + 1,           allocator); defer c.deinit();
+    var A = try RealMatrix(T).init(size + 1, size + 1, allocator); defer A.deinit();
+    var b = try RealVector(T).init(size + 1,           allocator); defer b.deinit();
+    var c = try RealVector(T).init(size + 1,           allocator); defer c.deinit();
 
-    var temporary = try RealVector(T).initZero(c.len, allocator); defer temporary.deinit();
+    var temporary = try RealVector(T).init(c.len, allocator); defer temporary.deinit();
 
     A.fill(1); b.fill(0); A.ptr(A.rows - 1, A.cols - 1).* = 0; b.ptr(b.len - 1).* = 1;
 
-    for (0..size) |i| for (0..size) |j| {
+    for (0..size) |i| for (i..size) |j| {
 
         A.ptr(i, j).* = 0;
 
@@ -227,6 +196,8 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: []RealMatrix
         for (0..DIIS_E[0].rows) |k| for (0..DIIS_E[0].cols) |l| {
             A.ptr(i, j).* += DIIS_E[ii].at(k, l) * DIIS_E[jj].at(k, l);
         };
+
+        A.ptr(j, i).* = A.at(i, j);
     };
 
     const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(); defer AJC.C.deinit();
@@ -257,8 +228,8 @@ pub fn errorVector(comptime T: type, S: RealMatrix(T), F: RealMatrix(T), P: Real
 
     var e = try RealMatrix(T).initZero(P.rows, P.cols, allocator);
 
-    for (0..e.rows) |i| for (0..e.cols) |j| {
-        e.ptr(i, j).* = SPF.at(i, j) - FPS.at(i, j);
+    for (0..e.rows) |i| for (i + 1..e.cols) |j| {
+        e.ptr(i, j).* = SPF.at(i, j) - FPS.at(i, j); e.ptr(j, i).* = -e.at(i, j);
     };
 
     return e;
@@ -327,6 +298,91 @@ pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocat
     return X;
 }
 
+/// Perform the SCF procedure and return the output.
+pub fn scf(comptime T: type, options: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    var basis = try BasisSet(T).init(system, options.basis, allocator); defer basis.deinit();
+
+    const nbf = if (options.generalized) 2 * basis.nbf() else basis.nbf();
+    const nocc = if (options.generalized) try system.noccSpin() else try system.noccSpatial();
+
+    if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{nbf});
+
+    if (enable_printing) try print("\nONE-ELECTRON INTEGRALS: ", .{});
+
+    var timer = try std.time.Timer.start();
+
+    var S = try overlap(T, basis, allocator);
+    var K = try kinetic(T, basis, allocator);
+    var V = try nuclear(T, system, basis, allocator);
+
+    if (options.generalized) {
+        try oneAO2AS(T, &S);
+        try oneAO2AS(T, &K);
+        try oneAO2AS(T, &V);
+    }
+
+    if (enable_printing) try print("{D}\n", .{timer.read()}); timer.reset();
+
+    if (enable_printing and !options.direct) try print("TWO-ELECTRON INTEGRALS: ", .{});
+
+    var J = if (!options.direct) try coulomb(T, basis, allocator) else null;
+
+    if (!options.direct and options.generalized) try twoAO2AS(T, &J.?);
+
+    if (enable_printing and !options.direct) try print("{D}\n", .{timer.read()});
+
+    var C = try RealMatrix(T).initZero(nbf, nbf, allocator);
+    var F = try RealMatrix(T).initZero(nbf, nbf, allocator);
+    var P = try RealMatrix(T).initZero(nbf, nbf, allocator);
+
+    var epsilon = try RealMatrix(T).initZero(nbf, nbf, allocator);
+
+    var X = try getXMatrix(T, S, allocator); defer X.deinit();
+
+    var DIIS_F = try allocator.alloc(RealMatrix(T), if (options.diis != null) options.diis.?.size else 0); defer allocator.free(DIIS_F); defer for (0..DIIS_F.len) |i| DIIS_F[i].deinit();
+    var DIIS_E = try allocator.alloc(RealMatrix(T), if (options.diis != null) options.diis.?.size else 0); defer allocator.free(DIIS_E); defer for (0..DIIS_E.len) |i| DIIS_E[i].deinit();
+
+    for (0..DIIS_F.len) |i| DIIS_F[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
+    for (0..DIIS_E.len) |i| DIIS_E[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
+
+    const VNN = system.nuclearRepulsionEnergy();
+
+    var energy: T = 0; var energy_prev: T = 1; var iter: usize = 0;
+
+    if (enable_printing) try print("\nSELF CONSISTENT FIELD:\n{s:4} {s:20} {s:8} {s:4}\n", .{"ITER", "ENERGY", "|DELTA E|", "TIME"});
+
+    while (@abs(energy - energy_prev) > options.threshold) : (iter += 1) {
+
+        if (iter >= options.maxiter) return throw(Output(T), "HARTREE-FOCK DID NOT CONVERGE IN {d} ITERATIONS", .{options.maxiter});
+
+        timer.reset();
+
+        try getFockMatrix(T, &F, K, V, P, J, basis);
+
+        if (options.diis != null) {
+
+            const e = try errorVector(T, S, F, P, allocator); defer e.deinit();
+
+            try F.copyTo(&DIIS_F[iter % DIIS_F.len]);
+            try e.copyTo(&DIIS_E[iter % DIIS_E.len]);
+
+            if (iter >= options.diis.?.start) try diisExtrapolate(T, &F, DIIS_F, DIIS_E, iter, allocator);
+        }
+
+        try solveRoothaan(T, &epsilon, &C, F, X, allocator);
+
+        getDensityMatrix(T, &P, C, nocc);
+
+        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, options.generalized);
+
+        if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {D}\n", .{iter + 1, energy + VNN, @abs(energy - energy_prev), timer.read()});
+    }
+
+    if (enable_printing) try print("\nHF ENERGY: {d:.14}\n", .{energy + VNN});
+
+    return .{.C = C, .F = F, .J = J, .K = K, .P = P, .S = S, .V = V, .energy = energy + VNN, .epsilon = epsilon, .allocator = allocator};
+}
+
 /// Solver for the Roothaan equations.
 pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: RealMatrix(T), X: RealMatrix(T), allocator: std.mem.Allocator) !void {
     const FX = try mmAlloc(T, F, false, X, false, allocator); defer FX.deinit();
@@ -347,7 +403,7 @@ test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
 
     var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.energy + 74.96590121728434) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.energy + 74.96590121728435) < TEST_TOLERANCE);
 }
 
 test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
@@ -358,5 +414,5 @@ test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
 
     var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.energy + 40.19517074970682) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.energy + 40.19517074970688) < TEST_TOLERANCE);
 }

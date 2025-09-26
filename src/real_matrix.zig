@@ -58,6 +58,24 @@ pub fn RealMatrix(comptime T: type) type {
             return self.data[i * self.cols + j];
         }
 
+        /// Returns the matrix as a view to a real vector.
+        pub fn asVector(self: @This()) RealVector(T) {
+            return RealVector(T){
+                .data = self.data,
+                .len = self.rows * self.cols,
+                .allocator = null
+            };
+        }
+
+        /// Clone the matrix.
+        pub fn clone(self: @This()) !@This() {
+            var B = try @This().init(self.rows, self.cols, self.allocator);
+
+            try self.copyTo(&B);
+
+            return B;
+        }
+
         /// Returns the column as a view to a strided real vector.
         pub fn column(self: @This(), j: usize) StridedRealVector(T) {
             return StridedRealVector(T){
@@ -134,6 +152,11 @@ pub fn RealMatrix(comptime T: type) type {
             };
 
             return true;
+        }
+
+        /// Multiply the matrix by a scalar value.
+        pub fn muls(self: *@This(), value: T) void {
+            for (self.data) |*element| element.* *= value;
         }
 
         /// Calculate the Frobenius norm of the off-diagonal elements of the matrix.

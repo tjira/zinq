@@ -75,6 +75,29 @@ pub fn ClassicalParticle(comptime T: type) type {
             self.masses.deinit();
         }
 
+        /// Clone the classical particle.
+        pub fn clone(self: @This()) !@This() {
+            var atoms: ?[]usize = null;
+
+            if (self.atoms != null) {
+
+                atoms = try self.allocator.alloc(usize, self.atoms.?.len);
+
+                for (0..self.atoms.?.len) |i| atoms.?[i] = self.atoms.?[i];
+            }
+
+            return @This(){
+                .atoms = atoms,
+                .acceleration = try self.acceleration.clone(),
+                .charge = self.charge,
+                .masses = try self.masses.clone(),
+                .ndim = self.ndim,
+                .position = try self.position.clone(),
+                .velocity = try self.velocity.clone(),
+                .allocator = self.allocator
+            };
+        }
+
         /// Calculate the kinetic energy of the classical particle.
         pub fn kineticEnergy(self: @This()) T {
             var kinetic_energy: T = 0;

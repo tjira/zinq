@@ -52,6 +52,9 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 * **Hartree–Fock Methods**  
   Perform restricted or generalized Hartree-Fock calculation with the option for direct SCF.
 
+* **Analytical Tools**  
+  Calculate the energy gradients, Hessians, vibrational frequencies, and geometry optimizations for all supported methods.
+
 ### Time-Dependent Quantum Mechanics
 
 * **Quantum Dynamics**  

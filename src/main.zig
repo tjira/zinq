@@ -17,10 +17,12 @@ pub const device_write = @import("device_write.zig");
 pub const eigenproblem_solver = @import("eigenproblem_solver.zig");
 pub const electronic_potential = @import("electronic_potential.zig");
 pub const embedded_files = @import("embedded_files.zig");
+pub const energy_derivative = @import("energy_derivative.zig");
 pub const error_handling = @import("error_handling.zig");
 pub const fewest_switches = @import("fewest_switches.zig");
 pub const file_potential = @import("file_potential.zig");
 pub const fourier_transform = @import("fourier_transform.zig");
+pub const frequency_analysis = @import("frequency_analysis.zig");
 pub const global_variables = @import("global_variables.zig");
 pub const grid_generator = @import("grid_generator.zig");
 pub const grid_wavefunction = @import("grid_wavefunction.zig");
@@ -38,6 +40,7 @@ pub const molecular_integrals = @import("molecular_integrals.zig");
 pub const morse_potential = @import("morse_potential.zig");
 pub const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 pub const object_array = @import("object_array.zig");
+pub const particle_optimization = @import("particle_optimization.zig");
 pub const potential_plot = @import("potential_plot.zig");
 pub const prime_numbers = @import("prime_numbers.zig");
 pub const primitive_gaussian = @import("primitive_gaussian.zig");
@@ -73,9 +76,13 @@ const Target = enum {
 
 /// Handle a specific module by parsing its options and running it.
 fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
-    var parsed = try std.json.parseFromValue(Module.Options(T), allocator, options, .{}); defer parsed.deinit();
+    var parsed = std.json.parseFromValue(Module.Options(T), allocator, options, .{}) catch |err| {
+        return error_handling.throwSpecific(void, "ERROR WHILE PARSING INPUT", .{}, err);
+    };
 
     var output = try Module.run(T, parsed.value, true, allocator); defer output.deinit();
+
+    parsed.deinit();
 }
 
 /// Parse the input JSON file and run the corresponding target.
@@ -84,7 +91,12 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 
     try device_write.print("\nPROCESSED FILE: {s}\n", .{path});
 
-    const input_json = try std.json.parseFromSlice(std.json.Value, allocator, file_contents, .{}); defer input_json.deinit();
+    var scanner = std.json.Scanner.initCompleteInput(allocator, file_contents); defer scanner.deinit();
+    var diagnostics = std.json.Diagnostics{}; scanner.enableDiagnostics(&diagnostics);
+
+    const input_json = std.json.parseFromTokenSource(std.json.Value, allocator, &scanner, .{}) catch |err| {
+        return error_handling.throwSpecific(void, "ERROR IN INPUT ON LINE {d}", .{diagnostics.line_number}, err);
+    };
 
     for (input_json.value.object.get("zinq").?.array.items, 1..) |object, i| {
 
@@ -105,7 +117,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
         }
     }
 
-    allocator.free(file_contents);
+    allocator.free(file_contents); input_json.deinit();
 }
 
 /// Main function of the program.
