@@ -91,9 +91,9 @@ pub fn PrimitiveGaussian(comptime T: type) type {
         }
 
         /// Compute the Hermite integrals.
-        pub fn hermite_integral(tuv: [3]T, RPC: [3]T, p: T, n: T) T {
+        pub fn hermite_integral(tuv: [3]T, RPC: [3]T, p: T, n: usize) T {
             if (tuv[0] == 0 and tuv[1] == 0 and tuv[2] == 0) {
-                return std.math.pow(T, -2 * p, n) * boys(T, p * (RPC[0] * RPC[0] + RPC[1] * RPC[1] + RPC[2] * RPC[2]), n);
+                return std.math.pow(T, -2 * p, @as(T, @floatFromInt(n))) * boys(n, p * (RPC[0] * RPC[0] + RPC[1] * RPC[1] + RPC[2] * RPC[2]));
             }
 
             else if (tuv[0] > 0){
