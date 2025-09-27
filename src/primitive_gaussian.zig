@@ -11,46 +11,57 @@ const ClassicalParticle = classical_particle.ClassicalParticle;
 
 const dfact = math_functions.dfact;
 const boys = integral_functions.boys;
+const powi = math_functions.powi;
 const sum = array_functions.sum;
 
 /// Primitive Gaussian type.
 pub fn PrimitiveGaussian(comptime T: type) type {
     return struct {
-        A: [3]T, a: [3]T, alpha: T, l: i8,
+        center: [3]T, angular: [3]T, alpha: T,
 
         /// Compute the coulomb integral between four primitive Gaussians.
         pub fn coulomb(self: PrimitiveGaussian(T), other1: PrimitiveGaussian(T), other2: PrimitiveGaussian(T), other3: PrimitiveGaussian(T)) T {
             const p = self.alpha + other1.alpha; const q = other2.alpha + other3.alpha; const beta = p * q / (p + q); var e: T = 0;
 
             const RP: [3]T = .{
-                (self.alpha * self.A[0] + other1.alpha * other1.A[0]) / (self.alpha + other1.alpha),
-                (self.alpha * self.A[1] + other1.alpha * other1.A[1]) / (self.alpha + other1.alpha),
-                (self.alpha * self.A[2] + other1.alpha * other1.A[2]) / (self.alpha + other1.alpha)
+                (self.alpha * self.center[0] + other1.alpha * other1.center[0]) / (self.alpha + other1.alpha),
+                (self.alpha * self.center[1] + other1.alpha * other1.center[1]) / (self.alpha + other1.alpha),
+                (self.alpha * self.center[2] + other1.alpha * other1.center[2]) / (self.alpha + other1.alpha)
             };
 
             const RQ: [3]T = .{
-                (other2.alpha * other2.A[0] + other3.alpha * other3.A[0]) / (other2.alpha + other3.alpha),
-                (other2.alpha * other2.A[1] + other3.alpha * other3.A[1]) / (other2.alpha + other3.alpha),
-                (other2.alpha * other2.A[2] + other3.alpha * other3.A[2]) / (other2.alpha + other3.alpha)
+                (other2.alpha * other2.center[0] + other3.alpha * other3.center[0]) / (other2.alpha + other3.alpha),
+                (other2.alpha * other2.center[1] + other3.alpha * other3.center[1]) / (other2.alpha + other3.alpha),
+                (other2.alpha * other2.center[2] + other3.alpha * other3.center[2]) / (other2.alpha + other3.alpha)
             };
 
             const RPQ: [3]T = .{RP[0] - RQ[0], RP[1] - RQ[1], RP[2] - RQ[2]};
 
-            for (0..@as(usize, @intFromFloat(  self.a[0] + other1.a[0])) + 1) |t  | {
-                for (0..@as(usize, @intFromFloat(  self.a[1] + other1.a[1])) + 1) |u  | {
-                    for (0..@as(usize, @intFromFloat(  self.a[2] + other1.a[2])) + 1) |v  | {
-                        for (0..@as(usize, @intFromFloat(other2.a[0] + other3.a[0])) + 1) |tau| {
-                            for (0..@as(usize, @intFromFloat(other2.a[1] + other3.a[1])) + 1) |nu | {
-                                for (0..@as(usize, @intFromFloat(other2.a[2] + other3.a[2])) + 1) |phi| {
+            for (0..@as(usize, @intFromFloat(self.angular[0] + other1.angular[0])) + 1) |t| {
 
-                                    const Eij = hermite_coef(.{  self.a[0], other1.a[0]}, .{  self.alpha, other1.alpha},   self.A[0] - other1.A[0], @floatFromInt(t  ));
-                                    const Ekl = hermite_coef(.{  self.a[1], other1.a[1]}, .{  self.alpha, other1.alpha},   self.A[1] - other1.A[1], @floatFromInt(u  ));
-                                    const Emn = hermite_coef(.{  self.a[2], other1.a[2]}, .{  self.alpha, other1.alpha},   self.A[2] - other1.A[2], @floatFromInt(v  ));
-                                    const Eop = hermite_coef(.{other2.a[0], other3.a[0]}, .{other2.alpha, other3.alpha}, other2.A[0] - other3.A[0], @floatFromInt(tau));
-                                    const Eqr = hermite_coef(.{other2.a[1], other3.a[1]}, .{other2.alpha, other3.alpha}, other2.A[1] - other3.A[1], @floatFromInt(nu ));
-                                    const Est = hermite_coef(.{other2.a[2], other3.a[2]}, .{other2.alpha, other3.alpha}, other2.A[2] - other3.A[2], @floatFromInt(phi));
+                const Eij = hermite_coef(.{self.angular[0], other1.angular[0]}, .{self.alpha, other1.alpha}, self.center[0] - other1.center[0], @floatFromInt(t));
 
-                                    const sign = std.math.pow(T, -1, @as(T, @floatFromInt(tau + nu + phi)));
+                for (0..@as(usize, @intFromFloat(self.angular[1] + other1.angular[1])) + 1) |u| {
+
+                    const Ekl = hermite_coef(.{self.angular[1], other1.angular[1]}, .{self.alpha, other1.alpha}, self.center[1] - other1.center[1], @floatFromInt(u));
+
+                    for (0..@as(usize, @intFromFloat(self.angular[2] + other1.angular[2])) + 1) |v| {
+
+                        const Emn = hermite_coef(.{self.angular[2], other1.angular[2]}, .{self.alpha, other1.alpha}, self.center[2] - other1.center[2], @floatFromInt(v));
+
+                        for (0..@as(usize, @intFromFloat(other2.angular[0] + other3.angular[0])) + 1) |tau| {
+
+                            const Eop = hermite_coef(.{other2.angular[0], other3.angular[0]}, .{other2.alpha, other3.alpha}, other2.center[0] - other3.center[0], @floatFromInt(tau));
+
+                            for (0..@as(usize, @intFromFloat(other2.angular[1] + other3.angular[1])) + 1) |nu| {
+
+                                const Eqr = hermite_coef(.{other2.angular[1], other3.angular[1]}, .{other2.alpha, other3.alpha}, other2.center[1] - other3.center[1], @floatFromInt(nu));
+
+                                for (0..@as(usize, @intFromFloat(other2.angular[2] + other3.angular[2])) + 1) |phi| {
+
+                                    const Est = hermite_coef(.{other2.angular[2], other3.angular[2]}, .{other2.alpha, other3.alpha}, other2.center[2] - other3.center[2], @floatFromInt(phi));
+
+                                    const sign: T = if ((tau + nu + phi) % 2 == 0) 1 else -1;
 
                                     e += sign * Eij * Ekl * Emn * Eop * Eqr * Est * hermite_integral([3]T{@floatFromInt(t + tau), @floatFromInt(u + nu), @floatFromInt(v + phi)}, RPQ, beta, 0);
                                 }
@@ -93,7 +104,7 @@ pub fn PrimitiveGaussian(comptime T: type) type {
         /// Compute the Hermite integrals.
         pub fn hermite_integral(tuv: [3]T, RPC: [3]T, p: T, n: usize) T {
             if (tuv[0] == 0 and tuv[1] == 0 and tuv[2] == 0) {
-                return std.math.pow(T, -2 * p, @as(T, @floatFromInt(n))) * boys(n, p * (RPC[0] * RPC[0] + RPC[1] * RPC[1] + RPC[2] * RPC[2]));
+                return powi(-2 * p, n) * boys(n, p * (RPC[0] * RPC[0] + RPC[1] * RPC[1] + RPC[2] * RPC[2]));
             }
 
             else if (tuv[0] > 0){
@@ -113,27 +124,29 @@ pub fn PrimitiveGaussian(comptime T: type) type {
 
         /// Compute the kinetic integral between two primitive Gaussians.
         pub fn kinetic(self: PrimitiveGaussian(T), other: PrimitiveGaussian(T)) T {
-            const pgpl = PrimitiveGaussian(T){.A = other.A, .a = .{other.a[0] + 2, other.a[1], other.a[2]}, .alpha = other.alpha, .l = other.l + 2};
-            const pgpm = PrimitiveGaussian(T){.A = other.A, .a = .{other.a[0], other.a[1] + 2, other.a[2]}, .alpha = other.alpha, .l = other.l + 2};
-            const pgpn = PrimitiveGaussian(T){.A = other.A, .a = .{other.a[0], other.a[1], other.a[2] + 2}, .alpha = other.alpha, .l = other.l + 2};
-            const pgml = PrimitiveGaussian(T){.A = other.A, .a = .{other.a[0] - 2, other.a[1], other.a[2]}, .alpha = other.alpha, .l = other.l - 2};
-            const pgmm = PrimitiveGaussian(T){.A = other.A, .a = .{other.a[0], other.a[1] - 2, other.a[2]}, .alpha = other.alpha, .l = other.l - 2};
-            const pgmn = PrimitiveGaussian(T){.A = other.A, .a = .{other.a[0], other.a[1], other.a[2] - 2}, .alpha = other.alpha, .l = other.l - 2};
+            const pgpl = PrimitiveGaussian(T){.center = other.center, .angular = .{other.angular[0] + 2, other.angular[1], other.angular[2]}, .alpha = other.alpha};
+            const pgpm = PrimitiveGaussian(T){.center = other.center, .angular = .{other.angular[0], other.angular[1] + 2, other.angular[2]}, .alpha = other.alpha};
+            const pgpn = PrimitiveGaussian(T){.center = other.center, .angular = .{other.angular[0], other.angular[1], other.angular[2] + 2}, .alpha = other.alpha};
+            const pgml = PrimitiveGaussian(T){.center = other.center, .angular = .{other.angular[0] - 2, other.angular[1], other.angular[2]}, .alpha = other.alpha};
+            const pgmm = PrimitiveGaussian(T){.center = other.center, .angular = .{other.angular[0], other.angular[1] - 2, other.angular[2]}, .alpha = other.alpha};
+            const pgmn = PrimitiveGaussian(T){.center = other.center, .angular = .{other.angular[0], other.angular[1], other.angular[2] - 2}, .alpha = other.alpha};
 
-            const T0 = other.alpha * (2 * sum(T, &other.a) + 3) * self.overlap(other);
+            const T0 = other.alpha * (2 * sum(T, &other.angular) + 3) * self.overlap(other);
 
             const T1 = -2 * std.math.pow(T, other.alpha, 2.0) * (self.overlap(pgpl) + self.overlap(pgpm) + self.overlap(pgpn));
 
-            const T2 = -0.5 * (other.a[0] * (other.a[0] - 1) * self.overlap(pgml) + other.a[1] * (other.a[1] - 1) * self.overlap(pgmm) + other.a[2] * (other.a[2] - 1) * self.overlap(pgmn));
+            const T2_1 = if (other.angular[0] > 1) other.angular[0] * (other.angular[0] - 1) * self.overlap(pgml) else 0;
+            const T2_2 = if (other.angular[1] > 1) other.angular[1] * (other.angular[1] - 1) * self.overlap(pgmm) else 0;
+            const T2_3 = if (other.angular[2] > 1) other.angular[2] * (other.angular[2] - 1) * self.overlap(pgmn) else 0;
 
-            return T0 + T1 + T2;
+            return T0 + T1 - 0.5 * (T2_1 + T2_2 + T2_3);
         }
 
         /// Calculate the norm of the primitive gaussian.
         pub fn norm(self: PrimitiveGaussian(T)) T {
-            const Nij = dfact(2 * self.a[0] - 1) * std.math.sqrt(0.5 * std.math.pi / self.alpha) / std.math.pow(T, 4 * self.alpha, self.a[0]);
-            const Nkl = dfact(2 * self.a[1] - 1) * std.math.sqrt(0.5 * std.math.pi / self.alpha) / std.math.pow(T, 4 * self.alpha, self.a[1]);
-            const Nmn = dfact(2 * self.a[2] - 1) * std.math.sqrt(0.5 * std.math.pi / self.alpha) / std.math.pow(T, 4 * self.alpha, self.a[2]);
+            const Nij = dfact(2 * self.angular[0] - 1) * std.math.sqrt(0.5 * std.math.pi / self.alpha) / std.math.pow(T, 4 * self.alpha, self.angular[0]);
+            const Nkl = dfact(2 * self.angular[1] - 1) * std.math.sqrt(0.5 * std.math.pi / self.alpha) / std.math.pow(T, 4 * self.alpha, self.angular[1]);
+            const Nmn = dfact(2 * self.angular[2] - 1) * std.math.sqrt(0.5 * std.math.pi / self.alpha) / std.math.pow(T, 4 * self.alpha, self.angular[2]);
 
             return std.math.sqrt(Nij * Nkl * Nmn);
         }
@@ -145,18 +158,22 @@ pub fn PrimitiveGaussian(comptime T: type) type {
             for (0..system.atoms.?.len) |i| {
 
                 const RPC: [3]T = .{
-                    (self.alpha * self.A[0] + other.alpha * other.A[0]) / (self.alpha + other.alpha) - system.position.at(3 * i + 0),
-                    (self.alpha * self.A[1] + other.alpha * other.A[1]) / (self.alpha + other.alpha) - system.position.at(3 * i + 1),
-                    (self.alpha * self.A[2] + other.alpha * other.A[2]) / (self.alpha + other.alpha) - system.position.at(3 * i + 2)
+                    (self.alpha * self.center[0] + other.alpha * other.center[0]) / (self.alpha + other.alpha) - system.position.at(3 * i + 0),
+                    (self.alpha * self.center[1] + other.alpha * other.center[1]) / (self.alpha + other.alpha) - system.position.at(3 * i + 1),
+                    (self.alpha * self.center[2] + other.alpha * other.center[2]) / (self.alpha + other.alpha) - system.position.at(3 * i + 2)
                 };
 
-                for (0..@as(usize, @intFromFloat(self.a[0] + other.a[0])) + 1) |t| {
-                    for (0..@as(usize, @intFromFloat(self.a[1] + other.a[1])) + 1) |u| {
-                        for (0..@as(usize, @intFromFloat(self.a[2] + other.a[2])) + 1) |v| {
+                for (0..@as(usize, @intFromFloat(self.angular[0] + other.angular[0])) + 1) |t| {
 
-                            const Eij = hermite_coef(.{self.a[0], other.a[0]}, .{self.alpha, other.alpha}, self.A[0] - other.A[0], @floatFromInt(t));
-                            const Ekl = hermite_coef(.{self.a[1], other.a[1]}, .{self.alpha, other.alpha}, self.A[1] - other.A[1], @floatFromInt(u));
-                            const Emn = hermite_coef(.{self.a[2], other.a[2]}, .{self.alpha, other.alpha}, self.A[2] - other.A[2], @floatFromInt(v));
+                    const Eij = hermite_coef(.{self.angular[0], other.angular[0]}, .{self.alpha, other.alpha}, self.center[0] - other.center[0], @floatFromInt(t));
+
+                    for (0..@as(usize, @intFromFloat(self.angular[1] + other.angular[1])) + 1) |u| {
+
+                        const Ekl = hermite_coef(.{self.angular[1], other.angular[1]}, .{self.alpha, other.alpha}, self.center[1] - other.center[1], @floatFromInt(u));
+
+                        for (0..@as(usize, @intFromFloat(self.angular[2] + other.angular[2])) + 1) |v| {
+
+                            const Emn = hermite_coef(.{self.angular[2], other.angular[2]}, .{self.alpha, other.alpha}, self.center[2] - other.center[2], @floatFromInt(v));
 
                             n -= @as(T, @floatFromInt(system.atoms.?[i])) * Eij * Ekl * Emn * hermite_integral([3]T{@floatFromInt(t), @floatFromInt(u), @floatFromInt(v)}, RPC, self.alpha + other.alpha, 0);
                         }
@@ -169,9 +186,9 @@ pub fn PrimitiveGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between two primitive Gaussians.
         pub fn overlap(self: PrimitiveGaussian(T), other: PrimitiveGaussian(T)) T {
-            const Sij = hermite_coef(.{self.a[0], other.a[0]}, .{self.alpha, other.alpha}, self.A[0] - other.A[0], 0);
-            const Skl = hermite_coef(.{self.a[1], other.a[1]}, .{self.alpha, other.alpha}, self.A[1] - other.A[1], 0);
-            const Smn = hermite_coef(.{self.a[2], other.a[2]}, .{self.alpha, other.alpha}, self.A[2] - other.A[2], 0);
+            const Sij = hermite_coef(.{self.angular[0], other.angular[0]}, .{self.alpha, other.alpha}, self.center[0] - other.center[0], 0);
+            const Skl = hermite_coef(.{self.angular[1], other.angular[1]}, .{self.alpha, other.alpha}, self.center[1] - other.center[1], 0);
+            const Smn = hermite_coef(.{self.angular[2], other.angular[2]}, .{self.alpha, other.alpha}, self.center[2] - other.center[2], 0);
 
             return Sij * Skl * Smn * std.math.pow(T, std.math.pi / (self.alpha + other.alpha), 1.5);
         }

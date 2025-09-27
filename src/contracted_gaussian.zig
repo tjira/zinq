@@ -16,64 +16,78 @@ const throw = error_handling.throw;
 /// Contracted Gaussian type.
 pub fn ContractedGaussian(comptime T: type) type {
     return struct {
-        A: [3]T,
-        a: [3]T,
+        angular: [3]T,
+        center: [3]T,
         alpha: []T,
-        c: []T,
-        l: i8,
+        coef: []T,
 
         allocator: std.mem.Allocator,
 
         /// Initialize a contracted Gaussian.
-        pub fn init(A: [3]T, a: [3]T, c: []const T, alpha: []const T, allocator: std.mem.Allocator) !ContractedGaussian(T) {
-            if (c.len != alpha.len) {
+        pub fn init(center: [3]T, angular: [3]T, coef: []const T, alpha: []const T, allocator: std.mem.Allocator) !ContractedGaussian(T) {
+            if (coef.len != alpha.len) {
                 return throw(ContractedGaussian(T), "THE LENGTH OF THE COEFFICIENTS AND EXPONENTS MUST BE THE SAME", .{});
             }
 
             const cg = ContractedGaussian(T) {
-                .A = A,
-                .a = a,
+                .center = center,
+                .angular = angular,
                 .alpha = try allocator.alloc(T, alpha.len),
-                .c = try allocator.alloc(T, c.len),
-                .l = @as(i8, @intFromFloat(sum(T, &a))),
+                .coef = try allocator.alloc(T, coef.len),
                 .allocator = allocator
             };
 
+            for (coef, 0..) |ci, i| cg.coef[i] = ci; for (alpha, 0..) |ai, i| cg.alpha[i] = ai;
+
             var N: T = 0;
 
-            for (c, 0..) |ci, i| cg.c[i] = ci; for (alpha, 0..) |ai, i| cg.alpha[i] = ai;
+            for (cg.coef, 0..) |ci, i| {
 
-            for (cg.c, 0..) |ci, i| for (cg.c, 0..) |cj, j| {
+                const pgi = PrimitiveGaussian(T){.center = cg.center, .angular = cg.angular, .alpha = cg.alpha[i]};
 
-                const pgi = PrimitiveGaussian(T){.A = cg.A, .a = cg.a, .alpha = cg.alpha[i], .l = cg.l};
-                const pgj = PrimitiveGaussian(T){.A = cg.A, .a = cg.a, .alpha = cg.alpha[j], .l = cg.l};
+                for (cg.coef, 0..) |cj, j| {
 
-                N += ci * cj * pgi.overlap(pgj) / (pgi.norm() * pgj.norm());
-            };
+                    const pgj = PrimitiveGaussian(T){.center = cg.center, .angular = cg.angular, .alpha = cg.alpha[j]};
 
-            for(cg.c) |*ci| ci.* /= std.math.sqrt(N);
+                    N += ci * cj * pgi.overlap(pgj) / (pgi.norm() * pgj.norm());
+                }
+            }
+
+            for(cg.coef) |*ci| ci.* /= std.math.sqrt(N);
 
             return cg;
         }
 
         /// Deinitialize a contracted Gaussian.
         pub fn deinit(self: ContractedGaussian(T)) void {
-            self.allocator.free(self.c); self.allocator.free(self.alpha);
+            self.allocator.free(self.coef); self.allocator.free(self.alpha);
         }
 
         /// Compute the Coulomb integral between four contracted Gaussians.
         pub fn coulomb(self: ContractedGaussian(T), other1: ContractedGaussian(T), other2: ContractedGaussian(T), other3: ContractedGaussian(T)) T {
             var e: T = 0;
 
-            for (self.c, 0..) |ci, i| for (other1.c, 0..) |cj, j| for (other2.c, 0..) |ck, k| for (other3.c, 0..) |cl, l| {
+            for (self.coef, 0..) |ci, i| {
 
-                const pgi = PrimitiveGaussian(T){.A =   self.A, .a =   self.a, .alpha =   self.alpha[i], .l =   self.l};
-                const pgj = PrimitiveGaussian(T){.A = other1.A, .a = other1.a, .alpha = other1.alpha[j], .l = other1.l};
-                const pgk = PrimitiveGaussian(T){.A = other2.A, .a = other2.a, .alpha = other2.alpha[k], .l = other2.l};
-                const pgl = PrimitiveGaussian(T){.A = other3.A, .a = other3.a, .alpha = other3.alpha[l], .l = other3.l};
+                const pgi = PrimitiveGaussian(T){.center = self.center, .angular = self.angular, .alpha = self.alpha[i]};
 
-                e += ci * cj * ck * cl * pgi.coulomb(pgj, pgk, pgl) / (pgi.norm() * pgj.norm() * pgk.norm() * pgl.norm());
-            };
+                for (other1.coef, 0..) |cj, j| {
+
+                    const pgj = PrimitiveGaussian(T){.center = other1.center, .angular = other1.angular, .alpha = other1.alpha[j]};
+
+                    for (other2.coef, 0..) |ck, k| {
+
+                        const pgk = PrimitiveGaussian(T){.center = other2.center, .angular = other2.angular, .alpha = other2.alpha[k]};
+
+                        for (other3.coef, 0..) |cl, l| {
+
+                            const pgl = PrimitiveGaussian(T){.center = other3.center, .angular = other3.angular, .alpha = other3.alpha[l]};
+
+                            e += ci * cj * ck * cl * pgi.coulomb(pgj, pgk, pgl) / (pgi.norm() * pgj.norm() * pgk.norm() * pgl.norm());
+                        }
+                    }
+                }
+            }
 
             return e;
         }
@@ -82,13 +96,17 @@ pub fn ContractedGaussian(comptime T: type) type {
         pub fn kinetic(self: ContractedGaussian(T), other: ContractedGaussian(T)) T {
             var t: T = 0;
 
-            for (self.c, 0..) |ci, i| for (other.c, 0..) |cj, j| {
+            for (self.coef, 0..) |ci, i| {
 
-                const pgi = PrimitiveGaussian(T){.A =  self.A, .a =  self.a, .alpha =  self.alpha[i], .l =  self.l};
-                const pgj = PrimitiveGaussian(T){.A = other.A, .a = other.a, .alpha = other.alpha[j], .l = other.l};
+                const pgi = PrimitiveGaussian(T){.center = self.center, .angular = self.angular, .alpha = self.alpha[i]};
 
-                t += ci * cj * pgi.kinetic(pgj) / (pgi.norm() * pgj.norm());
-            };
+                for (other.coef, 0..) |cj, j| {
+
+                    const pgj = PrimitiveGaussian(T){.center = other.center, .angular = other.angular, .alpha = other.alpha[j]};
+
+                    t += ci * cj * pgi.kinetic(pgj) / (pgi.norm() * pgj.norm());
+                }
+            }
 
             return t;
         }
@@ -97,13 +115,17 @@ pub fn ContractedGaussian(comptime T: type) type {
         pub fn nuclear(self: ContractedGaussian(T), other: ContractedGaussian(T), system: ClassicalParticle(T)) T {
             var v: T = 0;
 
-            for (self.c, 0..) |ci, i| for (other.c, 0..) |cj, j| {
+            for (self.coef, 0..) |ci, i| {
 
-                const pgi = PrimitiveGaussian(T){.A =  self.A, .a =  self.a, .alpha =  self.alpha[i], .l =  self.l};
-                const pgj = PrimitiveGaussian(T){.A = other.A, .a = other.a, .alpha = other.alpha[j], .l = other.l};
+                const pgi = PrimitiveGaussian(T){.center = self.center, .angular = self.angular, .alpha = self.alpha[i]};
 
-                v += ci * cj * pgi.nuclear(pgj, system) / (pgi.norm() * pgj.norm());
-            };
+                for (other.coef, 0..) |cj, j| {
+
+                    const pgj = PrimitiveGaussian(T){.center = other.center, .angular = other.angular, .alpha = other.alpha[j]};
+
+                    v += ci * cj * pgi.nuclear(pgj, system) / (pgi.norm() * pgj.norm());
+                }
+            }
 
             return v;
         }
@@ -112,13 +134,17 @@ pub fn ContractedGaussian(comptime T: type) type {
         pub fn overlap(self: ContractedGaussian(T), other: ContractedGaussian(T)) T {
             var s: T = 0;
 
-            for (self.c, 0..) |ci, i| for (other.c, 0..) |cj, j| {
+            for (self.coef, 0..) |ci, i| {
 
-                const pgi = PrimitiveGaussian(T){.A =  self.A, .a =  self.a, .alpha =  self.alpha[i], .l =  self.l};
-                const pgj = PrimitiveGaussian(T){.A = other.A, .a = other.a, .alpha = other.alpha[j], .l = other.l};
+                const pgi = PrimitiveGaussian(T){.center = self.center, .angular = self.angular, .alpha = self.alpha[i]};
 
-                s += ci * cj * pgi.overlap(pgj) / (pgi.norm() * pgj.norm());
-            };
+                for (other.coef, 0..) |cj, j| {
+
+                    const pgj = PrimitiveGaussian(T){.center = other.center, .angular = other.angular, .alpha = other.alpha[j]};
+
+                    s += ci * cj * pgi.overlap(pgj) / (pgi.norm() * pgj.norm());
+                }
+            }
 
             return s;
         }

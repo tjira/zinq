@@ -11,6 +11,17 @@ pub fn dfact(n: anytype) @TypeOf(n) {
     return n * dfact(n - 2);
 }
 
+/// Power function floats raised to integer exponents.
+pub fn powi(base: anytype, exp: usize) @TypeOf(base) {
+    var result: @TypeOf(base) = 1;
+
+    for (0..exp) |_| {
+        result *= base;
+    }
+
+    return result;
+}
+
 /// Reverse the bits of a number.
 pub fn revk(value: anytype, k: u6) @TypeOf(value) {
     var result: @TypeOf(value) = 0; var i: u6 = 0;

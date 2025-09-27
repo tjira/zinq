@@ -6,6 +6,7 @@ const error_handling = @import("error_handling.zig");
 
 const throw = error_handling.throw;
 
+pub const BOYS_CUTOFF = 1e-8;
 pub const FINITE_DIFFERENCES_STEP = 1e-8;
 pub const FSSH_DENOMINATOR_OFFSET = 1e-14;
 pub const MAX_INPUT_FILE_BYTES = 8192;

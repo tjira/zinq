@@ -2,19 +2,22 @@
 
 const std = @import("std");
 
+const global_variables = @import("global_variables.zig");
+
+const BOYS_CUTOFF = global_variables.BOYS_CUTOFF;
+
 /// Boys function.
 pub fn boys(n: usize, t: anytype) @TypeOf(t) {
-    if (t < 1e-8) {
-        return 1.0 / @as(@TypeOf(t), @floatFromInt(2 * n + 1)) - t / @as(@TypeOf(t), @floatFromInt(2 * n + 3));
+    if (t < BOYS_CUTOFF) {
+        return 1 / @as(@TypeOf(t), @floatFromInt(2 * n + 1)) - t / @as(@TypeOf(t), @floatFromInt(2 * n + 3));
     } else if (n == 0) {
         return std.math.sqrt(std.math.pi / (4 * t)) * erf(std.math.sqrt(t));
     } else {
         return (@as(@TypeOf(t), @floatFromInt(n)) - 0.5) * boys(n - 1, t) / t - std.math.exp(-t) / (2 * t);
     }
-
 }
 
-/// Error function.
+/// Error function. Using the Cody's rational Chebyshev approximations.
 pub fn erf(x: anytype) @TypeOf(x) {
     if (x < 0){
         return -erf(-x);
