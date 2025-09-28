@@ -59,8 +59,8 @@ serve: docs
 
 ifeq ($(OS), windows)
 .zig-bin/zig.exe:
-	curl -o zig.zip https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).zip
-	curl -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip
+	cmd /c "curl -Ls -o zig.zip https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).zip"
+	cmd /c "curl -Ls -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip"
 	Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory("$$PWD\zig.zip", "$$PWD")
 	Move-Item zig-$(ARCH)-$(OS)-$(ZIG_VERSION) .zig-bin ; Remove-Item .zig-bin/LICENSE, .zig-bin/README.md
 	Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory("$$PWD\zls.zip", "$$PWD/.zig-bin")
@@ -109,8 +109,8 @@ endif
 
 ifeq ($(OS), windows)
 clean-zig:
-	@&{Remove-Item -ErrorAction SilentlyContinue -Force -Recurse ${HOME}/.cache/zig, .zig-bin, .zig-cache}
+	@&{Remove-Item -ErrorAction SilentlyContinue -Force -Recurse .zig-bin, .zig-cache}
 else
 clean-zig:
-	@rm -rf ${HOME}/.cache/zig .zig-bin .zig-cache
+	@rm -rf .zig-bin .zig-cache
 endif
