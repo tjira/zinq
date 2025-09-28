@@ -6,7 +6,6 @@ const basis_set = @import("basis_set.zig");
 const classical_particle = @import("classical_particle.zig");
 const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
-const parallel_algorithm = @import("parallel_algorithm.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
 
@@ -18,7 +17,6 @@ const RealTensor4 = real_tensor_four.RealTensor4;
 
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealTensorFour = device_write.exportRealTensorFour;
-const parallelFor = parallel_algorithm.parallelFor;
 const print = device_write.print;
 const printJson = device_write.printJson;
 
@@ -146,78 +144,80 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 pub fn coulomb(comptime T: type, basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealTensor4(T) {
     var J = try RealTensor4(T).init(.{basis.nbf(), basis.nbf(), basis.nbf(), basis.nbf()}, allocator);
 
-    const func = struct {
-        fn call(i: usize, args: anytype) void {
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
 
-            for (i..args.J.shape[1]) |j| for (i..args.J.shape[2]) |k| for ((if (i == k) j else k)..args.J.shape[3]) |l| {
-
-                const I = args.basis.contracted_gaussians[i].coulomb(args.basis.contracted_gaussians[j], args.basis.contracted_gaussians[k], args.basis.contracted_gaussians[l]);
-
-                args.J.ptr(i, j, k, l).* = I;
-                args.J.ptr(i, j, l, k).* = I;
-                args.J.ptr(j, i, k, l).* = I;
-                args.J.ptr(j, i, l, k).* = I;
-
-                args.J.ptr(k, l, i, j).* = I;
-                args.J.ptr(k, l, j, i).* = I;
-                args.J.ptr(l, k, i, j).* = I;
-                args.J.ptr(l, k, j, i).* = I;
-            };
-        }
-    }.call;
-
-    try parallelFor(func, .{.J = &J, .basis = basis}, 0, J.shape[0], nthread, allocator);
+    for (0..J.shape[0]) |i| for (i..J.shape[1]) |j| for (i..J.shape[2]) |k| for ((if (i == k) j else k)..J.shape[3]) |l| {
+        try pool.spawn(coulombAssign, .{T, &J, i, j, k, l, basis});
+    };
 
     return J;
+}
+
+/// Assigns values to the coulomb tensor based on indices.
+pub fn coulombAssign(comptime T: type, J: *RealTensor4(T), i: usize, j: usize, k: usize, l: usize, basis: BasisSet(T)) void {
+    const I = basis.contracted_gaussians[i].coulomb(basis.contracted_gaussians[j], basis.contracted_gaussians[k], basis.contracted_gaussians[l]);
+
+    J.ptr(i, j, k, l).* = I;
+    J.ptr(i, j, l, k).* = I;
+    J.ptr(j, i, k, l).* = I;
+    J.ptr(j, i, l, k).* = I;
+
+    J.ptr(k, l, i, j).* = I;
+    J.ptr(k, l, j, i).* = I;
+    J.ptr(l, k, i, j).* = I;
+    J.ptr(l, k, j, i).* = I;
 }
 
 /// Compute the kinetic matrix.
 pub fn kinetic(comptime T: type, basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var K = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
-    const func = struct {
-        fn call(i: usize, args: anytype) void {
-            for (i..args.K.cols) |j| {
-                args.K.ptr(i, j).* = args.basis.contracted_gaussians[i].kinetic(args.basis.contracted_gaussians[j]); args.K.ptr(j, i).* = args.K.at(i, j);
-            }
-        }
-    }.call;
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
 
-    try parallelFor(func, .{.K = &K, .basis = basis}, 0, K.rows, nthread, allocator);
+    for (0..K.rows) |i| for (i..K.cols) |j| {
+        try pool.spawn(kineticAssign, .{T, &K, i, j, basis});
+    };
 
     return K;
 }
 
-/// Compute the kinetic matrix.
+/// Assigns values to the kinetic matrix based on indices.
+pub fn kineticAssign(comptime T: type, K: *RealMatrix(T), i: usize, j: usize, basis: BasisSet(T)) void {
+    K.ptr(i, j).* = basis.contracted_gaussians[i].kinetic(basis.contracted_gaussians[j]); K.ptr(j, i).* = K.at(i, j);
+}
+
+/// Compute the nuclear matrix.
 pub fn nuclear(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var V = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
-    const func = struct {
-        fn call(i: usize, args: anytype) void {
-            for (i..args.V.cols) |j| {
-                args.V.ptr(i, j).* = args.basis.contracted_gaussians[i].nuclear(args.basis.contracted_gaussians[j], args.system); args.V.ptr(j, i).* = args.V.at(i, j);
-            }
-        }
-    }.call;
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
 
-    try parallelFor(func, .{.V = &V, .basis = basis, .system = system}, 0, V.rows, nthread, allocator);
+    for (0..V.rows) |i| for (i..V.cols) |j| {
+        try pool.spawn(nuclearAssign, .{T, &V, i, j, system, basis});
+    };
 
     return V;
+}
+
+/// Assigns values to the nuclear matrix based on indices.
+pub fn nuclearAssign(comptime T: type, V: *RealMatrix(T), i: usize, j: usize, system: ClassicalParticle(T), basis: BasisSet(T)) void {
+    V.ptr(i, j).* = basis.contracted_gaussians[i].nuclear(basis.contracted_gaussians[j], system); V.ptr(j, i).* = V.at(i, j);
 }
 
 /// Compute the overlap matrix.
 pub fn overlap(comptime T: type, basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var S = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
-    const func = struct {
-        fn call(i: usize, args: anytype) void {
-            for (i..args.S.cols) |j| {
-                args.S.ptr(i, j).* = args.basis.contracted_gaussians[i].overlap(args.basis.contracted_gaussians[j]); args.S.ptr(j, i).* = args.S.at(i, j);
-            }
-        }
-    }.call;
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
 
-    try parallelFor(func, .{.S = &S, .basis = basis}, 0, S.rows, nthread, allocator);
+    for (0..S.rows) |i| for (i..S.cols) |j| {
+        try pool.spawn(overlapAssign, .{T, &S, i, j, basis});
+    };
 
     return S;
+}
+
+/// Assigns values to the overlap matrix based on indices.
+pub fn overlapAssign(comptime T: type, S: *RealMatrix(T), i: usize, j: usize, basis: BasisSet(T)) void {
+    S.ptr(i, j).* = basis.contracted_gaussians[i].overlap(basis.contracted_gaussians[j]); S.ptr(j, i).* = S.at(i, j);
 }
