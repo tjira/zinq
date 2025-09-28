@@ -30,7 +30,7 @@ all: zinq
 
 .PHONY: zinq run test
 
-zinq: .zig-bin/zig$(if $(filter $(OS),windows),.exe) clean-output
+zinq: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 	./.zig-bin/zig build $(ZIG_FLAGS)
 
 run: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
@@ -41,7 +41,7 @@ test: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 
 # CUSTOM TARGETS =======================================================================================================================================================================================
 
-docs: .zig-bin/zig$(if $(filter $(OS),windows),.exe) clean-docs
+docs: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 	@./.zig-bin/zig build-lib -femit-docs=docs/code -fno-emit-bin src/main.zig
 
 linguist:
