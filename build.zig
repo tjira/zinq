@@ -14,8 +14,6 @@ const targets: []const std.Target.Query = &.{
     .{.os_tag = .macos,   .cpu_arch = .x86_64 },
     .{.os_tag = .netbsd,  .cpu_arch = .aarch64},
     .{.os_tag = .netbsd,  .cpu_arch = .x86_64 },
-    .{.os_tag = .wasi,    .cpu_arch = .wasm32 },
-    .{.os_tag = .wasi,    .cpu_arch = .wasm64 },
     .{.os_tag = .windows, .cpu_arch = .aarch64},
     .{.os_tag = .windows, .cpu_arch = .x86_64 }
 };
@@ -34,6 +32,7 @@ pub fn build(builder: *std.Build) !void {
                 .optimize = optimize,
                 .root_source_file = builder.path("src/main.zig"),
                 .strip = optimize != .Debug,
+                .single_threaded = false,
                 .target = builder.resolveTargetQuery(target_query)
             }),
             .use_llvm = true // needed for valgrind for now

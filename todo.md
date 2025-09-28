@@ -13,3 +13,5 @@
 - [x] Implement the linsolveSymmetric function.
 - [x] Implement the DIIS for HF method.
 - [ ] Compress the basis set data to reduce the size of the executable.
+- [x] Implement some basic parallelization algorithm.
+- [ ] Precompute the primitive gaussian norms.

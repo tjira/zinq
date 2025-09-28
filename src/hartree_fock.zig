@@ -91,6 +91,7 @@ pub fn Options(comptime T: type) type {
         direct: bool = false,
         generalized: bool = false,
         maxiter: u32 = 100,
+        nthread: u32 = 1,
         threshold: T = 1e-12,
 
         diis: ?Diis = .{},
@@ -311,9 +312,9 @@ pub fn scf(comptime T: type, options: Options(T), system: ClassicalParticle(T), 
 
     var timer = try std.time.Timer.start();
 
-    var S = try overlap(T, basis, allocator);
-    var K = try kinetic(T, basis, allocator);
-    var V = try nuclear(T, system, basis, allocator);
+    var S = try overlap(T, basis, options.nthread, allocator);
+    var K = try kinetic(T, basis, options.nthread, allocator);
+    var V = try nuclear(T, system, basis, options.nthread, allocator);
 
     if (options.generalized) {
         try oneAO2AS(T, &S);
@@ -325,7 +326,7 @@ pub fn scf(comptime T: type, options: Options(T), system: ClassicalParticle(T), 
 
     if (enable_printing and !options.direct) try print("TWO-ELECTRON INTEGRALS: ", .{});
 
-    var J = if (!options.direct) try coulomb(T, basis, allocator) else null;
+    var J = if (!options.direct) try coulomb(T, basis, options.nthread, allocator) else null;
 
     if (!options.direct and options.generalized) try twoAO2AS(T, &J.?);
 
