@@ -59,8 +59,8 @@ serve: docs
 
 ifeq ($(OS), windows)
 .zig-bin/zig.exe:
-	cmd /c "curl -Ls -o zig.zip https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).zip"
-	cmd /c "curl -Ls -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip"
+	cmd /c curl -Ls -o zig.zip https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).zip
+	cmd /c curl -Ls -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip
 	Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory("$$PWD\zig.zip", "$$PWD")
 	Move-Item zig-$(ARCH)-$(OS)-$(ZIG_VERSION) .zig-bin ; Remove-Item .zig-bin/LICENSE, .zig-bin/README.md
 	Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory("$$PWD\zls.zip", "$$PWD/.zig-bin")
@@ -73,44 +73,5 @@ endif
 
 # CLEAN TARGETS ========================================================================================================================================================================================
 
-clean: clean-archive clean-docs clean-output clean-root clean-zig
-
-ifeq ($(OS), windows)
-clean-archive:
-	@&{Remove-Item -ErrorAction SilentlyContinue -Force -Recurse archive/*.mat, archive/*.ppm}
-else
-clean-archive:
-	@rm -rf archive/*.mat archive/*.ppm
-endif
-
-ifeq ($(OS), windows)
-clean-docs:
-	@&{Remove-Item -ErrorAction SilentlyContinue -Force -Recurse docs/_site, docs/.jekyll-cache, docs/code, docs/tex, docs/*.locked}
-else
-clean-docs:
-	@rm -rf docs/_site docs/.jekyll-cache docs/code docs/tex docs/*.locked
-endif
-
-ifeq ($(OS), windows)
-clean-output:
-	@&{Remove-Item -ErrorAction SilentlyContinue -Force -Recurse zig-out}
-else
-clean-output:
-	@rm -rf zig-out
-endif
-
-ifeq ($(OS), windows)
-clean-root:
-	@&{Remove-Item -ErrorAction SilentlyContinue -Force -Recurse *.all, *.dot, *.gz, *.json, *.mat, *.out, *.pdf, *.png, *.ppm, *.xyz, *.zip}
-else
-clean-root:
-	@rm -rf *.all *.dot *.gz *.json *.mat *.out *.pdf *.png *.ppm *.xyz *.zip
-endif
-
-ifeq ($(OS), windows)
-clean-zig:
-	@&{Remove-Item -ErrorAction SilentlyContinue -Force -Recurse .zig-bin, .zig-cache}
-else
-clean-zig:
-	@rm -rf .zig-bin .zig-cache
-endif
+clean:
+	git clean -dffx
