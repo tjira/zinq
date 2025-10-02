@@ -20,7 +20,6 @@ class Build(_build_py):
 setuptools.setup(
     name = "zinq",
     author = "tjira",
-    license_files = ["LICENSE"],
     long_description = open("README.md").read(),
     long_description_content_type = "text/markdown",
     packages = setuptools.find_packages(),
