@@ -5,6 +5,7 @@ def main():
 
     if OS   == "darwin": OS   =   "macos"
     if ARCH ==  "arm64": ARCH = "aarch64"
+    if ARCH ==  "amd64": ARCH =  "x86_64"
 
     binary_path = pathlib.Path(__file__).with_name("bin") / ("zinq-" + ARCH + "-" + OS + (".exe" if OS == "windows" else "")) 
 
