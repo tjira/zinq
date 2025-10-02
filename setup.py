@@ -19,12 +19,13 @@ class Build(_build_py):
 
 setuptools.setup(
     name = "zinq",
-    version = open("VERSION").read(),
-    packages = setuptools.find_packages(),
+    author = "tjira",
+    license_files = ["LICENSE"],
     long_description = open("README.md").read(),
     long_description_content_type = "text/markdown",
-    author = "tjira",
+    packages = setuptools.find_packages(),
     url = "https://github.com/tjira/zinq",
+    version = open("VERSION").read(),
     cmdclass = {
         "build_py": Build
     },
