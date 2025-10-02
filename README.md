@@ -78,3 +78,7 @@ Compiling Zinq is simple, running `make` will automatically download the Zig com
 ```
 
 and check that the missing input message is displayed. If the message appears, the program is compiled correctly.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.

@@ -55,6 +55,9 @@ profile: zinq
 serve: docs
 	@cd docs && bundle exec jekyll serve
 
+wheel:
+	python -m build
+
 # EXTERNAL TARGETS =====================================================================================================================================================================================
 
 ifeq ($(OS), windows)

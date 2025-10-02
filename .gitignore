@@ -9,7 +9,13 @@
 *.png*
 *.ppm*
 
+*bin*/
+*bui*/
 *cod*/
+*dis*/
+*egg*/
 *sit*/
 *tex*/
 *zig*/
+
+__*/
