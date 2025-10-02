@@ -1,11 +1,7 @@
-import os, setuptools, setuptools.command.install, shutil, subprocess, sysconfig
+import os, setuptools, setuptools.command.build_py, shutil, subprocess, sysconfig
 
-from setuptools.command.build_py import build_py as _build_py
-
-class Build(_build_py):
+class Build(setuptools.command.build_py.build_py):
     def run(self):
-        super().run()
-
         subprocess.run(["make", "CROSS=1"], check=True)
 
         os.makedirs(os.path.join("zinq", "bin"), exist_ok=True)
@@ -16,6 +12,8 @@ class Build(_build_py):
             dest = os.path.join("zinq", "bin", "zinq-" + directory + (".exe" if "win" in directory else ""))
 
             shutil.copyfile(source, dest)
+
+        super().run()
 
 setuptools.setup(
     name = "zinq",
