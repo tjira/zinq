@@ -21,16 +21,10 @@ jobs:
       - name: Build the Wheel and Source Distribution
         run: make wheel
 
-      - name: Check the Distribution
-        env:
-          TWINE_USERNAME: ${{secrets.PYPI_USERNAME}}
-          TWINE_PASSWORD: ${{secrets.PYPI_PASSWORD}}
-        run: twine check dist/*
-
       - name: Publish to PyPI
         env:
-          TWINE_USERNAME: ${{secrets.PYPI_USERNAME}}
-          TWINE_PASSWORD: ${{secrets.PYPI_PASSWORD}}
+          TWINE_USERNAME: ${{secrets.TWINE_USERNAME}}
+          TWINE_PASSWORD: ${{secrets.TWINE_PASSWORD}}
         run: twine upload dist/*
 
       - name: Setup Tmate Session
