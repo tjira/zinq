@@ -1,4 +1,4 @@
-import os, pathlib, platform, sys
+import os, pathlib, platform, subprocess, sys
 
 def main():
     ARCH, OS = platform.uname().machine.lower(), platform.uname().system.lower()
@@ -11,4 +11,6 @@ def main():
 
     if OS != "windows": os.chmod(binary_path, 0o755)
 
-    os.execv(binary_path, [binary_path, *sys.argv[1:]])
+    exit_code = subprocess.call([binary_path, *sys.argv[1:]])
+
+    sys.exit(exit_code)
