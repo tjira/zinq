@@ -1,3 +1,20 @@
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "zinq"
+authors = [{name = "tjira", email = "tom.jira@gmail.com"}]
+description = "Implementations of electronic structure methods and mathematical algorithms in Zig, focusing on clarity, simplicity, and modern system programming."
+readme = "README.md"
+dynamic = ["version"]
+
+[project.scripts]
+zinq = "zinq.launch:main"
+
+[project.urls]
+"Homepage" = "https://tjira.github.io/zinq/"
+"Bug Tracker" = "https://github.com/tjira/zinq/issues"
+
+[tool.setuptools.package-data]
+"zinq" = ["bin/*"]

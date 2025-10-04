@@ -1,4 +1,4 @@
-import os, setuptools, setuptools.command.build_py, shutil, subprocess, sysconfig
+import os, setuptools, setuptools.command.build_py, shutil, subprocess
 
 class Build(setuptools.command.build_py.build_py):
     def run(self):
@@ -16,20 +16,9 @@ class Build(setuptools.command.build_py.build_py):
         super().run()
 
 setuptools.setup(
-    name = "zinq",
-    author = "tjira",
-    long_description = open("README.md").read(),
-    long_description_content_type = "text/markdown",
-    packages = setuptools.find_packages(),
-    url = "https://github.com/tjira/zinq",
     version = open("VERSION").read(),
+    packages = setuptools.find_packages(),
     cmdclass = {
         "build_py": Build
-    },
-    entry_points = {
-        "console_scripts": ["zinq = zinq.launch:main"]
-    },
-    package_data = {
-        "zinq": ["bin/*"]
     }
 )
