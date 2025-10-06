@@ -8,8 +8,9 @@ class Build(setuptools.command.build_py.build_py):
 
         for directory in os.listdir("zig-out"):
 
-            source = os.path.join("zig-out", directory, "zinq.exe" if "win" in directory else "zinq")
-            dest = os.path.join("zinq", "bin", "zinq-" + directory + (".exe" if "win" in directory else ""))
+            suffix = ".exe" if "windows" in directory else ""
+
+            source, dest = os.path.join("zig-out", directory, "zinq" + suffix), os.path.join("zinq", "bin", "zinq-" + directory + suffix)
 
             shutil.copyfile(source, dest)
 
