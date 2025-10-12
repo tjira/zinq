@@ -28,7 +28,7 @@ all: zinq
 
 # ACORN BUILDING TARGETS ===============================================================================================================================================================================
 
-.PHONY: zinq run test
+.PHONY: zinq run test docs
 
 zinq: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 	./.zig-bin/zig build $(ZIG_FLAGS)
@@ -42,7 +42,7 @@ test: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 # CUSTOM TARGETS =======================================================================================================================================================================================
 
 docs: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
-	@./.zig-bin/zig build-lib -femit-docs=docs/code -fno-emit-bin src/main.zig
+	@./.zig-bin/zig build-lib -femit-docs=docs/code -fno-emit-bin src/main.zig && cd docs && bundle install && bundle exec jekyll build
 
 linguist:
 	@github-linguist
@@ -53,7 +53,7 @@ profile: zinq
 	@dot -T pdf profile.dot -o profile.pdf
 
 serve: docs
-	@cd docs && bundle install && bundle exec jekyll serve
+	@cd docs && bundle exec jekyll serve
 
 wheel:
 	python -m build --wheel
