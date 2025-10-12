@@ -31,6 +31,8 @@ jobs:
 
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
 
       - name: Setup Tmate Session
         if: failure()
