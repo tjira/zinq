@@ -17,17 +17,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Ruby
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
       - name: Compile the Code Documentation
         run: make docs
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Build Pages
-        uses: actions/jekyll-build-pages@v1
-        with:
-          destination: ./_site
-          source: /docs
 
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3

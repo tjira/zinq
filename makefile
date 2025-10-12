@@ -53,7 +53,7 @@ profile: zinq
 	@dot -T pdf profile.dot -o profile.pdf
 
 serve: docs
-	@cd docs && bundle exec jekyll serve
+	@cd docs && bundle install && bundle exec jekyll serve
 
 wheel:
 	python -m build --wheel
