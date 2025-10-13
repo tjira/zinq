@@ -13,7 +13,7 @@ Many concepts in quantum mechanics rest on the algebra of vector spaces and the 
 
 The object of interest is a vector space: a set with addition and scalar multiplication satisfying compatibility rules. The following definition states these axioms explicitly.
 
-{:.definition}
+{: .definition }
 > A vector space $$V$$ over a field $$F$$ is a non-empty set equipped with vector addition and scalar multiplication, which must satisfy the following axioms for all $$\mathbf{u},\mathbf{v},\mathbf{w}\in V$$ and all scalars $$a,b\in F$$:
 >
 > 1. Associativity of vector addition: $$(\mathbf{u}+\mathbf{v})+\mathbf{w}=\mathbf{u}+(\mathbf{v}+\mathbf{w})$$
@@ -25,18 +25,18 @@ The object of interest is a vector space: a set with addition and scalar multipl
 > 7. Distributivity of scalar multiplication with respect to vector addition: $$a(\mathbf{u}+\mathbf{v})=a\mathbf{u}+a\mathbf{v}$$
 > 8. Distributivity of scalar multiplication with respect to field addition: $$(a+b)\mathbf{u}=a\mathbf{u}+b\mathbf{u}$$
 
-These axioms are necessary for a set to be considered a vector space. Examples of vector spaces include the Euclidean space $$\mathbb{R}^n$$, the set of all functions over a field $$F$$ with continuous $$n$$-th derivatives $$C^n(F)$$ or $$C^\infty(F)$$, which is the set of all infinitely differentiable functions over a field $$F$$. In quantum mechanics we usually work in Hilbert spaces, which will be described in more detail in the next section.
+These axioms are necessary for a set to be considered a vector space. Examples of vector spaces include the Euclidean space $$\mathbb{R}^n$$, the set of all functions on $$\Omega\subset\mathbb{R}^m$$ (or $$\mathbb{C}^m$$) with continuous $$n$$-th derivatives $$C^n(\Omega)$$ or $$C^\infty(\Omega)$$, which is the set of all infinitely differentiable functions over a field $$F$$. In quantum mechanics we usually work in Hilbert spaces, which will be described in more detail in the next section.
 
 Before we can use vector spaces effectively, we must identify and characterize smaller structures that inherit their properties. These are known as subspaces.
 
-{:.definition}
-> A subset $$W\subset V$$ is a subspace if it is non-empty and closed under addition and scalar multiplication. For all $$\mathbf{u},\mathbf{v}\in W$$ and $$a\in F$$, one has $$\mathbf{u}+\mathbf{v}\in V$$ and $$a\mathbf{u}\in W$$. Equivalently, $$W$$ is a subspace iff $$\mathbf{0}\in W$$, $$\mathbf{u}+\mathbf{v}\in W$$ and $$a\mathbf{u}\in W$$.
+{: .definition }
+> A subset $$W\subset V$$ is a subspace if it is non-empty and closed under addition and scalar multiplication. For all $$\mathbf{u},\mathbf{v}\in W$$ and $$a\in F$$, one has $$\mathbf{u}+\mathbf{v}\in W$$ and $$a\mathbf{u}\in W$$. Equivalently, $$W$$ is a subspace iff $$\mathbf{0}\in W$$, $$\mathbf{u}+\mathbf{v}\in W$$ and $$a\mathbf{u}\in W$$.
 
 Every subspace necessarily contains the zero vector and is closed under both addition and scalar multiplication. Subspaces are important because they capture smaller, self-contained portions of a larger space where similar operations remain valid.
 
 We now proceed to the concept of linear combinations, which provides a mechanism for generating new vectors from existing ones, and the related concept of the span, which describes the set of all such combinations.
 
-{:.definition}
+{: .definition }
 > Given a vector space $$V$$ over a field $$F$$, a linear combination of vectors $$\mathbf{v}_1,\mathbf{v}_2,\ldots,\mathbf{v}_n\in V$$ is a vector
 >
 > $$
@@ -59,7 +59,7 @@ The span formalizes the idea of building new vectors from known ones. In finite-
 
 To understand how vectors relate to one another within a span, we must determine whether some vectors can be expressed as combinations of others. This leads us to the notion of linear independence.
 
-{:.definition}
+{: .definition }
 > A set of vectors $$\lbrace\mathbf{v}_1,\mathbf{v}_2,\ldots,\mathbf{v}_n\rbrace$$ in a vector space $$V$$ over a field $$F$$ is said to be linearly independent if the only solution to the equation
 >
 > $$
@@ -70,11 +70,11 @@ To understand how vectors relate to one another within a span, we must determine
 >
 > is $$a_1=a_2=\ldots=a_n=0$$, where $$a_1,a_2,\ldots,a_n\in F$$. If there exists a non-trivial solution (i.e., not all $$a_i$$ are zero), then the set is said to be linearly dependent.
 
-Linear independence ensures that no vector in the set can be constructed from others. This property is essential when defining a minimal generating set for the entire space. For linear operators (defined later), eigenvectors associated with distinct eigenvalues are independent in generic nondegenerate cases. No orthogonality is assumed here.
+Linear independence ensures that no vector in the set can be constructed from others. This property is essential when defining a minimal generating set for the entire space. For linear operators (defined later), eigenvectors associated with distinct eigenvalues are linearly independent. No orthogonality is assumed here.
 
 Finally, the concepts of basis and dimension summarize the structure of a vector space in a concise form. A basis provides coordinates for states and a matrix representation for operators.
 
-{:.definition}
+{: .definition }
 > A basis of a vector space $$V$$ over a field $$F$$ is a set of vectors $$\lbrace\mathbf{v}_1,\mathbf{v}_2,\ldots,\mathbf{v}_n\rbrace$$ in $$V$$ that is linearly independent and spans $$V$$. The dimension of $$V$$, denoted as $$\text{dim}(V)$$, is the number of vectors in any basis of $$V$$.
 
 Every vector in a vector space can be written uniquely as a linear combination of basis vectors. The dimension quantifies the minimal number of coordinates required to specify any element of the space, which is a fundamental concept underlying state representation in quantum mechanics.
@@ -83,8 +83,8 @@ Every vector in a vector space can be written uniquely as a linear combination o
 
 To introduce geometric concepts into vector spaces, we first define the normed vector space.
 
-{:.definition}
-> A normed vector space $$(V,\lvert\cdot\rvert)$$ is a vector space $$V$$ over a field $$F$$ equipped with a norm, which is a function $$\lvert\cdot\rvert:V\to\mathbb{R}$$ that satisfies the following properties for all $$\mathbf{u},\mathbf{v}\in V$$ and all scalars $$a\in F$$:
+{: .definition }
+> A normed vector space $$(V,\lvert\cdot\rvert)$$ is a vector space $$V$$ over a field $$F$$ (here, $$F$$ is $$\mathbb{R}$$ or $$\mathbb{C}$$) equipped with a norm, which is a function $$\lvert\cdot\rvert:V\to\mathbb{R}$$ that satisfies the following properties for all $$\mathbf{u},\mathbf{v}\in V$$ and all scalars $$a\in F$$:
 >
 > 1. Non-negativity: $$\lvert\mathbf{u}\rvert\geq 0$$, with equality if and only if $$\mathbf{u}=\mathbf{0}$$
 > 2. Absolute scalability: $$\lvert a\mathbf{u}\rvert=\lvert a\rvert\lvert\mathbf{u}\rvert$$
@@ -103,7 +103,7 @@ which satisfies all the properties of a metric, thereby enabling the study of ge
 
 The inner product generalizes the familiar Euclidean dot product to abstract vector spaces.
 
-{:.definition}
+{: .definition }
 > An inner product on a vector space $$V$$ over a field $$F$$ is a function $$\langle\cdot,\cdot\rangle:V\times V\to F$$ that satisfies the following properties for all $$\mathbf{u},\mathbf{v},\mathbf{w}\in V$$ and all scalars $$a\in F$$:
 >
 > 1. Conjugate symmetry: $$\langle\mathbf{u},\mathbf{v}\rangle=\overline{\langle\mathbf{v},\mathbf{u}\rangle}$$
@@ -114,15 +114,7 @@ For real vector spaces, the conjugate symmetry reduces to ordinary symmetry. The
 
 $$
 \begin{equation}
-\lvert\mathbf{u}\rvert=\sqrt{\langle\mathbf{u},\mathbf{u}\rangle},
-\end{equation}
-$$
-
-and allows the definition of the angle $$\theta$$ between two vectors $$\mathbf{u}$$ and $$\mathbf{v}$$ through the relation
-
-$$
-\begin{equation}\label{eq:vector_angle}
-\cos(\theta)=\frac{\langle\mathbf{u},\mathbf{v}\rangle}{\lvert\mathbf{u}\rvert\lvert\mathbf{v}\rvert}.
+\lvert\mathbf{u}\rvert=\sqrt{\langle\mathbf{u},\mathbf{u}\rangle}.
 \end{equation}
 $$
 
@@ -140,15 +132,15 @@ This inequality ensures that the angle defined in Equation \eqref{eq:vector_angl
 
 Before we get to linear operators, we add one final definition that will become important when we discuss infinite-dimensional spaces.
 
-{:.definition}
+{: .definition }
 > Let $$(V,\lvert\cdot\rvert)$$ be a normed vector space. A sequence $$\lbrace\mathbf{v}_n\rbrace$$ in $$V$$ is called a Cauchy sequence if for every $$\epsilon>0$$, there exists an integer $$N$$ such that $$\lvert\mathbf{v}_m-\mathbf{v}_n\rvert<\epsilon$$ for all $$m,n>N$$. The space $$V$$ is said to be complete if every Cauchy sequence in $$V$$ converges to a limit that is also in $$V$$. A complete normed vector space is called a Banach space.
 
 ## Linear Operators
 
 Linear operators lie at the core of quantum mechanics, representing physical observables and the evolution of quantum states. We now define linear operators and explore their properties.
 
-{:.definition}
-> A linear operator on a inner product vector space $$V$$ over a field $$F$$ is a map $$A:V\to V$$ with $$A(\mathbf{u}+\mathbf{v})=A\mathbf{u}+A\mathbf{v}$$ and $$A(a\mathbf{u})=aA\mathbf{u}$$ for all $$\mathbf{u},\mathbf{v}\in V$$, $$a\in F$$.
+{: .definition }
+> A linear operator on avector space $$V$$ over a field $$F$$ is a map $$A:V\to V$$ with $$A(\mathbf{u}+\mathbf{v})=A\mathbf{u}+A\mathbf{v}$$ and $$A(a\mathbf{u})=aA\mathbf{u}$$ for all $$\mathbf{u},\mathbf{v}\in V$$, $$a\in F$$.
 
 Using a basis of a vector space, we can represent linear operators as matrices. If $$\lbrace\mathbf{e}_i\rbrace_{i=1}^n$$ is a basis of an $$n$$-dimensional vector space $$V$$, an operator $$A$$ can be represented by a matrix $$[A]_{ij}=a_{ij}$$ with the coefficients defined by
 
@@ -184,12 +176,12 @@ $$
 
 Let's now define some additional properties of linear operators.
 
-{:.definition}
+{: .definition }
 > For $$A:V\to V$$, the kernel (or null space) of $$A$$ is the set of vectors $$\mathbf{v}\in V$$ such that $$A\mathbf{v}=\mathbf{0}$$. The image (or range) of $$A$$ is the set of vectors $$\mathbf{w}\in V$$ such that $$\mathbf{w}=A\mathbf{v}$$ for some $$\mathbf{v}\in V$$. If $$\text{dim}(V)$$ is finite, the rank-nullity theorem states that $$\text{dim}(\text{ker}(A))+\text{dim}(\text{im}(A))=\text{dim}(V)$$.
 
 Another important concept is the concept of eigenvalues and eigenvectors.
 
-{:.definition}
-> A scalar $$\lambda\in F$$ is called an eigenvalue of a linear operator $$A:V\to V$$ if there exists a non-zero vector $$\mathbf{v}\in V$$ such that $$A\mathbf{v}=\lambda\mathbf{v}$$. The vector $$\mathbf{v}$$ is called an eigenvector associated with the eigenvalue $$\lambda$$. The set of all eigenvalues of $$A$$ is called the spectrum of $$A$$. The subspace $$E_\lambda=\text{ker}(A-\lambda I)$$ is called the eigenspace associated with the eigenvalue $$\lambda$$, where $$I$$ is the identity operator on $$V$$.
+{: .definition }
+> A scalar $$\lambda\in F$$ is called an eigenvalue of a linear operator $$A:V\to V$$ if there exists a non-zero vector $$\mathbf{v}\in V$$ such that $$A\mathbf{v}=\lambda\mathbf{v}$$. The vector $$\mathbf{v}$$ is called an eigenvector associated with the eigenvalue $$\lambda$$. For a finite-dimensional vector space, the set of all eigenvalues of $$A$$ is called the spectrum of $$A$$. The subspace $$E_\lambda=\text{ker}(A-\lambda I)$$ is called the eigenspace associated with the eigenvalue $$\lambda$$, where $$I$$ is the identity operator on $$V$$.
 
 If $$V$$ is finite-dimensional, the eigenvalues of $$A$$ can be found by solving the characteristic polynomial equation $$\text{det}(A-\lambda I)=0$$. The eigenvalues may be real or complex, depending on the operator and the field $$F$$.
