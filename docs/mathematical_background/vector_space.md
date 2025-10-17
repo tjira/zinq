@@ -25,7 +25,7 @@ The object of interest is a vector space: a set with addition and scalar multipl
 > 7. Distributivity of scalar multiplication with respect to vector addition: $$a(\mathbf{u}+\mathbf{v})=a\mathbf{u}+a\mathbf{v}$$
 > 8. Distributivity of scalar multiplication with respect to field addition: $$(a+b)\mathbf{u}=a\mathbf{u}+b\mathbf{u}$$
 
-These axioms are necessary for a set to be considered a vector space. Examples of vector spaces include the Euclidean space $$\mathbb{R}^n$$, the set of all functions on $$\Omega\subset\mathbb{R}^m$$ (or $$\mathbb{C}^m$$) with continuous $$n$$-th derivatives $$C^n(\Omega)$$ or $$C^\infty(\Omega)$$, which is the set of all infinitely differentiable functions over a field $$F$$. In quantum mechanics we usually work in Hilbert spaces, which will be described in more detail in the next section.
+These axioms are necessary for a set to be considered a vector space. Examples of vector spaces include the Euclidean space $$\mathbb{R}^n$$, the set of all functions with continuous $$m$$-th derivatives $$C^m(\mathbb{R}^n)$$ or $$C^\infty(\mathbb{R}^n)$$, which is the set of all infinitely differentiable functions. In quantum mechanics we usually work in Hilbert spaces, which will be described in more detail in the next section.
 
 Before we can use vector spaces effectively, we must identify and characterize smaller structures that inherit their properties. These are known as subspaces.
 

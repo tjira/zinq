@@ -139,7 +139,7 @@ cat >> docs/tex/main.tex << EOL
 EOL
 
 AWK_CALLOUT_DEFINITION='''
-    /^\{\:\.definition\}/ {def=1 ; print "```{=latex}\n\\begin{definition}\n```" ; next}
+    /^\{:\.definition\}/ {def=1 ; print "```{=latex}\n\\begin{definition}\n```" ; next}
 
     def && !/^>/ {def=0 ; print "```{=latex}\n\\end{definition}\n```" ; next}
 

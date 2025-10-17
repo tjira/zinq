@@ -25,6 +25,9 @@ jobs:
       - name: Compile the Documentation
         run: make docs
 
+      - name: Transpile the Documentation
+        run: ./script/transpile_docs.sh
+
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
         with:
