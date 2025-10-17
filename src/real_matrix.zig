@@ -129,7 +129,7 @@ pub fn RealMatrix(comptime T: type) type {
             return std.math.sqrt(sum);
         }
 
-        /// Set the matrix to the identity matrix. The matrix must be square.
+        /// Set the matrix to the identity matrix.
         pub fn identity(self: *@This()) void {
             self.fill(0);
 

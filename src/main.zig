@@ -7,6 +7,7 @@ pub const array_functions = @import("array_functions.zig");
 pub const basis_set = @import("basis_set.zig");
 pub const classical_dynamics = @import("classical_dynamics.zig");
 pub const classical_particle = @import("classical_particle.zig");
+pub const complex_gaussian = @import("complex_gaussian.zig");
 pub const complex_matrix = @import("complex_matrix.zig");
 pub const complex_runge_kutta = @import("complex_runge_kutta.zig");
 pub const complex_vector = @import("complex_vector.zig");
@@ -38,6 +39,7 @@ pub const math_functions = @import("math_functions.zig");
 pub const matrix_multiplication = @import("matrix_multiplication.zig");
 pub const molecular_integrals = @import("molecular_integrals.zig");
 pub const morse_potential = @import("morse_potential.zig");
+pub const multiconfigurational_gaussian = @import("multiconfigurational_gaussian.zig");
 pub const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 pub const object_array = @import("object_array.zig");
 pub const particle_optimization = @import("particle_optimization.zig");
@@ -60,6 +62,7 @@ pub const tully_potential = @import("tully_potential.zig");
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
 pub const HartreeFockOptions = hartree_fock.Options;
 pub const MolecularIntegralsOptions = molecular_integrals.Options;
+pub const MulticonfigurationalGaussianOptions = multiconfigurational_gaussian.Options;
 pub const PotentialPlotOptions = potential_plot.Options;
 pub const PrimeNumbersOptions = prime_numbers.Options;
 pub const QuantumDynamicsOptions = quantum_dynamics.Options;
@@ -69,6 +72,7 @@ const Target = enum {
     classical_dynamics,
     hartree_fock,
     molecular_integrals,
+    multiconfigurational_gaussian,
     potential_plot,
     prime_numbers,
     quantum_dynamics
@@ -111,6 +115,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
             .hartree_fock => try handle(f64, hartree_fock, options, allocator),
             .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
+            .multiconfigurational_gaussian => try handle(f64, multiconfigurational_gaussian, options, allocator),
             .potential_plot => try handle(f64, potential_plot, options, allocator),
             .prime_numbers => try handle(u64, prime_numbers, options, allocator),
             .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator)

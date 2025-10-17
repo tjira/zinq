@@ -3,9 +3,12 @@
 const std = @import("std");
 
 const complex_vector = @import("complex_vector.zig");
+const error_handling = @import("error_handling.zig");
 
 const Complex = std.math.complex.Complex;
 const ComplexVector = complex_vector.ComplexVector;
+
+const throw = error_handling.throw;
 
 /// Complex matrix class. The matrix is stored in a flat array in row-major order.
 pub fn ComplexMatrix(comptime T: type) type {
@@ -38,16 +41,27 @@ pub fn ComplexMatrix(comptime T: type) type {
             if (self.allocator) |allocator| allocator.free(self.data);
         }
 
+        /// Get the element at (i, j).
+        pub fn at(self: @This(), i: usize, j: usize) Complex(T) {
+            return self.data[i * self.cols + j];
+        }
+
+        /// Copy the contents of this matrix to another matrix.
+        pub fn copyTo(self: @This(), other: *@This()) !void {
+            if (self.rows != other.rows or self.cols != other.cols) {
+                return throw(void, "CAN'T COPY A {d}x{d} MATRIX TO A {d}x{d} MATRIX", .{self.rows, self.cols, other.rows, other.cols});
+            }
+
+            for (self.data, 0..) |element, index| {
+                other.data[index] = element;
+            }
+        }
+
         /// Divide the matrix by a scalar value.
         pub fn divs(self: *@This(), value: Complex(T)) void {
             for (self.data) |*element| {
                 element.* = element.div(value);
             }
-        }
-
-        /// Get the element at (i, j).
-        pub fn at(self: @This(), i: usize, j: usize) Complex(T) {
-            return self.data[i * self.cols + j];
         }
 
         /// Equality operator for matrices, given a tolerance.
@@ -67,11 +81,59 @@ pub fn ComplexMatrix(comptime T: type) type {
             for (self.data) |*element| element.* = value;
         }
 
+        /// Calculate the Frobenius norm of the matrix.
+        pub fn frobeniusNorm(self: @This()) T {
+            var sum: T = 0;
+
+            for (self.data) |element| {
+                sum += element.magnitude() * element.magnitude();
+            }
+
+            return std.math.sqrt(sum);
+        }
+
+        /// Set the matrix to the identity matrix.
+        pub fn identity(self: *@This()) void {
+            self.fill(Complex(T).init(0, 0));
+
+            for (0..@min(self.rows, self.cols)) |i| {
+                self.ptr(i, i).* = Complex(T).init(1, 0);
+            }
+        }
+
+        /// Is the metrix hermitian.
+        pub fn isHermitian(self: @This(), tol: T) bool {
+            if (!self.isSquare()) return false;
+
+            for (0..self.rows) |i| for (0..self.cols) |j| {
+                if (@abs(self.at(i, j).re - self.at(j, i).re) > tol) return false;
+                if (@abs(self.at(i, j).im + self.at(j, i).im) > tol) return false;
+            };
+
+            return true;
+        }
+
+        /// Square checker.
+        pub fn isSquare(self: @This()) bool {
+            return self.rows == self.cols;
+        }
+
         /// Multiply the matrix by a scalar value.
         pub fn muls(self: *@This(), value: Complex(T)) void {
             for (self.data) |*element| {
                 element.* = element.mul(value);
             }
+        }
+
+        /// Calculate the Frobenius norm of the off-diagonal elements of the matrix.
+        pub fn offDiagonalFrobeniusNorm(self: @This()) T {
+            var sum: T = 0;
+
+            for (0..self.rows) |i| for (0..self.cols) |j| if (i != j) {
+                sum += self.at(i, j).magnitude() * self.at(i, j).magnitude();
+            };
+
+            return std.math.sqrt(sum);
         }
 
         /// Get the pointer to the element at (i, j).

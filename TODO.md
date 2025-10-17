@@ -18,3 +18,4 @@
 - [ ] Parallelize classical trajectories.
 - [ ] Parallelize Fock matrix construction.
 - [ ] Check if some parallelization is possible for quantum dynamics and implement it.
+- [ ] Implement variable gammas for each dimension in quantum dynamics.
