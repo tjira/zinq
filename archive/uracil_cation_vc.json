@@ -30,7 +30,7 @@
                     "state" : 2
                 },
                 "log_intervals" : {
-                    "iteration" : 1,
+                    "iteration" : 50,
                     "trajectory" : 50
                 },
                 "potential" : {
