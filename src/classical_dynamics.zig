@@ -286,16 +286,19 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surface_hopping: ?SurfaceHoppingAlgorithm(T)) !void {
     var buffer: [1024]u8 = undefined;
 
+    const ndim_header_width = 9 * @as(usize, @min(ndim, 3)) + 2 * (@as(usize, @min(ndim, 3)) - 1) + @as(usize, if (ndim > 3) 7 else 2);
+    const nstate_header_width = 7 * @as(usize, @min(4, nstate)) + 2 * (@as(usize, @min(4, nstate)) - 1) + @as(usize, if (nstate > 4) 7 else 2);
+
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:8} {s:8} ", .{"TRAJ", "ITER"});
     try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
     try writer.print("{s:5} ", .{"STATE"});
-    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * @as(usize, @intCast(@min(3, ndim))) + 2 * (@min(3, ndim) - 1) + 2});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * @as(usize, @intCast(@min(3, ndim))) + 2 * (@min(3, ndim) - 1) + 2});
+    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = ndim_header_width});
+    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = ndim_header_width});
 
     if (surface_hopping) |algorithm| switch (algorithm) {
-        .fewest_switches => try writer.print("{[value]s:[width]} ", .{.value = "|COEFS|^2", .width = 7 * @min(4, nstate) + 2 * (@min(4, nstate) - 1) + 2}),
+        .fewest_switches => try writer.print("{[value]s:[width]} ", .{.value = "|COEFS|^2", .width = nstate_header_width}),
         else => {}
     };
 
