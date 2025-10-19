@@ -46,7 +46,7 @@ pub fn SurfaceHoppingAlgorithm(comptime T: type) type {
 
             for (0..substeps) |_| {
 
-                getJumpProbabilities(self, jump_probabilities, parameters, state);
+                getJumpProbabilities(self, jump_probabilities, parameters, new_state);
 
                 const random_number = random.float(T);
 
@@ -54,14 +54,16 @@ pub fn SurfaceHoppingAlgorithm(comptime T: type) type {
 
                 var cumulative_probability: T = 0;
 
-                for (0..jump_probabilities.len) |i| {
+                if (new_state == state) for (0..jump_probabilities.len) |i| {
 
                     if (i == state) continue;
 
                     cumulative_probability += jump_probabilities.at(i);
 
-                    if (random_number < cumulative_probability) new_state = @intCast(i);
-                }
+                    if (random_number < cumulative_probability) {
+                        new_state = @intCast(i); break;
+                    }
+                };
             }
 
             if (new_state != state) {

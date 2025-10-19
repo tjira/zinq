@@ -44,6 +44,7 @@ const fixGauge = eigenproblem_solver.fixGauge;
 const mm = matrix_multiplication.mm;
 const print = device_write.print;
 const printJson = device_write.printJson;
+const printRealMatrix = device_write.printRealMatrix;
 const throw = error_handling.throw;
 
 /// Classical dynamics option struct.
@@ -167,9 +168,10 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     output.population_mean.divs(@as(T, @floatFromInt(options.trajectories)));
 
-    const population_error = 1.96 * std.math.sqrt(output.population_mean.at(options.iterations, 0) * (1 - output.population_mean.at(options.iterations, 0)) / @as(T, @floatFromInt(options.trajectories)));
-
     if (enable_printing) for (0..nstate) |i| {
+
+        const population_error = 1.96 * std.math.sqrt(output.population_mean.at(options.iterations, i) * (1 - output.population_mean.at(options.iterations, i)) / @as(T, @floatFromInt(options.trajectories)));
+
         try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} ± {:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(options.iterations, i), population_error});
     };
 
@@ -197,7 +199,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     var eigenvector_overlap = try RealMatrix(T).init(nstate, nstate, allocator); defer eigenvector_overlap.deinit();
     var time_derivative_coupling = try RealMatrix(T).initZero(nstate, nstate, allocator); defer time_derivative_coupling.deinit();
 
-    var energy_gaps = try RingBufferArray(T).init((2 * nstate - 2) / 2, .{.max_len = 5}, allocator); defer energy_gaps.deinit();
+    var energy_gaps = try RingBufferArray(T).init(nstate * (nstate - 1) / 2, .{.max_len = 5}, allocator); defer energy_gaps.deinit();
     var jump_probabilities = try RealVector(T).init(nstate, allocator); defer jump_probabilities.deinit();
     var runge_kutta_solver = try ComplexRungeKutta(T).init(nstate, allocator); defer runge_kutta_solver.deinit();
     var amplitudes = try ComplexVector(T).initZero(nstate, allocator); defer amplitudes.deinit();
@@ -249,7 +251,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
         }
 
         for (0..nstate) |j| for (j + 1..nstate) |k| {
-            energy_gaps.ptr(j + k - 1).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
+            energy_gaps.ptr(j * (2 * nstate - j - 1) / 2 + (k - j - 1)).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
         };
 
         if (options.surface_hopping) |algorithm| if (i > 1) {
@@ -282,18 +284,18 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 
 /// Print header for iteration info.
 pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surface_hopping: ?SurfaceHoppingAlgorithm(T)) !void {
-    var buffer: [128]u8 = undefined;
+    var buffer: [1024]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:8} {s:8} ", .{"TRAJ", "ITER"});
     try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
     try writer.print("{s:5} ", .{"STATE"});
-    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
+    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * @as(usize, @intCast(@min(3, ndim))) + 2 * (@min(3, ndim) - 1) + 2});
+    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * @as(usize, @intCast(@min(3, ndim))) + 2 * (@min(3, ndim) - 1) + 2});
 
     if (surface_hopping) |algorithm| switch (algorithm) {
-        .fewest_switches => try writer.print("{[value]s:[width]} ", .{.value = "|COEFS|^2", .width = 7 * nstate + 2 * (nstate - 1) + 2}),
+        .fewest_switches => try writer.print("{[value]s:[width]} ", .{.value = "|COEFS|^2", .width = 7 * @min(4, nstate) + 2 * (@min(4, nstate) - 1) + 2}),
         else => {}
     };
 
@@ -304,7 +306,7 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
 
 /// Prints the iteration info to standard output.
 pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T), timer: *std.time.Timer) !void {
-    var buffer: [128]u8 = undefined;
+    var buffer: [1024]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
 
@@ -314,23 +316,32 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surfa
 
     try writer.print("[", .{});
 
-    for (0..info.system.ndim) |i| {
+    for (0..@min(3, info.system.ndim)) |i| {
         try writer.print("{d:9.4}{s}", .{info.system.position.at(i), if (i == info.system.ndim - 1) "" else ", "});
     }
+
+    if (info.system.ndim > 3) try writer.print("...", .{});
     
     try writer.print("] [", .{});
 
-    for (0..info.system.ndim) |i| {
+    for (0..@min(3, info.system.ndim)) |i| {
         try writer.print("{d:9.4}{s}", .{info.system.velocity.at(i) * info.system.masses.at(i), if (i == info.system.ndim - 1) "" else ", "});
     }
+
+    if (info.system.ndim > 3) try writer.print("...", .{});
 
     if (surface_hopping) |algorithm| {
 
         if (algorithm == .fewest_switches) try writer.print("] [", .{});
 
-        if (algorithm == .fewest_switches) for (0..info.amplitudes.len) |i| {
-            try writer.print("{d:7.4}{s}", .{std.math.pow(T, info.amplitudes.at(i).magnitude(), 2), if (i == info.amplitudes.len - 1) "" else ", "});
-        };
+        if (algorithm == .fewest_switches) {
+
+            for (0..@min(4, info.amplitudes.len)) |i| {
+                try writer.print("{d:7.4}{s}", .{std.math.pow(T, info.amplitudes.at(i).magnitude(), 2), if (i == info.amplitudes.len - 1) "" else ", "});
+            }
+
+            if (info.amplitudes.len > 4) try writer.print("...", .{});
+        }
     }
 
     try writer.print("] {D}", .{timer.read()}); timer.reset();

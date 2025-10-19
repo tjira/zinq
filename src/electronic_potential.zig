@@ -11,6 +11,7 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const time_linear_potential = @import("time_linear_potential.zig");
 const tully_potential = @import("tully_potential.zig");
+const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
 const FilePotential = file_potential.FilePotential;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
@@ -19,6 +20,7 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const TimeLinearPotential = time_linear_potential.TimeLinearPotential;
 const TullyPotential1 = tully_potential.TullyPotential1;
+const VibronicCouplingPotential = vibronic_coupling_potential.VibronicCouplingPotential;
 
 const diagonalizeSymmetric = eigenproblem_solver.diagonalizeSymmetric;
 const eigensystemSymmetric = eigenproblem_solver.eigensystemSymmetric;
@@ -33,6 +35,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         morse: MorsePotential(T),
         time_linear: TimeLinearPotential(T),
         tully_1: TullyPotential1(T),
+        vibronic_coupling: VibronicCouplingPotential(T),
 
         /// Evaluate the adabatic potential energy matrix at given system state and time.
         pub fn evaluateAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) !void {
@@ -83,8 +86,9 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .file => |field| field.ndim,
                 .harmonic => |field| field.k.len,
                 .morse => 1,
+                .time_linear => 1,
                 .tully_1 => 1,
-                .time_linear => 1
+                .vibronic_coupling => |field| field.ndim()
             };
         }
 
@@ -94,8 +98,9 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .file => |field| field.nstate,
                 .harmonic => 1,
                 .morse => 1,
+                .time_linear => 2,
                 .tully_1 => 2,
-                .time_linear => 2
+                .vibronic_coupling => |field| field.nstate()
             };
         }
     };

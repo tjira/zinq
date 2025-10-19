@@ -32,9 +32,11 @@ pub fn LandauZener(comptime T: type) type {
         pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) void {
             jump_probabilities.zero(); var maxddZ0: T = -std.math.inf(T); var minZ0: T = std.math.inf(T);
 
+            const nstate = (1 + std.math.sqrt(1 + 8 * parameters.energy_gaps.len)) / 2;
+
             for (0..jump_probabilities.len) |i| if (i != current_state) {
 
-                const coupling_index = current_state + i - 1;
+                const coupling_index = @min(current_state, i) * (2 * nstate - @min(current_state, i) - 1) / 2 + (@max(current_state, i) - @min(current_state, i) - 1);
 
                 const Z0 = parameters.energy_gaps.at(coupling_index).last(0);
                 const Z1 = parameters.energy_gaps.at(coupling_index).last(1);

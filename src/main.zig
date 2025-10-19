@@ -56,6 +56,7 @@ pub const string_manipulation = @import("string_manipulation.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 pub const time_linear_potential = @import("time_linear_potential.zig");
 pub const tully_potential = @import("tully_potential.zig");
+pub const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
 pub const HartreeFockOptions = hartree_fock.Options;
