@@ -13,7 +13,7 @@ SHELL := $(if $(filter $(OS),Windows_NT),powershell.exe,sh)
 ARCH := $(if $(filter $(OS),Windows_NT),x86_64,$(shell uname -m | tr '[:upper:]' '[:lower:]' | sed 's/arm64/aarch64/'))
 OS   := $(if $(filter $(OS),Windows_NT),windows,$(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/'))
 
-ZIG_VERSION := 0.15.1
+ZIG_VERSION := 0.15.2
 ZLS_VERSION := 0.15.0
 
 ZIG_FLAGS := $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
