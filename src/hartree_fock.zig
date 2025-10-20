@@ -64,12 +64,14 @@ pub fn Options(comptime T: type) type {
         const Gradient = union(enum) {
             numeric: struct {
                 step: T = 1e-3,
+                nthread: u32 = 1
             },
             analytic: struct {}
         };
         const Hessian = union(enum) {
             numeric: struct {
                 step: T = 1e-3,
+                nthread: u32 = 1
             },
             analytic: struct {}
         };
