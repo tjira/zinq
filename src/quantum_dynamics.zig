@@ -305,7 +305,7 @@ test "Exact Dynamics on 1D Harmonic Potential" {
             .momentum = &.{0},
             .position = &.{1},
             .state = 0,
-            .gamma = 2
+            .gamma = &.{2}
         },
         .potential = .{
             .harmonic = HarmonicPotential(f64){}
@@ -331,7 +331,7 @@ test "Exact Dynamics on 2D Harmonic Potential" {
             .momentum = &.{0, 0},
             .position = &.{1, 1},
             .state = 0,
-            .gamma = 2
+            .gamma = &.{2, 2}
         },
         .potential = .{
             .harmonic = HarmonicPotential(f64){
@@ -359,7 +359,7 @@ test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
             .momentum = &.{15},
             .position = &.{-10},
             .state = 1,
-            .gamma = 2
+            .gamma = &.{2}
         },
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
@@ -387,7 +387,7 @@ test "Imaginary Time Propagation on 1D Harmonic Potential" {
             .momentum = &.{0},
             .position = &.{1},
             .state = 0,
-            .gamma = 2
+            .gamma = &.{2}
         },
         .potential = .{
             .harmonic = HarmonicPotential(f64){}
@@ -414,7 +414,7 @@ test "Imaginary Time Propagation on 2D Harmonic Potential" {
             .momentum = &.{0, 0},
             .position = &.{1, 0},
             .state = 0,
-            .gamma = 2
+            .gamma = &.{2}
         },
         .potential = .{
             .harmonic = HarmonicPotential(f64){
