@@ -203,7 +203,7 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.
 
     var atoms = try allocator.alloc(usize, natom);
 
-    _ = try reader_interface.discardDelimiterInclusive('\n');
+    reader_interface.toss(1); _ = try reader_interface.discardDelimiterInclusive('\n');
 
     var position = try RealVector(T).init(3 * natom, allocator); defer position.deinit();
 
@@ -216,6 +216,8 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.
         for (0..3) |j| {
             position.ptr(3 * i + j).* = try std.fmt.parseFloat(T, uncr(it.next().?)) * A2AU;
         }
+
+        reader_interface.toss(1);
     }
 
     var masses = try allocator.alloc(T, 3 * natom); defer allocator.free(masses);
