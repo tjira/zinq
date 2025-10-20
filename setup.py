@@ -17,7 +17,7 @@ class Build(setuptools.command.build_py.build_py):
         super().run()
 
 setuptools.setup(
-    version = open("VERSION").read(),
+    version = open("VERSION").read().strip(),
     packages = setuptools.find_packages(),
     cmdclass = {
         "build_py": Build
