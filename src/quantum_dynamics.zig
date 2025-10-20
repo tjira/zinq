@@ -46,7 +46,7 @@ pub fn Options(comptime T: type) type {
         };
         pub const InitialConditions = struct {
             adiabatic: bool = false,
-            gamma: T = 2,
+            gamma: []const T,
             mass: T,
             momentum: []const T,
             position: []const T,
