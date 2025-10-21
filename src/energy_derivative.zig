@@ -32,9 +32,7 @@ pub fn nuclearGradient(comptime T: type, opt: anytype, system: ClassicalParticle
 
     if (enable_printing) try print("\n{s} NUMERICAL GRADIENT:\n{s:7} {s:20} {s:4}\n", .{method, "INDEX", "GRADIENT ELEMENT", "TIME"});
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.gradient.?.numeric.nthread, .allocator = allocator});
-
-    var parallel_error: ?anyerror = null;
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.gradient.?.numeric.nthread, .allocator = allocator}); var parallel_error: ?anyerror = null;
 
     const parallel_function = struct {
         pub fn call(result: *T, params: anytype, err: *?anyerror) void {
@@ -64,9 +62,7 @@ pub fn nuclearHessian(comptime T: type, opt: anytype, system: ClassicalParticle(
 
     if (enable_printing) try print("\n{s} NUMERICAL HESSIAN:\n{s:7} {s:20} {s:4}\n", .{method, "INDEX", "HESSIAN ELEMENT", "TIME"});
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.hessian.?.numeric.nthread, .allocator = allocator});
-
-    var parallel_error: ?anyerror = null;
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.hessian.?.numeric.nthread, .allocator = allocator}); var parallel_error: ?anyerror = null;
 
     const parallel_function = struct {
         pub fn call(result: *T, params: anytype, err: *?anyerror) void {

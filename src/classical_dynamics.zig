@@ -79,6 +79,7 @@ pub fn Options(comptime T: type) type {
         write: Write = .{},
 
         seed: u32 = 0,
+        nthread: u32 = 1
     };
 }
 
@@ -148,22 +149,31 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     var output = try Output(T).init(nstate, options.iterations, allocator);
 
-    var split_mix = std.Random.SplitMix64.init(options.seed); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
+    var output_population_mean = try allocator.alloc(RealMatrix(T), options.nthread); defer allocator.free(output_population_mean);
+
+    for (output_population_mean) |*matrix| matrix.* = try RealMatrix(T).initZero(options.iterations + 1, nstate, allocator);
+
+    var split_mix = std.Random.SplitMix64.init(options.seed);
 
     if (enable_printing) try printIterationHeader(T, ndim, nstate, options.surface_hopping);
 
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = options.nthread, .allocator = allocator}); var parallel_error: ?anyerror = null;
+
     for (0..options.trajectories) |i| {
 
-        var system = try ClassicalParticle(T).initZero(ndim, options.initial_conditions.mass, allocator); defer system.deinit();
+        const rng = std.Random.DefaultPrng.init(split_mix.next());
 
-        try system.setPositionRandn(options.initial_conditions.position_mean, options.initial_conditions.position_std, &random);
-        try system.setMomentumRandn(options.initial_conditions.momentum_mean, options.initial_conditions.momentum_std, &random);
+        if (options.nthread == 1) {
+            runTrajectoryParallel(T, .{output_population_mean}, .{options, potential, i, enable_printing, rng, allocator}, &parallel_error);
+        } else {
+            try pool.spawn(runTrajectoryParallel, .{T, .{output_population_mean}, .{options, potential, i, enable_printing, rng, allocator}, &parallel_error});
+        }
+    }
 
-        var options_copy = options; options_copy.potential = potential;
+    pool.deinit(); if (parallel_error) |err| return err;
 
-        const trajectory_output = try runTrajectory(T, options_copy, &system, i, enable_printing, allocator); defer trajectory_output.deinit();
-
-        try output.population_mean.add(trajectory_output.population);
+    for (0..options.nthread) |i| {
+        try output.population_mean.add(output_population_mean[i]); output_population_mean[i].deinit();
     }
 
     output.population_mean.divs(@as(T, @floatFromInt(options.trajectories)));
@@ -282,6 +292,31 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
     return output;
 }
 
+/// Parallel function to run a trajectory.
+pub fn runTrajectoryParallel(comptime T: type, results: anytype, params: anytype, err: *?anyerror) void {
+    const id = std.Thread.getCurrentId() % @as(u32, params[0].nthread);
+
+    var options_copy = params[0]; options_copy.potential = params[1];
+
+    var system = ClassicalParticle(T).initZero(params[1].ndim(), params[0].initial_conditions.mass, params[5]) catch |e| {
+        if (err.* == null) err.* = e; return;
+    }; defer system.deinit();
+
+    var rng = params[4]; var random = rng.random();
+
+    sampleInitialConditions(T, &system, params[0].initial_conditions, &random) catch |e| {
+        if (err.* == null) err.* = e; return;
+    };
+
+    const trajectory_output = runTrajectory(T, params[0], &system, params[2], params[3], params[5]) catch |e| {
+        if (err.* == null) err.* = e; return;
+    }; defer trajectory_output.deinit();
+
+    results[0][id].add(trajectory_output.population) catch |e| {
+        if (err.* == null) err.* = e; return;
+    };
+}
+
 /// Print header for iteration info.
 pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surface_hopping: ?SurfaceHoppingAlgorithm(T)) !void {
     var buffer: [1024]u8 = undefined;
@@ -305,6 +340,21 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
     try writer.print("{s:4}", .{"TIME"});
 
     try print("{s}\n", .{writer.buffered()});
+}
+
+/// Initialize random number generators for parallel environment.
+pub fn initRandomParallel(nthread: u32, seed: u32, allocator: std.mem.Allocator) !struct{rng: []std.Random.DefaultPrng, random: []std.Random} {
+    var split_mix = std.Random.SplitMix64.init(seed);
+
+    var rng_parallel = try allocator.alloc(std.Random.DefaultPrng, nthread);
+    var random_parallel = try allocator.alloc(std.Random, nthread);
+
+    for (0..nthread) |i| {
+        rng_parallel[i] = std.Random.DefaultPrng.init(split_mix.next());
+        random_parallel[i] = rng_parallel[i].random();
+    }
+
+    return .{.rng = rng_parallel, .random = random_parallel};
 }
 
 /// Prints the iteration info to standard output.
@@ -352,6 +402,12 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surfa
     try print("{s}\n", .{writer.buffered()});
 }
 
+/// Samples the initial conditions.
+pub fn sampleInitialConditions(comptime T: type, system: *ClassicalParticle(T), initial_conditions: Options(T).InitialConditions, random: *std.Random) !void {
+    try system.setPositionRandn(initial_conditions.position_mean, initial_conditions.position_std, random);
+    try system.setMomentumRandn(initial_conditions.momentum_mean, initial_conditions.momentum_std, random);
+}
+
 test "Fewest Switches Surface Hopping on Tully's First Potential" {
     const options = Options(f64){
         .derivative_coupling = .{
@@ -378,8 +434,8 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(output.population_mean.at(options.iterations, 0) == 0.379);
-    try std.testing.expect(output.population_mean.at(options.iterations, 1) == 0.621);
+    try std.testing.expect(output.population_mean.at(options.iterations, 0) == 0.371);
+    try std.testing.expect(output.population_mean.at(options.iterations, 1) == 0.629);
 }
 
 test "Landau-Lener Surface Hopping on Tully's First Potential" {
