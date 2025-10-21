@@ -71,66 +71,66 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the integral engine target.
-pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(options);
+pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(opt);
 
-    const system = try classical_particle.read(T, options.system, 0, allocator); defer system.deinit();
-    var basis = try BasisSet(T).init(system, options.basis, allocator); defer basis.deinit();
+    const system = try classical_particle.read(T, opt.system, 0, allocator); defer system.deinit();
+    var basis = try BasisSet(T).init(system, opt.basis, allocator); defer basis.deinit();
 
     var output = Output(T).init(allocator);
 
     if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{basis.nbf()});
 
-    if (enable_printing and (options.write.overlap != null or options.write.kinetic != null or options.write.nuclear != null or options.write.coulomb != null)) {
+    if (enable_printing and (opt.write.overlap != null or opt.write.kinetic != null or opt.write.nuclear != null or opt.write.coulomb != null)) {
         try print("\n", .{});
     }
 
-    if (options.write.overlap) |path| {
+    if (opt.write.overlap) |path| {
 
         var timer = try std.time.Timer.start();
 
         if (enable_printing) try print("OVERLAP INTEGRALS: ", .{});
 
-        output.S = try overlap(T, basis, options.nthread, allocator);
+        output.S = try overlap(T, basis, opt.nthread, allocator);
 
         if (enable_printing) try print("{D}\n", .{timer.read()});
 
         try exportRealMatrix(T, path, output.S.?);
     }
 
-    if (options.write.kinetic) |path| {
+    if (opt.write.kinetic) |path| {
 
         var timer = try std.time.Timer.start();
 
         if (enable_printing) try print("KINETIC INTEGRALS: ", .{});
 
-        output.K = try kinetic(T, basis, options.nthread, allocator);
+        output.K = try kinetic(T, basis, opt.nthread, allocator);
 
         if (enable_printing) try print("{D}\n", .{timer.read()});
 
         try exportRealMatrix(T, path, output.K.?);
     }
 
-    if (options.write.nuclear) |path| {
+    if (opt.write.nuclear) |path| {
 
         var timer = try std.time.Timer.start();
 
         if (enable_printing) try print("NUCLEAR INTEGRALS: ", .{});
 
-        output.V = try nuclear(T, system, basis, options.nthread, allocator);
+        output.V = try nuclear(T, system, basis, opt.nthread, allocator);
 
         if (enable_printing) try print("{D}\n", .{timer.read()});
 
         try exportRealMatrix(T, path, output.V.?);
     }
 
-    if (options.write.coulomb) |path| {
+    if (opt.write.coulomb) |path| {
 
         var timer = try std.time.Timer.start();
 
         if (enable_printing) try print("COULOMB INTEGRALS: ", .{});
 
-        output.J = try coulomb(T, basis, options.nthread, allocator);
+        output.J = try coulomb(T, basis, opt.nthread, allocator);
 
         if (enable_printing) try print("{D}\n", .{timer.read()});
 

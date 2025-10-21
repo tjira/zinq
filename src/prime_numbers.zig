@@ -51,28 +51,28 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the prime number generation target.
-pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(options);
+pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(opt);
 
     if (enable_printing) try print("\n{s:9} {s:18}\n", .{"INDEX", "PRIME NUMBER"});
 
-    var output = try Output(T).init(@as(usize, @intCast(options.count)), allocator);
+    var output = try Output(T).init(@as(usize, @intCast(opt.count)), allocator);
 
-    output.prime_numbers.ptr(0).* = @as(T, if (options.start < 2) 2 else options.start);
+    output.prime_numbers.ptr(0).* = @as(T, if (opt.start < 2) 2 else opt.start);
 
-    for (0..options.count) |i| {
+    for (0..opt.count) |i| {
 
-        if (i > 0) output.prime_numbers.ptr(i).* = switch (options.filter) {
+        if (i > 0) output.prime_numbers.ptr(i).* = switch (opt.filter) {
             .all => nextPrime(T, output.prime_numbers.at(i - 1)),
             .mersenne => try nextMersenne(T, output.prime_numbers.at(i - 1), allocator),
         };
 
-        if (enable_printing and (i == 0 or (i + 1) % options.log_interval == 0)) {
+        if (enable_printing and (i == 0 or (i + 1) % opt.log_interval == 0)) {
             try print("{d:9} {d:18}\n", .{i + 1, output.prime_numbers.at(i)});
         }
     }
 
-    if (options.output) |path| try exportRealVector(T, path, output.prime_numbers);
+    if (opt.output) |path| try exportRealVector(T, path, output.prime_numbers);
 
     return output;
 }

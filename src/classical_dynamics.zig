@@ -35,6 +35,7 @@ const NormPreservingInterpolation = norm_preserving_interpolation.NormPreserving
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const RingBufferArray = object_array.RingBufferArray;
+const RealMatrixArray = object_array.RealMatrixArray;
 const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorithm;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
@@ -47,7 +48,7 @@ const printJson = device_write.printJson;
 const printRealMatrix = device_write.printRealMatrix;
 const throw = error_handling.throw;
 
-/// Classical dynamics option struct.
+/// Classical dynamics options struct.
 pub fn Options(comptime T: type) type {
     return struct {
         pub const InitialConditions = struct {
@@ -138,67 +139,65 @@ pub fn Custom(comptime T: type) type {
 }
 
 /// Run classical dynamics simulation.
-pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(options);
+pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(opt);
 
-    var potential = options.potential;
+    var potential = opt.potential;
     const ndim = potential.ndim();
     const nstate = potential.nstate();
 
     const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
 
-    var output = try Output(T).init(nstate, options.iterations, allocator);
+    var output = try Output(T).init(nstate, opt.iterations, allocator);
 
-    var output_population_mean = try allocator.alloc(RealMatrix(T), options.nthread); defer allocator.free(output_population_mean);
+    var output_population_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator); defer output_population_mean.deinit();
 
-    for (output_population_mean) |*matrix| matrix.* = try RealMatrix(T).initZero(options.iterations + 1, nstate, allocator);
+    var split_mix = std.Random.SplitMix64.init(opt.seed);
 
-    var split_mix = std.Random.SplitMix64.init(options.seed);
+    if (enable_printing) try printIterationHeader(T, ndim, nstate, opt.surface_hopping);
 
-    if (enable_printing) try printIterationHeader(T, ndim, nstate, options.surface_hopping);
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.nthread, .allocator = allocator}); var parallel_error: ?anyerror = null;
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = options.nthread, .allocator = allocator}); var parallel_error: ?anyerror = null;
-
-    for (0..options.trajectories) |i| {
+    for (0..opt.trajectories) |i| {
 
         const rng = std.Random.DefaultPrng.init(split_mix.next());
 
-        if (options.nthread == 1) {
-            runTrajectoryParallel(T, .{output_population_mean}, .{options, potential, i, enable_printing, rng, allocator}, &parallel_error);
+        if (opt.nthread == 1) {
+            runTrajectoryParallel(T, .{output_population_mean}, .{opt, potential, i, enable_printing, rng, allocator}, &parallel_error);
         } else {
-            try pool.spawn(runTrajectoryParallel, .{T, .{output_population_mean}, .{options, potential, i, enable_printing, rng, allocator}, &parallel_error});
+            try pool.spawn(runTrajectoryParallel, .{T, .{&output_population_mean}, .{opt, potential, i, enable_printing, rng, allocator}, &parallel_error});
         }
     }
 
     pool.deinit(); if (parallel_error) |err| return err;
 
-    for (0..options.nthread) |i| {
-        try output.population_mean.add(output_population_mean[i]); output_population_mean[i].deinit();
+    for (0..opt.nthread) |i| {
+        try output.population_mean.add(output_population_mean.at(i));
     }
 
-    output.population_mean.divs(@as(T, @floatFromInt(options.trajectories)));
+    output.population_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
 
     if (enable_printing) for (0..nstate) |i| {
 
-        const population_error = 1.96 * std.math.sqrt(output.population_mean.at(options.iterations, i) * (1 - output.population_mean.at(options.iterations, i)) / @as(T, @floatFromInt(options.trajectories)));
+        const population_error = 1.96 * std.math.sqrt(output.population_mean.at(opt.iterations, i) * (1 - output.population_mean.at(opt.iterations, i)) / @as(T, @floatFromInt(opt.trajectories)));
 
-        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} ± {:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(options.iterations, i), population_error});
+        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} ± {:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(opt.iterations, i), population_error});
     };
 
-    const end_time = @as(T, @floatFromInt(options.iterations)) * options.time_step;
+    const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
-    if (options.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population_mean, 0, end_time, options.iterations + 1);
+    if (opt.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population_mean, 0, end_time, opt.iterations + 1);
 
     return output;
 }
 
 /// Run a single trajectory.
-pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalParticle(T), index: usize, enable_printing: bool, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
-    const nstate = options.potential.nstate();
+pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalParticle(T), index: usize, enable_printing: bool, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
+    const nstate = opt.potential.nstate();
 
-    var output = try Custom(T).TrajectoryOutput.init(nstate, options.iterations, allocator);
+    var output = try Custom(T).TrajectoryOutput.init(nstate, opt.iterations, allocator);
 
-    var current_state: usize = @intCast(options.initial_conditions.state);
+    var current_state: usize = @intCast(opt.initial_conditions.state);
 
     if (current_state >= nstate) return throw(Custom(T).TrajectoryOutput, "ACTIVE STATE MUST NOT BE HIGHER THAN THE TOTAL NUMBER OF STATES", .{});
 
@@ -221,12 +220,12 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
         .amplitudes = &amplitudes,
         .derivative_coupling = time_derivative_coupling,
         .runge_kutta = runge_kutta_solver,
-        .time_step = options.time_step
+        .time_step = opt.time_step
     };
 
     const lz_parameters: landau_zener.Parameters(T) = .{
         .energy_gaps = energy_gaps,
-        .time_step = options.time_step
+        .time_step = opt.time_step
     };
 
     const surface_hopping_parameters: surface_hopping_algorithm.Parameters(T) = .{
@@ -234,29 +233,29 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
         .lz_parameters = lz_parameters
     };
 
-    var split_mix = std.Random.SplitMix64.init(options.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
+    var split_mix = std.Random.SplitMix64.init(opt.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
     var timer = try std.time.Timer.start();
 
-    for (0..options.iterations + 1) |i| {
+    for (0..opt.iterations + 1) |i| {
 
-        const time = @as(T, @floatFromInt(i)) * options.time_step;
+        const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
         try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
         if (i > 0) {
-            try system.propagateVelocityVerlet(options.potential, &adiabatic_potential, time, current_state, options.time_step);
+            try system.propagateVelocityVerlet(opt.potential, &adiabatic_potential, time, current_state, opt.time_step);
         }
 
-        try options.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time);
+        try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time);
 
         if (i > 0) {
 
             try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
             try mm(T, &eigenvector_overlap, previous_eigenvectors, true, adiabatic_eigenvectors, false);
 
-            if (options.derivative_coupling) |tdc_algorithm| {
-                try tdc_algorithm.evaluate(&time_derivative_coupling, eigenvector_overlap, options.time_step);
+            if (opt.derivative_coupling) |tdc_algorithm| {
+                try tdc_algorithm.evaluate(&time_derivative_coupling, eigenvector_overlap, opt.time_step);
             }
         }
 
@@ -264,7 +263,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
             energy_gaps.ptr(j * (2 * nstate - j - 1) / 2 + (k - j - 1)).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
         };
 
-        if (options.surface_hopping) |algorithm| if (i > 1) {
+        if (opt.surface_hopping) |algorithm| if (i > 1) {
             current_state = algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, adiabatic_potential, current_state, &random);
         };
 
@@ -273,7 +272,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 
         output.population.ptr(i, current_state).* += 1;
 
-        if (!enable_printing or (index > 0 and (index + 1) % options.log_intervals.trajectory != 0) or (i > 0 and i % options.log_intervals.iteration != 0)) continue;
+        if (!enable_printing or (index > 0 and (index + 1) % opt.log_intervals.trajectory != 0) or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;
 
         const iteration_info = Custom(T).IterationInfo{
             .iteration = i,
@@ -286,7 +285,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
             .amplitudes = amplitudes
         };
 
-        try printIterationInfo(T, iteration_info, options.surface_hopping, &timer);
+        try printIterationInfo(T, iteration_info, opt.surface_hopping, &timer);
     }
 
     return output;
@@ -296,7 +295,7 @@ pub fn runTrajectory(comptime T: type, options: Options(T), system: *ClassicalPa
 pub fn runTrajectoryParallel(comptime T: type, results: anytype, params: anytype, err: *?anyerror) void {
     const id = std.Thread.getCurrentId() % @as(u32, params[0].nthread);
 
-    var options_copy = params[0]; options_copy.potential = params[1];
+    var opt_copy = params[0]; opt_copy.potential = params[1];
 
     var system = ClassicalParticle(T).initZero(params[1].ndim(), params[0].initial_conditions.mass, params[5]) catch |e| {
         if (err.* == null) err.* = e; return;
@@ -312,7 +311,7 @@ pub fn runTrajectoryParallel(comptime T: type, results: anytype, params: anytype
         if (err.* == null) err.* = e; return;
     }; defer trajectory_output.deinit();
 
-    results[0][id].add(trajectory_output.population) catch |e| {
+    results[0].ptr(id).add(trajectory_output.population) catch |e| {
         if (err.* == null) err.* = e; return;
     };
 }
@@ -409,7 +408,7 @@ pub fn sampleInitialConditions(comptime T: type, system: *ClassicalParticle(T), 
 }
 
 test "Fewest Switches Surface Hopping on Tully's First Potential" {
-    const options = Options(f64){
+    const opt = Options(f64){
         .derivative_coupling = .{
             .npi = NormPreservingInterpolation(f64){}
         },
@@ -432,14 +431,14 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
         .trajectories = 1000
     };
 
-    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(output.population_mean.at(options.iterations, 0) == 0.371);
-    try std.testing.expect(output.population_mean.at(options.iterations, 1) == 0.629);
+    try std.testing.expect(output.population_mean.at(opt.iterations, 0) == 0.371);
+    try std.testing.expect(output.population_mean.at(opt.iterations, 1) == 0.629);
 }
 
 test "Landau-Lener Surface Hopping on Tully's First Potential" {
-    const options = Options(f64){
+    const opt = Options(f64){
         .initial_conditions = .{
             .mass = &.{2000},
             .momentum_mean = &.{15},
@@ -459,8 +458,8 @@ test "Landau-Lener Surface Hopping on Tully's First Potential" {
         .trajectories = 1000
     };
 
-    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(output.population_mean.at(options.iterations, 0) == 0.498);
-    try std.testing.expect(output.population_mean.at(options.iterations, 1) == 0.502);
+    try std.testing.expect(output.population_mean.at(opt.iterations, 0) == 0.498);
+    try std.testing.expect(output.population_mean.at(opt.iterations, 1) == 0.502);
 }

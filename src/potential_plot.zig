@@ -50,20 +50,20 @@ pub fn Output(comptime T: type) type {
     };
 }
 
-/// Run the potential plot target with the given options.
-pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(options);
+/// Run the potential plot target with the given opt.
+pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(opt);
 
-    var potential = options.potential;
+    var potential = opt.potential;
     const ndim = potential.ndim();
     const nstate = potential.nstate();
 
     const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
 
-    if (options.grid.limits.len != ndim) return throw(Output(T), "LIMITS LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
-    for (0..ndim) |i| if (options.grid.limits[i].len != 2) return throw(Output(T), "EACH LIMIT MUST HAVE A LENGTH OF 2", .{});
+    if (opt.grid.limits.len != ndim) return throw(Output(T), "LIMITS LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
+    for (0..ndim) |i| if (opt.grid.limits[i].len != 2) return throw(Output(T), "EACH LIMIT MUST HAVE A LENGTH OF 2", .{});
 
-    const potential_matrix = try RealMatrix(T).init(std.math.pow(usize, @intCast(options.grid.points), ndim), ndim + nstate * nstate, allocator);
+    const potential_matrix = try RealMatrix(T).init(std.math.pow(usize, @intCast(opt.grid.points), ndim), ndim + nstate * nstate, allocator);
 
     for (0..potential_matrix.rows) |i| {
 
@@ -72,12 +72,12 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
         try value.reshape(nstate, nstate);
 
-        positionAtRow(T, &point, i, ndim, @intCast(options.grid.points), options.grid.limits);
+        positionAtRow(T, &point, i, ndim, @intCast(opt.grid.points), opt.grid.limits);
 
-        if (options.adiabatic) try potential.evaluateAdiabatic(&value, point, 0) else potential.evaluateDiabatic(&value, point, 0);
+        if (opt.adiabatic) try potential.evaluateAdiabatic(&value, point, 0) else potential.evaluateDiabatic(&value, point, 0);
     }
 
-    try exportRealMatrix(T, options.output, potential_matrix);
+    try exportRealMatrix(T, opt.output, potential_matrix);
 
     return .{.potential = potential_matrix};
 }

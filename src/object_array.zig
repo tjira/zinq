@@ -4,8 +4,10 @@ const std = @import("std");
 
 const device_write = @import("device_write.zig");
 const ring_buffer = @import("ring_buffer.zig");
+const real_matrix = @import("real_matrix.zig");
 
 const RingBuffer = ring_buffer.RingBuffer;
+const RealMatrix = real_matrix.RealMatrix;
 
 const throw = device_write.throw;
 
@@ -22,6 +24,7 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
 
             for (data) |*element| switch (O(T)) {
                 RingBuffer(T) => |object| element.* = try object.init(params.max_len, allocator),
+                RealMatrix(T) => |object| element.* = try object.init(params.rows, params.cols, allocator),
                 else => return throw(@This(), "UNSUPPORTED OBJECT TYPE FOR OBJECTARRAY", .{}),
             };
 
@@ -56,4 +59,9 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
 /// Array for storing ring buffers in an array.
 pub fn RingBufferArray(comptime T: type) type {
     return ObjectArray(RingBuffer, T);
+}
+
+/// Array for storing real matrices.
+pub fn RealMatrixArray(comptime T: type) type {
+    return ObjectArray(RealMatrix, T);
 }

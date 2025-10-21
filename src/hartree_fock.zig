@@ -126,40 +126,40 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the Hartree-Fock target.
-pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(options);
+pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(opt);
     
-    if (options.gradient != null and options.gradient.? == .analytic) return throw(Output(T), "ANALYTIC GRADIENT NOT IMPLEMENTED", .{});
-    if (options.hessian != null and options.hessian.? == .analytic) return throw(Output(T), "ANALYTIC HESSIAN NOT IMPLEMENTED", .{});
+    if (opt.gradient != null and opt.gradient.? == .analytic) return throw(Output(T), "ANALYTIC GRADIENT NOT IMPLEMENTED", .{});
+    if (opt.hessian != null and opt.hessian.? == .analytic) return throw(Output(T), "ANALYTIC HESSIAN NOT IMPLEMENTED", .{});
 
-    var system = try classical_particle.read(T, options.system, options.charge, allocator); defer system.deinit();
+    var system = try classical_particle.read(T, opt.system, opt.charge, allocator); defer system.deinit();
 
     if (enable_printing) {try print("\nINPUT GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
-    if (options.optimize != null) {
+    if (opt.optimize != null) {
 
-        const optimized_system = try particleSteepestDescent(T, options, system, scf, "HARTREE-FOCK", enable_printing, allocator);
+        const optimized_system = try particleSteepestDescent(T, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator);
 
         system.deinit(); system = optimized_system;
     }
 
-    if (enable_printing and options.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
-    var output = try scf(T, options, system, enable_printing, allocator);
+    var output = try scf(T, opt, system, enable_printing, allocator);
 
-    output.G = if (options.gradient != null) try nuclearGradient(T, options, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
+    output.G = if (opt.gradient != null) try nuclearGradient(T, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
 
     if (output.G) |G| {try print("\nHARTREE-FOCK NUCLEAR GRADIENT (Eh/Bohr):\n", .{}); try printRealMatrix(T, G);}
 
-    output.H = if (options.hessian != null) try nuclearHessian(T, options, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
+    output.H = if (opt.hessian != null) try nuclearHessian(T, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
 
     if (output.H) |H| output.frequencies = try particleHarmonicFrequencies(T, system, H, allocator);
 
     if (output.frequencies) |freqs| {try print("\nHARTREE-FOCK VIBRATIONAL FREQUENCIES (CM^-1):\n", .{}); try printRealVector(T, freqs);}
 
-    if (options.write.coefficient) |path| try exportRealMatrix(T, path, output.C);
-    if (options.write.density) |path| try exportRealMatrix(T, path, output.P);
-    if (options.write.fock) |path| try exportRealMatrix(T, path, output.F);
+    if (opt.write.coefficient) |path| try exportRealMatrix(T, path, output.C);
+    if (opt.write.density) |path| try exportRealMatrix(T, path, output.P);
+    if (opt.write.fock) |path| try exportRealMatrix(T, path, output.F);
 
     return output;
 }
@@ -302,11 +302,11 @@ pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocat
 }
 
 /// Perform the SCF procedure and return the output.
-pub fn scf(comptime T: type, options: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    var basis = try BasisSet(T).init(system, options.basis, allocator); defer basis.deinit();
+pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    var basis = try BasisSet(T).init(system, opt.basis, allocator); defer basis.deinit();
 
-    const nbf = if (options.generalized) 2 * basis.nbf() else basis.nbf();
-    const nocc = if (options.generalized) try system.noccSpin() else try system.noccSpatial();
+    const nbf = if (opt.generalized) 2 * basis.nbf() else basis.nbf();
+    const nocc = if (opt.generalized) try system.noccSpin() else try system.noccSpatial();
 
     if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{nbf});
 
@@ -314,11 +314,11 @@ pub fn scf(comptime T: type, options: Options(T), system: ClassicalParticle(T), 
 
     var timer = try std.time.Timer.start();
 
-    var S = try overlap(T, basis, options.nthread, allocator);
-    var K = try kinetic(T, basis, options.nthread, allocator);
-    var V = try nuclear(T, system, basis, options.nthread, allocator);
+    var S = try overlap(T, basis, opt.nthread, allocator);
+    var K = try kinetic(T, basis, opt.nthread, allocator);
+    var V = try nuclear(T, system, basis, opt.nthread, allocator);
 
-    if (options.generalized) {
+    if (opt.generalized) {
         try oneAO2AS(T, &S);
         try oneAO2AS(T, &K);
         try oneAO2AS(T, &V);
@@ -326,13 +326,13 @@ pub fn scf(comptime T: type, options: Options(T), system: ClassicalParticle(T), 
 
     if (enable_printing) try print("{D}\n", .{timer.read()}); timer.reset();
 
-    if (enable_printing and !options.direct) try print("TWO-ELECTRON INTEGRALS: ", .{});
+    if (enable_printing and !opt.direct) try print("TWO-ELECTRON INTEGRALS: ", .{});
 
-    var J = if (!options.direct) try coulomb(T, basis, options.nthread, allocator) else null;
+    var J = if (!opt.direct) try coulomb(T, basis, opt.nthread, allocator) else null;
 
-    if (!options.direct and options.generalized) try twoAO2AS(T, &J.?);
+    if (!opt.direct and opt.generalized) try twoAO2AS(T, &J.?);
 
-    if (enable_printing and !options.direct) try print("{D}\n", .{timer.read()});
+    if (enable_printing and !opt.direct) try print("{D}\n", .{timer.read()});
 
     var C = try RealMatrix(T).initZero(nbf, nbf, allocator);
     var F = try RealMatrix(T).initZero(nbf, nbf, allocator);
@@ -342,8 +342,8 @@ pub fn scf(comptime T: type, options: Options(T), system: ClassicalParticle(T), 
 
     var X = try getXMatrix(T, S, allocator); defer X.deinit();
 
-    var DIIS_F = try allocator.alloc(RealMatrix(T), if (options.diis != null) options.diis.?.size else 0); defer allocator.free(DIIS_F); defer for (0..DIIS_F.len) |i| DIIS_F[i].deinit();
-    var DIIS_E = try allocator.alloc(RealMatrix(T), if (options.diis != null) options.diis.?.size else 0); defer allocator.free(DIIS_E); defer for (0..DIIS_E.len) |i| DIIS_E[i].deinit();
+    var DIIS_F = try allocator.alloc(RealMatrix(T), if (opt.diis != null) opt.diis.?.size else 0); defer allocator.free(DIIS_F); defer for (0..DIIS_F.len) |i| DIIS_F[i].deinit();
+    var DIIS_E = try allocator.alloc(RealMatrix(T), if (opt.diis != null) opt.diis.?.size else 0); defer allocator.free(DIIS_E); defer for (0..DIIS_E.len) |i| DIIS_E[i].deinit();
 
     for (0..DIIS_F.len) |i| DIIS_F[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
     for (0..DIIS_E.len) |i| DIIS_E[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
@@ -354,29 +354,29 @@ pub fn scf(comptime T: type, options: Options(T), system: ClassicalParticle(T), 
 
     if (enable_printing) try print("\nSELF CONSISTENT FIELD:\n{s:4} {s:20} {s:8} {s:4}\n", .{"ITER", "ENERGY", "|DELTA E|", "TIME"});
 
-    while (@abs(energy - energy_prev) > options.threshold) : (iter += 1) {
+    while (@abs(energy - energy_prev) > opt.threshold) : (iter += 1) {
 
-        if (iter >= options.maxiter) return throw(Output(T), "HARTREE-FOCK DID NOT CONVERGE IN {d} ITERATIONS", .{options.maxiter});
+        if (iter >= opt.maxiter) return throw(Output(T), "HARTREE-FOCK DID NOT CONVERGE IN {d} ITERATIONS", .{opt.maxiter});
 
         timer.reset();
 
         try getFockMatrix(T, &F, K, V, P, J, basis);
 
-        if (options.diis != null) {
+        if (opt.diis != null) {
 
             const e = try errorVector(T, S, F, P, allocator); defer e.deinit();
 
             try F.copyTo(&DIIS_F[iter % DIIS_F.len]);
             try e.copyTo(&DIIS_E[iter % DIIS_E.len]);
 
-            if (iter >= options.diis.?.start) try diisExtrapolate(T, &F, DIIS_F, DIIS_E, iter, allocator);
+            if (iter >= opt.diis.?.start) try diisExtrapolate(T, &F, DIIS_F, DIIS_E, iter, allocator);
         }
 
         try solveRoothaan(T, &epsilon, &C, F, X, allocator);
 
         getDensityMatrix(T, &P, C, nocc);
 
-        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, options.generalized);
+        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, opt.generalized);
 
         if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {D}\n", .{iter + 1, energy + VNN, @abs(energy - energy_prev), timer.read()});
     }
@@ -399,23 +399,23 @@ pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: 
 }
 
 test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
-    const options = Options(f64){
+    const opt = Options(f64){
         .system = "example/molecule/water.xyz",
         .basis = "sto-3g",
     };
 
-    var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+    var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
     try std.testing.expect(@abs(output.energy + 74.96590121728507) < TEST_TOLERANCE);
 }
 
 test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
-    const options = Options(f64){
+    const opt = Options(f64){
         .system = "example/molecule/methane.xyz",
         .basis = "6-31g*",
     };
 
-    var output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+    var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
     try std.testing.expect(@abs(output.energy + 40.19517074914403) < TEST_TOLERANCE);
 }
