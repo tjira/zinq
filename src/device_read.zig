@@ -15,14 +15,14 @@ pub fn readRealMatrix(comptime T: type, path: []const u8, allocator: std.mem.All
 
     var buffer: [32768]u8 = undefined; var reader = file.reader(&buffer); var reader_interface = &reader.interface;
 
-    const rowstr = try reader_interface.takeDelimiterExclusive(' ' ); const rows = try std.fmt.parseInt(usize, uncr(rowstr), 10);
-    const colstr = try reader_interface.takeDelimiterExclusive('\n'); const cols = try std.fmt.parseInt(usize, uncr(colstr), 10);
+    const rowstr = try reader_interface.takeDelimiterExclusive(' ' ); const rows = try std.fmt.parseInt(usize, uncr(rowstr), 10); reader_interface.toss(1);
+    const colstr = try reader_interface.takeDelimiterExclusive('\n'); const cols = try std.fmt.parseInt(usize, uncr(colstr), 10); reader_interface.toss(1);
 
     const A = try RealMatrix(T).init(rows, cols, allocator); var i: usize = 0;
 
     while (true) {
 
-        const line = reader_interface.takeDelimiterExclusive('\n') catch {break;};
+        const line = reader_interface.takeDelimiterExclusive('\n') catch {break;}; reader_interface.toss(1);
 
         var line_iterator = std.mem.tokenizeAny(u8, line, " "); 
 
