@@ -179,7 +179,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             const params = .{opt_copy, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator};
             const results = .{&output_population_mean};
 
-            if (opt.nthread == 1) runTrajectoryParallel(0, T, results, params) else pool.spawnWgId(&wait, runTrajectoryParallel, .{T, results, params});
+            if (opt.nthread == 1) runTrajectoryParallel(1, T, results, params) else pool.spawnWgId(&wait, runTrajectoryParallel, .{T, results, params});
         }
 
         wait.wait();
