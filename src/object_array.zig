@@ -35,6 +35,23 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
             };
         }
 
+        /// Initialize the object array to zero.
+        pub fn initZero(len: usize, params: anytype, allocator: std.mem.Allocator) !@This() {
+            const data = try allocator.alloc(O(T), len);
+
+            for (data) |*element| switch (O(T)) {
+                RingBuffer(T) => |object| element.* = try object.initZero(params.max_len, allocator),
+                RealMatrix(T) => |object| element.* = try object.initZero(params.rows, params.cols, allocator),
+                else => return throw(@This(), "UNSUPPORTED OBJECT TYPE FOR OBJECTARRAY", .{}),
+            };
+
+            return @This(){
+                .data = data,
+                .len = len,
+                .allocator = allocator,
+            };
+        }
+
         /// Deinitialize the array array.
         pub fn deinit(self: @This()) void {
             for (self.data) |object| {

@@ -15,6 +15,7 @@ const integral_transform = @import("integral_transform.zig");
 const linear_solve = @import("linear_solve.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const molecular_integrals = @import("molecular_integrals.zig");
+const object_array = @import("object_array.zig");
 const particle_optimization = @import("particle_optimization.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
@@ -24,6 +25,7 @@ const BasisSet = basis_set.BasisSet;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
 const RealMatrix = real_matrix.RealMatrix;
+const RealMatrixArray = object_array.RealMatrixArray;
 const RealTensor4 = real_tensor_four.RealTensor4;
 const RealVector = real_vector.RealVector;
 
@@ -253,32 +255,50 @@ pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), n
 }
 
 /// Obtain the Fock matrix form core Hamiltonian and density matrix.
-pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: ?RealTensor4(T), basis: BasisSet(T)) !void {
+pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: ?RealTensor4(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !void {
     for (0..F.rows) |i| for (0..F.cols) |j| {
         F.ptr(i, j).* = V.at(i, j) + K.at(i, j);
     };
 
     const factor: T = if (P.rows == 2 * basis.nbf()) 1 else 2;
 
+    var fock_parallel_contributions = try RealMatrixArray(T).initZero(nthread, .{.rows = F.rows, .cols = F.cols}, allocator); defer fock_parallel_contributions.deinit();
+
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator});
+
+    const parallel_function_direct = struct {
+        pub fn call(focks: *RealMatrixArray(T), params: anytype) void {
+            const id = std.Thread.getCurrentId() % @as(u32, @intCast(focks.len));
+
+            const i = params[0]; const j = params[1]; const k = params[2]; const l = params[3];
+
+            const j_int = params[5].contracted_gaussians[i].coulomb(params[5].contracted_gaussians[j], params[5].contracted_gaussians[k], params[5].contracted_gaussians[l]);
+            const k_int = params[5].contracted_gaussians[i].coulomb(params[5].contracted_gaussians[l], params[5].contracted_gaussians[k], params[5].contracted_gaussians[j]);
+
+            for (0..focks.at(id).rows / params[5].nbf()) |s| for (0..focks.at(id).rows / params[5].nbf()) |t| {
+
+                const ii = s * params[5].nbf() + i; const jj = s * params[5].nbf() + j;
+                const kk = t * params[5].nbf() + k; const ll = t * params[5].nbf() + l;
+
+                focks.ptr(id).ptr(kk, ll).* += params[6] * params[4].at(ii, jj) * j_int;
+
+                if (s == t) focks.ptr(id).ptr(kk, ll).* -= params[4].at(ii, jj) * k_int;
+            };
+        }
+    }.call;
+
     if (J == null) for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| for (0..basis.nbf()) |k| for (0..basis.nbf()) |l| {
 
-        const j_int = basis.contracted_gaussians[i].coulomb(basis.contracted_gaussians[j], basis.contracted_gaussians[k], basis.contracted_gaussians[l]);
-        const k_int = basis.contracted_gaussians[i].coulomb(basis.contracted_gaussians[l], basis.contracted_gaussians[k], basis.contracted_gaussians[j]);
+        const params = .{i, j, k, l, P, basis, factor};
 
-        for (0..F.rows / basis.nbf()) |s| for (0..F.rows / basis.nbf()) |t| {
-
-            const ii = s * basis.nbf() + i; const jj = s * basis.nbf() + j;
-            const kk = t * basis.nbf() + k; const ll = t * basis.nbf() + l;
-
-            F.ptr(kk, ll).* += factor * P.at(ii, jj) * j_int;
-
-            if (s == t) F.ptr(kk, ll).* -= P.at(ii, jj) * k_int;
-        };
+        if (nthread == 1) parallel_function_direct(&fock_parallel_contributions, params) else try pool.spawn(parallel_function_direct, .{&fock_parallel_contributions, params});
     };
 
     if (J != null) for (0..J.?.shape[0]) |i| for (0..J.?.shape[1]) |j| for (0..J.?.shape[2]) |k| for (0..J.?.shape[3]) |l| {
         F.ptr(k, l).* += P.at(i, j) * (factor * J.?.at(i, j, k, l) - J.?.at(i, l, k, j));
     };
+
+    pool.deinit(); for (0..fock_parallel_contributions.len) |i| try F.add(fock_parallel_contributions.at(i));
 
     try F.symmetrize();
 }
@@ -360,7 +380,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         timer.reset();
 
-        try getFockMatrix(T, &F, K, V, P, J, basis);
+        try getFockMatrix(T, &F, K, V, P, J, basis, opt.nthread, allocator);
 
         if (opt.diis != null) {
 

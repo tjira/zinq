@@ -4,12 +4,17 @@ const std = @import("std");
 
 const classical_particle = @import("classical_particle.zig");
 const device_write = @import("device_write.zig");
+const global_variables = @import("global_variables.zig");
+const parallel_tools = @import("parallel_tools.zig");
 const real_matrix = @import("real_matrix.zig");
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const RealMatrix = real_matrix.RealMatrix;
 
+const checkParallelError = parallel_tools.checkParallelError;
 const print = device_write.print;
+
+const PARALLEL_ERROR = &global_variables.PARALLEL_ERROR;
 
 /// Calculate the partial derivative of the energy with respect to nuclear coordinates using finite differences and assign it to the provided result.
 pub fn firstPartialDerivative(comptime T: type, result: *T, opt: anytype, system: ClassicalParticle(T), efunc: anytype, i: usize, enable_printing: bool, allocator: std.mem.Allocator) !void {
@@ -32,26 +37,24 @@ pub fn nuclearGradient(comptime T: type, opt: anytype, system: ClassicalParticle
 
     if (enable_printing) try print("\n{s} NUMERICAL GRADIENT:\n{s:7} {s:20} {s:4}\n", .{method, "INDEX", "GRADIENT ELEMENT", "TIME"});
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.gradient.?.numeric.nthread, .allocator = allocator}); var parallel_error: ?anyerror = null;
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.gradient.?.numeric.nthread, .allocator = allocator});
 
     const parallel_function = struct {
-        pub fn call(result: *T, params: anytype, err: *?anyerror) void {
+        pub fn call(result: *T, params: anytype) void {
             firstPartialDerivative(T, result, params[0], params[1], params[2], params[3], params[4], params[5]) catch |e| {
-                if (err.* != null) err.* = e; return;
+                if (PARALLEL_ERROR.* != null) PARALLEL_ERROR.* = e; return;
             };
         }
     }.call;
 
     for (0..system.position.len) |i| {
 
-        if (opt.gradient.?.numeric.nthread > 1) {
-            try pool.spawn(parallel_function, .{grad.ptr(i / 3, i % 3), .{opt, system, efunc, i, enable_printing, allocator}, &parallel_error});
-        } else {
-            try firstPartialDerivative(T, grad.ptr(i / 3, i % 3), opt, system, efunc, i, enable_printing, allocator);
-        }
+        const params = .{opt, system, efunc, i, enable_printing, allocator}; const result = grad.ptr(i / 3, i % 3);
+
+        if (opt.gradient.?.numeric.nthread == 1) parallel_function(result, params) else try pool.spawn(parallel_function, .{result, params});
     }
 
-    pool.deinit(); if (parallel_error) |err| return err;
+    pool.deinit(); try checkParallelError();
 
     return grad;
 }
@@ -62,26 +65,24 @@ pub fn nuclearHessian(comptime T: type, opt: anytype, system: ClassicalParticle(
 
     if (enable_printing) try print("\n{s} NUMERICAL HESSIAN:\n{s:7} {s:20} {s:4}\n", .{method, "INDEX", "HESSIAN ELEMENT", "TIME"});
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.hessian.?.numeric.nthread, .allocator = allocator}); var parallel_error: ?anyerror = null;
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.hessian.?.numeric.nthread, .allocator = allocator});
 
     const parallel_function = struct {
-        pub fn call(result: *T, params: anytype, err: *?anyerror) void {
+        pub fn call(result: *T, params: anytype) void {
             secondPartialDerivative(T, result, params[0], params[1], params[2], params[3], params[4], params[5], params[6]) catch |e| {
-                if (err.* != null) err.* = e; return;
+                if (PARALLEL_ERROR.* != null) PARALLEL_ERROR.* = e; return;
             };
         }
     }.call;
 
     for (0..hess.rows) |i| for (i..hess.cols) |j| {
 
-        if (opt.hessian.?.numeric.nthread > 1) {
-            try pool.spawn(parallel_function, .{hess.ptr(i, j), .{opt, system, efunc, i, j, enable_printing, allocator}, &parallel_error});
-        } else {
-            try secondPartialDerivative(T, hess.ptr(i, j), opt, system, efunc, i, j, enable_printing, allocator);
-        }
+        const params = .{opt, system, efunc, i, j, enable_printing, allocator}; const result = hess.ptr(i, j);
+
+        if (opt.hessian.?.numeric.nthread == 1) parallel_function(result, params) else try pool.spawn(parallel_function, .{result, params});
     };
 
-    pool.deinit(); if (parallel_error) |err| return err;
+    pool.deinit(); try checkParallelError();
 
     for (0..hess.rows) |i| for (i + 1..hess.cols) |j| {
         hess.ptr(j, i).* = hess.at(i, j);

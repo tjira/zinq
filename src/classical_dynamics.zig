@@ -11,11 +11,14 @@ const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const error_handling = @import("error_handling.zig");
 const fewest_switches = @import("fewest_switches.zig");
+const global_variables = @import("global_variables.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const landau_zener = @import("landau_zener.zig");
+const math_functions = @import("math_functions.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 const object_array = @import("object_array.zig");
+const parallel_tools = @import("parallel_tools.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const ring_buffer = @import("ring_buffer.zig");
@@ -39,6 +42,8 @@ const RealMatrixArray = object_array.RealMatrixArray;
 const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorithm;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
+const binomialConfInt = math_functions.binomialConfInt;
+const checkParallelError = parallel_tools.checkParallelError;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const fixGauge = eigenproblem_solver.fixGauge;
@@ -47,6 +52,8 @@ const print = device_write.print;
 const printJson = device_write.printJson;
 const printRealMatrix = device_write.printRealMatrix;
 const throw = error_handling.throw;
+
+var PARALLEL_ERROR = &global_variables.PARALLEL_ERROR;
 
 /// Classical dynamics options struct.
 pub fn Options(comptime T: type) type {
@@ -156,20 +163,20 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (enable_printing) try printIterationHeader(T, ndim, nstate, opt.surface_hopping);
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.nthread, .allocator = allocator}); var parallel_error: ?anyerror = null;
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.nthread, .allocator = allocator});
 
     for (0..opt.trajectories) |i| {
 
         const rng = std.Random.DefaultPrng.init(split_mix.next());
+        var opt_copy = opt; opt_copy.potential = potential;
 
-        if (opt.nthread == 1) {
-            runTrajectoryParallel(T, .{output_population_mean}, .{opt, potential, i, enable_printing, rng, allocator}, &parallel_error);
-        } else {
-            try pool.spawn(runTrajectoryParallel, .{T, .{&output_population_mean}, .{opt, potential, i, enable_printing, rng, allocator}, &parallel_error});
-        }
+        const params = .{opt_copy, i, enable_printing, rng, allocator};
+        const results = .{&output_population_mean};
+
+        if (opt.nthread == 1) runTrajectoryParallel(T, results, params) else try pool.spawn(runTrajectoryParallel, .{T, results, params});
     }
 
-    pool.deinit(); if (parallel_error) |err| return err;
+    pool.deinit(); try checkParallelError();
 
     for (0..opt.nthread) |i| {
         try output.population_mean.add(output_population_mean.at(i));
@@ -179,7 +186,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (enable_printing) for (0..nstate) |i| {
 
-        const population_error = 1.96 * std.math.sqrt(output.population_mean.at(opt.iterations, i) * (1 - output.population_mean.at(opt.iterations, i)) / @as(T, @floatFromInt(opt.trajectories)));
+        const population_error = binomialConfInt(output.population_mean.at(opt.iterations, i), opt.trajectories);
 
         try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} ± {:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(opt.iterations, i), population_error});
     };
@@ -292,27 +299,25 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 }
 
 /// Parallel function to run a trajectory.
-pub fn runTrajectoryParallel(comptime T: type, results: anytype, params: anytype, err: *?anyerror) void {
+pub fn runTrajectoryParallel(comptime T: type, results: anytype, params: anytype) void {
     const id = std.Thread.getCurrentId() % @as(u32, params[0].nthread);
 
-    var opt_copy = params[0]; opt_copy.potential = params[1];
-
-    var system = ClassicalParticle(T).initZero(params[1].ndim(), params[0].initial_conditions.mass, params[5]) catch |e| {
-        if (err.* == null) err.* = e; return;
+    var system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.mass, params[4]) catch |e| {
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     }; defer system.deinit();
 
-    var rng = params[4]; var random = rng.random();
+    var rng = params[3]; var random = rng.random();
 
     sampleInitialConditions(T, &system, params[0].initial_conditions, &random) catch |e| {
-        if (err.* == null) err.* = e; return;
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     };
 
-    const trajectory_output = runTrajectory(T, params[0], &system, params[2], params[3], params[5]) catch |e| {
-        if (err.* == null) err.* = e; return;
+    const trajectory_output = runTrajectory(T, params[0], &system, params[1], params[2], params[4]) catch |e| {
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     }; defer trajectory_output.deinit();
 
     results[0].ptr(id).add(trajectory_output.population) catch |e| {
-        if (err.* == null) err.* = e; return;
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     };
 }
 
