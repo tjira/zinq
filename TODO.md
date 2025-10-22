@@ -18,4 +18,4 @@
 - [x] Parallelize classical trajectories.
 - [x] Parallelize Fock matrix construction.
 - [ ] Check if some parallelization is possible for quantum dynamics and implement it.
-- [ ] Parallelization of classical trajectories takes too much memory when many trajectories are run. Implement a more memory-efficient parallelization scheme.
+- [x] Parallelization of classical trajectories takes too much memory when many trajectories are run. Implement a more memory-efficient parallelization scheme.

@@ -53,6 +53,7 @@ const printJson = device_write.printJson;
 const printRealMatrix = device_write.printRealMatrix;
 const throw = error_handling.throw;
 
+const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 var PARALLEL_ERROR = &global_variables.PARALLEL_ERROR;
 
 /// Classical dynamics options struct.
@@ -164,16 +165,24 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     if (enable_printing) try printIterationHeader(T, ndim, nstate, opt.surface_hopping);
 
     var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.nthread, .allocator = allocator});
+    var wait: std.Thread.WaitGroup = undefined; wait.reset();
 
-    for (0..opt.trajectories) |i| {
+    for (0..(opt.trajectories + MAX_POOL_SIZE - 1) / MAX_POOL_SIZE) |i| {
 
-        const rng = std.Random.DefaultPrng.init(split_mix.next());
-        var opt_copy = opt; opt_copy.potential = potential;
+        wait.reset();
 
-        const params = .{opt_copy, i, enable_printing, rng, allocator};
-        const results = .{&output_population_mean};
+        for (0..@min(opt.trajectories - i * MAX_POOL_SIZE, MAX_POOL_SIZE)) |j| {
 
-        if (opt.nthread == 1) runTrajectoryParallel(T, results, params) else try pool.spawn(runTrajectoryParallel, .{T, results, params});
+            const rng = std.Random.DefaultPrng.init(split_mix.next());
+            var opt_copy = opt; opt_copy.potential = potential;
+
+            const params = .{opt_copy, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator};
+            const results = .{&output_population_mean};
+
+            if (opt.nthread == 1) runTrajectoryParallel(T, results, params) else pool.spawnWg(&wait, runTrajectoryParallel, .{T, results, params});
+        }
+
+        pool.waitAndWork(&wait);
     }
 
     pool.deinit(); try checkParallelError();
