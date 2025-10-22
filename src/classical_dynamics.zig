@@ -164,7 +164,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (enable_printing) try printIterationHeader(T, ndim, nstate, opt.surface_hopping);
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.nthread, .allocator = allocator});
+    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.nthread, .track_ids = true, .allocator = allocator});
     var wait: std.Thread.WaitGroup = undefined; wait.reset();
 
     for (0..(opt.trajectories + MAX_POOL_SIZE - 1) / MAX_POOL_SIZE) |i| {
@@ -179,10 +179,10 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             const params = .{opt_copy, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator};
             const results = .{&output_population_mean};
 
-            if (opt.nthread == 1) runTrajectoryParallel(T, results, params) else pool.spawnWg(&wait, runTrajectoryParallel, .{T, results, params});
+            if (opt.nthread == 1) runTrajectoryParallel(0, T, results, params) else pool.spawnWgId(&wait, runTrajectoryParallel, .{T, results, params});
         }
 
-        pool.waitAndWork(&wait);
+        wait.wait();
     }
 
     pool.deinit(); try checkParallelError();
@@ -308,9 +308,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 }
 
 /// Parallel function to run a trajectory.
-pub fn runTrajectoryParallel(comptime T: type, results: anytype, params: anytype) void {
-    const id = std.Thread.getCurrentId() % @as(u32, params[0].nthread);
-
+pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, params: anytype) void {
     var system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.mass, params[4]) catch |e| {
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     }; defer system.deinit();
@@ -325,7 +323,7 @@ pub fn runTrajectoryParallel(comptime T: type, results: anytype, params: anytype
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     }; defer trajectory_output.deinit();
 
-    results[0].ptr(id).add(trajectory_output.population) catch |e| {
+    results[0].ptr(id - 1).add(trajectory_output.population) catch |e| {
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     };
 }
