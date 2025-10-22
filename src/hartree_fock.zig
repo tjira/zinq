@@ -53,6 +53,7 @@ const printRealVector = device_write.printRealVector;
 const throw = errror_handling.throw;
 const twoAO2AS = integral_transform.twoAO2AS;
 
+const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 const SINGULARITY_TOLERANCE = global_variables.SINGULARITY_TOLERANCE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
@@ -264,25 +265,25 @@ pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: R
 
     var fock_parallel_contributions = try RealMatrixArray(T).initZero(nthread, .{.rows = F.rows, .cols = F.cols}, allocator); defer fock_parallel_contributions.deinit();
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator});
+    var pool: std.Thread.Pool = undefined; var wait: std.Thread.WaitGroup = undefined; wait.reset();
+
+    try pool.init(.{.n_jobs = nthread, .track_ids = true, .allocator = allocator});
 
     const parallel_function_direct = struct {
-        pub fn call(focks: *RealMatrixArray(T), params: anytype) void {
-            const id = std.Thread.getCurrentId() % @as(u32, @intCast(focks.len));
-
+        pub fn call(id: usize, focks: *RealMatrixArray(T), params: anytype) void {
             const i = params[0]; const j = params[1]; const k = params[2]; const l = params[3];
 
             const j_int = params[5].contracted_gaussians[i].coulomb(params[5].contracted_gaussians[j], params[5].contracted_gaussians[k], params[5].contracted_gaussians[l]);
             const k_int = params[5].contracted_gaussians[i].coulomb(params[5].contracted_gaussians[l], params[5].contracted_gaussians[k], params[5].contracted_gaussians[j]);
 
-            for (0..focks.at(id).rows / params[5].nbf()) |s| for (0..focks.at(id).rows / params[5].nbf()) |t| {
+            for (0..focks.at(id - 1).rows / params[5].nbf()) |s| for (0..focks.at(id - 1).rows / params[5].nbf()) |t| {
 
                 const ii = s * params[5].nbf() + i; const jj = s * params[5].nbf() + j;
                 const kk = t * params[5].nbf() + k; const ll = t * params[5].nbf() + l;
 
-                focks.ptr(id).ptr(kk, ll).* += params[6] * params[4].at(ii, jj) * j_int;
+                focks.ptr(id - 1).ptr(kk, ll).* += params[6] * params[4].at(ii, jj) * j_int;
 
-                if (s == t) focks.ptr(id).ptr(kk, ll).* -= params[4].at(ii, jj) * k_int;
+                if (s == t) focks.ptr(id - 1).ptr(kk, ll).* -= params[4].at(ii, jj) * k_int;
             };
         }
     }.call;
@@ -291,7 +292,7 @@ pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: R
 
         const params = .{i, j, k, l, P, basis, factor};
 
-        if (nthread == 1) parallel_function_direct(&fock_parallel_contributions, params) else try pool.spawn(parallel_function_direct, .{&fock_parallel_contributions, params});
+        if (nthread == 1) parallel_function_direct(1, &fock_parallel_contributions, params) else pool.spawnWgId(&wait, parallel_function_direct, .{&fock_parallel_contributions, params});
     };
 
     if (J != null) for (0..J.?.shape[0]) |i| for (0..J.?.shape[1]) |j| for (0..J.?.shape[2]) |k| for (0..J.?.shape[3]) |l| {

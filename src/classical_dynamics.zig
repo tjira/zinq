@@ -164,8 +164,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (enable_printing) try printIterationHeader(T, ndim, nstate, opt.surface_hopping);
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = opt.nthread, .track_ids = true, .allocator = allocator});
-    var wait: std.Thread.WaitGroup = undefined; wait.reset();
+    var pool: std.Thread.Pool = undefined; var wait: std.Thread.WaitGroup = undefined;
+
+    try pool.init(.{.n_jobs = opt.nthread, .track_ids = true, .allocator = allocator});
 
     for (0..(opt.trajectories + MAX_POOL_SIZE - 1) / MAX_POOL_SIZE) |i| {
 
