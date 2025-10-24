@@ -26,8 +26,7 @@
                 },
                 "iterations" : 2000,
                 "time_step" : 0.01,
-                "trajectories" : 1000000,
-                "nthread" : 12
+                "trajectories" : 10000
             }
         },
         {
