@@ -39,6 +39,7 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const RingBufferArray = object_array.RingBufferArray;
 const RealMatrixArray = object_array.RealMatrixArray;
+const RealVectorArray = object_array.RealVectorArray;
 const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorithm;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
@@ -72,7 +73,12 @@ pub fn Options(comptime T: type) type {
             iteration: u32 = 1
         };
         pub const Write = struct {
-            population_mean: ?[]const u8 = null
+            kinetic_energy_mean: ?[]const u8 = null,
+            momentum_mean: ?[]const u8 = null,
+            population_mean: ?[]const u8 = null,
+            position_mean: ?[]const u8 = null,
+            potential_energy_mean: ?[]const u8 = null,
+            total_energy_mean: ?[]const u8 = null
         };
 
         potential: ElectronicPotential(T),
@@ -95,18 +101,33 @@ pub fn Options(comptime T: type) type {
 /// Structure that hold the output of the simulation.
 pub fn Output(comptime T: type) type {
     return struct {
+        kinetic_energy_mean: RealVector(T),
+        momentum_mean: RealMatrix(T),
         population_mean: RealMatrix(T),
+        position_mean: RealMatrix(T),
+        potential_energy_mean: RealVector(T),
+        total_energy_mean: RealVector(T),
 
         /// Allocate the output structure.
-        pub fn init(nstate: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
+        pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
-                .population_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator)
+                .kinetic_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
+                .momentum_mean = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
+                .population_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
+                .position_mean = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
+                .potential_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
+                .total_energy_mean = try RealVector(T).initZero(iterations + 1, allocator)
             };
         }
 
         /// Free the memory allocated for the output structure.
         pub fn deinit(self: @This()) void {
+            self.kinetic_energy_mean.deinit();
+            self.momentum_mean.deinit();
             self.population_mean.deinit();
+            self.position_mean.deinit();
+            self.potential_energy_mean.deinit();
+            self.total_energy_mean.deinit();
         }
     };
 }
@@ -129,18 +150,33 @@ pub fn Custom(comptime T: type) type {
 
         /// Structure to hold a single trajectory output.
         pub const TrajectoryOutput = struct {
+            kinetic_energy: RealVector(T),
+            momentum: RealMatrix(T),
             population: RealMatrix(T),
+            position: RealMatrix(T),
+            potential_energy: RealVector(T),
+            total_energy: RealVector(T),
 
             /// Allocate the trajectory output structure.
-            pub fn init(nstate: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
+            pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
                 return @This(){
-                    .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator)
+                    .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
+                    .momentum = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
+                    .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
+                    .position = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
+                    .potential_energy = try RealVector(T).initZero(iterations + 1, allocator),
+                    .total_energy = try RealVector(T).initZero(iterations + 1, allocator),
                 };
             }
 
             /// Free the memory allocated for the trajectory output structure.
             pub fn deinit(self: @This()) void {
+                self.kinetic_energy.deinit();
+                self.momentum.deinit();
                 self.population.deinit();
+                self.position.deinit();
+                self.potential_energy.deinit();
+                self.total_energy.deinit();
             }
         };
     };
@@ -156,9 +192,23 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
 
-    var output = try Output(T).init(nstate, opt.iterations, allocator);
+    var output = try Output(T).init(nstate, ndim, opt.iterations, allocator);
 
+    var output_kinetic_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator); defer output_kinetic_energy_mean.deinit();
+    var output_momentum_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator); defer output_momentum_mean.deinit();
     var output_population_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator); defer output_population_mean.deinit();
+    var output_position_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator); defer output_position_mean.deinit();
+    var output_potential_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator); defer output_potential_energy_mean.deinit();
+    var output_total_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator); defer output_total_energy_mean.deinit();
+
+    const parallel_results = .{
+        .kinetic_energy_mean = output_kinetic_energy_mean,
+        .momentum_mean = output_momentum_mean,
+        .population_mean = output_population_mean,
+        .position_mean = output_position_mean,
+        .potential_energy_mean = output_potential_energy_mean,
+        .total_energy_mean = output_total_energy_mean
+    };
 
     var split_mix = std.Random.SplitMix64.init(opt.seed);
 
@@ -178,9 +228,12 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             var opt_copy = opt; opt_copy.potential = potential;
 
             const params = .{opt_copy, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator};
-            const results = .{&output_population_mean};
 
-            if (opt.nthread == 1) runTrajectoryParallel(1, T, results, params) else pool.spawnWgId(&wait, runTrajectoryParallel, .{T, results, params});
+            if (opt.nthread == 1) {
+                runTrajectoryParallel(1, T, parallel_results, params);
+            } else {
+                pool.spawnWgId(&wait, runTrajectoryParallel, .{T, parallel_results, params});
+            }
         }
 
         wait.wait();
@@ -188,22 +241,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     pool.deinit(); try checkParallelError();
 
-    for (0..opt.nthread) |i| {
-        try output.population_mean.add(output_population_mean.at(i));
-    }
+    try finalizeOutput(T, &output, opt, parallel_results);
 
-    output.population_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
-
-    if (enable_printing) for (0..nstate) |i| {
-
-        const population_error = binomialConfInt(output.population_mean.at(opt.iterations, i), opt.trajectories);
-
-        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} ± {:.6}\n", .{if (i == 0) "\n" else "", i, output.population_mean.at(opt.iterations, i), population_error});
-    };
-
-    const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
-
-    if (opt.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population_mean, 0, end_time, opt.iterations + 1);
+    if (enable_printing) try printFinalDetails(T, opt, output);
 
     return output;
 }
@@ -211,8 +251,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 /// Run a single trajectory.
 pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalParticle(T), index: usize, enable_printing: bool, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
     const nstate = opt.potential.nstate();
+    const ndim = opt.potential.ndim();
 
-    var output = try Custom(T).TrajectoryOutput.init(nstate, opt.iterations, allocator);
+    var output = try Custom(T).TrajectoryOutput.init(nstate, ndim, opt.iterations, allocator);
 
     var current_state: usize = @intCast(opt.initial_conditions.state);
 
@@ -287,7 +328,14 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         const kinetic_energy = system.kineticEnergy();
         const potential_energy = adiabatic_potential.at(current_state, current_state);
 
-        output.population.ptr(i, current_state).* += 1;
+        output.kinetic_energy.ptr(i).* = kinetic_energy;
+        output.population.ptr(i, current_state).* = 1;
+        output.potential_energy.ptr(i).* = potential_energy;
+        output.total_energy.ptr(i).* = kinetic_energy + potential_energy;
+
+        for (0..ndim) |j| {
+            output.position.ptr(i, j).* = system.position.at(j); output.momentum.ptr(i, j).* = system.velocity.at(j) * system.masses.at(j);
+        }
 
         if (!enable_printing or (index > 0 and (index + 1) % opt.log_intervals.trajectory != 0) or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;
 
@@ -324,7 +372,27 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     }; defer trajectory_output.deinit();
 
-    results[0].ptr(id - 1).add(trajectory_output.population) catch |e| {
+    results.kinetic_energy_mean.ptr(id - 1).add(trajectory_output.kinetic_energy) catch |e| {
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    };
+
+    results.momentum_mean.ptr(id - 1).add(trajectory_output.momentum) catch |e| {
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    };
+
+    results.population_mean.ptr(id - 1).add(trajectory_output.population) catch |e| {
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    };
+
+    results.position_mean.ptr(id - 1).add(trajectory_output.position) catch |e| {
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    };
+
+    results.potential_energy_mean.ptr(id - 1).add(trajectory_output.potential_energy) catch |e| {
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    };
+
+    results.total_energy_mean.ptr(id - 1).add(trajectory_output.total_energy) catch |e| {
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     };
 }
@@ -354,6 +422,41 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
     try print("{s}\n", .{writer.buffered()});
 }
 
+/// Add the partial results to the output vectors and export them if requested.
+pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), parallel_results: anytype) !void {
+    const output_kinetic_energy_mean = parallel_results.kinetic_energy_mean;
+    const output_momentum_mean = parallel_results.momentum_mean;
+    const output_population_mean = parallel_results.population_mean;
+    const output_position_mean = parallel_results.position_mean;
+    const output_potential_energy_mean = parallel_results.potential_energy_mean;
+    const output_total_energy_mean = parallel_results.total_energy_mean;
+
+    for (0..opt.nthread) |i| {
+        try output.kinetic_energy_mean.add(output_kinetic_energy_mean.at(i));
+        try output.momentum_mean.add(output_momentum_mean.at(i));
+        try output.population_mean.add(output_population_mean.at(i));
+        try output.position_mean.add(output_position_mean.at(i));
+        try output.potential_energy_mean.add(output_potential_energy_mean.at(i));
+        try output.total_energy_mean.add(output_total_energy_mean.at(i));
+    }
+
+    output.kinetic_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+    output.momentum_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+    output.population_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+    output.position_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+    output.potential_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+    output.total_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+
+    const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
+
+    if (opt.write.kinetic_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.kinetic_energy_mean.asMatrix(), 0, end_time, opt.iterations + 1);
+    if (opt.write.momentum_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.momentum_mean, 0, end_time, opt.iterations + 1);
+    if (opt.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population_mean, 0, end_time, opt.iterations + 1);
+    if (opt.write.position_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.position_mean, 0, end_time, opt.iterations + 1);
+    if (opt.write.potential_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.potential_energy_mean.asMatrix(), 0, end_time, opt.iterations + 1);
+    if (opt.write.total_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy_mean.asMatrix(), 0, end_time, opt.iterations + 1);
+}
+
 /// Initialize random number generators for parallel environment.
 pub fn initRandomParallel(nthread: u32, seed: u32, allocator: std.mem.Allocator) !struct{rng: []std.Random.DefaultPrng, random: []std.Random} {
     var split_mix = std.Random.SplitMix64.init(seed);
@@ -367,6 +470,20 @@ pub fn initRandomParallel(nthread: u32, seed: u32, allocator: std.mem.Allocator)
     }
 
     return .{.rng = rng_parallel, .random = random_parallel};
+}
+
+/// Prints the fine details after simulation.
+pub fn printFinalDetails(comptime T: type, opt: Options(T), output: Output(T)) !void {
+    try print("\nFINAL AVERAGED TOTAL ENERGY: {d:.14}\n", .{output.total_energy_mean.at(opt.iterations)});
+
+    for (0..output.population_mean.cols) |i| {
+
+        const population_error = binomialConfInt(output.population_mean.at(opt.iterations, i), opt.trajectories);
+
+        const print_payload = .{if (i == 0) "\n" else "", i, output.population_mean.at(opt.iterations, i), population_error};
+
+        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} ± {:.6}\n", print_payload);
+    }
 }
 
 /// Prints the iteration info to standard output.

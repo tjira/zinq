@@ -181,7 +181,7 @@ pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: 
 }
 
 /// Extrapolate the DIIS error to obtain a new Fock matrix. The error vector from the first iteration is ignored, since it is zero.
-pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: []RealMatrix(T), DIIS_E: []RealMatrix(T), iter: usize, allocator: std.mem.Allocator) !void {
+pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixArray(T), DIIS_E: RealMatrixArray(T), iter: usize, allocator: std.mem.Allocator) !void {
     const size = @min(DIIS_F.len, iter);
 
     var A = try RealMatrix(T).init(size + 1, size + 1, allocator); defer A.deinit();
@@ -199,8 +199,8 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: []RealMatrix
         const ii = (iter - size + i + 1) % DIIS_E.len;
         const jj = (iter - size + j + 1) % DIIS_E.len;
 
-        for (0..DIIS_E[0].rows) |k| for (0..DIIS_E[0].cols) |l| {
-            A.ptr(i, j).* += DIIS_E[ii].at(k, l) * DIIS_E[jj].at(k, l);
+        for (0..DIIS_E.at(0).rows) |k| for (0..DIIS_E.at(0).cols) |l| {
+            A.ptr(i, j).* += DIIS_E.at(ii).at(k, l) * DIIS_E.at(jj).at(k, l);
         };
 
         A.ptr(j, i).* = A.at(i, j);
@@ -217,7 +217,7 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: []RealMatrix
         const ii = (iter - size + i + 1) % DIIS_E.len;
 
         for (0..F.rows) |j| for (0..F.cols) |k| {
-            F.ptr(j, k).* += c.at(i) * DIIS_F[ii].at(j, k);
+            F.ptr(j, k).* += c.at(i) * DIIS_F.at(ii).at(j, k);
         };
     }
 
@@ -261,20 +261,25 @@ pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: R
         F.ptr(i, j).* = V.at(i, j) + K.at(i, j);
     };
 
-    const factor: T = if (P.rows == 2 * basis.nbf()) 1 else 2;
+    const factor: T = if (P.rows == 2 * basis.nbf()) 1 else 2; const stype = std.meta.Float(2 * @bitSizeOf(T));
 
-    var fock_parallel_contributions = try RealMatrixArray(T).initZero(nthread, .{.rows = F.rows, .cols = F.cols}, allocator); defer fock_parallel_contributions.deinit();
+    var fock_parallel_contributions = try RealMatrixArray(stype).initZero(nthread, .{.rows = F.rows, .cols = F.cols}, allocator); defer fock_parallel_contributions.deinit();
 
     var pool: std.Thread.Pool = undefined; var wait: std.Thread.WaitGroup = undefined; wait.reset();
 
     try pool.init(.{.n_jobs = nthread, .track_ids = true, .allocator = allocator});
 
     const parallel_function_direct = struct {
-        pub fn call(id: usize, focks: *RealMatrixArray(T), params: anytype) void {
+        pub fn call(id: usize, focks: *RealMatrixArray(stype), params: anytype) void {
             const i = params[0]; const j = params[1]; const k = params[2]; const l = params[3];
 
-            const j_int = params[5].contracted_gaussians[i].coulomb(params[5].contracted_gaussians[j], params[5].contracted_gaussians[k], params[5].contracted_gaussians[l]);
-            const k_int = params[5].contracted_gaussians[i].coulomb(params[5].contracted_gaussians[l], params[5].contracted_gaussians[k], params[5].contracted_gaussians[j]);
+            const cgi = params[5].contracted_gaussians[i];
+            const cgj = params[5].contracted_gaussians[j];
+            const cgk = params[5].contracted_gaussians[k];
+            const cgl = params[5].contracted_gaussians[l];
+
+            const j_int = cgi.coulomb(cgj, cgk, cgl);
+            const k_int = cgi.coulomb(cgl, cgk, cgj);
 
             for (0..focks.at(id - 1).rows / params[5].nbf()) |s| for (0..focks.at(id - 1).rows / params[5].nbf()) |t| {
 
@@ -292,14 +297,24 @@ pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: R
 
         const params = .{i, j, k, l, P, basis, factor};
 
-        if (nthread == 1) parallel_function_direct(1, &fock_parallel_contributions, params) else pool.spawnWgId(&wait, parallel_function_direct, .{&fock_parallel_contributions, params});
+        if (nthread == 1) {
+            parallel_function_direct(1, &fock_parallel_contributions, params);
+        } else {
+            pool.spawnWgId(&wait, parallel_function_direct, .{&fock_parallel_contributions, params});
+        }
     };
 
     if (J != null) for (0..J.?.shape[0]) |i| for (0..J.?.shape[1]) |j| for (0..J.?.shape[2]) |k| for (0..J.?.shape[3]) |l| {
         F.ptr(k, l).* += P.at(i, j) * (factor * J.?.at(i, j, k, l) - J.?.at(i, l, k, j));
     };
 
-    pool.deinit(); for (0..fock_parallel_contributions.len) |i| try F.add(fock_parallel_contributions.at(i));
+    pool.deinit();
+
+    if (nthread > 1) for (1..fock_parallel_contributions.len) |i| try fock_parallel_contributions.ptr(0).add(fock_parallel_contributions.at(i));
+
+    if (nthread > 1) for (0..F.rows) |i| for (0..F.cols) |j| {
+        F.ptr(i, j).* += @floatCast(fock_parallel_contributions.at(0).at(i, j));
+    };
 
     try F.symmetrize();
 }
@@ -363,11 +378,8 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     var X = try getXMatrix(T, S, allocator); defer X.deinit();
 
-    var DIIS_F = try allocator.alloc(RealMatrix(T), if (opt.diis != null) opt.diis.?.size else 0); defer allocator.free(DIIS_F); defer for (0..DIIS_F.len) |i| DIIS_F[i].deinit();
-    var DIIS_E = try allocator.alloc(RealMatrix(T), if (opt.diis != null) opt.diis.?.size else 0); defer allocator.free(DIIS_E); defer for (0..DIIS_E.len) |i| DIIS_E[i].deinit();
-
-    for (0..DIIS_F.len) |i| DIIS_F[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
-    for (0..DIIS_E.len) |i| DIIS_E[i] = try RealMatrix(T).initZero(nbf, nbf, allocator);
+    var DIIS_F = try RealMatrixArray(T).initZero(if (opt.diis != null) opt.diis.?.size else 0, .{.rows = nbf, .cols = nbf}, allocator); defer DIIS_F.deinit();
+    var DIIS_E = try RealMatrixArray(T).initZero(if (opt.diis != null) opt.diis.?.size else 0, .{.rows = nbf, .cols = nbf}, allocator); defer DIIS_E.deinit();
 
     const VNN = system.nuclearRepulsionEnergy();
 
@@ -387,8 +399,8 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
             const e = try errorVector(T, S, F, P, allocator); defer e.deinit();
 
-            try F.copyTo(&DIIS_F[iter % DIIS_F.len]);
-            try e.copyTo(&DIIS_E[iter % DIIS_E.len]);
+            try F.copyTo(DIIS_F.ptr(iter % DIIS_F.len));
+            try e.copyTo(DIIS_E.ptr(iter % DIIS_E.len));
 
             if (iter >= opt.diis.?.start) try diisExtrapolate(T, &F, DIIS_F, DIIS_E, iter, allocator);
         }

@@ -3,13 +3,16 @@
 const std = @import("std");
 
 const device_write = @import("device_write.zig");
+const error_handling = @import("error_handling.zig");
 const ring_buffer = @import("ring_buffer.zig");
 const real_matrix = @import("real_matrix.zig");
+const real_vector = @import("real_vector.zig");
 
 const RingBuffer = ring_buffer.RingBuffer;
 const RealMatrix = real_matrix.RealMatrix;
+const RealVector = real_vector.RealVector;
 
-const throw = device_write.throw;
+const throw = error_handling.throw;
 
 /// Array for storing object in an array.
 pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
@@ -25,6 +28,7 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
             for (data) |*element| switch (O(T)) {
                 RingBuffer(T) => |object| element.* = try object.init(params.max_len, allocator),
                 RealMatrix(T) => |object| element.* = try object.init(params.rows, params.cols, allocator),
+                RealVector(T) => |object| element.* = try object.init(params.rows, allocator),
                 else => return throw(@This(), "UNSUPPORTED OBJECT TYPE FOR OBJECTARRAY", .{}),
             };
 
@@ -42,6 +46,7 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
             for (data) |*element| switch (O(T)) {
                 RingBuffer(T) => |object| element.* = try object.initZero(params.max_len, allocator),
                 RealMatrix(T) => |object| element.* = try object.initZero(params.rows, params.cols, allocator),
+                RealVector(T) => |object| element.* = try object.initZero(params.rows, allocator),
                 else => return throw(@This(), "UNSUPPORTED OBJECT TYPE FOR OBJECTARRAY", .{}),
             };
 
@@ -81,4 +86,9 @@ pub fn RingBufferArray(comptime T: type) type {
 /// Array for storing real matrices.
 pub fn RealMatrixArray(comptime T: type) type {
     return ObjectArray(RealMatrix, T);
+}
+
+/// Array for storing real vectors.
+pub fn RealVectorArray(comptime T: type) type {
+    return ObjectArray(RealVector, T);
 }
