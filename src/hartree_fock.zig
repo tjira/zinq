@@ -312,7 +312,7 @@ pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: R
 
     if (nthread > 1) for (1..fock_parallel_contributions.len) |i| try fock_parallel_contributions.ptr(0).add(fock_parallel_contributions.at(i));
 
-    if (nthread > 1) for (0..F.rows) |i| for (0..F.cols) |j| {
+    for (0..F.rows) |i| for (0..F.cols) |j| {
         F.ptr(i, j).* += @floatCast(fock_parallel_contributions.at(0).at(i, j));
     };
 
