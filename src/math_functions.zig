@@ -2,6 +2,11 @@
 
 const std = @import("std");
 
+/// Binomial confidence interval given the probability and number of trials.
+pub fn binomialConfInt(p: anytype, n: usize) @TypeOf(p) {
+    return 1.96 * std.math.sqrt(p * (1 - p) / @as(@TypeOf(p), @floatFromInt(n)));
+}
+
 /// Calculate the double factorial of a number.
 pub fn dfact(n: anytype) @TypeOf(n) {
     if (n == -1 or n == 0 or n == 1) return 1;

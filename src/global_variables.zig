@@ -6,6 +6,8 @@ const error_handling = @import("error_handling.zig");
 
 const throw = error_handling.throw;
 
+pub var PARALLEL_ERROR: ?anyerror = null;
+
 pub const BOYS_CUTOFF = 1e-8;
 pub const FINITE_DIFFERENCES_STEP = 1e-8;
 pub const FSSH_DENOMINATOR_OFFSET = 1e-14;
@@ -13,6 +15,7 @@ pub const MAX_INPUT_FILE_BYTES = 8192;
 pub const MAX_JACOBI_ITERATIONS = 1000;
 pub const TEST_TOLERANCE = 1e-10;
 pub const SINGULARITY_TOLERANCE = 1e-14;
+pub const MAX_POOL_SIZE = 10000;
 
 pub const Eh  = 4.359744722206e-18; // J
 pub const a0  = 5.29177210544e-11;  // m

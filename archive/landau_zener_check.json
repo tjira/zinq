@@ -41,7 +41,7 @@
                     "momentum" : [0],
                     "position" : [0],
                     "state" : 1,
-                    "gamma" : 2
+                    "gamma" : [2]
                 },
                 "log_intervals" : {
                     "iteration" : 500

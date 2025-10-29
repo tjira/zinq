@@ -74,7 +74,7 @@ ACRONYMS=(
 
 # create the document class and define the header in the tex file
 mkdir -p docs/tex && rm -f docs/tex/* && cat > docs/tex/main.tex << EOL
-% This file was transpiled using a script from the online version in the tjira.github.io/acorn repository. Do not edit it directly.
+% This file was transpiled using a script from the online version in the tjira.github.io/zinq repository. Do not edit it directly.
 
 % Compile with the "$TEX_COMPILER main && $BIB_COMPILER main && $GLOSSARY_COMPILER main && $TEX_COMPILER main && $TEX_COMPILER main" command.
 
@@ -110,6 +110,8 @@ mkdir -p docs/tex && rm -f docs/tex/* && cat > docs/tex/main.tex << EOL
 \setmainfont{Libertinus Serif} % set the main font
 \setmathfont{Libertinus Math} % set the math font
 \setsansfont{Libertinus Sans} % set the sans-serif font
+
+\newtheorem{definition}{Definition}\numberwithin{definition}{section}
 EOL
 
 # add the acronym definitions
@@ -136,11 +138,24 @@ cat >> docs/tex/main.tex << EOL
 \tableofcontents
 EOL
 
+AWK_CALLOUT_DEFINITION='''
+    /^\{:\.definition\}/ {def=1 ; print "```{=latex}\n\\begin{definition}\n```" ; next}
+
+    def && !/^>/ {def=0 ; print "```{=latex}\n\\end{definition}\n```" ; next}
+
+    def {sub(/^> ?/,"")}
+
+    {print}
+'''
+
 # loop over all pages
 for PAGE in ${PAGES[@]}; do
 
+    # replace the definition callouts with LaTeX environment
+    awk "$AWK_CALLOUT_DEFINITION" "docs/$PAGE.md" > temp.md
+
     # replace kramdown math wrappers, remove escapes in front of | symbols and remove markdown links, comments and hints
-    sed 's/\$\$/\$/g ; s/^\$$//g ; s/\\\\|/|/g ; s/\[.*\](.*)//g ; s/<!--\|-->//g ; /^[{>]/d' "docs/$PAGE.md" > temp.md
+    sed -i 's/\$\$/\$/g ; s/^\$$//g ; s/\\\\|/|/g ; s/\[.*\](.*)//g ; s/<!--\|-->//g ; /^[{>]/d' temp.md
 
     # convert MD to LaTeX
     pandoc --from=markdown-auto_identifiers --mathjax --to latex --wrap=none --output temp.tex temp.md
@@ -150,7 +165,7 @@ for PAGE in ${PAGES[@]}; do
 done
 
 # some post-processing
-sed -i 's/ \\eqref/~\\eqref/g' docs/tex/main.tex
+sed -i 's/\\tightlist//g ; s/ \\eqref/~\\eqref/g' docs/tex/main.tex
 
 # set the chapters
 for CHAPTER in "${CHAPTERS[@]}"; do

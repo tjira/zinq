@@ -42,6 +42,7 @@ pub const morse_potential = @import("morse_potential.zig");
 pub const multiconfigurational_gaussian = @import("multiconfigurational_gaussian.zig");
 pub const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 pub const object_array = @import("object_array.zig");
+pub const parallel_tools = @import("parallel_tools.zig");
 pub const particle_optimization = @import("particle_optimization.zig");
 pub const potential_plot = @import("potential_plot.zig");
 pub const prime_numbers = @import("prime_numbers.zig");
@@ -58,6 +59,7 @@ pub const string_manipulation = @import("string_manipulation.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 pub const time_linear_potential = @import("time_linear_potential.zig");
 pub const tully_potential = @import("tully_potential.zig");
+pub const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
 pub const HartreeFockOptions = hartree_fock.Options;

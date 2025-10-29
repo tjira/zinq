@@ -39,8 +39,8 @@ pub fn RealVector(comptime T: type) type {
         }
 
         /// Add another vector to this vector.
-        pub fn add(self: *@This(), other: @This()) void {
-            std.debug.assert(self.len == other.len);
+        pub fn add(self: *@This(), other: @This()) !void {
+            if (self.len != other.len) return throw(void, "CAN'T ADD A VECTOR OF LENGTH {d} TO A VECTOR OF LENGTH {d}", .{other.len, self.len});
 
             for (self.data, 0..) |*element, index| {
                 element.* += other.data[index];

@@ -15,7 +15,8 @@
 - [ ] Compress the basis set data to reduce the size of the executable.
 - [x] Implement some basic parallelization algorithm.
 - [ ] Precompute the primitive gaussian norms.
-- [ ] Parallelize classical trajectories.
-- [ ] Parallelize Fock matrix construction.
+- [x] Parallelize classical trajectories.
+- [x] Parallelize Fock matrix construction.
 - [ ] Check if some parallelization is possible for quantum dynamics and implement it.
-- [ ] Implement variable gammas for each dimension in quantum dynamics.
+- [x] Implement variable gammas for each dimension in quantum dynamics.
+- [x] Parallelization of classical trajectories takes too much memory when many trajectories are run. Implement a more memory-efficient parallelization scheme.

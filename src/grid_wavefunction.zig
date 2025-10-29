@@ -118,7 +118,7 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Initialize the position of the wavefunction as a Gaussian wavepacket.
-        pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: T) !void {
+        pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: []const T) !void {
             if (position.len != self.ndim) return throw(void, "POSITION LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
             if (momentum.len != self.ndim) return throw(void, "MOMENTUM LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
             if (state >= self.nstate) return throw(void, "STATE INDEX OUT OF BOUNDS", .{});
@@ -135,7 +135,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
                     for (0..self.ndim) |k| {
 
-                        exp.re -= 0.5 * gamma * (position_at_row.at(k) - position[k]) * (position_at_row.at(k) - position[k]);
+                        exp.re -= 0.5 * gamma[k] * (position_at_row.at(k) - position[k]) * (position_at_row.at(k) - position[k]);
 
                         exp.im += momentum[k] * (position_at_row.at(k) - position[k]);
                     }

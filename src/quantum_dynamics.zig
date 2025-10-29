@@ -46,7 +46,7 @@ pub fn Options(comptime T: type) type {
         };
         pub const InitialConditions = struct {
             adiabatic: bool = false,
-            gamma: T = 2,
+            gamma: []const T,
             mass: T,
             momentum: []const T,
             position: []const T,
@@ -114,24 +114,24 @@ pub fn Custom(comptime T: type) type {
 }
 
 /// Run quantum dynamics simulation.
-pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(options);
+pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(opt);
 
-    var potential = options.potential;
+    var potential = opt.potential;
     const ndim = potential.ndim();
     const nstate = potential.nstate();
 
     const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
 
-    var output = try Output(T).init(nstate, @intCast(options.iterations), allocator);
+    var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
 
-    var wavefunction = try GridWavefunction(T).init(@intCast(options.grid.points), nstate, ndim, options.grid.limits, options.initial_conditions.mass, allocator); defer wavefunction.deinit();
+    var wavefunction = try GridWavefunction(T).init(@intCast(opt.grid.points), nstate, ndim, opt.grid.limits, opt.initial_conditions.mass, allocator); defer wavefunction.deinit();
 
-    try wavefunction.initialGaussian(options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.state, options.initial_conditions.gamma);
+    try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma);
 
-    if (options.adiabatic) try wavefunction.transformRepresentation(potential, 0, false);
+    if (opt.adiabatic) try wavefunction.transformRepresentation(potential, 0, false);
 
-    var wavefunction_dynamics: ?RealMatrix(T) = if (options.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, wavefunction, options.iterations, allocator) else null;
+    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, wavefunction, opt.iterations, allocator) else null;
 
     var temporary_wavefunction_column = try ComplexVector(T).init(wavefunction.data.rows, allocator); defer temporary_wavefunction_column.deinit();
 
@@ -139,13 +139,13 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
 
     var timer = try std.time.Timer.start();
 
-    for (0..options.iterations + 1) |i| {
+    for (0..opt.iterations + 1) |i| {
 
-        const time = @as(T, @floatFromInt(i)) * options.time_step;
+        const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
-        if (i > 0) try wavefunction.propagate(potential, time, options.time_step, options.imaginary, &temporary_wavefunction_column);
+        if (i > 0) try wavefunction.propagate(potential, time, opt.time_step, opt.imaginary, &temporary_wavefunction_column);
 
-        const density_matrix = try wavefunction.density(potential, time, options.adiabatic); defer density_matrix.deinit();
+        const density_matrix = try wavefunction.density(potential, time, opt.adiabatic); defer density_matrix.deinit();
 
         const potential_energy = try wavefunction.potentialEnergy(potential, time);
         const kinetic_energy = try wavefunction.kineticEnergy(&temporary_wavefunction_column);
@@ -157,14 +157,14 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
             output.population.ptr(i, j).* = density_matrix.at(j, j).re;
         }
 
-        if (options.write.wavefunction != null) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, potential, i, time, options.adiabatic);
+        if (opt.write.wavefunction != null) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, potential, i, time, opt.adiabatic);
 
-        if (i == options.iterations) {
+        if (i == opt.iterations) {
             output.kinetic_energy = kinetic_energy;
             output.potential_energy = potential_energy;
         }
 
-        if (!enable_printing or (i > 0 and i % options.log_intervals.iteration != 0)) continue;
+        if (!enable_printing or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;
 
         const iteration_info = Custom(T).IterationInfo{
             .density_matrix = density_matrix,
@@ -180,13 +180,13 @@ pub fn run(comptime T: type, options: Options(T), enable_printing: bool, allocat
     }
 
     if (enable_printing) for (0..nstate) |i| {
-        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population.at(options.iterations, i)});
+        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i)});
     };
 
-    const end_time = @as(T, @floatFromInt(options.iterations)) * options.time_step;
+    const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
-    if (options.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time, options.iterations + 1);
-    if (options.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
+    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time, opt.iterations + 1);
+    if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
 
     if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit();
 
@@ -295,7 +295,7 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
 }
 
 test "Exact Dynamics on 1D Harmonic Potential" {
-    const options = Options(f64){
+    const opt = Options(f64){
         .grid = .{
             .limits = &.{&.{-8, 8}},
             .points = 64
@@ -305,7 +305,7 @@ test "Exact Dynamics on 1D Harmonic Potential" {
             .momentum = &.{0},
             .position = &.{1},
             .state = 0,
-            .gamma = 2
+            .gamma = &.{2}
         },
         .potential = .{
             .harmonic = HarmonicPotential(f64){}
@@ -314,14 +314,14 @@ test "Exact Dynamics on 1D Harmonic Potential" {
         .time_step = 0.1
     };
 
-    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
     try std.testing.expect(@abs(output.kinetic_energy - 0.52726330098766) < TEST_TOLERANCE);
     try std.testing.expect(@abs(output.potential_energy - 0.59766836993815) < TEST_TOLERANCE);
 }
 
 test "Exact Dynamics on 2D Harmonic Potential" {
-    const options = Options(f64){
+    const opt = Options(f64){
         .grid = .{
             .limits = &.{&.{-8, 8}, &.{-8, 8}},
             .points = 64
@@ -331,7 +331,7 @@ test "Exact Dynamics on 2D Harmonic Potential" {
             .momentum = &.{0, 0},
             .position = &.{1, 1},
             .state = 0,
-            .gamma = 2
+            .gamma = &.{2, 2}
         },
         .potential = .{
             .harmonic = HarmonicPotential(f64){
@@ -342,14 +342,14 @@ test "Exact Dynamics on 2D Harmonic Potential" {
         .time_step = 0.1
     };
 
-    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
     try std.testing.expect(@abs(output.kinetic_energy - 1.05452660197613) < TEST_TOLERANCE);
     try std.testing.expect(@abs(output.potential_energy - 1.19533673987723) < TEST_TOLERANCE);
 }
 
 test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
-    const options = Options(f64){
+    const opt = Options(f64){
         .grid = .{
             .limits = &.{&.{-24, 32}},
             .points = 2048
@@ -359,7 +359,7 @@ test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
             .momentum = &.{15},
             .position = &.{-10},
             .state = 1,
-            .gamma = 2
+            .gamma = &.{2}
         },
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
@@ -368,16 +368,16 @@ test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
         .time_step = 10
     };
 
-    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
     try std.testing.expect(@abs(output.kinetic_energy - 0.06471011654226) < TEST_TOLERANCE);
-    try std.testing.expect(@abs(output.population.at(options.iterations, 0) - 0.58949426578088) < TEST_TOLERANCE);
-    try std.testing.expect(@abs(output.population.at(options.iterations, 1) - 0.41050573421579) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 0) - 0.58949426578088) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 1) - 0.41050573421579) < TEST_TOLERANCE);
     try std.testing.expect(@abs(output.potential_energy - 0.00178988577130) < TEST_TOLERANCE);
 }
 
 test "Imaginary Time Propagation on 1D Harmonic Potential" {
-    const options = Options(f64){
+    const opt = Options(f64){
         .grid = .{
             .limits = &.{&.{-8, 8}},
             .points = 64
@@ -387,7 +387,7 @@ test "Imaginary Time Propagation on 1D Harmonic Potential" {
             .momentum = &.{0},
             .position = &.{1},
             .state = 0,
-            .gamma = 2
+            .gamma = &.{2}
         },
         .potential = .{
             .harmonic = HarmonicPotential(f64){}
@@ -397,14 +397,14 @@ test "Imaginary Time Propagation on 1D Harmonic Potential" {
         .imaginary = true
     };
 
-    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
     try std.testing.expect(@abs(output.kinetic_energy - 0.25031230493126) < TEST_TOLERANCE);
     try std.testing.expect(@abs(output.potential_energy - 0.24968808471946) < TEST_TOLERANCE);
 }
 
 test "Imaginary Time Propagation on 2D Harmonic Potential" {
-    const options = Options(f64){
+    const opt = Options(f64){
         .grid = .{
             .limits = &.{&.{-8, 8}, &.{-8, 8}},
             .points = 64
@@ -414,7 +414,7 @@ test "Imaginary Time Propagation on 2D Harmonic Potential" {
             .momentum = &.{0, 0},
             .position = &.{1, 0},
             .state = 0,
-            .gamma = 2
+            .gamma = &.{2}
         },
         .potential = .{
             .harmonic = HarmonicPotential(f64){
@@ -426,7 +426,7 @@ test "Imaginary Time Propagation on 2D Harmonic Potential" {
         .imaginary = true
     };
 
-    const output = try run(f64, options, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
     try std.testing.expect(@abs(output.kinetic_energy - 0.50062460986252) < TEST_TOLERANCE);
     try std.testing.expect(@abs(output.potential_energy - 0.49937616943892) < TEST_TOLERANCE);

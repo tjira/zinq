@@ -7,6 +7,16 @@ baseurl: "/zinq"
 
 theme: just-the-docs
 
+callouts:
+    cite:
+        title: Cite
+        color: yellow
+    definition:
+        title: Definition
+        color: blue
+
 aux_links:
-  "Zinq on GitHub":
+  "Source Code":
     - "//github.com/tjira/zinq"
+  "Code Documentation":
+    - "//tjira.github.io/zinq/code"
