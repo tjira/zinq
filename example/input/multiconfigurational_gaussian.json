@@ -1,0 +1,30 @@
+{
+    "zinq" : [
+        {
+            "name" : "multiconfigurational_gaussian",
+            "options" : {
+                "integration_grid" : {
+                    "limits" : [[-24, 32]],
+                    "points" : 2048
+                },
+                "method" : {
+                    "vMCG" : {
+                        "momentum" : [15],
+                        "position" : [-10],
+                        "gamma" : [2]
+                    }
+                },
+                "log_intervals" : {
+                    "iteration" : 500
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "initial_state" : 1,
+                "mass" : [2000],
+                "iterations" : 3500,
+                "time_step" : 1
+            }
+        }
+    ]
+}

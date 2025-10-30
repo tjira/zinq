@@ -63,6 +63,17 @@ pub fn ComplexVector(comptime T: type) type {
             return self.data[i];
         }
 
+        /// Clone the vector.
+        pub fn clone(self: @This()) !@This() {
+            var v = try @This().init(self.len, self.allocator);
+
+            for (self.data, 0..) |element, i| {
+                v.data[i] = element;
+            }
+
+            return v;
+        }
+
         /// Check for equality with another vector, given a tolerance.
         pub fn eq(self: @This(), other: @This(), tol: T) bool {
             if (self.len != other.len) return false;

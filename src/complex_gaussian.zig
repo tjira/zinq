@@ -7,6 +7,7 @@ const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const error_handling = @import("error_handling.zig");
+const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -22,6 +23,8 @@ const positionAtRow = grid_generator.positionAtRow;
 const prod = array_functions.prod;
 const throw = error_handling.throw;
 
+const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
+
 /// Complex Gaussian function implementation in Zig.
 pub fn ComplexGaussian(comptime T: type) type {
     return struct {
@@ -29,6 +32,7 @@ pub fn ComplexGaussian(comptime T: type) type {
         gamma: []T,
         momentum: []T,
         norm: T,
+        allocator: std.mem.Allocator,
 
         /// Initialize a new complex Gaussian with given parameters.
         pub fn init(center: []const T, gamma: []const T, momentum: []const T, allocator: std.mem.Allocator) !@This() {
@@ -41,6 +45,7 @@ pub fn ComplexGaussian(comptime T: type) type {
                 .gamma = try allocator.alloc(T, center.len),
                 .momentum = try allocator.alloc(T, center.len),
                 .norm = std.math.pow(T, std.math.pi, @as(T, @floatFromInt(center.len)) / 4) / std.math.pow(T, prod(T, gamma), 0.25),
+                .allocator = allocator
             };
 
             for (center, 0..) |c, i| cg.center[i] = c;
@@ -51,10 +56,15 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Free allocated memory for the complex Gaussian.
-        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
-            allocator.free(self.center);
-            allocator.free(self.gamma);
-            allocator.free(self.momentum);
+        pub fn deinit(self: @This()) void {
+            self.allocator.free(self.center);
+            self.allocator.free(self.gamma);
+            self.allocator.free(self.momentum);
+        }
+
+        /// Clone the complex Gaussian.
+        pub fn clone(self: @This()) !@This() {
+            return try @This().init(self.center, self.gamma, self.momentum, self.allocator);
         }
 
         /// Evaluate the complex Gaussian function at a given point x.
@@ -156,6 +166,51 @@ pub fn ComplexGaussian(comptime T: type) type {
             V.muls(Complex(T).init(dq, 0));
 
             v.deinit(); return V;
+        }
+
+        /// Compute the potential energy derivative matrix element between this complex Gaussian and another for a given potential function and a specified coordinate.
+        pub fn potentialDerivative(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, limits: []const []const T, npoint: usize, time: T, allocator: std.mem.Allocator) !ComplexMatrix(T) {
+            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator);
+
+            var vDerivative = try RealMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator); defer vDerivative.deinit();
+            var vPlus  = try RealMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator); defer vPlus.deinit();
+            var vMinus = try RealMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator); defer vMinus.deinit();
+
+            var q = try RealVector(T).init(limits.len, allocator); defer q.deinit();
+            var qPlus  = try RealVector(T).init(limits.len, allocator); defer  qPlus.deinit();
+            var qMinus = try RealVector(T).init(limits.len, allocator); defer qMinus.deinit();
+
+            var dq: T = 1;
+
+            for (0..limits.len) |i| {
+                dq *= (limits[i][1] - limits[i][0]) / @as(T, @floatFromInt(npoint - 1));
+            }
+
+            for (0..std.math.pow(usize, npoint, limits.len)) |k| {
+
+                positionAtRow(T, &q, k, limits.len, npoint, limits);
+
+                try q.copyTo(&qPlus); qPlus.ptr(index).* += FINITE_DIFFERENCES_STEP;
+                try q.copyTo(&qMinus); qMinus.ptr(index).* -= FINITE_DIFFERENCES_STEP;
+
+                pot.evaluateDiabatic(&vPlus, qPlus, time);
+                pot.evaluateDiabatic(&vMinus, qMinus, time);
+
+                for (0..vDerivative.rows) |i| for (0..vDerivative.cols) |j| {
+                    vDerivative.ptr(i, j).* = (vPlus.at(i, j) - vMinus.at(i, j)) / (2 * FINITE_DIFFERENCES_STEP);
+                };
+
+                const g1_value = self.evaluate(q.data);
+                const g2_value = other.evaluate(q.data);
+
+                for (0..V.rows) |i| for (0..V.cols) |j| {
+                    V.ptr(i, j).* = V.at(i, j).add(g1_value.conjugate().mul(Complex(T).init(vDerivative.at(i, j), 0)).mul(g2_value));
+                };
+            }
+
+            V.muls(Complex(T).init(dq, 0));
+
+            return V;
         }
     };
 }
