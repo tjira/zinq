@@ -5,7 +5,7 @@
             "options" : {
                 "integration_grid" : {
                     "limits" : [[-24, 32]],
-                    "points" : 1024
+                    "points" : 2048
                 },
                 "method" : {
                     "vMCG" : {

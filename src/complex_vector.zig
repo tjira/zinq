@@ -96,6 +96,15 @@ pub fn ComplexVector(comptime T: type) type {
             return &self.data[i];
         }
 
+        /// Get a slice of the internal data in the form of a vector.
+        pub fn slice(self: @This(), start: usize, end: usize) @This() {
+            return @This(){
+                .data = self.data[start..end],
+                .len = end - start,
+                .allocator = null,
+            };
+        }
+
         /// Fills the vector with zeros.
         pub fn zero(self: *@This()) void {
             self.fill(Complex(T).init(0, 0));

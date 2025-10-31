@@ -127,7 +127,7 @@ pub fn ComplexGaussian(comptime T: type) type {
                 const dq = q1 - q2;
                 const dp = p1 - p2;
 
-                const factor = std.math.sqrt(0.5 * std.math.pi) / std.math.pow(T, g1 + g2, 2.5) / m / std.math.sqrt(2 * std.math.pi / (g1 + g2));
+                const factor = std.math.sqrt(0.25 * (g1 + g2)) / std.math.pow(T, g1 + g2, 2.5) / m;
 
                 const factorRe = (std.math.pow(T, g2 * p1 + g1 * p2, 2) + g1 * g2 * (g1 + g2 - g1 * g2 * dq * dq));
                 const factorIm = 2 * g1 * g2 * dq * (g2 * p1 + g1 * p2);

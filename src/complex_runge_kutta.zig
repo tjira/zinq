@@ -41,35 +41,35 @@ pub fn ComplexRungeKutta(comptime T: type) type {
             self.y3.deinit();
         }
 
-        /// Propagate the wavefunction coefficients using the Runge-Kutta method.
-        pub fn propagate(self: *@This(), amplitudes: *ComplexVector(T), function: anytype, parameters: anytype, time_step: T) void {
+        /// Propagate the variables using the 4th order Runge-Kutta method.
+        pub fn rk4(self: *@This(), vars: *ComplexVector(T), function: anytype, parameters: anytype, time_step: T) !void {
             self.k1.zero(); self.k2.zero(); self.k3.zero(); self.k4.zero();
 
-            function(&self.k1, amplitudes.*, parameters);
+            try function(&self.k1, vars.*, parameters);
 
-            for (0..amplitudes.len) |j| {
-                self.y1.ptr(j).* = amplitudes.at(j).add(self.k1.at(j).mul(Complex(T).init(time_step / 2, 0)));
+            for (0..vars.len) |j| {
+                self.y1.ptr(j).* = vars.at(j).add(self.k1.at(j).mul(Complex(T).init(time_step / 2, 0)));
             }
 
-            function(&self.k2, self.y1, parameters);
+            try function(&self.k2, self.y1, parameters);
 
-            for (0..amplitudes.len) |j| {
-                self.y2.ptr(j).* = amplitudes.at(j).add(self.k2.at(j).mul(Complex(T).init(time_step / 2, 0)));
+            for (0..vars.len) |j| {
+                self.y2.ptr(j).* = vars.at(j).add(self.k2.at(j).mul(Complex(T).init(time_step / 2, 0)));
             }
 
-            function(&self.k3, self.y2, parameters);
+            try function(&self.k3, self.y2, parameters);
 
-            for (0..amplitudes.len) |j| {
-                self.y3.ptr(j).* = amplitudes.at(j).add(self.k3.at(j).mul(Complex(T).init(time_step, 0)));
+            for (0..vars.len) |j| {
+                self.y3.ptr(j).* = vars.at(j).add(self.k3.at(j).mul(Complex(T).init(time_step, 0)));
             }
 
-            function(&self.k4, self.y3, parameters);
+            try function(&self.k4, self.y3, parameters);
 
-            for (0..amplitudes.len) |j| {
+            for (0..vars.len) |j| {
 
                 const ksum = self.k1.at(j).add(self.k2.at(j).mul(Complex(T).init(2, 0))).add(self.k3.at(j).mul(Complex(T).init(2, 0))).add(self.k4.at(j));
 
-                amplitudes.ptr(j).* = amplitudes.at(j).add(ksum.mul(Complex(T).init(time_step / 6, 0)));
+                vars.ptr(j).* = vars.at(j).add(ksum.mul(Complex(T).init(time_step / 6, 0)));
             }
         }
     };

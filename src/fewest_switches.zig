@@ -39,7 +39,7 @@ pub fn FewestSwitches(comptime T: type) type {
             const quantum_step = parameters.time_step / @as(T, @floatFromInt(self.substeps));
 
             const coefficient_derivative = struct {
-                pub fn get(k: *ComplexVector(T), amplitudes: ComplexVector(T), derivative_parameters: anytype) void {
+                pub fn get(k: *ComplexVector(T), amplitudes: ComplexVector(T), derivative_parameters: anytype) !void {
                     const adiabatic_potential = derivative_parameters.adiabatic_potential;
                     const derivative_coupling = derivative_parameters.derivative_coupling;
 
@@ -58,7 +58,7 @@ pub fn FewestSwitches(comptime T: type) type {
                 .derivative_coupling = parameters.derivative_coupling
             };
 
-            @constCast(&parameters.runge_kutta).propagate(parameters.amplitudes, coefficient_derivative.get, coefficient_derivative_parameters, quantum_step);
+            try @constCast(&parameters.runge_kutta).rk4(parameters.amplitudes, coefficient_derivative.get, coefficient_derivative_parameters, quantum_step);
 
             for (0..parameters.amplitudes.len) |j| if (j != current_state) {
 
