@@ -414,7 +414,7 @@ test "Imaginary Time Propagation on 2D Harmonic Potential" {
             .momentum = &.{0, 0},
             .position = &.{1, 0},
             .state = 0,
-            .gamma = &.{2}
+            .gamma = &.{2, 2}
         },
         .potential = .{
             .harmonic = HarmonicPotential(f64){
