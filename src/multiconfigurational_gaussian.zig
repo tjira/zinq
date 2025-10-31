@@ -7,6 +7,7 @@ const complex_runge_kutta = @import("complex_runge_kutta.zig");
 const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const math_functions = @import("math_functions.zig");
@@ -32,6 +33,8 @@ const positionAtRow = grid_generator.positionAtRow;
 const powi = math_functions.powi;
 const print = device_write.print;
 const printJson = device_write.printJson;
+
+const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// The vMCG dynamics opt struct.
 pub fn Options(comptime T: type) type {
@@ -142,7 +145,7 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
     var propagator = try ComplexRungeKutta(T).init(2 * gaussian.position.len + coefs.len, allocator); defer propagator.deinit();
 
-    try printIterationHeader(ndim, nstate);
+    if (enable_printing) try printIterationHeader(ndim, nstate);
 
     var timer = try std.time.Timer.start();
 
@@ -344,4 +347,36 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
     try writer.print("] {D}", .{timer.read()}); timer.reset();
 
     try print("{s}\n", .{writer.buffered()});
+}
+
+test "vMCG on Tully's First Potential" {
+    const opt = Options(f64){
+        .initial_conditions = .{
+            .mass = &.{2000},
+            .state = 1,
+        },
+        .integration_grid = .{
+            .limits = &.{&.{-24, 32}},
+            .points = 2048
+        },
+        .method = .{
+            .vMCG = .{
+                .position = &.{-10},
+                .gamma = &.{2},
+                .momentum = &.{15}
+            }
+        },
+        .potential = .{
+            .tully_1 = TullyPotential1(f64){}
+        },
+        .iterations = 350,
+        .time_step = 10
+    };
+
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+
+    try std.testing.expect(@abs(output.kinetic_energy - 0.06574640030075) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 0) - 0.53765670511788) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 1) - 0.46234038610337) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.potential_energy - 0.00075316319014) < TEST_TOLERANCE);
 }
