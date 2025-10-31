@@ -3,11 +3,14 @@
 const std = @import("std");
 
 const complex_matrix = @import("complex_matrix.zig");
+const error_handling = @import("error_handling.zig");
 const strided_complex_vector = @import("strided_complex_vector.zig");
 
 const Complex = std.math.Complex;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const StridedComplexVector = strided_complex_vector.StridedComplexVector;
+
+const throw = error_handling.throw;
 
 /// Complex vector class.
 pub fn ComplexVector(comptime T: type) type {
@@ -72,6 +75,17 @@ pub fn ComplexVector(comptime T: type) type {
             }
 
             return v;
+        }
+
+        /// Copy the contents of this matrix to another matrix.
+        pub fn copyTo(self: @This(), other: *@This()) !void {
+            if (self.len != other.len) {
+                return throw(void, "CAN'T COPY A {d}-ELEMENT VECTOR TO A {d}-ELEMENT VECTOR", .{self.len, other.len});
+            }
+
+            for (self.data, 0..) |element, index| {
+                other.data[index] = element;
+            }
         }
 
         /// Check for equality with another vector, given a tolerance.

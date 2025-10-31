@@ -3,19 +3,14 @@
 const std = @import("std");
 
 const complex_gaussian = @import("complex_gaussian.zig");
-const complex_matrix = @import("complex_matrix.zig");
 const complex_runge_kutta = @import("complex_runge_kutta.zig");
 const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
-const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
-const grid_wavefunction = @import("grid_wavefunction.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const math_functions = @import("math_functions.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
-const object_array = @import("object_array.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const tully_potential = @import("tully_potential.zig");
@@ -23,32 +18,29 @@ const tully_potential = @import("tully_potential.zig");
 const Complex = std.math.Complex;
 const ComplexGaussian = complex_gaussian.ComplexGaussian;
 const ComplexRungeKutta = complex_runge_kutta.ComplexRungeKutta;
-const ComplexMatrix = complex_matrix.ComplexMatrix;
 const ComplexVector = complex_vector.ComplexVector;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
-const GridWavefunction = grid_wavefunction.GridWavefunction;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
 const RealMatrix = real_matrix.RealMatrix;
-const RealMatrixArray = object_array.RealMatrixArray;
 const RealVector = real_vector.RealVector;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
-const fixGauge = eigenproblem_solver.fixGauge;
 const mm = matrix_multiplication.mm;
-const momentumGridAlloc = grid_generator.momentumGridAlloc;
 const positionAtRow = grid_generator.positionAtRow;
-const positionGridAlloc = grid_generator.positionGridAlloc;
 const powi = math_functions.powi;
 const print = device_write.print;
 const printJson = device_write.printJson;
-const printRealMatrix = device_write.printRealMatrix;
-const printComplexMatrix = device_write.printComplexMatrix;
 
 /// The vMCG dynamics opt struct.
 pub fn Options(comptime T: type) type {
     return struct {
+        pub const InitialConditions = struct {
+            adiabatic: bool = false,
+            mass: []const T,
+            state: u32
+        };
         pub const IntegrationGrid = struct {
             limits: []const []const T,
             points: u32
@@ -68,14 +60,13 @@ pub fn Options(comptime T: type) type {
             }
         };
 
-        potential: ElectronicPotential(T),
+        initial_conditions: InitialConditions,
         integration_grid: IntegrationGrid,
         method: Method,
+        potential: ElectronicPotential(T),
 
-        initial_state: u32,
         iterations: u32,
         time_step: T,
-        mass: []const T,
 
         log_intervals: LogIntervals = .{},
         write: Write = .{},
@@ -147,7 +138,7 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
     var gaussian = try complex_gaussian.ComplexGaussian(T).init(opt.method.vMCG.position, opt.method.vMCG.gamma, opt.method.vMCG.momentum, allocator); defer gaussian.deinit();
 
-    var coefs = try ComplexVector(T).init(nstate, allocator); defer coefs.deinit(); coefs.ptr(opt.initial_state).* = Complex(T).init(1, 0);
+    var coefs = try ComplexVector(T).init(nstate, allocator); defer coefs.deinit(); coefs.ptr(opt.initial_conditions.state).* = Complex(T).init(1, 0);
 
     var propagator = try ComplexRungeKutta(T).init(2 * gaussian.position.len + coefs.len, allocator); defer propagator.deinit();
 
@@ -161,13 +152,17 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
         if (i > 0) try propagateSingleGaussian(T, &gaussian, &coefs, opt_copy, &propagator, time, allocator);
 
-        const potential_energy = try gaussian.potentialEnergy(potential, coefs, opt.integration_grid.limits, opt.integration_grid.points, time);
-        const kinetic_energy = try gaussian.kineticEnergy(opt.mass);
-
         const position = RealVector(T){.data = gaussian.position, .len = gaussian.position.len, .allocator = null};
         const momentum = RealVector(T){.data = gaussian.momentum, .len = gaussian.momentum.len, .allocator = null};
 
-        const coefs_adia = if (opt.adiabatic) try adiabaticCoefficients(T, coefs, potential, position, time, allocator) else null; defer if (coefs_adia) |c| c.deinit();
+        const transform_coefs = opt.adiabatic or (i == 0 and opt.initial_conditions.adiabatic);
+
+        const coefs_adia = if (transform_coefs) try adiabaticCoefficients(T, coefs, potential, position, time, allocator) else null; defer if (coefs_adia) |c| c.deinit();
+
+        if (opt.initial_conditions.adiabatic and i == 0) try coefs_adia.?.copyTo(&coefs);
+
+        const potential_energy = try gaussian.potentialEnergy(potential, coefs, opt.integration_grid.limits, opt.integration_grid.points, time);
+        const kinetic_energy = try gaussian.kineticEnergy(opt.initial_conditions.mass);
 
         for (0..nstate) |j| {
             output.population.ptr(i, j).* = if (opt.adiabatic) coefs_adia.?.at(j).magnitude() * coefs_adia.?.at(j).magnitude() else coefs.at(j).magnitude() * coefs.at(j).magnitude();
@@ -288,7 +283,7 @@ pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), 
                 g.position[i] = v.at(i).re; g.momentum[i] = v.at(g.position.len + i).re;
             }
 
-            const kq = try g.positionDerivative(params.opt.mass); defer kq.deinit();
+            const kq = try g.positionDerivative(params.opt.initial_conditions.mass); defer kq.deinit();
             const kp = try g.momentumDerivative(params.opt.potential, c, params.opt.integration_grid.limits, params.opt.integration_grid.points, params.time); defer kp.deinit();
             const kc = try g.coefficientDerivative(c, params.opt.potential, params.opt.integration_grid.limits, params.opt.integration_grid.points, params.time); defer kc.deinit();
 

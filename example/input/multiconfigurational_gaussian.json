@@ -20,8 +20,11 @@
                 "potential" : {
                     "tully_1" : {}
                 },
-                "initial_state" : 1,
-                "mass" : [2000],
+                "initial_conditions" : {
+                    "adiabatic" : true,
+                    "state" : 1,
+                    "mass" : [2000]
+                },
                 "iterations" : 3500,
                 "time_step" : 1
             }
