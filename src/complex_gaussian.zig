@@ -120,14 +120,14 @@ pub fn ComplexGaussian(comptime T: type) type {
                 return throw(Complex(T), "BOTH COMPLEX GAUSSIANS AND MASS ARRAY MUST HAVE THE SAME DIMENSIONALITY", .{});
             }
 
-            var result = Complex(T).init(1, 0);
+            var result = Complex(T).init(0, 0);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, mass) |q1, q2, g1, g2, p1, p2, m| {
 
                 const dq = q1 - q2;
                 const dp = p1 - p2;
 
-                const factor = std.math.sqrt(0.5 * std.math.pi) / std.math.pow(T, g1 + g2, 2.5) / m;
+                const factor = std.math.sqrt(0.5 * std.math.pi) / std.math.pow(T, g1 + g2, 2.5) / m / std.math.sqrt(2 * std.math.pi / (g1 + g2));
 
                 const factorRe = (std.math.pow(T, g2 * p1 + g1 * p2, 2) + g1 * g2 * (g1 + g2 - g1 * g2 * dq * dq));
                 const factorIm = 2 * g1 * g2 * dq * (g2 * p1 + g1 * p2);
@@ -138,10 +138,10 @@ pub fn ComplexGaussian(comptime T: type) type {
                 const factor_full = Complex(T).init(factor * factorRe, factor * factorIm);
                 const exponent_full = Complex(T).init(expRe, expIm);
 
-                result = result.mul(std.math.complex.exp(exponent_full).mul(factor_full));
+                result = result.add(std.math.complex.exp(exponent_full).mul(factor_full));
             }
 
-            return result.div(Complex(T).init(self.norm * other.norm, 0));
+            return result.mul(try self.overlap(other));
         }
 
         /// Returns the kinetic energy expectation value of this complex Gaussian.
