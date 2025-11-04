@@ -121,6 +121,7 @@ pub fn GridWavefunction(comptime T: type) type {
         pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: []const T) !void {
             if (position.len != self.ndim) return throw(void, "POSITION LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
             if (momentum.len != self.ndim) return throw(void, "MOMENTUM LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
+            if (gamma.len != self.ndim) return throw(void, "GAMMA LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
             if (state >= self.nstate) return throw(void, "STATE INDEX OUT OF BOUNDS", .{});
 
             var position_at_row = try RealVector(T).init(self.ndim, self.allocator); defer position_at_row.deinit();

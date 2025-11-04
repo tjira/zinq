@@ -12,10 +12,12 @@ const electronic_potential = @import("electronic_potential.zig");
 const error_handling = @import("error_handling.zig");
 const fewest_switches = @import("fewest_switches.zig");
 const global_variables = @import("global_variables.zig");
+const hammes_schiffer_tully = @import("hammes_schiffer_tully.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const landau_zener = @import("landau_zener.zig");
 const math_functions = @import("math_functions.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
+const nonadiabatic_coupling_vector = @import("nonadiabatic_coupling_vector.zig");
 const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 const object_array = @import("object_array.zig");
 const parallel_tools = @import("parallel_tools.zig");
@@ -78,6 +80,7 @@ pub fn Options(comptime T: type) type {
             population_mean: ?[]const u8 = null,
             position_mean: ?[]const u8 = null,
             potential_energy_mean: ?[]const u8 = null,
+            time_derivative_coupling_mean: ?[]const u8 = null,
             total_energy_mean: ?[]const u8 = null
         };
 
@@ -106,6 +109,7 @@ pub fn Output(comptime T: type) type {
         population_mean: RealMatrix(T),
         position_mean: RealMatrix(T),
         potential_energy_mean: RealVector(T),
+        time_derivative_coupling_mean: RealMatrix(T),
         total_energy_mean: RealVector(T),
 
         /// Allocate the output structure.
@@ -116,6 +120,7 @@ pub fn Output(comptime T: type) type {
                 .population_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                 .position_mean = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                 .potential_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
+                .time_derivative_coupling_mean = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
                 .total_energy_mean = try RealVector(T).initZero(iterations + 1, allocator)
             };
         }
@@ -127,6 +132,7 @@ pub fn Output(comptime T: type) type {
             self.population_mean.deinit();
             self.position_mean.deinit();
             self.potential_energy_mean.deinit();
+            self.time_derivative_coupling_mean.deinit();
             self.total_energy_mean.deinit();
         }
     };
@@ -155,6 +161,7 @@ pub fn Custom(comptime T: type) type {
             population: RealMatrix(T),
             position: RealMatrix(T),
             potential_energy: RealVector(T),
+            time_derivative_coupling: RealMatrix(T),
             total_energy: RealVector(T),
 
             /// Allocate the trajectory output structure.
@@ -165,6 +172,7 @@ pub fn Custom(comptime T: type) type {
                     .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                     .position = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                     .potential_energy = try RealVector(T).initZero(iterations + 1, allocator),
+                    .time_derivative_coupling = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
                     .total_energy = try RealVector(T).initZero(iterations + 1, allocator),
                 };
             }
@@ -176,6 +184,7 @@ pub fn Custom(comptime T: type) type {
                 self.population.deinit();
                 self.position.deinit();
                 self.potential_energy.deinit();
+                self.time_derivative_coupling.deinit();
                 self.total_energy.deinit();
             }
         };
@@ -194,21 +203,17 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var output = try Output(T).init(nstate, ndim, opt.iterations, allocator);
 
-    var output_kinetic_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator); defer output_kinetic_energy_mean.deinit();
-    var output_momentum_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator); defer output_momentum_mean.deinit();
-    var output_population_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator); defer output_population_mean.deinit();
-    var output_position_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator); defer output_position_mean.deinit();
-    var output_potential_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator); defer output_potential_energy_mean.deinit();
-    var output_total_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator); defer output_total_energy_mean.deinit();
-
     const parallel_results = .{
-        .kinetic_energy_mean = output_kinetic_energy_mean,
-        .momentum_mean = output_momentum_mean,
-        .population_mean = output_population_mean,
-        .position_mean = output_position_mean,
-        .potential_energy_mean = output_potential_energy_mean,
-        .total_energy_mean = output_total_energy_mean
+        .kinetic_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
+        .momentum_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
+        .population_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
+        .position_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
+        .potential_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
+        .time_derivative_coupling_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate * nstate}, allocator),
+        .total_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
     };
+
+    defer inline for (std.meta.fields(@TypeOf(parallel_results))) |field| @as(field.type, @field(parallel_results, field.name)).deinit();
 
     var split_mix = std.Random.SplitMix64.init(opt.seed);
 
@@ -291,13 +296,39 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .lz_parameters = lz_parameters
     };
 
+    const hst_parameters: hammes_schiffer_tully.Parameters(T) = .{
+        .eigenvector_overlap = eigenvector_overlap,
+        .time_step = opt.time_step
+    };
+
+    const nacv_parameters: nonadiabatic_coupling_vector.Parameters(T) = .{
+        .adiabatic_potential = adiabatic_potential,
+        .diabatic_potential = diabatic_potential,
+        .adiabatic_eigenvectors = adiabatic_eigenvectors,
+        .electronic_potential = opt.potential,
+        .position = system.position,
+        .velocity = system.velocity,
+        .time = 0
+    };
+
+    const npi_parameters: norm_preserving_interpolation.Parameters(T) = .{
+        .eigenvector_overlap = eigenvector_overlap,
+        .time_step = opt.time_step
+    };
+
+    const derivative_coupling_parameters: derivative_coupling.Parameters(T) = .{
+        .hst_parameters = hst_parameters,
+        .nacv_parameters = nacv_parameters,
+        .npi_parameters = npi_parameters
+    };
+
     var split_mix = std.Random.SplitMix64.init(opt.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
     var timer = try std.time.Timer.start();
 
     for (0..opt.iterations + 1) |i| {
 
-        const time = @as(T, @floatFromInt(i)) * opt.time_step;
+        const time = @as(T, @floatFromInt(i)) * opt.time_step; @constCast(&nacv_parameters.time).* = time;
 
         try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
@@ -312,8 +343,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
             try mm(T, &eigenvector_overlap, previous_eigenvectors, true, adiabatic_eigenvectors, false);
 
-            if (opt.derivative_coupling) |tdc_algorithm| {
-                try tdc_algorithm.evaluate(&time_derivative_coupling, eigenvector_overlap, opt.time_step);
+            if (opt.derivative_coupling) |time_derivative_coupling_algorithm| {
+                try time_derivative_coupling_algorithm.evaluate(&time_derivative_coupling, derivative_coupling_parameters);
             }
         }
 
@@ -332,6 +363,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         output.population.ptr(i, current_state).* = 1;
         output.potential_energy.ptr(i).* = potential_energy;
         output.total_energy.ptr(i).* = kinetic_energy + potential_energy;
+
+        for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = time_derivative_coupling.at(j / nstate, j % nstate);
 
         for (0..ndim) |j| {
             output.position.ptr(i, j).* = system.position.at(j); output.momentum.ptr(i, j).* = system.velocity.at(j) * system.masses.at(j);
@@ -392,6 +425,10 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     };
 
+    results.time_derivative_coupling_mean.ptr(id - 1).add(trajectory_output.time_derivative_coupling) catch |e| {
+        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    };
+
     results.total_energy_mean.ptr(id - 1).add(trajectory_output.total_energy) catch |e| {
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
     };
@@ -429,6 +466,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     const output_population_mean = parallel_results.population_mean;
     const output_position_mean = parallel_results.position_mean;
     const output_potential_energy_mean = parallel_results.potential_energy_mean;
+    const output_time_derivative_coupling_mean = parallel_results.time_derivative_coupling_mean;
     const output_total_energy_mean = parallel_results.total_energy_mean;
 
     for (0..opt.nthread) |i| {
@@ -437,6 +475,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
         try output.population_mean.add(output_population_mean.at(i));
         try output.position_mean.add(output_position_mean.at(i));
         try output.potential_energy_mean.add(output_potential_energy_mean.at(i));
+        try output.time_derivative_coupling_mean.add(output_time_derivative_coupling_mean.at(i));
         try output.total_energy_mean.add(output_total_energy_mean.at(i));
     }
 
@@ -445,6 +484,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     output.population_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.position_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.potential_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+    output.time_derivative_coupling_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.total_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
@@ -454,6 +494,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     if (opt.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population_mean, 0, end_time, opt.iterations + 1);
     if (opt.write.position_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.position_mean, 0, end_time, opt.iterations + 1);
     if (opt.write.potential_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.potential_energy_mean.asMatrix(), 0, end_time, opt.iterations + 1);
+    if (opt.write.time_derivative_coupling_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.time_derivative_coupling_mean, 0, end_time, opt.iterations + 1);
     if (opt.write.total_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy_mean.asMatrix(), 0, end_time, opt.iterations + 1);
 }
 

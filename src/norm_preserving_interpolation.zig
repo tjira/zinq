@@ -10,15 +10,26 @@ const RealMatrix = real_matrix.RealMatrix;
 
 const throw = error_handling.throw;
 
+/// Parameters for the Norm Preserving Interpolation method.
+pub fn Parameters(comptime T: type) type {
+    return struct {
+        eigenvector_overlap: RealMatrix(T),
+        time_step: T
+    };
+}
+
 /// Norm Preserving interpolation coupling implementation.
 pub fn NormPreservingInterpolation(comptime T: type) type {
     return struct {
 
         /// Evaluate the time derivative coupling.
-        pub fn evaluate(_: @This(), derivative_coupling: *RealMatrix(T), eigenvector_overlap: RealMatrix(T), time_step: T) !void {
+        pub fn evaluate(_: @This(), derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
             if (derivative_coupling.rows != 2) return throw(void, "NORM PRESERVING INTERPOLATION ONLY IMPLEMENTED FOR 2 STATES", .{});
 
             derivative_coupling.zero();
+
+            const eigenvector_overlap = parameters.eigenvector_overlap;
+            const time_step = parameters.time_step;
 
             if (eigenvector_overlap.at(0, 1) == 0) return;
 
