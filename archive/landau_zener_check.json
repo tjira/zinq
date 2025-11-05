@@ -50,7 +50,7 @@
                     "time_linear" : {}
                 },
                 "write" : {
-                    "population" : "POPULATION.mat"
+                    "population" : "POPULATION_EXACT.mat"
                 },
                 "iterations" : 2000,
                 "time_step" : 0.01,
