@@ -60,6 +60,9 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 * **Quantum Dynamics**  
   Simulate wavepacket dynamics in arbitrary dimensions and across multiple electronic states.
 
+* **Dirac–Frenkel Variational Principle**  
+  Propagate a parametrized wavefunction using the Dirac–Frenkel variational principle.
+
 * **Surface Hopping**  
   Run nonadiabatic dynamics with Fewest Switches (FSSH) or Landau-Zener (LZSH) algorithms.
 
