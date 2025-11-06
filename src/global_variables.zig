@@ -16,6 +16,7 @@ pub const MAX_JACOBI_ITERATIONS = 1000;
 pub const TEST_TOLERANCE = 1e-10;
 pub const SINGULARITY_TOLERANCE = 1e-14;
 pub const MAX_POOL_SIZE = 10000;
+pub const RPN_MAX_STACK_SIZE = 2048;
 
 pub const Eh  = 4.359744722206e-18; // J
 pub const a0  = 5.29177210544e-11;  // m
