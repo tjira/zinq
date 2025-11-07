@@ -2,7 +2,7 @@ import os, setuptools, setuptools.command.build_py, shutil, subprocess
 
 class Build(setuptools.command.build_py.build_py):
     def run(self):
-        subprocess.run(["make", "CROSS=1"], check=True)
+        subprocess.run(["make", "CROSS=1"], check=True, env={**os.environ, **({"OS" : "Windows_NT"} if os.name == "nt" else {})})
 
         os.makedirs(os.path.join("zinq", "bin"), exist_ok=True)
 

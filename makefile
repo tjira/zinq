@@ -1,5 +1,7 @@
 .SHELLFLAGS := $(if $(filter $(OS),Windows_NT),-NoProfile -Command,-c)
 
+VERSION := $(file < VERSION)
+
 CROSS       ?= 0
 DEBUG       ?= 0
 INCREMENTAL ?= 0
@@ -47,6 +49,9 @@ docs: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 linguist:
 	@github-linguist
 
+pip: wheel
+	@pip install --force-reinstall dist/zinq-$(VERSION)-py3-none-any.whl
+
 profile: zinq
 	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq
 	@gprof2dot -e 1 -f callgrind -n 5 -o profile.dot -z main.main callgrind.out
@@ -56,7 +61,7 @@ serve: docs
 	@cd docs && bundle exec jekyll serve
 
 wheel:
-	python -m build --wheel
+	@python -m build --wheel
 
 # EXTERNAL TARGETS =====================================================================================================================================================================================
 
