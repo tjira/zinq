@@ -50,6 +50,8 @@ pub fn FilePotential(comptime T: type) type {
         pub fn init(self: @This(), allocator: std.mem.Allocator) !?FilePotentialData(T) {
             const U = try readRealMatrix(T, self.path, allocator);
 
+            if (self.ndim + self.nstate * self.nstate != U.cols) return throw(?FilePotentialData(T), "POTENTIAL DATA DIMENSIONS DO NOT MATCH THE SPECIFIED NDIM AND NSTATE", .{});
+
             file_potential_data = .{
                 .data = U,
                 .allocator = allocator
