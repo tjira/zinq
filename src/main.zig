@@ -35,6 +35,7 @@ pub const integral_transform = @import("integral_transform.zig");
 pub const landau_zener = @import("landau_zener.zig");
 pub const linear_interpolation = @import("linear_interpolation.zig");
 pub const linear_solve = @import("linear_solve.zig");
+pub const mapping_approach = @import("mapping_approach.zig");
 pub const math_functions = @import("math_functions.zig");
 pub const matrix_multiplication = @import("matrix_multiplication.zig");
 pub const molecular_integrals = @import("molecular_integrals.zig");

@@ -36,6 +36,7 @@ const print = device_write.print;
 const printJson = device_write.printJson;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
+const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
 /// The quantum dynamics options struct.
 pub fn Options(comptime T: type) type {
@@ -248,7 +249,7 @@ pub fn initializeWavefunctionDynamicsContainer(comptime T: type, wavefunction: G
 
 /// Print header for iteration info.
 pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
-    var buffer: [128]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
 
@@ -264,7 +265,7 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
 
 /// Prints the iteration info to standard output.
 pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer: *std.time.Timer) !void {
-    var buffer: [128]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
 

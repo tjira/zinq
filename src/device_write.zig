@@ -20,6 +20,8 @@ const RealVector = real_vector.RealVector;
 const AN2SM = global_variables.AN2SM;
 const A2AU = global_variables.A2AU;
 
+const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
+
 /// Exports the real matrix to a file.
 pub fn exportRealMatrix(comptime T: type, path: []const u8, A: RealMatrix(T)) !void {
     var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
@@ -87,7 +89,7 @@ pub fn printRealVector(comptime T: type, v: RealVector(T)) !void {
 
 /// Print a formatted line into the specified device.
 pub fn write(device: std.fs.File, comptime format: []const u8, args: anytype) !void {
-    var buffer: [32768]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
@@ -98,7 +100,7 @@ pub fn write(device: std.fs.File, comptime format: []const u8, args: anytype) !v
 
 /// Write the classical particle as a .xyz molecule file into the specified device with an optional comment line.
 pub fn writeClassicalParticleAsMolecule(comptime T: type, device: std.fs.File, object: ClassicalParticle(T), comment: ?[]const u8) !void {
-    var buffer: [32768]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
@@ -120,7 +122,7 @@ pub fn writeClassicalParticleAsMolecule(comptime T: type, device: std.fs.File, o
 
 /// Print the formatted complex matrix to the specified device.
 pub fn writeComplexMatrix(comptime T: type, device: std.fs.File, A: ComplexMatrix(T)) !void {
-    var buffer: [32768]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
@@ -135,7 +137,7 @@ pub fn writeComplexMatrix(comptime T: type, device: std.fs.File, A: ComplexMatri
 
 /// Print a formatted json into the specified device.
 pub fn writeJson(device: std.fs.File, object: anytype) !void {
-    var buffer: [32768]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
@@ -148,7 +150,7 @@ pub fn writeJson(device: std.fs.File, object: anytype) !void {
 
 /// Print the formatted real matrix to the specified device.
 pub fn writeRealMatrix(comptime T: type, device: std.fs.File, A: RealMatrix(T)) !void {
-    var buffer: [32768]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
@@ -163,7 +165,7 @@ pub fn writeRealMatrix(comptime T: type, device: std.fs.File, A: RealMatrix(T)) 
 
 /// Write the real matrix to the specified device with the leftmost column being linspaced values from start to end with points number of points.
 pub fn writeRealMatrixWithLinspacedLeftColumn(comptime T: type, device: std.fs.File, A: RealMatrix(T), start: T, end: T, points: usize) !void {
-    var buffer: [32768]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
@@ -185,7 +187,7 @@ pub fn writeRealMatrixWithLinspacedLeftColumn(comptime T: type, device: std.fs.F
 
 /// Print the formatted real 4th order tensor to the specified device.
 pub fn writeRealTensorFour(comptime T: type, device: std.fs.File, A: RealTensor4(T)) !void {
-    var buffer: [32768]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
@@ -200,7 +202,7 @@ pub fn writeRealTensorFour(comptime T: type, device: std.fs.File, A: RealTensor4
 
 /// Print the formatted real 3rd order tensor to the specified device as a PPM image.
 pub fn writeRealTensorThreeAsPPM(comptime T: type, device: std.fs.File, A: RealTensor3(T)) !void {
-    var buffer: [32768]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
@@ -215,7 +217,7 @@ pub fn writeRealTensorThreeAsPPM(comptime T: type, device: std.fs.File, A: RealT
 
 /// Print the formatted real vector to the specified device.
 pub fn writeRealVector(comptime T: type, device: std.fs.File, v: RealVector(T)) !void {
-    var buffer: [32768]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 

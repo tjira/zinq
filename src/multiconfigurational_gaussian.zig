@@ -35,6 +35,7 @@ const print = device_write.print;
 const printJson = device_write.printJson;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
+const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
 /// The vMCG dynamics opt struct.
 pub fn Options(comptime T: type) type {
@@ -303,15 +304,18 @@ pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), 
 
 /// Print header for iteration info.
 pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
-    var buffer: [128]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
+
+    const ndim_header_width = 9 * @as(usize, @min(ndim, 3)) + 2 * (@as(usize, @min(ndim, 3)) - 1) + @as(usize, if (ndim > 3) 7 else 2);
+    const nstate_header_width = 7 * @as(usize, @min(4, nstate)) + 2 * (@as(usize, @min(4, nstate)) - 1) + @as(usize, if (nstate > 4) 7 else 2);
 
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:8} ", .{"ITER"});
     try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
-    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]} ", .{.value = "POPULATION", .width = 9 * nstate + 2 * (nstate - 1) + 2});
+    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = ndim_header_width});
+    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = ndim_header_width});
+    try writer.print("{[value]s:[width]} ", .{.value = "POPULATION", .width = nstate_header_width});
     try writer.print("{s:4}", .{"TIME"});
 
     try print("{s}\n", .{writer.buffered()});
@@ -319,7 +323,7 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
 
 /// Prints the iteration info to standard output.
 pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer: *std.time.Timer) !void {
-    var buffer: [128]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
 
@@ -328,19 +332,19 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
 
     try writer.print("[", .{});
 
-    for (0..info.position.len) |i| {
+    for (0..@min(3, info.position.len)) |i| {
         try writer.print("{d:9.4}{s}", .{info.position.at(i), if (i == info.position.len - 1) "" else ", "});
     }
 
     try writer.print("] [", .{});
 
-    for (0..info.momentum.len) |i| {
+    for (0..@min(3, info.position.len)) |i| {
         try writer.print("{d:9.4}{s}", .{info.momentum.at(i), if (i == info.momentum.len - 1) "" else ", "});
     }
 
     try writer.print("] [", .{});
 
-    for (0..info.coefs.len) |i| {
+    for (0..@min(4, info.coefs.len)) |i| {
         try writer.print("{d:9.4}{s}", .{info.coefs.at(i).magnitude() * info.coefs.at(i).magnitude(), if (i == info.coefs.len - 1) "" else ", "});
     }
 

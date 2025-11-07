@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const string_manipulation = @import("string_manipulation.zig");
 
@@ -9,11 +10,13 @@ const RealMatrix = real_matrix.RealMatrix;
 
 const uncr = string_manipulation.uncr;
 
+const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
+
 /// Reads the real matrix from a file.
 pub fn readRealMatrix(comptime T: type, path: []const u8, allocator: std.mem.Allocator) !RealMatrix(T) {
     var file = try std.fs.cwd().openFile(path, .{}); defer file.close();
 
-    var buffer: [32768]u8 = undefined; var reader = file.reader(&buffer); var reader_interface = &reader.interface;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined; var reader = file.reader(&buffer); var reader_interface = &reader.interface;
 
     const rowstr = try reader_interface.takeDelimiterExclusive(' ' ); const rows = try std.fmt.parseInt(usize, uncr(rowstr), 10); reader_interface.toss(1);
     const colstr = try reader_interface.takeDelimiterExclusive('\n'); const cols = try std.fmt.parseInt(usize, uncr(colstr), 10); reader_interface.toss(1);

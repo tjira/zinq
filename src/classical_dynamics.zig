@@ -15,6 +15,7 @@ const global_variables = @import("global_variables.zig");
 const hammes_schiffer_tully = @import("hammes_schiffer_tully.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const landau_zener = @import("landau_zener.zig");
+const mapping_approach = @import("mapping_approach.zig");
 const math_functions = @import("math_functions.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const nonadiabatic_coupling_vector = @import("nonadiabatic_coupling_vector.zig");
@@ -36,6 +37,7 @@ const ElectronicPotential = electronic_potential.ElectronicPotential;
 const FewestSwitches = fewest_switches.FewestSwitches;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
 const LandauZener = landau_zener.LandauZener;
+const MappingApproach = mapping_approach.MappingApproach;
 const NormPreservingInterpolation = norm_preserving_interpolation.NormPreservingInterpolation;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
@@ -57,6 +59,8 @@ const printRealMatrix = device_write.printRealMatrix;
 const throw = error_handling.throw;
 
 const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
+const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
+
 var PARALLEL_ERROR = &global_variables.PARALLEL_ERROR;
 
 /// Classical dynamics options struct.
@@ -258,6 +262,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     const nstate = opt.potential.nstate();
     const ndim = opt.potential.ndim();
 
+    var split_mix = std.Random.SplitMix64.init(opt.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
+
     var output = try Custom(T).TrajectoryOutput.init(nstate, ndim, opt.iterations, allocator);
 
     var current_state: usize = @intCast(opt.initial_conditions.state);
@@ -275,8 +281,21 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     var jump_probabilities = try RealVector(T).init(nstate, allocator); defer jump_probabilities.deinit();
     var runge_kutta_solver = try ComplexRungeKutta(T).init(nstate, allocator); defer runge_kutta_solver.deinit();
     var amplitudes = try ComplexVector(T).initZero(nstate, allocator); defer amplitudes.deinit();
+    var bloch_vector = try RealVector(T).initZero(3, allocator); defer bloch_vector.deinit();
 
-    amplitudes.ptr(current_state).* = Complex(T).init(1, 0);
+    amplitudes.ptr(current_state).* = Complex(T).init(1, 0); bloch_vector.ptr(2).* = if (current_state == 1) 1 else -1;
+
+    if (opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
+
+        const phi = 2 * std.math.pi * random.float(T);
+
+        const cos_theta = bloch_vector.at(2) * std.math.sqrt(random.float(T));
+        const sin_theta = std.math.sqrt(1 - cos_theta * cos_theta);
+
+        bloch_vector.ptr(0).* = sin_theta * std.math.cos(phi);
+        bloch_vector.ptr(1).* = sin_theta * std.math.sin(phi);
+        bloch_vector.ptr(2).* = cos_theta;
+    }
 
     const fs_parameters: fewest_switches.Parameters(T) = .{
         .adiabatic_potential = adiabatic_potential,
@@ -291,9 +310,17 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .time_step = opt.time_step
     };
 
+    const ma_parameters: mapping_approach.Parameters(T) = .{
+        .adiabatic_potential = adiabatic_potential,
+        .bloch_vector = &bloch_vector,
+        .derivative_coupling = time_derivative_coupling,
+        .time_step = opt.time_step
+    };
+
     const surface_hopping_parameters: surface_hopping_algorithm.Parameters(T) = .{
         .fs_parameters = fs_parameters,
-        .lz_parameters = lz_parameters
+        .lz_parameters = lz_parameters,
+        .ma_parameters = ma_parameters
     };
 
     const hst_parameters: hammes_schiffer_tully.Parameters(T) = .{
@@ -308,7 +335,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .electronic_potential = opt.potential,
         .position = system.position,
         .velocity = system.velocity,
-        .time = 0
+        .time = undefined
     };
 
     const npi_parameters: norm_preserving_interpolation.Parameters(T) = .{
@@ -321,8 +348,6 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .nacv_parameters = nacv_parameters,
         .npi_parameters = npi_parameters
     };
-
-    var split_mix = std.Random.SplitMix64.init(opt.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
     var timer = try std.time.Timer.start();
 
@@ -353,7 +378,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         };
 
         if (opt.surface_hopping) |algorithm| if (i > 1) {
-            current_state = algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, adiabatic_potential, current_state, &random);
+            current_state = try algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, adiabatic_potential, current_state, &random);
         };
 
         const kinetic_energy = system.kineticEnergy();
@@ -436,7 +461,7 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
 
 /// Print header for iteration info.
 pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surface_hopping: ?SurfaceHoppingAlgorithm(T)) !void {
-    var buffer: [1024]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     const ndim_header_width = 9 * @as(usize, @min(ndim, 3)) + 2 * (@as(usize, @min(ndim, 3)) - 1) + @as(usize, if (ndim > 3) 7 else 2);
     const nstate_header_width = 7 * @as(usize, @min(4, nstate)) + 2 * (@as(usize, @min(4, nstate)) - 1) + @as(usize, if (nstate > 4) 7 else 2);
@@ -529,7 +554,7 @@ pub fn printFinalDetails(comptime T: type, opt: Options(T), output: Output(T)) !
 
 /// Prints the iteration info to standard output.
 pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T), timer: *std.time.Timer) !void {
-    var buffer: [1024]u8 = undefined;
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
 
@@ -633,4 +658,34 @@ test "Landau-Lener Surface Hopping on Tully's First Potential" {
 
     try std.testing.expect(output.population_mean.at(opt.iterations, 0) == 0.498);
     try std.testing.expect(output.population_mean.at(opt.iterations, 1) == 0.502);
+}
+
+test "Mapping Approach to Surface Hopping on Tully's First Potential" {
+    const opt = Options(f64){
+        .derivative_coupling = .{
+            .npi = NormPreservingInterpolation(f64){}
+        },
+        .initial_conditions = .{
+            .mass = &.{2000},
+            .momentum_mean = &.{15},
+            .momentum_std = &.{1},
+            .position_mean = &.{-10},
+            .position_std = &.{0.5},
+            .state = 1
+        },
+        .potential = .{
+            .tully_1 = TullyPotential1(f64){}
+        },
+        .surface_hopping = .{
+            .mapping_approach = MappingApproach(f64){}
+        },
+        .iterations = 3500,
+        .time_step = 1,
+        .trajectories = 1000
+    };
+
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+
+    try std.testing.expect(output.population_mean.at(opt.iterations, 0) == 0.385);
+    try std.testing.expect(output.population_mean.at(opt.iterations, 1) == 0.615);
 }

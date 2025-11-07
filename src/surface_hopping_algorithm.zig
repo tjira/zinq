@@ -5,6 +5,7 @@ const std = @import("std");
 const classical_particle = @import("classical_particle.zig");
 const fewest_switches = @import("fewest_switches.zig");
 const landau_zener = @import("landau_zener.zig");
+const mapping_approach = @import("mapping_approach.zig");
 const object_array = @import("object_array.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -12,6 +13,7 @@ const real_vector = @import("real_vector.zig");
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const FewestSwitches = fewest_switches.FewestSwitches;
 const LandauZener = landau_zener.LandauZener;
+const MappingApproach = mapping_approach.MappingApproach;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const RingBufferArray = object_array.RingBufferArray;
@@ -20,7 +22,8 @@ const RingBufferArray = object_array.RingBufferArray;
 pub fn Parameters(comptime T: type) type {
     return struct {
         fs_parameters: fewest_switches.Parameters(T),
-        lz_parameters: landau_zener.Parameters(T)
+        lz_parameters: landau_zener.Parameters(T),
+        ma_parameters: mapping_approach.Parameters(T)
     };
 }
 
@@ -29,24 +32,26 @@ pub fn SurfaceHoppingAlgorithm(comptime T: type) type {
     return union(enum) {
         fewest_switches: FewestSwitches(T),
         landau_zener: LandauZener(T),
+        mapping_approach: MappingApproach(T),
 
         /// Get the jump probabilities for the current state.
-        pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) void {
+        pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) !void {
             switch (self) {
                 .fewest_switches => |field| field.getJumpProbabilities(jump_probabilities, parameters.fs_parameters, current_state),
-                .landau_zener => |field| field.getJumpProbabilities(jump_probabilities, parameters.lz_parameters, current_state)
+                .landau_zener => |field| field.getJumpProbabilities(jump_probabilities, parameters.lz_parameters, current_state),
+                .mapping_approach => |field| try field.getJumpProbabilities(jump_probabilities, parameters.ma_parameters, current_state)
             }
         }
 
         /// Perform the jump based on the probabilities and adjust the momentum accordingly.
-        pub fn jump(self: @This(), system: *ClassicalParticle(T), jump_probabilities: *RealVector(T), parameters: Parameters(T), adiabatic_potential: RealMatrix(T), state: usize, random: *std.Random) usize {
+        pub fn jump(self: @This(), system: *ClassicalParticle(T), jump_probabilities: *RealVector(T), parameters: Parameters(T), adiabatic_potential: RealMatrix(T), state: usize, random: *std.Random) !usize {
             const substeps = if (self == .fewest_switches) self.fewest_switches.substeps else 1;
 
             var new_state: usize = state;
 
             for (0..substeps) |_| {
 
-                getJumpProbabilities(self, jump_probabilities, parameters, new_state);
+                try getJumpProbabilities(self, jump_probabilities, parameters, new_state);
 
                 const random_number = random.float(T);
 
