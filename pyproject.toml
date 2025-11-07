@@ -11,6 +11,7 @@ dynamic = ["version"]
 
 [project.scripts]
 zinq = "zinq.launch:main"
+hf = "zinq.launch:hf"
 
 [project.urls]
 "Homepage" = "https://tjira.github.io/zinq/"

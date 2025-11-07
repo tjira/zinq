@@ -1,6 +1,12 @@
-import os, pathlib, platform, subprocess, sys
+import argparse, json, os, pathlib, platform, subprocess, sys
 
-def main():
+def deleteInputFile():
+    os.remove("input.json")
+
+def executeInputFile():
+    sys.exit(subprocess.call([getBinaryPath(), "input.json"]))
+
+def getBinaryPath():
     ARCH, OS = platform.uname().machine.lower(), platform.uname().system.lower()
 
     if OS   == "darwin": OS   =   "macos"
@@ -11,6 +17,51 @@ def main():
 
     if OS != "windows": os.chmod(binary_path, 0o755)
 
-    exit_code = subprocess.call([binary_path, *sys.argv[1:]])
+    return binary_path
 
-    sys.exit(exit_code)
+def getInputTemplate(name):
+    return {
+        "zinq" : [
+            {
+                "name": name,
+                "options" : {}
+            }
+        ]
+    }
+
+def writeInputFile(inp):
+    with open("input.json", "w") as file:
+        json.dump(inp, file, indent=4)
+
+def writeInputExecuteAndClean(inp):
+    writeInputFile(inp)
+    executeInputFile()
+    deleteInputFile()
+
+def main():
+    sys.exit(subprocess.call([getBinaryPath(), *sys.argv[1:]]))
+
+def hf():
+    parser = argparse.ArgumentParser(
+        prog="Zinq Hartree-Fock Module", description="Wrapper for the Hartree-Fock method using the Zinq package.",
+        formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=128),
+        add_help=False, allow_abbrev=False
+    )
+
+    parser.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS, help="This help message.")
+
+    parser.add_argument("-b", "--basis", type=str, help="Basis set to use.", default="sto-3g")
+    parser.add_argument("-m", "--molecule", type=str, help="Molecule specification in XYZ format.", default="molecule.xyz")
+
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.molecule): raise Exception(f"ERROR: MOLECULE FILE '{args.molecule}' DOES NOT EXIST")
+
+    inp = getInputTemplate("hartree_fock")
+
+    inp["zinq"][0]["options"] = {
+        "system" : args.molecule,
+        "basis" : args.basis
+    }
+
+    writeInputExecuteAndClean(inp)
