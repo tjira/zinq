@@ -34,9 +34,7 @@
                     "file" : {
                         "ndim" : 1,
                         "nstate" : 2,
-                        "source" : {
-                            "path" : "U.mat"
-                        }
+                        "path" : "U.mat"
                     }
                 },
                 "iterations" : 3500,

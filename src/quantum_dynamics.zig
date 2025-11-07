@@ -118,11 +118,11 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    var potential = opt.potential;
-    const ndim = potential.ndim();
-    const nstate = potential.nstate();
+    const ndim = opt.potential.ndim();
+    const nstate = opt.potential.nstate();
 
-    const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
+    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
+    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
 
     var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
 
@@ -130,7 +130,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma);
 
-    if (opt.adiabatic) try wavefunction.transformRepresentation(potential, 0, false);
+    if (opt.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false);
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, wavefunction, opt.iterations, allocator) else null;
 
@@ -144,11 +144,11 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
-        if (i > 0) try wavefunction.propagate(potential, time, opt.time_step, opt.imaginary, &temporary_wavefunction_column);
+        if (i > 0) try wavefunction.propagate(opt.potential, time, opt.time_step, opt.imaginary, &temporary_wavefunction_column);
 
-        const density_matrix = try wavefunction.density(potential, time, opt.adiabatic); defer density_matrix.deinit();
+        const density_matrix = try wavefunction.density(opt.potential, time, opt.adiabatic); defer density_matrix.deinit();
 
-        const potential_energy = try wavefunction.potentialEnergy(potential, time);
+        const potential_energy = try wavefunction.potentialEnergy(opt.potential, time);
         const kinetic_energy = try wavefunction.kineticEnergy(&temporary_wavefunction_column);
 
         const position = try wavefunction.positionMean(); defer position.deinit();
@@ -158,7 +158,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             output.population.ptr(i, j).* = density_matrix.at(j, j).re;
         }
 
-        if (opt.write.wavefunction != null) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, potential, i, time, opt.adiabatic);
+        if (opt.write.wavefunction != null) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, i, time, opt.adiabatic);
 
         if (i == opt.iterations) {
             output.kinetic_energy = kinetic_energy;

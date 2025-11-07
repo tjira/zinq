@@ -130,13 +130,13 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    var potential = opt.potential;
-    const ndim = potential.ndim();
-    const nstate = potential.nstate();
+    const ndim = opt.potential.ndim();
+    const nstate = opt.potential.nstate();
 
-    const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
+    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
+    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
 
-    var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator); var opt_copy = opt; opt_copy.potential = potential;
+    var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.integration_grid, nstate, opt.iterations, allocator) else null;
 
@@ -154,18 +154,18 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
-        if (i > 0) try propagateSingleGaussian(T, &gaussian, &coefs, opt_copy, &propagator, time, allocator);
+        if (i > 0) try propagateSingleGaussian(T, &gaussian, &coefs, opt, &propagator, time, allocator);
 
         const position = RealVector(T){.data = gaussian.position, .len = gaussian.position.len, .allocator = null};
         const momentum = RealVector(T){.data = gaussian.momentum, .len = gaussian.momentum.len, .allocator = null};
 
         const transform_coefs = opt.adiabatic or (i == 0 and opt.initial_conditions.adiabatic);
 
-        const coefs_adia = if (transform_coefs) try adiabaticCoefficients(T, coefs, potential, position, time, allocator) else null; defer if (coefs_adia) |c| c.deinit();
+        const coefs_adia = if (transform_coefs) try adiabaticCoefficients(T, coefs, opt.potential, position, time, allocator) else null; defer if (coefs_adia) |c| c.deinit();
 
         if (opt.initial_conditions.adiabatic and i == 0) try coefs_adia.?.copyTo(&coefs);
 
-        const potential_energy = try gaussian.potentialEnergy(potential, coefs, opt.integration_grid.limits, opt.integration_grid.points, time);
+        const potential_energy = try gaussian.potentialEnergy(opt.potential, coefs, opt.integration_grid.limits, opt.integration_grid.points, time);
         const kinetic_energy = try gaussian.kineticEnergy(opt.initial_conditions.mass);
 
         for (0..nstate) |j| {

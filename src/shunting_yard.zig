@@ -14,14 +14,14 @@ const operatorPrecedence = reverse_polish_notation.operatorPrecedence;
 const throw = error_handling.throw;
 
 /// Parses the input expression using the Shunting Yard algorithm and returns the RPN output.
-pub fn shuntingYard(comptime T: type, input: []const u8, allocator: std.mem.Allocator) !ReversePolishNotation(T) {
+pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []const u8, allocator: std.mem.Allocator) !ReversePolishNotation(T) {
     var rpn = try ReversePolishNotation(T).init(allocator);
 
     var stack = std.ArrayList(union(enum) {op: Operator, bracket: u8}){}; defer stack.deinit(allocator);
 
     var i: usize = 0; var j: usize = 0; var buffer: [64]u8 = undefined;
 
-    while (i < input.len) : (i += 1) {
+    parser: while (i < input.len) : (i += 1) {
 
         if (std.ascii.isWhitespace(input[i])) continue;
 
@@ -63,6 +63,13 @@ pub fn shuntingYard(comptime T: type, input: []const u8, allocator: std.mem.Allo
         }
 
         else {
+
+            for (variables) |variable| {
+                if (std.mem.eql(u8, variable, input[i..i + variable.len])) {
+                    try rpn.append(variable); i += variable.len - 1; continue :parser;
+                }
+            }
+
             return throw(ReversePolishNotation(T), "UNKNOWN TOKEN IN EXPRESSION", .{});
         }
     }

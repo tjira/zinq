@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const custom_potential = @import("custom_potential.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const file_potential = @import("file_potential.zig");
 const global_variables = @import("global_variables.zig");
@@ -13,6 +14,7 @@ const time_linear_potential = @import("time_linear_potential.zig");
 const tully_potential = @import("tully_potential.zig");
 const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
+const CustomPotential = custom_potential.CustomPotential;
 const FilePotential = file_potential.FilePotential;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
 const MorsePotential = morse_potential.MorsePotential;
@@ -30,6 +32,7 @@ const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
 /// Electronic potential mode union.
 pub fn ElectronicPotential(comptime T: type) type {
     return union(enum) {
+        custom: CustomPotential(T),
         file: FilePotential(T),
         harmonic: HarmonicPotential(T),
         morse: MorsePotential(T),
@@ -47,6 +50,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Evaluate the dabatic potential energy matrix at given system state and time.
         pub fn evaluateDiabatic(self: @This(), diabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) void {
             switch (self) {
+                .custom => |field| field.evaluateDiabatic(diabatic_potential, position, time) catch unreachable,
                 .file => |field| field.evaluateDiabatic(diabatic_potential, position, time) catch unreachable,
                 inline else => |field| field.evaluateDiabatic(diabatic_potential, position, time)
             }
@@ -83,6 +87,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Getter for number of dimensions.
         pub fn ndim(self: @This()) usize {
             return switch (self) {
+                .custom => |field| field.variables.len,
                 .file => |field| field.ndim,
                 .harmonic => |field| field.k.len,
                 .morse => 1,
@@ -95,6 +100,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Getter for number of electronic states.
         pub fn nstate(self: @This()) usize {
             return switch (self) {
+                .custom => |field| field.matrix.len,
                 .file => |field| field.nstate,
                 .harmonic => 1,
                 .morse => 1,

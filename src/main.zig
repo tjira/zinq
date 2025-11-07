@@ -12,6 +12,7 @@ pub const complex_matrix = @import("complex_matrix.zig");
 pub const complex_runge_kutta = @import("complex_runge_kutta.zig");
 pub const complex_vector = @import("complex_vector.zig");
 pub const contracted_gaussian = @import("contracted_gaussian.zig");
+pub const custom_potential = @import("custom_potential.zig");
 pub const derivative_coupling = @import("derivative_coupling.zig");
 pub const device_read = @import("device_read.zig");
 pub const device_write = @import("device_write.zig");

@@ -20,6 +20,7 @@
                 "potential" : {
                     "tully_1" : {}
                 },
+                "adiabatic" : true,
                 "iterations" : 3500,
                 "time_step" : 1
             }

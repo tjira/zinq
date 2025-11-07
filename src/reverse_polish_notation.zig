@@ -30,6 +30,7 @@ pub fn ReversePolishNotation(comptime T: type) type {
         const Element = union(enum) {
             number: T,
             op: Operator,
+            variable: []const u8
         };
 
         data: std.ArrayList(Element),
@@ -57,17 +58,20 @@ pub fn ReversePolishNotation(comptime T: type) type {
                 try self.data.append(self.allocator, Element{.number = element});
             } else if (@TypeOf(element) == Operator) {
                 try self.data.append(self.allocator, Element{.op = element});
+            } else if (@TypeOf(element) == []const u8) {
+                try self.data.append(self.allocator, Element{.variable = element});
             } else {
                 return throw(void, "INVALID ELEMENT TYPE FOR RPN", .{});
             }
         }
 
         /// Evaluates the RPN expression and returns the result.
-        pub fn evaluate(self: *@This()) T {
+        pub fn evaluate(self: *@This(), map: std.StringHashMap(T)) !T {
             for (self.data.items) |element| {
                 switch (element) {
                     .number => |num| self.stack.appendAssumeCapacity(num),
-                    .op => |op| self.stack.appendAssumeCapacity(applyOperator(op, self.stack.pop().?, self.stack.pop().?))
+                    .op => |op| self.stack.appendAssumeCapacity(applyOperator(op, self.stack.pop().?, self.stack.pop().?)),
+                    .variable => |variable| self.stack.appendAssumeCapacity(map.get(variable) orelse return throw(T, "UNKNOWN '{s}' VARIABLE IN RPN EVALUATION", .{variable})),
                 }
             }
 

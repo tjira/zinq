@@ -54,11 +54,11 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    var potential = opt.potential;
-    const ndim = potential.ndim();
-    const nstate = potential.nstate();
+    const ndim = opt.potential.ndim();
+    const nstate = opt.potential.nstate();
 
-    const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
+    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
+    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
 
     if (opt.grid.limits.len != ndim) return throw(Output(T), "LIMITS LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
     for (0..ndim) |i| if (opt.grid.limits[i].len != 2) return throw(Output(T), "EACH LIMIT MUST HAVE A LENGTH OF 2", .{});
@@ -74,7 +74,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         positionAtRow(T, &point, i, ndim, @intCast(opt.grid.points), opt.grid.limits);
 
-        if (opt.adiabatic) try potential.evaluateAdiabatic(&value, point, 0) else potential.evaluateDiabatic(&value, point, 0);
+        if (opt.adiabatic) try opt.potential.evaluateAdiabatic(&value, point, 0) else opt.potential.evaluateDiabatic(&value, point, 0);
     }
 
     try exportRealMatrix(T, opt.output, potential_matrix);

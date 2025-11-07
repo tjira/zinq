@@ -23,9 +23,7 @@ pub fn lerp(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(
 
 /// Function to get a function value of a point in a grid using 1D linear interpolation.
 pub fn lerp1D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(T)) T {
-    var i = grid.column(r.len - 1).bisectRight(r.at(0));
-
-    if (i >= grid.rows) i = grid.rows - 1;
+    const i = @min(@max(grid.column(r.len - 1).bisectRight(r.at(0)), 1), grid.rows - 1);
 
     const x0 = grid.at(i - 1, r.len - 1);
     const x1 = grid.at(i,     r.len - 1);
@@ -42,11 +40,8 @@ pub fn lerp1D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVecto
 pub fn lerp2D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(T)) T {
     const size: usize = @as(usize, @intFromFloat(@round(std.math.pow(T, @as(T, @floatFromInt(grid.rows)), 1.0 / 2.0))));
 
-    var i = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(0));
-    var j = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(1));
-
-    if (i >= grid.rows) i = grid.rows - 1;
-    if (j >= grid.rows) j = grid.rows - 1;
+    const i = @min(@max(grid.column(r.len - 1).slice(0, size).bisectRight(r.at(0)), 1), grid.rows - 1);
+    const j = @min(@max(grid.column(r.len - 1).slice(0, size).bisectRight(r.at(1)), 1), grid.rows - 1);
 
     const x0 = grid.at(i - 1, r.len - 1);
     const x1 = grid.at(i,     r.len - 1);
@@ -72,13 +67,9 @@ pub fn lerp2D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVecto
 pub fn lerp3D(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(T)) T {
     const size: usize = @as(usize, @intFromFloat(@round(std.math.pow(T, @as(T, @floatFromInt(grid.rows)), 1.0 / 3.0))));
 
-    var i = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(0));
-    var j = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(1));
-    var k = grid.column(r.len - 1).slice(0, size).bisectRight(r.at(2));
-
-    if (i >= grid.rows) i = grid.rows - 1;
-    if (j >= grid.rows) j = grid.rows - 1;
-    if (k >= grid.rows) k = grid.rows - 1;
+    const i = @min(@max(grid.column(r.len - 1).slice(0, size).bisectRight(r.at(0)), 1), grid.rows - 1);
+    const j = @min(@max(grid.column(r.len - 1).slice(0, size).bisectRight(r.at(1)), 1), grid.rows - 1);
+    const k = @min(@max(grid.column(r.len - 1).slice(0, size).bisectRight(r.at(2)), 1), grid.rows - 1);
 
     const x0 = grid.at(i - 1, r.len - 1);
     const x1 = grid.at(i,     r.len - 1);

@@ -199,11 +199,11 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    var potential = opt.potential;
-    const ndim = potential.ndim();
-    const nstate = potential.nstate();
+    const ndim = opt.potential.ndim();
+    const nstate = opt.potential.nstate();
 
-    const file_potential = if (potential == .file) try potential.file.init(allocator) else null; defer if (file_potential) |U| U.deinit();
+    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
+    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
 
     var output = try Output(T).init(nstate, ndim, opt.iterations, allocator);
 
@@ -234,9 +234,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         for (0..@min(opt.trajectories - i * MAX_POOL_SIZE, MAX_POOL_SIZE)) |j| {
 
             const rng = std.Random.DefaultPrng.init(split_mix.next());
-            var opt_copy = opt; opt_copy.potential = potential;
 
-            const params = .{opt_copy, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator};
+            const params = .{opt, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator};
 
             if (opt.nthread == 1) {
                 runTrajectoryParallel(1, T, parallel_results, params);
