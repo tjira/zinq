@@ -358,7 +358,7 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
     try writer.print("] [", .{});
 
     for (0..@min(4, info.coefs.len)) |i| {
-        try writer.print("{d:9.4}{s}", .{info.coefs.at(i).magnitude() * info.coefs.at(i).magnitude(), if (i == info.coefs.len - 1) "" else ", "});
+        try writer.print("{d:7.4}{s}", .{info.coefs.at(i).magnitude() * info.coefs.at(i).magnitude(), if (i == info.coefs.len - 1) "" else ", "});
     }
 
     if (info.coefs.len > 4) try writer.print("...", .{});
