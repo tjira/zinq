@@ -3,10 +3,6 @@
         {
             "name" : "multiconfigurational_gaussian",
             "options" : {
-                "integration_grid" : {
-                    "limits" : [[-24, 32]],
-                    "points" : 2048
-                },
                 "method" : {
                     "vMCG" : {
                         "momentum" : [15],
@@ -25,6 +21,7 @@
                     "state" : 1,
                     "mass" : [2000]
                 },
+                "adiabatic" : true,
                 "iterations" : 350,
                 "time_step" : 10
             }

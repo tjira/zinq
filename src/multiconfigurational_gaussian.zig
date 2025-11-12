@@ -7,6 +7,8 @@ const complex_runge_kutta = @import("complex_runge_kutta.zig");
 const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const error_handling = @import("error_handling.zig");
+const hermite_quadrature_nodes = @import("hermite_quadrature_nodes.zig");
 const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
@@ -33,9 +35,11 @@ const positionAtRow = grid_generator.positionAtRow;
 const powi = math_functions.powi;
 const print = device_write.print;
 const printJson = device_write.printJson;
+const throw = error_handling.throw;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
+const HERMITE_NODES = hermite_quadrature_nodes.HERMITE_NODES;
 
 /// The vMCG dynamics opt struct.
 pub fn Options(comptime T: type) type {
@@ -45,16 +49,16 @@ pub fn Options(comptime T: type) type {
             mass: []const T,
             state: u32
         };
-        pub const IntegrationGrid = struct {
-            limits: []const []const T,
-            points: u32
-        };
         pub const LogIntervals = struct {
             iteration: u32 = 1
         };
         pub const Write = struct {
             population: ?[]const u8 = null,
             wavefunction: ?[]const u8 = null
+        };
+        pub const WavefunctionGrid = struct {
+            limits: []const []const T,
+            points: u32
         };
         pub const Method = union(enum) {
             vMCG: struct {
@@ -65,7 +69,6 @@ pub fn Options(comptime T: type) type {
         };
 
         initial_conditions: InitialConditions,
-        integration_grid: IntegrationGrid,
         method: Method,
         potential: ElectronicPotential(T),
 
@@ -73,8 +76,10 @@ pub fn Options(comptime T: type) type {
         time_step: T,
 
         log_intervals: LogIntervals = .{},
+        wavefunction_grid: ?WavefunctionGrid = null,
         write: Write = .{},
 
+        integration_nodes: u32 = 32,
         adiabatic: bool = false,
     };
 }
@@ -130,6 +135,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
+    if (opt.integration_nodes < 1 or opt.integration_nodes > 256) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{HERMITE_NODES.len});
+
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
@@ -138,7 +145,7 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
     var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
 
-    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.integration_grid, nstate, opt.iterations, allocator) else null;
+    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
 
     var gaussian = try complex_gaussian.ComplexGaussian(T).init(opt.method.vMCG.position, opt.method.vMCG.gamma, opt.method.vMCG.momentum, allocator); defer gaussian.deinit();
 
@@ -165,7 +172,7 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
         if (opt.initial_conditions.adiabatic and i == 0) try coefs_adia.?.copyTo(&coefs);
 
-        const potential_energy = try gaussian.potentialEnergy(opt.potential, coefs, opt.integration_grid.limits, opt.integration_grid.points, time);
+        const potential_energy = try gaussian.potentialEnergy(opt.potential, coefs, opt.integration_nodes, time);
         const kinetic_energy = try gaussian.kineticEnergy(opt.initial_conditions.mass);
 
         for (0..nstate) |j| {
@@ -242,18 +249,20 @@ pub fn assignWavefunctionStepSingleGaussian(comptime T: type, wfn_container: *Re
 }
 
 /// Initialize the container for the wavefunction dynamics.
-pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: Options(T).IntegrationGrid, nstate: usize, iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
-    const grid_points = powi(grid.points, grid.limits.len);
+pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(T).WavefunctionGrid, nstate: usize, iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
+    if (grid == null) return throw(RealMatrix(T), "WAVEFUNCTION GRID MUST BE PROVIDED WHEN WRITING THE WAVEFUNCTION DYNAMICS", .{});
 
-    var wavefunction_dynamics: RealMatrix(T) = try RealMatrix(T).init(grid_points, grid.limits.len + 2 * nstate * (iterations + 1), allocator);
+    const grid_points = powi(grid.?.points, grid.?.limits.len);
 
-    var position_at_row = try RealVector(T).init(grid.limits.len, allocator); defer position_at_row.deinit();
+    var wavefunction_dynamics: RealMatrix(T) = try RealMatrix(T).init(grid_points, grid.?.limits.len + 2 * nstate * (iterations + 1), allocator);
+
+    var position_at_row = try RealVector(T).init(grid.?.limits.len, allocator); defer position_at_row.deinit();
 
     for (0..grid_points) |i| {
 
-        positionAtRow(T, &position_at_row, i, grid.limits.len, grid.points, grid.limits);
+        positionAtRow(T, &position_at_row, i, grid.?.limits.len, grid.?.points, grid.?.limits);
 
-        for (0..grid.limits.len) |j| {
+        for (0..grid.?.limits.len) |j| {
             wavefunction_dynamics.ptr(i, j).* = position_at_row.at(j);
         }
     }
@@ -288,8 +297,8 @@ pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), 
             }
 
             const kq = try g.positionDerivative(params.opt.initial_conditions.mass); defer kq.deinit();
-            const kp = try g.momentumDerivative(params.opt.potential, c, params.opt.integration_grid.limits, params.opt.integration_grid.points, params.time); defer kp.deinit();
-            const kc = try g.coefficientDerivative(c, params.opt.potential, params.opt.integration_grid.limits, params.opt.integration_grid.points, params.time); defer kc.deinit();
+            const kp = try g.momentumDerivative(params.opt.potential, c, params.opt.integration_nodes, params.time); defer kp.deinit();
+            const kc = try g.coefficientDerivative(c, params.opt.potential, params.opt.integration_nodes, params.time); defer kc.deinit();
 
             for (0..g.position.len) |i| {
                 k.ptr(i).* = Complex(T).init(kq.at(i), 0); k.ptr(g.position.len + i).* = Complex(T).init(kp.at(i), 0);
@@ -336,17 +345,23 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
         try writer.print("{d:9.4}{s}", .{info.position.at(i), if (i == info.position.len - 1) "" else ", "});
     }
 
+    if (info.position.len > 3) try writer.print("...", .{});
+
     try writer.print("] [", .{});
 
-    for (0..@min(3, info.position.len)) |i| {
+    for (0..@min(3, info.momentum.len)) |i| {
         try writer.print("{d:9.4}{s}", .{info.momentum.at(i), if (i == info.momentum.len - 1) "" else ", "});
     }
+
+    if (info.momentum.len > 3) try writer.print("...", .{});
 
     try writer.print("] [", .{});
 
     for (0..@min(4, info.coefs.len)) |i| {
         try writer.print("{d:9.4}{s}", .{info.coefs.at(i).magnitude() * info.coefs.at(i).magnitude(), if (i == info.coefs.len - 1) "" else ", "});
     }
+
+    if (info.coefs.len > 4) try writer.print("...", .{});
 
     try writer.print("] {D}", .{timer.read()}); timer.reset();
 
@@ -359,10 +374,6 @@ test "vMCG on Tully's First Potential" {
             .mass = &.{2000},
             .state = 1,
         },
-        .integration_grid = .{
-            .limits = &.{&.{-24, 32}},
-            .points = 2048
-        },
         .method = .{
             .vMCG = .{
                 .position = &.{-10},
@@ -373,14 +384,15 @@ test "vMCG on Tully's First Potential" {
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
         },
+        .integration_nodes = 32,
         .iterations = 350,
         .time_step = 10
     };
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.kinetic_energy - 0.06574640030075) < TEST_TOLERANCE);
-    try std.testing.expect(@abs(output.population.at(opt.iterations, 0) - 0.53765670511788) < TEST_TOLERANCE);
-    try std.testing.expect(@abs(output.population.at(opt.iterations, 1) - 0.46234038610337) < TEST_TOLERANCE);
-    try std.testing.expect(@abs(output.potential_energy - 0.00075316319014) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.kinetic_energy - 0.06574552356661) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 0) - 0.53765879822849) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 1) - 0.46233829327311) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.potential_energy - 0.00075320504955) < TEST_TOLERANCE);
 }
