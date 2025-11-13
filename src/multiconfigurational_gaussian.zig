@@ -166,11 +166,15 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
         const position = RealVector(T){.data = gaussian.position, .len = gaussian.position.len, .allocator = null};
         const momentum = RealVector(T){.data = gaussian.momentum, .len = gaussian.momentum.len, .allocator = null};
 
-        const transform_coefs = opt.adiabatic or (i == 0 and opt.initial_conditions.adiabatic);
+        var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit();
 
-        const coefs_adia = if (transform_coefs) try adiabaticCoefficients(T, coefs, opt.potential, position, time, allocator) else null; defer if (coefs_adia) |c| c.deinit();
+        if (i == 0 and opt.initial_conditions.adiabatic) {
+            coefs_adia = try transformCoefficients(T, coefs, opt.potential, position, time, false, allocator); try coefs_adia.?.copyTo(&coefs);
+        }
 
-        if (opt.initial_conditions.adiabatic and i == 0) try coefs_adia.?.copyTo(&coefs);
+        if (opt.adiabatic) {
+            if (coefs_adia) |c| c.deinit(); coefs_adia = try transformCoefficients(T, coefs, opt.potential, position, time, true, allocator);
+        }
 
         const potential_energy = try gaussian.potentialEnergy(opt.potential, coefs, opt.integration_nodes, time);
         const kinetic_energy = try gaussian.kineticEnergy(opt.initial_conditions.mass);
@@ -217,8 +221,8 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
     return output;
 }
 
-/// Transforms the coefficients to the adiabatic representation.
-pub fn adiabaticCoefficients(comptime T: type, coefs: ComplexVector(T), potential: ElectronicPotential(T), position: RealVector(T), time: T, allocator: std.mem.Allocator) !ComplexVector(T) {
+/// Transforms the coefficients between the diabatic and adiabatic representations.
+pub fn transformCoefficients(comptime T: type, coefs: ComplexVector(T), potential: ElectronicPotential(T), position: RealVector(T), time: T, to_adiabatic: bool, allocator: std.mem.Allocator) !ComplexVector(T) {
     const coefs_adia = try ComplexVector(T).initZero(coefs.len, allocator); var coefs_adia_matrix = coefs_adia.asMatrix();
 
     var diabatic_potential = try RealMatrix(T).init(coefs.len, coefs.len, allocator); defer diabatic_potential.deinit();
@@ -227,7 +231,11 @@ pub fn adiabaticCoefficients(comptime T: type, coefs: ComplexVector(T), potentia
 
     try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position, time);
 
-    try mm(T, &coefs_adia_matrix, adiabatic_eigenvectors, true, coefs.asMatrix(), false);
+    if (to_adiabatic) {
+        try mm(T, &coefs_adia_matrix, adiabatic_eigenvectors, true, coefs.asMatrix(), false);
+    } else {
+        try mm(T, &coefs_adia_matrix, adiabatic_eigenvectors, false, coefs.asMatrix(), false);
+    }
 
     return coefs_adia;
 }

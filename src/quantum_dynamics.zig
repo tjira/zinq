@@ -130,7 +130,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma);
 
-    if (opt.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false);
+    if (opt.initial_conditions.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false);
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, wavefunction, opt.iterations, allocator) else null;
 
