@@ -37,6 +37,10 @@
                         "path" : "U.mat"
                     }
                 },
+                "write" : {
+                    "wavefunction" : "WAVEFUNCTION_EXACT.mat",
+                    "population" : "POPULATION_EXACT.mat"
+                },
                 "iterations" : 3500,
                 "time_step" : 1
             }

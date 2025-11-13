@@ -33,6 +33,7 @@ pub const harmonic_potential = @import("harmonic_potential.zig");
 pub const hartree_fock = @import("hartree_fock.zig");
 pub const integral_functions = @import("integral_functions.zig");
 pub const integral_transform = @import("integral_transform.zig");
+pub const jahn_teller_potential = @import("jahn_teller_potential.zig");
 pub const landau_zener = @import("landau_zener.zig");
 pub const hermite_quadrature_nodes = @import("hermite_quadrature_nodes.zig");
 pub const linear_interpolation = @import("linear_interpolation.zig");

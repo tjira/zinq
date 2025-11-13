@@ -7,6 +7,7 @@ const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const file_potential = @import("file_potential.zig");
 const global_variables = @import("global_variables.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
+const jahn_teller_potential = @import("jahn_teller_potential.zig");
 const morse_potential = @import("morse_potential.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -17,6 +18,7 @@ const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 const CustomPotential = custom_potential.CustomPotential;
 const FilePotential = file_potential.FilePotential;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
+const JahnTellerPotential = jahn_teller_potential.JahnTellerPotential;
 const MorsePotential = morse_potential.MorsePotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
@@ -35,6 +37,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         custom: CustomPotential(T),
         file: FilePotential(T),
         harmonic: HarmonicPotential(T),
+        jahn_teller: JahnTellerPotential(T),
         morse: MorsePotential(T),
         time_linear: TimeLinearPotential(T),
         tully_1: TullyPotential1(T),
@@ -90,6 +93,7 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .custom => |field| field.variables.len,
                 .file => |field| field.ndim,
                 .harmonic => |field| field.k.len,
+                .jahn_teller => 2,
                 .morse => 1,
                 .time_linear => 1,
                 .tully_1 => 1,
@@ -103,6 +107,7 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .custom => |field| field.matrix.len,
                 .file => |field| field.nstate,
                 .harmonic => 1,
+                .jahn_teller => 2,
                 .morse => 1,
                 .time_linear => 2,
                 .tully_1 => 2,

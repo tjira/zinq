@@ -8,6 +8,7 @@
                     "points" : 2048
                 },
                 "initial_conditions" : {
+                    "adiabatic" : true,
                     "mass" : 2000,
                     "momentum" : [15],
                     "position" : [-10],

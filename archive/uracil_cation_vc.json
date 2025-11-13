@@ -98,6 +98,9 @@
                 "derivative_coupling" : {
                     "hst" : {}
                 },
+                "write" : {
+                    "population_mean" : "POPULATION_MEAN.mat"
+                },
                 "iterations" : 250,
                 "time_step" : 10,
                 "trajectories" : 1000

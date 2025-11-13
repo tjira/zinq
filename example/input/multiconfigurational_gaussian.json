@@ -11,19 +11,19 @@
                     }
                 },
                 "log_intervals" : {
-                    "iteration" : 50
-                },
-                "potential" : {
-                    "tully_1" : {}
+                    "iteration" : 500
                 },
                 "initial_conditions" : {
                     "adiabatic" : true,
                     "state" : 1,
                     "mass" : [2000]
                 },
+                "potential" : {
+                    "tully_1" : {}
+                },
                 "adiabatic" : true,
-                "iterations" : 350,
-                "time_step" : 10
+                "iterations" : 3500,
+                "time_step" : 1
             }
         }
     ]

@@ -1,0 +1,33 @@
+{
+    "zinq" : [
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 128
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [2, 2],
+                    "state" : 1,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 100
+                },
+                "potential" : {
+                    "jahn_teller" : {}
+                },
+                "write" : {
+                    "wavefunction" : "WAVEFUNCTION_EXACT.mat",
+                    "population" : "POPULATION_EXACT.mat"
+                },
+                "adiabatic" : true,
+                "iterations" : 1000,
+                "time_step" : 0.01
+            }
+        }
+    ]
+}
