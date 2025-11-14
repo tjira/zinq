@@ -4,7 +4,7 @@ import argparse as ap, matplotlib.animation as anm, matplotlib.pyplot as plt, nu
 
 # create the parser
 parser = ap.ArgumentParser(
-    prog="Acorn Heatmap Plotter", description="Heatmap plotting script for the Quantum Acorn package.",
+    prog="Zinq Heatmap Plotter", description="Heatmap plotting script for the Zinq package.",
     formatter_class=lambda prog: ap.HelpFormatter(prog, max_help_position=128),
     add_help=False, allow_abbrev=False
 )
