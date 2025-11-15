@@ -1,10 +1,8 @@
-import argparse, json, os, pathlib, platform, subprocess, sys
+import argparse, json, os, pathlib, platform, subprocess, sys, tempfile
 
-def deleteInputFile():
-    os.remove("input.json")
-
-def executeInputFile():
-    sys.exit(subprocess.call([getBinaryPath(), "input.json"]))
+def executeInput(inp):
+    with tempfile.NamedTemporaryFile(mode="w") as tmp:
+        json.dump(inp, tmp); tmp.flush(); sys.exit(subprocess.call([getBinaryPath(), tmp.name]))
 
 def getBinaryPath():
     ARCH, OS = platform.uname().machine.lower(), platform.uname().system.lower()
@@ -28,15 +26,6 @@ def getInputTemplate(name):
             }
         ]
     }
-
-def writeInputFile(inp):
-    with open("input.json", "w") as file:
-        json.dump(inp, file, indent=4)
-
-def writeInputExecuteAndClean(inp):
-    writeInputFile(inp)
-    executeInputFile()
-    deleteInputFile()
 
 def main():
     sys.exit(subprocess.call([getBinaryPath(), *sys.argv[1:]]))
@@ -64,4 +53,37 @@ def hf():
         "basis" : args.basis
     }
 
-    writeInputExecuteAndClean(inp)
+    executeInput(inp)
+
+def prime():
+    parser = argparse.ArgumentParser(
+        prog="Zinq Prime Generation Module", description="Wrapper for the prime number generation using the Zinq package.",
+        formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=128),
+        add_help=False, allow_abbrev=False
+    )
+
+    parser.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS, help="This help message.")
+
+    parser.add_argument("-c", "--count", type=str, help="Number of primes to generate.", default=10)
+    parser.add_argument("-l", "--log", type=str, help="Logging interval.", default=1)
+    parser.add_argument("-o", "--output", type=str, help="Output file. Splitting interval can be put after a semicolon.")
+    parser.add_argument("-s", "--start", type=int, help="Starting number.", default=2)
+
+    parser.add_argument('--mersenne', action=argparse.BooleanOptionalAction)
+
+    args = parser.parse_args()
+
+    inp = getInputTemplate("prime_numbers")
+
+    inp["zinq"][0]["options"] = {
+        "count" : args.count,
+        "filter" : "mersenne" if args.mersenne else "all",
+        "log_interval" : args.log,
+        "start" : args.start,
+        "output" : {
+            "interval" : int(args.output.split(":")[1]) if ":" in args.output else None,
+            "path" : args.output.split(":")[0]
+        } if args.output else None
+    }
+
+    executeInput(inp)

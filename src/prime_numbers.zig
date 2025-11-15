@@ -18,13 +18,17 @@ pub fn Options(comptime _: type) type {
             all,
             mersenne
         };
+        pub const Out = struct {
+            interval: ?u32 = null,
+            path: []const u8
+        };
 
         count: u32 = 10,
         log_interval: u32 = 1,
-        output: ?[]const u8 = null,
         start: u32 = 2,
 
         filter: Filter = .all,
+        output: ?Out = null
     };
 }
 
@@ -56,23 +60,39 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (enable_printing) try print("\n{s:9} {s:18}\n", .{"INDEX", "PRIME NUMBER"});
 
-    var output = try Output(T).init(@as(usize, @intCast(opt.count)), allocator);
+    const max_output = if (opt.output != null and opt.output.?.interval != null) @min(opt.count, opt.output.?.interval.?) else opt.count;
 
-    output.prime_numbers.ptr(0).* = @as(T, if (opt.start < 2) 2 else opt.start);
+    var output = try Output(T).init(max_output, allocator);
+
+    output.prime_numbers.ptr(0).* = if (opt.start <= 2) 2 else switch (opt.filter) {
+        .all => nextPrime(T, opt.start),
+        .mersenne => try nextMersenne(T, opt.start, allocator),
+    };
 
     for (0..opt.count) |i| {
 
-        if (i > 0) output.prime_numbers.ptr(i).* = switch (opt.filter) {
-            .all => nextPrime(T, output.prime_numbers.at(i - 1)),
-            .mersenne => try nextMersenne(T, output.prime_numbers.at(i - 1), allocator),
+        if (i > 0 or output.prime_numbers.len == 0) output.prime_numbers.ptr(i % max_output).* = switch (opt.filter) {
+            .all => nextPrime(T, output.prime_numbers.at((i - 1) % max_output)),
+            .mersenne => try nextMersenne(T, output.prime_numbers.at((i - 1) % max_output), allocator),
         };
 
         if (enable_printing and (i == 0 or (i + 1) % opt.log_interval == 0)) {
-            try print("{d:9} {d:18}\n", .{i + 1, output.prime_numbers.at(i)});
+            try print("{d:9} {d:18}\n", .{i + 1, output.prime_numbers.at(i % max_output)});
+        }
+
+        if ((i + 1) % max_output == 0) {
+            if (opt.output != null) {
+
+                var buf_start: [32]u8 = undefined; var buf_end: [32]u8 = undefined;
+
+                const start = try std.fmt.bufPrint(&buf_start, "{d}", .{i + 2 - max_output}); const end = try std.fmt.bufPrint(&buf_end, "{d}", .{i + 1});
+
+                const path = if (opt.output.?.interval != null) try std.mem.concat(allocator, u8, &.{opt.output.?.path, "_", start, "-", end}) else opt.output.?.path;
+
+                try exportRealVector(T, path, output.prime_numbers); if (opt.output.?.interval != null) allocator.free(path);
+            }
         }
     }
-
-    if (opt.output) |path| try exportRealVector(T, path, output.prime_numbers);
 
     return output;
 }
