@@ -79,6 +79,7 @@ pub fn Options(comptime T: type) type {
         wavefunction_grid: ?WavefunctionGrid = null,
         write: Write = .{},
 
+        finite_differences_step: T = 1e-8,
         integration_nodes: u32 = 32,
         adiabatic: bool = false,
     };
@@ -305,7 +306,7 @@ pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), 
             }
 
             const kq = try g.positionDerivative(params.opt.initial_conditions.mass); defer kq.deinit();
-            const kp = try g.momentumDerivative(params.opt.potential, c, params.opt.integration_nodes, params.time); defer kp.deinit();
+            const kp = try g.momentumDerivative(params.opt.potential, c, params.opt.integration_nodes, params.time, params.opt.finite_differences_step); defer kp.deinit();
             const kc = try g.coefficientDerivative(c, params.opt.potential, params.opt.integration_nodes, params.time); defer kc.deinit();
 
             for (0..g.position.len) |i| {

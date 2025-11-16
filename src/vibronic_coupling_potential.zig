@@ -34,66 +34,36 @@ pub fn VibronicCouplingPotential(comptime T: type) type {
         nondiagonal_linear: []const []const T,
 
         /// Diabatic potential matrix evaluator.
-        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), _: T) void {
-            U.fill(0); for (0..self.nstate()) |i| U.ptr(i, i).* = self.energy[i];
-
-            for (0..position.len) |i| {
-
-                const qi = position.at(i) * std.math.sqrt(self.omega[i] / EV2RCM / AU2EV);
-
-                for (0..self.nstate()) |j| {
-
-                    const d = self.morse_potential.d[j][i];
-                    const a = self.morse_potential.a[j][i];
-                    const q = self.morse_potential.q[j][i];
-                    const e = self.morse_potential.e[j][i];
-
-                    const harmonic = d == 0 and a == 0 and q == 0 and e == 0;
-
-                    U.ptr(j, j).* += if (harmonic) self.omega[i] * qi * qi / (2 * EV2RCM) else d * std.math.pow(T, std.math.exp(-a * (qi - q)) - 1, 2) + e;
-                }
-
-                for (0..self.nstate()) |j| U.ptr(j, j).* += self.diagonal_linear[j][i] * qi;
-                for (0..self.nstate()) |j| U.ptr(j, j).* += self.diagonal_quadratic[j][i] * qi * qi / 2;
-                for (0..self.nstate()) |j| U.ptr(j, j).* += self.diagonal_quartic[j][i] * qi * qi * qi * qi / 24;
-
-                for (0..U.rows) |j| for (j + 1..U.cols) |k| {
-                    U.ptr(j, k).* += self.nondiagonal_linear[j * (2 * self.nstate() - j - 1) / 2 + (k - j - 1)][i] * qi;
-                };
-            }
-
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) void {
             for (0..self.nstate()) |i| for (i..self.nstate()) |j| {
-                U.ptr(i, j).* /= AU2EV; U.ptr(j, i).* = U.at(i, j);
+                U.ptr(i, j).* = self.evaluateDiabaticElement(i, j, position, time) catch unreachable; U.ptr(j, i).* = U.at(i, j);
             };
         }
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
-            if (i >= self.nstate() or j >= self.nstate()) return throw(T, "ELEMENT EVALUATION FOR VIBRONIC COUPLING POTENTIAL NOT IMPLEMENTED", .{});
+            if (i >= self.nstate() or j >= self.nstate()) return throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{});
 
             var value = if (i == j) self.energy[i] else 0;
 
             for (0..position.len) |k| {
 
-                const qi = position.at(i) * std.math.sqrt(self.omega[k] / EV2RCM / AU2EV);
+                const qi = position.at(k) * std.math.sqrt(self.omega[k] / EV2RCM / AU2EV);
 
                 if (i == j) {
 
-                    for (0..self.nstate()) |l| {
+                    const d = self.morse_potential.d[i][k];
+                    const a = self.morse_potential.a[i][k];
+                    const q = self.morse_potential.q[i][k];
+                    const e = self.morse_potential.e[i][k];
 
-                        const d = self.morse_potential.d[l][k];
-                        const a = self.morse_potential.a[l][k];
-                        const q = self.morse_potential.q[l][k];
-                        const e = self.morse_potential.e[l][k];
+                    const harmonic = d == 0 and a == 0 and q == 0 and e == 0;
 
-                        const harmonic = d == 0 and a == 0 and q == 0 and e == 0;
+                    value += if (harmonic) self.omega[k] * qi * qi / (2 * EV2RCM) else d * std.math.pow(T, std.math.exp(-a * (qi - q)) - 1, 2) + e;
 
-                        value += if (harmonic) self.omega[k] * qi * qi / (2 * EV2RCM) else d * std.math.pow(T, std.math.exp(-a * (qi - q)) - 1, 2) + e;
-                    }
-
-                    for (0..self.nstate()) |l| value += self.diagonal_linear[l][k] * qi;
-                    for (0..self.nstate()) |l| value += self.diagonal_quadratic[l][k] * qi * qi / 2;
-                    for (0..self.nstate()) |l| value += self.diagonal_quartic[l][k] * qi * qi * qi * qi / 24;
+                    value += self.diagonal_linear[i][k] * qi;
+                    value += self.diagonal_quadratic[i][k] * qi * qi / 2;
+                    value += self.diagonal_quartic[i][k] * qi * qi * qi * qi / 24;
                 }
 
                 if (i != j) {

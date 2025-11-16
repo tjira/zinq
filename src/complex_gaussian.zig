@@ -157,11 +157,11 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Calculates the derivative of the momentum.
-        pub fn momentumDerivative(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T) !RealVector(T) {
+        pub fn momentumDerivative(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
             const dV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, self.allocator); defer dV.deinit();
 
             for (0..dV.len) |i| {
-                dV.ptr(i).deinit(); dV.ptr(i).* = try self.potentialDerivative(self, pot, i, n_nodes, time);
+                dV.ptr(i).deinit(); dV.ptr(i).* = try self.potentialDerivative(self, pot, i, n_nodes, time, fdiff_step);
             }
 
             var F = try RealVector(T).initZero(dV.len, self.allocator);
@@ -257,7 +257,7 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Compute the potential energy derivative matrix element between this complex Gaussian and another for a given potential function and a specified coordinate.
-        pub fn potentialDerivative(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T) !ComplexMatrix(T) {
+        pub fn potentialDerivative(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T) !ComplexMatrix(T) {
             var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator);
 
             var variables = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(variables);
@@ -288,7 +288,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                 for (0..V.rows) |j| for (j..V.cols) |k| {
 
-                    const value = try pot.evaluateDiabaticElementDerivative1(j, k, RealVector(T){.data = variables, .len = variables.len, .allocator = null}, time, index, 1e-8);
+                    const value = try pot.evaluateDiabaticElementDerivative1(j, k, RealVector(T){.data = variables, .len = variables.len, .allocator = null}, time, index, fdiff_step);
 
                     V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); V.ptr(k, j).* = V.at(j, k);
                 };

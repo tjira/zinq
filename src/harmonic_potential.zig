@@ -17,17 +17,20 @@ pub fn HarmonicPotential(comptime T: type) type {
         k: []const T = &[_]T{1},
 
         /// Diabatic potential evaluator.
-        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), _: T) void {
-            U.ptr(0, 0).* = 0;
-
-            for (0..self.k.len) |i| {
-                U.ptr(0, 0).* += 0.5 * self.k[i] * position.at(i) * position.at(i);
-            }
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) void {
+            U.ptr(0, 0).* = self.evaluateDiabaticElementComptime(0, 0, position, time);
         }
 
         /// Diabatic potential matrix element evaluator.
-        pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
+        pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
             if (i >= 1 or j >= 1) return throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{});
+
+            return self.evaluateDiabaticElementComptime(0, 0, position, time);
+        }
+
+        /// Comptime diabatic matrix element evaluator.
+        pub fn evaluateDiabaticElementComptime(self: @This(), comptime i: usize, comptime j: usize, position: RealVector(T), _: T) T {
+            if (i >= 1 or j >= 1) @compileError("INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT");
 
             var value: T = 0;
 

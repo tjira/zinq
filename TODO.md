@@ -21,5 +21,6 @@
 - [x] Implement variable gammas for each dimension in quantum dynamics.
 - [x] Parallelization of classical trajectories takes too much memory when many trajectories are run. Implement a more memory-efficient parallelization scheme.
 - [x] Implement better potential and potential derivative integrators in vMCG.
-- [ ] Check the potential energy matrix element calculation of vibronic coupling potential and if it matches the matrix evaluation.
-- [ ] Specifi th differentiation step fot vMCG method.
+- [x] Check the potential energy matrix element calculation of vibronic coupling potential and if it matches the matrix evaluation.
+- [x] Specify the differentiation step fot vMCG method.
+- [ ] Figure out a better way to store the file and custom potentials instead of just using global variables.

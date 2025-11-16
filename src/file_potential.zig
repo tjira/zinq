@@ -38,16 +38,15 @@ pub fn FilePotential(comptime T: type) type {
         path: []const u8,
 
         /// Diabatic potential matrix evaluator.
-        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), _: T) !void {
-            if (file_potential_data == null) return throw(void, "POTENTIAL DATA NOT INITIALIZED, CALL init() FIRST", .{});
-
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
             for (0..U.rows) |i| for (i..U.cols) |j| {
-                U.ptr(i, j).* = try lerp(T, file_potential_data.?.data, self.ndim + i * U.cols + j, position); U.ptr(j, i).* = U.at(i, j);
+                U.ptr(i, j).* = try evaluateDiabaticElement(self, i, j, position, time); U.ptr(j, i).* = U.at(i, j);
             };
         }
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
+            if (file_potential_data == null) return throw(T, "POTENTIAL DATA NOT INITIALIZED, CALL init() FIRST", .{});
             if (i >= self.nstate or j >= self.nstate) return throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{});
 
             return try lerp(T, file_potential_data.?.data, self.ndim + i * self.nstate + j, position);

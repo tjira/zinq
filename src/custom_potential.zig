@@ -41,12 +41,8 @@ pub fn CustomPotential(comptime T: type) type {
 
         /// Diabatic potential evaluator.
         pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
-            custom_potential_data.?.map.putAssumeCapacity("t", time);
-
-            for (0..position.len) |q| custom_potential_data.?.map.putAssumeCapacity(self.variables[q], position.at(q));
-
             for (0..U.rows) |i| for (i..U.cols) |j| {
-                U.ptr(i, j).* = try custom_potential_data.?.rpn_array[i * U.cols + j].evaluate(custom_potential_data.?.map); U.ptr(j, i).* = U.at(i, j);
+                U.ptr(i, j).* = try evaluateDiabaticElement(self, i, j, position, time); U.ptr(j, i).* = U.at(i, j);
             };
         }
 
