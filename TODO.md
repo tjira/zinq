@@ -24,3 +24,4 @@
 - [x] Check the potential energy matrix element calculation of vibronic coupling potential and if it matches the matrix evaluation.
 - [x] Specify the differentiation step fot vMCG method.
 - [ ] Figure out a better way to store the file and custom potentials instead of just using global variables.
+- [x] Integrals over gaussians with complex gamma are not implemented. Implement them.

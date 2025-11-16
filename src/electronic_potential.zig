@@ -80,6 +80,27 @@ pub fn ElectronicPotential(comptime T: type) type {
             return 0.5 * (energy_plus - energy_minus) / fdiff_step;
         }
 
+        /// Evaluate the matrix element of potential second derivative.
+        pub fn evaluateDiabaticElementDerivative2(self: @This(), i: usize, j: usize, position: RealVector(T), time: T, index: usize, fdiff_step: T) !T {
+            const original_position = position.at(index);
+
+            @constCast(&position).ptr(index).* = original_position - fdiff_step;
+
+            const energy_minus = try self.evaluateDiabaticElement(i, j, position, time);
+
+            @constCast(&position).ptr(index).* = original_position;
+
+            const energy = try self.evaluateDiabaticElement(i, j, position, time);
+
+            @constCast(&position).ptr(index).* = original_position + fdiff_step;
+
+            const energy_plus = try self.evaluateDiabaticElement(i, j, position, time);
+
+            @constCast(&position).ptr(index).* = original_position;
+
+            return (energy_plus - 2 * energy + energy_minus) / (fdiff_step * fdiff_step);
+        }
+
         /// Evaluate adiabatic eigensystem at given system state and time.
         pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T) !void {
             self.evaluateDiabatic(diabatic, position, time);

@@ -79,7 +79,7 @@ pub fn Options(comptime T: type) type {
         wavefunction_grid: ?WavefunctionGrid = null,
         write: Write = .{},
 
-        finite_differences_step: T = 1e-8,
+        finite_differences_step: T = 1e-4,
         integration_nodes: u32 = 32,
         adiabatic: bool = false,
     };
@@ -393,6 +393,7 @@ test "vMCG on Tully's First Potential" {
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
         },
+        .finite_differences_step = 1e-8,
         .integration_nodes = 32,
         .iterations = 350,
         .time_step = 10
