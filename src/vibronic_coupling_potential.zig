@@ -2,12 +2,15 @@
 
 const std = @import("std");
 
+const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
+
+const throw = error_handling.throw;
 
 const AU2EV = global_variables.AU2EV;
 const EV2RCM = global_variables.EV2RCM;
@@ -62,6 +65,43 @@ pub fn VibronicCouplingPotential(comptime T: type) type {
             for (0..self.nstate()) |i| for (i..self.nstate()) |j| {
                 U.ptr(i, j).* /= AU2EV; U.ptr(j, i).* = U.at(i, j);
             };
+        }
+
+        /// Diabatic potential matrix element evaluator.
+        pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
+            if (i >= self.nstate() or j >= self.nstate()) return throw(T, "ELEMENT EVALUATION FOR VIBRONIC COUPLING POTENTIAL NOT IMPLEMENTED", .{});
+
+            var value = if (i == j) self.energy[i] else 0;
+
+            for (0..position.len) |k| {
+
+                const qi = position.at(i) * std.math.sqrt(self.omega[k] / EV2RCM / AU2EV);
+
+                if (i == j) {
+
+                    for (0..self.nstate()) |l| {
+
+                        const d = self.morse_potential.d[l][k];
+                        const a = self.morse_potential.a[l][k];
+                        const q = self.morse_potential.q[l][k];
+                        const e = self.morse_potential.e[l][k];
+
+                        const harmonic = d == 0 and a == 0 and q == 0 and e == 0;
+
+                        value += if (harmonic) self.omega[k] * qi * qi / (2 * EV2RCM) else d * std.math.pow(T, std.math.exp(-a * (qi - q)) - 1, 2) + e;
+                    }
+
+                    for (0..self.nstate()) |l| value += self.diagonal_linear[l][k] * qi;
+                    for (0..self.nstate()) |l| value += self.diagonal_quadratic[l][k] * qi * qi / 2;
+                    for (0..self.nstate()) |l| value += self.diagonal_quartic[l][k] * qi * qi * qi * qi / 24;
+                }
+
+                if (i != j) {
+                    value += self.nondiagonal_linear[i * (2 * self.nstate() - i - 1) / 2 + (j - i - 1)][k] * qi;
+                }
+            }
+
+            return value / AU2EV;
         }
 
         /// Dimension getter.

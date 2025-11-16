@@ -46,6 +46,13 @@ pub fn FilePotential(comptime T: type) type {
             };
         }
 
+        /// Diabatic potential matrix element evaluator.
+        pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
+            if (i >= self.nstate or j >= self.nstate) return throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{});
+
+            return try lerp(T, file_potential_data.?.data, self.ndim + i * self.nstate + j, position);
+        }
+
         /// Read the potential data from file, if the file path is specified. Otherwise, just return the matrix from the data pointer.
         pub fn init(self: @This(), allocator: std.mem.Allocator) !?FilePotentialData(T) {
             const U = try readRealMatrix(T, self.path, allocator);

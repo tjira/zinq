@@ -18,7 +18,6 @@ const uncr = string_manipulation.uncr;
 
 const A2AU = global_variables.A2AU;
 const AN2M = global_variables.AN2M;
-const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
 const SM2AN = global_variables.SM2AN;
 
 /// Classical particle struct that holds all information about the classical-like coordinates, velocities and masses.
@@ -156,14 +155,14 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Propagate the classical particle using velocity verlet algorithm.
-        pub fn propagateVelocityVerlet(self: *@This(), potential: ElectronicPotential(T), potential_matrix: *RealMatrix(T), time: T, current_state: usize, time_step: T) !void {
+        pub fn propagateVelocityVerlet(self: *@This(), potential: ElectronicPotential(T), potential_matrix: *RealMatrix(T), time: T, current_state: usize, time_step: T, fdiff_step: T) !void {
             for (0..self.ndim) |i| {
                 self.position.ptr(i).* += (self.velocity.at(i) + 0.5 * self.acceleration.at(i) * time_step) * time_step;
             }
 
             for (0..self.ndim) |i| {
 
-                const force = try potential.forceAdiabatic(potential_matrix, self.position, time, current_state, i);
+                const force = try potential.forceAdiabatic(potential_matrix, self.position, time, current_state, i, fdiff_step);
 
                 const previous_acceleration = self.acceleration.at(i);
 

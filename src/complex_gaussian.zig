@@ -8,7 +8,6 @@ const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const error_handling = @import("error_handling.zig");
-const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
 const hermite_quadrature_nodes = @import("hermite_quadrature_nodes.zig");
 const math_functions = @import("math_functions.zig");
@@ -33,7 +32,6 @@ const printComplexMatrix = device_write.printComplexMatrix;
 const prod = array_functions.prod;
 const throw = error_handling.throw;
 
-const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
 const HERMITE_NODES = hermite_quadrature_nodes.HERMITE_NODES;
 const HERMITE_WEIGHTS = hermite_quadrature_nodes.HERMITE_WEIGHTS;
 
@@ -124,7 +122,7 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Calculate the kinetic matrix element between this complex Gaussian and another.
         pub fn kinetic(self: @This(), other: @This(), mass: []const T) !Complex(T) {
             if (self.position.len != other.position.len or self.position.len != mass.len or other.position.len != mass.len) {
-                return throw(Complex(T), "BOTH COMPLEX LEGENDRES AND MASS ARRAY MUST HAVE THE SAME DIMENSIONALITY", .{});
+                return throw(Complex(T), "BOTH POSITION AND MASS ARRAY MUST HAVE THE SAME DIMENSIONALITY", .{});
             }
 
             var result = Complex(T).init(0, 0);
@@ -153,7 +151,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Returns the kinetic energy expectation value of this complex Gaussian.
         pub fn kineticEnergy(self: @This(), mass: []const T) !T {
-            if (self.position.len != mass.len) return throw(T, "COMPLEX LEGENDRE AND MASS ARRAY MUST HAVE THE SAME DIMENSIONALITY", .{});
+            if (self.position.len != mass.len) return throw(T, "POSITION AND MASS ARRAY MUST HAVE THE SAME DIMENSIONALITY IN COMPLEX GAUSSIAN", .{});
 
             return (try kinetic(self, self, mass)).re;
         }
@@ -177,7 +175,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another.
         pub fn overlap(self: @This(), other: @This()) !Complex(T) {
-            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX LEGENDRES MUST HAVE THE SAME DIMENSIONALITY", .{});
+            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
 
             var result = Complex(T).init(1, 0);
 
@@ -215,9 +213,6 @@ pub fn ComplexGaussian(comptime T: type) type {
         pub fn potential(self: @This(), other: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T) !ComplexMatrix(T) {
             var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator);
 
-            var v = try RealMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator); defer v.deinit();
-
-            var indices = try self.allocator.alloc(usize, pot.ndim()); defer self.allocator.free(indices);
             var variables = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(variables);
             var sigmas = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(sigmas);
             var mus = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(mus);
@@ -231,29 +226,24 @@ pub fn ComplexGaussian(comptime T: type) type {
                 sigmas[i] = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
             }
 
-            const nodes = HERMITE_NODES[n_nodes];
-            const weights = HERMITE_WEIGHTS[n_nodes];
-
-            for (0..std.math.pow(usize, nodes.len, pot.ndim())) |i| {
+            for (0..std.math.pow(usize, n_nodes, pot.ndim())) |i| {
 
                 var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
 
-                for (0..indices.len) |j| {
-                    indices[j] = temp % nodes.len; weight *= weights[indices[j]]; temp = temp / nodes.len;
+                for (0..pot.ndim()) |j| {
+
+                    variables[j] = std.math.sqrt2 * sigmas[j] * HERMITE_NODES[n_nodes][temp % n_nodes] + mus[j]; 
+
+                    complex_exponent = complex_exponent.add(Complex(T).init(0, self.momentum[j] * (self.position[j] - variables[j]) + other.momentum[j] * (variables[j] - other.position[j])));
+
+                    weight *= HERMITE_WEIGHTS[n_nodes][temp % n_nodes]; temp /= n_nodes;
                 }
 
-                for (0..variables.len) |j| {
-                    variables[j] = std.math.sqrt2 * sigmas[j] * nodes[indices[j]] + mus[j];
-                }
+                for (0..V.rows) |j| for (j..V.cols) |k| {
 
-                pot.evaluateDiabatic(&v, RealVector(T){.data = variables, .len = variables.len, .allocator = null}, time);
+                    const value = try pot.evaluateDiabaticElement(j, k, RealVector(T){.data = variables, .len = variables.len, .allocator = null}, time);
 
-                for (0..variables.len) |l| {
-                    complex_exponent = complex_exponent.add(Complex(T).init(0, self.momentum[l] * (self.position[l] - variables[l]) + other.momentum[l] * (variables[l] - other.position[l])));
-                }
-
-                for (0..V.rows) |j| for (0..V.cols) |k| {
-                    V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * v.at(j, k), 0).mul(std.math.complex.exp(complex_exponent)));
+                    V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); V.ptr(k, j).* = V.at(j, k);
                 };
             }
 
@@ -270,15 +260,6 @@ pub fn ComplexGaussian(comptime T: type) type {
         pub fn potentialDerivative(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T) !ComplexMatrix(T) {
             var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator);
 
-            var vDerivative = try RealMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator); defer vDerivative.deinit();
-            var vPlus  = try RealMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator); defer vPlus.deinit();
-            var vMinus = try RealMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator); defer vMinus.deinit();
-
-            var q = try RealVector(T).init(pot.ndim(), self.allocator); defer q.deinit();
-            var qPlus  = try RealVector(T).init(pot.ndim(), self.allocator); defer qPlus.deinit();
-            var qMinus = try RealVector(T).init(pot.ndim(), self.allocator); defer qMinus.deinit();
-
-            var indices = try self.allocator.alloc(usize, pot.ndim()); defer self.allocator.free(indices);
             var variables = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(variables);
             var sigmas = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(sigmas);
             var mus = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(mus);
@@ -292,37 +273,24 @@ pub fn ComplexGaussian(comptime T: type) type {
                 sigmas[i] = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
             }
 
-            const nodes = HERMITE_NODES[n_nodes];
-            const weights = HERMITE_WEIGHTS[n_nodes];
+            for (0..std.math.pow(usize, n_nodes, pot.ndim())) |i| {
 
-            for (0..std.math.pow(usize, nodes.len, pot.ndim())) |k| {
+                var temp = i; var weight: T = 1;  var complex_exponent = Complex(T).init(0, 0);
 
-                var temp = k; var weight: T = 1;  var complex_exponent = Complex(T).init(0, 0);
+                for (0..pot.ndim()) |j| {
 
-                for (0..indices.len) |i| {
-                    indices[i] = temp % nodes.len; weight *= weights[indices[i]]; temp = temp / nodes.len;
+                    variables[j] = std.math.sqrt2 * sigmas[j] * HERMITE_NODES[n_nodes][temp % n_nodes] + mus[j]; 
+
+                    complex_exponent = complex_exponent.add(Complex(T).init(0, self.momentum[j] * (self.position[j] - variables[j]) + other.momentum[j] * (variables[j] - other.position[j])));
+
+                    weight *= HERMITE_WEIGHTS[n_nodes][temp % n_nodes]; temp /= n_nodes;
                 }
 
-                for (0..variables.len) |i| {
-                    variables[i] = std.math.sqrt2 * sigmas[i] * nodes[indices[i]] + mus[i];
-                }
+                for (0..V.rows) |j| for (j..V.cols) |k| {
 
-                @memcpy(qPlus.data, variables); qPlus.ptr(index).* += FINITE_DIFFERENCES_STEP;
-                @memcpy(qMinus.data, variables); qMinus.ptr(index).* -= FINITE_DIFFERENCES_STEP;
+                    const value = try pot.evaluateDiabaticElementDerivative1(j, k, RealVector(T){.data = variables, .len = variables.len, .allocator = null}, time, index, 1e-8);
 
-                pot.evaluateDiabatic(&vPlus, qPlus, time);
-                pot.evaluateDiabatic(&vMinus, qMinus, time);
-
-                for (0..vDerivative.rows) |i| for (0..vDerivative.cols) |j| {
-                    vDerivative.ptr(i, j).* = (vPlus.at(i, j) - vMinus.at(i, j)) / (2 * FINITE_DIFFERENCES_STEP);
-                };
-
-                for (0..variables.len) |l| {
-                    complex_exponent = complex_exponent.add(Complex(T).init(0, self.momentum[l] * (self.position[l] - variables[l]) + other.momentum[l] * (variables[l] - other.position[l])));
-                }
-
-                for (0..V.rows) |i| for (0..V.cols) |j| {
-                    V.ptr(i, j).* = V.at(i, j).add(Complex(T).init(weight * vDerivative.at(i, j), 0).mul(std.math.complex.exp(complex_exponent)));
+                    V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); V.ptr(k, j).* = V.at(j, k);
                 };
             }
 

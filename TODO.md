@@ -20,4 +20,6 @@
 - [ ] Check if some parallelization is possible for quantum dynamics and implement it.
 - [x] Implement variable gammas for each dimension in quantum dynamics.
 - [x] Parallelization of classical trajectories takes too much memory when many trajectories are run. Implement a more memory-efficient parallelization scheme.
-- [ ] Implement better potential and potential derivative integrators in vMCG.
+- [x] Implement better potential and potential derivative integrators in vMCG.
+- [ ] Check the potential energy matrix element calculation of vibronic coupling potential and if it matches the matrix evaluation.
+- [ ] Specifi th differentiation step fot vMCG method.

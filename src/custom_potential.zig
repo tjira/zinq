@@ -50,6 +50,17 @@ pub fn CustomPotential(comptime T: type) type {
             };
         }
 
+        /// Diabatic potential matrix element evaluator.
+        pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
+            if (i >= self.matrix.len or j >= self.matrix.len) return throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{});
+
+            custom_potential_data.?.map.putAssumeCapacity("t", time);
+
+            for (0..position.len) |q| custom_potential_data.?.map.putAssumeCapacity(self.variables[q], position.at(q));
+
+            return try custom_potential_data.?.rpn_array[i * self.matrix.len + j].evaluate(custom_potential_data.?.map);
+        }
+
         /// Parse and initialize the custom potential from the provided expression matrix.
         pub fn init(self: @This(), allocator: std.mem.Allocator) !?CustomPotentialData(T) {
             var rpn_array = try allocator.alloc(ReversePolishNotation(T), self.matrix.len * self.matrix.len);

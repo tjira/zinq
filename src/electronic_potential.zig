@@ -5,7 +5,6 @@ const std = @import("std");
 const custom_potential = @import("custom_potential.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const file_potential = @import("file_potential.zig");
-const global_variables = @import("global_variables.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const jahn_teller_potential = @import("jahn_teller_potential.zig");
 const morse_potential = @import("morse_potential.zig");
@@ -28,8 +27,6 @@ const VibronicCouplingPotential = vibronic_coupling_potential.VibronicCouplingPo
 
 const diagonalizeSymmetric = eigenproblem_solver.diagonalizeSymmetric;
 const eigensystemSymmetric = eigenproblem_solver.eigensystemSymmetric;
-
-const FINITE_DIFFERENCES_STEP = global_variables.FINITE_DIFFERENCES_STEP;
 
 /// Electronic potential mode union.
 pub fn ElectronicPotential(comptime T: type) type {
@@ -59,6 +56,30 @@ pub fn ElectronicPotential(comptime T: type) type {
             }
         }
 
+        /// Evaluate the dabatic potential energy matrix element.
+        pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
+            return switch (self) {
+                inline else => |field| field.evaluateDiabaticElement(i, j, position, time)
+            };
+        }
+
+        /// Evaluate the matrix element of potential derivative.
+        pub fn evaluateDiabaticElementDerivative1(self: @This(), i: usize, j: usize, position: RealVector(T), time: T, index: usize, fdiff_step: T) !T {
+            const original_position = position.at(index);
+
+            @constCast(&position).ptr(index).* = original_position - fdiff_step;
+
+            const energy_minus = try self.evaluateDiabaticElement(i, j, position, time);
+
+            @constCast(&position).ptr(index).* = original_position + fdiff_step;
+
+            const energy_plus = try self.evaluateDiabaticElement(i, j, position, time);
+
+            @constCast(&position).ptr(index).* = original_position;
+
+            return 0.5 * (energy_plus - energy_minus) / fdiff_step;
+        }
+
         /// Evaluate adiabatic eigensystem at given system state and time.
         pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T) !void {
             self.evaluateDiabatic(diabatic, position, time);
@@ -67,16 +88,16 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Evaluate the adabatic potential energy gradient for a specific coordinate index. The adiabatic potential matrix will hold the potential at the r + dr point.
-        pub fn forceAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize) !T {
+        pub fn forceAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T) !T {
             const original_position = position.at(index);
 
-            @constCast(&position).ptr(index).* = original_position - FINITE_DIFFERENCES_STEP;
+            @constCast(&position).ptr(index).* = original_position - fdiff_step;
 
             try self.evaluateAdiabatic(adiabatic_potential, position, time);
 
             const energy_minus = adiabatic_potential.at(state, state);
 
-            @constCast(&position).ptr(index).* = original_position + FINITE_DIFFERENCES_STEP;
+            @constCast(&position).ptr(index).* = original_position + fdiff_step;
 
             try self.evaluateAdiabatic(adiabatic_potential, position, time);
 
@@ -84,7 +105,7 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             @constCast(&position).ptr(index).* = original_position;
 
-            return 0.5 * (energy_minus - energy_plus) / FINITE_DIFFERENCES_STEP;
+            return 0.5 * (energy_minus - energy_plus) / fdiff_step;
         }
 
         /// Getter for number of dimensions.

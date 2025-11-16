@@ -100,6 +100,7 @@ pub fn Options(comptime T: type) type {
         surface_hopping: ?SurfaceHoppingAlgorithm(T) = null,
         write: Write = .{},
 
+        finite_differences_step: T = 1e-8,
         seed: u32 = 0,
         nthread: u32 = 1
     };
@@ -357,7 +358,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
         if (i > 0) {
-            try system.propagateVelocityVerlet(opt.potential, &adiabatic_potential, time, current_state, opt.time_step);
+            try system.propagateVelocityVerlet(opt.potential, &adiabatic_potential, time, current_state, opt.time_step, opt.finite_differences_step);
         }
 
         try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time);
