@@ -41,7 +41,6 @@ pub fn ComplexGaussian(comptime T: type) type {
         position: []T,
         gamma: []Complex(T),
         momentum: []T,
-        norm: T,
         allocator: std.mem.Allocator,
 
         /// Initialize a new complex Gaussian with given parameters.
@@ -54,7 +53,6 @@ pub fn ComplexGaussian(comptime T: type) type {
                 .position = try allocator.alloc(T, position.len),
                 .gamma = try allocator.alloc(Complex(T), position.len),
                 .momentum = try allocator.alloc(T, position.len),
-                .norm = std.math.pow(T, std.math.pi, @as(T, @floatFromInt(position.len)) / 4) / std.math.pow(T, prod(T, gamma), 0.25),
                 .allocator = allocator
             };
 
@@ -109,14 +107,38 @@ pub fn ComplexGaussian(comptime T: type) type {
 
             for (self.position, 0..) |c, i| {
 
-                const dq_c = Complex(T).init(q[i] - c, 0); const pc = Complex(T).init(self.momentum[i], 0);
+                const dq_c = Complex(T).init(q[i] - c, 0); const p_c = Complex(T).init(0, self.momentum[i]);
 
-                const exponent = Complex(T).init(0.5, 0).neg().mul(self.gamma[i].mul(dq_c.mul(dq_c))).add(pc.mul(dq_c));
+                const exponent = Complex(T).init(0.5, 0).neg().mul(self.gamma[i].mul(dq_c.mul(dq_c))).add(p_c.mul(dq_c));
 
                 result = result.mul(std.math.complex.exp(exponent));
             }
 
-            return result.div(Complex(T).init(self.norm, 0));
+            return result.div(Complex(T).init(self.norm(), 0));
+        }
+
+        /// Calculates the derivative of the gamma parameter.
+        pub fn gammaDerivative(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
+            const ddV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, self.allocator); defer ddV.deinit();
+
+            for (0..ddV.len) |i| {
+                ddV.ptr(i).deinit(); ddV.ptr(i).* = try self.potentialDerivative2(self, pot, i, n_nodes, time, fdiff_step);
+            }
+
+            const dg = try ComplexVector(T).initZero(ddV.len, self.allocator);
+
+            for (0..dg.len) |i| {
+
+                dg.ptr(i).* = self.gamma[i].mul(self.gamma[i]).div(Complex(T).init(mass[i], 0));
+
+                for (0..coefs.len) |j| for (0..coefs.len) |k| {
+                    dg.ptr(i).* = dg.at(i).sub(coefs.at(j).conjugate().mul(ddV.at(i).at(j, k)).mul(coefs.at(k)));
+                };
+
+                dg.ptr(i).* = dg.at(i).mulbyi().neg();
+            }
+
+            return dg;
         }
 
         /// Calculate the kinetic matrix element between this complex Gaussian and another.
@@ -171,6 +193,13 @@ pub fn ComplexGaussian(comptime T: type) type {
             return F;
         }
 
+        /// Returns the norm of the gaussian.
+        pub fn norm(self: @This()) T {
+            var gamma_prod: T = 1; for (self.gamma) |g| gamma_prod *= g.re;
+
+            return std.math.pow(T, std.math.pi, @as(T, @floatFromInt(self.position.len)) / 4) / std.math.pow(T, gamma_prod, 0.25);
+        }
+
         /// Compute the overlap integral between this complex Gaussian and another.
         pub fn overlap(self: @This(), other: @This()) !Complex(T) {
             if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
@@ -193,7 +222,7 @@ pub fn ComplexGaussian(comptime T: type) type {
                 result = result.mul(std.math.complex.exp(exponent).mul(factor));
             }
 
-            return result.div(Complex(T).init(self.norm * other.norm, 0));
+            return result.div(Complex(T).init(self.norm() * other.norm(), 0));
         }
 
         /// Calculates the derivative of the position.
@@ -259,7 +288,7 @@ pub fn ComplexGaussian(comptime T: type) type {
                 V.ptr(j, i).* = V.at(i, j).conjugate();
             };
 
-            V.divs(Complex(T).init(self.norm * other.norm, 0));
+            V.divs(Complex(T).init(self.norm() * other.norm(), 0));
 
             return V;
         }
@@ -316,7 +345,7 @@ pub fn ComplexGaussian(comptime T: type) type {
                 V.ptr(j, i).* = V.at(i, j).conjugate();
             };
 
-            V.divs(Complex(T).init(self.norm * other.norm, 0));
+            V.divs(Complex(T).init(self.norm() * other.norm(), 0));
 
             return V;
         }
@@ -373,7 +402,7 @@ pub fn ComplexGaussian(comptime T: type) type {
                 V.ptr(j, i).* = V.at(i, j).conjugate();
             };
 
-            V.divs(Complex(T).init(self.norm * other.norm, 0));
+            V.divs(Complex(T).init(self.norm() * other.norm(), 0));
 
             return V;
         }

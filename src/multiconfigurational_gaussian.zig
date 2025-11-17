@@ -64,7 +64,8 @@ pub fn Options(comptime T: type) type {
             vMCG: struct {
                 position: []const T,
                 gamma: []const T,
-                momentum: []const T
+                momentum: []const T,
+                frozen: bool = true
             }
         };
 
@@ -79,7 +80,7 @@ pub fn Options(comptime T: type) type {
         wavefunction_grid: ?WavefunctionGrid = null,
         write: Write = .{},
 
-        finite_differences_step: T = 1e-4,
+        finite_differences_step: T = 1e-6,
         integration_nodes: u32 = 32,
         adiabatic: bool = false,
     };
@@ -152,7 +153,7 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
     var coefs = try ComplexVector(T).init(nstate, allocator); defer coefs.deinit(); coefs.ptr(opt.initial_conditions.state).* = Complex(T).init(1, 0);
 
-    var propagator = try ComplexRungeKutta(T).init(2 * gaussian.position.len + coefs.len, allocator); defer propagator.deinit();
+    var propagator = try ComplexRungeKutta(T).init(3 * gaussian.position.len + coefs.len, allocator); defer propagator.deinit();
 
     if (enable_printing) try printIterationHeader(ndim, nstate);
 
@@ -281,43 +282,49 @@ pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(
 
 /// Propagates the gaussian and coefficients using the 4th order Runge-Kutta method.
 pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), coefs: *ComplexVector(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, allocator: std.mem.Allocator) !void {
-    var vars = try ComplexVector(T).init(gaussian.position.len * 2 + coefs.len, allocator); defer vars.deinit();
+    var vars = try ComplexVector(T).init(3 * gaussian.position.len + coefs.len, allocator); defer vars.deinit();
 
     for (0..gaussian.position.len) |i| {
-        vars.ptr(i).* = Complex(T).init(gaussian.position[i], 0); vars.ptr(gaussian.position.len + i).* = Complex(T).init(gaussian.momentum[i], 0);
+        vars.ptr(i).* = Complex(T).init(gaussian.position[i], 0); vars.ptr(gaussian.position.len + i).* = Complex(T).init(gaussian.momentum[i], 0); vars.ptr(2 * gaussian.position.len + i).* = gaussian.gamma[i];
     } defer {
         for (0..gaussian.position.len) |i| {
-            gaussian.position[i] = vars.at(i).re; gaussian.momentum[i] = vars.at(gaussian.position.len + i).re;
+            gaussian.position[i] = vars.at(i).re; gaussian.momentum[i] = vars.at(gaussian.position.len + i).re; gaussian.gamma[i] = vars.at(2 * gaussian.position.len + i);
         }
     }
 
     for (0..coefs.len) |i| {
-        vars.ptr(2 * gaussian.position.len + i).* = coefs.at(i);
+        vars.ptr(3 * gaussian.position.len + i).* = coefs.at(i);
     } defer {
-        for (0..coefs.len) |i| coefs.ptr(i).* = vars.at(2 * gaussian.position.len + i);
+        for (0..coefs.len) |i| coefs.ptr(i).* = vars.at(3 * gaussian.position.len + i);
     }
 
     const derivative = struct {
         pub fn call(k: *ComplexVector(T), v: ComplexVector(T), params: anytype) !void {
-            const g = params.gaussian; const c = v.slice(2 * g.position.len, v.len);
+            const g = params.gaussian; const c = v.slice(3 * g.position.len, v.len);
 
             for (0..g.position.len) |i| {
-                g.position[i] = v.at(i).re; g.momentum[i] = v.at(g.position.len + i).re;
+                g.position[i] = v.at(i).re; g.momentum[i] = v.at(g.position.len + i).re; g.gamma[i] = v.at(2 * g.position.len + i);
             }
+
+            var kg = try ComplexVector(T).init(g.gamma.len, params.allocator); defer kg.deinit();
 
             const kq = try g.positionDerivative(params.opt.initial_conditions.mass); defer kq.deinit();
             const kp = try g.momentumDerivative(params.opt.potential, c, params.opt.integration_nodes, params.time, params.opt.finite_differences_step); defer kp.deinit();
             const kc = try g.coefficientDerivative(c, params.opt.potential, params.opt.integration_nodes, params.time); defer kc.deinit();
 
-            for (0..g.position.len) |i| {
-                k.ptr(i).* = Complex(T).init(kq.at(i), 0); k.ptr(g.position.len + i).* = Complex(T).init(kp.at(i), 0);
+            if (!params.opt.method.vMCG.frozen) {
+                kg.deinit(); kg = try g.gammaDerivative(params.opt.potential, c, params.opt.initial_conditions.mass, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
             }
 
-            for (0..c.len) |i| k.ptr(2 * g.position.len + i).* = kc.at(i);
+            for (0..g.position.len) |i| {
+                k.ptr(i).* = Complex(T).init(kq.at(i), 0); k.ptr(g.position.len + i).* = Complex(T).init(kp.at(i), 0); k.ptr(2 * g.position.len + i).* = kg.at(i);
+            }
+
+            for (0..c.len) |i| k.ptr(3 * g.position.len + i).* = kc.at(i);
         }
     }.call;
 
-    try rk.rk4(&vars, derivative, .{.gaussian = gaussian, .opt = opt, .time = time}, opt.time_step);
+    try rk.rk4(&vars, derivative, .{.gaussian = gaussian, .opt = opt, .time = time, .allocator = allocator}, opt.time_step);
 }
 
 /// Print header for iteration info.
