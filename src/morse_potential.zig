@@ -19,7 +19,7 @@ pub fn MorsePotential(comptime T: type) type {
         r: T = 0,
 
         /// Diabatic potential evaluator.
-        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) void {
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
             U.ptr(0, 0).* = self.evaluateDiabaticElementComptime(0, 0, position, time);
         }
 

@@ -18,7 +18,7 @@ pub fn TimeLinearPotential(comptime T: type) type {
         slope: T = 10,
 
         /// Diabatic potential evaluator.
-        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) void {
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
             U.ptr(0, 0).* = self.evaluateDiabaticElementComptime(0, 0, position, time);
             U.ptr(0, 1).* = self.evaluateDiabaticElementComptime(0, 1, position, time);
             U.ptr(1, 0).* = self.evaluateDiabaticElementComptime(1, 0, position, time);

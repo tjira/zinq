@@ -263,7 +263,7 @@ pub fn GridWavefunction(comptime T: type) type {
             for (0..self.data.rows) |i| {
 
                 positionAtRow(T, &position_at_row, i, self.ndim, self.npoint, self.limits);
-                potential.evaluateDiabatic(&diabatic_potential_matrix, position_at_row, time);
+                try potential.evaluateDiabatic(&diabatic_potential_matrix, position_at_row, time);
 
                 for (0..self.nstate) |j| for (0..self.nstate) |k| {
                     potential_energy += self.data.at(i, j).conjugate().mul(Complex(T).init(diabatic_potential_matrix.at(j, k), 0).mul(self.data.at(i, k))).re;

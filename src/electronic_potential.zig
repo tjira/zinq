@@ -42,17 +42,15 @@ pub fn ElectronicPotential(comptime T: type) type {
 
         /// Evaluate the adabatic potential energy matrix at given system state and time.
         pub fn evaluateAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) !void {
-            self.evaluateDiabatic(adiabatic_potential, position, time);
+            try self.evaluateDiabatic(adiabatic_potential, position, time);
 
             try diagonalizeSymmetric(T, adiabatic_potential);
         }
 
         /// Evaluate the dabatic potential energy matrix at given system state and time.
-        pub fn evaluateDiabatic(self: @This(), diabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) void {
+        pub fn evaluateDiabatic(self: @This(), diabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) !void {
             switch (self) {
-                .custom => |field| field.evaluateDiabatic(diabatic_potential, position, time) catch unreachable,
-                .file => |field| field.evaluateDiabatic(diabatic_potential, position, time) catch unreachable,
-                inline else => |field| field.evaluateDiabatic(diabatic_potential, position, time)
+                inline else => |field| try field.evaluateDiabatic(diabatic_potential, position, time)
             }
         }
 
@@ -103,7 +101,7 @@ pub fn ElectronicPotential(comptime T: type) type {
 
         /// Evaluate adiabatic eigensystem at given system state and time.
         pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T) !void {
-            self.evaluateDiabatic(diabatic, position, time);
+            try self.evaluateDiabatic(diabatic, position, time);
 
             try eigensystemSymmetric(T, adiabatic, eigenvectors, diabatic.*);
         }

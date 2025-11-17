@@ -34,9 +34,9 @@ pub fn VibronicCouplingPotential(comptime T: type) type {
         nondiagonal_linear: []const []const T,
 
         /// Diabatic potential matrix evaluator.
-        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) void {
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
             for (0..self.nstate()) |i| for (i..self.nstate()) |j| {
-                U.ptr(i, j).* = self.evaluateDiabaticElement(i, j, position, time) catch unreachable; U.ptr(j, i).* = U.at(i, j);
+                U.ptr(i, j).* = try self.evaluateDiabaticElement(i, j, position, time); U.ptr(j, i).* = U.at(i, j);
             };
         }
 
