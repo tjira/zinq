@@ -1,0 +1,32 @@
+{
+    "zinq" : [
+        {
+            "name" : "multiconfigurational_gaussian",
+            "options" : {
+                "method" : {
+                    "vMCG" : {
+                        "momentum" : [0],
+                        "position" : [1],
+                        "gamma" : [2],
+                        "frozen" : false
+                    }
+                },
+                "log_intervals" : {
+                    "iteration" : 500
+                },
+                "initial_conditions" : {
+                    "state" : 0,
+                    "mass" : [1]
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1]
+                    }
+                },
+                "imaginary" : true,
+                "iterations" : 2000,
+                "time_step" : 0.01
+            }
+        }
+    ]
+}

@@ -83,6 +83,7 @@ pub fn Options(comptime T: type) type {
         finite_differences_step: T = 1e-6,
         integration_nodes: u32 = 32,
         adiabatic: bool = false,
+        imaginary: bool = false
     };
 }
 
@@ -306,14 +307,30 @@ pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), 
                 g.position[i] = v.at(i).re; g.momentum[i] = v.at(g.position.len + i).re; g.gamma[i] = v.at(2 * g.position.len + i);
             }
 
-            var kg = try ComplexVector(T).init(g.gamma.len, params.allocator); defer kg.deinit();
+            var kq: RealVector(T) = undefined; defer kq.deinit();
+            var kp: RealVector(T) = undefined; defer kp.deinit();
+            var kg: ComplexVector(T) = undefined; defer kg.deinit();
+            var kc: ComplexVector(T) = undefined; defer kc.deinit();
 
-            const kq = try g.positionDerivative(params.opt.initial_conditions.mass); defer kq.deinit();
-            const kp = try g.momentumDerivative(params.opt.potential, c, params.opt.integration_nodes, params.time, params.opt.finite_differences_step); defer kp.deinit();
-            const kc = try g.coefficientDerivative(c, params.opt.potential, params.opt.integration_nodes, params.time); defer kc.deinit();
+            if (params.opt.imaginary) {
+
+                kp = try g.momentumDerivativeImaginary(params.opt.initial_conditions.mass);
+                kq = try g.positionDerivativeImaginary(params.opt.potential, c, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
+                kc = try g.coefficientDerivativeImaginary(c, params.opt.potential, params.opt.integration_nodes, params.time);
+
+            } else {
+
+                kp = try g.momentumDerivative(params.opt.potential, c, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
+                kq = try g.positionDerivative(params.opt.initial_conditions.mass);
+                kc = try g.coefficientDerivative(c, params.opt.potential, params.opt.integration_nodes, params.time);
+            }
 
             if (!params.opt.method.vMCG.frozen) {
-                kg.deinit(); kg = try g.gammaDerivative(params.opt.potential, c, params.opt.initial_conditions.mass, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
+                if (params.opt.imaginary) {
+                    kg = try g.gammaDerivativeImaginary(params.opt.potential, c, params.opt.initial_conditions.mass, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
+                } else {
+                    kg = try g.gammaDerivative(params.opt.potential, c, params.opt.initial_conditions.mass, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
+                }
             }
 
             for (0..g.position.len) |i| {

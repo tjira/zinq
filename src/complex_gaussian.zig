@@ -101,6 +101,17 @@ pub fn ComplexGaussian(comptime T: type) type {
             return dc;
         }
 
+        /// Returns the derivative of the electronic coefficients where this gaussian is shared between them.
+        pub fn coefficientDerivativeImaginary(self: @This(), coefs: ComplexVector(T), pot: ElectronicPotential(T), n_nodes: usize, time: T) !ComplexVector(T) {
+            var dc = try self.coefficientDerivative(coefs, pot, n_nodes, time);
+
+            for (0..dc.len) |i| {
+                dc.ptr(i).* = dc.at(i).mulbyi().neg();
+            }
+
+            return dc;
+        }
+
         /// Evaluate the complex Gaussian function at a given point x.
         pub fn evaluate(self: @This(), q: []const T) Complex(T) {
             var result = Complex(T).init(1, 0);
@@ -135,6 +146,17 @@ pub fn ComplexGaussian(comptime T: type) type {
                     dg.ptr(i).* = dg.at(i).sub(coefs.at(j).conjugate().mul(ddV.at(i).at(j, k)).mul(coefs.at(k)));
                 };
 
+                dg.ptr(i).* = dg.at(i).mulbyi().neg();
+            }
+
+            return dg;
+        }
+
+        /// Calculates the derivative of the gamma parameter.
+        pub fn gammaDerivativeImaginary(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
+            var dg = try self.gammaDerivative(pot, coefs, mass, n_nodes, time, fdiff_step);
+
+            for (0..dg.len) |i| {
                 dg.ptr(i).* = dg.at(i).mulbyi().neg();
             }
 
@@ -193,6 +215,13 @@ pub fn ComplexGaussian(comptime T: type) type {
             return F;
         }
 
+        /// Calculates the derivative of the position when performing imaginaty time propagation.
+        pub fn momentumDerivativeImaginary(self: @This(), mass: []const T) !RealVector(T) {
+            var dp = try self.positionDerivative(mass); dp.muls(-1);
+
+            return dp;
+        }
+
         /// Returns the norm of the gaussian.
         pub fn norm(self: @This()) T {
             var gamma_prod: T = 1; for (self.gamma) |g| gamma_prod *= g.re;
@@ -234,6 +263,11 @@ pub fn ComplexGaussian(comptime T: type) type {
             }
 
             return dq;
+        }
+
+        /// Calculates the derivative of the position. in imaginary time propagation.
+        pub fn positionDerivativeImaginary(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
+            return try self.momentumDerivative(pot, coefs, n_nodes, time, fdiff_step);
         }
 
         /// Compute the potential energy matrix element between this complex Gaussian and another for a given potential function.
