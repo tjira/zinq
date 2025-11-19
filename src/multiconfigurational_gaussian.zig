@@ -331,6 +331,8 @@ pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), 
                 } else {
                     kg = try g.gammaDerivative(params.opt.potential, c, params.opt.initial_conditions.mass, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
                 }
+            } else {
+                kg = try ComplexVector(T).initZero(g.position.len, params.allocator);
             }
 
             for (0..g.position.len) |i| {
