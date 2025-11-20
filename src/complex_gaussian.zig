@@ -297,11 +297,11 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * std.math.pow(T, self.position[j] - other.position[j], 2);
 
-                    const imag_exponent_self = self.momentum[j] * (variables[j] - self.position[j]);
-                    const imag_exponent_other = other.momentum[j] * (other.position[j] - variables[j]);
+                    const imag_exponent_self = self.momentum[j] * (self.position[j] - variables[j]);
+                    const imag_exponent_other = other.momentum[j] * (variables[j] - other.position[j]);
 
-                    const imag_gamma_self = -0.5 * self.gamma[j].im * std.math.pow(T, variables[j] - self.position[j], 2);
-                    const imag_gamma_other = 0.5 * other.gamma[j].im * std.math.pow(T, variables[j] - other.position[j], 2);
+                    const imag_gamma_self = 0.5 * self.gamma[j].im * std.math.pow(T, variables[j] - self.position[j], 2);
+                    const imag_gamma_other = -0.5 * other.gamma[j].im * std.math.pow(T, variables[j] - other.position[j], 2);
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
@@ -354,11 +354,11 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * std.math.pow(T, self.position[j] - other.position[j], 2);
 
-                    const imag_exponent_self = self.momentum[j] * (variables[j] - self.position[j]);
-                    const imag_exponent_other = other.momentum[j] * (other.position[j] - variables[j]);
+                    const imag_exponent_self = self.momentum[j] * (self.position[j] - variables[j]);
+                    const imag_exponent_other = other.momentum[j] * (variables[j] - other.position[j]);
 
-                    const imag_gamma_self = -0.5 * self.gamma[j].im * std.math.pow(T, variables[j] - self.position[j], 2);
-                    const imag_gamma_other = 0.5 * other.gamma[j].im * std.math.pow(T, variables[j] - other.position[j], 2);
+                    const imag_gamma_self = 0.5 * self.gamma[j].im * std.math.pow(T, variables[j] - self.position[j], 2);
+                    const imag_gamma_other = -0.5 * other.gamma[j].im * std.math.pow(T, variables[j] - other.position[j], 2);
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
@@ -411,11 +411,11 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * std.math.pow(T, self.position[j] - other.position[j], 2);
 
-                    const imag_exponent_self = self.momentum[j] * (variables[j] - self.position[j]);
-                    const imag_exponent_other = other.momentum[j] * (other.position[j] - variables[j]);
+                    const imag_exponent_self = self.momentum[j] * (self.position[j] - variables[j]);
+                    const imag_exponent_other = other.momentum[j] * (variables[j] - other.position[j]);
 
-                    const imag_gamma_self = -0.5 * self.gamma[j].im * std.math.pow(T, variables[j] - self.position[j], 2);
-                    const imag_gamma_other = 0.5 * other.gamma[j].im * std.math.pow(T, variables[j] - other.position[j], 2);
+                    const imag_gamma_self = 0.5 * self.gamma[j].im * std.math.pow(T, variables[j] - self.position[j], 2);
+                    const imag_gamma_other = -0.5 * other.gamma[j].im * std.math.pow(T, variables[j] - other.position[j], 2);
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
