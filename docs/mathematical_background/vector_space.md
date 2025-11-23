@@ -128,7 +128,7 @@ $$
 \end{equation}
 $$
 
-This inequality ensures that the angle defined in Equation \eqref{eq:vector_angle} is well-defined and implies the triangle inequality for the induced norm. A vector space with an inner product is called an inner product space. Together, these results ensure that the norm induced by an inner product satisfies all metric axioms, endowing the space with a well-defined notion of distance. Thus, every inner product space is a normed vector space, although the converse is not generally true.
+This inequality ensures that the angle between two vectors is well-defined and implies the triangle inequality for the induced norm. A vector space with an inner product is called an inner product space. Together, these results ensure that the norm induced by an inner product satisfies all metric axioms, endowing the space with a well-defined notion of distance. Thus, every inner product space is a normed vector space, although the converse is not generally true.
 
 Before we get to linear operators, we add one final definition that will become important when we discuss infinite-dimensional spaces.
 

@@ -9,47 +9,47 @@ nav_order: 1
 
 # Quantum Amplitude Propagation in Mixed Schemes<!--\label{sec:quantum_amplitude_propagation_in_mixed_themes}-->
 
-Under the Born--Oppenheimer Approximation, the total molecular wavefunction, $$\Psi(\symbf{r},\symbf{R},t)$$, is formally separable into electronic and nuclear parts because the nuclear masses greatly exceed those of the electrons. However, when two or more electronic states approach degeneracy, the Born--Oppenheimer Approximation separation fails and nonadiabatic effects become significant. Trajectory Surface Hopping is a general framework that treats nuclei and electrons separately: nuclei are propagated classically on an adiabatic Potential Energy Surface, while electrons are treated quantum mechanically.
+Under the Born--Oppenheimer Approximation, the total molecular wavefunction, $$\ket{\Psi(t)}$$, is formally separable into electronic and nuclear parts because the nuclear masses greatly exceed those of the electrons. However, when two or more electronic states approach degeneracy, the Born--Oppenheimer Approximation separation fails and nonadiabatic effects become significant. Trajectory Surface Hopping is a general framework that treats nuclei and electrons separately: nuclei are propagated classically on an adiabatic Potential Energy Surface, while electrons are treated quantum mechanically.
 
 In Trajectory Surface Hopping, the nuclei follow Newton's equations of motion on a single adiabatic Potential Energy Surface at any instant:
 
 $$
 \begin{equation}
-\symbf{M}\ddot{\symbf{R}}(t)=-\nabla_{\symbf{R}}E_k(\symbf{R}(t)),
+\symbf{M}\ddot{\symbf{R}}(t)=-\nabla_{\symbf{R}}E_j,
 \end{equation}
 $$
 
-where $$\symbf{M}$$ is the diagonal matrix with masses for each coordinate, $$\symbf{R}$$ is nuclear geometry, and $$E_k(\symbf{R}(t))$$ is the electronic energy of the adiabatic state $$k$$ at the nuclear configuration $$\symbf{R}(t)$$. Meanwhile, the electrons evolve according to the Time-Dependent Schrödinger Equation, with the electronic wavefunction $$\Phi(\symbf{r},t;\symbf{R}(t))$$ expanded in the instantaneous adiabatic eigenvectors of the electronic Hamiltonian $$\hat{H}^{\symrm{el}}(\symbf{r};\symbf{R}(t))$$:
+where $$\symbf{M}$$ is the diagonal matrix with masses for each coordinate, $$\symbf{R}(t)$$ is nuclear geometry at time $$t$$, and $$E_j$$ is the electronic energy of the state $$j$$ at the nuclear configuration $$\symbf{R}(t)$$. Meanwhile, the electrons evolve according to the Time-Dependent Schrödinger Equation, with the electronic wavefunction $$\ket{\Phi(t)}$$ expanded in the instantaneous adiabatic eigenvectors of the electronic Hamiltonian $$\hat{H}^{\symrm{el}}$$ as
 
 $$
 \begin{equation}
-\Phi(\symbf{r},t;\symbf{R}(t))=\sum_k c_k(t)\phi_k(r;\symbf{R}(t)),
+\Phi(t)=\sum_j c_j(t)\ket{\phi_j},
 \end{equation}
 $$
 
-where $$\phi_k(r;\symbf{R}(t))$$ satisfies the Time-Independent Schrödinger Equation
+where $$\phi_j$$ satisfies the Time-Independent Schrödinger Equation
 
 $$
 \begin{equation}
-\hat{H}^{\symrm{el}}(\symbf{r};\symbf{R}(t))\phi_k(r;\symbf{R}(t))=E_k(\symbf{R}(t))\phi_k(r;\symbf{R}(t)),
+\hat{H}^{\symrm{el}}\ket{\phi_j}=E_j\ket{\phi_j},
 \end{equation}
 $$
 
-and the complex coefficients $$c_k$$ encode the instantaneous probability amplitudes for occupying each adiabatic state. For notational brevity, we will often suppress explicit dependence on the variables where no ambiguity arises.
+and the complex coefficients $$c_j$$ encode the instantaneous probability amplitudes for occupying each adiabatic state. For notational brevity, we will often suppress explicit dependence on the variables where no ambiguity arises.
 
 Substituting this ansatz into the full electronic Time-Dependent Schrödinger Equation,
 
 $$
 \begin{equation}
-i\hbar\frac{\partial}{\partial t}\Phi(\symbf{r},t;\symbf{R}(t))=\hat{H}^{\symrm{el}}(\symbf{r};\symbf{R}(t))\Phi(\symbf{r},t;\symbf{R}(t)),
+i\hbar\frac{\partial}{\partial t}\ket{\Phi(t)}=\hat{H}^{\symrm{el}}\ket{\Phi(t)},
 \end{equation}
 $$
 
-and projecting onto a particular adiabatic state $$\phi_j(r;\symbf{R}(t))$$, we obtain a set of coupled equations for the coefficients $$c_j$$:
+and projecting onto a particular adiabatic state $$\ket{\phi_j}$$, we obtain a set of coupled equations for the coefficients $$c_j$$:
 
 $$
 \begin{equation}\label{eq:tsh_eom}
-i\hbar\frac{\symrm{d}c_j}{\symrm{d}t}=\sum_k\left(H_{jk}^{\symrm{el}}-i\hbar\Braket{\phi_j\\|\frac{\partial\phi_k}{\partial t}}\right)c_k,
+i\hbar\frac{\symrm{d}c_j}{\symrm{d}t}=\sum_k\left(\hat{H}_{jk}^{\symrm{el}}-i\hbar\Braket{\phi_j\\|\frac{\partial\phi_k}{\partial t}}\right)c_k,
 \end{equation}
 $$
 
