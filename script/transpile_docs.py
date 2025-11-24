@@ -49,7 +49,6 @@ with open("tex/main.tex") as tex:
         IN_BLOCK = True  if line.startswith(r"\begin{definition}") else IN_BLOCK
         IN_BLOCK = False if line.startswith(r"\end{definition}"  ) else IN_BLOCK
 
-        if line.startswith(r"\end{definition}"  ): continue
         if line.startswith(r"\begin{appendices}"): continue
         if line.startswith(r"\end{appendices}"  ): continue
 
@@ -62,7 +61,9 @@ with open("tex/main.tex") as tex:
 
         if IN_BLOCK: formatted_line = "> " + formatted_line.strip().replace("\n", "\n> ") + "\n"
 
-        formatted_line = "{:.definition}\n" if line.startswith(r"\begin{definition}") else formatted_line
+        formatted_line = "\n{:.definition}\n" if line.startswith(r"\begin{definition}") else formatted_line
+
+        formatted_line = "\n" if line.startswith(r"\end{definition}") else formatted_line
 
         if line.startswith(r"\chapter"   ): formatted_line = "# "   + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
         if line.startswith(r"\section"   ): formatted_line = "## "  + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
