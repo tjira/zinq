@@ -2,6 +2,18 @@
 /*.jso*
 /*.xyz*
 
+*.acn*
+*.acr*
+*.alg*
+*.aux*
+*.bbl*
+*.bcf*
+*.blg*
+*.ist*
+*.log*
+*.xml*
+*.toc*
+*.bib*
 *.dot*
 *.loc*
 *.mat*
@@ -10,6 +22,7 @@
 *.png*
 *.ppm*
 
+*.gz
 *.md
 
 *bin*/

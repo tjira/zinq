@@ -25,11 +25,11 @@ jobs:
       - name: Install Biber and LaTeX
         run: sudo apt update && sudo apt install -y biber texlive-full
 
-      - name: Compile the Documentation
-        run: make docs
-
       - name: Transpile the Documentation
         run: ./script/transpile_docs.py
+
+      - name: Compile the Documentation
+        run: make docs
 
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
