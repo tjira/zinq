@@ -10,13 +10,16 @@
 *.png*
 *.ppm*
 
+*.md
+
 *bin*/
 *bui*/
 *cod*/
 *dis*/
 *egg*/
 *sit*/
-*tex*/
 *zig*/
 
 __*/
+
+!index.md
