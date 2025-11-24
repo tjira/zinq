@@ -13,7 +13,6 @@
 *.log*
 *.xml*
 *.toc*
-*.bib*
 *.dot*
 *.loc*
 *.mat*

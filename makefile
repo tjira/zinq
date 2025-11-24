@@ -52,6 +52,9 @@ linguist:
 pip: wheel
 	@pip install --force-reinstall dist/zinq-$(VERSION)-py3-none-any.whl
 
+phd:
+	@cd tex && lualatex main && biber main && makeglossaries main && lualatex main && lualatex main
+
 profile: zinq
 	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq
 	@gprof2dot -e 1 -f callgrind -n 5 -o profile.dot -z main.main callgrind.out
