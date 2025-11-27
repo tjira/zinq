@@ -74,7 +74,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         positionAtRow(T, &point, i, ndim, @intCast(opt.grid.points), opt.grid.limits);
 
-        if (opt.adiabatic) try opt.potential.evaluateAdiabatic(&value, point, 0) else try opt.potential.evaluateDiabatic(&value, point, 0);
+        if (opt.adiabatic) try opt.potential.evaluateAdiabatic(&value, point, 0, null) else try opt.potential.evaluateDiabatic(&value, point, 0);
     }
 
     try exportRealMatrix(T, opt.output, potential_matrix);

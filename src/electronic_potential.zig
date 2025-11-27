@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const bias_potential = @import("bias_potential.zig");
 const custom_potential = @import("custom_potential.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const file_potential = @import("file_potential.zig");
@@ -14,6 +15,7 @@ const time_linear_potential = @import("time_linear_potential.zig");
 const tully_potential = @import("tully_potential.zig");
 const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
+const BiasPotential = bias_potential.BiasPotential;
 const CustomPotential = custom_potential.CustomPotential;
 const FilePotential = file_potential.FilePotential;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
@@ -41,8 +43,23 @@ pub fn ElectronicPotential(comptime T: type) type {
         vibronic_coupling: VibronicCouplingPotential(T),
 
         /// Evaluate the adabatic potential energy matrix at given system state and time.
-        pub fn evaluateAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) !void {
+        pub fn evaluateAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, bias: ?BiasPotential(T)) !void {
             try self.evaluateDiabatic(adiabatic_potential, position, time);
+
+            if (bias) |bias_struct| for (0..adiabatic_potential.rows) |i| {
+
+                const variable = switch (bias_struct.variable) {
+                    .potential_energy => adiabatic_potential.at(i, i)
+                };
+
+                adiabatic_potential.ptr(i, i).* += bias_struct.evaluate(variable);
+            };
+
+            // const k = 0.5e2;
+            //
+            // for (0..adiabatic_potential.rows) |i| {
+            //     adiabatic_potential.ptr(i, i).* += k * (adiabatic_potential.at(i, i) - 0.5) * (adiabatic_potential.at(i, i) - 0.5);
+            // }
 
             try diagonalizeSymmetric(T, adiabatic_potential);
         }
@@ -107,18 +124,18 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Evaluate the adabatic potential energy gradient for a specific coordinate index. The adiabatic potential matrix will hold the potential at the r + dr point.
-        pub fn forceAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T) !T {
+        pub fn forceAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T)) !T {
             const original_position = position.at(index);
 
             @constCast(&position).ptr(index).* = original_position - fdiff_step;
 
-            try self.evaluateAdiabatic(adiabatic_potential, position, time);
+            try self.evaluateAdiabatic(adiabatic_potential, position, time, bias);
 
             const energy_minus = adiabatic_potential.at(state, state);
 
             @constCast(&position).ptr(index).* = original_position + fdiff_step;
 
-            try self.evaluateAdiabatic(adiabatic_potential, position, time);
+            try self.evaluateAdiabatic(adiabatic_potential, position, time, bias);
 
             const energy_plus = adiabatic_potential.at(state, state);
 

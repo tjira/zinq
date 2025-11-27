@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const bias_potential = @import("bias_potential.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
@@ -9,6 +10,7 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const string_manipulation = @import("string_manipulation.zig");
 
+const BiasPotential = bias_potential.BiasPotential;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
@@ -155,14 +157,14 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Propagate the classical particle using velocity verlet algorithm.
-        pub fn propagateVelocityVerlet(self: *@This(), potential: ElectronicPotential(T), potential_matrix: *RealMatrix(T), time: T, current_state: usize, time_step: T, fdiff_step: T) !void {
+        pub fn propagateVelocityVerlet(self: *@This(), pot: ElectronicPotential(T), pot_matrix: *RealMatrix(T), time: T, current_state: usize, time_step: T, fdiff_step: T, bias: ?BiasPotential(T)) !void {
             for (0..self.ndim) |i| {
                 self.position.ptr(i).* += (self.velocity.at(i) + 0.5 * self.acceleration.at(i) * time_step) * time_step;
             }
 
             for (0..self.ndim) |i| {
 
-                const force = try potential.forceAdiabatic(potential_matrix, self.position, time, current_state, i, fdiff_step);
+                const force = try pot.forceAdiabatic(pot_matrix, self.position, time, current_state, i, fdiff_step, bias);
 
                 const previous_acceleration = self.acceleration.at(i);
 

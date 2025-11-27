@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const bias_potential = @import("bias_potential.zig");
 const classical_particle = @import("classical_particle.zig");
 const complex_runge_kutta = @import("complex_runge_kutta.zig");
 const complex_vector = @import("complex_vector.zig");
@@ -28,6 +29,7 @@ const ring_buffer = @import("ring_buffer.zig");
 const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 const tully_potential = @import("tully_potential.zig");
 
+const BiasPotential = bias_potential.BiasPotential;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const Complex = std.math.complex.Complex;
 const ComplexRungeKutta = complex_runge_kutta.ComplexRungeKutta;
@@ -95,6 +97,7 @@ pub fn Options(comptime T: type) type {
         iterations: u32,
         time_step: T,
 
+        bias: ?BiasPotential(T) = null,
         derivative_coupling: ?DerivativeCoupling(T) = null,
         log_intervals: LogIntervals = .{},
         surface_hopping: ?SurfaceHoppingAlgorithm(T) = null,
@@ -358,7 +361,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
         if (i > 0) {
-            try system.propagateVelocityVerlet(opt.potential, &adiabatic_potential, time, current_state, opt.time_step, opt.finite_differences_step);
+            try system.propagateVelocityVerlet(opt.potential, &adiabatic_potential, time, current_state, opt.time_step, opt.finite_differences_step, opt.bias);
         }
 
         try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time);

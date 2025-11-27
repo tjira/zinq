@@ -5,6 +5,7 @@ const std = @import("std");
 
 pub const array_functions = @import("array_functions.zig");
 pub const basis_set = @import("basis_set.zig");
+pub const bias_potential = @import("bias_potential.zig");
 pub const classical_dynamics = @import("classical_dynamics.zig");
 pub const classical_particle = @import("classical_particle.zig");
 pub const complex_gaussian = @import("complex_gaussian.zig");
