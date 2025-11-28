@@ -254,6 +254,46 @@ pub fn ComplexGaussian(comptime T: type) type {
             return result.div(Complex(T).init(self.norm() * other.norm(), 0));
         }
 
+        /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to momentum.
+        pub fn overlapDiffMomentum(self: @This(), other: @This()) !Complex(T) {
+            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+
+            var result = Complex(T).init(0, 0);
+
+            for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum) |q1, q2, g1, g2, p1, p2| {
+
+                const g1_c = g1.conjugate();
+
+                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
+
+                const dq_c = Complex(T).init(q1 - q2, 0);
+
+                result = result.add(p1_c.sub(p2_c).add(g1_c.mul(dq_c).mulbyi()).div(g1_c.add(g2)));
+            }
+
+            return result.mul(try self.overlap(other));
+        }
+
+        /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to position.
+        pub fn overlapDiffPosition(self: @This(), other: @This()) !Complex(T) {
+            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+
+            var result = Complex(T).init(0, 0);
+
+            for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum) |q1, q2, g1, g2, p1, p2| {
+
+                const g1_c = g1.conjugate();
+
+                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
+
+                const dq_c = Complex(T).init(q1 - q2, 0);
+
+                result = result.add(g1_c.mul(p2_c).neg().mulbyi().add(g2.mul(p1_c.mulbyi().neg().add(g1_c.mul(dq_c)))).div(g1_c.add(g2)));
+            }
+
+            return result.mul(try self.overlap(other));
+        }
+
         /// Calculates the derivative of the position.
         pub fn positionDerivative(self: @This(), mass: []const T) !RealVector(T) {
             var dq = try RealVector(T).init(self.position.len, self.allocator);

@@ -66,6 +66,11 @@ pub fn Options(comptime T: type) type {
                 gamma: []const T,
                 momentum: []const T,
                 frozen: bool = true
+            },
+            ss_vMCG: struct {
+                position: []const []const T,
+                gamma: []const []const T,
+                momentum: []const []const T
             }
         };
 
@@ -129,17 +134,16 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
+    if (opt.integration_nodes < 1 or opt.integration_nodes > 256) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{HERMITE_NODES.len});
+
     switch (opt.method) {
-        .vMCG => return try runSingleGaussian(T, opt, enable_printing, allocator)
+        .vMCG => return try runSingleGaussian(T, opt, enable_printing, allocator),
+        .ss_vMCG => return try runSingleSetOfGaussians(T, opt, enable_printing, allocator),
     }
 }
 
 /// Perform the simulation with a single gaussian.
 pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(opt);
-
-    if (opt.integration_nodes < 1 or opt.integration_nodes > 256) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{HERMITE_NODES.len});
-
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
@@ -209,6 +213,38 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
         try printIterationInfo(T, info, &timer);
     }
+
+    if (enable_printing) for (0..nstate) |i| {
+        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i)});
+    };
+
+    const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
+
+    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time, opt.iterations + 1);
+    if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?, );
+
+    if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit();
+
+    return output;
+}
+
+/// Perform the simulation with a single set of gaussians.
+pub fn runSingleSetOfGaussians(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    const ndim = opt.potential.ndim();
+    const nstate = opt.potential.nstate();
+
+    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
+    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
+
+    const output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
+
+    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
+
+    for (0..opt.iterations + 1) |_| {
+
+    }
+
+    if (enable_printing) try printIterationHeader(ndim, nstate);
 
     if (enable_printing) for (0..nstate) |i| {
         try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i)});

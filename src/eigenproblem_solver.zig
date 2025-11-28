@@ -30,7 +30,7 @@ pub fn eigensystemHermitian(comptime T: type, J: *ComplexMatrix(T), C: *ComplexM
     try eigensystemJacobi(ComplexMatrix, T, J, C, A);
 }
 
-/// Solve the eigenproblem for a real symmetric system using the Jacobi method.
+/// Solve the eigenproblem for a symmetric or Hermitian system using the Jacobi method.
 pub fn eigensystemJacobi(comptime M: fn (comptime type) type, comptime T: type, J: *M(T), C: ?*M(T), A: M(T)) !void {
     if (!A.isSquare()) return throw(void, "MATRIX MUST BE SQUARE TO SOLVE THE EIGENPROBLEM", .{});
     if (A.rows != J.rows or A.cols != J.cols) return throw(void, "EIGENVALUE MATRIX MUST HAVE THE SAME DIMENSIONS AS THE INPUT MATRIX", .{});
@@ -123,6 +123,16 @@ pub fn eigensystemJacobi(comptime M: fn (comptime type) type, comptime T: type, 
             };
         }
     };
+}
+
+/// Solve the eigenproblem for a complex hermitian system.
+pub fn eigensystemJacobiAlloc(comptime M: fn (comptime type) type, comptime T: type, A: M(T), allocator: std.mem.Allocator) !struct {J: M(T), C: M(T)} {
+    var J = try M(T).init(A.rows, A.cols, allocator);
+    var C = try M(T).init(A.rows, A.cols, allocator);
+
+    try eigensystemJacobi(M, T, &J, &C, A);
+
+    return .{.J = J, .C = C};
 }
 
 /// Solve the eigenproblem for a real symmetric system.

@@ -41,6 +41,7 @@ pub const linear_interpolation = @import("linear_interpolation.zig");
 pub const linear_solve = @import("linear_solve.zig");
 pub const mapping_approach = @import("mapping_approach.zig");
 pub const math_functions = @import("math_functions.zig");
+pub const matrix_inverse = @import("matrix_inverse.zig");
 pub const matrix_multiplication = @import("matrix_multiplication.zig");
 pub const molecular_integrals = @import("molecular_integrals.zig");
 pub const morse_potential = @import("morse_potential.zig");
@@ -160,6 +161,31 @@ pub fn main() !void {
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
+
+    // const cg1 = try complex_gaussian.ComplexGaussian(f64).init(&.{1}, &.{1}, &.{2}, allocator); defer cg1.deinit();
+    // const cg2 = try complex_gaussian.ComplexGaussian(f64).init(&.{2}, &.{3}, &.{1}, allocator); defer cg2.deinit();
+    //
+    // cg1.gamma[0] = std.math.complex.Complex(f64).init(cg1.gamma[0].re, 2);
+    // cg2.gamma[0] = std.math.complex.Complex(f64).init(cg2.gamma[0].re, 4);
+    //
+    // const S = try cg1.overlap(cg2);
+    // const Sp = try cg1.overlapDiffMomentum(cg2);
+    // const Sq = try cg1.overlapDiffPosition(cg2);
+    //
+    // std.debug.print("OVERLAP: ({d:.14}, {d:.14})\n", .{S.re, S.im});
+    // std.debug.print("OVERLAP POSITION: ({d:.14}, {d:.14})\n", .{Sq.re, Sq.im});
+    // std.debug.print("OVERLAP MOMENTUM: ({d:.14}, {d:.14})\n", .{Sp.re, Sp.im});
+    
+    // var A = try complex_matrix.ComplexMatrix(f64).init(3, 3, allocator); defer A.deinit();
+    //
+    // A.ptr(0, 0).* = std.math.complex.Complex(f64).init(1.0, 0); A.ptr(0, 1).* = std.math.complex.Complex(f64).init(2.0, 0); A.ptr(0, 2).* = std.math.complex.Complex(f64).init(3.0, 0);
+    // A.ptr(1, 0).* = std.math.complex.Complex(f64).init(2.0, 0); A.ptr(1, 1).* = std.math.complex.Complex(f64).init(4.0, 0); A.ptr(1, 2).* = std.math.complex.Complex(f64).init(5.0, 0);
+    // A.ptr(2, 0).* = std.math.complex.Complex(f64).init(3.0, 0); A.ptr(2, 1).* = std.math.complex.Complex(f64).init(5.0, 0); A.ptr(2, 2).* = std.math.complex.Complex(f64).init(6.0, 0);
+    //
+    // const Ainv = try matrix_inverse.inverseHermitianAlloc(f64, A, allocator); defer Ainv.deinit();
+    //
+    // try device_write.printComplexMatrix(f64, A);
+    // try device_write.printComplexMatrix(f64, Ainv);
 }
 
 test {
