@@ -1,0 +1,27 @@
+name: Documentation
+
+on:
+  push:
+    branches:
+      - 'master'
+
+permissions:
+  id-token: write
+  pages: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mirror the Repository
+        run: git clone --mirror git@github.com:/tjira/zinq zinq
+
+      - name: Push to Mirror to GitLab
+        env:
+          GITLAB_TOKEN: ${{secrets.GITLAB_TOKEN}}
+        run: cd zinq && git push --mirror git@github.com:/tojira/zinq
+
+      - name: Setup Tmate Session
+        if: failure()
+        uses: mxschmitt/action-tmate/detached@v3
