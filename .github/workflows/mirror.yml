@@ -19,7 +19,7 @@ jobs:
       - name: Push the Mirror to GitLab
         env:
           GITLAB_TOKEN: ${{secrets.GITLAB_TOKEN}}
-        run: cd zinq && git push --mirror https://gitlab.com/tojira/zinq
+        run: cd zinq && git push --mirror https://oauth2:$GITLAB_TOKEN@gitlab.com/tojira/zinq
 
       - name: Setup Tmate Session
         if: failure()
