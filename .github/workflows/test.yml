@@ -6,10 +6,10 @@ on:
       - '*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  test_linux:
+  linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -22,7 +22,7 @@ jobs:
         if: failure()
         uses: mxschmitt/action-tmate/detached@v3
 
-  test_macos:
+  macos:
     runs-on: macos-latest
 
     steps:
@@ -35,7 +35,7 @@ jobs:
         if: failure()
         uses: mxschmitt/action-tmate/detached@v3
 
-  test_windows:
+  windows:
     runs-on: windows-latest
 
     steps:
