@@ -6,21 +6,20 @@ on:
       - 'master'
 
 permissions:
-  id-token: write
-  pages: write
+  contents: write
 
 jobs:
-  mirror:
+  gitlab:
     runs-on: ubuntu-latest
 
     steps:
       - name: Mirror the Repository
-        run: git clone --mirror git@github.com:/tjira/zinq zinq
+        run: git clone --mirror https://github.com/tjira/zinq
 
-      - name: Push to Mirror to GitLab
+      - name: Push the Mirror to GitLab
         env:
           GITLAB_TOKEN: ${{secrets.GITLAB_TOKEN}}
-        run: cd zinq && git push --mirror git@github.com:/tojira/zinq
+        run: cd zinq && git push --mirror https://gitlab.com/tjira/zinq
 
       - name: Setup Tmate Session
         if: failure()
