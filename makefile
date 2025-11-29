@@ -53,7 +53,7 @@ pip: wheel
 	@pip install --force-reinstall dist/zinq-$(VERSION)-py3-none-any.whl
 
 phd:
-	@cd tex && lualatex main && biber main && makeglossaries main && lualatex main && lualatex main
+	@cd tex ; lualatex main ; biber main ; makeglossaries main ; lualatex main ; lualatex main
 
 profile: zinq
 	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq

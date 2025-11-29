@@ -56,8 +56,8 @@ with open("tex/main.tex") as tex:
 
         formatted_line = formatted_line.replace(r"~\ref", r" \ref").replace(r"~\eqref", r" \eqref")
 
-        formatted_line = formatted_line.replace("\\begin{equation}", "$$\n\\begin{equation}").replace("\\end{equation}", "\\end{equation}\n$$")
-        formatted_line = formatted_line.replace("\\begin{align}",    "$$\n\\begin{align}"   ).replace("\\end{align}",    "\\end{align}\n$$"   )
+        formatted_line = formatted_line.replace("\\begin{equation}", "\n$$\n\\begin{equation}").replace("\\end{equation}", "\\end{equation}\n$$\n")
+        formatted_line = formatted_line.replace("\\begin{align}",    "\n$$\n\\begin{align}"   ).replace("\\end{align}",    "\\end{align}\n$$\n"   )
 
         if IN_BLOCK: formatted_line = "> " + formatted_line.strip().replace("\n", "\n> ") + "\n"
 
@@ -65,9 +65,10 @@ with open("tex/main.tex") as tex:
 
         formatted_line = "\n" if line.startswith(r"\end{definition}") else formatted_line
 
-        if line.startswith(r"\chapter"   ): formatted_line = "# "   + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
-        if line.startswith(r"\section"   ): formatted_line = "## "  + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
-        if line.startswith(r"\subsection"): formatted_line = "### " + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
+        if line.startswith(r"\chapter"      ): formatted_line = "# "    + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
+        if line.startswith(r"\section"      ): formatted_line = "## "   + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
+        if line.startswith(r"\subsection"   ): formatted_line = "### "  + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
+        if line.startswith(r"\subsubsection"): formatted_line = "#### " + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
 
         for acronym, (short, long) in ACRONYMS.items():
             formatted_line = formatted_line.replace(r"\acrshort{" + acronym + r"}", short).replace(r"\acrfull{" + acronym + r"}", f"{long} ({short})")

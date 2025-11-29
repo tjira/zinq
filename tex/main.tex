@@ -1,12 +1,16 @@
 % Compile with the "lualatex main && biber main && makeglossaries main && lualatex main && lualatex main" command.
 
-\DocumentMetadata{
+\RequirePackage{pdfmanagement}
+
+\SetKeys[document/metadata]{
     lang = en,
     pdfversion = 1.7,
-    pdfstandard = A-3b,
+    pdfstandard = A-3b
 }
 
-\documentclass[headsepline=true,parskip=half,open=any,12pt]{scrbook}\title{Algorithms of Quantum Chemistry}\author{Tomáš \textsc{Jíra}}
+\documentclass[headsepline=true,parskip=half,open=any,12pt]{scrbook}
+
+\title{Algorithms of Quantum Chemistry}\author{Tomáš \textsc{Jíra}}
 
 \usepackage[hidelinks]{hyperref}\makeatletter\hypersetup{pdfauthor={\@author},pdftitle={\@title}}\makeatother % hyperlinks and metadata
 
@@ -16,25 +20,26 @@
 \usepackage[backend=biber,style=chem-acs]{biblatex} % bibliography package
 \usepackage{fontspec} % font selection
 \usepackage{braket} % braket notation
-\usepackage[format=plain,labelfont=bf]{caption} % bold captions
 \usepackage[left=1.5cm,top=2cm,right=1.5cm,bottom=2cm]{geometry} % page layout
 \usepackage[acronym,nogroupskip,nomain,toc]{glossaries} % glossary package
 \usepackage{mathrsfs} % mathscr environment
 \usepackage[automark]{scrlayer-scrpage} % page styles
-\usepackage{subcaption} % subfigures
 \usepackage{unicode-math} % unicode math support
 \usepackage{microtype} % better typesetting
 
 \addbibresource{library.bib} % set the library file
+\makeglossaries % make the glossary
+
 \clearpairofpagestyles % clear the default page styles
 \ihead{\pagemark} % add page number to the inner header
-\makeglossaries % make the glossary
 \ohead{\headmark} % add chapter name to the outer header
+
 \setmainfont{Libertinus Serif} % set the main font
 \setmathfont{Libertinus Math} % set the math font
 \setsansfont{Libertinus Sans} % set the sans-serif font
 
 \newtheorem{definition}{Definition}\numberwithin{definition}{section}
+\newtheorem{theorem}{Theorem}\numberwithin{theorem}{section}
 
 \newacronym{rhf}{RHF}{Restricted Hartree--Fock}
 \newacronym{post-hf}{post-HF}{post-Hartree--Fock}
@@ -81,16 +86,16 @@
 \tableofcontents
 \chapter{Mathematical Background}\label{sec:mathematical_background}
 \section{Vector Spaces and Linear Operators}\label{sec:vector_spaces_and_linear_operators}
-Many concepts in quantum mechanics rest on the algebra of vector spaces and the action of linear operators. We review what is needed here. Fuller accounts can be found in standard linear algebra and functional analysis texts. Throughout, the scalar field is a general field $F$, but in quantum mechanics we take $F=\mathbb{C}$ unless stated otherwise.
+Many concepts in quantum mechanics rest on the algebra of vector spaces and the action of linear operators. We review what is needed here. More complete accounts can be found in standard linear algebra and functional analysis texts. Throughout, the scalar field is a general field $F$, but in quantum mechanics we take $F=\mathbb{C}$ unless stated otherwise.
 \subsection{Vector Spaces and Basic Properties}\label{sec:vector_spaces_basic_properties}
 The object of interest is a vector space: a set with addition and scalar multiplication satisfying compatibility rules. The following definition states these axioms explicitly.
 \begin{definition}
-A vector space $V$ over a field $F$ is a non-empty set equipped with vector addition and scalar multiplication, which must satisfy the following axioms for all $\symbf{u},\symbf{v},\symbf{w}\in V$ and all scalars $a,b\in F$:
+A vector space $(V,+,\cdot)$ over a field $F$ is a non-empty set that is closed under vector addition and scalar multiplication. Every vector space must satisfy the following axioms for all $\symbf{u},\symbf{v},\symbf{w}\in V$ and all scalars $a,b\in F$:
 \begin{enumerate}\def\labelenumi{\arabic{enumi}.}
 \item Associativity of vector addition: $(\symbf{u}+\symbf{v})+\symbf{w}=\symbf{u}+(\symbf{v}+\symbf{w})$
 \item Commutativity of vector addition: $\symbf{u}+\symbf{v}=\symbf{v}+\symbf{u}$
-\item Identity element of vector addition: $\exists\symbf{0}\in V$ such that $\symbf{u}+\symbf{0}=\symbf{u}$
-\item Inverse element of vector addition: $\exists(-\symbf{u})\in V$ such that $\symbf{u}+(-\symbf{u})=\symbf{0}$
+\item Identity element of vector addition: $\exists\,\symbf{0}\in V$ such that $\symbf{u}+\symbf{0}=\symbf{u}$
+\item Inverse element of vector addition: $\exists\,(-\symbf{u})\in V$ such that $\symbf{u}+(-\symbf{u})=\symbf{0}$
 \item Compatibility of scalar multiplication with field multiplication: $a(b\symbf{u})=(ab)\symbf{u}$
 \item Identity element of scalar multiplication: $1\symbf{u}=\symbf{u}$, where $1$ is the multiplicative identity in $F$
 \item Distributivity of scalar multiplication with respect to vector addition: $a(\symbf{u}+\symbf{v})=a\symbf{u}+a\symbf{v}$
@@ -103,7 +108,7 @@ Before we can use vector spaces effectively, we must identify and characterize s
 \begin{definition}
 A subset $W\subset V$ is a subspace if it is non-empty and closed under addition and scalar multiplication. For all $\symbf{u},\symbf{v}\in W$ and $a\in F$, one has $\symbf{u}+\symbf{v}\in W$ and $a\symbf{u}\in W$. Equivalently, $W$ is a subspace iff $\symbf{0}\in W$, $\symbf{u}+\symbf{v}\in W$ and $a\symbf{u}\in W$.
 \end{definition}
-Every subspace necessarily contains the zero vector and is closed under both addition and scalar multiplication. Subspaces are important because they capture smaller, self-contained portions of a larger space where similar operations remain valid.
+Every subspace necessarily contains the zero vector and is closed under both addition and scalar multiplication so it is itself a vector space. Subspaces are important because they capture smaller, self-contained portions of a larger space where similar operations remain valid.
 
 We now proceed to the concept of linear combinations, which provides a mechanism for generating new vectors from existing ones, and the related concept of the span, which describes the set of all such combinations.
 \begin{definition}
@@ -137,30 +142,29 @@ Every vector in a vector space can be written uniquely as a linear combination o
 \subsection{Normed, Inner Product and Complete Vector Space}\label{sec:normed_inner_product_complete_vector_space}
 To introduce geometric concepts into vector spaces, we first define the normed vector space.
 \begin{definition}
-A normed vector space $(V,\lvert\cdot\rvert)$ is a vector space $V$ over a field $F$ (here, $F$ is $\mathbb{R}$ or $\mathbb{C}$) equipped with a norm, which is a function $\lvert\cdot\rvert:V\to\mathbb{R}$ that satisfies the following properties for all $\symbf{u},\symbf{v}\in V$ and all scalars $a\in F$:
+A normed vector space $(V,\lvert\cdot\rvert)$ is a vector space $V$ over a field $F$ (here, $F$ is $\mathbb{R}$ or $\mathbb{C}$) equipped with a norm, which is a function $\lvert\cdot\rvert:V\to\left[0,\infty\right)\subset\mathbb{R}$ that satisfies the following properties for all $\symbf{u},\symbf{v}\in V$ and all scalars $a\in F$:
 \begin{enumerate}\def\labelenumi{\arabic{enumi}.}
-\item Non-negativity: $\lvert\symbf{u}\rvert\geq 0$, with equality if and only if $\symbf{u}=\symbf{0}$
+\item Non-negativity: $\lvert\symbf{u}\rvert\geq 0$, with equality iff $\symbf{u}=\symbf{0}$
 \item Absolute scalability: $\lvert a\symbf{u}\rvert=\lvert a\rvert\lvert\symbf{u}\rvert$
 \item Triangle inequality: $\lvert\symbf{u}+\symbf{v}\rvert\leq\lvert\symbf{u}\rvert+\lvert\symbf{v}\rvert$
-\item Positive-definiteness: $\lvert\symbf{u}\rvert=0$ if and only if $\symbf{u}=\symbf{0}$
 \end{enumerate}
 \end{definition}
-A norm provides a measure of the "length" or "magnitude" of vectors in the space, allowing us to discuss concepts such as convergence and continuity. The norm induces a metric (or distance function) on the vector space defined briefly as
+A norm provides a measure of the \emph{length} or \emph{magnitude} of vectors in the space, allowing us to discuss concepts such as convergence and continuity. The norm induces a metric (or distance function) on the vector space defined briefly as
 \begin{equation}
 d(\symbf{u},\symbf{v})=\lvert\symbf{u}-\symbf{v}\rvert,
 \end{equation}
 which satisfies all the properties of a metric, thereby enabling the study of geometric properties within the vector space. More specialized normed vector space emerges after we define an inner product.
 
 The inner product generalizes the familiar Euclidean dot product to abstract vector spaces.
-\begin{definition}
+\begin{definition}\label{def:inner_product}
 An inner product on a vector space $V$ over a field $F$ is a function $\langle\cdot,\cdot\rangle:V\times V\to F$ that satisfies the following properties for all $\symbf{u},\symbf{v},\symbf{w}\in V$ and all scalars $a\in F$:
 \begin{enumerate}\def\labelenumi{\arabic{enumi}.}
 \item Conjugate symmetry: $\langle\symbf{u},\symbf{v}\rangle=\overline{\langle\symbf{v},\symbf{u}\rangle}$
-\item Linearity in the first argument: $\langle a\symbf{u}+\symbf{v},\symbf{w}\rangle=a\langle\symbf{u},\symbf{w}\rangle+\langle\symbf{v},\symbf{w}\rangle$
+\item Linearity in the second argument: $\langle \symbf{u},a\symbf{v}+\symbf{w}\rangle=a\langle\symbf{u},\symbf{v}\rangle+\langle\symbf{u},\symbf{w}\rangle$
 \item Positive-definiteness: $\langle\symbf{u},\symbf{u}\rangle\geq 0$, with equality if and only if $\symbf{u}=\symbf{0}$
 \end{enumerate}
 \end{definition}
-For real vector spaces, the conjugate symmetry reduces to ordinary symmetry. The inner product induces a norm (or length) of a vector $\symbf{u}$ defined by
+The linearity in second argument and conjugate symmetry together imply conjugate-linearity in the first argument. We note here that we use the definition that is commonly used un quantum mechanics. Mathematicians often require linearity in the first argument and conjugate-linearity in the second argument. For real vector spaces, the conjugate symmetry reduces to ordinary symmetry. The inner product induces a norm (or length) of a vector $\symbf{u}$ defined by
 \begin{equation}
 \lvert\symbf{u}\rvert=\sqrt{\langle\symbf{u},\symbf{u}\rangle}.
 \end{equation}
@@ -170,7 +174,7 @@ The inner product gives rise to two key inequalities that determine much of the 
 \begin{equation}
 \lvert\langle\symbf{u},\symbf{v}\rangle\rvert\leq\lvert\symbf{u}\rvert\lvert\symbf{v}\rvert.
 \end{equation}
-This inequality ensures that the angle between two vectors is well-defined and implies the triangle inequality for the induced norm. A vector space with an inner product is called an inner product space. Together, these results ensure that the norm induced by an inner product satisfies all metric axioms, endowing the space with a well-defined notion of distance. Thus, every inner product space is a normed vector space, although the converse is not generally true.
+This inequality ensures that the angle between two vectors is well-defined and implies the triangle inequality for the induced norm. A vector space equipped with an inner product is called an inner product space. Together, these results ensure that the norm induced by an inner product satisfies all metric axioms, endowing the space with a well-defined notion of distance. Thus, every inner product space is a normed vector space, although the converse is not generally true.
 
 Before we get to linear operators, we add one final definition that will become important when we discuss infinite-dimensional spaces.
 \begin{definition}
@@ -179,7 +183,7 @@ Let $(V,\lvert\cdot\rvert)$ be a normed vector space. A sequence $\lbrace\symbf{
 \subsection{Linear Operators}\label{sec:linear_operators}
 Linear operators lie at the core of quantum mechanics, representing physical observables and the evolution of quantum states. We now define linear operators and explore their properties.
 \begin{definition}
-A linear operator on avector space $V$ over a field $F$ is a map $A:V\to V$ with $A(\symbf{u}+\symbf{v})=A\symbf{u}+A\symbf{v}$ and $A(a\symbf{u})=aA\symbf{u}$ for all $\symbf{u},\symbf{v}\in V$, $a\in F$.
+A linear operator on a vector space $V$ over a field $F$ is a map $A:V\to V$ with $A(\symbf{u}+\symbf{v})=A\symbf{u}+A\symbf{v}$ and $A(a\symbf{u})=aA\symbf{u}$ for all $\symbf{u},\symbf{v}\in V$, $a\in F$.
 \end{definition}
 Using a basis of a vector space, we can represent linear operators as matrices. If $\lbrace\symbf{e}_i\rbrace_{i=1}^n$ is a basis of an $n$-dimensional vector space $V$, an operator $A$ can be represented by a matrix $[A]_{ij}=a_{ij}$ with the coefficients defined by
 \begin{equation}
@@ -193,8 +197,8 @@ If the vector space $V$ is equipped with an inner product and the basis $\lbrace
 \begin{equation}
 a_{ij}=\langle\symbf{e}_i,A\symbf{e}_j\rangle.
 \end{equation}
-Note that the matrix representation of an operator depends on the choice of basis. If $U$ is a change of basis matrix from a new basis $\lbrace\symbf{f}_i\rbrace_{i=1}^n$ to the old basis $\lbrace\symbf{e}_i\rbrace_{i=1}^n$ (i.e., $\symbf{e}_i=\sum_{j=1}^n U_{ji}\symbf{f}_j$), the matrix representation of $A$ in the new basis is given by
-\begin{equation}
+This equation is consistent with Def~\ref{def:inner_product}, where we adopt the physics convention for the inner product. Note that the matrix representation of an operator depends on the choice of basis. If $U$ is a change of basis matrix from a new basis $\lbrace\symbf{f}_i\rbrace_{i=1}^n$ to the old basis $\lbrace\symbf{e}_i\rbrace_{i=1}^n$ (i.e., $\symbf{e}_i=\sum_{j=1}^n U_{ji}\symbf{f}_j$), the matrix representation of $A$ in the new basis is given by
+\begin{equation}\label{eq:change_of_basis}
 [A]_{\symbf{e}}=U^{-1}[A]_{\symbf{f}}U.
 \end{equation}
 Let's now define some additional properties of linear operators.
@@ -203,24 +207,216 @@ For $A:V\to V$, the kernel (or null space) of $A$ is the set of vectors $\symbf{
 \end{definition}
 Another important concept is the concept of eigenvalues and eigenvectors.
 \begin{definition}
-A scalar $\lambda\in F$ is called an eigenvalue of a linear operator $A:V\to V$ if there exists a non-zero vector $\symbf{v}\in V$ such that $A\symbf{v}=\lambda\symbf{v}$. The vector $\symbf{v}$ is called an eigenvector associated with the eigenvalue $\lambda$. For a finite-dimensional vector space, the set of all eigenvalues of $A$ is called the spectrum of $A$. The subspace $E_\lambda=\text{ker}(A-\lambda I)$ is called the eigenspace associated with the eigenvalue $\lambda$, where $I$ is the identity operator on $V$.
+A scalar $\lambda\in F$ is called an eigenvalue of a linear operator $A:V\to V$ if there exists a non-zero vector $\symbf{v}\in V$ such that $A\symbf{v}=\lambda\symbf{v}$. The vector $\symbf{v}$ is called an eigenvector associated with the eigenvalue $\lambda$. For a finite-dimensional vector space, the set of all eigenvalues of $A$ is called the spectrum of $A$. The subspace $E_\lambda=\symrm{ker}(A-\lambda I)$ is called the eigenspace associated with the eigenvalue $\lambda$, where $I$ is the identity operator on $V$.
 \end{definition}
-If $V$ is finite-dimensional, the eigenvalues of $A$ can be found by solving the characteristic polynomial equation $\text{det}(A-\lambda I)=0$. The eigenvalues may be real or complex, depending on the operator and the field $F$.
+If $V$ is finite-dimensional, the eigenvalues of $A$ can be found by solving the characteristic polynomial equation $\text{det}(A-\lambda I)=0$.
 \section{Hilbert Spaces and Quantum States}\label{sec:hilbert_spaces}
-Hilbert space is a fundamental concept in quantum mechanics, providing the mathematical framework for describing quantum states and their evolution. In this section, we will explore the definition of Hilbert spaces, their properties, and how they relate to quantum states. We will start with the definition.
+Hilbert spaces are fundamental concepts in quantum mechanics, providing the mathematical framework for describing quantum states and their evolution. In this section, we will explore the definition of Hilbert spaces, their properties, and how they relate to quantum states. We will start with the definition.
 \begin{definition}
 A Hilbert space $\mathcal{H}$ is a complete inner product space, which means it is a vector space equipped with an inner product that allows for the definition of length and angle, and it is complete with respect to the norm induced by the inner product.
 \end{definition}
-Some examples of Hilbert spaces include the finite-dimensional vector spaces $\mathbb{R}^n$ or $\mathbb{C}^n$ or, as is often the case in quantum mechanics, the space of all square-integrable functions $L^2(\mathbb{R}^n)$. Formally
+In the context of quantum mechanics we will always take $\mathcal{H}$ to be a complex vector space, and we adopt the physics convention for the inner product, where $\langle\cdot,\cdot\rangle$ is conjugate-linear in its first argument and linear in its second, consistent with Def~\ref{def:inner_product}. The norm induced by the inner product is
+\begin{equation}
+\lvert\psi\rvert = \sqrt{\langle\psi,\psi\rangle}.
+\end{equation}
+Some examples of Hilbert spaces include the finite-dimensional vector spaces $\mathbb{R}^n$ or $\mathbb{C}^n$ or, as is often the case in quantum mechanics, the space of all square-integrable functions $L^2(\mathbb{R}^n)$. Formally\footnote{We will skip here the talk about the Lebesgue measure, since we do not want to complicate our lives with edge cases.}
 \begin{equation}
 L^2(\mathbb{R}^n)=\left\lbrace\psi :\mathbb{R}^n\to\mathbb{C}\middle\vert\int_{\mathbb{R}^n}\psi^*(\symbf{r})\psi(\symbf{r})\mathrm{d}\symbf{r}<\infty\right\rbrace
 \end{equation}
-where $\psi^*(x)$ is the complex conjugate of $\psi(x)$. When dealing with quantum states, we often use the Dirac notation, where quantum states are represented as ket vectors $\ket{\psi}$. The inner product between two elements $\ket{\psi}$ and $\ket{\phi}$ in the Hilbert space $L^2(\mathbb{R}^n)$ is defined as
+where $\psi^*(\symbf{r})$ is the complex conjugate of $\psi(\symbf{r})$. In Dirac notation, elements of $\mathcal{H}$ are written as kets $\ket{\psi}$. The inner product of $\psi,\phi\in\mathcal{H}$ is then denoted by
 \begin{equation}
-\braket{\psi\vert\phi}=\int_{\mathbb{R}^n}\psi^*(\symbf{r})\phi(\symbf{r})\,\mathrm{d}\symbf{r}.
+\braket{\psi\vert\phi}:=\langle\psi,\phi\rangle.
 \end{equation}
-\section{Spectral Theory in Hilbert Spaces}\label{sec:spectral_theory}
-\section{Adiabatic vs Diabatic Representation}\label{sec:adiabatic_vs_diabatic}
+To each ket $\ket{\psi}$ there corresponds a bra $\bra{\psi}$, which is a linear functional
+\begin{equation}
+\bra{\psi} : \mathcal{H}\to\mathbb{C},\qquad\bra{\psi}\left(\ket{\phi}\right):=\braket{\psi|\phi}.
+\end{equation}
+This correspondence is guaranteed by the Riesz representation theorem.
+
+In quantum mechanics, physical (pure) states are represented by \emph{rays} in a Hilbert space, i.e. one-dimensional subspaces of $\mathcal{H}$. Vectors that differ only by a nonzero complex scalar multiplication represent the same physical state:
+\begin{equation}
+\ket{\psi}\sim\ket{\phi}\Longleftrightarrow\exists\,c\in\mathbb{C}\setminus\lbrace 0\rbrace:\ket{\phi}=c\ket{\psi}.
+\end{equation}
+It is customary to choose a normalized representative $\ket{\psi}$ with
+\begin{equation}
+\braket{\psi\vert\psi}=1,
+\end{equation}
+in which case $\ket{\psi}$ is called a (normalized) state vector. The overall phase $e^{\mathrm i\theta}\ket{\psi}$ has no observable physical effect.
+
+In most physical applications one assumes that $\mathcal{H}$ is \emph{separable}, i.e. it possesses a countable orthonormal basis $\lbrace\ket{n}\rbrace_{n\in\mathbb{N}_0}$. Any vector $\ket{\psi}\in\mathcal{H}$ can then be then expanded as
+\begin{equation}
+\ket{\psi}=\sum_{n}c_n\ket{n},\qquad c_n=\braket{n\vert\psi},
+\end{equation}
+where the series converges in the norm of $\mathcal{H}$.
+
+\section{Spectral Theory in Hilbert Spaces}\label{sec:spectral_theory_in_hilbert_spaces}
+In this section we introduce the basic elements of spectral theory for operators on Hilbert spaces and connect them to the description of quantum observables and measurements. Throughout, $\mathcal{H}$ denotes a complex Hilbert space with inner product $\langle\cdot,\cdot\rangle$ conjugate-linear in the first argument and linear in the second. We write $\braket{\psi|\phi}:=\langle\psi,\phi\rangle$ in Dirac notation. The associated norm is
+\begin{equation}
+\lvert\ket{\psi}\rvert := \sqrt{\braket{\psi|\psi}},
+\end{equation}
+and, for brevity, we will often write $\lvert\psi\rvert$ instead of $\lvert\ket{\psi}\rvert$.
+\subsection{Self-adjoint Operators and Observables}
+In quantum mechanics, observables are represented by self-adjoint operators on a Hilbert space. Spectral theory describes how such operators can be decomposed into their \emph{eigenvalue parts}, both discrete and continuous, and how this decomposition encodes measurement statistics and time evolution.
+\begin{definition}
+A linear operator $A$ on $\mathcal{H}$ is called \emph{self-adjoint} if
+\begin{equation}
+\braket{\phi|A\psi}=\braket{A\phi|\psi}\quad\text{for all }\ket{\phi},\ket{\psi}\in\mathcal{H}
+\end{equation}
+and the domain of $A$ coincides with the domain of its adjoint.
+\end{definition}
+In physics terminology, self-adjoint operators are often called Hermitian. In nonrelativistic quantum mechanics, each observable is modeled by a self-adjoint operator $A$ on $\mathcal{H}$ and its spectral properties determine the possible measurement outcomes.
+\subsubsection*{Finite-Dimensional Case}
+If $\mathcal{H}$ is finite-dimensional, the spectral structure is simple.
+\begin{theorem}[Spectral Theorem in Finite Dimensions]
+Let $\mathcal{H}$ be finite-dimensional and $A$ self-adjoint. Then there exists an orthonormal basis $\{\ket{n}\}$ of $\mathcal{H}$ such that
+\begin{equation}
+A\ket{n}=\lambda_n\ket{n},\qquad\lambda_n\in\mathbb{R},
+\end{equation}
+and
+\begin{equation}
+A=\sum_n\lambda_n\ket{n}\bra{n}.
+\end{equation}
+\end{theorem}
+The real numbers $\lambda_n$ are the eigenvalues of $A$ and the kets $\ket{n}$ are the corresponding eigenstates. If the system is in a normalized state $\ket{\psi}$, the probability of obtaining the result $\lambda_n$ when measuring $A$ is
+\begin{equation}
+\mathbb P_A^\psi(\lambda_n)=\lvert\braket{n\vert\psi}\rvert^2,
+\end{equation}
+and the expectation value of $A$ is
+\begin{equation}
+\langle A\rangle_\psi=\braket{\psi\vert A\vert\psi}=\sum_n\lambda_n\lvert\braket{n\vert\psi}\rvert^2.
+\end{equation}
+This is the standard discrete version of the Born rule.
+\subsection{Spectral Decomposition in Infinite Dimensions}
+In infinite-dimensional Hilbert spaces, self-adjoint operators may have both discrete and continuous parts of the spectrum. The finite sum in the previous subsection is replaced by a combination of sums and integrals.
+
+Heuristically, one can write the spectral decomposition of a self-adjoint operator $A$ as
+\begin{equation}\label{eq:heuristic_spectral_decomposition}
+A=\sum_n \lambda_n \ket{n}\bra{n}+\int_{\sigma_{\mathrm c}(A)} \lambda\,\ket{\lambda}\bra{\lambda}\,\mathrm{d}\lambda,
+\end{equation}
+where $\lambda_n$ are discrete eigenvalues with normalizable eigenstates $\ket{n}$ (bound states), $\sigma_{\mathrm c}(A)$ is the continuous part of the spectrum. The generalized kets $\ket{\lambda}$ are not elements of $\mathcal{H}$ (they are not normalizable), but they can be treated formally in Dirac’s notation. More rigorously, the spectral decomposition is described using a projection-valued measure, but the heuristic form in Eq~\eqref{eq:heuristic_spectral_decomposition} is sufficient for most physical applications.
+
+For a normalized state $\ket{\psi}$, the discrete and continuous parts of the spectrum contribute to the normalization as
+\begin{equation}
+1=\lvert\psi\rvert^2=\sum_n\lvert\braket{n\vert\psi}\rvert^2+\int_{\sigma_{\mathrm c}(A)}\lvert\braket{\lambda\vert\psi}\rvert^2\,\mathrm{d}\lambda,
+\end{equation}
+and the probability of obtaining a measurement outcome in an interval $\Delta$ is
+\begin{equation}
+\mathbb P_A^\psi(\Delta)=\sum_{\lambda_n\in\Delta}\lvert\braket{n\vert\psi}\rvert^2+\int_{\Delta\cap\sigma_{\mathrm c}(A)}\lvert\braket{\lambda\vert\psi}\rvert^2\,\mathrm{d}\lambda.
+\end{equation}
+\subsection{Functions of Observables and Time Evolution}
+Once the spectral decomposition of a self-adjoint operator $A$ is known, one can define functions of $A$ by acting on its spectral components.
+
+In the purely discrete case,
+\begin{equation}
+A=\sum_n\lambda_n\ket{n}\bra{n},\qquad\ket{\psi}=\sum_n c_n\ket{n},
+\end{equation}
+a function $f(A)$ is defined by
+\begin{equation}
+f(A):=\sum_n f(\lambda_n)\ket{n}\bra{n},
+\end{equation}
+so that
+\begin{equation}
+f(A)\ket{n}=f(\lambda_n)\ket{n}.
+\end{equation}
+
+In the general (discrete + continuous) case, the same idea gives
+\begin{equation}
+f(A)=\sum_n f(\lambda_n)\ket{n}\bra{n}+\int_{\sigma_{\mathrm c}(A)}f(\lambda)\,\ket{\lambda}\bra{\lambda}\,\mathrm{d}\lambda,
+\end{equation}
+which is the heuristic form of the functional calculus. 
+
+The most important example in quantum mechanics is the time-evolution operator generated by a Hamiltonian $H$. For a time-independent Hamiltonian, the unitary time-evolution operator is
+\begin{equation}
+U(t)=\mathrm e^{-\mathrm{i} t H},
+\end{equation}
+which, in spectral form, reads
+\begin{equation}
+U(t)=\sum_n \mathrm e^{-\mathrm{i} t E_n} \ket{n}\bra{n}+\int_{\sigma_{\mathrm c}(H)} \mathrm e^{-\mathrm{i} t E}\,\ket{E}\bra{E}\,\mathrm{d}E,
+\end{equation}
+where $E_n$ and $E$ denote discrete and continuous energy values, respectively. This expression shows explicitly how each energy component of the state picks up a phase factor $\mathrm e^{-\mathrm{i} t E}$, while the norm
+\begin{equation}
+\lvert U(t)\psi\rvert=\lvert\psi\rvert
+\end{equation}
+is preserved, expressing conservation of total probability under Schr\"odinger time evolution.
+\section{Adiabatic vs Diabatic Representation}\label{sec:adiabatic_vs_diabatic_representation}
+In molecular quantum mechanics we often describe a system of electrons and nuclei in terms of two sets of coordinates: electronic coordinates $\symbf{r}$ and nuclear coordinates $\symbf{R}$. The total molecular wavefunction depends on both, $\ket{\Psi(\symbf{R},\symbf{r},t)}$, and evolves under the full molecular Hamiltonian. In practice, it is convenient to expand $\ket{\Psi}$ in a suitable electronic basis that depends on the nuclear positions. Two particularly important choices are the \emph{adiabatic} and \emph{diabatic} representations.
+\subsection{Born--Oppenheimer Separation}
+The starting point is the separation of the Hamiltonian into nuclear and electronic parts. For a molecular system one typically writes
+\begin{equation}\label{eq:boa_hamiltonian}
+H=T_\mathrm{n}(\symbf{R})+H_\mathrm{el}(\symbf{r};\symbf{R}),
+\end{equation}
+where $T_\mathrm{n}$ is the nuclear kinetic energy operator and $H_\mathrm{el}$ contains the electronic kinetic energy and all Coulomb interactions, with the nuclei treated as fixed at positions $\symbf{R}$.
+
+For each fixed nuclear configuration $\symbf{R}$ we can solve the electronic Schr\"odinger equation
+\begin{equation}
+H_\mathrm{el}(\symbf{r};\symbf{R})\ket{\phi_I(\symbf{R})}=E_I(\symbf{R})\ket{\phi_I(\symbf{R})},
+\end{equation}
+where $\{\ket{\phi_I(\symbf{R})}\}$ are electronic eigenstates and $E_I(\symbf{R})$ is the associated \acrfull{pes} for electronic state $I$.
+
+The total molecular wavefunction can then be expanded as
+\begin{equation}\label{eq:boa_expansion}
+\ket{\Psi(\symbf{R},\symbf{r},t)}=\sum_I\ket{\chi_I(\symbf{R},t)}\otimes\ket{\phi_I(\symbf{R})},
+\end{equation}
+where the nuclear wavefunctions $\ket{\chi_I(\symbf{R},t)}$ act as expansion coefficients in the electronic basis.
+
+Different choices of the electronic basis $\{\ket{\phi_I(\symbf{R})}\}$ lead to different representations of the nuclear dynamics. The two most common choices are the adiabatic and diabatic representations.
+\subsection{Adiabatic Representation}
+In the adiabatic representation the electronic basis is chosen as the eigenstates of the electronic Hamiltonian. By construction,
+\begin{equation}
+H_\mathrm{el}(\symbf{r};\symbf{R})\ket{\phi_I(\symbf{R})}=E_I(\symbf{R})\ket{\phi_I(\symbf{R})},
+\end{equation}
+so the electronic Hamiltonian is diagonal in this basis.
+
+Inserting the expansion in Eq.~\eqref{eq:boa_expansion} into the time-dependent Schr\"odinger equation and projecting onto $\bra{\phi_I(\symbf{R})}$ yields coupled equations for the nuclear wavefunctions $\ket{\chi_I(\symbf{R},t)}$. These contain the potential energy surfaces $E_I(\symbf{R})$ and additional terms that arise from the nuclear kinetic energy acting on the $\symbf{R}$-dependent electronic states:
+\begin{equation}
+\mathrm{i}\frac{\partial}{\partial{t}}\ket{\chi_I(\symbf{R},t)}=\left[T_\mathrm{n}(\symbf{R})+E_I(\symbf{R})\right]\ket{\chi_I(\symbf{R},t)}+\sum_JC_{IJ}(\symbf{R})\,\ket{\chi_J(\symbf{R},t)},
+\end{equation}
+where operator $C_{IJ}(\symbf{R})$ contains all the derivative coupling terms arising from the application of $T_\mathrm{n}(\symbf{R})$ on the full wavefunction $\ket{\Psi(\symbf{R},\symbf{r},t)}$.
+
+Physically, the adiabatic representation has two key features. The electronic Hamiltonian is diagonal which means that each $E_I(\symbf{R})$ defines a potential energy surface on which the nuclei move. And second, nonadiabatic effects appear as derivative couplings in the nuclear kinetic energy, encoded in $C_{IJ}(\symbf{R})$.
+
+The adiabatic picture is particularly intuitive far from avoided crossings or conical intersections, where the nuclei move approximately on a single surface $E_I(\symbf{R})$. Near regions where surfaces approach or intersect, the derivative couplings become large and the adiabatic representation can become numerically inconvenient.
+\subsection{Diabatic Representation}
+In the diabatic representation one chooses a different set of electronic basis functions $\{\ket{\tilde\phi_\alpha(\symbf{R})}\}$, related to the adiabatic states by an $\symbf{R}$-dependent unitary transformation
+\begin{equation}\label{eq:unitary_transform}
+\ket{\tilde\phi_\alpha(\symbf{R})}=\sum_I U_{I\alpha}(\symbf{R})\ket{\phi_I(\symbf{R})},
+\end{equation}
+where $U(\symbf{R})$ is unitary for each $\symbf{R}$.
+
+The defining property of an ideal diabatic basis is that the derivative couplings vanish:
+\begin{equation}
+\tilde{\symbf{d}}_{\alpha\beta}(\symbf{R})=\braket{\tilde\phi_\alpha(\symbf{R})\vert\nabla_{\symbf{R}}\tilde\phi_\beta(\symbf{R})}\approx\symbf{0},
+\end{equation}
+for all $\alpha,\beta$ (or at least for those states of interest). In such a basis, the nuclear kinetic energy operator acts trivially on the electronic functions and there are no derivative (nonadiabatic) couplings.
+
+However, removing the derivative couplings in this way introduces off-diagonal elements into the potential energy matrix. The nuclear Schr\"odinger equation in the diabatic representation then has the form
+\begin{equation}
+\mathrm{i}\frac{\partial}{\partial{t}}\ket{\tilde\chi_\alpha(\symbf{R},t)}=T_\mathrm{n}\ket{\tilde\chi_\alpha(\symbf{R},t)}+\sum_\beta\tilde{V}_{\alpha\beta}(\symbf{R})\ket{\tilde\chi_\beta(\symbf{R},t)},
+\end{equation}
+where the couplings between electronic states now appear as off-diagonal potential terms rather than derivative couplings. The $\tilde{V}$ term is equivalent to the electronic Hamiltonian in Eq~\eqref{eq:boa_hamiltonian}, we call it here potential, mainly for historical reasons.
+
+Physically, the diabatic representation has the following features. First, the nuclear kinetic energy is diagonal and free of derivative couplings (or they are at least minimized). Second, the electronic couplings appear as smooth off-diagonal potentials in $\tilde{V}(\symbf{R})$.
+
+This is often advantageous for constructing low-dimensional model Hamiltonians and for simulating nonadiabatic dynamics, since the diabatic potentials can be chosen to vary smoothly through avoided crossings and conical intersections.
+
+In general, a globally exact diabatic basis free of derivative couplings may not exist due to topological obstructions (e.g. around conical intersections). In practice, one works with quasi-diabatic representations where the derivative couplings are small but not exactly zero.
+\subsection{Transformation Between Adiabatic and Diabatic Representations}
+The nuclear wavefunctions in the two representations are related by the same unitary transformation $U(\symbf{R})$ that relates the electronic bases. Writing the total wavefunction as
+\begin{equation}
+\ket{\Psi(\symbf{R},\symbf{r},t)}=\sum_I\ket{\chi_I(\symbf{R},t)}\otimes\ket{\phi_I(\symbf{R})}=\sum_\alpha \ket{\tilde\chi_\alpha(\symbf{R},t)}\otimes\ket{\tilde\phi_\alpha(\symbf{R})},
+\end{equation}
+and inserting Eq~\eqref{eq:unitary_transform} into this equation and comparing the diabatic and adiabatic representation gives
+\begin{equation}
+\ket{\chi_I(\symbf{R},t)}=\sum_I U_{I\alpha}(\symbf{R})\ket{\tilde\chi_\alpha(\symbf{R},t)}.
+\end{equation}
+The adiabatic potential matrix is diagonal,
+\begin{equation}
+V_{IJ}(\symbf{R})=E_I(\symbf{R})\delta_{IJ},
+\end{equation}
+while the diabatic potential matrix $\tilde{V}(\symbf{R})$ is obtained using the unitary similarity transformation according to the change of basis formula in Eq~\eqref{eq:change_of_basis} as
+\begin{equation}
+\tilde{V}(\symbf{R})=U^\dagger(\symbf{R})V(\symbf{R})U(\symbf{R}).
+\end{equation}
 \chapter{Time Evolution in Quantum Mechanics}\label{sec:time_evolution}
 Quantum dynamics describes the evolution of quantum systems over time and is fundamental in quantum chemistry for understanding molecular behavior at the atomic level. It is governed by the principles of quantum mechanics, particularly the \acrfull{tdse}, which dictates how wavefunctions change with time. Due to the complex nature of these equations, practical solutions are often limited to small or model systems.
 
