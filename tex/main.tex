@@ -255,7 +255,7 @@ In this section we introduce the basic elements of spectral theory for operators
 \lvert\ket{\psi}\rvert := \sqrt{\braket{\psi|\psi}},
 \end{equation}
 and, for brevity, we will often write $\lvert\psi\rvert$ instead of $\lvert\ket{\psi}\rvert$.
-\subsection{Self-adjoint Operators and Observables}
+\subsection{Self-adjoint Operators and Observables}\label{sec:self_adjoint_operators_and_observables}
 In quantum mechanics, observables are represented by self-adjoint operators on a Hilbert space. Spectral theory describes how such operators can be decomposed into their \emph{eigenvalue parts}, both discrete and continuous, and how this decomposition encodes measurement statistics and time evolution.
 \begin{definition}
 A linear operator $A$ on $\mathcal{H}$ is called \emph{self-adjoint} if
@@ -265,7 +265,7 @@ A linear operator $A$ on $\mathcal{H}$ is called \emph{self-adjoint} if
 and the domain of $A$ coincides with the domain of its adjoint.
 \end{definition}
 In physics terminology, self-adjoint operators are often called Hermitian. In nonrelativistic quantum mechanics, each observable is modeled by a self-adjoint operator $A$ on $\mathcal{H}$ and its spectral properties determine the possible measurement outcomes.
-\subsubsection*{Finite-Dimensional Case}
+\subsubsection*{Finite-Dimensional Case}\label{sec:finite_dimensional_case}
 If $\mathcal{H}$ is finite-dimensional, the spectral structure is simple.
 \begin{theorem}[Spectral Theorem in Finite Dimensions]
 Let $\mathcal{H}$ be finite-dimensional and $A$ self-adjoint. Then there exists an orthonormal basis $\{\ket{n}\}$ of $\mathcal{H}$ such that
@@ -286,7 +286,7 @@ and the expectation value of $A$ is
 \langle A\rangle_\psi=\braket{\psi\vert A\vert\psi}=\sum_n\lambda_n\lvert\braket{n\vert\psi}\rvert^2.
 \end{equation}
 This is the standard discrete version of the Born rule.
-\subsection{Spectral Decomposition in Infinite Dimensions}
+\subsection{Spectral Decomposition in Infinite Dimensions}\label{sec:spectral_decompositions_in_infinite_dimenstions}
 In infinite-dimensional Hilbert spaces, self-adjoint operators may have both discrete and continuous parts of the spectrum. The finite sum in the previous subsection is replaced by a combination of sums and integrals.
 
 Heuristically, one can write the spectral decomposition of a self-adjoint operator $A$ as
@@ -303,7 +303,7 @@ and the probability of obtaining a measurement outcome in an interval $\Delta$ i
 \begin{equation}
 \mathbb P_A^\psi(\Delta)=\sum_{\lambda_n\in\Delta}\lvert\braket{n\vert\psi}\rvert^2+\int_{\Delta\cap\sigma_{\mathrm c}(A)}\lvert\braket{\lambda\vert\psi}\rvert^2\,\mathrm{d}\lambda.
 \end{equation}
-\subsection{Functions of Observables and Time Evolution}
+\subsection{Functions of Observables and Time Evolution}\label{sec:functions_of_observables_and_time_evolution}
 Once the spectral decomposition of a self-adjoint operator $A$ is known, one can define functions of $A$ by acting on its spectral components.
 
 In the purely discrete case,
@@ -340,7 +340,7 @@ where $E_n$ and $E$ denote discrete and continuous energy values, respectively. 
 is preserved, expressing conservation of total probability under Schr\"odinger time evolution.
 \section{Adiabatic vs Diabatic Representation}\label{sec:adiabatic_vs_diabatic_representation}
 In molecular quantum mechanics we often describe a system of electrons and nuclei in terms of two sets of coordinates: electronic coordinates $\symbf{r}$ and nuclear coordinates $\symbf{R}$. The total molecular wavefunction depends on both, $\ket{\Psi(\symbf{R},\symbf{r},t)}$, and evolves under the full molecular Hamiltonian. In practice, it is convenient to expand $\ket{\Psi}$ in a suitable electronic basis that depends on the nuclear positions. Two particularly important choices are the \emph{adiabatic} and \emph{diabatic} representations.
-\subsection{Born--Oppenheimer Separation}
+\subsection{Born--Oppenheimer Separation}\label{sec:born_oppenheimer_separation}
 The starting point is the separation of the Hamiltonian into nuclear and electronic parts. For a molecular system one typically writes
 \begin{equation}\label{eq:boa_hamiltonian}
 H=T_\mathrm{n}(\symbf{R})+H_\mathrm{el}(\symbf{r};\symbf{R}),
@@ -360,7 +360,7 @@ The total molecular wavefunction can then be expanded as
 where the nuclear wavefunctions $\ket{\chi_I(\symbf{R},t)}$ act as expansion coefficients in the electronic basis.
 
 Different choices of the electronic basis $\{\ket{\phi_I(\symbf{R})}\}$ lead to different representations of the nuclear dynamics. The two most common choices are the adiabatic and diabatic representations.
-\subsection{Adiabatic Representation}
+\subsection{Adiabatic Representation}\label{sec:adiabatic_representation}
 In the adiabatic representation the electronic basis is chosen as the eigenstates of the electronic Hamiltonian. By construction,
 \begin{equation}
 H_\mathrm{el}(\symbf{r};\symbf{R})\ket{\phi_I(\symbf{R})}=E_I(\symbf{R})\ket{\phi_I(\symbf{R})},
@@ -376,7 +376,7 @@ where operator $C_{IJ}(\symbf{R})$ contains all the derivative coupling terms ar
 Physically, the adiabatic representation has two key features. The electronic Hamiltonian is diagonal which means that each $E_I(\symbf{R})$ defines a potential energy surface on which the nuclei move. And second, nonadiabatic effects appear as derivative couplings in the nuclear kinetic energy, encoded in $C_{IJ}(\symbf{R})$.
 
 The adiabatic picture is particularly intuitive far from avoided crossings or conical intersections, where the nuclei move approximately on a single surface $E_I(\symbf{R})$. Near regions where surfaces approach or intersect, the derivative couplings become large and the adiabatic representation can become numerically inconvenient.
-\subsection{Diabatic Representation}
+\subsection{Diabatic Representation}\label{sec:diabatic_representation}
 In the diabatic representation one chooses a different set of electronic basis functions $\{\ket{\tilde\phi_\alpha(\symbf{R})}\}$, related to the adiabatic states by an $\symbf{R}$-dependent unitary transformation
 \begin{equation}\label{eq:unitary_transform}
 \ket{\tilde\phi_\alpha(\symbf{R})}=\sum_I U_{I\alpha}(\symbf{R})\ket{\phi_I(\symbf{R})},
@@ -400,7 +400,7 @@ Physically, the diabatic representation has the following features. First, the n
 This is often advantageous for constructing low-dimensional model Hamiltonians and for simulating nonadiabatic dynamics, since the diabatic potentials can be chosen to vary smoothly through avoided crossings and conical intersections.
 
 In general, a globally exact diabatic basis free of derivative couplings may not exist due to topological obstructions (e.g. around conical intersections). In practice, one works with quasi-diabatic representations where the derivative couplings are small but not exactly zero.
-\subsection{Transformation Between Adiabatic and Diabatic Representations}
+\subsection{Transformation Between Adiabatic and Diabatic Representations}\label{sec:transformation_between_adiabatic_and_diabatic_representations}
 The nuclear wavefunctions in the two representations are related by the same unitary transformation $U(\symbf{R})$ that relates the electronic bases. Writing the total wavefunction as
 \begin{equation}
 \ket{\Psi(\symbf{R},\symbf{r},t)}=\sum_I\ket{\chi_I(\symbf{R},t)}\otimes\ket{\phi_I(\symbf{R})}=\sum_\alpha \ket{\tilde\chi_\alpha(\symbf{R},t)}\otimes\ket{\tilde\phi_\alpha(\symbf{R})},
@@ -476,16 +476,6 @@ which is valid for small $\Delta t$. Now we have everything we need to propagate
 where $\hat{T}$ is the kinetic matrix in the momentum space, and $\hat{V}$ is the potential matrix in the position space. The matrix exponential is now simply a mathematical problem and is described .
 
 Now that we have the wavefunction an any given time, we can calculate observables, such as the density matrix, position, momentum, etc. The expectation value of position is trivial to calculate, since the wavefunction is already in the position space. The expectation value of momentum can be calculated by applying \acrshort{ft} on the wavefunction and multiplying by the momentum operator. The density matrix can be calculated by taking the outer product of the wavefunction with itself.
-\subsection{The Adiabatic Transform}\label{sec:the_adiabatic_transform}
-Sometimes, we would like to see the results from the dynamics in the adiabatic basis (i.e., the basis where the potential matrix $V$ is diagonal). Most of the quantum chemistry software for molecular dynamics use the adiabatic basis, since the diabatic basis is not known. For that reason, most of the surface hopping algorithms also work in the adiabatic basis so it is convenient to know how to transform the wavefunction from the diabatic basis to the adiabatic basis to compare the results. To find the transformation from the diabatic basis to the adiabatic basis, we need to find a matrix $\symbf{U}$ that diagonalizes the potential matrix $V$. To do that, we solve the eigenvalue problem
-\begin{equation}
-V\symbf{U}=\symbf{U}\symbf{E},
-\end{equation}
-for each coordinate of the grid, where $\symbf{E}$ is a diagonal matrix with the eigenvalues of $V$ on the diagonal. The columns of $\symbf{U}$ are the eigenvectors of $V$. The matrix $\symbf{U}$ is the transformation matrix from the diabatic basis to the adiabatic basis. To transform the wavefunction from the diabatic basis to the adiabatic basis, we multiply the wavefunction by the transformation matrix $\symbf{U}^\dagger$ as
-\begin{equation}
-\ket{\Psi_{\text{adiabatic}}\left(x,t\right)}=\symbf{U}^\dagger\ket{\Psi_{\text{diabatic}}\left(x,t\right)}.
-\end{equation}
-The transformation matrix $\symbf{U}$ can be used to transform matrix representations of any operator from the diabatic basis to the adiabatic basis.
 \section{Imaginary Time Propagation}\label{sec:imaginary_time_propagation}
 Imaginary time propagation is a numerical technique used to find the ground state of a quantum system by evolving it in imaginary time instead of real time. By replacing time with an imaginary variable, higher energy states decay exponentially, leaving only the lowest-energy state. This method is widely used in quantum chemistry and condensed matter physics to determine electronic and nuclear ground states. However, like real time propagation, its applicability is limited to small systems due to the high computational cost of solving the underlying equations.
 

@@ -22,9 +22,6 @@ jobs:
         with:
           ruby-version: "3.4"
 
-      - name: Install Biber and LaTeX
-        run: sudo apt update && sudo apt install -y biber texlive-full
-
       - name: Transpile the Documentation
         run: ./script/transpile_docs.py
 

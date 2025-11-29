@@ -65,6 +65,7 @@ with open("tex/main.tex") as tex:
 
         formatted_line = "\n" if line.startswith(r"\end{definition}") else formatted_line
 
+        if line.startswith(r"\subsection"   ): print(line)
         if line.startswith(r"\chapter"      ): formatted_line = "# "    + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
         if line.startswith(r"\section"      ): formatted_line = "## "   + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
         if line.startswith(r"\subsection"   ): formatted_line = "### "  + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
