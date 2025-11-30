@@ -8,7 +8,7 @@
     pdfstandard = A-3b
 }
 
-\documentclass[headsepline=true,parskip=half,open=any,12pt]{scrbook}
+\documentclass[headsepline=true,parskip=half,open=left,12pt]{scrbook}
 
 \title{Algorithms of Quantum Chemistry}\author{Tomáš \textsc{Jíra}}
 
@@ -26,6 +26,8 @@
 \usepackage[automark]{scrlayer-scrpage} % page styles
 \usepackage{unicode-math} % unicode math support
 \usepackage{microtype} % better typesetting
+
+\renewcommand{\baselinestretch}{1.5}
 
 \addbibresource{library.bib} % set the library file
 \makeglossaries % make the glossary
@@ -89,7 +91,7 @@
 Many concepts in quantum mechanics rest on the algebra of vector spaces and the action of linear operators. We review what is needed here. More complete accounts can be found in standard linear algebra and functional analysis texts. Throughout, the scalar field is a general field $F$, but in quantum mechanics we take $F=\mathbb{C}$ unless stated otherwise.
 \subsection{Vector Spaces and Basic Properties}\label{sec:vector_spaces_basic_properties}
 The object of interest is a vector space: a set with addition and scalar multiplication satisfying compatibility rules. The following definition states these axioms explicitly.
-\begin{definition}
+\begin{definition}[Vector Space]
 A vector space $(V,+,\cdot)$ over a field $F$ is a non-empty set that is closed under vector addition and scalar multiplication. Every vector space must satisfy the following axioms for all $\symbf{u},\symbf{v},\symbf{w}\in V$ and all scalars $a,b\in F$:
 \begin{enumerate}\def\labelenumi{\arabic{enumi}.}
 \item Associativity of vector addition: $(\symbf{u}+\symbf{v})+\symbf{w}=\symbf{u}+(\symbf{v}+\symbf{w})$
@@ -105,13 +107,13 @@ A vector space $(V,+,\cdot)$ over a field $F$ is a non-empty set that is closed 
 These axioms are necessary for a set to be considered a vector space. Examples of vector spaces include the Euclidean space $\mathbb{R}^n$, the set of all functions with continuous $m$-th derivatives $C^m(\mathbb{R}^n)$ or $C^\infty(\mathbb{R}^n)$, which is the set of all infinitely differentiable functions. In quantum mechanics we usually work in Hilbert spaces, which will be described in more detail in the next section.
 
 Before we can use vector spaces effectively, we must identify and characterize smaller structures that inherit their properties. These are known as subspaces.
-\begin{definition}
+\begin{definition}[Subspace]
 A subset $W\subset V$ is a subspace if it is non-empty and closed under addition and scalar multiplication. For all $\symbf{u},\symbf{v}\in W$ and $a\in F$, one has $\symbf{u}+\symbf{v}\in W$ and $a\symbf{u}\in W$. Equivalently, $W$ is a subspace iff $\symbf{0}\in W$, $\symbf{u}+\symbf{v}\in W$ and $a\symbf{u}\in W$.
 \end{definition}
 Every subspace necessarily contains the zero vector and is closed under both addition and scalar multiplication so it is itself a vector space. Subspaces are important because they capture smaller, self-contained portions of a larger space where similar operations remain valid.
 
 We now proceed to the concept of linear combinations, which provides a mechanism for generating new vectors from existing ones, and the related concept of the span, which describes the set of all such combinations.
-\begin{definition}
+\begin{definition}[Linear Combination]
 Given a vector space $V$ over a field $F$, a linear combination of vectors $\symbf{v}_1,\symbf{v}_2,\ldots,\symbf{v}_n\in V$ is a vector
 \begin{equation}
 \symbf{u}=a_1\symbf{v}_1+a_2\symbf{v}_2+\ldots+a_n\symbf{v}_n,
@@ -125,7 +127,7 @@ The span of a set of vectors is the smallest subspace of $V$ that contains all t
 The span formalizes the idea of building new vectors from known ones. In finite-dimensional spaces, the span of a finite set can fill the entire space (as in the case of a basis) or a lower-dimensional subspace.
 
 To understand how vectors relate to one another within a span, we must determine whether some vectors can be expressed as combinations of others. This leads us to the notion of linear independence.
-\begin{definition}
+\begin{definition}[Linear Independence]
 A set of vectors $\lbrace\symbf{v}_1,\symbf{v}_2,\ldots,\symbf{v}_n\rbrace$ in a vector space $V$ over a field $F$ is said to be linearly independent if the only solution to the equation
 \begin{equation}
 a_1\symbf{v}_1+a_2\symbf{v}_2+\ldots+a_n\symbf{v}_n=\symbf{0}
@@ -135,13 +137,13 @@ is $a_1=a_2=\ldots=a_n=0$, where $a_1,a_2,\ldots,a_n\in F$. If there exists a no
 Linear independence ensures that no vector in the set can be constructed from others. This property is essential when defining a minimal generating set for the entire space. For linear operators (defined later), eigenvectors associated with distinct eigenvalues are linearly independent. No orthogonality is assumed here.
 
 Finally, the concepts of basis and dimension summarize the structure of a vector space in a concise form. A basis provides coordinates for states and a matrix representation for operators.
-\begin{definition}
+\begin{definition}[Basis]
 A basis of a vector space $V$ over a field $F$ is a set of vectors $\lbrace\symbf{v}_1,\symbf{v}_2,\ldots,\symbf{v}_n\rbrace$ in $V$ that is linearly independent and spans $V$. The dimension of $V$, denoted as $\text{dim}(V)$, is the number of vectors in any basis of $V$.
 \end{definition}
 Every vector in a vector space can be written uniquely as a linear combination of basis vectors. The dimension quantifies the minimal number of coordinates required to specify any element of the space, which is a fundamental concept underlying state representation in quantum mechanics.
 \subsection{Normed, Inner Product and Complete Vector Space}\label{sec:normed_inner_product_complete_vector_space}
 To introduce geometric concepts into vector spaces, we first define the normed vector space.
-\begin{definition}
+\begin{definition}[Normed Vector Space]
 A normed vector space $(V,\lvert\cdot\rvert)$ is a vector space $V$ over a field $F$ (here, $F$ is $\mathbb{R}$ or $\mathbb{C}$) equipped with a norm, which is a function $\lvert\cdot\rvert:V\to\left[0,\infty\right)\subset\mathbb{R}$ that satisfies the following properties for all $\symbf{u},\symbf{v}\in V$ and all scalars $a\in F$:
 \begin{enumerate}\def\labelenumi{\arabic{enumi}.}
 \item Non-negativity: $\lvert\symbf{u}\rvert\geq 0$, with equality iff $\symbf{u}=\symbf{0}$
@@ -156,7 +158,7 @@ d(\symbf{u},\symbf{v})=\lvert\symbf{u}-\symbf{v}\rvert,
 which satisfies all the properties of a metric, thereby enabling the study of geometric properties within the vector space. More specialized normed vector space emerges after we define an inner product.
 
 The inner product generalizes the familiar Euclidean dot product to abstract vector spaces.
-\begin{definition}\label{def:inner_product}
+\begin{definition}[Inner Product]\label{def:inner_product}
 An inner product on a vector space $V$ over a field $F$ is a function $\langle\cdot,\cdot\rangle:V\times V\to F$ that satisfies the following properties for all $\symbf{u},\symbf{v},\symbf{w}\in V$ and all scalars $a\in F$:
 \begin{enumerate}\def\labelenumi{\arabic{enumi}.}
 \item Conjugate symmetry: $\langle\symbf{u},\symbf{v}\rangle=\overline{\langle\symbf{v},\symbf{u}\rangle}$
@@ -177,12 +179,12 @@ The inner product gives rise to two key inequalities that determine much of the 
 This inequality ensures that the angle between two vectors is well-defined and implies the triangle inequality for the induced norm. A vector space equipped with an inner product is called an inner product space. Together, these results ensure that the norm induced by an inner product satisfies all metric axioms, endowing the space with a well-defined notion of distance. Thus, every inner product space is a normed vector space, although the converse is not generally true.
 
 Before we get to linear operators, we add one final definition that will become important when we discuss infinite-dimensional spaces.
-\begin{definition}
+\begin{definition}[Complete Vector Space]
 Let $(V,\lvert\cdot\rvert)$ be a normed vector space. A sequence $\lbrace\symbf{v}_n\rbrace$ in $V$ is called a Cauchy sequence if for every $\epsilon>0$, there exists an integer $N$ such that $\lvert\symbf{v}_m-\symbf{v}_n\rvert<\epsilon$ for all $m,n>N$. The space $V$ is said to be complete if every Cauchy sequence in $V$ converges to a limit that is also in $V$. A complete normed vector space is called a Banach space.
 \end{definition}
 \subsection{Linear Operators}\label{sec:linear_operators}
 Linear operators lie at the core of quantum mechanics, representing physical observables and the evolution of quantum states. We now define linear operators and explore their properties.
-\begin{definition}
+\begin{definition}[Linear Operator]
 A linear operator on a vector space $V$ over a field $F$ is a map $A:V\to V$ with $A(\symbf{u}+\symbf{v})=A\symbf{u}+A\symbf{v}$ and $A(a\symbf{u})=aA\symbf{u}$ for all $\symbf{u},\symbf{v}\in V$, $a\in F$.
 \end{definition}
 Using a basis of a vector space, we can represent linear operators as matrices. If $\lbrace\symbf{e}_i\rbrace_{i=1}^n$ is a basis of an $n$-dimensional vector space $V$, an operator $A$ can be represented by a matrix $[A]_{ij}=a_{ij}$ with the coefficients defined by
@@ -202,17 +204,17 @@ This equation is consistent with Def~\ref{def:inner_product}, where we adopt the
 [A]_{\symbf{e}}=U^{-1}[A]_{\symbf{f}}U.
 \end{equation}
 Let's now define some additional properties of linear operators.
-\begin{definition}
+\begin{definition}[Null Space]
 For $A:V\to V$, the kernel (or null space) of $A$ is the set of vectors $\symbf{v}\in V$ such that $A\symbf{v}=\symbf{0}$. The image (or range) of $A$ is the set of vectors $\symbf{w}\in V$ such that $\symbf{w}=A\symbf{v}$ for some $\symbf{v}\in V$. If $\text{dim}(V)$ is finite, the rank-nullity theorem states that $\text{dim}(\text{ker}(A))+\text{dim}(\text{im}(A))=\text{dim}(V)$.
 \end{definition}
 Another important concept is the concept of eigenvalues and eigenvectors.
-\begin{definition}
+\begin{definition}[Eigenvalues and Eigenvectors]
 A scalar $\lambda\in F$ is called an eigenvalue of a linear operator $A:V\to V$ if there exists a non-zero vector $\symbf{v}\in V$ such that $A\symbf{v}=\lambda\symbf{v}$. The vector $\symbf{v}$ is called an eigenvector associated with the eigenvalue $\lambda$. For a finite-dimensional vector space, the set of all eigenvalues of $A$ is called the spectrum of $A$. The subspace $E_\lambda=\symrm{ker}(A-\lambda I)$ is called the eigenspace associated with the eigenvalue $\lambda$, where $I$ is the identity operator on $V$.
 \end{definition}
 If $V$ is finite-dimensional, the eigenvalues of $A$ can be found by solving the characteristic polynomial equation $\text{det}(A-\lambda I)=0$.
-\section{Hilbert Spaces and Quantum States}\label{sec:hilbert_spaces}
+\section{Hilbert Spaces and Quantum States}\label{sec:hilbert_spaces_and_quantum_states}
 Hilbert spaces are fundamental concepts in quantum mechanics, providing the mathematical framework for describing quantum states and their evolution. In this section, we will explore the definition of Hilbert spaces, their properties, and how they relate to quantum states. We will start with the definition.
-\begin{definition}
+\begin{definition}[Hilbert Space]
 A Hilbert space $\mathcal{H}$ is a complete inner product space, which means it is a vector space equipped with an inner product that allows for the definition of length and angle, and it is complete with respect to the norm induced by the inner product.
 \end{definition}
 In the context of quantum mechanics we will always take $\mathcal{H}$ to be a complex vector space, and we adopt the physics convention for the inner product, where $\langle\cdot,\cdot\rangle$ is conjugate-linear in its first argument and linear in its second, consistent with Def~\ref{def:inner_product}. The norm induced by the inner product is
@@ -257,7 +259,7 @@ In this section we introduce the basic elements of spectral theory for operators
 and, for brevity, we will often write $\lvert\psi\rvert$ instead of $\lvert\ket{\psi}\rvert$.
 \subsection{Self-adjoint Operators and Observables}\label{sec:self_adjoint_operators_and_observables}
 In quantum mechanics, observables are represented by self-adjoint operators on a Hilbert space. Spectral theory describes how such operators can be decomposed into their \emph{eigenvalue parts}, both discrete and continuous, and how this decomposition encodes measurement statistics and time evolution.
-\begin{definition}
+\begin{definition}[Self-Adjoint Operator]
 A linear operator $A$ on $\mathcal{H}$ is called \emph{self-adjoint} if
 \begin{equation}
 \braket{\phi|A\psi}=\braket{A\phi|\psi}\quad\text{for all }\ket{\phi},\ket{\psi}\in\mathcal{H}
@@ -265,6 +267,22 @@ A linear operator $A$ on $\mathcal{H}$ is called \emph{self-adjoint} if
 and the domain of $A$ coincides with the domain of its adjoint.
 \end{definition}
 In physics terminology, self-adjoint operators are often called Hermitian. In nonrelativistic quantum mechanics, each observable is modeled by a self-adjoint operator $A$ on $\mathcal{H}$ and its spectral properties determine the possible measurement outcomes.
+
+Since a lot of operators in quantum mechanics require unitarity, we also define it here.
+\begin{definition}[Unitary Operator]
+A linear operator $U$ on a Hilbert space $\mathcal{H}$ is called unitary if
+\begin{equation}
+U^\dagger U=U U^\dagger=I,
+\end{equation}
+where $U^\dagger$ is the adjoint of $U$ and $I$ is the identity on $\mathcal{H}$.
+\end{definition}
+Unitary operators preserve the inner product and hence the norm
+\begin{equation}
+\braket{U\psi\vert U\phi}=\braket{\psi\vert\phi}\quad\text{for all }\psi,\phi\in\mathcal{H},
+\end{equation}
+so that $\lvert U\psi\rvert=\lvert\psi\rvert$. In quantum mechanics they represent symmetry
+transformations and the time evolution of isolated systems.
+
 \subsubsection*{Finite-Dimensional Case}\label{sec:finite_dimensional_case}
 If $\mathcal{H}$ is finite-dimensional, the spectral structure is simple.
 \begin{theorem}[Spectral Theorem in Finite Dimensions]
@@ -391,9 +409,9 @@ for all $\alpha,\beta$ (or at least for those states of interest). In such a bas
 
 However, removing the derivative couplings in this way introduces off-diagonal elements into the potential energy matrix. The nuclear Schr\"odinger equation in the diabatic representation then has the form
 \begin{equation}
-\mathrm{i}\frac{\partial}{\partial{t}}\ket{\tilde\chi_\alpha(\symbf{R},t)}=T_\mathrm{n}\ket{\tilde\chi_\alpha(\symbf{R},t)}+\sum_\beta\tilde{V}_{\alpha\beta}(\symbf{R})\ket{\tilde\chi_\beta(\symbf{R},t)},
+\mathrm{i}\frac{\partial}{\partial{t}}\ket{\tilde\chi_\alpha(\symbf{R},t)}=\tilde{T}_\mathrm{n}\ket{\tilde\chi_\alpha(\symbf{R},t)}+\sum_\beta\tilde{V}_{\alpha\beta}(\symbf{R})\ket{\tilde\chi_\beta(\symbf{R},t)},
 \end{equation}
-where the couplings between electronic states now appear as off-diagonal potential terms rather than derivative couplings. The $\tilde{V}$ term is equivalent to the electronic Hamiltonian in Eq~\eqref{eq:boa_hamiltonian}, we call it here potential, mainly for historical reasons.
+where the couplings between electronic states now appear as off-diagonal potential terms rather than derivative couplings. The $\tilde{V}$ term is equivalent to the electronic Hamiltonian in Eq~\eqref{eq:boa_hamiltonian} in diabatic basis, we call it here potential, mainly for historical reasons.
 
 Physically, the diabatic representation has the following features. First, the nuclear kinetic energy is diagonal and free of derivative couplings (or they are at least minimized). Second, the electronic couplings appear as smooth off-diagonal potentials in $\tilde{V}(\symbf{R})$.
 
@@ -418,143 +436,145 @@ while the diabatic potential matrix $\tilde{V}(\symbf{R})$ is obtained using the
 \tilde{V}(\symbf{R})=U^\dagger(\symbf{R})V(\symbf{R})U(\symbf{R}).
 \end{equation}
 \chapter{Time Evolution in Quantum Mechanics}\label{sec:time_evolution}
-Quantum dynamics describes the evolution of quantum systems over time and is fundamental in quantum chemistry for understanding molecular behavior at the atomic level. It is governed by the principles of quantum mechanics, particularly the \acrfull{tdse}, which dictates how wavefunctions change with time. Due to the complex nature of these equations, practical solutions are often limited to small or model systems.
+Quantum dynamics describes the evolution of quantum states $\ket{\Psi(t)}\in\mathcal{H}$ over time and is fundamental in quantum chemistry for understanding molecular behavior at the atomic level. It is governed by the principles of quantum mechanics, particularly the \acrfull{tdse}, which dictates how wavefunctions change with time. Due to the complex nature of these equations, practical solutions are often limited to small or model systems.
 
-There are two main approaches to quantum dynamics: real time propagation and imaginary time propagation. Real time propagation follows the natural evolution of a system in time, making it crucial for studying dynamic processes such as chemical reactions, electronic excitations, and non-equilibrium phenomena. Imaginary time propagation, on the other hand, is used to find the ground state of a quantum system by evolving it in an artificial imaginary time direction, gradually filtering out higher energy states. While these techniques provide deep insights into molecular quantum behavior, their application is restricted to relatively small or model systems due to the exponential increase in computational cost with system size.
+There are two main approaches to quantum dynamics: real time propagation and imaginary time propagation. Real time propagation follows the natural evolution of a system in time, making it crucial for studying dynamic processes such as chemical reactions, electronic excitations, and non-equilibrium phenomena. Imaginary time propagation, on the other hand, is used to find the ground state of a quantum system by evolving it in an artificial imaginary time direction, gradually filtering out higher energy states. 
+
+We work in the complex separable Hilbert space $\mathcal{H}$ introduced in Sec~\ref{sec:hilbert_spaces_and_quantum_states}, with self-adjoint Hamiltonian $H$ (Sec~\ref{sec:self_adjoint_operators_and_observables}), so that the time-evolution operators described in this chapter are consistent with functional calculus treatment in Sec~\ref{sec:spectral_theory_in_hilbert_spaces}.
 \section{Real Time Propagation}\label{sec:real_time_propagation}
 Real time propagation is a computational approach used to study the time evolution of quantum systems according to the \acrshort{tdse}. It is essential for modeling dynamic processes such as electronic excitations, molecular vibrations, and non equilibrium phenomena in quantum chemistry. By solving the wavefunction's evolution step by step in real time, this method captures transient states and ultrafast reactions. However, due to the exponential growth of computational complexity, real time propagation is feasible only for small systems or simplified models.
 
 The time evolution in quantum mechanics is governed by the \acrshort{tdse} in the form
 \begin{equation}\label{eq:tdse}
-\symrm{i}\hbar\frac{\symrm{d}}{\symrm{d}t}\ket{\Psi\left(t\right)}=\hat{H}\ket{\Psi\left(t\right)},
+\symrm{i}\frac{\symrm{d}}{\symrm{d}t}\ket{\Psi\left(t\right)}=H\ket{\Psi\left(t\right)},
 \end{equation}
-where $i$ is the imaginary unit, $\hbar$ is the reduced Planck constant, $\ket{\Psi\left(t\right)}$ is the time dependent wavefunction, $\hat{H}$ is the Hamiltonian operator, which encodes the total energy of the system. In the position representation, one could write $\Psi\left(x,t\right)$, where $x$ is the position coordinate for a quantum particle such as an electron or proton.
+where $i$ is the imaginary unit, $\ket{\Psi\left(t\right)}$ is the time dependent wavefunction, $H$ is the time-independent Hamiltonian operator, which encodes the total energy of the system. In the position representation, one could write $\Psi\left(x,t\right)$, where $x$ is the position coordinate for a quantum particle such as an electron or proton.
 
 A general solution of the \acrshort{tdse} can be written as
 \begin{equation}\label{eq:tdse_propagator}
-\ket{\Psi\left(t\right)}=\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{H}t}\ket{\Psi\left(0\right)}.
+\ket{\Psi\left(t\right)}=\symrm{e}^{-\symrm{i}t H}\ket{\Psi\left(0\right)}.
 \end{equation}
-The action of $\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{H}t}$ on the initial wavefunction $\ket{\Psi\left(0\right)}$ propagates the state from time $0$ to time $t$, carrying all the information about the time evolution of the system. This exponential operator contains the complete description of how the system evolves with time. In practical applications, however, evaluating $\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{H}t}$ analytically is rarely straightforward for nontrivial Hamiltonians, which often necessitates numerical methods for an accurate treatment of quantum dynamics.
+The action of the operator $\symrm{e}^{-\symrm{i}t H}$ on the initial wavefunction $\ket{\Psi\left(0\right)}$ propagates the state from time $0$ to time $t$, carrying all the information about the time evolution of the system. Since $H$ is self-adjoint, the spectral theorem yields a unitary propagator, ensuring $\lvert\Psi(t)\rvert=\lvert\Psi(0)\rvert$. This exponential operator contains the complete description of how the system evolves with time. In practical applications, however, evaluating $\symrm{e}^{-\symrm{i}t H}$ analytically is rarely straightforward for nontrivial Hamiltonians, which often necessitates numerical methods for an accurate treatment of quantum dynamics.
 \subsection{Space Discretization and the Diabatic Basis}\label{sec:space_discretization_diabatic_basis}
-To represent the wavefunction numerically, we sample it on a spatial grid. In practical terms, this means introducing a dependence on the coordinate $x$, so that $\ket{\Psi\left(t\right)}$ becomes $\ket{\Psi\left(x,t\right)}$. More importantly, we expand the wavefunction $\ket{\Psi\left(x,t\right)}$ in a set of basis functions $\lbrace\Phi_i\rbrace_{i=1}^N$, where $N$ is the number of states included in the dynamics. The basis set will be orthonormal and satisfy the condition
-\begin{equation}\label{eq:diabatic_condition}
-\bra{\Phi_i}\frac{\partial}{\partial x}\ket{\Phi_j}=0,\,i\neq j.
-\end{equation}
-Because these diabatic basis states are frequently taken simply as the canonical basis in $\mathbb{R}^N$ when defining model potential energy surfaces, their explicit functional forms are not crucial in most model-based simulations. Nonetheless, from a physical standpoint, these states are usually determined through quantum chemical computations that ensure minimal coordinate dependence in the electronic mixing. For a n-state system, the wavefunction in the diabatic basis can be written as
+To represent the wavefunction numerically, we work in a position representation $\Psi\left(\symbf{R},t\right):=\braket{\symbf{R}\vert\Psi\left(t\right)}$. More importantly, we expand the wavefunction $\ket{\Psi\left(t\right)}$ in a set of diabatic basis functions $\lbrace\tilde\phi_I\rbrace_{I=1}^N$ defined in Sec~\ref{sec:adiabatic_vs_diabatic_representation}, so that $\Psi\left(\symbf{R},t\right)$ is an N-component vector in a electronic diabatic subspace. Because these diabatic basis states are frequently taken simply as the canonical basis in $\mathbb{R}^N$ when defining model potential energy surfaces, their explicit functional forms are not crucial in most model-based simulations. Nonetheless, from a physical standpoint, these states are usually determined through quantum chemical computations that ensure minimal coordinate dependence in the electronic mixing. For a N-state system, the wavefunction in the diabatic basis can be written as
 \begin{equation}\label{eq:diabatic_wavefunction}
-\ket{\Psi\left(x,t\right)}=\sum_{i=1}^n c_i\left(x,t\right)\ket{\Phi_i}
+\Psi\left(\symbf{R},t\right)=\sum_{I=1}^N c_I\left(\symbf{R},t\right)\ket{\tilde\phi_I}
 \end{equation}
-where $c_i\left(x,t\right)$ are the expansion coefficients of the wavefunction in the diabatic basis. The Hamiltonian operator $\hat{H}$ in the diabatic basis takes the form
+where $c_I\left(\symbf{R},t\right)$ are the expansion coefficients of the wavefunction in the diabatic basis. The Hamiltonian operator $H$ in the diabatic basis takes the form
 \begin{equation}\label{eq:diabatic_hamiltonian}
-\hat{H}=\hat{T}+\hat{V}=-\frac{\hbar^2}{2m}\frac{\partial^2}{\partial x^2}\hat{I}+\hat{V}
+H=\tilde{T}_\mathrm{n}+\tilde{V}=-\frac{1}{2m}\frac{\partial^2}{\partial\symbf{R}^2}\otimes I_N+\tilde{V}
 \end{equation}
-where $\hat{I}$ is the identity operator, $\hat{T}$ is the kinetic energy operator, and $\hat{V}$ is the potential energy operator.
+where $I_N$ is the identity matrix, $\tilde{T}_\mathrm{n}$ is the nuclear kinetic energy operator, and $\tilde{V}$ is the potential energy matrix (electronic Hamiltonian) in diabatic basis.
 \subsection{Wavefunction Propagation}\label{sec:wavefunction_propagation}
-We aim to reduce the action of the propagator on the diabatic wavefunction~\eqref{eq:diabatic_wavefunction} to a simple matrix multiplication. The main difficulty is the differential form of the kinetic operator in the equation~\eqref{eq:diabatic_hamiltonian}. To handle this, we use a Fourier-based method for applying the kinetic operator $\hat{T}$ on a wavefunction $\ket{\Psi\left(x,t\right)}$. Taking the \acrfull{ft} of $\hat{T}\ket{\Psi\left(x,t\right)}$ yields
+We aim to reduce the action of the propagator on the diabatic wavefunction in Eq~\eqref{eq:diabatic_wavefunction} to a simple matrix multiplication. The main difficulty is the differential form of the kinetic operator in the equation~\eqref{eq:diabatic_hamiltonian}. To handle this, we use a Fourier-based method for applying the kinetic operator $\tilde{T}_\mathrm{n}$ on a wavefunction $\Psi\left(\symbf{R},t\right)$. Taking the \acrfull{ft} of $\tilde{T}_\mathrm{n}\Psi\left(\symbf{R},t\right)$ yields
 \begin{align}\label{eq:kinetic_fourier_method}
-\mathcal{F}\left\lbrace\hat{T}\ket{\Psi\left(x,t\right)}\right\rbrace&=\mathcal{F}\left\lbrace-\frac{\hbar^2}{2m}\frac{\partial^2}{\partial x^2}\ket{\Psi\left(x,t\right)}\right\rbrace=\frac{\hbar^2 k^2}{2m}\mathcal{F}\left\lbrace\ket{\Psi\left(x,t\right)}\right\rbrace \\
-\hat{T}\ket{\Psi\left(x,t\right)}&=\frac{\hbar^2}{2m}\mathcal{F}^{-1}\left\lbrace k^2\mathcal{F}\left\lbrace\ket{\Psi\left(x,t\right)}\right\rbrace\right\rbrace,
+\mathcal{F}\left\lbrace \tilde{T}_\mathrm{n}\Psi\left(\symbf{R},t\right)\right\rbrace&=\mathcal{F}\left\lbrace-\frac{1}{2m}\frac{\partial^2}{\partial \symbf{R}^2}\Psi\left(\symbf{R},t\right)\right\rbrace=\frac{k^2}{2m}\mathcal{F}\left\lbrace\Psi\left(\symbf{R},t\right)\right\rbrace \\
+\tilde{T}_\mathrm{n}\Psi\left(\symbf{R},t\right)&=\frac{1}{2m}\mathcal{F}^{-1}\left\lbrace k^2\mathcal{F}\left\lbrace\Psi\left(\symbf{R},t\right)\right\rbrace\right\rbrace,
 \end{align}
-where $k$ is the coordinate in the Fourier space. In other words, to apply the kinetic operator on the wavefunction, we need to \acrshort{ft} the wavefunction, multiply it by $\frac{\hbar^2k^2}{2m}$, and then apply the \acrfull{ift}. This method is computationally efficient, since the \acrshort{ft} can be done using the \acrfull{fft} algorithm, which has a complexity of $\mathcal{O}(N\log N)$, where $N$ is the number of grid points (contrary to the straightforward \acrfull{dft} with $\mathcal{O}(N^2)$ complexity).
+where $k$ is the coordinate in the Fourier space. In other words, to apply the kinetic operator on the wavefunction, we need to \acrshort{ft} the wavefunction, multiply it by $\frac{k^2}{2m}$, and then apply the \acrfull{ift}. In Fourier space, $\tilde{T}_\mathrm{n}$ becomes diagonal operator $\frac{k^2}{2m}$. For notational simplicity we denote both the coordinate-space operator and its Fourier-space representation by the same symbol. This method is computationally efficient, since the \acrshort{ft} can be done using the \acrfull{fft} algorithm, which has a complexity of $\mathcal{O}(N\log N)$, where $N$ is the number of grid points (contrary to the straightforward \acrfull{dft} with $\mathcal{O}(N^2)$ complexity).
 
-A remaining challenge is the non-commutativity of the potential and kinetic operators. Because $\hat{V}$ and $\hat{T}$ do not commute we cannot factorize the propagator as
+A remaining challenge is the non-commutativity of the potential and kinetic operators. Because $\tilde{V}$ and $\tilde{T}_\mathrm{n}$ do not commute we cannot factorize the propagator as
 \begin{equation}
-\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{H}t}\neq\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{V}t}\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{T}t}.
+\symrm{e}^{-\symrm{i}t H}\neq\symrm{e}^{-\symrm{i}t\tilde{V}}\symrm{e}^{-\symrm{i}t\tilde{T}_\mathrm{n}}.
 \end{equation}
-If such a factorization were possible, we could apply the exponential of $\hat{V}$ in the position space and the exponential of $\hat{T}$ momentum space separately. To address this, we split the total propagation time $t$ into $n$ short steps $\Delta t$, so the full propagator becomes a product of short-time propagators as
+If such a factorization were possible, we could apply the exponential of $\tilde{V}$ in the position space and the exponential of $\tilde{T}$ momentum space separately. To address this, we split the total propagation time $t$ into $n$ short steps $\Delta t$, so the full propagator becomes a product of short-time propagators as
 \begin{equation}
-\hat{U}(t)=\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{H}t}=\symbf{e}^{-\frac{\symrm{i}}{\hbar}\hat{H}\Delta t}\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{H}\Delta t} \cdots\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{H}\Delta t},
+U(t)=\symrm{e}^{-\symrm{i}t H}=\left(\symbf{e}^{-\symrm{i}\Delta t H}\right)^n,\qquad t=n\Delta t
 \end{equation}
 where $\Delta t$ is a fixed time step. Now, each individual short-time propagator acts on the wave function and causes a small evolution. We can then use the symmetric splitting approximation
 \begin{equation}
-\symrm{e}^{-\frac{\symrm{i}}{\hbar}\hat{H}\Delta t}=\symrm{e}^{-\frac{\symrm{i}\Delta t}{2\hbar}\hat{V}}\symrm{e}^{-\frac{\symrm{i}\Delta t}{\hbar}\hat{T}}\symrm{e}^{-\frac{\symrm{i}\Delta t}{2\hbar}\hat{V}}+\mathcal{O}(\Delta t^3),
+\symrm{e}^{-\symrm{i}\Delta t H}=\symrm{e}^{-\frac{\symrm{i}}{2}\Delta t\tilde{V}}\symrm{e}^{-\symrm{i}\Delta t\tilde{T}_\mathrm{n}}\symrm{e}^{-\frac{\symrm{i}}{2}\Delta t\tilde{V}}+\mathcal{O}(\Delta t^3),
 \end{equation}
 which is valid for small $\Delta t$. Now we have everything we need to propagate the wavefunction in time. The formula for propagating the wavefunction from time $t$ to time $t+\Delta t$ is
 \begin{equation}
-\ket{\Psi\left(x,t+\Delta t\right)}=\symrm{e}^{-\frac{\symrm{i}\Delta t}{2\hbar}V}\mathcal{F}^{-1}\left\lbrace\symrm{e}^{-\frac{\symrm{i}\Delta t}{\hbar}T}\mathcal{F}\left\lbrace\symrm{e}^{-\frac{\symrm{i}\Delta t}{2\hbar}V}\ket{\Psi\left(x,t\right)}\right\rbrace\right\rbrace,
+\Psi\left(\symbf{R},t+\Delta t\right)=\symrm{e}^{-\frac{\symrm{i}}{2}\Delta t\tilde V}\mathcal{F}^{-1}\left\lbrace\symrm{e}^{-\symrm{i}\Delta t\tilde{T}_\mathrm{n}}\mathcal{F}\left\lbrace\symrm{e}^{-\frac{\symrm{i}}{2}\Delta t\tilde V}\Psi\left(\symbf{R},t\right)\right\rbrace\right\rbrace,
 \end{equation}
-where $\hat{T}$ is the kinetic matrix in the momentum space, and $\hat{V}$ is the potential matrix in the position space. The matrix exponential is now simply a mathematical problem and is described .
+where $\tilde{T}_\mathrm{n}$ is the kinetic matrix in the momentum space, and $\tilde{V}$ is the potential matrix in the position space. The matrix exponential is now simply a mathematical problem and is described .
 
 Now that we have the wavefunction an any given time, we can calculate observables, such as the density matrix, position, momentum, etc. The expectation value of position is trivial to calculate, since the wavefunction is already in the position space. The expectation value of momentum can be calculated by applying \acrshort{ft} on the wavefunction and multiplying by the momentum operator. The density matrix can be calculated by taking the outer product of the wavefunction with itself.
 \section{Imaginary Time Propagation}\label{sec:imaginary_time_propagation}
 Imaginary time propagation is a numerical technique used to find the ground state of a quantum system by evolving it in imaginary time instead of real time. By replacing time with an imaginary variable, higher energy states decay exponentially, leaving only the lowest-energy state. This method is widely used in quantum chemistry and condensed matter physics to determine electronic and nuclear ground states. However, like real time propagation, its applicability is limited to small systems due to the high computational cost of solving the underlying equations.
 
-Similar to real time propagation, we start with the \acrshort{tdse}, but this time we perform a suspicious substitution $\tau\rightarrow\symrm{i}t$ to obtain the equation
+Similar to real time propagation, we start with the \acrshort{tdse}, but this time we introduce imaginary time $\tau$ via $\tau=\symrm{i}t$ to obtain the equation
 \begin{equation}\label{eq:tdse_it}
-\hbar\frac{\symrm{d}}{\symrm{d}\tau}\ket{\Psi\left(\tau\right)}=-\hat{H}\ket{\Psi\left(\tau\right)},
+\frac{\symrm{d}}{\symrm{d}\tau}\ket{\Psi\left(\tau\right)}=-H\ket{\Psi\left(\tau\right)},
 \end{equation}
 which has a formal solution given by
 \begin{equation}\label{eq:wf_it}
-\ket{\Psi\left(\tau\right)}=\symrm{e}^{-\frac{\hat{H}\tau}{\hbar}}\ket{\Psi\left(0\right)}.
+\ket{\Psi\left(\tau\right)}=\symrm{e}^{-\tau H}\ket{\Psi\left(0\right)}.
 \end{equation}
-We now expand the wavefunction in the basis of the eigenstates of the Hamiltonian $\hat{H}$ as
+We now expand the initial wavefunction in the basis of the eigenstates of the Hamiltonian $H$ as
 \begin{equation}\label{eq:wf_expansion_eigenstates}
-\ket{\Psi\left(\tau\right)}=\sum_{n}c_{n}\left(\tau\right)\ket{\phi_{n}},
+\ket{\Psi\left(0\right)}=\sum_{I}c_{I}\left(0\right)\ket{\phi_{I}},
 \end{equation}
-where $\ket{\phi_{n}}$ are the eigenstates of the Hamiltonian $\hat{H}$ and $c_{n}\left(\tau\right)$ are the expansion coefficients. Substituting the wavefunction expression~\eqref{eq:wf_expansion_eigenstates} into the solution of \acrshort{tdse} in imaginary time~\eqref{eq:wf_it} we obtain
+where $\ket{\phi_{I}}$ are the eigenstates of the Hamiltonian $H$ and $c_{I}\left(0\right)$ are the expansion coefficients. Substituting the wavefunction expression~\eqref{eq:wf_expansion_eigenstates} into the solution of \acrshort{tdse} in imaginary time~\eqref{eq:wf_it} we obtain
 \begin{equation}\label{eq:tdse_it_expansion}
-\ket{\Psi\left(\tau\right)}=\sum_{n}c_{n}\left(\tau\right)\symrm{e}^{-\frac{E_{n}\tau}{\hbar}}\ket{\phi_{n}},
+\ket{\Psi\left(\tau\right)}=\sum_{I}c_{I}\left(0\right)\symrm{e}^{-\tau E_{I}}\ket{\phi_{I}},
 \end{equation}
-where $E_{n}$ are the eigenvalues of the Hamiltonian $\hat{H}$. We now see, that the bigger the value of $E_n$, the faster the corresponding term in the sum decays. This means that, in the limit $\tau\rightarrow\infty$, only the term corresponding to the smallest eigenvalue $E_{0}$ will survive, and the wavefunction will converge to the ground state of the system. Note that we need to normalize the wavefunction at each step of the imaginary time propagation to ensure that the wavefunction remains normalized, otherwise the wavefunction will decay to zero.
+where $E_{I}$ are the eigenvalues of the Hamiltonian $H$. We now see, that the bigger the value of $E_I$, the faster the corresponding term in the sum decays. This means that, in the limit $\tau\rightarrow\infty$, only the term corresponding to the smallest eigenvalue $E_{0}$ will survive, and the wavefunction will converge to the ground state of the system. Note that we need to normalize the wavefunction at each step of the imaginary time propagation to ensure that the wavefunction remains normalized, otherwise the wavefunction will decay to zero.
 \chapter{Mixed Quantum-Classical Dynamics}\label{sec:mixed_quantum_classical_dynamics}
 \section{Quantum Amplitude Propagation in Mixed Schemes}\label{sec:quantum_amplitude_propagation_in_mixed_themes}
 Under the \acrfull{boa}, the total molecular wavefunction, $\ket{\Psi(t)}$, is formally separable into electronic and nuclear parts because the nuclear masses greatly exceed those of the electrons. However, when two or more electronic states approach degeneracy, the \acrshort{boa} separation fails and nonadiabatic effects become significant. \acrfull{tsh} is a general framework that treats nuclei and electrons separately: nuclei are propagated classically on an adiabatic \acrfull{pes}, while electrons are treated quantum mechanically.
 
 In \acrshort{tsh}, the nuclei follow Newton's equations of motion on a single adiabatic \acrshort{pes} at any instant:
 \begin{equation}
-\symbf{M}\ddot{\symbf{R}}(t)=-\nabla_{\symbf{R}}E_j,
+\symbf{M}\ddot{\symbf{R}}(t)=-\nabla_{\symbf{R}}E_I,
 \end{equation}
-where $\symbf{M}$ is the diagonal matrix with masses for each coordinate, $\symbf{R}(t)$ is nuclear geometry at time $t$, and $E_j$ is the electronic energy of the state $j$ at the nuclear configuration $\symbf{R}(t)$. Meanwhile, the electrons evolve according to the \acrshort{tdse}, with the electronic wavefunction $\ket{\Phi(t)}$ expanded in the instantaneous adiabatic eigenvectors of the electronic Hamiltonian $\hat{H}^{\symrm{el}}$ as
+where $\symbf{M}$ is the diagonal matrix with masses for each coordinate, $\symbf{R}(t)$ is nuclear geometry at time $t$, and $E_I$ is the electronic energy of the state $I$ at the nuclear configuration $\symbf{R}(t)$. Meanwhile, the electrons evolve according to the \acrshort{tdse}, with the electronic wavefunction $\ket{\Phi(t)}$ expanded in the instantaneous adiabatic eigenvectors of the electronic Hamiltonian $H_{\symrm{el}}$ as
 \begin{equation}
-\Phi(t)=\sum_j c_j(t)\ket{\phi_j},
+\ket{\Phi(t)}=\sum_I c_I(t)\ket{\phi_I},
 \end{equation}
-where $\phi_j$ satisfies the \acrfull{tise}
+where $\phi_I$ satisfies the \acrfull{tise}
 \begin{equation}
-\hat{H}^{\symrm{el}}\ket{\phi_j}=E_j\ket{\phi_j},
+H_{\symrm{el}}\ket{\phi_I}=E_I\ket{\phi_I},
 \end{equation}
-and the complex coefficients $c_j$ encode the instantaneous probability amplitudes for occupying each adiabatic state. For notational brevity, we will often suppress explicit dependence on the variables where no ambiguity arises.
+and the complex coefficients $c_I$ encode the instantaneous probability amplitudes for occupying each adiabatic state. For notational brevity, we will often suppress explicit dependence on the variables where no ambiguity arises.
 
 Substituting this ansatz into the full electronic \acrshort{tdse},
 \begin{equation}
-i\hbar\frac{\partial}{\partial t}\ket{\Phi(t)}=\hat{H}^{\symrm{el}}\ket{\Phi(t)},
+\symrm{i}\frac{\partial}{\partial t}\ket{\Phi(t)}=H_{\symrm{el}}\ket{\Phi(t)},
 \end{equation}
-and projecting onto a particular adiabatic state $\ket{\phi_j}$, we obtain a set of coupled equations for the coefficients $c_j$:
+and projecting onto a particular adiabatic state $\ket{\phi_I}$, we obtain a set of coupled equations for the coefficients $c_I$:
 \begin{equation}\label{eq:tsh_eom}
-i\hbar\frac{\symrm{d}c_j}{\symrm{d}t}=\sum_k\left(\hat{H}_{jk}^{\symrm{el}}-i\hbar\Braket{\phi_j\vert\frac{\partial\phi_k}{\partial t}}\right)c_k,
+\symrm{i}\frac{\symrm{d}c_I}{\symrm{d}t}=\sum_J\left(H_{IJ}^{\symrm{el}}-\symrm{i}\Braket{\phi_I\vert\frac{\partial\phi_J}{\partial t}}\right)c_J,
 \end{equation}
-where $\sigma_{jk}=\Braket{\phi_j\vert\frac{\partial\phi_k}{\partial t}}$ is the \acrfull{tdc}. In the purely adiabatic basis, $\hat{H}^{\symrm{el}}$ is diagonal, so electronic population transfer between states is mediated entirely by $\sigma_{jk}$:
+where $\sigma_{IJ}=\Braket{\phi_I\vert\frac{\partial\phi_J}{\partial t}}$ is the \acrfull{tdc}. In the purely adiabatic basis, $H_{\symrm{el}}$ is diagonal, so electronic population transfer between states is mediated entirely by $\sigma_{IJ}$:
+\begin{equation}\label{eq:sh_tdse_coefs}
+\symrm{i}\frac{\partial c_I}{\partial t}=E_I c_I-\symrm{i}\sum_J\sigma_{IJ}c_J.
+\end{equation}
+With $\symbf{c}(t)=\left(c_1(t),c_2(t),\cdots,c_N(t)\right)^\mathrm{T}$ the Eq~\eqref{eq:sh_tdse_coefs} is a Schr\"odinger equation in a finite-dimensional Hilbert space $\mathbb{C}^N$ and can be rewritten as
 \begin{equation}
-i\hbar\frac{\partial c_j}{\partial t}=E_j c_j-i\hbar\sum_k\sigma_{jk}c_k.
+\mathrm{i}\symbf{\dot{c}}(t)=H_{\mathrm{eff}}\symbf{c}(t),\qquad H_{IJ}^{\mathrm{eff}}=E_I\delta_{IJ}-\mathrm{i}\sigma_{IJ}
 \end{equation}
-To evaluate $\sigma_{jk}$ in practice, note that each adiabatic eigenfunction depends parametrically on the instantaneous nuclear coordinates $\symbf{R}(t)$. By the chain rule,
+For electronic dynamics in Eq~\eqref{eq:sh_tdse_coefs} to be unitary, the effective Hamiltonian $H_{\mathrm{eff}}$ must be self-adjoint, which in turn requires $\sigma_{IJ}$ to be antisymmetric, $\sigma^\dagger=-\sigma$, in accordance with Sec~\ref{sec:self_adjoint_operators_and_observables}. To evaluate $\sigma_{IJ}$ in practice, note that each adiabatic eigenfunction depends parametrically on the instantaneous nuclear coordinates $\symbf{R}(t)$. By the chain rule,
 \begin{equation}
-\sigma_{jk}=\Braket{\phi_j\vert\frac{\partial\phi_k}{\partial t}}=\dot{\symbf{R}}\cdot\Braket{\phi_j\vert\frac{\partial\phi_k}{\partial\symbf{R}}}=\symbf{v}\cdot\symbf{d}_{jk},
+\sigma_{IJ}=\Braket{\phi_I\vert\frac{\partial\phi_J}{\partial t}}=\dot{\symbf{R}}\cdot\Braket{\phi_I\vert\frac{\partial\phi_J}{\partial\symbf{R}}}=\symbf{v}\cdot\symbf{d}_{IJ},
 \end{equation}
-where $\symbf{v}=\dot{\symbf{R}}$ is the nuclear velocity and $\symbf{d}_{jk}$ is the \acrfull{nacv}. Although many quantum‐chemistry packages provide \acrshort{nacv} and thus allow computation of the \acrshort{tdc} via $\sigma_{jk}=\symbf{v}\cdot\symbf{d}_{jk}$, \acrshort{nacv} can become ill-defined or numerically unstable near conical intersections (e.g., in multi-reference methods). In cases where a reliable \acrshort{nacv} is not available, one may instead employ a direct \acrshort{tdc} approximation using wavefunction overlaps.
+where $\symbf{v}=\dot{\symbf{R}}$ is the nuclear velocity and $\symbf{d}_{IJ}$ is the \acrfull{nacv}. Although many quantum‐chemistry packages provide \acrshort{nacv} and thus allow computation of the \acrshort{tdc} via $\sigma_{IJ}=\symbf{v}\cdot\symbf{d}_{IJ}$, \acrshort{nacv} can become ill-defined or numerically unstable near conical intersections (e.g., in multi-reference methods). In cases where a reliable \acrshort{nacv} is not available, one may instead employ a direct \acrshort{tdc} approximation using wavefunction overlaps.
 \section{The Time Derivative Coupling}\label{sec:time_derivative_coupling}
-\acrshort{tdc} is a pivotal quantity in \acrshort{tsh} simulations because it enters the electronic equations of motion given in Eq.~\eqref{eq:tsh_eom}. In \emph{ab initio} molecular dynamics, the \acrshort{tdc} is commonly evaluated using the full \acrshort{nacv} as $\sigma_{jk}=\symbf{v}\cdot\symbf{d}_{jk}$, where $\symbf{v}$ is the nuclear velocity. When the dynamics evolves on analytic \acrshort{pes} or the \acrshort{nacv} is for any reason not available, it is often preferable to calculate the \acrshort{tdc} directly. The most straightforward strategy applies a finite-difference formula to the adiabatic wavefunctions
+\acrshort{tdc} is a pivotal quantity in \acrshort{tsh} simulations because it enters the electronic equations of motion given in Eq.~\eqref{eq:tsh_eom}. In \emph{ab initio} molecular dynamics, the \acrshort{tdc} is commonly evaluated using the full \acrshort{nacv} as $\sigma_{IJ}=\symbf{v}\cdot\symbf{d}_{IJ}$, where $\symbf{v}$ is the nuclear velocity. When the dynamics evolves on analytic \acrshort{pes} or the \acrshort{nacv} is for any reason not available, it is often preferable to calculate the \acrshort{tdc} directly. The most straightforward strategy applies a finite-difference formula to the adiabatic wavefunctions
 \begin{equation}\label{eq:tdc_fd1}
-\sigma_{jk}(t)=\frac{1}{\Delta t}\left(\Braket{\phi_j(t)\vert\phi_k(t+\Delta t)}-\Braket{\phi_j(t)\vert\phi_k(t)}\right)=\frac{1}{\Delta t}\left(\Braket{\phi_j(t)\vert\phi_k(t+\Delta t)}-\delta_{jk}\right),
+\sigma_{IJ}(t)=\frac{1}{\Delta t}\left(\Braket{\phi_I(t)\vert\phi_J(t+\Delta t)}-\Braket{\phi_I(t)\vert\phi_J(t)}\right)=\frac{1}{\Delta t}\left(\Braket{\phi_I(t)\vert\phi_J(t+\Delta t)}-\delta_{IJ}\right),
 \end{equation}
 with $\Delta t$ a small time step. When analytic \acrshort{pes} is available, the finite-difference estimate of the \acrshort{tdc} is straightforward to implement. In \emph{ab initio} molecular dynamics, however, it is usually more practical to recover this quantity from the non-adiabatic coupling vector, which most electronic-structure packages provide natively. The naïve first-order finite-difference formula suffers from well-known deficiencies: its truncation error scales linearly with the time step and it is highly sensitive to numerical noise. A simple remedy is to adopt the second-order approximation
 \begin{equation}\label{eq:tdc_fd2}
-\sigma_{jk}(t)=\frac{1}{2\Delta t}\left(\Braket{\phi_j(t)\vert\phi_k(t+\Delta t)}-\Braket{\phi_j(t)\vert\phi_k(t-\Delta t)}\right).
+\sigma_{IJ}(t)=\frac{1}{2\Delta t}\left(\Braket{\phi_I(t)\vert\phi_J(t+\Delta t)}-\Braket{\phi_I(t)\vert\phi_J(t-\Delta t)}\right).
 \end{equation}
-Although nominally second-order accurate, the approximation still retains significant shortcomings. In particular, it still violates the fundamental antisymmetry requirement, $\sigma_{jk}\neq-\sigma_{kj}$, undermining the Hermiticity of the electronic Hamiltonian. The following sections tackle these deficiencies and introduce more accurate, numerically robust strategies for evaluating the \acrshort{tdc}.
+Although nominally second-order accurate, the approximation still retains significant shortcomings. In particular, it still violates the fundamental antisymmetry requirement, $\sigma_{IJ}^\ast\neq-\sigma_{JI}$, undermining the Hermiticity of the electronic Hamiltonian. The following sections tackle these deficiencies and introduce more accurate, numerically robust strategies for evaluating the \acrshort{tdc}.
 \subsection{The Hammes-Schiffer Tully Scheme}\label{sec:hammes_schiffer_tully_scheme}
-The \acrfull{hst} scheme remedies the antisymmetry defect of Eq.~\eqref{eq:tdc_fd1} and Eq.~\eqref{eq:tdc_fd2}, making the electronic Hamiltonian Hermitian. To that end we first introduce a midpoint approximation for each adiabatic eigenstate $\phi_j$, obtained by linear interpolation between its values at the bracketing time slices
+The \acrfull{hst} scheme remedies the antisymmetry defect of Eq.~\eqref{eq:tdc_fd1} and Eq.~\eqref{eq:tdc_fd2}, making the electronic Hamiltonian Hermitian. To that end we first introduce a midpoint approximation for each adiabatic eigenstate $\phi_I$, obtained by linear interpolation between its values at the bracketing time slices
 \begin{equation}\label{eq:hst_wfn}
-\phi_j\left(t+\frac{\Delta t}{2}\right)=\frac{1}{2}\left(\phi_j(t+\Delta t)+\phi_j(t)\right).
+\phi_I\left(t+\frac{\Delta t}{2}\right)=\frac{1}{2}\left(\phi_I(t+\Delta t)+\phi_I(t)\right).
 \end{equation}
-This midpoint state is not strictly normalized, a fully norm-preserving variant will be introduced in the next section. The time derivative at the same midpoint is obtained by combining a backward difference for $\phi_j(t+\Delta t)$ with a forward difference for $\phi_j(t)$, yielding
+This midpoint state is not strictly normalized, a fully norm-preserving variant will be introduced in the next section. The time derivative at the same midpoint is obtained by combining a backward difference for $\phi_I(t+\Delta t)$ with a forward difference for $\phi_I(t)$, yielding
 \begin{equation}\label{eq:hst_dwfn}
-\frac{\partial \phi_j}{\partial t}\left(t+\frac{\Delta t}{2}\right)=\frac{1}{\Delta t}\left(\phi_j(t+\Delta t)-\phi_j(t)\right).
+\frac{\partial \phi_I}{\partial t}\left(t+\frac{\Delta t}{2}\right)=\frac{1}{\Delta t}\left(\phi_I(t+\Delta t)-\phi_I(t)\right).
 \end{equation}
-The \acrshort{tdc} $\sigma_{jk}=\Braket{\phi_j\vert\frac{\partial \phi_k}{\partial t}}$ at a time $t+\frac{\Delta t}{2}$ is then formed as an overlap beween the expressions in Eq.~\eqref{eq:hst_wfn} and Eq.~\eqref{eq:hst_dwfn}:
+The \acrshort{tdc} $\sigma_{IJ}=\Braket{\phi_I\vert\frac{\partial \phi_J}{\partial t}}$ at a time $t+\frac{\Delta t}{2}$ is then formed as an overlap beween the expressions in Eq.~\eqref{eq:hst_wfn} and Eq.~\eqref{eq:hst_dwfn}:
 \begin{equation}\label{eq:hst_tdc}
-\sigma_{jk}\left(t+\frac{\Delta t}{2}\right)=\frac{1}{2\Delta t}\left(\Braket{\phi_j(t)\vert\phi_k(t+\Delta t)}-\Braket{\phi_j(t+\Delta t)\vert\phi_k(t)}\right).
+\sigma_{IJ}\left(t+\frac{\Delta t}{2}\right)=\frac{1}{2\Delta t}\left(\Braket{\phi_I(t)\vert\phi_J(t+\Delta t)}-\Braket{\phi_I(t+\Delta t)\vert\phi_J(t)}\right).
 \end{equation}
-The \acrshort{hst} scheme in Eq.~\eqref{eq:hst_tdc} is a finite-difference approximation of the \acrshort{tdc}, which is also antisymmetric, i.e., $\sigma_{jk}=-\sigma_{kj}$. The scheme is numerically stable, but it does not preserve the norm of the adiabatic wavefunction in between the timesteps. Any rapidly varying wavefunction will suffer from a significant normalization error, which can lead to unphysical results. Such a case occurs for two diabatic surfaces coupled by zero diabatic interaction: in the adiabatic basis the exact \acrshort{tdc} diverges, yet the \acrshort{hst} formula collapses to zero, predicting no population transfer. To address this issue, we can apply a \acrfull{npi} to the adiabatic wavefunction, which is discussed in the next section.
+The \acrshort{hst} scheme in Eq.~\eqref{eq:hst_tdc} is a finite-difference approximation of the \acrshort{tdc}, which is also antisymmetric, i.e., $\sigma_{IJ}^\ast=-\sigma_{JI}$. The scheme is numerically stable, but it does not preserve the norm of the adiabatic wavefunction in between the timesteps. Any rapidly varying wavefunction will suffer from a significant normalization error, which can lead to unphysical results. Such a case occurs for two diabatic surfaces coupled by zero diabatic interaction: in the adiabatic basis the exact \acrshort{tdc} diverges, yet the \acrshort{hst} formula collapses to zero, predicting no population transfer. To address this issue, we can apply a \acrfull{npi} to the adiabatic wavefunction, which is discussed in the next section.
 \subsection{The Norm-Preserving Interpolation}\label{sec:norm_preserving_interpolation}
 \subsection{The Baeck--An Scheme}\label{sec:baeck_an}
 \section{Ehrenfest Dynamics}\label{sec:ehrenfest_dynamics}
