@@ -151,7 +151,7 @@ A normed vector space $(V,\lvert\cdot\rvert)$ is a vector space $V$ over a field
 \item Triangle inequality: $\lvert\symbf{u}+\symbf{v}\rvert\leq\lvert\symbf{u}\rvert+\lvert\symbf{v}\rvert$
 \end{enumerate}
 \end{definition}
-A norm provides a measure of the \emph{length} or \emph{magnitude} of vectors in the space, allowing us to discuss concepts such as convergence and continuity. The norm induces a metric (or distance function) on the vector space defined briefly as
+A norm provides a measure of the length or magnitude of vectors in the space, allowing us to discuss concepts such as convergence and continuity. The norm induces a metric (or distance function) on the vector space defined briefly as
 \begin{equation}
 d(\symbf{u},\symbf{v})=\lvert\symbf{u}-\symbf{v}\rvert,
 \end{equation}
@@ -235,7 +235,7 @@ To each ket $\ket{\psi}$ there corresponds a bra $\bra{\psi}$, which is a linear
 \end{equation}
 This correspondence is guaranteed by the Riesz representation theorem.
 
-In quantum mechanics, physical (pure) states are represented by \emph{rays} in a Hilbert space, i.e. one-dimensional subspaces of $\mathcal{H}$. Vectors that differ only by a nonzero complex scalar multiplication represent the same physical state:
+In quantum mechanics, physical (pure) states are represented by rays in a Hilbert space, i.e. one-dimensional subspaces of $\mathcal{H}$. Vectors that differ only by a nonzero complex scalar multiplication represent the same physical state:
 \begin{equation}
 \ket{\psi}\sim\ket{\phi}\Longleftrightarrow\exists\,c\in\mathbb{C}\setminus\lbrace 0\rbrace:\ket{\phi}=c\ket{\psi}.
 \end{equation}
@@ -245,7 +245,7 @@ It is customary to choose a normalized representative $\ket{\psi}$ with
 \end{equation}
 in which case $\ket{\psi}$ is called a (normalized) state vector. The overall phase $e^{\mathrm i\theta}\ket{\psi}$ has no observable physical effect.
 
-In most physical applications one assumes that $\mathcal{H}$ is \emph{separable}, i.e. it possesses a countable orthonormal basis $\lbrace\ket{n}\rbrace_{n\in\mathbb{N}_0}$. Any vector $\ket{\psi}\in\mathcal{H}$ can then be then expanded as
+In most physical applications one assumes that $\mathcal{H}$ is separable, i.e. it possesses a countable orthonormal basis $\lbrace\ket{n}\rbrace_{n\in\mathbb{N}_0}$. Any vector $\ket{\psi}\in\mathcal{H}$ can then be then expanded as
 \begin{equation}
 \ket{\psi}=\sum_{n}c_n\ket{n},\qquad c_n=\braket{n\vert\psi},
 \end{equation}
@@ -258,9 +258,9 @@ In this section we introduce the basic elements of spectral theory for operators
 \end{equation}
 and, for brevity, we will often write $\lvert\psi\rvert$ instead of $\lvert\ket{\psi}\rvert$.
 \subsection{Self-adjoint Operators and Observables}\label{sec:self_adjoint_operators_and_observables}
-In quantum mechanics, observables are represented by self-adjoint operators on a Hilbert space. Spectral theory describes how such operators can be decomposed into their \emph{eigenvalue parts}, both discrete and continuous, and how this decomposition encodes measurement statistics and time evolution.
+In quantum mechanics, observables are represented by self-adjoint operators on a Hilbert space. Spectral theory describes how such operators can be decomposed into their eigenvalue parts, both discrete and continuous, and how this decomposition encodes measurement statistics and time evolution.
 \begin{definition}[Self-Adjoint Operator]
-A linear operator $A$ on $\mathcal{H}$ is called \emph{self-adjoint} if
+A linear operator $A$ on $\mathcal{H}$ is called self-adjoint if
 \begin{equation}
 \braket{\phi|A\psi}=\braket{A\phi|\psi}\quad\text{for all }\ket{\phi},\ket{\psi}\in\mathcal{H}
 \end{equation}
@@ -357,7 +357,7 @@ where $E_n$ and $E$ denote discrete and continuous energy values, respectively. 
 \end{equation}
 is preserved, expressing conservation of total probability under Schr\"odinger time evolution.
 \section{Adiabatic vs Diabatic Representation}\label{sec:adiabatic_vs_diabatic_representation}
-In molecular quantum mechanics we often describe a system of electrons and nuclei in terms of two sets of coordinates: electronic coordinates $\symbf{r}$ and nuclear coordinates $\symbf{R}$. The total molecular wavefunction depends on both, $\ket{\Psi(\symbf{R},\symbf{r},t)}$, and evolves under the full molecular Hamiltonian. In practice, it is convenient to expand $\ket{\Psi}$ in a suitable electronic basis that depends on the nuclear positions. Two particularly important choices are the \emph{adiabatic} and \emph{diabatic} representations.
+In molecular quantum mechanics we often describe a system of electrons and nuclei in terms of two sets of coordinates: electronic coordinates $\symbf{r}$ and nuclear coordinates $\symbf{R}$. The total molecular wavefunction depends on both, $\ket{\Psi(\symbf{R},\symbf{r},t)}$, and evolves under the full molecular Hamiltonian. In practice, it is convenient to expand $\ket{\Psi}$ in a suitable electronic basis that depends on the nuclear positions. Two particularly important choices are the adiabatic and diabatic representations.
 \subsection{Born--Oppenheimer Separation}\label{sec:born_oppenheimer_separation}
 The starting point is the separation of the Hamiltonian into nuclear and electronic parts. For a molecular system one typically writes
 \begin{equation}\label{eq:boa_hamiltonian}
@@ -552,11 +552,11 @@ For electronic dynamics in Eq~\eqref{eq:sh_tdse_coefs} to be unitary, the effect
 \end{equation}
 where $\symbf{v}=\dot{\symbf{R}}$ is the nuclear velocity and $\symbf{d}_{IJ}$ is the \acrfull{nacv}. Although many quantum‐chemistry packages provide \acrshort{nacv} and thus allow computation of the \acrshort{tdc} via $\sigma_{IJ}=\symbf{v}\cdot\symbf{d}_{IJ}$, \acrshort{nacv} can become ill-defined or numerically unstable near conical intersections (e.g., in multi-reference methods). In cases where a reliable \acrshort{nacv} is not available, one may instead employ a direct \acrshort{tdc} approximation using wavefunction overlaps.
 \section{The Time Derivative Coupling}\label{sec:time_derivative_coupling}
-\acrshort{tdc} is a pivotal quantity in \acrshort{tsh} simulations because it enters the electronic equations of motion given in Eq.~\eqref{eq:tsh_eom}. In \emph{ab initio} molecular dynamics, the \acrshort{tdc} is commonly evaluated using the full \acrshort{nacv} as $\sigma_{IJ}=\symbf{v}\cdot\symbf{d}_{IJ}$, where $\symbf{v}$ is the nuclear velocity. When the dynamics evolves on analytic \acrshort{pes} or the \acrshort{nacv} is for any reason not available, it is often preferable to calculate the \acrshort{tdc} directly. The most straightforward strategy applies a finite-difference formula to the adiabatic wavefunctions
+\acrshort{tdc} is a pivotal quantity in \acrshort{tsh} simulations because it enters the electronic equations of motion given in Eq.~\eqref{eq:tsh_eom}. In \textit{ab initio} molecular dynamics, the \acrshort{tdc} is commonly evaluated using the full \acrshort{nacv} as $\sigma_{IJ}=\symbf{v}\cdot\symbf{d}_{IJ}$, where $\symbf{v}$ is the nuclear velocity. When the dynamics evolves on analytic \acrshort{pes} or the \acrshort{nacv} is for any reason not available, it is often preferable to calculate the \acrshort{tdc} directly. The most straightforward strategy applies a finite-difference formula to the adiabatic wavefunctions
 \begin{equation}\label{eq:tdc_fd1}
 \sigma_{IJ}(t)=\frac{1}{\Delta t}\left(\Braket{\phi_I(t)\vert\phi_J(t+\Delta t)}-\Braket{\phi_I(t)\vert\phi_J(t)}\right)=\frac{1}{\Delta t}\left(\Braket{\phi_I(t)\vert\phi_J(t+\Delta t)}-\delta_{IJ}\right),
 \end{equation}
-with $\Delta t$ a small time step. When analytic \acrshort{pes} is available, the finite-difference estimate of the \acrshort{tdc} is straightforward to implement. In \emph{ab initio} molecular dynamics, however, it is usually more practical to recover this quantity from the non-adiabatic coupling vector, which most electronic-structure packages provide natively. The naïve first-order finite-difference formula suffers from well-known deficiencies: its truncation error scales linearly with the time step and it is highly sensitive to numerical noise. A simple remedy is to adopt the second-order approximation
+with $\Delta t$ a small time step. When analytic \acrshort{pes} is available, the finite-difference estimate of the \acrshort{tdc} is straightforward to implement. In \textit{ab initio} molecular dynamics, however, it is usually more practical to recover this quantity from the non-adiabatic coupling vector, which most electronic-structure packages provide natively. The naïve first-order finite-difference formula suffers from well-known deficiencies: its truncation error scales linearly with the time step and it is highly sensitive to numerical noise. A simple remedy is to adopt the second-order approximation
 \begin{equation}\label{eq:tdc_fd2}
 \sigma_{IJ}(t)=\frac{1}{2\Delta t}\left(\Braket{\phi_I(t)\vert\phi_J(t+\Delta t)}-\Braket{\phi_I(t)\vert\phi_J(t-\Delta t)}\right).
 \end{equation}
