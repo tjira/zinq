@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const complex_gaussian = @import("complex_gaussian.zig");
+const complex_matrix = @import("complex_matrix.zig");
 const complex_runge_kutta = @import("complex_runge_kutta.zig");
 const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
@@ -15,11 +16,13 @@ const harmonic_potential = @import("harmonic_potential.zig");
 const math_functions = @import("math_functions.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const real_matrix = @import("real_matrix.zig");
+const matrix_inverse = @import("matrix_inverse.zig");
 const real_vector = @import("real_vector.zig");
 const tully_potential = @import("tully_potential.zig");
 
 const Complex = std.math.Complex;
 const ComplexGaussian = complex_gaussian.ComplexGaussian;
+const ComplexMatrix = complex_matrix.ComplexMatrix;
 const ComplexRungeKutta = complex_runge_kutta.ComplexRungeKutta;
 const ComplexVector = complex_vector.ComplexVector;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
@@ -28,12 +31,16 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
+const inverseHermitianAlloc = matrix_inverse.inverseHermitianAlloc;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const mm = matrix_multiplication.mm;
 const positionAtRow = grid_generator.positionAtRow;
 const powi = math_functions.powi;
 const print = device_write.print;
+const printComplexMatrix = device_write.printComplexMatrix;
+const printComplexVector = device_write.printComplexVector;
+const printRealVector = device_write.printRealVector;
 const printJson = device_write.printJson;
 const throw = error_handling.throw;
 
@@ -156,7 +163,7 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
     var gaussian = try complex_gaussian.ComplexGaussian(T).init(opt.method.vMCG.position, opt.method.vMCG.gamma, opt.method.vMCG.momentum, allocator); defer gaussian.deinit();
 
-    var coefs = try ComplexVector(T).init(nstate, allocator); defer coefs.deinit(); coefs.ptr(opt.initial_conditions.state).* = Complex(T).init(1, 0);
+    var coefs = try ComplexVector(T).initZero(nstate, allocator); defer coefs.deinit(); coefs.ptr(opt.initial_conditions.state).* = Complex(T).init(1, 0);
 
     var propagator = try ComplexRungeKutta(T).init(3 * gaussian.position.len + coefs.len, allocator); defer propagator.deinit();
 
@@ -232,19 +239,36 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 pub fn runSingleSetOfGaussians(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
+    const ngauss = opt.method.ss_vMCG.position.len;
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
 
     const output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
 
-    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
+    var gaussians: std.ArrayList(ComplexGaussian(T)) = .empty; defer gaussians.deinit(allocator); defer for (gaussians.items) |gauss| gauss.deinit();
 
-    for (0..opt.iterations + 1) |_| {
-
+    for (0..ngauss) |i| {
+        try gaussians.append(allocator, try complex_gaussian.ComplexGaussian(T).init(opt.method.ss_vMCG.position[i], opt.method.ss_vMCG.gamma[i], opt.method.ss_vMCG.momentum[i], allocator));
     }
 
+    var coefs = try ComplexVector(T).initZero(nstate * ngauss, allocator); defer coefs.deinit(); coefs.ptr(opt.initial_conditions.state * ngauss).* = Complex(T).init(1, 0);
+
+    var propagator = try ComplexRungeKutta(T).init(2 * ngauss * gaussians.items[0].position.len + coefs.len, allocator); defer propagator.deinit();
+
+    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
+
     if (enable_printing) try printIterationHeader(ndim, nstate);
+
+    for (0..opt.iterations + 1) |i| {
+        const time = @as(T, @floatFromInt(i)) * opt.time_step;
+
+        if (i > 0) try propagateSingleSetOfGaussians(T, &gaussians, &coefs, opt, &propagator, time, allocator);
+
+        if (wavefunction_dynamics) |*wfn_container| {
+            try assignWavefunctionStepSingleSetOfGaussian(T, wfn_container, gaussians, coefs, i);
+        }
+    }
 
     if (enable_printing) for (0..nstate) |i| {
         try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i)});
@@ -291,6 +315,24 @@ pub fn assignWavefunctionStepSingleGaussian(comptime T: type, wfn_container: *Re
 
             wfn_container.ptr(i, gaussian.position.len + 2 * coefs.len * iteration + 2 * j + 0).* = value.re;
             wfn_container.ptr(i, gaussian.position.len + 2 * coefs.len * iteration + 2 * j + 1).* = value.im;
+        }
+    }
+}
+
+/// Assigns the single gaussian to the wavefunction dynamics container.
+pub fn assignWavefunctionStepSingleSetOfGaussian(comptime T: type, wfn_container: *RealMatrix(T), gaussians: std.ArrayList(ComplexGaussian(T)), coefs: ComplexVector(T), iteration: usize) !void {
+    for (0..wfn_container.rows) |i| {
+
+        for (0..coefs.len / gaussians.items.len) |j| {
+
+            var value = Complex(T).init(0, 0);
+
+            for (gaussians.items, 0..) |g, k| {
+                value = value.add(g.evaluate(wfn_container.row(i).slice(0, g.position.len).data).mul(coefs.at(j * gaussians.items.len + k)));
+            }
+
+            wfn_container.ptr(i, gaussians.items[0].position.len + 2 * coefs.len / gaussians.items.len * iteration + 2 * j + 0).* = value.re;
+            wfn_container.ptr(i, gaussians.items[0].position.len + 2 * coefs.len / gaussians.items.len * iteration + 2 * j + 1).* = value.im;
         }
     }
 }
@@ -380,6 +422,115 @@ pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), 
     }.call;
 
     try rk.rk4(&vars, derivative, .{.gaussian = gaussian, .opt = opt, .time = time, .allocator = allocator}, opt.time_step);
+}
+
+/// Propagates the single set of gaussians and coefficients using the 4th order Runge-Kutta method.
+pub fn propagateSingleSetOfGaussians(comptime T: type, gaussians: *std.ArrayList(ComplexGaussian(T)), coefs: *ComplexVector(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, allocator: std.mem.Allocator) !void {
+    var vars = try ComplexVector(T).init(2 * gaussians.items[0].position.len * gaussians.items.len + coefs.len, allocator); defer vars.deinit();
+
+    for (gaussians.items, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
+
+        const index = 2 * i * gaussian.position.len + j;
+
+        vars.ptr(index).* = Complex(T).init(gaussian.position[j], 0); vars.ptr(gaussian.position.len + index).* = Complex(T).init(gaussian.momentum[j], 0);
+    }; defer {
+        for (gaussians.items, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
+
+            const index = 2 * i * gaussian.position.len + j;
+
+            gaussian.position[j] = vars.at(index).re; gaussian.momentum[j] = vars.at(gaussian.position.len + index).re;
+        };
+    }
+
+    for (0..coefs.len) |i| {
+        vars.ptr(2 * gaussians.items[0].position.len * gaussians.items.len + i).* = coefs.at(i);
+    } defer {
+        for (0..coefs.len) |i| coefs.ptr(i).* = vars.at(2 * gaussians.items[0].position.len * gaussians.items.len + i);
+    }
+
+    // try printComplexVector(T, vars);
+
+    const derivative = struct {
+        pub fn call(k: *ComplexVector(T), v: ComplexVector(T), params: anytype) !void {
+            const gs = params.gaussians.*; const c = v.slice(2 * gs.items[0].position.len * gs.items.len, v.len);
+
+            var kq = try RealVector(T).initZero(gs.items.len, params.allocator); defer kq.deinit();
+            var kp = try RealVector(T).initZero(gs.items.len, params.allocator); defer kp.deinit();
+
+            for (params.gaussians.items, 0..) |gaussian, i| {
+
+                const kq_i = try gaussian.positionDerivative(params.opt.initial_conditions.mass); defer kq_i.deinit();
+
+                for (0..gaussian.position.len) |j| {
+                    kq.ptr(gaussian.position.len * i + j).* = kq_i.at(j);
+                }
+            }
+
+            for (params.gaussians.items, 0..) |gaussian, i| {
+
+                const kp_i = try gaussian.momentumDerivativeMulti(gs, params.opt.potential, c, params.opt.integration_nodes, params.time, params.opt.finite_differences_step); defer kp_i.deinit();
+
+                for (0..gaussian.position.len) |j| {
+                    kp.ptr(gaussian.position.len * i + j).* = kp_i.at(j);
+                }
+            }
+
+            var S = try ComplexMatrix(T).initZero(c.len, c.len, params.allocator); defer S.deinit();
+            var tau = try ComplexMatrix(T).initZero(c.len, c.len, params.allocator); defer tau.deinit();
+            var H = try ComplexMatrix(T).initZero(c.len, c.len, params.allocator); defer H.deinit();
+            var Heff = try ComplexMatrix(T).initZero(c.len, c.len, params.allocator); defer Heff.deinit();
+            var Hc = try ComplexVector(T).initZero(c.len, params.allocator); defer Hc.deinit(); var Hc_matrix = Hc.asMatrix();
+
+            for (0..S.rows) |i| for (0..S.cols) |j| {
+
+                const ig = i % gs.items.len; const is = i / gs.items.len;
+                const jg = j % gs.items.len; const js = j / gs.items.len;
+
+                if (is == js) {
+
+                    S.ptr(i, j).* = try gs.items[ig].overlap(gs.items[jg]); H.ptr(i, j).* = try gs.items[ig].kinetic(gs.items[jg], params.opt.initial_conditions.mass);
+
+                    const dSq = try gs.items[ig].overlapDiffPosition(gs.items[jg]);
+                    const dSp = try gs.items[ig].overlapDiffMomentum(gs.items[jg]);
+
+                    tau.ptr(i, j).* = dSq.mul(Complex(T).init(kq.at(jg), 0)).add(dSp.mul(Complex(T).init(kp.at(jg), 0)));
+                }
+            };
+
+            for (0..gs.items.len) |i| for (0..gs.items.len) |j| {
+
+                var Hij = try gs.items[i].potential(gs.items[j], params.opt.potential, params.opt.integration_nodes, params.time); defer Hij.deinit();
+
+                for (0..Hij.rows) |m| for (0..Hij.cols) |n| {
+
+                    const row = m * c.len / gs.items.len + i;
+                    const col = n * c.len / gs.items.len + j;
+
+                    H.ptr(row, col).* = H.at(row, col).add(Hij.at(m, n));
+                };
+            };
+
+            const Sinv = try inverseHermitianAlloc(T, S, params.allocator); defer Sinv.deinit();
+
+            for (0..Heff.rows) |i| for (0..Heff.cols) |j| {
+                Heff.ptr(i, j).* = H.at(i, j).sub(tau.at(i, j).mulbyi());
+            };
+
+            try mm(T, &Hc_matrix, Heff, false, c.asMatrix(), false);
+
+            var kc = try ComplexVector(T).initZero(c.len, params.allocator); defer kc.deinit(); var kc_matrix = kc.asMatrix();
+
+            try mm(T, &kc_matrix, Sinv, false, Hc_matrix, false); kc.muls(Complex(T).init(0, -1));
+
+            for (0..kq.len) |i| {
+                k.ptr(2 * i).* = Complex(T).init(kq.at(i), 0); k.ptr(2 * i + 1).* = Complex(T).init(kp.at(i), 0);
+            }
+
+            for (0..c.len) |i| k.ptr(2 * gs.items[0].position.len * gs.items.len + i).* = kc.at(i);
+        }
+    }.call;
+
+    try rk.rk4(&vars, derivative, .{.gaussians = gaussians, .opt = opt, .time = time, .allocator = allocator}, opt.time_step);
 }
 
 /// Print header for iteration info.

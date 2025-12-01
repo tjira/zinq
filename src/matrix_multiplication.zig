@@ -57,8 +57,11 @@ pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: anytype, comptime at
 
         for (0..A.cols) |k| {
 
-            const a = if (comptime at) A.at(k, i) else A.at(i, k);
-            const b = if (comptime bt) B.at(j, k) else B.at(k, j);
+            var a = if (comptime at) A.at(k, i) else A.at(i, k);
+            var b = if (comptime bt) B.at(j, k) else B.at(k, j);
+
+            a = if (comptime at and @TypeOf(a) == Complex(T)) a.conjugate() else a;
+            b = if (comptime bt and @TypeOf(b) == Complex(T)) b.conjugate() else b;
 
             const ac = if (comptime @TypeOf(a) == Complex(T)) a else Complex(T).init(a, 0);
             const bc = if (comptime @TypeOf(b) == Complex(T)) b else Complex(T).init(b, 0);

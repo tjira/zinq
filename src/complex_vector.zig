@@ -105,6 +105,11 @@ pub fn ComplexVector(comptime T: type) type {
             for (self.data) |*element| element.* = value;
         }
 
+        /// Multiply the vector by a scalar value.
+        pub fn muls(self: *@This(), value: Complex(T)) void {
+            for (self.data) |*element| element.* = element.mul(value);
+        }
+
         /// Get the pointer to the element at the specified index.
         pub fn ptr(self: @This(), i: usize) *Complex(T) {
             return &self.data[i];

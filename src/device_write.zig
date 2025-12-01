@@ -4,6 +4,7 @@ const std = @import("std");
 
 const classical_particle = @import("classical_particle.zig");
 const complex_matrix = @import("complex_matrix.zig");
+const complex_vector = @import("complex_vector.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
@@ -12,6 +13,7 @@ const real_vector = @import("real_vector.zig");
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
+const ComplexVector = complex_vector.ComplexVector;
 const RealMatrix = real_matrix.RealMatrix;
 const RealTensor3 = real_tensor_three.RealTensor3;
 const RealTensor4 = real_tensor_four.RealTensor4;
@@ -70,6 +72,11 @@ pub fn printClassicalParticleAsMolecule(comptime T: type, object: ClassicalParti
 /// Print the formatted complex matrix to the standard output.
 pub fn printComplexMatrix(comptime T: type, A: ComplexMatrix(T)) !void {
     try writeComplexMatrix(T, std.fs.File.stdout(), A);
+}
+
+/// Print the formatted complex vector to the standard output.
+pub fn printComplexVector(comptime T: type, v: ComplexVector(T)) !void {
+    try writeComplexVector(T, std.fs.File.stdout(), v);
 }
 
 /// Print the formatted json to the standard output.
@@ -131,6 +138,21 @@ pub fn writeComplexMatrix(comptime T: type, device: std.fs.File, A: ComplexMatri
     for (0..A.rows) |i| for (0..A.cols) |j| {
         try writer_interface.print("({d:20.14}, {d:20.14}){s}", .{A.at(i, j).re, A.at(i, j).im, if (j == A.cols - 1) "\n" else " "});
     };
+
+    try writer_interface.flush();
+}
+
+/// Print the formatted complex vector to the specified device.
+pub fn writeComplexVector(comptime T: type, device: std.fs.File, v: ComplexVector(T)) !void {
+    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
+
+    var writer = device.writer(&buffer); var writer_interface = &writer.interface;
+
+    try writer_interface.print("{d}\n", .{v.len});
+
+    for (0..v.len) |i| {
+        try writer_interface.print("({d:20.14}, {d:20.14})\n", .{v.at(i).re, v.at(i).im});
+    }
 
     try writer_interface.flush();
 }

@@ -29,6 +29,7 @@ const mm = matrix_multiplication.mm;
 const positionAtRow = grid_generator.positionAtRow;
 const powi = math_functions.powi;
 const printComplexMatrix = device_write.printComplexMatrix;
+const printComplexVector = device_write.printComplexVector;
 const prod = array_functions.prod;
 const throw = error_handling.throw;
 
@@ -220,6 +221,35 @@ pub fn ComplexGaussian(comptime T: type) type {
             var dp = try self.positionDerivative(mass); dp.muls(-1);
 
             return dp;
+        }
+
+        /// Calculates the derivative of the momentum.
+        pub fn momentumDerivativeMulti(self: @This(), others: std.ArrayList(@This()), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
+            const dV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, self.allocator); defer dV.deinit();
+
+            var F = try RealVector(T).initZero(dV.len, self.allocator);
+
+            var index: usize = undefined; const ngauss = others.items.len;
+
+            for (others.items, 0..) |other, i| if (std.meta.eql(self, other)) {
+                index = i; break;
+            };
+
+            for (others.items, 0..) |other, i| {
+
+                for (0..dV.len) |j| {
+                    dV.ptr(j).deinit(); dV.ptr(j).* = try self.potentialDerivative1(other, pot, j, n_nodes, time, fdiff_step);
+                }
+
+                for (0..F.len) |j| for (0..coefs.len / ngauss) |k| for (0..coefs.len / ngauss) |l| {
+
+                    const c1 = coefs.at(k * ngauss + index); const c2 = coefs.at(l * ngauss + i);
+
+                    F.ptr(j).* -= c1.conjugate().mul(dV.at(j).at(k, l)).mul(c2).re;
+                };
+            }
+
+            return F;
         }
 
         /// Returns the norm of the gaussian.
