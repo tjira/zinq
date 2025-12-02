@@ -16,31 +16,25 @@
     }
 }
 
-\documentclass[headsepline=true,parskip=half,open=any,12pt]{scrbook}
+\documentclass[BCOR=20mm,headsepline=true,open=right,parskip=half,twoside=true,12pt]{scrbook}
 
 \title{Algorithms of Quantum Chemistry}\author{Tomáš \textsc{Jíra}}
 
-\usepackage{setspace} % setting the line spacing
-
+\usepackage[onehalfspacing]{setspace} % setting the line spacing
 \usepackage[hidelinks]{hyperref} % hyperlinks and metadata
-
 \usepackage{amsmath} % all the math environments and symbols
 \usepackage{amssymb} % additional math symbols
 \usepackage[toc,page]{appendix} % appendices
 \usepackage[backend=biber,style=chem-acs]{biblatex} % bibliography package
 \usepackage{fontspec} % font selection
 \usepackage{braket} % braket notation
-\usepackage[left=1.5cm,top=2cm,right=1.5cm,bottom=2cm]{geometry} % page layout
 \usepackage[acronym,nogroupskip,nomain,toc]{glossaries} % glossary package
 \usepackage{mathrsfs} % mathscr environment
 \usepackage[automark]{scrlayer-scrpage} % page styles
 \usepackage{unicode-math} % unicode math support
 \usepackage{microtype} % better typesetting
-\usepackage{lipsum} % text filler
 
 \makeatletter\hypersetup{pdfauthor={\@author},pdftitle={\@title}}\makeatother % set metadata
-
-\AtBeginDocument{\onehalfspacing} % set line spacing to 1.5 at the beginning of document
 
 \addbibresource{library.bib} % set the library file
 \makeglossaries % make the glossary
@@ -298,7 +292,7 @@ transformations and the time evolution of isolated systems.
 
 \subsubsection*{Finite-Dimensional Case}\label{sec:finite_dimensional_case}
 If $\mathcal{H}$ is finite-dimensional, the spectral structure is simple.
-\begin{theorem}[Spectral Theorem in Finite Dimensions]
+\begin{theorem}[Spectral Theorem]
 Let $\mathcal{H}$ be a finite-dimensional Hilbert space and $A$ self-adjoint. Then there exists an orthonormal basis $\{\ket{n}\}$ of $\mathcal{H}$ such that
 \begin{equation}
 A\ket{n}=\lambda_n\ket{n},\qquad\lambda_n\in\mathbb{R},
@@ -410,7 +404,7 @@ The adiabatic picture is particularly intuitive far from avoided crossings or co
 \subsection{Diabatic Representation}\label{sec:diabatic_representation}
 In the diabatic representation one chooses a different set of electronic basis functions $\{\ket{\tilde\phi_\alpha(\symbf{R})}\}$, related to the adiabatic states by an $\symbf{R}$-dependent unitary transformation
 \begin{equation}\label{eq:unitary_transform}
-\ket{\tilde\phi_\alpha(\symbf{R})}=\sum_I U_{I\alpha}(\symbf{R})\ket{\phi_I(\symbf{R})},
+\ket{\phi_I(\symbf{R})}=\sum_\alpha U_{\alpha I}(\symbf{R})\ket{\tilde\phi_\alpha(\symbf{R})},
 \end{equation}
 where $U(\symbf{R})$ is unitary for each $\symbf{R}$.
 
@@ -431,22 +425,22 @@ Physically, the diabatic representation has the following features. First, the n
 This is often advantageous for constructing low-dimensional model Hamiltonians and for simulating nonadiabatic dynamics, since the diabatic potentials can be chosen to vary smoothly through avoided crossings and conical intersections.
 
 In general, a globally exact diabatic basis free of derivative couplings may not exist due to topological obstructions (e.g. around conical intersections). In practice, one works with quasi-diabatic representations where the derivative couplings are small but not exactly zero.
-\subsection{Transformation Between Adiabatic and Diabatic Representations}\label{sec:transformation_between_adiabatic_and_diabatic_representations}
+\subsection{Adiabatic Transform}\label{sec:adiabatic_transform}
 The nuclear wavefunctions in the two representations are related by the same unitary transformation $U(\symbf{R})$ that relates the electronic bases. Writing the total wavefunction as
 \begin{equation}
 \ket{\Psi(\symbf{R},\symbf{r},t)}=\sum_I\ket{\chi_I(\symbf{R},t)}\otimes\ket{\phi_I(\symbf{R})}=\sum_\alpha \ket{\tilde\chi_\alpha(\symbf{R},t)}\otimes\ket{\tilde\phi_\alpha(\symbf{R})},
 \end{equation}
 and inserting Eq~\eqref{eq:unitary_transform} into this equation and comparing the diabatic and adiabatic representation gives
 \begin{equation}
-\ket{\chi_I(\symbf{R},t)}=\sum_I U_{I\alpha}(\symbf{R})\ket{\tilde\chi_\alpha(\symbf{R},t)}.
+\ket{\chi_I(\symbf{R},t)}=\sum_\alpha U_{\alpha I}^\ast(\symbf{R})\ket{\tilde\chi_\alpha(\symbf{R},t)}.
 \end{equation}
 The adiabatic potential matrix is diagonal,
 \begin{equation}
 V_{IJ}(\symbf{R})=E_I(\symbf{R})\delta_{IJ},
 \end{equation}
-while the diabatic potential matrix $\tilde{V}(\symbf{R})$ is obtained using the unitary similarity transformation according to the change of basis formula in Eq~\eqref{eq:change_of_basis} as
+while the adiabatic potential matrix $\tilde{V}(\symbf{R})$ is obtained using the unitary similarity transformation according to the change of basis formula in Eq~\eqref{eq:change_of_basis} as
 \begin{equation}
-\tilde{V}(\symbf{R})=U^\dagger(\symbf{R})V(\symbf{R})U(\symbf{R}).
+V(\symbf{R})=U^\dagger(\symbf{R})\tilde{V}(\symbf{R})U(\symbf{R}).
 \end{equation}
 \chapter{Time Evolution in Quantum Mechanics}\label{sec:time_evolution}
 Quantum dynamics describes the evolution of quantum states $\ket{\Psi(t)}\in\mathcal{H}$ over time and is fundamental in quantum chemistry for understanding molecular behavior at the atomic level. It is governed by the principles of quantum mechanics, particularly the \acrfull{tdse}
@@ -477,7 +471,7 @@ where $I_N$ is the identity operator on the $N$-dimensional diabatic electronic 
 $\tilde{T}_{\symrm{n}}$ is the nuclear kinetic energy operator, and $\tilde{V}$ is the
 potential energy operator represented by an $N\times N$ matrix in the diabatic electronic basis. We aim to reduce the action of the propagator on the diabatic wavefunction in Eq~\eqref{eq:diabatic_wavefunction} to a simple matrix multiplication. The main difficulty is the differential form of the kinetic operator in the equation~\eqref{eq:diabatic_hamiltonian}. To handle this, we use a Fourier-based method for applying the kinetic operator $\tilde{T}_{\symrm{n}}$ on a wavefunction $\Psi\left(\symbf{R},t\right)$. Taking the \acrfull{ft} of $\tilde{T}_{\symrm{n}}\Psi\left(\symbf{R},t\right)$ yields
 \begin{equation}\label{eq:kinetic_fourier_method}
-\mathcal{F}\left\lbrace \tilde{T}_{\symrm{n}}\Psi\left(\symbf{R},t\right)\right\rbrace=\mathcal{F}\left\lbrace-\frac{1}{2m}\frac{\partial^2}{\partial \symbf{R}^2}\Psi\left(\symbf{R},t\right)\right\rbrace=\frac{k^2}{2m}\mathcal{F}\left\lbrace\Psi\left(\symbf{R},t\right)\right\rbrace,\qquad\tilde{T}_{\symrm{n}}\Psi\left(\symbf{R},t\right)=\frac{1}{2m}\mathcal{F}^{-1}\left\lbrace k^2\mathcal{F}\left\lbrace\Psi\left(\symbf{R},t\right)\right\rbrace\right\rbrace,
+\mathcal{F}\left\lbrace \tilde{T}_{\symrm{n}}\Psi\left(\symbf{R},t\right)\right\rbrace=\mathcal{F}\left\lbrace-\frac{1}{2m}\frac{\partial^2}{\partial \symbf{R}^2}\Psi\left(\symbf{R},t\right)\right\rbrace=\frac{k^2}{2m}\mathcal{F}\left\lbrace\Psi\left(\symbf{R},t\right)\right\rbrace,
 \end{equation}
 where $k$ is the coordinate in the Fourier space. In other words, to apply the kinetic operator on the wavefunction, we need to \acrshort{ft} the wavefunction, multiply it by $\frac{k^2}{2m}$, and then apply the \acrfull{ift}. In Fourier space, $\tilde{T}_{\symrm{n}}$ becomes diagonal multiplication operator $\frac{k^2}{2m}$. For notational simplicity we denote both the coordinate-space operator and its Fourier-space representation by the same symbol. This method is computationally efficient, since the \acrshort{ft} can be done using the \acrfull{fft} algorithm, which has a complexity of $\mathcal{O}(N\log N)$, where $N$ is the number of grid points (contrary to the straightforward \acrfull{dft} with $\mathcal{O}(N^2)$ complexity).
 
