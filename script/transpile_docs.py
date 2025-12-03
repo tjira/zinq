@@ -2,11 +2,11 @@
 
 import os, re
 
-ACRONYMS, CURRENT_CHAPTER, CURRENT_SECTION, CHAPTER_INDEX, SECTION_INDEX, IN_BLOCK, ENUMERATE_INDEX = {}, "", "", 0, 0, False, 0
+ACRONYMS, CURRENT_CHAPTER, CURRENT_SECTION, CURRENT_SUBSECTION, CHAPTER_INDEX, SECTION_INDEX, SUBSECTION_INDEX, IN_BLOCK, ENUMERATE_INDEX = {}, "", "", "", 0, 0, 0, False, 0
 
 with open("tex/main.tex") as tex:
 
-    md_chapter, md_section = None, None
+    md_chapter, md_section, md_subsection = None, None, None
 
     for line in tex:
 
@@ -20,9 +20,10 @@ with open("tex/main.tex") as tex:
 
         if line.startswith("\chapter"):
 
-            if md_section: md_section.close(); md_section = None
+            if md_section:    md_section.close();    md_section    = None
+            if md_subsection: md_subsection.close(); md_subsection = None
 
-            CURRENT_CHAPTER, CHAPTER_INDEX, SECTION_INDEX = re.search(r"\{(.*?)\}", line).group(1), CHAPTER_INDEX + 1, 0
+            CURRENT_CHAPTER, CHAPTER_INDEX, SECTION_INDEX, SUBSECTION_INDEX = re.search(r"\{(.*?)\}", line).group(1), CHAPTER_INDEX + 1, 0, 0
 
             if md_chapter: md_chapter.close()
 
@@ -32,15 +33,29 @@ with open("tex/main.tex") as tex:
 
         if line.startswith("\section"):
 
-            if md_chapter: md_chapter.close(); md_chapter = None
+            if md_chapter:    md_chapter.close();    md_chapter    = None
+            if md_subsection: md_subsection.close(); md_subsection = None
 
-            CURRENT_SECTION, SECTION_INDEX = re.search(r"\{(.*)\}\\", line).group(1), SECTION_INDEX + 1
+            CURRENT_SECTION, SECTION_INDEX, SUBSECTION_INDEX = re.search(r"\{(.*)\}\\", line).group(1), SECTION_INDEX + 1, 0
 
             if md_section: md_section.close()
 
             md_section = open(f"docs/{CURRENT_SECTION.lower().replace(' ', '_').replace('--', '_').replace('-', '_')}.md", "w")
 
             md_section.write(f"---\ntitle: {CURRENT_SECTION}\nparent: {CURRENT_CHAPTER}\nlayout: default\nnav_order: {SECTION_INDEX}\n---\n\n"); md_section.write("{% include mathjax.html %}\n\n")
+
+        if line.startswith("\subsection"):
+
+            if md_chapter: md_chapter.close(); md_chapter = None
+            if md_section: md_section.close(); md_section = None
+
+            CURRENT_SUBSECTION, SUBSECTION_INDEX = re.search(r"\{(.*)\}\\", line).group(1), SUBSECTION_INDEX + 1
+
+            if md_subsection: md_subsection.close()
+
+            md_subsection = open(f"docs/{CURRENT_SUBSECTION.lower().replace(' ', '_').replace('--', '_').replace('-', '_')}.md", "w")
+
+            md_subsection.write(f"---\ntitle: {CURRENT_SUBSECTION}\nparent: {CURRENT_SECTION}\nlayout: default\nnav_order: {SUBSECTION_INDEX}\n---\n\n"); md_subsection.write("{% include mathjax.html %}\n\n")
 
         if line.startswith(r"\printglossary"): break
 
@@ -65,7 +80,6 @@ with open("tex/main.tex") as tex:
 
         formatted_line = "\n" if line.startswith(r"\end{definition}") else formatted_line
 
-        if line.startswith(r"\subsection"   ): print(line)
         if line.startswith(r"\chapter"      ): formatted_line = "# "    + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
         if line.startswith(r"\section"      ): formatted_line = "## "   + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
         if line.startswith(r"\subsection"   ): formatted_line = "### "  + re.search(r"\{(.*)\}\\", line).group(1) + "\n"
@@ -80,5 +94,8 @@ with open("tex/main.tex") as tex:
         if line.startswith(r"\item"):
             ENUMERATE_INDEX += 1; formatted_line = formatted_line.replace(r"\item", f"{ENUMERATE_INDEX}.")
 
-        if md_chapter: md_chapter.write(f"{formatted_line}")
-        if md_section: md_section.write(f"{formatted_line}")
+        formatted_line = re.sub(r"\\textit\{(.*?)\}", r"*\1*", formatted_line)
+
+        if md_chapter:    md_chapter.write(   f"{formatted_line}")
+        if md_section:    md_section.write(   f"{formatted_line}")
+        if md_subsection: md_subsection.write(f"{formatted_line}")
