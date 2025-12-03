@@ -640,14 +640,44 @@ test "vMCG on Tully's First Potential" {
         },
         .finite_differences_step = 1e-8,
         .integration_nodes = 32,
-        .iterations = 350,
-        .time_step = 10
+        .iterations = 3500,
+        .time_step = 1
     };
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.kinetic_energy - 0.06574552356661) < TEST_TOLERANCE);
-    try std.testing.expect(@abs(output.population.at(opt.iterations, 0) - 0.53765879822849) < TEST_TOLERANCE);
-    try std.testing.expect(@abs(output.population.at(opt.iterations, 1) - 0.46233829327311) < TEST_TOLERANCE);
-    try std.testing.expect(@abs(output.potential_energy - 0.00075320504955) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.kinetic_energy - 0.06574685612813) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 0) - 0.53765759177167) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 1) - 0.46234240819512) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.potential_energy - 0.00075315183576) < TEST_TOLERANCE);
+}
+
+test "ss-vMCG on Tully's First Potential" {
+    const opt = Options(f64){
+        .initial_conditions = .{
+            .mass = &.{2000},
+            .state = 1,
+        },
+        .method = .{
+            .ss_vMCG = .{
+                .position = &.{&.{-10.5}, &.{-9.5}},
+                .gamma = &.{&.{2}, &.{2}},
+                .momentum = &.{&.{15}, &.{15}}
+            }
+        },
+        .potential = .{
+            .tully_1 = TullyPotential1(f64){}
+        },
+        .finite_differences_step = 1e-8,
+        .integration_nodes = 32,
+        .iterations = 3500,
+        .time_step = 1
+    };
+
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+
+    // try std.testing.expect(@abs(output.kinetic_energy - 0.06574552356661) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 0) - 0.54743654143241) < TEST_TOLERANCE);
+    try std.testing.expect(@abs(output.population.at(opt.iterations, 1) - 0.45256626329183) < TEST_TOLERANCE);
+    // try std.testing.expect(@abs(output.potential_energy - 0.00075320504955) < TEST_TOLERANCE);
 }
