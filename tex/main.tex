@@ -1,19 +1,9 @@
 % Compile with the "lualatex main && biber main && makeglossaries main && lualatex main && lualatex main" command.
 
-\IfPDFManagementActiveTF{
-    \DocumentMetadata{
-        lang = en,
-        pdfversion = 1.7,
-        pdfstandard = A-3b
-    }
-}{
-    \RequirePackage{pdfmanagement}\IfPDFManagementActiveTF{
-        \SetKeys[document/metadata]{
-            lang = en,
-            pdfversion = 1.7,
-            pdfstandard = A-3b
-        }
-    }
+\DocumentMetadata{
+    lang = en,
+    pdfversion = 1.7,
+    pdfstandard = A-3b
 }
 
 \documentclass[BCOR=20mm,headsepline=true,open=right,parskip=half,twoside=true,12pt]{scrbook}
