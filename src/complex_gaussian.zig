@@ -388,10 +388,6 @@ pub fn ComplexGaussian(comptime T: type) type {
                 };
             }
 
-            for (0..V.rows) |i| for (i + 1..V.cols) |j| {
-                V.ptr(j, i).* = V.at(i, j).conjugate();
-            };
-
             V.divs(Complex(T).init(self.norm() * other.norm(), 0));
 
             return V;
@@ -445,10 +441,6 @@ pub fn ComplexGaussian(comptime T: type) type {
                 };
             }
 
-            for (0..V.rows) |i| for (i + 1..V.cols) |j| {
-                V.ptr(j, i).* = V.at(i, j).conjugate();
-            };
-
             V.divs(Complex(T).init(self.norm() * other.norm(), 0));
 
             return V;
@@ -501,10 +493,6 @@ pub fn ComplexGaussian(comptime T: type) type {
                     V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); V.ptr(k, j).* = V.at(j, k);
                 };
             }
-
-            for (0..V.rows) |i| for (i + 1..V.cols) |j| {
-                V.ptr(j, i).* = V.at(i, j).conjugate();
-            };
 
             V.divs(Complex(T).init(self.norm() * other.norm(), 0));
 
