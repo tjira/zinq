@@ -252,6 +252,63 @@ pub fn ComplexGaussian(comptime T: type) type {
             return F;
         }
 
+        /// Calculates the matrix element of the momentum operator between this complex Gaussian and another.
+        pub fn momentumMatrixElement(self: @This(), other: @This()) !ComplexVector(T) {
+            if (self.position.len != other.position.len) return throw(ComplexVector(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+
+            var result = try ComplexVector(T).initZero(self.position.len, self.allocator);
+
+            for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
+
+                const g1_c = g1.conjugate(); // gamma_j*
+                const denom = g1_c.add(g2);  // gamma_j* + gamma_k
+
+                // --- PART 1: Weighted Momentum ---
+                // Formula: (gamma_j* * p2 + gamma_k * p1)
+                const term_p1 = g1_c.mul(Complex(T).init(p2, 0));
+                const term_p2 = g2.mul(Complex(T).init(p1, 0));
+                const weighted_p = term_p1.add(term_p2);
+
+                // --- PART 2: Position Shift (Imaginary) ---
+                // Formula: - i * gamma_j* * gamma_k * (q2 - q1)
+                // Equivalent to: + i * gamma_j* * gamma_k * (q1 - q2)
+                const dq_c = Complex(T).init(q1 - q2, 0);
+                
+                // g1* * g2 * (q1 - q2) * i
+                const shift_term = g1_c.mul(g2).mul(dq_c).mulbyi();
+
+                // --- Combine ---
+                // (Weighted_P + Shift) / Denom
+                result.ptr(i).* = weighted_p.add(shift_term).div(denom);
+            }
+
+            // Multiply by total overlap scalar
+            result.muls(try self.overlap(other));
+
+            return result;
+        }
+
+        /// Calculates the matrix element of the position operator between this complex Gaussian and another.
+        pub fn positionMatrixElement(self: @This(), other: @This()) !ComplexVector(T) {
+            if (self.position.len != other.position.len) return throw(ComplexVector(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+
+            var result = try ComplexVector(T).initZero(self.position.len, self.allocator);
+
+            for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
+
+                const g1_c = g1.conjugate();
+
+                const dq_c = Complex(T).init(q1 - q2, 0);
+                const dp_c = Complex(T).init(p2 - p1, 0);
+                
+                result.ptr(i).* = Complex(T).init(q2, 0).add(g1_c.div(g1_c.add(g2)).mul(dq_c)).add(dp_c.div(g1_c.add(g2)).mulbyi());
+            }
+
+            result.muls(try self.overlap(other));
+
+            return result;
+        }
+
         /// Returns the norm of the gaussian.
         pub fn norm(self: @This()) T {
             var gamma_prod: T = 1; for (self.gamma) |g| gamma_prod *= g.re;
