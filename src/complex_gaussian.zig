@@ -224,18 +224,18 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Calculates the derivative of the momentum.
-        pub fn momentumDerivativeMulti(self: @This(), others: std.ArrayList(@This()), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
+        pub fn momentumDerivativeMulti(self: @This(), others: []const @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
             const dV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, self.allocator); defer dV.deinit();
 
             var F = try RealVector(T).initZero(dV.len, self.allocator);
 
-            var index: usize = undefined; const ngauss = others.items.len;
+            var index: usize = undefined; const ngauss = others.len;
 
-            for (others.items, 0..) |other, i| if (std.meta.eql(self, other)) {
+            for (others, 0..) |other, i| if (std.meta.eql(self, other)) {
                 index = i; break;
             };
 
-            for (others.items, 0..) |other, i| {
+            for (others, 0..) |other, i| {
 
                 for (0..dV.len) |j| {
                     dV.ptr(j).deinit(); dV.ptr(j).* = try self.potentialDerivative1(other, pot, j, n_nodes, time, fdiff_step);
@@ -260,29 +260,13 @@ pub fn ComplexGaussian(comptime T: type) type {
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
 
-                const g1_c = g1.conjugate(); // gamma_j*
-                const denom = g1_c.add(g2);  // gamma_j* + gamma_k
+                const g1_c = g1.conjugate();
 
-                // --- PART 1: Weighted Momentum ---
-                // Formula: (gamma_j* * p2 + gamma_k * p1)
-                const term_p1 = g1_c.mul(Complex(T).init(p2, 0));
-                const term_p2 = g2.mul(Complex(T).init(p1, 0));
-                const weighted_p = term_p1.add(term_p2);
-
-                // --- PART 2: Position Shift (Imaginary) ---
-                // Formula: - i * gamma_j* * gamma_k * (q2 - q1)
-                // Equivalent to: + i * gamma_j* * gamma_k * (q1 - q2)
                 const dq_c = Complex(T).init(q1 - q2, 0);
-                
-                // g1* * g2 * (q1 - q2) * i
-                const shift_term = g1_c.mul(g2).mul(dq_c).mulbyi();
 
-                // --- Combine ---
-                // (Weighted_P + Shift) / Denom
-                result.ptr(i).* = weighted_p.add(shift_term).div(denom);
+                result.ptr(i).* = g1_c.mul(Complex(T).init(p2, 0)).add(g2.mul(Complex(T).init(p1, 0))).add(g1_c.mul(g2).mul(dq_c).mulbyi()).div(g1_c.add(g2));
             }
 
-            // Multiply by total overlap scalar
             result.muls(try self.overlap(other));
 
             return result;

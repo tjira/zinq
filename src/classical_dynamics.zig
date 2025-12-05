@@ -632,8 +632,8 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(output.population_mean.at(opt.iterations, 0) == 0.371);
-    try std.testing.expect(output.population_mean.at(opt.iterations, 1) == 0.629);
+    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.371);
+    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.629);
 }
 
 test "Landau-Lener Surface Hopping on Tully's First Potential" {
@@ -659,8 +659,8 @@ test "Landau-Lener Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(output.population_mean.at(opt.iterations, 0) == 0.498);
-    try std.testing.expect(output.population_mean.at(opt.iterations, 1) == 0.502);
+    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.498);
+    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.502);
 }
 
 test "Mapping Approach to Surface Hopping on Tully's First Potential" {
@@ -689,6 +689,6 @@ test "Mapping Approach to Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(output.population_mean.at(opt.iterations, 0) == 0.385);
-    try std.testing.expect(output.population_mean.at(opt.iterations, 1) == 0.615);
+    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.385);
+    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.615);
 }

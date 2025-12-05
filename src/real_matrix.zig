@@ -216,7 +216,7 @@ pub fn RealMatrix(comptime T: type) type {
 test "init, deinit" {
     var A = try RealMatrix(f64).init(345, 753, std.testing.allocator); defer A.deinit();
 
-    try std.testing.expect(A.rows == 345);
-    try std.testing.expect(A.cols == 753);
-    try std.testing.expect(A.data.len == 259785);
+    try std.testing.expectEqual(A.rows, 345);
+    try std.testing.expectEqual(A.cols, 753);
+    try std.testing.expectEqual(A.data.len, 259785);
 }

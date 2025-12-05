@@ -439,7 +439,7 @@ test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
 
     var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.energy + 74.96590121728507) < TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.energy, -74.96590121728507, TEST_TOLERANCE);
 }
 
 test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
@@ -450,5 +450,5 @@ test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
 
     var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expect(@abs(output.energy + 40.19517074914403) < TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.energy, -40.19517074914403, TEST_TOLERANCE);
 }
