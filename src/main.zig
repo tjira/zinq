@@ -61,6 +61,7 @@ pub const real_vector = @import("real_vector.zig");
 pub const reverse_polish_notation = @import("reverse_polish_notation.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
 pub const shunting_yard = @import("shunting_yard.zig");
+pub const single_set_of_mcg = @import("single_set_of_mcg.zig");
 pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const strided_real_vector = @import("strided_real_vector.zig");
 pub const string_manipulation = @import("string_manipulation.zig");

@@ -9,15 +9,16 @@ const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const error_handling = @import("error_handling.zig");
-const hermite_quadrature_nodes = @import("hermite_quadrature_nodes.zig");
 const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
+const hermite_quadrature_nodes = @import("hermite_quadrature_nodes.zig");
 const math_functions = @import("math_functions.zig");
+const matrix_inverse = @import("matrix_inverse.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const real_matrix = @import("real_matrix.zig");
-const matrix_inverse = @import("matrix_inverse.zig");
 const real_vector = @import("real_vector.zig");
+const single_set_of_mcg = @import("single_set_of_mcg.zig");
 const tully_potential = @import("tully_potential.zig");
 
 const Complex = std.math.Complex;
@@ -29,6 +30,7 @@ const ElectronicPotential = electronic_potential.ElectronicPotential;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
+const SingleSetOfMCG = single_set_of_mcg.SingleSetOfMCG;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
 const inverseHermitianAlloc = matrix_inverse.inverseHermitianAlloc;
@@ -161,11 +163,9 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
 
-    var gaussian = try complex_gaussian.ComplexGaussian(T).init(opt.method.vMCG.position, opt.method.vMCG.gamma, opt.method.vMCG.momentum, allocator); defer gaussian.deinit();
+    var mcg = try SingleSetOfMCG(T).init(&.{opt.method.vMCG.position}, &.{opt.method.vMCG.gamma}, &.{opt.method.vMCG.momentum}, opt.initial_conditions.state, nstate, allocator); defer mcg.deinit();
 
-    var coefs = try ComplexVector(T).initZero(nstate, allocator); defer coefs.deinit(); coefs.ptr(opt.initial_conditions.state).* = Complex(T).init(1, 0);
-
-    var propagator = try ComplexRungeKutta(T).init(3 * gaussian.position.len + coefs.len, allocator); defer propagator.deinit();
+    var propagator = try ComplexRungeKutta(T).init(3 * mcg.gaussians[0].position.len + mcg.coefs.len, allocator); defer propagator.deinit();
 
     if (enable_printing) try printIterationHeader(ndim, nstate);
 
@@ -175,30 +175,30 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
-        if (i > 0) try propagateSingleGaussian(T, &gaussian, &coefs, opt, &propagator, time, allocator);
-
-        const position = RealVector(T){.data = gaussian.position, .len = gaussian.position.len, .allocator = null};
-        const momentum = RealVector(T){.data = gaussian.momentum, .len = gaussian.momentum.len, .allocator = null};
+        if (i > 0) try propagateSingleGaussian(T, &mcg.gaussians[0], &mcg.coefs, opt, &propagator, time, allocator);
 
         var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit();
 
         if (i == 0 and opt.initial_conditions.adiabatic) {
-            coefs_adia = try transformCoefficients(T, coefs, &.{gaussian}, opt.potential, time, false, allocator); try coefs_adia.?.copyTo(&coefs);
+            coefs_adia = try mcg.transformedCoefs(opt.potential, time, false); try coefs_adia.?.copyTo(&mcg.coefs);
         }
 
         if (opt.adiabatic) {
-            if (coefs_adia) |c| c.deinit(); coefs_adia = try transformCoefficients(T, coefs, &.{gaussian}, opt.potential, time, true, allocator);
+            if (coefs_adia) |c| c.deinit(); coefs_adia = try mcg.transformedCoefs(opt.potential, time, true);
         }
 
-        const potential_energy = try gaussian.potentialEnergy(opt.potential, coefs, opt.integration_nodes, time);
-        const kinetic_energy = try gaussian.kineticEnergy(opt.initial_conditions.mass);
+        const position = try mcg.coordinateExpectation(.position); defer position.deinit();
+        const momentum = try mcg.coordinateExpectation(.momentum); defer momentum.deinit();
+
+        const kinetic_energy = try mcg.kineticEnergy(opt.initial_conditions.mass);
+        const potential_energy = try mcg.potentialEnergy(opt.potential, opt.integration_nodes, time);
 
         for (0..nstate) |j| {
-            output.population.ptr(i, j).* = if (opt.adiabatic) coefs_adia.?.at(j).magnitude() * coefs_adia.?.at(j).magnitude() else coefs.at(j).magnitude() * coefs.at(j).magnitude();
+            output.population.ptr(i, j).* = try mcg.population(j, if (opt.adiabatic) coefs_adia.? else mcg.coefs);
         }
 
         if (wavefunction_dynamics) |*wfn_container| {
-            try assignWavefunction(T, wfn_container, &.{gaussian}, if (opt.adiabatic) coefs_adia.? else coefs, i);
+            try assignWavefunction(T, wfn_container, mcg.gaussians, if (opt.adiabatic) coefs_adia.? else mcg.coefs, i);
         }
 
         if (i == opt.iterations) {
@@ -211,7 +211,7 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
         const info = Custom(T).IterationInfo{
             .iteration = i,
             .kinetic_energy = kinetic_energy,
-            .coefs = if (opt.adiabatic) coefs_adia.? else coefs,
+            .coefs = if (opt.adiabatic) coefs_adia.? else mcg.coefs,
             .momentum = momentum,
             .position = position,
             .potential_energy = potential_energy,
@@ -245,20 +245,14 @@ pub fn runSingleSetOfGaussians(comptime T: type, opt: Options(T), enable_printin
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
 
     var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
+    
+    var ss_mcg = try SingleSetOfMCG(T).init(opt.method.ss_vMCG.position, opt.method.ss_vMCG.gamma, opt.method.ss_vMCG.momentum, opt.initial_conditions.state, nstate, allocator); defer ss_mcg.deinit();
 
-    var gaussians = try allocator.alloc(ComplexGaussian(T), ngauss); defer allocator.free(gaussians); defer for (gaussians) |gaussian| gaussian.deinit();
-
-    for (0..ngauss) |i| {
-        gaussians[i] = try complex_gaussian.ComplexGaussian(T).init(opt.method.ss_vMCG.position[i], opt.method.ss_vMCG.gamma[i], opt.method.ss_vMCG.momentum[i], allocator);
-    }
-
-    var coefs = try ComplexVector(T).initZero(nstate * ngauss, allocator); defer coefs.deinit(); coefs.ptr(opt.initial_conditions.state * ngauss + 0).* = Complex(T).init(1.0, 0);
-
-    var propagator = try ComplexRungeKutta(T).init(2 * ngauss * gaussians[0].position.len + coefs.len, allocator); defer propagator.deinit();
+    var propagator = try ComplexRungeKutta(T).init(2 * ngauss * ss_mcg.gaussians[0].position.len + ss_mcg.coefs.len, allocator); defer propagator.deinit();
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
 
-    if (enable_printing) try printIterationHeader(ndim, coefs.len);
+    if (enable_printing) try printIterationHeader(ndim, ss_mcg.coefs.len);
 
     var timer = try std.time.Timer.start();
 
@@ -266,57 +260,30 @@ pub fn runSingleSetOfGaussians(comptime T: type, opt: Options(T), enable_printin
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
-        var S = try ComplexMatrix(T).initZero(coefs.len, coefs.len, allocator); defer S.deinit();
-        var K = try ComplexMatrix(T).initZero(coefs.len, coefs.len, allocator); defer K.deinit();
-        var V = try ComplexMatrix(T).initZero(coefs.len, coefs.len, allocator); defer V.deinit();
-
-        if (i > 0) try propagateSingleSetOfGaussians(T, gaussians, &coefs, opt, &propagator, time, allocator);
+        if (i > 0) try propagateSingleSetOfGaussians(T, ss_mcg.gaussians, &ss_mcg.coefs, opt, &propagator, time, allocator);
 
         var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit();
 
         if (i == 0 and opt.initial_conditions.adiabatic) {
-            coefs_adia = try transformCoefficients(T, coefs, gaussians, opt.potential, time, false, allocator); try coefs_adia.?.copyTo(&coefs);
+            coefs_adia = try ss_mcg.transformedCoefs(opt.potential, time, false); try coefs_adia.?.copyTo(&ss_mcg.coefs);
         }
 
         if (opt.adiabatic) {
-            if (coefs_adia) |c| c.deinit(); coefs_adia = try transformCoefficients(T, coefs, gaussians, opt.potential, time, true, allocator);
+            if (coefs_adia) |c| c.deinit(); coefs_adia = try ss_mcg.transformedCoefs(opt.potential, time, true);
         }
 
-        for (0..S.rows) |j| for (0..S.cols) |k| {
+        const position = try ss_mcg.coordinateExpectation(.position); defer position.deinit();
+        const momentum = try ss_mcg.coordinateExpectation(.momentum); defer momentum.deinit();
 
-            const ig = j % gaussians.len; const is = j / gaussians.len;
-            const jg = k % gaussians.len; const js = k / gaussians.len;
-
-            if (is == js) {
-                S.ptr(j, k).* = try gaussians[ig].overlap(gaussians[jg]); K.ptr(j, k).* = try gaussians[ig].kinetic(gaussians[jg], opt.initial_conditions.mass);
-            }
-        };
-
-        for (0..gaussians.len) |j| for (0..gaussians.len) |k| {
-
-            var Vij = try gaussians[j].potential(gaussians[k], opt.potential, opt.integration_nodes, time); defer Vij.deinit();
-
-            for (0..Vij.rows) |l| for (0..Vij.cols) |m| {
-
-                const row = l * gaussians.len + j;
-                const col = m * gaussians.len + k;
-
-                V.ptr(row, col).* = V.at(row, col).add(Vij.at(l, m));
-            };
-        };
-
-        const position = try calculatePosition(T, gaussians, if (opt.adiabatic) coefs_adia.? else coefs, S, allocator); defer position.deinit();
-        const momentum = try calculateMomentum(T, gaussians, if (opt.adiabatic) coefs_adia.? else coefs, S, allocator); defer momentum.deinit();
-
-        const kinetic_energy = try calculateEnergy(T, if (opt.adiabatic) coefs_adia.? else coefs, K, S);
-        const potential_energy = try calculateEnergy(T, if (opt.adiabatic) coefs_adia.? else coefs, V, S);
+        const kinetic_energy = try ss_mcg.kineticEnergy(opt.initial_conditions.mass);
+        const potential_energy = try ss_mcg.potentialEnergy(opt.potential, opt.integration_nodes, time);
 
         for (0..nstate) |j| {
-            output.population.ptr(i, j).* = calculatePopulation(T, j, if (opt.adiabatic) coefs_adia.? else coefs, S, nstate);
+            output.population.ptr(i, j).* = try ss_mcg.population(j, if (opt.adiabatic) coefs_adia.? else ss_mcg.coefs);
         }
 
         if (wavefunction_dynamics) |*wfn_container| {
-            try assignWavefunction(T, wfn_container, gaussians, if (opt.adiabatic) coefs_adia.? else coefs, i);
+            try assignWavefunction(T, wfn_container, ss_mcg.gaussians, if (opt.adiabatic) coefs_adia.? else ss_mcg.coefs, i);
         }
 
         if (i == opt.iterations) {
@@ -329,7 +296,7 @@ pub fn runSingleSetOfGaussians(comptime T: type, opt: Options(T), enable_printin
         const info = Custom(T).IterationInfo{
             .iteration = i,
             .kinetic_energy = kinetic_energy,
-            .coefs = if (opt.adiabatic) coefs_adia.? else coefs,
+            .coefs = if (opt.adiabatic) coefs_adia.? else ss_mcg.coefs,
             .momentum = momentum,
             .position = position,
             .potential_energy = potential_energy,
@@ -351,150 +318,6 @@ pub fn runSingleSetOfGaussians(comptime T: type, opt: Options(T), enable_printin
     if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit();
 
     return output;
-}
-
-/// Calculate the energy given the appropriate energy matrix, overlap matrix, and coefficients.
-pub fn calculateEnergy(comptime T: type, coefs: ComplexVector(T), K: ComplexMatrix(T), S: ComplexMatrix(T)) !T {
-    var Ekin: T = 0; var norm: T = 0;
-
-    var temp1 = try ComplexVector(T).initZero(coefs.len, coefs.allocator); defer temp1.deinit(); var temp1_matrix = temp1.asMatrix();
-    var temp2 = try ComplexVector(T).initZero(coefs.len, coefs.allocator); defer temp2.deinit(); var temp2_matrix = temp2.asMatrix();
-
-    try mm(T, &temp1_matrix, K, false, coefs.asMatrix(), false);
-    try mm(T, &temp2_matrix, S, false, coefs.asMatrix(), false);
-
-    for (0..coefs.len) |i| {
-        Ekin += coefs.at(i).conjugate().mul(temp1.at(i)).re;
-    }
-
-    for (0..coefs.len) |i| {
-        norm += coefs.at(i).conjugate().mul(temp2.at(i)).re;
-    }
-
-    return Ekin / norm;
-}
-
-/// Returns the population of a given state.
-pub fn calculatePopulation(comptime T: type, state: usize, coefs: ComplexVector(T), S: ComplexMatrix(T), nstate: usize) T {
-    var pop: T = 0;
-
-    for (0..coefs.len / nstate) |i| {
-
-        const index1 = state * (coefs.len / nstate) + i;
-
-        for (0..coefs.len / nstate) |j| {
-
-            const index2 = state * (coefs.len / nstate) + j;
-
-            const c1 = coefs.at(index1);
-            const c2 = coefs.at(index2);
-
-            pop += c1.conjugate().mul(c2).mul(S.at(index1, index2)).re;
-        }
-    }
-
-    return pop;
-}
-
-/// Returns the momentum expectation value of a set of gaussians.
-pub fn calculateMomentum(comptime T: type, gaussians: []const ComplexGaussian(T), coefs: ComplexVector(T), S: ComplexMatrix(T), allocator: std.mem.Allocator) !RealVector(T) {
-    var position = try RealVector(T).initZero(gaussians[0].position.len, allocator); var total_norm: T = 0;
-
-    for (0..coefs.len / gaussians.len) |i| {
-
-        for (0..gaussians.len) |j| {
-
-            const index_1 = i * gaussians.len + j;
-
-            for (0..gaussians.len) |k| {
-
-                const index_2 = i * gaussians.len + k;
-
-                const c_1 = coefs.at(index_1);
-                const c_2 = coefs.at(index_2);
-
-                total_norm += c_1.conjugate().mul(c_2).mul(S.at(index_1, index_2)).re;
-
-                const me = try gaussians[j].momentumMatrixElement(gaussians[k]); defer me.deinit();
-
-                for (0..position.len) |d| {
-                    position.ptr(d).* += c_1.conjugate().mul(c_2).mul(me.at(d)).re;
-                }
-            }
-        }
-    }
-
-    position.muls(total_norm);
-
-    return position;
-}
-
-/// Returns the position expectation value of a set of gaussians.
-pub fn calculatePosition(comptime T: type, gaussians: []const ComplexGaussian(T), coefs: ComplexVector(T), S: ComplexMatrix(T), allocator: std.mem.Allocator) !RealVector(T) {
-    var position = try RealVector(T).initZero(gaussians[0].position.len, allocator); var total_norm: T = 0;
-
-    for (0..coefs.len / gaussians.len) |i| {
-
-        for (0..gaussians.len) |j| {
-
-            const index_1 = i * gaussians.len + j;
-
-            for (0..gaussians.len) |k| {
-
-                const index_2 = i * gaussians.len + k;
-
-                const c_1 = coefs.at(index_1);
-                const c_2 = coefs.at(index_2);
-
-                total_norm += c_1.conjugate().mul(c_2).mul(S.at(index_1, index_2)).re;
-
-                const me = try gaussians[j].positionMatrixElement(gaussians[k]); defer me.deinit();
-
-                for (0..position.len) |d| {
-                    position.ptr(d).* += c_1.conjugate().mul(c_2).mul(me.at(d)).re;
-                }
-            }
-        }
-    }
-
-    position.muls(total_norm);
-
-    return position;
-}
-
-/// Transforms the coefficients between the diabatic and adiabatic representations.
-pub fn transformCoefficients(comptime T: type, coefs: ComplexVector(T), gaussians: []const ComplexGaussian(T), potential: ElectronicPotential(T), time: T, to_adiabatic: bool, allocator: std.mem.Allocator) !ComplexVector(T) {
-    const coefs_adia = try ComplexVector(T).initZero(coefs.len, allocator);
-
-    var diabatic_potential = try RealMatrix(T).init(coefs.len / gaussians.len, coefs.len / gaussians.len, allocator); defer diabatic_potential.deinit();
-    var adiabatic_potential = try RealMatrix(T).init(coefs.len / gaussians.len, coefs.len / gaussians.len, allocator); defer adiabatic_potential.deinit();
-    var adiabatic_eigenvectors = try RealMatrix(T).init(coefs.len / gaussians.len, coefs.len / gaussians.len, allocator); defer adiabatic_eigenvectors.deinit();
-
-    for (gaussians, 0..) |gaussian, i| {
-
-        const position = RealVector(T){.data = gaussian.position, .len = gaussian.position.len, .allocator = null};
-
-        const coefs_dia_i  = try ComplexVector(T).initZero(coefs.len / gaussians.len, allocator); defer  coefs_dia_i.deinit(); const coefs_dia_i_matrix = coefs_dia_i.asMatrix();
-        const coefs_adia_i = try ComplexVector(T).initZero(coefs.len / gaussians.len, allocator); defer coefs_adia_i.deinit(); var coefs_adia_i_matrix = coefs_adia_i.asMatrix();
-
-        for (0..coefs.len / gaussians.len) |j| {
-            coefs_dia_i.ptr(j).* = coefs.at(j * gaussians.len + i);
-        }
-
-        try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position, time);
-
-        if (to_adiabatic) {
-            try mm(T, &coefs_adia_i_matrix, adiabatic_eigenvectors, true, coefs_dia_i_matrix, false);
-        } else {
-            try mm(T, &coefs_adia_i_matrix, adiabatic_eigenvectors, false, coefs_dia_i_matrix, false);
-        }
-
-        for (0..coefs_adia_i.len) |j| {
-            coefs_adia.ptr(j * gaussians.len + i).* = coefs_adia_i.at(j);
-        }
-    }
-
-    return coefs_adia;
 }
 
 /// Assigns the single gaussian to the wavefunction dynamics container.
