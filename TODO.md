@@ -25,3 +25,4 @@
 - [x] Specify the differentiation step fot vMCG method.
 - [ ] Figure out a better way to store the file and custom potentials instead of just using global variables.
 - [x] Integrals over gaussians with complex gamma are not implemented. Implement them.
+- [ ] The Riccati equations may produce non-unitary propagation in ss-vMCG. Implement a fix for that.

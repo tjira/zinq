@@ -88,6 +88,11 @@ pub fn ComplexVector(comptime T: type) type {
             }
         }
 
+        /// Divide the vector by a scalar value.
+        pub fn divs(self: *@This(), value: Complex(T)) void {
+            for (self.data) |*element| element.* = element.div(value);
+        }
+
         /// Check for equality with another vector, given a tolerance.
         pub fn eq(self: @This(), other: @This(), tol: T) bool {
             if (self.len != other.len) return false;

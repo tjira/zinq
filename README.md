@@ -64,7 +64,7 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
   Propagate a parametrized wavefunction using the Dirac–Frenkel variational principle.
 
 * **Surface Hopping**  
-  Run nonadiabatic dynamics with Fewest Switches (FSSH) or Landau-Zener (LZSH) algorithms.
+  Run nonadiabatic dynamics with FSSH, LZSH or MASH surface hopping algorithms.
 
 ## Getting Zinq
 

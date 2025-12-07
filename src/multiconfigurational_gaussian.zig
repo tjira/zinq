@@ -14,7 +14,6 @@ const grid_generator = @import("grid_generator.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const hermite_quadrature_nodes = @import("hermite_quadrature_nodes.zig");
 const math_functions = @import("math_functions.zig");
-const matrix_inverse = @import("matrix_inverse.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -33,7 +32,6 @@ const RealVector = real_vector.RealVector;
 const SingleSetOfMCG = single_set_of_mcg.SingleSetOfMCG;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
-const inverseHermitianAlloc = matrix_inverse.inverseHermitianAlloc;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const mm = matrix_multiplication.mm;
@@ -56,6 +54,7 @@ pub fn Options(comptime T: type) type {
         pub const InitialConditions = struct {
             adiabatic: bool = false,
             mass: []const T,
+            bf_spread: []const u32,
             state: u32
         };
         pub const LogIntervals = struct {
@@ -71,15 +70,10 @@ pub fn Options(comptime T: type) type {
         };
         pub const Method = union(enum) {
             vMCG: struct {
-                position: []const T,
-                gamma: []const T,
-                momentum: []const T,
-                frozen: bool = true
-            },
-            ss_vMCG: struct {
                 position: []const []const T,
                 gamma: []const []const T,
-                momentum: []const []const T
+                momentum: []const []const T,
+                frozen: bool = true
             }
         };
 
@@ -139,20 +133,12 @@ pub fn Custom(comptime T: type) type {
     };
 }
 
-/// Run quantum dynamics simulation.
+/// Perform the simulation.
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.integration_nodes < 1 or opt.integration_nodes > 256) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{HERMITE_NODES.len});
+    if (opt.integration_nodes < 1 or opt.integration_nodes > 256) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{256});
 
-    switch (opt.method) {
-        .vMCG => return try runSingleGaussian(T, opt, enable_printing, allocator),
-        .ss_vMCG => return try runSingleSetOfGaussians(T, opt, enable_printing, allocator),
-    }
-}
-
-/// Perform the simulation with a single gaussian.
-pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
@@ -160,14 +146,14 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
 
     var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
+    
+    var mcg = try SingleSetOfMCG(T).init(opt.method.vMCG.position, opt.method.vMCG.gamma, opt.method.vMCG.momentum, opt.initial_conditions.state, opt.initial_conditions.bf_spread, nstate, allocator); defer mcg.deinit();
+
+    var propagator = try ComplexRungeKutta(T).init(3 * mcg.gaussians.len * mcg.gaussians[0].position.len + mcg.coefs.len, allocator); defer propagator.deinit();
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
 
-    var mcg = try SingleSetOfMCG(T).init(&.{opt.method.vMCG.position}, &.{opt.method.vMCG.gamma}, &.{opt.method.vMCG.momentum}, opt.initial_conditions.state, nstate, allocator); defer mcg.deinit();
-
-    var propagator = try ComplexRungeKutta(T).init(3 * mcg.gaussians[0].position.len + mcg.coefs.len, allocator); defer propagator.deinit();
-
-    if (enable_printing) try printIterationHeader(ndim, nstate);
+    if (enable_printing) try printIterationHeader(ndim, mcg.coefs.len);
 
     var timer = try std.time.Timer.start();
 
@@ -175,7 +161,9 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
-        if (i > 0) try propagateSingleGaussian(T, &mcg.gaussians[0], &mcg.coefs, opt, &propagator, time, allocator);
+        if (i > 0) try propagate(T, &mcg, opt, &propagator, time, allocator);
+
+        if (i > 0 and opt.imaginary) try mcg.normalize();
 
         var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit();
 
@@ -212,91 +200,6 @@ pub fn runSingleGaussian(comptime T: type, opt: Options(T), enable_printing: boo
             .iteration = i,
             .kinetic_energy = kinetic_energy,
             .coefs = if (opt.adiabatic) coefs_adia.? else mcg.coefs,
-            .momentum = momentum,
-            .position = position,
-            .potential_energy = potential_energy,
-            .time = time
-        };
-
-        try printIterationInfo(T, info, &timer);
-    }
-
-    if (enable_printing) for (0..nstate) |i| {
-        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i)});
-    };
-
-    const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
-
-    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time, opt.iterations + 1);
-    if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?, );
-
-    if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit();
-
-    return output;
-}
-
-/// Perform the simulation with a single set of gaussians.
-pub fn runSingleSetOfGaussians(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    const ndim = opt.potential.ndim();
-    const nstate = opt.potential.nstate();
-    const ngauss = opt.method.ss_vMCG.position.len;
-
-    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
-    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
-
-    var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
-    
-    var ss_mcg = try SingleSetOfMCG(T).init(opt.method.ss_vMCG.position, opt.method.ss_vMCG.gamma, opt.method.ss_vMCG.momentum, opt.initial_conditions.state, nstate, allocator); defer ss_mcg.deinit();
-
-    var propagator = try ComplexRungeKutta(T).init(2 * ngauss * ss_mcg.gaussians[0].position.len + ss_mcg.coefs.len, allocator); defer propagator.deinit();
-
-    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
-
-    if (enable_printing) try printIterationHeader(ndim, ss_mcg.coefs.len);
-
-    var timer = try std.time.Timer.start();
-
-    for (0..opt.iterations + 1) |i| {
-
-        const time = @as(T, @floatFromInt(i)) * opt.time_step;
-
-        if (i > 0) try propagateSingleSetOfGaussians(T, ss_mcg.gaussians, &ss_mcg.coefs, opt, &propagator, time, allocator);
-
-        var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit();
-
-        if (i == 0 and opt.initial_conditions.adiabatic) {
-            coefs_adia = try ss_mcg.transformedCoefs(opt.potential, time, false); try coefs_adia.?.copyTo(&ss_mcg.coefs);
-        }
-
-        if (opt.adiabatic) {
-            if (coefs_adia) |c| c.deinit(); coefs_adia = try ss_mcg.transformedCoefs(opt.potential, time, true);
-        }
-
-        const position = try ss_mcg.coordinateExpectation(.position); defer position.deinit();
-        const momentum = try ss_mcg.coordinateExpectation(.momentum); defer momentum.deinit();
-
-        const kinetic_energy = try ss_mcg.kineticEnergy(opt.initial_conditions.mass);
-        const potential_energy = try ss_mcg.potentialEnergy(opt.potential, opt.integration_nodes, time);
-
-        for (0..nstate) |j| {
-            output.population.ptr(i, j).* = try ss_mcg.population(j, if (opt.adiabatic) coefs_adia.? else ss_mcg.coefs);
-        }
-
-        if (wavefunction_dynamics) |*wfn_container| {
-            try assignWavefunction(T, wfn_container, ss_mcg.gaussians, if (opt.adiabatic) coefs_adia.? else ss_mcg.coefs, i);
-        }
-
-        if (i == opt.iterations) {
-            output.kinetic_energy = kinetic_energy;
-            output.potential_energy = potential_energy;
-        }
-
-        if (!enable_printing or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;
-
-        const info = Custom(T).IterationInfo{
-            .iteration = i,
-            .kinetic_energy = kinetic_energy,
-            .coefs = if (opt.adiabatic) coefs_adia.? else ss_mcg.coefs,
             .momentum = momentum,
             .position = position,
             .potential_energy = potential_energy,
@@ -360,27 +263,18 @@ pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(
     return wavefunction_dynamics;
 }
 
-/// Propagates the gaussian and coefficients using the 4th order Runge-Kutta method.
-pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), coefs: *ComplexVector(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, allocator: std.mem.Allocator) !void {
-    var vars = try ComplexVector(T).init(3 * gaussian.position.len + coefs.len, allocator); defer vars.deinit();
-
-    for (0..gaussian.position.len) |i| {
-        vars.ptr(i).* = Complex(T).init(gaussian.position[i], 0);
-        vars.ptr(gaussian.position.len + i).* = Complex(T).init(gaussian.momentum[i], 0);
-        vars.ptr(2 * gaussian.position.len + i).* = gaussian.gamma[i];
-    }
-
-    for (0..coefs.len) |i| {
-        vars.ptr(3 * gaussian.position.len + i).* = coefs.at(i);
-    }
+/// Propagates the MCG object using the 4th order Runge-Kutta method.
+pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, allocator: std.mem.Allocator) !void {
+    var vars = try mcg.exportParameterVector(); defer vars.deinit();
 
     const derivative = struct {
-        pub fn call(k: *ComplexVector(T), v: ComplexVector(T), params: anytype) !void {
-            const g = params.gaussian; const c = v.slice(3 * g.position.len, v.len);
+        pub fn call(k: *ComplexVector(T), v: ComplexVector(T), params: anytype) anyerror!void {
+            const mass = params.opt.initial_conditions.mass;
+            const pot = params.opt.potential;
+            const n_nodes = params.opt.integration_nodes;
+            const fdiff_step = params.opt.finite_differences_step;
 
-            for (0..g.position.len) |i| {
-                g.position[i] = v.at(i).re; g.momentum[i] = v.at(g.position.len + i).re; g.gamma[i] = v.at(2 * g.position.len + i);
-            }
+            try params.mcg.loadParameterVector(v);
 
             var kq: RealVector(T) = undefined; defer kq.deinit();
             var kp: RealVector(T) = undefined; defer kp.deinit();
@@ -389,162 +283,46 @@ pub fn propagateSingleGaussian(comptime T: type, gaussian: *ComplexGaussian(T), 
 
             if (params.opt.imaginary) {
 
-                kp = try g.momentumDerivativeImaginary(params.opt.initial_conditions.mass);
-                kq = try g.positionDerivativeImaginary(params.opt.potential, c, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
-                kc = try g.coefficientDerivativeImaginary(c, params.opt.potential, params.opt.integration_nodes, params.time);
+                kq = try params.mcg.positionDerivativeImaginaryEhrenfest(pot, n_nodes, params.time, fdiff_step); kp = try params.mcg.momentumDerivativeImaginaryEhrenfest(mass);
 
-            } else {
-
-                kp = try g.momentumDerivative(params.opt.potential, c, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
-                kq = try g.positionDerivative(params.opt.initial_conditions.mass);
-                kc = try g.coefficientDerivative(c, params.opt.potential, params.opt.integration_nodes, params.time);
-            }
-
-            if (!params.opt.method.vMCG.frozen) {
-                if (params.opt.imaginary) {
-                    kg = try g.gammaDerivativeImaginary(params.opt.potential, c, params.opt.initial_conditions.mass, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
-                } else {
-                    kg = try g.gammaDerivative(params.opt.potential, c, params.opt.initial_conditions.mass, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
-                }
-            } else {
-                kg = try ComplexVector(T).initZero(g.position.len, params.allocator);
-            }
-
-            for (0..g.position.len) |i| {
-                k.ptr(i).* = Complex(T).init(kq.at(i), 0); k.ptr(g.position.len + i).* = Complex(T).init(kp.at(i), 0); k.ptr(2 * g.position.len + i).* = kg.at(i);
-            }
-
-            for (0..c.len) |i| k.ptr(3 * g.position.len + i).* = kc.at(i);
-        }
-    }.call;
-
-    try rk.rk4(&vars, derivative, .{.gaussian = gaussian, .opt = opt, .time = time, .allocator = allocator}, opt.time_step);
-
-    for (0..gaussian.position.len) |i| {
-        gaussian.position[i] = vars.at(i).re;
-        gaussian.momentum[i] = vars.at(gaussian.position.len + i).re;
-        gaussian.gamma[i] = vars.at(2 * gaussian.position.len + i);
-    }
-
-    for (0..coefs.len) |i| coefs.ptr(i).* = vars.at(3 * gaussian.position.len + i);
-}
-
-/// Propagates the single set of gaussians and coefficients using the 4th order Runge-Kutta method.
-pub fn propagateSingleSetOfGaussians(comptime T: type, gaussians: []ComplexGaussian(T), coefs: *ComplexVector(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, allocator: std.mem.Allocator) !void {
-    var vars = try ComplexVector(T).init(2 * gaussians[0].position.len * gaussians.len + coefs.len, allocator); defer vars.deinit();
-
-    for (gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
-
-        const index = 2 * i * gaussian.position.len + j;
-
-        vars.ptr(index).* = Complex(T).init(gaussian.position[j], 0);
-        vars.ptr(gaussian.position.len + index).* = Complex(T).init(gaussian.momentum[j], 0);
-    };
-
-    for (0..coefs.len) |i| {
-        vars.ptr(2 * gaussians[0].position.len * gaussians.len + i).* = coefs.at(i);
-    }
-
-    const derivative = struct {
-        pub fn call(k: *ComplexVector(T), v: ComplexVector(T), params: anytype) !void {
-            const c = v.slice(2 * params.gaussians[0].position.len * params.gaussians.len, v.len);
-
-            for (params.gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
-
-                const index = 2 * i * gaussian.position.len + j;
-
-                gaussian.position[j] = v.at(index).re; gaussian.momentum[j] = v.at(gaussian.position.len + index).re;
-            };
-
-            var kq = try RealVector(T).initZero(params.gaussians.len, params.allocator); defer kq.deinit();
-            var kp = try RealVector(T).initZero(params.gaussians.len, params.allocator); defer kp.deinit();
-
-            var kc = try ComplexVector(T).initZero(c.len, params.allocator); defer kc.deinit();
-
-            for (params.gaussians, 0..) |gaussian, i| {
-
-                const kq_i = try gaussian.positionDerivative(params.opt.initial_conditions.mass); defer kq_i.deinit();
-
-                for (0..gaussian.position.len) |j| {
-                    kq.ptr(gaussian.position.len * i + j).* = kq_i.at(j);
-                }
-            }
-
-            for (params.gaussians, 0..) |gaussian, i| {
-
-                const kp_i = try gaussian.momentumDerivativeMulti(params.gaussians, params.opt.potential, c, params.opt.integration_nodes, params.time, params.opt.finite_differences_step);
-
-                for (0..gaussian.position.len) |j| {
-                    kp.ptr(gaussian.position.len * i + j).* = kp_i.at(j);
-                }
-
-                kp_i.deinit();
-            }
-
-            var S = try ComplexMatrix(T).initZero(c.len, c.len, params.allocator); defer S.deinit();
-            var tau = try ComplexMatrix(T).initZero(c.len, c.len, params.allocator); defer tau.deinit();
-            var H = try ComplexMatrix(T).initZero(c.len, c.len, params.allocator); defer H.deinit();
-            var Heff = try ComplexMatrix(T).initZero(c.len, c.len, params.allocator); defer Heff.deinit();
-            var Hc = try ComplexVector(T).initZero(c.len, params.allocator); defer Hc.deinit();
-
-            var Hc_matrix = Hc.asMatrix(); var kc_matrix = kc.asMatrix();
-
-            for (0..S.rows) |i| for (0..S.cols) |j| {
-
-                const ig = i % params.gaussians.len; const is = i / params.gaussians.len;
-                const jg = j % params.gaussians.len; const js = j / params.gaussians.len;
-
-                if (is == js) {
-
-                    S.ptr(i, j).* = try params.gaussians[ig].overlap(params.gaussians[jg]); H.ptr(i, j).* = try params.gaussians[ig].kinetic(params.gaussians[jg], params.opt.initial_conditions.mass);
-
-                    const dSq = try params.gaussians[ig].overlapDiffPosition(params.gaussians[jg]);
-                    const dSp = try params.gaussians[ig].overlapDiffMomentum(params.gaussians[jg]);
-
-                    tau.ptr(i, j).* = dSq.mul(Complex(T).init(kq.at(jg), 0)).add(dSp.mul(Complex(T).init(kp.at(jg), 0)));
-                }
-            };
-
-            const Sinv = try inverseHermitianAlloc(T, S, params.allocator); defer Sinv.deinit();
-
-            for (0..params.gaussians.len) |i| for (0..params.gaussians.len) |j| {
-
-                var Hij = try params.gaussians[i].potential(params.gaussians[j], params.opt.potential, params.opt.integration_nodes, params.time); defer Hij.deinit();
-
-                for (0..Hij.rows) |m| for (0..Hij.cols) |n| {
-
-                    const row = m * params.gaussians.len + i;
-                    const col = n * params.gaussians.len + j;
-
-                    H.ptr(row, col).* = H.at(row, col).add(Hij.at(m, n));
+                kc = switch (params.mcg.gaussians.len) {
+                    1 => try params.mcg.gaussians[0].coefficientDerivativeImaginary(params.mcg.coefs, pot, n_nodes, params.time),
+                    else => try params.mcg.coefficientDerivativeImaginary(pot, kq, kp, mass, n_nodes, params.time)
                 };
-            };
 
-            for (0..Heff.rows) |i| for (0..Heff.cols) |j| {
-                Heff.ptr(i, j).* = H.at(i, j).sub(tau.at(i, j).mulbyi());
-            };
+                if (!params.opt.method.vMCG.frozen) {
+                    kg = try params.mcg.gammaDerivativeImaginaryEhrenfest(pot, mass, n_nodes, params.time, fdiff_step);
+                }
 
-            try mm(T, &Hc_matrix, Heff, false, c.asMatrix(), false);
-            try mm(T, &kc_matrix, Sinv, false, Hc_matrix, false); kc.muls(Complex(T).init(0, -1));
+            } else {
+
+                kq = try params.mcg.positionDerivativeEhrenfest(mass); kp = try params.mcg.momentumDerivativeEhrenfest(pot, n_nodes, params.time, fdiff_step);
+
+                kc = switch (params.mcg.gaussians.len) {
+                    1 => try params.mcg.gaussians[0].coefficientDerivative(params.mcg.coefs, pot, n_nodes, params.time),
+                    else => try params.mcg.coefficientDerivative(pot, kq, kp, mass, n_nodes, params.time)
+                };
+
+                if (!params.opt.method.vMCG.frozen) {
+                    kg = try params.mcg.gammaDerivativeEhrenfest(pot, mass, n_nodes, params.time, fdiff_step);
+                }
+            }
+
+            if (params.opt.method.vMCG.frozen) {
+                kg = try ComplexVector(T).initZero(params.mcg.gaussians[0].position.len, params.allocator);
+            }
 
             for (0..kq.len) |i| {
-                k.ptr(2 * i).* = Complex(T).init(kq.at(i), 0); k.ptr(2 * i + 1).* = Complex(T).init(kp.at(i), 0);
+                k.ptr(3 * i).* = Complex(T).init(kq.at(i), 0); k.ptr(3 * i + 1).* = Complex(T).init(kp.at(i), 0); k.ptr(3 * i + 2).* = kg.at(i);
             }
 
-            for (0..c.len) |i| k.ptr(v.data.len - c.data.len + i).* = kc.at(i);
+            for (0..params.mcg.coefs.len) |i| k.ptr(v.data.len - params.mcg.coefs.len + i).* = kc.at(i);
         }
     }.call;
 
-    try rk.rk4(&vars, derivative, .{.gaussians = gaussians, .opt = opt, .time = time, .allocator = allocator}, opt.time_step);
+    try rk.rk4(&vars, derivative, .{.mcg = mcg, .opt = opt, .time = time, .allocator = allocator}, opt.time_step);
 
-    for (gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
-
-        const index = 2 * i * gaussian.position.len + j;
-
-        gaussian.position[j] = vars.at(index).re; gaussian.momentum[j] = vars.at(gaussian.position.len + index).re;
-    };
-
-    for (0..coefs.len) |i| coefs.ptr(i).* = vars.at(2 * gaussians[0].position.len * gaussians.len + i);
+    try mcg.loadParameterVector(vars);
 }
 
 /// Print header for iteration info.
@@ -607,14 +385,15 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
 test "vMCG on Tully's First Potential" {
     const opt = Options(f64){
         .initial_conditions = .{
+            .bf_spread = &.{1},
             .mass = &.{2000},
             .state = 1,
         },
         .method = .{
             .vMCG = .{
-                .position = &.{-10},
-                .gamma = &.{2},
-                .momentum = &.{15}
+                .position = &.{&.{-10}},
+                .gamma = &.{&.{2}},
+                .momentum = &.{&.{15}}
             }
         },
         .potential = .{
@@ -637,11 +416,12 @@ test "vMCG on Tully's First Potential" {
 test "ss-vMCG on Tully's First Potential" {
     const opt = Options(f64){
         .initial_conditions = .{
+            .bf_spread = &.{1, 0},
             .mass = &.{2000},
             .state = 1,
         },
         .method = .{
-            .ss_vMCG = .{
+            .vMCG = .{
                 .position = &.{&.{-10.5}, &.{-9.5}},
                 .gamma = &.{&.{2}, &.{2}},
                 .momentum = &.{&.{15}, &.{15}}

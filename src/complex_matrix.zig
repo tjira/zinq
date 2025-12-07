@@ -41,9 +41,29 @@ pub fn ComplexMatrix(comptime T: type) type {
             if (self.allocator) |allocator| allocator.free(self.data);
         }
 
+        /// Add another matrix to this matrix.
+        pub fn add(self: *@This(), other: @This()) !void {
+            if (self.rows != other.rows or self.cols != other.cols) {
+                return throw(void, "CAN'T ADD A {d}x{d} MATRIX TO A {d}x{d} MATRIX", .{other.rows, other.cols, self.rows, self.cols});
+            }
+
+            for (self.data, 0..) |*element, index| {
+                element.* = element.add(other.data[index]);
+            }
+        }
+
         /// Get the element at (i, j).
         pub fn at(self: @This(), i: usize, j: usize) Complex(T) {
             return self.data[i * self.cols + j];
+        }
+
+        /// Returns the matrix as a view to a complex vector.
+        pub fn asVector(self: @This()) ComplexVector(T) {
+            return ComplexVector(T){
+                .data = self.data,
+                .len = self.rows * self.cols,
+                .allocator = null
+            };
         }
 
         /// Copy the contents of this matrix to another matrix.

@@ -223,35 +223,6 @@ pub fn ComplexGaussian(comptime T: type) type {
             return dp;
         }
 
-        /// Calculates the derivative of the momentum.
-        pub fn momentumDerivativeMulti(self: @This(), others: []const @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
-            const dV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, self.allocator); defer dV.deinit();
-
-            var F = try RealVector(T).initZero(dV.len, self.allocator);
-
-            var index: usize = undefined; const ngauss = others.len;
-
-            for (others, 0..) |other, i| if (std.meta.eql(self, other)) {
-                index = i; break;
-            };
-
-            for (others, 0..) |other, i| {
-
-                for (0..dV.len) |j| {
-                    dV.ptr(j).deinit(); dV.ptr(j).* = try self.potentialDerivative1(other, pot, j, n_nodes, time, fdiff_step);
-                }
-
-                for (0..F.len) |j| for (0..coefs.len / ngauss) |k| for (0..coefs.len / ngauss) |l| {
-
-                    const c1 = coefs.at(k * ngauss + index); const c2 = coefs.at(l * ngauss + i);
-
-                    F.ptr(j).* -= c1.conjugate().mul(dV.at(j).at(k, l)).mul(c2).re;
-                };
-            }
-
-            return F;
-        }
-
         /// Calculates the matrix element of the momentum operator between this complex Gaussian and another.
         pub fn momentumMatrixElement(self: @This(), other: @This()) !ComplexVector(T) {
             if (self.position.len != other.position.len) return throw(ComplexVector(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
@@ -360,6 +331,37 @@ pub fn ComplexGaussian(comptime T: type) type {
                 const dq_c = Complex(T).init(q1 - q2, 0);
 
                 result = result.add(g1_c.mul(p2_c).neg().mulbyi().add(g2.mul(p1_c.mulbyi().neg().add(g1_c.mul(dq_c)))).div(g1_c.add(g2)));
+            }
+
+            return result.mul(try self.overlap(other));
+        }
+
+        /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to time.
+        pub fn overlapDiffTime(self: @This(), other: @This(), dq: RealVector(T), dp: RealVector(T)) !Complex(T) {
+            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+
+            var result = Complex(T).init(0, 0);
+
+            for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
+
+                const g1_c = g1.conjugate();
+
+                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
+
+                const dq_c = Complex(T).init(q1 - q2, 0);
+
+                result = result.add(g1_c.mul(p2_c).neg().mulbyi().add(g2.mul(p1_c.mulbyi().neg().add(g1_c.mul(dq_c)))).div(g1_c.add(g2)).mul(Complex(T).init(dq.at(i), 0)));
+            }
+
+            for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
+
+                const g1_c = g1.conjugate();
+
+                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
+
+                const dq_c = Complex(T).init(q1 - q2, 0);
+
+                result = result.add(p1_c.sub(p2_c).add(g1_c.mul(dq_c).mulbyi()).div(g1_c.add(g2)).mul(Complex(T).init(dp.at(i), 0)));
             }
 
             return result.mul(try self.overlap(other));

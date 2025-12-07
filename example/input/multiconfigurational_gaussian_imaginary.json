@@ -5,9 +5,9 @@
             "options" : {
                 "method" : {
                     "vMCG" : {
-                        "momentum" : [0],
-                        "position" : [1],
-                        "gamma" : [2],
+                        "momentum" : [[0]],
+                        "position" : [[1]],
+                        "gamma" : [[2]],
                         "frozen" : false
                     }
                 },
@@ -15,6 +15,7 @@
                     "iteration" : 500
                 },
                 "initial_conditions" : {
+                    "bf_spread" : [1],
                     "state" : 0,
                     "mass" : [1]
                 },
