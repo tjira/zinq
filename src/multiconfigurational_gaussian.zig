@@ -313,9 +313,13 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
                 };
             }
 
-            for (0..kq.len) |i| {
-                k.ptr(3 * i).* = Complex(T).init(kq.at(i), 0); k.ptr(3 * i + 1).* = Complex(T).init(kp.at(i), 0); k.ptr(3 * i + 2).* = kg.at(i);
-            }
+            for (0..kq.len / params.mcg.gaussians[0].position.len) |i| for (0..params.mcg.gaussians[0].position.len) |j| {
+
+                    k.ptr(3 * params.mcg.gaussians[0].position.len * i + j + 0 * params.mcg.gaussians[0].position.len).* = Complex(T).init(kq.at(params.mcg.gaussians[0].position.len * i + j), 0);
+                    k.ptr(3 * params.mcg.gaussians[0].momentum.len * i + j + 1 * params.mcg.gaussians[0].momentum.len).* = Complex(T).init(kp.at(params.mcg.gaussians[0].momentum.len * i + j), 0);
+
+                    k.ptr(3 * params.mcg.gaussians[0].gamma.len * i + j + 2 * params.mcg.gaussians[0].gamma.len).* = kg.at(params.mcg.gaussians[0].gamma.len * i + j);
+            };
 
             for (0..params.mcg.coefs.len) |i| k.ptr(v.data.len - params.mcg.coefs.len + i).* = kc.at(i);
         }

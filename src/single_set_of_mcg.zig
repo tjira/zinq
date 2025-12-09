@@ -213,7 +213,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                 var dg_i = try gaussian.gammaDerivative(pot, c_i, mass, integration_nodes, time, fdiff_step); defer dg_i.deinit();
 
                 for (0..gaussian.momentum.len) |j| {
-                    dg.ptr(gaussian.momentum.len * i + j).* = dg_i.at(j);
+                    dg.ptr(gaussian.gamma.len * i + j).* = dg_i.at(j);
                 }
             }
 
@@ -416,7 +416,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
         /// Calculates the Ehrenfest-like position derivative.
         pub fn positionDerivativeEhrenfest(self: @This(), mass: []const T) !RealVector(T) {
-            var dq = try RealVector(T).initZero(self.gaussians.len, self.allocator);
+            var dq = try RealVector(T).initZero(self.gaussians.len * self.gaussians[0].position.len, self.allocator);
 
             for (self.gaussians, 0..) |gaussian, i| {
 
