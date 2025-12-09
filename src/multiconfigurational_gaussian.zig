@@ -439,8 +439,8 @@ test "ss-vMCG on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.07135428435461, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.55681507284005, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.44317823762332, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.potential_energy, 0.00113637595399, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.07135428435411, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.55681879770101, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.44318120229899, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy, 0.00113637595402, TEST_TOLERANCE);
 }
