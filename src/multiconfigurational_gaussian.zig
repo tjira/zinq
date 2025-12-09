@@ -90,6 +90,7 @@ pub fn Options(comptime T: type) type {
 
         finite_differences_step: T = 1e-6,
         integration_nodes: u32 = 32,
+        renormalize: bool = true,
         adiabatic: bool = false,
         imaginary: bool = false
     };
@@ -163,7 +164,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         if (i > 0) try propagate(T, &mcg, opt, &propagator, time, allocator);
 
-        if (i > 0 and opt.imaginary) try mcg.normalize();
+        if (i > 0 and opt.renormalize) try mcg.normalize();
 
         var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit();
 
@@ -281,35 +282,35 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
             var kg: ComplexVector(T) = undefined; defer kg.deinit();
             var kc: ComplexVector(T) = undefined; defer kc.deinit();
 
+            if (params.opt.method.vMCG.frozen) {
+                kg = try ComplexVector(T).initZero(params.mcg.gaussians.len * params.mcg.gaussians[0].gamma.len, params.allocator);
+            }
+
             if (params.opt.imaginary) {
 
                 kq = try params.mcg.positionDerivativeImaginaryEhrenfest(pot, n_nodes, params.time, fdiff_step); kp = try params.mcg.momentumDerivativeImaginaryEhrenfest(mass);
-
-                kc = switch (params.mcg.gaussians.len) {
-                    1 => try params.mcg.gaussians[0].coefficientDerivativeImaginary(params.mcg.coefs, pot, n_nodes, params.time),
-                    else => try params.mcg.coefficientDerivativeImaginary(pot, kq, kp, mass, n_nodes, params.time)
-                };
 
                 if (!params.opt.method.vMCG.frozen) {
                     kg = try params.mcg.gammaDerivativeImaginaryEhrenfest(pot, mass, n_nodes, params.time, fdiff_step);
                 }
 
+                kc = switch (params.mcg.gaussians.len) {
+                    1 => try params.mcg.gaussians[0].coefficientDerivativeImaginary(params.mcg.coefs, pot, n_nodes, params.time),
+                    else => try params.mcg.coefficientDerivativeImaginary(pot, kq, kp, kg, mass, n_nodes, params.time)
+                };
+
             } else {
 
                 kq = try params.mcg.positionDerivativeEhrenfest(mass); kp = try params.mcg.momentumDerivativeEhrenfest(pot, n_nodes, params.time, fdiff_step);
 
-                kc = switch (params.mcg.gaussians.len) {
-                    1 => try params.mcg.gaussians[0].coefficientDerivative(params.mcg.coefs, pot, n_nodes, params.time),
-                    else => try params.mcg.coefficientDerivative(pot, kq, kp, mass, n_nodes, params.time)
-                };
-
                 if (!params.opt.method.vMCG.frozen) {
                     kg = try params.mcg.gammaDerivativeEhrenfest(pot, mass, n_nodes, params.time, fdiff_step);
                 }
-            }
 
-            if (params.opt.method.vMCG.frozen) {
-                kg = try ComplexVector(T).initZero(params.mcg.gaussians[0].position.len, params.allocator);
+                kc = switch (params.mcg.gaussians.len) {
+                    1 => try params.mcg.gaussians[0].coefficientDerivative(params.mcg.coefs, pot, n_nodes, params.time),
+                    else => try params.mcg.coefficientDerivative(pot, kq, kp, kg, mass, n_nodes, params.time)
+                };
             }
 
             for (0..kq.len) |i| {
@@ -438,8 +439,8 @@ test "ss-vMCG on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06656293583613, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.54743654143241, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.45256626329183, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.potential_energy, 0.00094870012056, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.07135428435461, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.55681507284005, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.44317823762332, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy, 0.00113637595399, TEST_TOLERANCE);
 }

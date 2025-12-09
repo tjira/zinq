@@ -78,6 +78,65 @@ pub fn inverseSymmetricOrHermitianAlloc(comptime M: fn (comptime type) type, com
     return Ainv;
 }
 
+/// Form the pseudo inverse of a hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
+pub fn pseudoInverseHermitian(comptime T: type, Ainv: *ComplexMatrix(T), A: ComplexMatrix(T), AJ: ComplexMatrix(T), AC: ComplexMatrix(T), Atmp: *ComplexMatrix(T), thresh: T) !void {
+    return try pseudoInverseSymmetricOrHermitian(ComplexMatrix, T, Ainv, A, AJ, AC, Atmp, thresh);
+}
+
+/// Form the pseudo inverse of a hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
+pub fn pseudoInverseHermitianAlloc(comptime T: type, A: ComplexMatrix(T), thresh: T, allocator: std.mem.Allocator) !ComplexMatrix(T) {
+    return try pseudoInverseSymmetricOrHermitianAlloc(ComplexMatrix, T, A, thresh, allocator);
+}
+
+/// Form the pseudo inverse of a symmetric matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
+pub fn pseudoInverseSymmetric(comptime T: type, Ainv: *RealMatrix(T), A: RealMatrix(T), AJ: RealMatrix(T), AC: RealMatrix(T), Atmp: *RealMatrix(T), thresh: T) !void {
+    return try pseudoInverseSymmetricOrHermitian(RealMatrix, T, Ainv, A, AJ, AC, Atmp, thresh);
+}
+
+/// Form the pseudo inverse of a symmetric matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
+pub fn pseudoInverseSymmetricAlloc(comptime T: type, A: RealMatrix(T), thresh: T, allocator: std.mem.Allocator) !RealMatrix(T) {
+    return try pseudoInverseSymmetricOrHermitianAlloc(RealMatrix, T, A, thresh, allocator);
+}
+
+/// Form the pseudo inverse of a symmetric or hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
+pub fn pseudoInverseSymmetricOrHermitian(comptime M: fn (comptime type) type, comptime T: type, Ainv: *M(T), A: M(T), AJ: M(T), AC: M(T), Atmp: *M(T), thresh: T) !void {
+    if (!AJ.isSquare() or !AC.isSquare()) return throw(void, "EIGENVALUE MATRIX OR EIGENVECTOR MATRIX IS NOT SQUARE AND THE INVERSE CANNOT BE FORMED", .{});
+    if (AJ.rows != AC.rows or AJ.cols != AC.cols) return throw(void, "EIGENVALUE MATRIX AND EIGENVECTOR MATRIX MUST HAVE THE SAME DIMENSIONS", .{});
+
+    if (comptime M == RealMatrix) {
+        if (!A.isSymmetric(0)) return throw(void, "THE MATRIX YOU ARE PASSING TO THE INVERSE SYMMETRIC FUNCTION IS NOT SYMMETRIC", .{});
+    } else {
+        if (!A.isHermitian(0)) return throw(void, "THE MATRIX YOU ARE PASSING TO THE JACOBI EIGENSOLVER IS NOT HERMITIAN", .{});
+    }
+
+    try AJ.copyTo(Ainv);
+
+    for (0..Ainv.rows) |i| {
+
+        if ((if (comptime M == RealMatrix) Ainv.at(i, i) else Ainv.at(i, i).magnitude()) < thresh) {
+            Ainv.ptr(i, i).* = if (comptime M == RealMatrix) 0 else Complex(T).init(0, 0); continue;
+        }
+
+        Ainv.ptr(i, i).* = if (comptime M == RealMatrix) 1 / Ainv.at(i, i) else Complex(T).init(1, 0).div(Ainv.at(i, i));
+    }
+    
+    try mm(T, Atmp, AC, false, Ainv.*, false); try mm(T, Ainv, Atmp.*, false, AC, true);
+}
+
+/// Form the inverse of a symmetric or hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
+pub fn pseudoInverseSymmetricOrHermitianAlloc(comptime M: fn (comptime type) type, comptime T: type, A: M(T), thresh: T, allocator: std.mem.Allocator) !M(T) {
+    const AJC = try eigensystemJacobiAlloc(M, T, A, allocator); defer AJC.J.deinit(); defer AJC.C.deinit();
+
+    var Ainv = try M(T).init(A.rows, A.cols, allocator);
+    var Atmp = try M(T).init(A.rows, A.cols, allocator);
+
+    try pseudoInverseSymmetricOrHermitian(M, T, &Ainv, A, AJC.J, AJC.C, &Atmp, thresh);
+
+    Atmp.deinit();
+
+    return Ainv;
+}
+
 test "Symmetric 3x3 Inverse" {
     var A = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer A.deinit();
 

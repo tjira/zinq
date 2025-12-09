@@ -5,6 +5,13 @@ ClearAll["Global`*"];
 
 
 (* ::Subsection:: *)
+(*Helper Functions*)
+
+
+WirtingerD[f_,z_]:=(D[#,a]-I*D[#,b])/2&[Simplify[f/.z->a+b*I,Assumptions->{a\[Element]Reals,b\[Element]Reals}]]/.{a+I*b->z,a->Re[z],b->Im[z]}
+
+
+(* ::Subsection:: *)
 (*Assumptions*)
 
 
@@ -44,12 +51,33 @@ S=Integrate[FullSimplify[Conjugate@G1*G2,{q\[Element]Reals}],{q,-Infinity,Infini
 T=Integrate[FullSimplify[-Conjugate@G1*D[G2,{q,2}]/(2*m),{m\[Element]Reals,q\[Element]Reals}],{q,-Infinity,Infinity}]
 
 
+(* ::Subsubsection:: *)
+(*Kinetic Integral Divided by Overlap*)
+
+
+TwS=FullSimplify[T/S]
+
+
 (* ::Subsection:: *)
-(*Time Derivative Integral*)
+(*Parameter Derivative Integrals*)
 
 
 taux=Integrate[FullSimplify[Conjugate@G1*D[G2,Subscript[x,2]],{q\[Element]Reals}],{q,-Infinity,Infinity}]
 taup=Integrate[FullSimplify[Conjugate@G1*D[G2,Subscript[p,2]],{q\[Element]Reals}],{q,-Infinity,Infinity}]
+
+
+taug=Integrate[FullSimplify[Conjugate@G1*WirtingerD[G2,Subscript[g,2]],{q\[Element]Reals}],{q,-Infinity,Infinity}]
+
+
+(* ::Subsubsection:: *)
+(*Parameter Derivative Integrals Divided by Overlap*)
+
+
+tauxwS=FullSimplify[taux/S]
+taupwS=FullSimplify[taup/S]
+
+
+taugwS=FullSimplify[taug/S]
 
 
 (* ::Subsection:: *)
@@ -62,6 +90,7 @@ N[T/.IC]
 
 dx=N[taux/.IC]
 dp=N[taup/.IC]
+dg=N[taug/.IC]
 
 
 

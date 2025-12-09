@@ -15,7 +15,7 @@
                     "iteration" : 500
                 },
                 "initial_conditions" : {
-                    "bf_spread" : [1, 0],
+                    "bf_spread" : [1, 1],
                     "adiabatic" : true,
                     "state" : 1,
                     "mass" : [2000]
