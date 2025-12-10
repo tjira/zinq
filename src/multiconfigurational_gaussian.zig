@@ -437,7 +437,7 @@ test "thawed real-time vMCG on Tully's First Potential" {
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
         },
-        .finite_differences_step = 1e-6,
+        .finite_differences_step = 1e-3,
         .integration_nodes = 32,
         .iterations = 3500,
         .time_step = 1
@@ -445,10 +445,10 @@ test "thawed real-time vMCG on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06763811732432, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.44324052654058, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.55675947345942, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.potential_energy, -0.00113518946724, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06763705056010, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.44325081289219, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.55674918710781, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy, -0.00113498374022, TEST_TOLERANCE);
 }
 
 test "thawed real-time ss-vMCG on Tully's First Potential" {
@@ -469,7 +469,7 @@ test "thawed real-time ss-vMCG on Tully's First Potential" {
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
         },
-        .finite_differences_step = 1e-6,
+        .finite_differences_step = 1e-3,
         .integration_nodes = 32,
         .iterations = 3500,
         .time_step = 1
@@ -477,10 +477,10 @@ test "thawed real-time ss-vMCG on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
 
-    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06706790773011, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.44571226496860, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.55428773503140, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.potential_energy, -0.00108575470568, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06706660848155, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.44575305875514, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.55424694124486, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy, -0.00108493882998, TEST_TOLERANCE);
 }
 
 test "frozen real-time ss-vMCG on Tully's First Potential" {
