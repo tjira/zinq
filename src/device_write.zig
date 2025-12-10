@@ -13,16 +13,21 @@ const real_vector = @import("real_vector.zig");
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
-const ComplexVector = complex_vector.ComplexVector;
 const RealMatrix = real_matrix.RealMatrix;
 const RealTensor3 = real_tensor_three.RealTensor3;
 const RealTensor4 = real_tensor_four.RealTensor4;
-const RealVector = real_vector.RealVector;
 
 const AN2SM = global_variables.AN2SM;
 const A2AU = global_variables.A2AU;
 
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
+
+/// Exports the complex matrix to a file with the leftmost column being linspaced values from start to end.
+pub fn exportComplexMatrixWithLinspacedLeftColumn(comptime T: type, path: []const u8, A: ComplexMatrix(T), start: T, end: T) !void {
+    var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
+
+    try writeComplexMatrixWithLinspacedLeftColumn(T, file, A, start, end);
+}
 
 /// Exports the real matrix to a file.
 pub fn exportRealMatrix(comptime T: type, path: []const u8, A: RealMatrix(T)) !void {
@@ -31,11 +36,11 @@ pub fn exportRealMatrix(comptime T: type, path: []const u8, A: RealMatrix(T)) !v
     try writeRealMatrix(T, file, A);
 }
 
-/// Exports the real matrix to a file with the leftmost column being linspaced values from start to end with points number of points.
-pub fn exportRealMatrixWithLinspacedLeftColumn(comptime T: type, path: []const u8, A: RealMatrix(T), start: T, end: T, points: usize) !void {
+/// Exports the real matrix to a file with the leftmost column being linspaced values from start to end.
+pub fn exportRealMatrixWithLinspacedLeftColumn(comptime T: type, path: []const u8, A: RealMatrix(T), start: T, end: T) !void {
     var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
 
-    try writeRealMatrixWithLinspacedLeftColumn(T, file, A, start, end, points);
+    try writeRealMatrixWithLinspacedLeftColumn(T, file, A, start, end);
 }
 
 /// Exports the real 4th order tensor to a file.
@@ -50,13 +55,6 @@ pub fn exportRealTensorThreeAsPPM(comptime T: type, path: []const u8, A: RealTen
     var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
 
     try writeRealTensorThreeAsPPM(T, file, A);
-}
-
-/// Exports the real vector to a file.
-pub fn exportRealVector(comptime T: type, path: []const u8, v: RealVector(T)) !void {
-    var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
-
-    try writeRealVector(T, file, v);
 }
 
 /// Print the formatted line to the standard output.
@@ -74,11 +72,6 @@ pub fn printComplexMatrix(comptime T: type, A: ComplexMatrix(T)) !void {
     try writeComplexMatrix(T, std.fs.File.stdout(), A);
 }
 
-/// Print the formatted complex vector to the standard output.
-pub fn printComplexVector(comptime T: type, v: ComplexVector(T)) !void {
-    try writeComplexVector(T, std.fs.File.stdout(), v);
-}
-
 /// Print the formatted json to the standard output.
 pub fn printJson(object: anytype) !void {
     try writeJson(std.fs.File.stdout(), object);
@@ -87,11 +80,6 @@ pub fn printJson(object: anytype) !void {
 /// Print the formatted real matrix to the standard output.
 pub fn printRealMatrix(comptime T: type, A: RealMatrix(T)) !void {
     try writeRealMatrix(T, std.fs.File.stdout(), A);
-}
-
-/// Print the formatted real vector to the standard output.
-pub fn printRealVector(comptime T: type, v: RealVector(T)) !void {
-    try writeRealVector(T, std.fs.File.stdout(), v);
 }
 
 /// Print a formatted line into the specified device.
@@ -133,25 +121,32 @@ pub fn writeComplexMatrix(comptime T: type, device: std.fs.File, A: ComplexMatri
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
-    try writer_interface.print("{d} {d}\n", .{A.rows, A.cols});
+    try writer_interface.print("{d} {d}\n", .{A.rows, 2 * A.cols});
 
     for (0..A.rows) |i| for (0..A.cols) |j| {
-        try writer_interface.print("({d:20.14}, {d:20.14}){s}", .{A.at(i, j).re, A.at(i, j).im, if (j == A.cols - 1) "\n" else " "});
+        try writer_interface.print("{d:20.14} {d:20.14}{s}", .{A.at(i, j).re, A.at(i, j).im, if (j == A.cols - 1) "\n" else " "});
     };
 
     try writer_interface.flush();
 }
 
-/// Print the formatted complex vector to the specified device.
-pub fn writeComplexVector(comptime T: type, device: std.fs.File, v: ComplexVector(T)) !void {
+/// Print the formatted complex matrix to the specified device.
+pub fn writeComplexMatrixWithLinspacedLeftColumn(comptime T: type, device: std.fs.File, A: ComplexMatrix(T), start: T, end: T) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
-    try writer_interface.print("{d}\n", .{v.len});
+    try writer_interface.print("{d} {d}\n", .{A.rows, 2 * A.cols});
 
-    for (0..v.len) |i| {
-        try writer_interface.print("({d:20.14}, {d:20.14})\n", .{v.at(i).re, v.at(i).im});
+    for (0..A.rows) |i| {
+
+        const x = start + (end - start) * @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(A.rows - 1));
+
+        try writer_interface.print("{d:20.14}", .{x});
+
+        for (0..A.cols) |j| {
+            try writer_interface.print(" {d:20.14} {d:20.14}{s}", .{A.at(i, j).re, A.at(i, j).im, if (j == A.cols - 1) "\n" else " "});
+        }
     }
 
     try writer_interface.flush();
@@ -185,8 +180,8 @@ pub fn writeRealMatrix(comptime T: type, device: std.fs.File, A: RealMatrix(T)) 
     try writer_interface.flush();
 }
 
-/// Write the real matrix to the specified device with the leftmost column being linspaced values from start to end with points number of points.
-pub fn writeRealMatrixWithLinspacedLeftColumn(comptime T: type, device: std.fs.File, A: RealMatrix(T), start: T, end: T, points: usize) !void {
+/// Write the real matrix to the specified device with the leftmost column being linspaced values from start to end.
+pub fn writeRealMatrixWithLinspacedLeftColumn(comptime T: type, device: std.fs.File, A: RealMatrix(T), start: T, end: T) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
@@ -195,7 +190,7 @@ pub fn writeRealMatrixWithLinspacedLeftColumn(comptime T: type, device: std.fs.F
 
     for (0..A.rows) |i| {
 
-        const x = start + (end - start) * @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(points - 1));
+        const x = start + (end - start) * @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(A.rows - 1));
 
         try writer_interface.print("{d:20.14}", .{x});
 
@@ -233,21 +228,6 @@ pub fn writeRealTensorThreeAsPPM(comptime T: type, device: std.fs.File, A: RealT
     for (A.data[1..A.data.len]) |value| try writer_interface.print(" {d}", .{value});
 
     try writer_interface.print("\n", .{});
-
-    try writer_interface.flush();
-}
-
-/// Print the formatted real vector to the specified device.
-pub fn writeRealVector(comptime T: type, device: std.fs.File, v: RealVector(T)) !void {
-    var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
-
-    var writer = device.writer(&buffer); var writer_interface = &writer.interface;
-
-    try writer_interface.print("{d}\n", .{v.len});
-
-    for (0..v.len) |i| {
-        try writer_interface.print("{d:20.14}\n", .{v.at(i)});
-    }
 
     try writer_interface.flush();
 }

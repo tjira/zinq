@@ -49,7 +49,6 @@ const print = device_write.print;
 const printClassicalParticleAsMolecule = device_write.printClassicalParticleAsMolecule;
 const printJson = device_write.printJson;
 const printRealMatrix = device_write.printRealMatrix;
-const printRealVector = device_write.printRealVector;
 const throw = errror_handling.throw;
 const twoAO2AS = integral_transform.twoAO2AS;
 
@@ -158,7 +157,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (output.H) |H| output.frequencies = try particleHarmonicFrequencies(T, system, H, allocator);
 
-    if (output.frequencies) |freqs| {try print("\nHARTREE-FOCK VIBRATIONAL FREQUENCIES (CM^-1):\n", .{}); try printRealVector(T, freqs);}
+    if (output.frequencies) |freqs| {try print("\nHARTREE-FOCK VIBRATIONAL FREQUENCIES (CM^-1):\n", .{}); try printRealMatrix(T, freqs.asMatrix());}
 
     if (opt.write.coefficient) |path| try exportRealMatrix(T, path, output.C);
     if (opt.write.density) |path| try exportRealMatrix(T, path, output.P);

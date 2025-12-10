@@ -216,8 +216,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
-    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time, opt.iterations + 1);
-    if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?, );
+    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
+    if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
 
     if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit();
 

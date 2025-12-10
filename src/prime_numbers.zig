@@ -7,7 +7,7 @@ const real_vector = @import("real_vector.zig");
 
 const RealVector = real_vector.RealVector;
 
-const exportRealVector = device_write.exportRealVector;
+const exportRealMatrix = device_write.exportRealMatrix;
 const print = device_write.print;
 const printJson = device_write.printJson;
 
@@ -89,7 +89,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
                 const path = if (opt.output.?.interval != null) try std.mem.concat(allocator, u8, &.{opt.output.?.path, "_", start, "-", end}) else opt.output.?.path;
 
-                try exportRealVector(T, path, output.prime_numbers); if (opt.output.?.interval != null) allocator.free(path);
+                try exportRealMatrix(T, path, output.prime_numbers.asMatrix()); if (opt.output.?.interval != null) allocator.free(path);
             }
         }
     }

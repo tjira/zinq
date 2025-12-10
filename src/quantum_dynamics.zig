@@ -7,6 +7,7 @@ const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const fourier_transform = @import("fourier_transform.zig");
 const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
 const grid_wavefunction = @import("grid_wavefunction.zig");
@@ -16,6 +17,7 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const tully_potential = @import("tully_potential.zig");
 
+const Complex = std.math.Complex;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const ComplexVector = complex_vector.ComplexVector;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
@@ -25,6 +27,8 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
+const cfft1 = fourier_transform.cfft1;
+const exportComplexMatrixWithLinspacedLeftColumn = device_write.exportComplexMatrixWithLinspacedLeftColumn;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const fixGauge = eigenproblem_solver.fixGauge;
@@ -56,9 +60,15 @@ pub fn Options(comptime T: type) type {
         pub const LogIntervals = struct {
             iteration: u32 = 1
         };
+        pub const Spectrum = struct {
+            window: enum {gaussian} = .gaussian,
+            padding_order: u32 = 1
+        };
         pub const Write = struct {
             population: ?[]const u8 = null,
-            wavefunction: ?[]const u8 = null
+            wavefunction: ?[]const u8 = null,
+            spectrum: ?[]const u8 = null,
+            autocorrelation_function: ?[]const u8 = null
         };
 
         potential: ElectronicPotential(T),
@@ -69,6 +79,7 @@ pub fn Options(comptime T: type) type {
         time_step: T,
 
         log_intervals: LogIntervals = .{},
+        spectrum: Spectrum = .{},
         write: Write = .{},
 
         adiabatic: bool = false,
@@ -130,11 +141,17 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma);
 
+    const save_iwf = opt.write.spectrum != null or opt.write.autocorrelation_function != null;
+
+    const initial_wavefunction: ?GridWavefunction(T) = if (save_iwf) try wavefunction.clone() else null; defer if (initial_wavefunction) |iwf| iwf.deinit();
+
     if (opt.initial_conditions.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false);
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, wavefunction, opt.iterations, allocator) else null;
 
     var temporary_wavefunction_column = try ComplexVector(T).init(wavefunction.data.rows, allocator); defer temporary_wavefunction_column.deinit();
+
+    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit();
 
     if (enable_printing) try printIterationHeader(ndim, nstate);
 
@@ -145,6 +162,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
         if (i > 0) try wavefunction.propagate(opt.potential, time, opt.time_step, opt.imaginary, &temporary_wavefunction_column);
+
+        if (initial_wavefunction) |iwf| acf.ptr(i).* = wavefunction.overlap(iwf);
 
         const density_matrix = try wavefunction.density(opt.potential, time, opt.adiabatic); defer density_matrix.deinit();
 
@@ -186,7 +205,22 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
-    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time, opt.iterations + 1);
+    
+    if (opt.write.spectrum) |path| {
+
+        if (enable_printing) try print("\nCALCULATING ENERGY SPECTRUM: ", .{});
+
+        const spectrum = try energySpectrum(T, acf, opt.spectrum, allocator);
+
+        if (enable_printing) try print("DONE\n", .{});
+
+        const nyquist_frequency = std.math.pi / opt.time_step;
+
+        try exportRealMatrixWithLinspacedLeftColumn(T, path, spectrum.asMatrix(), 0, nyquist_frequency);
+    }
+
+    if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, path, acf.asMatrix(), 0, end_time);
+    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
     if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
 
     if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit();
@@ -227,6 +261,45 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
             wavefunction_dynamics.ptr(i, wavefunction.ndim + 2 * wavefunction.nstate * iter + 2 * j + 1).* = wavefunction_row.at(j, 0).im;
         }
     }
+}
+
+/// Energy spectrum from autocorrelation function.
+pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options: Options(T).Spectrum, allocator: std.mem.Allocator) !RealVector(T) {
+    const spectrum_len = try std.math.powi(usize, 2, std.math.log2_int_ceil(usize, acf.len) + spectrum_options.padding_order);
+
+    var spectrum_complex = try ComplexVector(T).initZero(spectrum_len, allocator); defer spectrum_complex.deinit();
+
+    for (0..acf.len) |i| {
+        spectrum_complex.ptr(spectrum_complex.len / 2 + i).* = acf.at(i);
+        spectrum_complex.ptr(spectrum_complex.len / 2 - i).* = acf.at(i).conjugate();
+    }
+
+    const sigma = @as(T, @floatFromInt(acf.len)) / 4;
+
+    if (spectrum_options.window == .gaussian) for (0..spectrum_complex.len) |i| {
+
+        const dist = @as(T, @floatFromInt(i)) - @as(T, @floatFromInt(spectrum_complex.len / 2));
+
+        const exponent = dist * dist / (2 * sigma * sigma);
+
+        spectrum_complex.ptr(i).* = spectrum_complex.at(i).mul(Complex(T).init(std.math.exp(-exponent), 0));
+    };
+
+    for (0..spectrum_complex.len / 2) |i| {
+        std.mem.swap(Complex(T), spectrum_complex.ptr(i), spectrum_complex.ptr(i + spectrum_complex.len / 2));
+    }
+
+    var spectrum_complex_strided = spectrum_complex.asStrided();
+
+    try cfft1(T, &spectrum_complex_strided, -1);
+
+    var spectrum = try RealVector(T).init(spectrum_complex.len / 2, allocator);
+
+    for (0..spectrum.len + 1) |i| {
+        spectrum.ptr(i).* = spectrum_complex.at(i).re;
+    }
+
+    return spectrum;
 }
 
 /// Initialize the container for the wavefunction dynamics.

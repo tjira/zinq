@@ -62,6 +62,17 @@ pub fn GridWavefunction(comptime T: type) type {
             self.data.deinit();
         }
 
+        /// Clone the wavefunction.
+        pub fn clone(self: @This()) !@This() {
+            var new_wavefunction = try @This().init(self.npoint, self.nstate, self.ndim, self.limits, self.mass, self.allocator);
+
+            for (0..self.data.rows) |i| for (0..self.nstate) |j| {
+                new_wavefunction.data.ptr(i, j).* = self.data.at(i, j);
+            };
+
+            return new_wavefunction;
+        }
+
         /// Calculate the density matrix of the wavefunction. The matrix is allocated and returned.
         pub fn density(self: @This(), potential: ElectronicPotential(T), time: T, adiabatic: bool) !ComplexMatrix(T) {
             var density_matrix = try ComplexMatrix(T).init(self.nstate, self.nstate, self.allocator);
