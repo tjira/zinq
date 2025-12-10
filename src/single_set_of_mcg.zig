@@ -52,7 +52,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                 return throw(@This(), "BASIS FUNCTION SPREAD LENGTH MUST MATCH NUMBER OF GAUSSIANS", .{});
             }
 
-            var gaussians = try allocator.alloc(ComplexGaussian(T), position.len); var coefs = try ComplexVector(T).init(nstate * gaussians.len, allocator);
+            var gaussians = try allocator.alloc(ComplexGaussian(T), position.len); var coefs = try ComplexVector(T).initZero(nstate * gaussians.len, allocator);
 
             for (0..gaussians.len) |i| {
                 gaussians[i] = try ComplexGaussian(T).init(position[i], gamma[i], momentum[i], allocator);
@@ -173,7 +173,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                 }
             }
 
-            coordinate.muls(total_norm);
+            coordinate.divs(total_norm);
 
             return coordinate;
         }
