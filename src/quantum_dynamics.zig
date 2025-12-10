@@ -205,7 +205,6 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
-    
     if (opt.write.spectrum) |path| {
 
         if (enable_printing) try print("\nCALCULATING ENERGY SPECTRUM: ", .{});
@@ -264,7 +263,7 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
 }
 
 /// Energy spectrum from autocorrelation function.
-pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options: Options(T).Spectrum, allocator: std.mem.Allocator) !RealVector(T) {
+pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options: anytype, allocator: std.mem.Allocator) !RealVector(T) {
     const spectrum_len = try std.math.powi(usize, 2, std.math.log2_int_ceil(usize, acf.len) + spectrum_options.padding_order);
 
     var spectrum_complex = try ComplexVector(T).initZero(spectrum_len, allocator); defer spectrum_complex.deinit();
@@ -293,11 +292,21 @@ pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options:
 
     try cfft1(T, &spectrum_complex_strided, -1);
 
-    var spectrum = try RealVector(T).init(spectrum_complex.len / 2, allocator);
+    var spectrum = try RealVector(T).init(spectrum_complex.len / 2 + 1, allocator);
 
     for (0..spectrum.len + 1) |i| {
         spectrum.ptr(i).* = spectrum_complex.at(i).re;
     }
+
+    var max_value: T = 0;
+
+    for (0..spectrum.len) |i| {
+        if (spectrum.at(i) > max_value) {
+            max_value = spectrum.at(i);
+        }
+    }
+
+    spectrum.divs(max_value);
 
     return spectrum;
 }

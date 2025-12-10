@@ -15,6 +15,7 @@ const harmonic_potential = @import("harmonic_potential.zig");
 const hermite_quadrature_nodes = @import("hermite_quadrature_nodes.zig");
 const math_functions = @import("math_functions.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
+const quantum_dynamics = @import("quantum_dynamics.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const single_set_of_mcg = @import("single_set_of_mcg.zig");
@@ -32,9 +33,11 @@ const RealVector = real_vector.RealVector;
 const SingleSetOfMCG = single_set_of_mcg.SingleSetOfMCG;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
+const exportComplexMatrixWithLinspacedLeftColumn = device_write.exportComplexMatrixWithLinspacedLeftColumn;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const mm = matrix_multiplication.mm;
+const energySpectrum = quantum_dynamics.energySpectrum;
 const positionAtRow = grid_generator.positionAtRow;
 const powi = math_functions.powi;
 const print = device_write.print;
@@ -60,9 +63,15 @@ pub fn Options(comptime T: type) type {
         pub const LogIntervals = struct {
             iteration: u32 = 1
         };
+        pub const Spectrum = struct {
+            window: enum {gaussian} = .gaussian,
+            padding_order: u32 = 1
+        };
         pub const Write = struct {
             population: ?[]const u8 = null,
-            wavefunction: ?[]const u8 = null
+            wavefunction: ?[]const u8 = null,
+            spectrum: ?[]const u8 = null,
+            autocorrelation_function: ?[]const u8 = null
         };
         pub const WavefunctionGrid = struct {
             limits: []const []const T,
@@ -85,6 +94,7 @@ pub fn Options(comptime T: type) type {
         time_step: T,
 
         log_intervals: LogIntervals = .{},
+        spectrum: Spectrum = .{},
         wavefunction_grid: ?WavefunctionGrid = null,
         write: Write = .{},
 
@@ -150,9 +160,13 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     
     var mcg = try SingleSetOfMCG(T).init(opt.method.vMCG.position, opt.method.vMCG.gamma, opt.method.vMCG.momentum, opt.initial_conditions.state, opt.initial_conditions.bf_spread, nstate, allocator); defer mcg.deinit();
 
+    const mcg_init = try mcg.clone();
+
     var propagator = try ComplexRungeKutta(T).init(3 * mcg.gaussians.len * mcg.gaussians[0].position.len + mcg.coefs.len, allocator); defer propagator.deinit();
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
+
+    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit();
 
     if (enable_printing) try printIterationHeader(ndim, mcg.coefs.len);
 
@@ -165,6 +179,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         if (i > 0) try propagate(T, &mcg, opt, &propagator, time, allocator);
 
         if (i > 0 and opt.renormalize) try mcg.normalize();
+
+        acf.ptr(i).* = try mcg_init.selfOverlap(mcg);
 
         var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit();
 
@@ -216,6 +232,21 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
+    if (opt.write.spectrum) |path| {
+
+        if (enable_printing) try print("\nCALCULATING ENERGY SPECTRUM: ", .{});
+
+        const spectrum = try energySpectrum(T, acf, opt.spectrum, allocator);
+
+        if (enable_printing) try print("DONE\n", .{});
+
+        const nyquist_frequency = std.math.pi / opt.time_step;
+
+        try exportRealMatrixWithLinspacedLeftColumn(T, path, spectrum.asMatrix(), 0, nyquist_frequency);
+    }
+
+
+    if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, path, acf.asMatrix(), 0, end_time);
     if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
     if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
 

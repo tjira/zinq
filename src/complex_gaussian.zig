@@ -73,7 +73,20 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Clone the complex Gaussian.
         pub fn clone(self: @This()) !@This() {
-            return try @This().init(self.position, self.gamma, self.momentum, self.allocator);
+            var gamma = try self.allocator.alloc(Complex(T), self.gamma.len);
+            var momentum = try self.allocator.alloc(T, self.momentum.len);
+            var position = try self.allocator.alloc(T, self.position.len);
+
+            for (self.gamma, 0..) |g, i| gamma[i] = g;
+            for (self.momentum, 0..) |p, i| momentum[i] = p;
+            for (self.position, 0..) |q, i| position[i] = q;
+
+            return @This(){
+                .position = position,
+                .gamma = gamma,
+                .momentum = momentum,
+                .allocator = self.allocator
+            };
         }
 
         /// Returns the derivative of the electronic coefficients where this gaussian is shared between them.

@@ -1,0 +1,64 @@
+{
+    "zinq" : [
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0],
+                    "position" : [1],
+                    "state" : 0,
+                    "gamma" : [2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1]
+                    }
+                },
+                "write" : {
+                    "spectrum" : "SPECTRUM_QD.mat"
+                },
+                "iterations" : 10000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "multiconfigurational_gaussian",
+            "options" : {
+                "method" : {
+                    "vMCG" : {
+                        "momentum" : [[0], [0]],
+                        "position" : [[-1], [1]],
+                        "gamma" : [[2], [2]],
+                        "frozen" : false
+                    }
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "initial_conditions" : {
+                    "bf_spread" : [1, 0],
+                    "state" : 0,
+                    "mass" : [1]
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1]
+                    }
+                },
+                "write" : {
+                    "spectrum" : "SPECTRUM_VMCG.mat"
+                },
+                "iterations" : 10000,
+                "time_step" : 0.01
+            }
+        }
+    ]
+}

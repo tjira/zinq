@@ -80,6 +80,27 @@ pub fn SingleSetOfMCG(comptime T: type) type {
             self.coefs.deinit();
         }
 
+        /// Clone the SingleSetOfMCG structure.
+        pub fn clone(self: @This()) !@This() {
+            var gaussians = try self.allocator.alloc(ComplexGaussian(T), self.gaussians.len);
+
+            for (0..self.gaussians.len) |i| {
+                gaussians[i] = try self.gaussians[i].clone();
+            }
+
+            var coefs = try ComplexVector(T).init(self.coefs.len, self.allocator);
+
+            for (0..self.coefs.len) |i| {
+                coefs.ptr(i).* = self.coefs.at(i);
+            }
+
+            return @This(){
+                .gaussians = gaussians,
+                .coefs = coefs,
+                .allocator = self.allocator,
+            };
+        }
+
         /// Calculates the derivative of the coefficients with respect to time.
         pub fn coefficientDerivative(self: @This(), pot: ElectronicPotential(T), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T), mass: []const T, n_nodes: usize, time: T) !ComplexVector(T) {
             const S = try self.overlap(); defer S.deinit();
@@ -460,6 +481,44 @@ pub fn SingleSetOfMCG(comptime T: type) type {
             const V = try self.potential(pot, n_nodes, time); defer V.deinit();
 
             return try self.operatorExpectation(V);
+        }
+
+        /// Calculates the total scalar overlap between this wavefunction and another wavefunction.
+        pub fn selfOverlap(self: @This(), other: @This()) !Complex(T) {
+            const n_states_self = self.coefs.len / self.gaussians.len;
+            const n_states_other = other.coefs.len / other.gaussians.len;
+
+            if (self.coefs.len / self.gaussians.len != other.coefs.len / other.gaussians.len) {
+                return throw(Complex(T), "CANNOT CALCULATE OVERLAP: STATE COUNTS DO NOT MATCH (SELF: {}, OTHER: {})", .{n_states_self, n_states_other});
+            }
+
+            var S = try ComplexMatrix(T).initZero(self.gaussians.len, other.gaussians.len, self.allocator); defer S.deinit();
+
+            for (0..self.gaussians.len) |i| {
+                for (0..other.gaussians.len) |j| {
+                    S.ptr(i, j).* = try self.gaussians[i].overlap(other.gaussians[j]);
+                }
+            }
+
+            var total_overlap = Complex(T).init(0, 0);
+
+            for (0..n_states_self) |state| {
+                for (0..self.gaussians.len) |i| {
+
+                    const c1 = self.coefs.at(state * self.gaussians.len + i);
+
+                    if (c1.re == 0 and c1.im == 0) continue;
+
+                    for (0..other.gaussians.len) |j| {
+
+                        const c2 = other.coefs.at(state * other.gaussians.len + j);
+
+                        total_overlap = total_overlap.add(c1.conjugate().mul(c2).mul(S.at(i, j)));
+                    }
+                }
+            }
+
+            return total_overlap;
         }
 
         /// Returns the transformed coefficients. If to_adiabatic is true, transforms to adiabatic representation; otherwise, to diabatic.
