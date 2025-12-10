@@ -387,18 +387,19 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
     try print("{s}\n", .{writer.buffered()});
 }
 
-test "vMCG on Tully's First Potential" {
+test "frozen real-time vMCG on Tully's First Potential" {
     const opt = Options(f64){
         .initial_conditions = .{
             .bf_spread = &.{1},
             .mass = &.{2000},
-            .state = 1,
+            .state = 1
         },
         .method = .{
             .vMCG = .{
                 .position = &.{&.{-10}},
                 .gamma = &.{&.{2}},
-                .momentum = &.{&.{15}}
+                .momentum = &.{&.{15}},
+                .frozen = true
             }
         },
         .potential = .{
@@ -418,18 +419,83 @@ test "vMCG on Tully's First Potential" {
     try std.testing.expectApproxEqAbs(output.potential_energy, 0.00075315183576, TEST_TOLERANCE);
 }
 
-test "ss-vMCG on Tully's First Potential" {
+test "thawed real-time vMCG on Tully's First Potential" {
+    const opt = Options(f64){
+        .initial_conditions = .{
+            .bf_spread = &.{1},
+            .mass = &.{2000},
+            .state = 1
+        },
+        .method = .{
+            .vMCG = .{
+                .position = &.{&.{-10}},
+                .gamma = &.{&.{2}},
+                .momentum = &.{&.{15}},
+                .frozen = false
+            }
+        },
+        .potential = .{
+            .tully_1 = TullyPotential1(f64){}
+        },
+        .finite_differences_step = 1e-8,
+        .integration_nodes = 32,
+        .iterations = 3500,
+        .time_step = 1
+    };
+
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+
+    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06780655389538, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.43700581213738, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.56299418786262, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy, -0.00125988375367, TEST_TOLERANCE);
+}
+
+test "thawed real-time ss-vMCG on Tully's First Potential" {
     const opt = Options(f64){
         .initial_conditions = .{
             .bf_spread = &.{1, 0},
             .mass = &.{2000},
-            .state = 1,
+            .state = 1
         },
         .method = .{
             .vMCG = .{
                 .position = &.{&.{-10.5}, &.{-9.5}},
                 .gamma = &.{&.{2}, &.{2}},
-                .momentum = &.{&.{15}, &.{15}}
+                .momentum = &.{&.{15}, &.{15}},
+                .frozen = false
+            }
+        },
+        .potential = .{
+            .tully_1 = TullyPotential1(f64){}
+        },
+        .finite_differences_step = 1e-8,
+        .integration_nodes = 32,
+        .iterations = 3500,
+        .time_step = 1
+    };
+
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+
+    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06710139421857, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.45253095192318, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.54746904807682, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy, -0.00094938113928, TEST_TOLERANCE);
+}
+
+test "frozen real-time ss-vMCG on Tully's First Potential" {
+    const opt = Options(f64){
+        .initial_conditions = .{
+            .bf_spread = &.{1, 0},
+            .mass = &.{2000},
+            .state = 1
+        },
+        .method = .{
+            .vMCG = .{
+                .position = &.{&.{-10.5}, &.{-9.5}},
+                .gamma = &.{&.{2}, &.{2}},
+                .momentum = &.{&.{15}, &.{15}},
+                .frozen = true
             }
         },
         .potential = .{

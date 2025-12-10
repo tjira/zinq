@@ -46,22 +46,13 @@ pub fn inverseSymmetricAlloc(comptime T: type, A: RealMatrix(T), allocator: std.
 
 /// Form the inverse of a symmetric or hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
 pub fn inverseSymmetricOrHermitian(comptime M: fn (comptime type) type, comptime T: type, Ainv: *M(T), A: M(T), AJ: M(T), AC: M(T), Atmp: *M(T)) !void {
-    if (!AJ.isSquare() or !AC.isSquare()) return throw(void, "EIGENVALUE MATRIX OR EIGENVECTOR MATRIX IS NOT SQUARE AND THE INVERSE CANNOT BE FORMED", .{});
-    if (AJ.rows != AC.rows or AJ.cols != AC.cols) return throw(void, "EIGENVALUE MATRIX AND EIGENVECTOR MATRIX MUST HAVE THE SAME DIMENSIONS", .{});
-
     if (comptime M == RealMatrix) {
-        if (!A.isSymmetric(0)) return throw(void, "THE MATRIX YOU ARE PASSING TO THE INVERSE SYMMETRIC FUNCTION IS NOT SYMMETRIC", .{});
         for (0..AJ.rows) |i| if (@abs(AJ.at(i, i)) < SINGULARITY_TOLERANCE) return throw(void, "THE MATRIX IS SINGULAR AND THE INVERSE CANNOT BE FORMED", .{});
     } else {
-        if (!A.isHermitian(0)) return throw(void, "THE MATRIX YOU ARE PASSING TO THE JACOBI EIGENSOLVER IS NOT HERMITIAN", .{});
         for (0..AJ.rows) |i| if (std.math.complex.abs(AJ.at(i, i)) < SINGULARITY_TOLERANCE) return throw(void, "THE MATRIX IS SINGULAR AND THE INVERSE CANNOT BE FORMED", .{});
     }
 
-    try AJ.copyTo(Ainv);
-
-    for (0..Ainv.rows) |i| Ainv.ptr(i, i).* = if (comptime M == RealMatrix) 1 / Ainv.at(i, i) else Complex(T).init(1, 0).div(Ainv.at(i, i));
-    
-    try mm(T, Atmp, AC, false, Ainv.*, false); try mm(T, Ainv, Atmp.*, false, AC, true);
+    try pseudoInverseSymmetricOrHermitian(M, T, Ainv, A, AJ, AC, Atmp, SINGULARITY_TOLERANCE);
 }
 
 /// Form the inverse of a symmetric or hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
@@ -113,7 +104,7 @@ pub fn pseudoInverseSymmetricOrHermitian(comptime M: fn (comptime type) type, co
 
     for (0..Ainv.rows) |i| {
 
-        if ((if (comptime M == RealMatrix) Ainv.at(i, i) else Ainv.at(i, i).magnitude()) < thresh) {
+        if ((if (comptime M == RealMatrix) @abs(Ainv.at(i, i)) else std.math.complex.abs(Ainv.at(i, i))) < thresh) {
             Ainv.ptr(i, i).* = if (comptime M == RealMatrix) 0 else Complex(T).init(0, 0); continue;
         }
 

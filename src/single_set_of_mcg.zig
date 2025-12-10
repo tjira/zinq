@@ -81,9 +81,9 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the derivative of the coefficients with respect to time.
-        pub fn coefficientDerivative(self: @This(), pot: ElectronicPotential(T), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T), mass: []const T, integration_nodes: usize, time: T) !ComplexVector(T) {
+        pub fn coefficientDerivative(self: @This(), pot: ElectronicPotential(T), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T), mass: []const T, n_nodes: usize, time: T) !ComplexVector(T) {
             const S = try self.overlap(); defer S.deinit();
-            const H = try self.hamiltonian(mass, pot, integration_nodes, time); defer H.deinit();
+            const H = try self.hamiltonian(mass, pot, n_nodes, time); defer H.deinit();
             var tau = try self.overlapDiffTime(dq, dp, dg); defer tau.deinit();
             const Sinv = try pseudoInverseHermitianAlloc(T, S, SINGULARITY_TOLERANCE, self.allocator); defer Sinv.deinit();
 
@@ -111,9 +111,9 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the derivative of the coefficients with respect to imaginary time.
-        pub fn coefficientDerivativeImaginary(self: @This(), pot: ElectronicPotential(T), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T), mass: []const T, integration_nodes: usize, time: T) !ComplexVector(T) {
+        pub fn coefficientDerivativeImaginary(self: @This(), pot: ElectronicPotential(T), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T), mass: []const T, n_nodes: usize, time: T) !ComplexVector(T) {
             const S = try self.overlap(); defer S.deinit();
-            const H = try self.hamiltonian(mass, pot, integration_nodes, time); defer H.deinit();
+            const H = try self.hamiltonian(mass, pot, n_nodes, time); defer H.deinit();
             var tau = try self.overlapDiffTime(dq, dp, dg); defer tau.deinit();
             const Sinv = try pseudoInverseHermitianAlloc(T, S, SINGULARITY_TOLERANCE, self.allocator); defer Sinv.deinit();
 
@@ -199,7 +199,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the Ehrenfest-like gamma derivative.
-        pub fn gammaDerivativeEhrenfest(self: @This(), pot: ElectronicPotential(T), mass: []const T, integration_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
+        pub fn gammaDerivativeEhrenfest(self: @This(), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
             var dg = try ComplexVector(T).initZero(self.gaussians.len * self.gaussians[0].gamma.len, self.allocator); 
 
             for (self.gaussians, 0..) |gaussian, i| {
@@ -210,7 +210,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                     c_i.ptr(j).* = self.coefs.at(j * self.gaussians.len + i);
                 }
 
-                var dg_i = try gaussian.gammaDerivative(pot, c_i, mass, integration_nodes, time, fdiff_step); defer dg_i.deinit();
+                var dg_i = try gaussian.gammaDerivative(pot, c_i, mass, n_nodes, time, fdiff_step); defer dg_i.deinit();
 
                 for (0..gaussian.momentum.len) |j| {
                     dg.ptr(gaussian.gamma.len * i + j).* = dg_i.at(j);
@@ -221,8 +221,8 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the derivative of the gamma parameter with respect to imaginary time in an Ehrenfest-like manner.
-        pub fn gammaDerivativeImaginaryEhrenfest(self: @This(), pot: ElectronicPotential(T), mass: []const T, integration_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
-            var dg = try self.gammaDerivativeEhrenfest(pot, mass, integration_nodes, time, fdiff_step);
+        pub fn gammaDerivativeImaginaryEhrenfest(self: @This(), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
+            var dg = try self.gammaDerivativeEhrenfest(pot, mass, n_nodes, time, fdiff_step);
 
             for (0..dg.len) |i| {
                 dg.ptr(i).* = dg.at(i).mulbyi().neg();
@@ -232,8 +232,8 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the Hamiltonian matrix.
-        pub fn hamiltonian(self: @This(), mass: []const T, pot: ElectronicPotential(T), integration_nodes: usize, time: T) !ComplexMatrix(T) {
-            var H = try self.potential(pot, integration_nodes, time);
+        pub fn hamiltonian(self: @This(), mass: []const T, pot: ElectronicPotential(T), n_nodes: usize, time: T) !ComplexMatrix(T) {
+            var H = try self.potential(pot, n_nodes, time);
 
             const K = try self.kinetic(mass); defer K.deinit();
 
@@ -285,7 +285,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the Ehrenfest-like momentum derivative.
-        pub fn momentumDerivativeEhrenfest(self: @This(), pot: ElectronicPotential(T), integration_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
+        pub fn momentumDerivativeEhrenfest(self: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
             var dp = try RealVector(T).initZero(self.gaussians.len * self.gaussians[0].momentum.len, self.allocator); 
 
             for (self.gaussians, 0..) |gaussian, i| {
@@ -296,7 +296,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                     c_i.ptr(j).* = self.coefs.at(j * self.gaussians.len + i);
                 }
 
-                var dp_i = try gaussian.momentumDerivative(pot, c_i, integration_nodes, time, fdiff_step); defer dp_i.deinit();
+                var dp_i = try gaussian.momentumDerivative(pot, c_i, n_nodes, time, fdiff_step); defer dp_i.deinit();
 
                 for (0..gaussian.momentum.len) |j| {
                     dp.ptr(gaussian.momentum.len * i + j).* = dp_i.at(j);
@@ -431,17 +431,17 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the Ehrenfest-like position derivative in imaginary time.
-        pub fn positionDerivativeImaginaryEhrenfest(self: @This(), pot: ElectronicPotential(T), integration_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
-            return try self.momentumDerivativeEhrenfest(pot, integration_nodes, time, fdiff_step);
+        pub fn positionDerivativeImaginaryEhrenfest(self: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
+            return try self.momentumDerivativeEhrenfest(pot, n_nodes, time, fdiff_step);
         }
 
         /// Calculates the potential matrix for a given potential function.
-        pub fn potential(self: @This(), pot: ElectronicPotential(T), integration_nodes: usize, time: T) !ComplexMatrix(T) {
+        pub fn potential(self: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T) !ComplexMatrix(T) {
             var V = try ComplexMatrix(T).initZero(self.coefs.len, self.coefs.len, self.allocator);
 
             for (0..self.gaussians.len) |i| for (0..self.gaussians.len) |j| {
 
-                var Vij = try self.gaussians[i].potential(self.gaussians[j], pot, integration_nodes, time); defer Vij.deinit();
+                var Vij = try self.gaussians[i].potential(self.gaussians[j], pot, n_nodes, time); defer Vij.deinit();
 
                 for (0..Vij.rows) |k| for (0..Vij.cols) |l| {
 
@@ -456,8 +456,8 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the potential energy.
-        pub fn potentialEnergy(self: @This(), pot: ElectronicPotential(T), integration_nodes: usize, time: T) !T {
-            const V = try self.potential(pot, integration_nodes, time); defer V.deinit();
+        pub fn potentialEnergy(self: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T) !T {
+            const V = try self.potential(pot, n_nodes, time); defer V.deinit();
 
             return try self.operatorExpectation(V);
         }
