@@ -88,9 +88,10 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Returns the derivative of the electronic coefficients where this gaussian is shared between them.
         pub fn coefficientDerivative(self: @This(), dc: *ComplexVector(T), coefs: ComplexVector(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, allocator: std.mem.Allocator) !void {
-            dc.zero();
+            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator); defer V.deinit(allocator);
+            var q = try RealVector(T).init(pot.ndim(), allocator); defer q.deinit(allocator);
 
-            const V = try self.potential(self, pot, n_nodes, time, allocator); defer V.deinit(allocator);
+            try self.potential(self, &V, pot, n_nodes, time, &q);
 
             var rho = try ComplexMatrix(T).initZero(V.rows, V.cols, allocator); defer rho.deinit(allocator);
             var VC = try ComplexVector(T).init(V.cols, allocator); defer VC.deinit(allocator);
@@ -105,9 +106,14 @@ pub fn ComplexGaussian(comptime T: type) type {
 
             var VC_matrix = VC.asMatrix(); try mm(T, &VC_matrix, V, false, coefs.asMatrix(), false);
 
-            for (0..dc.len) |i| for (0..coefs.len) |j| {
-                dc.ptr(i).* = dc.at(i).add(rho.at(i, j).mul(VC.at(j)).mulbyi().neg());
-            };
+            for (0..dc.len) |i| {
+
+                dc.ptr(i).* = Complex(T).init(0, 0);
+
+                for (0..coefs.len) |j| {
+                    dc.ptr(i).* = dc.at(i).add(rho.at(i, j).mul(VC.at(j)).mulbyi().neg());
+                }
+            }
         }
 
         /// Returns the derivative of the electronic coefficients where this gaussian is shared between them.
@@ -135,14 +141,8 @@ pub fn ComplexGaussian(comptime T: type) type {
             return result.div(Complex(T).init(self.norm(), 0));
         }
 
-        /// Calculates the derivative of the gamma parameter.
-        pub fn gammaDerivative(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !ComplexVector(T) {
-            const ddV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, allocator); defer ddV.deinit(allocator);
-
-            for (0..ddV.len) |i| {
-                ddV.ptr(i).deinit(allocator); ddV.ptr(i).* = try self.potentialDerivative2(self, pot, i, n_nodes, time, fdiff_step, allocator);
-            }
-
+        /// Calculates the derivative of the gamma parameter for the coordinate index.
+        pub fn gammaDerivativeIndex(self: @This(), mass: T, ddV: ComplexMatrix(T), coefs: anytype, i: usize) Complex(T) {
             var population: T = 0.0;
 
             for (0..coefs.len) |j| {
@@ -151,33 +151,15 @@ pub fn ComplexGaussian(comptime T: type) type {
 
             if (population < 1e-14) population = 1;
 
-            const dg = try ComplexVector(T).initZero(ddV.len, allocator);
+            var dg_i = self.gamma[i].mul(self.gamma[i]).div(Complex(T).init(mass, 0));
 
-            for (0..dg.len) |i| {
+            var potential_term = Complex(T).init(0, 0);
 
-                dg.ptr(i).* = self.gamma[i].mul(self.gamma[i]).div(Complex(T).init(mass[i], 0));
+            for (0..coefs.len) |j| for (0..coefs.len) |k| {
+                potential_term = potential_term.add(coefs.at(j).conjugate().mul(ddV.at(j, k)).mul(coefs.at(k)));
+            };
 
-                var potential_term = Complex(T).init(0, 0);
-
-                for (0..coefs.len) |j| for (0..coefs.len) |k| {
-                    potential_term = potential_term.add(coefs.at(j).conjugate().mul(ddV.at(i).at(j, k)).mul(coefs.at(k)));
-                };
-
-                dg.ptr(i).* = dg.at(i).sub(potential_term.div(Complex(T).init(population, 0))).mulbyi().neg();
-            }
-
-            return dg;
-        }
-
-        /// Calculates the derivative of the gamma parameter.
-        pub fn gammaDerivativeImaginary(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
-            var dg = try self.gammaDerivative(pot, coefs, mass, n_nodes, time, fdiff_step);
-
-            for (0..dg.len) |i| {
-                dg.ptr(i).* = dg.at(i).mulbyi().neg();
-            }
-
-            return dg;
+            return dg_i.sub(potential_term.div(Complex(T).init(population, 0))).mulbyi().neg();
         }
 
         /// Calculate the kinetic matrix element between this complex Gaussian and another.
@@ -208,19 +190,14 @@ pub fn ComplexGaussian(comptime T: type) type {
             return result.mul(try self.overlap(other));
         }
 
-        /// Returns the kinetic energy expectation value of this complex Gaussian.
-        pub fn kineticEnergy(self: @This(), mass: []const T) !T {
-            if (self.position.len != mass.len) return throw(T, "POSITION AND MASS ARRAY MUST HAVE THE SAME DIMENSIONALITY IN COMPLEX GAUSSIAN", .{});
-
-            return (try kinetic(self, self, mass)).re;
-        }
-
         /// Calculates the derivative of the momentum.
         pub fn momentumDerivative(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !RealVector(T) {
             const dV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, allocator); defer dV.deinit(allocator);
 
+            var q = try RealVector(T).init(pot.ndim(), allocator); defer q.deinit(allocator);
+
             for (0..dV.len) |i| {
-                dV.ptr(i).deinit(allocator); dV.ptr(i).* = try self.potentialDerivative1(self, pot, i, n_nodes, time, fdiff_step, allocator);
+                try self.potentialDerivative1(self, dV.ptr(i), pot, i, n_nodes, time, fdiff_step, &q);
             }
 
             var population: T = 0.0;
@@ -447,31 +424,13 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Calculates the derivative of the position for the specific coordinate.
-        pub fn positionDerivativeIndex(self: @This(), mass: []const T, i: usize) T {
-            return self.momentum[i] / mass[i];
-        }
-
-        /// Calculates the derivative of the position. in imaginary time propagation.
-        pub fn positionDerivativeImaginary(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
-            return try self.momentumDerivative(pot, coefs, n_nodes, time, fdiff_step);
+        pub fn positionDerivativeIndex(self: @This(), mass: T, i: usize) T {
+            return self.momentum[i] / mass;
         }
 
         /// Compute the potential energy matrix element between this complex Gaussian and another for a given potential function.
-        pub fn potential(self: @This(), other: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T, allocator: std.mem.Allocator) !ComplexMatrix(T) {
-            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator);
-
-            var variables = try allocator.alloc(T, pot.ndim()); defer allocator.free(variables);
-            var sigmas = try allocator.alloc(T, pot.ndim()); defer allocator.free(sigmas);
-            var mus = try allocator.alloc(T, pot.ndim()); defer allocator.free(mus);
-
-            for (0..pot.ndim()) |i| {
-
-                const s1 = 1 / std.math.sqrt(self.gamma[i].re); const s2 = 1 / std.math.sqrt(other.gamma[i].re);
-
-                mus[i] = (self.position[i] * s2 * s2 + other.position[i] * s1 * s1) / (s1 * s1 + s2 * s2);
-
-                sigmas[i] = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
-            }
+        pub fn potential(self: @This(), other: @This(), V: *ComplexMatrix(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, q: *RealVector(T)) !void {
+            V.zero();
 
             for (0..std.math.pow(usize, n_nodes, pot.ndim())) |i| {
 
@@ -479,52 +438,41 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                 for (0..pot.ndim()) |j| {
 
-                    variables[j] = std.math.sqrt2 * sigmas[j] * HERMITE_NODES[n_nodes][temp % n_nodes] + mus[j]; 
+                    const s1 = 1 / std.math.sqrt(self.gamma[j].re); const s2 = 1 / std.math.sqrt(other.gamma[j].re);
+
+                    const mu = (self.position[j] * s2 * s2 + other.position[j] * s1 * s1) / (s1 * s1 + s2 * s2);
+
+                    const sigma = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
+
+                    q.ptr(j).* = std.math.sqrt2 * sigma * HERMITE_NODES[n_nodes][temp % n_nodes] + mu; 
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * std.math.pow(T, self.position[j] - other.position[j], 2);
 
-                    const imag_exponent_self = self.momentum[j] * (self.position[j] - variables[j]);
-                    const imag_exponent_other = other.momentum[j] * (variables[j] - other.position[j]);
+                    const imag_exponent_self = self.momentum[j] * (self.position[j] - q.at(j));
+                    const imag_exponent_other = other.momentum[j] * (q.at(j) - other.position[j]);
 
-                    const imag_gamma_self = 0.5 * self.gamma[j].im * std.math.pow(T, variables[j] - self.position[j], 2);
-                    const imag_gamma_other = -0.5 * other.gamma[j].im * std.math.pow(T, variables[j] - other.position[j], 2);
+                    const imag_gamma_self = 0.5 * self.gamma[j].im * std.math.pow(T, q.at(j) - self.position[j], 2);
+                    const imag_gamma_other = -0.5 * other.gamma[j].im * std.math.pow(T, q.at(j) - other.position[j], 2);
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
-                    weight *= std.math.sqrt2 * sigmas[j] * HERMITE_WEIGHTS[n_nodes][temp % n_nodes]; temp /= n_nodes;
+                    weight *= std.math.sqrt2 * sigma * HERMITE_WEIGHTS[n_nodes][temp % n_nodes]; temp /= n_nodes;
                 }
 
                 for (0..V.rows) |j| for (j..V.cols) |k| {
 
-                    const variable_vector = RealVector(T){.data = variables, .len = variables.len};
-
-                    const value = try pot.evaluateDiabaticElement(j, k, variable_vector, time);
+                    const value = try pot.evaluateDiabaticElement(j, k, q.*, time);
 
                     V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); V.ptr(k, j).* = V.at(j, k);
                 };
             }
 
             V.divs(Complex(T).init(self.norm() * other.norm(), 0));
-
-            return V;
         }
 
         /// Compute the potential energy derivative matrix element between this complex Gaussian and another for a given potential function and a specified coordinate.
-        pub fn potentialDerivative1(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !ComplexMatrix(T) {
-            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator);
-
-            var variables = try allocator.alloc(T, pot.ndim()); defer allocator.free(variables);
-            var sigmas = try allocator.alloc(T, pot.ndim()); defer allocator.free(sigmas);
-            var mus = try allocator.alloc(T, pot.ndim()); defer allocator.free(mus);
-
-            for (0..pot.ndim()) |i| {
-
-                const s1 = 1 / std.math.sqrt(self.gamma[i].re); const s2 = 1 / std.math.sqrt(other.gamma[i].re);
-
-                mus[i] = (self.position[i] * s2 * s2 + other.position[i] * s1 * s1) / (s1 * s1 + s2 * s2);
-
-                sigmas[i] = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
-            }
+        pub fn potentialDerivative1(self: @This(), other: @This(), dV: *ComplexMatrix(T), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, q: *RealVector(T)) !void {
+            dV.zero();
 
             for (0..std.math.pow(usize, n_nodes, pot.ndim())) |i| {
 
@@ -532,52 +480,41 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                 for (0..pot.ndim()) |j| {
 
-                    variables[j] = std.math.sqrt2 * sigmas[j] * HERMITE_NODES[n_nodes][temp % n_nodes] + mus[j]; 
+                    const s1 = 1 / std.math.sqrt(self.gamma[j].re); const s2 = 1 / std.math.sqrt(other.gamma[j].re);
+
+                    const mu = (self.position[j] * s2 * s2 + other.position[j] * s1 * s1) / (s1 * s1 + s2 * s2);
+
+                    const sigma = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
+
+                    q.ptr(j).* = std.math.sqrt2 * sigma * HERMITE_NODES[n_nodes][temp % n_nodes] + mu; 
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * std.math.pow(T, self.position[j] - other.position[j], 2);
 
-                    const imag_exponent_self = self.momentum[j] * (self.position[j] - variables[j]);
-                    const imag_exponent_other = other.momentum[j] * (variables[j] - other.position[j]);
+                    const imag_exponent_self = self.momentum[j] * (self.position[j] - q.at(j));
+                    const imag_exponent_other = other.momentum[j] * (q.at(j) - other.position[j]);
 
-                    const imag_gamma_self = 0.5 * self.gamma[j].im * std.math.pow(T, variables[j] - self.position[j], 2);
-                    const imag_gamma_other = -0.5 * other.gamma[j].im * std.math.pow(T, variables[j] - other.position[j], 2);
+                    const imag_gamma_self = 0.5 * self.gamma[j].im * std.math.pow(T, q.at(j) - self.position[j], 2);
+                    const imag_gamma_other = -0.5 * other.gamma[j].im * std.math.pow(T, q.at(j) - other.position[j], 2);
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
-                    weight *= std.math.sqrt2 * sigmas[j] * HERMITE_WEIGHTS[n_nodes][temp % n_nodes]; temp /= n_nodes;
+                    weight *= std.math.sqrt2 * sigma * HERMITE_WEIGHTS[n_nodes][temp % n_nodes]; temp /= n_nodes;
                 }
 
-                for (0..V.rows) |j| for (j..V.cols) |k| {
+                for (0..dV.rows) |j| for (j..dV.cols) |k| {
 
-                    const variable_vector = RealVector(T){.data = variables, .len = variables.len};
+                    const value = try pot.evaluateDiabaticElementDerivative1(j, k, q.*, time, index, fdiff_step);
 
-                    const value = try pot.evaluateDiabaticElementDerivative1(j, k, variable_vector, time, index, fdiff_step);
-
-                    V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); V.ptr(k, j).* = V.at(j, k);
+                    dV.ptr(j, k).* = dV.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); dV.ptr(k, j).* = dV.at(j, k);
                 };
             }
 
-            V.divs(Complex(T).init(self.norm() * other.norm(), 0));
-
-            return V;
+            dV.divs(Complex(T).init(self.norm() * other.norm(), 0));
         }
 
         /// Compute the potential energy second derivative matrix element between this complex Gaussian and another for a given potential function and a specified coordinate.
-        pub fn potentialDerivative2(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !ComplexMatrix(T) {
-            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator);
-
-            var variables = try allocator.alloc(T, pot.ndim()); defer allocator.free(variables);
-            var sigmas = try allocator.alloc(T, pot.ndim()); defer allocator.free(sigmas);
-            var mus = try allocator.alloc(T, pot.ndim()); defer allocator.free(mus);
-
-            for (0..pot.ndim()) |i| {
-
-                const s1 = 1 / std.math.sqrt(self.gamma[i].re); const s2 = 1 / std.math.sqrt(other.gamma[i].re);
-
-                mus[i] = (self.position[i] * s2 * s2 + other.position[i] * s1 * s1) / (s1 * s1 + s2 * s2);
-
-                sigmas[i] = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
-            }
+        pub fn potentialDerivative2(self: @This(), other: @This(), ddV: *ComplexMatrix(T), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, q: *RealVector(T)) !void {
+            ddV.zero();
 
             for (0..std.math.pow(usize, n_nodes, pot.ndim())) |i| {
 
@@ -585,47 +522,36 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                 for (0..pot.ndim()) |j| {
 
-                    variables[j] = std.math.sqrt2 * sigmas[j] * HERMITE_NODES[n_nodes][temp % n_nodes] + mus[j]; 
+                    const s1 = 1 / std.math.sqrt(self.gamma[j].re); const s2 = 1 / std.math.sqrt(other.gamma[j].re);
+
+                    const mu = (self.position[j] * s2 * s2 + other.position[j] * s1 * s1) / (s1 * s1 + s2 * s2);
+
+                    const sigma = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
+
+                    q.ptr(j).* = std.math.sqrt2 * sigma * HERMITE_NODES[n_nodes][temp % n_nodes] + mu; 
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * std.math.pow(T, self.position[j] - other.position[j], 2);
 
-                    const imag_exponent_self = self.momentum[j] * (self.position[j] - variables[j]);
-                    const imag_exponent_other = other.momentum[j] * (variables[j] - other.position[j]);
+                    const imag_exponent_self = self.momentum[j] * (self.position[j] - q.at(j));
+                    const imag_exponent_other = other.momentum[j] * (q.at(j) - other.position[j]);
 
-                    const imag_gamma_self = 0.5 * self.gamma[j].im * std.math.pow(T, variables[j] - self.position[j], 2);
-                    const imag_gamma_other = -0.5 * other.gamma[j].im * std.math.pow(T, variables[j] - other.position[j], 2);
+                    const imag_gamma_self = 0.5 * self.gamma[j].im * std.math.pow(T, q.at(j) - self.position[j], 2);
+                    const imag_gamma_other = -0.5 * other.gamma[j].im * std.math.pow(T, q.at(j) - other.position[j], 2);
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
-                    weight *= std.math.sqrt2 * sigmas[j] * HERMITE_WEIGHTS[n_nodes][temp % n_nodes]; temp /= n_nodes;
+                    weight *= std.math.sqrt2 * sigma * HERMITE_WEIGHTS[n_nodes][temp % n_nodes]; temp /= n_nodes;
                 }
 
-                for (0..V.rows) |j| for (j..V.cols) |k| {
+                for (0..ddV.rows) |j| for (j..ddV.cols) |k| {
 
-                    const variable_vector = RealVector(T){.data = variables, .len = variables.len};
+                    const value = try pot.evaluateDiabaticElementDerivative2(j, k, q.*, time, index, fdiff_step);
 
-                    const value = try pot.evaluateDiabaticElementDerivative2(j, k, variable_vector, time, index, fdiff_step);
-
-                    V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); V.ptr(k, j).* = V.at(j, k);
+                    ddV.ptr(j, k).* = ddV.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); ddV.ptr(k, j).* = ddV.at(j, k);
                 };
             }
 
-            V.divs(Complex(T).init(self.norm() * other.norm(), 0));
-
-            return V;
-        }
-
-        /// Returns the potential energy expectation value of this complex Gaussian for a given potential operator.
-        pub fn potentialEnergy(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, allocator: std.mem.Allocator) !T {
-            const V = try self.potential(self, pot, n_nodes, time); defer V.deinit(allocator);
-
-            var potential_energy: Complex(T) = Complex(T).init(0, 0);
-
-            for (0..coefs.len) |i| for (0..coefs.len) |j| {
-                potential_energy = potential_energy.add(coefs.at(i).conjugate().mul(V.at(i, j)).mul(coefs.at(j)));
-            };
-
-            return potential_energy.re;
+            ddV.divs(Complex(T).init(self.norm() * other.norm(), 0));
         }
     };
 }

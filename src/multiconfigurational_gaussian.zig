@@ -159,6 +159,12 @@ pub fn Custom(comptime T: type) type {
             g: ComplexVector(T),
             c: ComplexVector(T)
         };
+
+        /// Temporary matrices and vectors used in the propagation.
+        pub const Temporaries = struct {
+            nstatev: ComplexMatrix(T),
+            dimv: RealVector(T),
+        };
     };
 }
 
@@ -209,6 +215,13 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     defer inline for (std.meta.fields(@TypeOf(vars))) |field| @as(field.type, @field(vars, field.name)).deinit(allocator);
 
+    var temps = Custom(T).Temporaries{
+        .nstatev = try ComplexMatrix(T).initZero(nstate, nstate, allocator),
+        .dimv = try RealVector(T).initZero(ndim, allocator)
+    };
+
+    defer inline for (std.meta.fields(@TypeOf(temps))) |field| @as(field.type, @field(temps, field.name)).deinit(allocator);
+
     var propagator = try ComplexRungeKutta(T).init(nparams, allocator); defer propagator.deinit(allocator);
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_|
@@ -225,11 +238,11 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
-        if (i > 0) try propagate(T, &mcg, opt, &propagator, time, &vars, &matrix_eom, allocator);
+        if (i > 0) try propagate(T, &mcg, opt, &propagator, time, &vars, &matrix_eom, &temps, allocator);
 
         try mcg.overlap(&matrix_eom.S);
         try mcg.kinetic(&matrix_eom.T, opt.initial_conditions.mass);
-        try mcg.potential(&matrix_eom.V, opt.potential, opt.integration_nodes, time, allocator);
+        try mcg.potential(&matrix_eom.V, opt.potential, opt.integration_nodes, time, &temps.nstatev, &temps.dimv);
 
         if (i > 0 and opt.renormalize) try mcg.normalize(matrix_eom.S);
 
@@ -361,7 +374,7 @@ pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(
 }
 
 /// Propagates the MCG object using the 4th order Runge-Kutta method.
-pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, vars: *Custom(T).Variables, matrix_eom: *Custom(T).MatrixEOM, allocator: std.mem.Allocator) !void {
+pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, vars: *Custom(T).Variables, matrix_eom: *Custom(T).MatrixEOM, temps: *Custom(T).Temporaries, allocator: std.mem.Allocator) !void {
     mcg.exportParameterVector(&vars.all);
 
     const derivative = struct {
@@ -380,7 +393,7 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
 
             try params.mcg.overlap(&params.matrix_eom.S);
             try params.mcg.kinetic(&params.matrix_eom.T, mass);
-            try params.mcg.potential(&params.matrix_eom.V, pot, n_nodes, params.time, params.allocator);
+            try params.mcg.potential(&params.matrix_eom.V, pot, n_nodes, params.time, &params.temps.nstatev, &params.temps.dimv);
 
             if (params.opt.imaginary) {
 
@@ -388,7 +401,7 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
                 try params.mcg.momentumDerivativeImaginaryEhrenfest(&kp, mass);
 
                 if (!params.opt.method.vMCG.frozen) {
-                    try params.mcg.gammaDerivativeImaginaryEhrenfest(&kg, pot, mass, n_nodes, params.time, fdiff_step, params.allocator);
+                    try params.mcg.gammaDerivativeImaginaryEhrenfest(&kg, pot, mass, n_nodes, params.time, fdiff_step, &params.temps.nstatev, &params.temps.dimv);
                 }
 
                 try params.mcg.overlapDiffTime(&params.matrix_eom.tau, kq, kp, kg); fixGaugeTauMatrix(T, &params.matrix_eom.tau, params.matrix_eom.S);
@@ -404,7 +417,7 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
                 try params.mcg.momentumDerivativeEhrenfest(&kp, pot, n_nodes, params.time, fdiff_step, params.allocator);
 
                 if (!params.opt.method.vMCG.frozen) {
-                    try params.mcg.gammaDerivativeEhrenfest(&kg, pot, mass, n_nodes, params.time, fdiff_step, params.allocator);
+                    try params.mcg.gammaDerivativeEhrenfest(&kg, pot, mass, n_nodes, params.time, fdiff_step, &params.temps.nstatev, &params.temps.dimv);
                 }
 
                 try params.mcg.overlapDiffTime(&params.matrix_eom.tau, kq, kp, kg); fixGaugeTauMatrix(T, &params.matrix_eom.tau, params.matrix_eom.S);
@@ -435,6 +448,7 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
         .kp = vars.p,
         .kg = vars.g,
         .kc = vars.c,
+        .temps = temps,
         .matrix_eom = matrix_eom,
         .allocator = allocator
     }, opt.time_step);

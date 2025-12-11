@@ -7,6 +7,7 @@ const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
+const strided_complex_vector = @import("strided_complex_vector.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const error_handlingg = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
@@ -17,8 +18,8 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
 const Complex = std.math.Complex;
-const printRealMatrix = device_write.printRealMatrix;
 const ComplexGaussian = complex_gaussian.ComplexGaussian;
+const StridedComplexVector = strided_complex_vector.StridedComplexVector;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const ComplexMatrixArray = object_array.ComplexMatrixArray;
 const ComplexVector = complex_vector.ComplexVector;
@@ -194,26 +195,28 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the Ehrenfest-like gamma derivative.
-        pub fn gammaDerivativeEhrenfest(self: @This(), dg: *ComplexVector(T), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !void {
+        pub fn gammaDerivativeEhrenfest(self: @This(), dg: *ComplexVector(T), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T, ddV: *ComplexMatrix(T), q: *RealVector(T)) !void {
             for (self.gaussians, 0..) |gaussian, i| {
 
-                var c_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, allocator); defer c_i.deinit(allocator);
-
-                for (0..c_i.len) |j| {
-                    c_i.ptr(j).* = self.coefs.at(j * self.gaussians.len + i);
-                }
-
-                var dg_i = try gaussian.gammaDerivative(pot, c_i, mass, n_nodes, time, fdiff_step, allocator); defer dg_i.deinit(allocator);
+                const c_i = StridedComplexVector(T){
+                    .data = self.coefs.data,
+                    .len = self.coefs.len / self.gaussians.len,
+                    .stride = self.gaussians.len,
+                    .zero = i
+                };
 
                 for (0..gaussian.gamma.len) |j| {
-                    dg.ptr(gaussian.gamma.len * i + j).* = dg_i.at(j);
+
+                    try gaussian.potentialDerivative2(gaussian, ddV, pot, j, n_nodes, time, fdiff_step, q);
+
+                    dg.ptr(gaussian.gamma.len * i + j).* = gaussian.gammaDerivativeIndex(mass[j], ddV.*, c_i, j);
                 }
             }
         }
 
         /// Calculates the derivative of the gamma parameter with respect to imaginary time in an Ehrenfest-like manner.
-        pub fn gammaDerivativeImaginaryEhrenfest(self: @This(), dg: *ComplexVector(T), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !void {
-            try self.gammaDerivativeEhrenfest(dg, pot, mass, n_nodes, time, fdiff_step, allocator);
+        pub fn gammaDerivativeImaginaryEhrenfest(self: @This(), dg: *ComplexVector(T), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T, ddV: *ComplexMatrix(T), q: *RealVector(T)) !void {
+            try self.gammaDerivativeEhrenfest(dg, pot, mass, n_nodes, time, fdiff_step, ddV, q);
 
             for (0..dg.len) |i| {
                 dg.ptr(i).* = dg.at(i).mulbyi().neg();
@@ -376,7 +379,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Calculates the Ehrenfest-like position derivative.
         pub fn positionDerivativeEhrenfest(self: @This(), dq: *RealVector(T), mass: []const T) !void {
             for (self.gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
-                dq.ptr(gaussian.position.len * i + j).* = gaussian.positionDerivativeIndex(mass, j);
+                dq.ptr(gaussian.position.len * i + j).* = gaussian.positionDerivativeIndex(mass[j], j);
             };
         }
 
@@ -386,12 +389,12 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the potential matrix for a given potential function.
-        pub fn potential(self: @This(), V: *ComplexMatrix(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, allocator: std.mem.Allocator) !void {
+        pub fn potential(self: @This(), V: *ComplexMatrix(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, Vij: *ComplexMatrix(T), q: *RealVector(T)) !void {
             V.zero();
 
             for (0..self.gaussians.len) |i| for (0..self.gaussians.len) |j| {
 
-                var Vij = try self.gaussians[i].potential(self.gaussians[j], pot, n_nodes, time, allocator); defer Vij.deinit(allocator);
+                try self.gaussians[i].potential(self.gaussians[j], Vij, pot, n_nodes, time, q);
 
                 for (0..Vij.rows) |k| for (0..Vij.cols) |l| {
 
