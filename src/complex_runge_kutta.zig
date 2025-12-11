@@ -31,14 +31,14 @@ pub fn ComplexRungeKutta(comptime T: type) type {
         }
 
         /// Free the memory allocated for the Runge-Kutta struct.
-        pub fn deinit(self: @This()) void {
-            self.k1.deinit();
-            self.k2.deinit();
-            self.k3.deinit();
-            self.k4.deinit();
-            self.y1.deinit();
-            self.y2.deinit();
-            self.y3.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.k1.deinit(allocator);
+            self.k2.deinit(allocator);
+            self.k3.deinit(allocator);
+            self.k4.deinit(allocator);
+            self.y1.deinit(allocator);
+            self.y2.deinit(allocator);
+            self.y3.deinit(allocator);
         }
 
         /// Propagate the variables using the 4th order Runge-Kutta method.

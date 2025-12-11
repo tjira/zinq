@@ -19,7 +19,7 @@ const print = device_write.print;
 pub fn particleSteepestDescent(comptime T: type, opt: anytype, system: ClassicalParticle(T), efunc: anytype, method: []const u8, enable_printing: bool, allocator: std.mem.Allocator) !ClassicalParticle(T) {
     if (opt.gradient == null) return throw(ClassicalParticle(T), "NO GRADIENT METHOD SPECIFIED FOR OPTIMIZATION", .{});
 
-    var optimized_system = try system.clone();
+    var optimized_system = try system.clone(allocator);
 
     if (enable_printing) try print("\n{s} GEOMETRY OPTIMIZATION:\n{s:4} {s:20} {s:4}\n", .{method, "ITER", "GRADIENT NORM", "TIME"});
 

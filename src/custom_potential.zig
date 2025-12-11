@@ -22,12 +22,11 @@ pub fn CustomPotentialData(comptime T: type) type {
     return struct {
         rpn_array: []ReversePolishNotation(T),
         map: std.StringHashMap(T),
-        allocator: std.mem.Allocator,
 
         /// Free the resources.
-        pub fn deinit(self: *@This()) void {
-            for (self.rpn_array) |*rpn| rpn.deinit();
-            self.allocator.free(self.rpn_array);
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            for (self.rpn_array) |*rpn| rpn.deinit(allocator);
+            allocator.free(self.rpn_array);
             self.map.deinit();
         }
     };
@@ -72,8 +71,7 @@ pub fn CustomPotential(comptime T: type) type {
 
             custom_potential_data = .{
                 .rpn_array = rpn_array,
-                .map = map,
-                .allocator = allocator
+                .map = map
             };
 
             return custom_potential_data;

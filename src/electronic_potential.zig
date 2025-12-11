@@ -55,12 +55,6 @@ pub fn ElectronicPotential(comptime T: type) type {
                 adiabatic_potential.ptr(i, i).* += bias_struct.evaluate(variable);
             };
 
-            // const k = 0.5e2;
-            //
-            // for (0..adiabatic_potential.rows) |i| {
-            //     adiabatic_potential.ptr(i, i).* += k * (adiabatic_potential.at(i, i) - 0.5) * (adiabatic_potential.at(i, i) - 0.5);
-            // }
-
             try diagonalizeSymmetric(T, adiabatic_potential);
         }
 

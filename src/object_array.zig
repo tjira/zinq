@@ -23,7 +23,6 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
     return struct {
         data: []O(T),
         len: usize,
-        allocator: std.mem.Allocator,
 
         /// Initialize the object array.
         pub fn init(len: usize, params: anytype, allocator: std.mem.Allocator) !@This() {
@@ -40,8 +39,7 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
 
             return @This(){
                 .data = data,
-                .len = len,
-                .allocator = allocator,
+                .len = len
             };
         }
 
@@ -60,18 +58,17 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
 
             return @This(){
                 .data = data,
-                .len = len,
-                .allocator = allocator,
+                .len = len
             };
         }
 
         /// Deinitialize the array array.
-        pub fn deinit(self: @This()) void {
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
             for (self.data) |object| {
-                object.deinit();
+                object.deinit(allocator);
             }
 
-            self.allocator.free(self.data);
+            allocator.free(self.data);
         }
 
         /// Element access operator to get the i-th object.

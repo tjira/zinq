@@ -35,31 +35,29 @@ pub fn ReversePolishNotation(comptime T: type) type {
 
         data: std.ArrayList(Element),
         stack: std.ArrayList(T),
-        allocator: std.mem.Allocator,
 
         /// Initializes the RPN structure.
         pub fn init(allocator: std.mem.Allocator) !@This() {
             return @This(){
                 .data = std.ArrayList(Element){},
-                .stack = try std.ArrayList(T).initCapacity(allocator, RPN_MAX_STACK_SIZE),
-                .allocator = allocator
+                .stack = try std.ArrayList(T).initCapacity(allocator, RPN_MAX_STACK_SIZE)
             };
         }
 
         /// Free the resources used by the RPN structure.
-        pub fn deinit(self: *@This()) void {
-            self.data.deinit(self.allocator);
-            self.stack.deinit(self.allocator);
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            self.data.deinit(allocator);
+            self.stack.deinit(allocator);
         }
 
         /// Appends a number to the RPN output.
-        pub fn append(self: *@This(), element: anytype) !void {
+        pub fn append(self: *@This(), element: anytype, allocator: std.mem.Allocator) !void {
             if (@TypeOf(element) == T) {
-                try self.data.append(self.allocator, Element{.number = element});
+                try self.data.append(allocator, Element{.number = element});
             } else if (@TypeOf(element) == Operator) {
-                try self.data.append(self.allocator, Element{.op = element});
+                try self.data.append(allocator, Element{.op = element});
             } else if (@TypeOf(element) == []const u8) {
-                try self.data.append(self.allocator, Element{.variable = element});
+                try self.data.append(allocator, Element{.variable = element});
             } else {
                 return throw(void, "INVALID ELEMENT TYPE FOR RPN", .{});
             }

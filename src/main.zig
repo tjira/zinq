@@ -95,7 +95,7 @@ fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allo
         return error_handling.throwSpecific(void, "ERROR WHILE PARSING INPUT", .{}, err);
     };
 
-    var output = try Module.run(T, parsed.value, true, allocator); defer output.deinit();
+    var output = try Module.run(T, parsed.value, true, allocator); defer output.deinit(allocator);
 
     parsed.deinit();
 }

@@ -56,8 +56,8 @@ pub fn MappingApproach(comptime T: type) type {
             omega_data[7] = omega_data[5];
             omega_data[8] = (V * V + 4 * C * C * coshb.re) / a;
 
-            const omega = RealMatrix(T){.rows = 3, .cols = 3, .data = &omega_data, .allocator = null};
-            var new_bloch = RealMatrix(T){.rows = 3, .cols = 1, .data = &new_bloch_data, .allocator = null};
+            const omega = RealMatrix(T){.rows = 3, .cols = 3, .data = &omega_data};
+            var new_bloch = RealMatrix(T){.rows = 3, .cols = 1, .data = &new_bloch_data};
 
             try mm(T, &new_bloch, omega, false, parameters.bloch_vector.*.asMatrix(), false); try new_bloch.asVector().copyTo(parameters.bloch_vector);
 

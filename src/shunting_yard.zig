@@ -33,7 +33,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
             const number = try std.fmt.parseFloat(T, buffer[0..j]);
 
-            try rpn.append(number); i -= 1; j = 0; continue;
+            try rpn.append(number, allocator); i -= 1; j = 0; continue;
         }
 
         else if (input[i] == '+' or input[i] == '-' or input[i] == '*' or input[i] == '/' or input[i] == '^') {
@@ -41,7 +41,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
             const op = try operatorFromChar(input[i]); const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
 
             while (stack.items.len > 0 and switch(stack.getLast()) {.op => true, .bracket => |bracket| bracket != '('}) {
-                if (operatorPrecedence(stack.getLast().op) > opp or (operatorPrecedence(stack.getLast().op) == opp and opa == .Left)) try rpn.append(stack.pop().?.op) else break;
+                if (operatorPrecedence(stack.getLast().op) > opp or (operatorPrecedence(stack.getLast().op) == opp and opa == .Left)) try rpn.append(stack.pop().?.op, allocator) else break;
             }
 
             try stack.append(allocator, .{.op = op});
@@ -54,7 +54,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
         else if (input[i] == ')') {
 
             while (stack.items.len > 0 and switch(stack.getLast()) {.op => true, .bracket => |bracket| bracket != '('}) {
-                try rpn.append(stack.pop().?.op);
+                try rpn.append(stack.pop().?.op, allocator);
             }
 
             if (stack.items.len == 0) return throw(ReversePolishNotation(T), "MISMATCHED PARENTHESES IN EXPRESSION", .{});
@@ -66,7 +66,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
             for (variables) |variable| {
                 if (std.mem.eql(u8, variable, input[i..i + variable.len])) {
-                    try rpn.append(variable); i += variable.len - 1; continue :parser;
+                    try rpn.append(variable, allocator); i += variable.len - 1; continue :parser;
                 }
             }
 
@@ -74,7 +74,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
         }
     }
 
-    while (stack.items.len > 0) try rpn.append(stack.pop().?.op);
+    while (stack.items.len > 0) try rpn.append(stack.pop().?.op, allocator);
 
     return rpn;
 }

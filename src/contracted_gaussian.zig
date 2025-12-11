@@ -21,8 +21,6 @@ pub fn ContractedGaussian(comptime T: type) type {
         alpha: []T,
         coef: []T,
 
-        allocator: std.mem.Allocator,
-
         /// Initialize a contracted Gaussian.
         pub fn init(center: [3]T, angular: [3]T, coef: []const T, alpha: []const T, allocator: std.mem.Allocator) !ContractedGaussian(T) {
             if (coef.len != alpha.len) {
@@ -33,8 +31,7 @@ pub fn ContractedGaussian(comptime T: type) type {
                 .center = center,
                 .angular = angular,
                 .alpha = try allocator.alloc(T, alpha.len),
-                .coef = try allocator.alloc(T, coef.len),
-                .allocator = allocator
+                .coef = try allocator.alloc(T, coef.len)
             };
 
             for (coef, 0..) |ci, i| cg.coef[i] = ci; for (alpha, 0..) |ai, i| cg.alpha[i] = ai;
@@ -59,8 +56,8 @@ pub fn ContractedGaussian(comptime T: type) type {
         }
 
         /// Deinitialize a contracted Gaussian.
-        pub fn deinit(self: ContractedGaussian(T)) void {
-            self.allocator.free(self.coef); self.allocator.free(self.alpha);
+        pub fn deinit(self: ContractedGaussian(T), allocator: std.mem.Allocator) void {
+            allocator.free(self.coef); allocator.free(self.alpha);
         }
 
         /// Compute the Coulomb integral between four contracted Gaussians.

@@ -21,8 +21,6 @@ pub fn BasisSet(comptime T: type) type {
     return struct {
         contracted_gaussians: []const ContractedGaussian(T),
 
-        allocator: std.mem.Allocator,
-
         /// Get the basis set for the given system and name.
         pub fn init(system: ClassicalParticle(T), name: []const u8, allocator: std.mem.Allocator) !BasisSet(T) {
             var basis = std.ArrayList(ContractedGaussian(T)){};
@@ -75,14 +73,14 @@ pub fn BasisSet(comptime T: type) type {
                 }
             }
 
-            return .{.contracted_gaussians = try basis.toOwnedSlice(allocator), .allocator = allocator};
+            return .{.contracted_gaussians = try basis.toOwnedSlice(allocator)};
         }
 
         /// Deinitialize the basis set.
-        pub fn deinit(self: BasisSet(T)) void {
-            for (self.contracted_gaussians) |cg| cg.deinit();
+        pub fn deinit(self: BasisSet(T), allocator: std.mem.Allocator) void {
+            for (self.contracted_gaussians) |cg| cg.deinit(allocator);
 
-            self.allocator.free(self.contracted_gaussians);
+            allocator.free(self.contracted_gaussians);
         }
 
         /// Get the number of basis functions.

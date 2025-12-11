@@ -33,8 +33,6 @@ pub fn ClassicalParticle(comptime T: type) type {
         position: RealVector(T),
         velocity: RealVector(T),
 
-        allocator: std.mem.Allocator,
-
         /// Initialize the system using the number of dimensions, an array of masses, and an allocator. The positions and velocities are undefined after initialization.
         pub fn init(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !@This() {
             if (ndim != masses.len) return throw(@This(), "THE LENGTH OF MASSES VECTOR MUST BE THE SAME AS NUMBER OF DIMENSIONS", .{});
@@ -46,8 +44,7 @@ pub fn ClassicalParticle(comptime T: type) type {
                 .masses = try RealVector(T).init(ndim, allocator),
                 .ndim = ndim,
                 .position = try RealVector(T).init(ndim, allocator),
-                .velocity = try RealVector(T).init(ndim, allocator),
-                .allocator = allocator
+                .velocity = try RealVector(T).init(ndim, allocator)
             };
 
             for (masses, 0..) |mi, i| particle.masses.ptr(i).* = mi;
@@ -67,35 +64,34 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Free the memory allocated for the system.
-        pub fn deinit(self: @This()) void {
-            if (self.atoms) |atoms| self.allocator.free(atoms);
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            if (self.atoms) |atoms| allocator.free(atoms);
 
-            self.position.deinit();
-            self.velocity.deinit();
-            self.acceleration.deinit();
-            self.masses.deinit();
+            self.position.deinit(allocator);
+            self.velocity.deinit(allocator);
+            self.acceleration.deinit(allocator);
+            self.masses.deinit(allocator);
         }
 
         /// Clone the classical particle.
-        pub fn clone(self: @This()) !@This() {
+        pub fn clone(self: @This(), allocator: std.mem.Allocator) !@This() {
             var atoms: ?[]usize = null;
 
             if (self.atoms != null) {
 
-                atoms = try self.allocator.alloc(usize, self.atoms.?.len);
+                atoms = try allocator.alloc(usize, self.atoms.?.len);
 
                 for (0..self.atoms.?.len) |i| atoms.?[i] = self.atoms.?[i];
             }
 
             return @This(){
                 .atoms = atoms,
-                .acceleration = try self.acceleration.clone(),
+                .acceleration = try self.acceleration.clone(allocator),
                 .charge = self.charge,
-                .masses = try self.masses.clone(),
+                .masses = try self.masses.clone(allocator),
                 .ndim = self.ndim,
-                .position = try self.position.clone(),
-                .velocity = try self.velocity.clone(),
-                .allocator = self.allocator
+                .position = try self.position.clone(allocator),
+                .velocity = try self.velocity.clone(allocator)
             };
         }
 
@@ -206,7 +202,7 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.
 
     reader_interface.toss(1); _ = try reader_interface.discardDelimiterInclusive('\n');
 
-    var position = try RealVector(T).init(3 * natom, allocator); defer position.deinit();
+    var position = try RealVector(T).init(3 * natom, allocator); defer position.deinit(allocator);
 
     for (0..natom) |i| {
 

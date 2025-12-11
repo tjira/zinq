@@ -44,8 +44,8 @@ pub fn Output(comptime T: type) type {
         potential: RealMatrix(T),
 
         /// Deallocate the output structure.
-        pub fn deinit(self: @This()) void {
-            self.potential.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.potential.deinit(allocator);
         }
     };
 }
@@ -57,8 +57,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
-    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
-    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
+    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
+    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
     if (opt.grid.limits.len != ndim) return throw(Output(T), "LIMITS LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
     for (0..ndim) |i| if (opt.grid.limits[i].len != 2) return throw(Output(T), "EACH LIMIT MUST HAVE A LENGTH OF 2", .{});

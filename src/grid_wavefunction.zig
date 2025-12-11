@@ -38,8 +38,6 @@ pub fn GridWavefunction(comptime T: type) type {
         ndim: usize,
         mass: T,
 
-        allocator: std.mem.Allocator,
-
         /// Allocate a wavefunction on a grid.
         pub fn init(npoint: usize, nstate: usize, ndim: usize, limits: []const []const T, mass: T, allocator: std.mem.Allocator) !@This() {
             if (limits.len != ndim) return throw(@This(), "LIMITS LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
@@ -52,19 +50,18 @@ pub fn GridWavefunction(comptime T: type) type {
                 .npoint = npoint,
                 .nstate = nstate,
                 .ndim = ndim,
-                .mass = mass,
-                .allocator = allocator
+                .mass = mass
             };
         }
 
         /// Free the memory allocated for the wavefunction.
-        pub fn deinit(self: @This()) void {
-            self.data.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.data.deinit(allocator);
         }
 
         /// Clone the wavefunction.
-        pub fn clone(self: @This()) !@This() {
-            var new_wavefunction = try @This().init(self.npoint, self.nstate, self.ndim, self.limits, self.mass, self.allocator);
+        pub fn clone(self: @This(), allocator: std.mem.Allocator) !@This() {
+            var new_wavefunction = try @This().init(self.npoint, self.nstate, self.ndim, self.limits, self.mass, allocator);
 
             for (0..self.data.rows) |i| for (0..self.nstate) |j| {
                 new_wavefunction.data.ptr(i, j).* = self.data.at(i, j);
@@ -74,16 +71,16 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Calculate the density matrix of the wavefunction. The matrix is allocated and returned.
-        pub fn density(self: @This(), potential: ElectronicPotential(T), time: T, adiabatic: bool) !ComplexMatrix(T) {
-            var density_matrix = try ComplexMatrix(T).init(self.nstate, self.nstate, self.allocator);
+        pub fn density(self: @This(), potential: ElectronicPotential(T), time: T, adiabatic: bool, allocator: std.mem.Allocator) !ComplexMatrix(T) {
+            var density_matrix = try ComplexMatrix(T).init(self.nstate, self.nstate, allocator);
 
-            var diabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer diabatic_potential.deinit();
-            var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_potential.deinit();
-            var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_eigenvectors.deinit();
+            var diabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer diabatic_potential.deinit(allocator);
+            var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_potential.deinit(allocator);
+            var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_eigenvectors.deinit(allocator);
 
-            var position_at_row = try RealVector(T).init(self.ndim, self.allocator); defer position_at_row.deinit();
+            var position_at_row = try RealVector(T).init(self.ndim, allocator); defer position_at_row.deinit(allocator);
 
-            var wavefunction_row = try ComplexMatrix(T).init(self.nstate, 1, self.allocator); defer wavefunction_row.deinit();
+            var wavefunction_row = try ComplexMatrix(T).init(self.nstate, 1, allocator); defer wavefunction_row.deinit(allocator);
             
             for (0..self.data.rows) |i| {
 
@@ -120,8 +117,8 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Get the shape of the wavefunction as an array of usize.
-        pub fn getShape(self: @This()) ![]usize {
-            const shape = try self.allocator.alloc(usize, self.ndim);
+        pub fn getShape(self: @This(), allocator: std.mem.Allocator) ![]usize {
+            const shape = try allocator.alloc(usize, self.ndim);
 
             for (0..self.ndim) |i| shape[i] = self.npoint;
 
@@ -129,13 +126,13 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Initialize the position of the wavefunction as a Gaussian wavepacket.
-        pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: []const T) !void {
+        pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: []const T, allocator: std.mem.Allocator) !void {
             if (position.len != self.ndim) return throw(void, "POSITION LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
             if (momentum.len != self.ndim) return throw(void, "MOMENTUM LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
             if (gamma.len != self.ndim) return throw(void, "GAMMA LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
             if (state >= self.nstate) return throw(void, "STATE INDEX OUT OF BOUNDS", .{});
 
-            var position_at_row = try RealVector(T).init(self.ndim, self.allocator); defer position_at_row.deinit();
+            var position_at_row = try RealVector(T).init(self.ndim, allocator); defer position_at_row.deinit(allocator);
 
             for (0..self.data.rows) |i| {
 
@@ -160,10 +157,10 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Kinetic energy operator in momentum space.
-        pub fn kineticEnergy(self: @This(), temporary_column: *ComplexVector(T)) !T {
-            const shape = try self.getShape(); defer self.allocator.free(shape);
+        pub fn kineticEnergy(self: @This(), temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !T {
+            const shape = try self.getShape(allocator); defer allocator.free(shape);
 
-            var momentum_at_row = try RealVector(T).init(self.ndim, self.allocator); defer momentum_at_row.deinit();
+            var momentum_at_row = try RealVector(T).init(self.ndim, allocator); defer momentum_at_row.deinit(allocator);
 
             var kinetic_energy: T = 0;
 
@@ -197,12 +194,12 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Calculate the momentum of the wavefunction. The resulting vector is allocated inside the function and returned.
-        pub fn momentumMean(self: @This(), temporary_column: *ComplexVector(T)) !RealVector(T) {
-            const shape = try self.getShape(); defer self.allocator.free(shape);
+        pub fn momentumMean(self: @This(), temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !RealVector(T) {
+            const shape = try self.getShape(allocator); defer allocator.free(shape);
 
-            var momentum_at_row = try RealVector(T).init(self.ndim, self.allocator); defer momentum_at_row.deinit();
+            var momentum_at_row = try RealVector(T).init(self.ndim, allocator); defer momentum_at_row.deinit(allocator);
 
-            var momentum = try RealVector(T).initZero(self.ndim, self.allocator);
+            var momentum = try RealVector(T).initZero(self.ndim, allocator);
 
             for (0..self.ndim) |i| for (0..self.nstate) |j| {
 
@@ -244,10 +241,10 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Calculate the position of the wavefunction. The resulting vector is allocated inside the function and returned.
-        pub fn positionMean(self: @This()) !RealVector(T) {
-            var position_at_row = try RealVector(T).init(self.ndim, self.allocator); defer position_at_row.deinit();
+        pub fn positionMean(self: @This(), allocator: std.mem.Allocator) !RealVector(T) {
+            var position_at_row = try RealVector(T).init(self.ndim, allocator); defer position_at_row.deinit(allocator);
 
-            var position = try RealVector(T).initZero(self.ndim, self.allocator);
+            var position = try RealVector(T).initZero(self.ndim, allocator);
 
             for (0..self.data.rows) |i| {
 
@@ -264,10 +261,10 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Calculate potential energy of the wavefunction. The temporary matrix for storing the potential matrix is allocated inside the function.
-        pub fn potentialEnergy(self: *@This(), potential: ElectronicPotential(T), time: T) !T {
-            var position_at_row = try RealVector(T).init(self.ndim, self.allocator); defer position_at_row.deinit();
+        pub fn potentialEnergy(self: *@This(), potential: ElectronicPotential(T), time: T, allocator: std.mem.Allocator) !T {
+            var position_at_row = try RealVector(T).init(self.ndim, allocator); defer position_at_row.deinit(allocator);
 
-            var diabatic_potential_matrix = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer diabatic_potential_matrix.deinit();
+            var diabatic_potential_matrix = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer diabatic_potential_matrix.deinit(allocator);
 
             var potential_energy: T = 0;
 
@@ -285,25 +282,25 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Propagate the wavefunction in time using the split-operator method.
-        pub fn propagate(self: *@This(), potential: ElectronicPotential(T), time: T, time_step: T, imaginary: bool, temporary_column: *ComplexVector(T)) !void {
+        pub fn propagate(self: *@This(), potential: ElectronicPotential(T), time: T, time_step: T, imaginary: bool, temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
             const unit = Complex(T).init(if (imaginary) 1 else 0, if (imaginary) 0 else 1);
 
-            try propagateHalfPosition(self, potential, time, time_step, unit, temporary_column);
+            try propagateHalfPosition(self, potential, time, time_step, unit, temporary_column, allocator);
 
-            try propagateFullMomentum(self, time_step, unit, temporary_column);
+            try propagateFullMomentum(self, time_step, unit, temporary_column, allocator);
 
-            try propagateHalfPosition(self, potential, time, time_step, unit, temporary_column);
+            try propagateHalfPosition(self, potential, time, time_step, unit, temporary_column, allocator);
 
             if (imaginary) self.normalize();
         }
 
         /// Propagate the wavefunction full time step in momentum space.
-        pub fn propagateFullMomentum(self: *@This(), time_step: T, unit: Complex(T), temporary_column: *ComplexVector(T)) !void {
-            const shape = try self.getShape(); defer self.allocator.free(shape);
+        pub fn propagateFullMomentum(self: *@This(), time_step: T, unit: Complex(T), temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
+            const shape = try self.getShape(allocator); defer allocator.free(shape);
 
-            var momentum_at_row = try RealVector(T).init(self.ndim, self.allocator); defer momentum_at_row.deinit();
+            var momentum_at_row = try RealVector(T).init(self.ndim, allocator); defer momentum_at_row.deinit(allocator);
 
-            var K = try ComplexMatrix(T).init(self.nstate, self.nstate, self.allocator); defer K.deinit();
+            var K = try ComplexMatrix(T).init(self.nstate, self.nstate, allocator); defer K.deinit(allocator);
 
             for (0..self.nstate) |j| {
 
@@ -339,16 +336,16 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Propagate the wavefunction half a time step in position space.
-        pub fn propagateHalfPosition(self: *@This(), potential: ElectronicPotential(T), time: T, time_step: T, unit: Complex(T), temporary_column: *ComplexVector(T)) !void {
-            var diabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer diabatic_potential.deinit();
-            var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_potential.deinit();
-            var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_eigenvectors.deinit();
+        pub fn propagateHalfPosition(self: *@This(), potential: ElectronicPotential(T), time: T, time_step: T, unit: Complex(T), temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
+            var diabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer diabatic_potential.deinit(allocator);
+            var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_potential.deinit(allocator);
+            var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_eigenvectors.deinit(allocator);
 
-            var position_at_row = try RealVector(T).init(self.ndim, self.allocator); defer position_at_row.deinit();
+            var position_at_row = try RealVector(T).init(self.ndim, allocator); defer position_at_row.deinit(allocator);
 
-            var R = try ComplexMatrix(T).init(self.nstate, self.nstate, self.allocator); defer R.deinit();
+            var R = try ComplexMatrix(T).init(self.nstate, self.nstate, allocator); defer R.deinit(allocator);
 
-            var mm_temporary = try ComplexMatrix(T).init(self.nstate, self.nstate, self.allocator); defer mm_temporary.deinit();
+            var mm_temporary = try ComplexMatrix(T).init(self.nstate, self.nstate, allocator); defer mm_temporary.deinit(allocator);
 
             for (0..self.data.rows) |i| {
 
@@ -372,14 +369,14 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Perform the transformation from diabatic to adiabatic representation or vice versa.
-        pub fn transformRepresentation(self: *@This(), potential: ElectronicPotential(T), time: T, to_adiabatic: bool) !void {
-            var diabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer diabatic_potential.deinit();
-            var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_potential.deinit();
-            var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, self.allocator); defer adiabatic_eigenvectors.deinit();
+        pub fn transformRepresentation(self: *@This(), potential: ElectronicPotential(T), time: T, to_adiabatic: bool, allocator: std.mem.Allocator) !void {
+            var diabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer diabatic_potential.deinit(allocator);
+            var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_potential.deinit(allocator);
+            var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_eigenvectors.deinit(allocator);
 
-            var position_at_row = try RealVector(T).init(self.ndim, self.allocator); defer position_at_row.deinit();
+            var position_at_row = try RealVector(T).init(self.ndim, allocator); defer position_at_row.deinit(allocator);
 
-            var mm_temporary = try ComplexMatrix(T).init(self.nstate, 1, self.allocator); defer mm_temporary.deinit();
+            var mm_temporary = try ComplexMatrix(T).init(self.nstate, 1, allocator); defer mm_temporary.deinit(allocator);
 
             for (0..self.data.rows) |i| {
 

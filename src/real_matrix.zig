@@ -18,28 +18,25 @@ pub fn RealMatrix(comptime T: type) type {
         rows: usize,
         cols: usize,
 
-        allocator: ?std.mem.Allocator,
-
         /// Initialize a matrix with a given number of rows and columns and specify an allocator. The function returns an error if the allocation fails.
-        pub fn init(rows: usize, cols: usize, allocator: ?std.mem.Allocator) !@This() {
+        pub fn init(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
-                .data = try allocator.?.alloc(T, rows * cols),
+                .data = try allocator.alloc(T, rows * cols),
                 .rows = rows,
-                .cols = cols,
-                .allocator = allocator
+                .cols = cols
             };
         }
 
         /// Initialize a matrix and fills it with zeros.
-        pub fn initZero(rows: usize, cols: usize, allocator: ?std.mem.Allocator) !@This() {
+        pub fn initZero(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
             var A = try @This().init(rows, cols, allocator); A.zero();
 
             return A;
         }
 
         /// Free the memory allocated for the matrix.
-        pub fn deinit(self: @This()) void {
-            if (self.allocator) |allocator| allocator.free(self.data);
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            allocator.free(self.data);
         }
 
         /// Add another matrix to this matrix.
@@ -62,14 +59,13 @@ pub fn RealMatrix(comptime T: type) type {
         pub fn asVector(self: @This()) RealVector(T) {
             return RealVector(T){
                 .data = self.data,
-                .len = self.rows * self.cols,
-                .allocator = null
+                .len = self.rows * self.cols
             };
         }
 
         /// Clone the matrix.
-        pub fn clone(self: @This()) !@This() {
-            var B = try @This().init(self.rows, self.cols, self.allocator);
+        pub fn clone(self: @This(), allocator: std.mem.Allocator) !@This() {
+            var B = try @This().init(self.rows, self.cols, allocator);
 
             try self.copyTo(&B);
 
@@ -187,8 +183,7 @@ pub fn RealMatrix(comptime T: type) type {
         pub fn row(self: @This(), i: usize) RealVector(T) {
             return RealVector(T){
                 .data = self.data[i * self.cols..(i + 1) * self.cols],
-                .len = self.cols,
-                .allocator = null
+                .len = self.cols
             };
         }
 
@@ -214,7 +209,7 @@ pub fn RealMatrix(comptime T: type) type {
 }
 
 test "init, deinit" {
-    var A = try RealMatrix(f64).init(345, 753, std.testing.allocator); defer A.deinit();
+    var A = try RealMatrix(f64).init(345, 753, std.testing.allocator); defer A.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(A.rows, 345);
     try std.testing.expectEqual(A.cols, 753);

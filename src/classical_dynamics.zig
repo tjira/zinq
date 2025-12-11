@@ -134,14 +134,14 @@ pub fn Output(comptime T: type) type {
         }
 
         /// Free the memory allocated for the output structure.
-        pub fn deinit(self: @This()) void {
-            self.kinetic_energy_mean.deinit();
-            self.momentum_mean.deinit();
-            self.population_mean.deinit();
-            self.position_mean.deinit();
-            self.potential_energy_mean.deinit();
-            self.time_derivative_coupling_mean.deinit();
-            self.total_energy_mean.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.kinetic_energy_mean.deinit(allocator);
+            self.momentum_mean.deinit(allocator);
+            self.population_mean.deinit(allocator);
+            self.position_mean.deinit(allocator);
+            self.potential_energy_mean.deinit(allocator);
+            self.time_derivative_coupling_mean.deinit(allocator);
+            self.total_energy_mean.deinit(allocator);
         }
     };
 }
@@ -186,14 +186,14 @@ pub fn Custom(comptime T: type) type {
             }
 
             /// Free the memory allocated for the trajectory output structure.
-            pub fn deinit(self: @This()) void {
-                self.kinetic_energy.deinit();
-                self.momentum.deinit();
-                self.population.deinit();
-                self.position.deinit();
-                self.potential_energy.deinit();
-                self.time_derivative_coupling.deinit();
-                self.total_energy.deinit();
+            pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+                self.kinetic_energy.deinit(allocator);
+                self.momentum.deinit(allocator);
+                self.population.deinit(allocator);
+                self.position.deinit(allocator);
+                self.potential_energy.deinit(allocator);
+                self.time_derivative_coupling.deinit(allocator);
+                self.total_energy.deinit(allocator);
             }
         };
     };
@@ -206,8 +206,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
-    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
-    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
+    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
+    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
     var output = try Output(T).init(nstate, ndim, opt.iterations, allocator);
 
@@ -221,7 +221,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         .total_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
     };
 
-    defer inline for (std.meta.fields(@TypeOf(parallel_results))) |field| @as(field.type, @field(parallel_results, field.name)).deinit();
+    defer inline for (std.meta.fields(@TypeOf(parallel_results))) |field| @as(field.type, @field(parallel_results, field.name)).deinit(allocator);
 
     var split_mix = std.Random.SplitMix64.init(opt.seed);
 
@@ -273,18 +273,18 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
     if (current_state >= nstate) return throw(Custom(T).TrajectoryOutput, "ACTIVE STATE MUST NOT BE HIGHER THAN THE TOTAL NUMBER OF STATES", .{});
 
-    var diabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer diabatic_potential.deinit();
-    var adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_potential.deinit();
-    var adiabatic_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_eigenvectors.deinit();
-    var previous_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer previous_eigenvectors.deinit();
-    var eigenvector_overlap = try RealMatrix(T).init(nstate, nstate, allocator); defer eigenvector_overlap.deinit();
-    var time_derivative_coupling = try RealMatrix(T).initZero(nstate, nstate, allocator); defer time_derivative_coupling.deinit();
+    var diabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer diabatic_potential.deinit(allocator);
+    var adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_potential.deinit(allocator);
+    var adiabatic_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_eigenvectors.deinit(allocator);
+    var previous_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator); defer previous_eigenvectors.deinit(allocator);
+    var eigenvector_overlap = try RealMatrix(T).init(nstate, nstate, allocator); defer eigenvector_overlap.deinit(allocator);
+    var time_derivative_coupling = try RealMatrix(T).initZero(nstate, nstate, allocator); defer time_derivative_coupling.deinit(allocator);
 
-    var energy_gaps = try RingBufferArray(T).init(nstate * (nstate - 1) / 2, .{.max_len = 5}, allocator); defer energy_gaps.deinit();
-    var jump_probabilities = try RealVector(T).init(nstate, allocator); defer jump_probabilities.deinit();
-    var runge_kutta_solver = try ComplexRungeKutta(T).init(nstate, allocator); defer runge_kutta_solver.deinit();
-    var amplitudes = try ComplexVector(T).initZero(nstate, allocator); defer amplitudes.deinit();
-    var bloch_vector = try RealVector(T).initZero(3, allocator); defer bloch_vector.deinit();
+    var energy_gaps = try RingBufferArray(T).init(nstate * (nstate - 1) / 2, .{.max_len = 5}, allocator); defer energy_gaps.deinit(allocator);
+    var jump_probabilities = try RealVector(T).init(nstate, allocator); defer jump_probabilities.deinit(allocator);
+    var runge_kutta_solver = try ComplexRungeKutta(T).init(nstate, allocator); defer runge_kutta_solver.deinit(allocator);
+    var amplitudes = try ComplexVector(T).initZero(nstate, allocator); defer amplitudes.deinit(allocator);
+    var bloch_vector = try RealVector(T).initZero(3, allocator); defer bloch_vector.deinit(allocator);
 
     amplitudes.ptr(current_state).* = Complex(T).init(1, 0); bloch_vector.ptr(2).* = if (current_state == 1) 1 else -1;
 
@@ -338,7 +338,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .electronic_potential = opt.potential,
         .position = system.position,
         .velocity = system.velocity,
-        .time = undefined
+        .time = undefined,
+        .allocator = allocator
     };
 
     const npi_parameters: norm_preserving_interpolation.Parameters(T) = .{
@@ -421,7 +422,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, params: anytype) void {
     var system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.mass, params[4]) catch |e| {
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
-    }; defer system.deinit();
+    }; defer system.deinit(params[4]);
 
     var rng = params[3]; var random = rng.random();
 
@@ -431,7 +432,7 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
 
     const trajectory_output = runTrajectory(T, params[0], &system, params[1], params[2], params[4]) catch |e| {
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
-    }; defer trajectory_output.deinit();
+    }; defer trajectory_output.deinit(params[4]);
 
     results.kinetic_energy_mean.ptr(id - 1).add(trajectory_output.kinetic_energy) catch |e| {
         if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
@@ -630,7 +631,7 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
         .trajectories = 1000
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.371);
     try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.629);
@@ -657,7 +658,7 @@ test "Landau-Lener Surface Hopping on Tully's First Potential" {
         .trajectories = 1000
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.498);
     try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.502);
@@ -687,7 +688,7 @@ test "Mapping Approach to Surface Hopping on Tully's First Potential" {
         .trajectories = 1000
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.385);
     try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.615);

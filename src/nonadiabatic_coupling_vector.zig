@@ -22,7 +22,8 @@ pub fn Parameters(comptime T: type) type {
         electronic_potential: ElectronicPotential(T),
         position: RealVector(T),
         velocity: RealVector(T),
-        time: T
+        time: T,
+        allocator: std.mem.Allocator
     };
 }
 
@@ -42,8 +43,8 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
             const velocity = parameters.velocity;
             const time = parameters.time;
 
-            var eigenvectors_plus = try adiabatic_eigenvectors.clone(); defer eigenvectors_plus.deinit();
-            var eigenvectors_minus = try adiabatic_eigenvectors.clone(); defer eigenvectors_minus.deinit();
+            var eigenvectors_plus = try adiabatic_eigenvectors.clone(parameters.allocator); defer eigenvectors_plus.deinit(parameters.allocator);
+            var eigenvectors_minus = try adiabatic_eigenvectors.clone(parameters.allocator); defer eigenvectors_minus.deinit(parameters.allocator);
 
             for (0..position.len) |i| {
                 const original_position = position.at(i);

@@ -102,8 +102,8 @@ pub fn Output(comptime T: type) type {
         }
 
         /// Deallocate the output structure.
-        pub fn deinit(self: @This()) void {
-            self.population.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.population.deinit(allocator);
         }
     };
 }
@@ -132,26 +132,26 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
-    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
-    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
+    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
+    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
     var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
 
-    var wavefunction = try GridWavefunction(T).init(@intCast(opt.grid.points), nstate, ndim, opt.grid.limits, opt.initial_conditions.mass, allocator); defer wavefunction.deinit();
+    var wavefunction = try GridWavefunction(T).init(@intCast(opt.grid.points), nstate, ndim, opt.grid.limits, opt.initial_conditions.mass, allocator); defer wavefunction.deinit(allocator);
 
-    try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma);
+    try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma, allocator);
 
     const save_iwf = opt.write.spectrum != null or opt.write.autocorrelation_function != null;
 
-    const initial_wavefunction: ?GridWavefunction(T) = if (save_iwf) try wavefunction.clone() else null; defer if (initial_wavefunction) |iwf| iwf.deinit();
+    const initial_wavefunction: ?GridWavefunction(T) = if (save_iwf) try wavefunction.clone(allocator) else null; defer if (initial_wavefunction) |iwf| iwf.deinit(allocator);
 
-    if (opt.initial_conditions.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false);
+    if (opt.initial_conditions.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false, allocator);
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, wavefunction, opt.iterations, allocator) else null;
 
-    var temporary_wavefunction_column = try ComplexVector(T).init(wavefunction.data.rows, allocator); defer temporary_wavefunction_column.deinit();
+    var temporary_wavefunction_column = try ComplexVector(T).init(wavefunction.data.rows, allocator); defer temporary_wavefunction_column.deinit(allocator);
 
-    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit();
+    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit(allocator);
 
     if (enable_printing) try printIterationHeader(ndim, nstate);
 
@@ -161,23 +161,23 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
-        if (i > 0) try wavefunction.propagate(opt.potential, time, opt.time_step, opt.imaginary, &temporary_wavefunction_column);
+        if (i > 0) try wavefunction.propagate(opt.potential, time, opt.time_step, opt.imaginary, &temporary_wavefunction_column, allocator);
 
-        if (initial_wavefunction) |iwf| acf.ptr(i).* = wavefunction.overlap(iwf);
+        if (initial_wavefunction) |iwf| acf.ptr(i).* = iwf.overlap(wavefunction);
 
-        const density_matrix = try wavefunction.density(opt.potential, time, opt.adiabatic); defer density_matrix.deinit();
+        const density_matrix = try wavefunction.density(opt.potential, time, opt.adiabatic, allocator); defer density_matrix.deinit(allocator);
 
-        const potential_energy = try wavefunction.potentialEnergy(opt.potential, time);
-        const kinetic_energy = try wavefunction.kineticEnergy(&temporary_wavefunction_column);
+        const potential_energy = try wavefunction.potentialEnergy(opt.potential, time, allocator);
+        const kinetic_energy = try wavefunction.kineticEnergy(&temporary_wavefunction_column, allocator);
 
-        const position = try wavefunction.positionMean(); defer position.deinit();
-        const momentum = try wavefunction.momentumMean(&temporary_wavefunction_column); defer momentum.deinit();
+        const position = try wavefunction.positionMean(allocator); defer position.deinit(allocator);
+        const momentum = try wavefunction.momentumMean(&temporary_wavefunction_column, allocator); defer momentum.deinit(allocator);
 
         for (0..nstate) |j| {
             output.population.ptr(i, j).* = density_matrix.at(j, j).re;
         }
 
-        if (opt.write.wavefunction != null) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, i, time, opt.adiabatic);
+        if (opt.write.wavefunction != null) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, i, time, opt.adiabatic, allocator);
 
         if (i == opt.iterations) {
             output.kinetic_energy = kinetic_energy;
@@ -222,21 +222,21 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
     if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
 
-    if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit();
+    if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit(allocator);
 
     return output;
 }
 
 /// Assign current wavefunction to the wavefunction dynamics matrix.
-pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatrix(T), wavefunction: GridWavefunction(T), potential: ElectronicPotential(T), iter: usize, time: T, adiabatic: bool) !void {
-    var diabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer diabatic_potential.deinit();
-    var adiabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer adiabatic_potential.deinit();
-    var adiabatic_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer adiabatic_eigenvectors.deinit();
-    var previous_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, wavefunction.allocator); defer previous_eigenvectors.deinit();
+pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatrix(T), wavefunction: GridWavefunction(T), potential: ElectronicPotential(T), iter: usize, time: T, adiabatic: bool, allocator: std.mem.Allocator) !void {
+    var diabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer diabatic_potential.deinit(allocator);
+    var adiabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer adiabatic_potential.deinit(allocator);
+    var adiabatic_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer adiabatic_eigenvectors.deinit(allocator);
+    var previous_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer previous_eigenvectors.deinit(allocator);
 
-    var position_at_row = try RealVector(T).init(wavefunction.ndim, wavefunction.allocator); defer position_at_row.deinit();
+    var position_at_row = try RealVector(T).init(wavefunction.ndim, allocator); defer position_at_row.deinit(allocator);
 
-    var wavefunction_row = try ComplexMatrix(T).init(wavefunction.nstate, 1, wavefunction.allocator); defer wavefunction_row.deinit();
+    var wavefunction_row = try ComplexMatrix(T).init(wavefunction.nstate, 1, allocator); defer wavefunction_row.deinit(allocator);
 
     for (0..wavefunction.data.rows) |i| {
 
@@ -266,7 +266,7 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
 pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options: anytype, allocator: std.mem.Allocator) !RealVector(T) {
     const spectrum_len = try std.math.powi(usize, 2, std.math.log2_int_ceil(usize, acf.len) + spectrum_options.padding_order);
 
-    var spectrum_complex = try ComplexVector(T).initZero(spectrum_len, allocator); defer spectrum_complex.deinit();
+    var spectrum_complex = try ComplexVector(T).initZero(spectrum_len, allocator); defer spectrum_complex.deinit(allocator);
 
     for (0..acf.len) |i| {
         spectrum_complex.ptr(spectrum_complex.len / 2 + i).* = acf.at(i);
@@ -290,7 +290,7 @@ pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options:
 
     var spectrum_complex_strided = spectrum_complex.asStrided();
 
-    try cfft1(T, &spectrum_complex_strided, -1);
+    try cfft1(T, &spectrum_complex_strided, 1);
 
     var spectrum = try RealVector(T).init(spectrum_complex.len / 2 + 1, allocator);
 
@@ -315,7 +315,7 @@ pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options:
 pub fn initializeWavefunctionDynamicsContainer(comptime T: type, wavefunction: GridWavefunction(T), iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var wavefunction_dynamics: RealMatrix(T) = try RealMatrix(T).init(wavefunction.data.rows, wavefunction.ndim + 2 * wavefunction.nstate * (iterations + 1), allocator);
 
-    var position_at_row = try RealVector(T).init(wavefunction.ndim, allocator); defer position_at_row.deinit();
+    var position_at_row = try RealVector(T).init(wavefunction.ndim, allocator); defer position_at_row.deinit(allocator);
 
     for (0..wavefunction.data.rows) |i| {
 
@@ -397,7 +397,7 @@ test "Exact Dynamics on 1D Harmonic Potential" {
         .time_step = 0.1
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.52726330098766, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.potential_energy, 0.59766836993815, TEST_TOLERANCE);
@@ -425,7 +425,7 @@ test "Exact Dynamics on 2D Harmonic Potential" {
         .time_step = 0.1
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 1.05452660197613, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.potential_energy, 1.19533673987723, TEST_TOLERANCE);
@@ -451,7 +451,7 @@ test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
         .time_step = 10
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06471011654226, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.58949426578088, TEST_TOLERANCE);
@@ -480,7 +480,7 @@ test "Imaginary Time Propagation on 1D Harmonic Potential" {
         .imaginary = true
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.25031230493126, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.potential_energy, 0.24968808471946, TEST_TOLERANCE);
@@ -509,7 +509,7 @@ test "Imaginary Time Propagation on 2D Harmonic Potential" {
         .imaginary = true
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.50062460986252, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.potential_energy, 0.49937616943892, TEST_TOLERANCE);

@@ -20,11 +20,11 @@ const PARALLEL_ERROR = &global_variables.PARALLEL_ERROR;
 pub fn firstPartialDerivative(comptime T: type, result: *T, opt: anytype, system: ClassicalParticle(T), efunc: anytype, i: usize, enable_printing: bool, allocator: std.mem.Allocator) !void {
     var timer = try std.time.Timer.start();
 
-    var sysp1 = try system.clone(); defer sysp1.deinit(); sysp1.position.ptr(i).* += opt.gradient.?.numeric.step;
-    var sysm1 = try system.clone(); defer sysm1.deinit(); sysm1.position.ptr(i).* -= opt.gradient.?.numeric.step;
+    var sysp1 = try system.clone(allocator); defer sysp1.deinit(allocator); sysp1.position.ptr(i).* += opt.gradient.?.numeric.step;
+    var sysm1 = try system.clone(allocator); defer sysm1.deinit(allocator); sysm1.position.ptr(i).* -= opt.gradient.?.numeric.step;
 
-    var outp1 = try efunc(T, opt, sysp1, false, allocator); const Ep1 = outp1.energy; outp1.deinit();
-    var outm1 = try efunc(T, opt, sysm1, false, allocator); const Em1 = outm1.energy; outm1.deinit();
+    var outp1 = try efunc(T, opt, sysp1, false, allocator); const Ep1 = outp1.energy; outp1.deinit(allocator);
+    var outm1 = try efunc(T, opt, sysm1, false, allocator); const Em1 = outm1.energy; outm1.deinit(allocator);
 
     result.* = (Ep1 - Em1) / (2 * opt.gradient.?.numeric.step);
 
@@ -98,15 +98,15 @@ pub fn secondPartialDerivative(comptime T: type, result: *T, opt: anytype, syste
     const index_of_derivative = i * system.position.len - (i * (i - 1)) / 2 + (j - i) + 1;
     const total_derivatives = system.position.len * (system.position.len - 1) / 2 + system.position.len;
 
-    var sysp2   = try system.clone(); defer   sysp2.deinit(); sysp2.position.ptr(i).*   += opt.hessian.?.numeric.step; sysp2.position.ptr(j).*   += opt.hessian.?.numeric.step;
-    var sysp1m1 = try system.clone(); defer sysp1m1.deinit(); sysp1m1.position.ptr(i).* += opt.hessian.?.numeric.step; sysp1m1.position.ptr(j).* -= opt.hessian.?.numeric.step;
-    var sysm1p1 = try system.clone(); defer sysm1p1.deinit(); sysm1p1.position.ptr(i).* -= opt.hessian.?.numeric.step; sysm1p1.position.ptr(j).* += opt.hessian.?.numeric.step;
-    var sysm2   = try system.clone(); defer   sysm2.deinit(); sysm2.position.ptr(i).*   -= opt.hessian.?.numeric.step; sysm2.position.ptr(j).*   -= opt.hessian.?.numeric.step;
+    var sysp2   = try system.clone(allocator); defer   sysp2.deinit(allocator); sysp2.position.ptr(i).*   += opt.hessian.?.numeric.step; sysp2.position.ptr(j).*   += opt.hessian.?.numeric.step;
+    var sysp1m1 = try system.clone(allocator); defer sysp1m1.deinit(allocator); sysp1m1.position.ptr(i).* += opt.hessian.?.numeric.step; sysp1m1.position.ptr(j).* -= opt.hessian.?.numeric.step;
+    var sysm1p1 = try system.clone(allocator); defer sysm1p1.deinit(allocator); sysm1p1.position.ptr(i).* -= opt.hessian.?.numeric.step; sysm1p1.position.ptr(j).* += opt.hessian.?.numeric.step;
+    var sysm2   = try system.clone(allocator); defer   sysm2.deinit(allocator); sysm2.position.ptr(i).*   -= opt.hessian.?.numeric.step; sysm2.position.ptr(j).*   -= opt.hessian.?.numeric.step;
 
-    var outp2   = try efunc(T, opt, sysp2,   false, allocator); const Ep2   = outp2.energy;     outp2.deinit();
-    var outp1m1 = try efunc(T, opt, sysp1m1, false, allocator); const Ep1m1 = outp1m1.energy; outp1m1.deinit();
-    var outm1p1 = try efunc(T, opt, sysm1p1, false, allocator); const Em1p1 = outm1p1.energy; outm1p1.deinit();
-    var outm2   = try efunc(T, opt, sysm2,   false, allocator); const Em2   = outm2.energy;     outm2.deinit();
+    var outp2   = try efunc(T, opt, sysp2,   false, allocator); const Ep2   = outp2.energy;     outp2.deinit(allocator);
+    var outp1m1 = try efunc(T, opt, sysp1m1, false, allocator); const Ep1m1 = outp1m1.energy; outp1m1.deinit(allocator);
+    var outm1p1 = try efunc(T, opt, sysm1p1, false, allocator); const Em1p1 = outm1p1.energy; outm1p1.deinit(allocator);
+    var outm2   = try efunc(T, opt, sysm2,   false, allocator); const Em2   = outm2.energy;     outm2.deinit(allocator);
 
     result.* = (Ep2 - Ep1m1 - Em1p1 + Em2) / (4 * opt.hessian.?.numeric.step * opt.hessian.?.numeric.step);
 

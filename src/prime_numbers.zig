@@ -37,19 +37,16 @@ pub fn Output(comptime T: type) type {
     return struct {
         prime_numbers: RealVector(T),
 
-        allocator: std.mem.Allocator,
-
         /// Initialize the output structure.
         pub fn init(count: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
-                .prime_numbers = try RealVector(T).init(count, allocator),
-                .allocator = allocator
+                .prime_numbers = try RealVector(T).init(count, allocator)
             };
         }
 
         /// Free the output structure.
-        pub fn deinit(self: @This()) void {
-            self.prime_numbers.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.prime_numbers.deinit(allocator);
         }
     };
 }

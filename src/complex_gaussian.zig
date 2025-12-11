@@ -42,7 +42,6 @@ pub fn ComplexGaussian(comptime T: type) type {
         position: []T,
         gamma: []Complex(T),
         momentum: []T,
-        allocator: std.mem.Allocator,
 
         /// Initialize a new complex Gaussian with given parameters.
         pub fn init(position: []const T, gamma: []const T, momentum: []const T, allocator: std.mem.Allocator) !@This() {
@@ -54,7 +53,6 @@ pub fn ComplexGaussian(comptime T: type) type {
                 .position = try allocator.alloc(T, position.len),
                 .gamma = try allocator.alloc(Complex(T), position.len),
                 .momentum = try allocator.alloc(T, position.len),
-                .allocator = allocator
             };
 
             for (position, 0..) |c, i| cg.position[i] = c;
@@ -65,17 +63,17 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Free allocated memory for the complex Gaussian.
-        pub fn deinit(self: @This()) void {
-            self.allocator.free(self.position);
-            self.allocator.free(self.gamma);
-            self.allocator.free(self.momentum);
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            allocator.free(self.position);
+            allocator.free(self.gamma);
+            allocator.free(self.momentum);
         }
 
         /// Clone the complex Gaussian.
-        pub fn clone(self: @This()) !@This() {
-            var gamma = try self.allocator.alloc(Complex(T), self.gamma.len);
-            var momentum = try self.allocator.alloc(T, self.momentum.len);
-            var position = try self.allocator.alloc(T, self.position.len);
+        pub fn clone(self: @This(), allocator: std.mem.Allocator) !@This() {
+            var gamma = try allocator.alloc(Complex(T), self.gamma.len);
+            var momentum = try allocator.alloc(T, self.momentum.len);
+            var position = try allocator.alloc(T, self.position.len);
 
             for (self.gamma, 0..) |g, i| gamma[i] = g;
             for (self.momentum, 0..) |p, i| momentum[i] = p;
@@ -84,19 +82,18 @@ pub fn ComplexGaussian(comptime T: type) type {
             return @This(){
                 .position = position,
                 .gamma = gamma,
-                .momentum = momentum,
-                .allocator = self.allocator
+                .momentum = momentum
             };
         }
 
         /// Returns the derivative of the electronic coefficients where this gaussian is shared between them.
-        pub fn coefficientDerivative(self: @This(), coefs: ComplexVector(T), pot: ElectronicPotential(T), n_nodes: usize, time: T) !ComplexVector(T) {
-            var dc = try ComplexVector(T).initZero(coefs.len, self.allocator);
+        pub fn coefficientDerivative(self: @This(), dc: *ComplexVector(T), coefs: ComplexVector(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, allocator: std.mem.Allocator) !void {
+            dc.zero();
 
-            const V = try self.potential(self, pot, n_nodes, time); defer V.deinit();
+            const V = try self.potential(self, pot, n_nodes, time, allocator); defer V.deinit(allocator);
 
-            var rho = try ComplexMatrix(T).initZero(V.rows, V.cols, self.allocator); defer rho.deinit();
-            var VC = try ComplexVector(T).init(V.cols, self.allocator); defer VC.deinit();
+            var rho = try ComplexMatrix(T).initZero(V.rows, V.cols, allocator); defer rho.deinit(allocator);
+            var VC = try ComplexVector(T).init(V.cols, allocator); defer VC.deinit(allocator);
 
             for (0..coefs.len) |i| for (0..coefs.len) |j| {
                 rho.ptr(i, j).* = coefs.at(i).mul(coefs.at(j).conjugate());
@@ -111,19 +108,15 @@ pub fn ComplexGaussian(comptime T: type) type {
             for (0..dc.len) |i| for (0..coefs.len) |j| {
                 dc.ptr(i).* = dc.at(i).add(rho.at(i, j).mul(VC.at(j)).mulbyi().neg());
             };
-
-            return dc;
         }
 
         /// Returns the derivative of the electronic coefficients where this gaussian is shared between them.
-        pub fn coefficientDerivativeImaginary(self: @This(), coefs: ComplexVector(T), pot: ElectronicPotential(T), n_nodes: usize, time: T) !ComplexVector(T) {
-            var dc = try self.coefficientDerivative(coefs, pot, n_nodes, time);
+        pub fn coefficientDerivativeImaginary(self: @This(), dc: *ComplexVector(T), coefs: ComplexVector(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, allocator: std.mem.Allocator) !void {
+            try self.coefficientDerivative(dc, coefs, pot, n_nodes, time, allocator);
 
             for (0..dc.len) |i| {
                 dc.ptr(i).* = dc.at(i).mulbyi().neg();
             }
-
-            return dc;
         }
 
         /// Evaluate the complex Gaussian function at a given point x.
@@ -143,11 +136,11 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Calculates the derivative of the gamma parameter.
-        pub fn gammaDerivative(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
-            const ddV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, self.allocator); defer ddV.deinit();
+        pub fn gammaDerivative(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !ComplexVector(T) {
+            const ddV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, allocator); defer ddV.deinit(allocator);
 
             for (0..ddV.len) |i| {
-                ddV.ptr(i).deinit(); ddV.ptr(i).* = try self.potentialDerivative2(self, pot, i, n_nodes, time, fdiff_step);
+                ddV.ptr(i).deinit(allocator); ddV.ptr(i).* = try self.potentialDerivative2(self, pot, i, n_nodes, time, fdiff_step, allocator);
             }
 
             var population: T = 0.0;
@@ -158,7 +151,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
             if (population < 1e-14) population = 1;
 
-            const dg = try ComplexVector(T).initZero(ddV.len, self.allocator);
+            const dg = try ComplexVector(T).initZero(ddV.len, allocator);
 
             for (0..dg.len) |i| {
 
@@ -223,11 +216,11 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Calculates the derivative of the momentum.
-        pub fn momentumDerivative(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
-            const dV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, self.allocator); defer dV.deinit();
+        pub fn momentumDerivative(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !RealVector(T) {
+            const dV = try ComplexMatrixArray(T).init(self.position.len, .{.rows = pot.nstate(), .cols = pot.nstate()}, allocator); defer dV.deinit(allocator);
 
             for (0..dV.len) |i| {
-                dV.ptr(i).deinit(); dV.ptr(i).* = try self.potentialDerivative1(self, pot, i, n_nodes, time, fdiff_step);
+                dV.ptr(i).deinit(allocator); dV.ptr(i).* = try self.potentialDerivative1(self, pot, i, n_nodes, time, fdiff_step, allocator);
             }
 
             var population: T = 0.0;
@@ -238,7 +231,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
             if (population < 1e-14) population = 1;
 
-            var dp = try RealVector(T).initZero(dV.len, self.allocator);
+            var dp = try RealVector(T).initZero(dV.len, allocator);
 
             for (0..dp.len) |i| {
 
@@ -262,10 +255,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Calculates the matrix element of the momentum operator between this complex Gaussian and another.
-        pub fn momentumMatrixElement(self: @This(), other: @This()) !ComplexVector(T) {
+        pub fn momentumMatrixElement(self: @This(), other: @This(), allocator: std.mem.Allocator) !ComplexVector(T) {
             if (self.position.len != other.position.len) return throw(ComplexVector(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
 
-            var result = try ComplexVector(T).initZero(self.position.len, self.allocator);
+            var result = try ComplexVector(T).initZero(self.position.len, allocator);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
 
@@ -282,10 +275,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Calculates the matrix element of the position operator between this complex Gaussian and another.
-        pub fn positionMatrixElement(self: @This(), other: @This()) !ComplexVector(T) {
+        pub fn positionMatrixElement(self: @This(), other: @This(), allocator: std.mem.Allocator) !ComplexVector(T) {
             if (self.position.len != other.position.len) return throw(ComplexVector(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
 
-            var result = try ComplexVector(T).initZero(self.position.len, self.allocator);
+            var result = try ComplexVector(T).initZero(self.position.len, allocator);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
 
@@ -443,14 +436,19 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Calculates the derivative of the position.
-        pub fn positionDerivative(self: @This(), mass: []const T) !RealVector(T) {
-            var dq = try RealVector(T).init(self.position.len, self.allocator);
+        pub fn positionDerivative(self: @This(), mass: []const T, allocator: std.mem.Allocator) !RealVector(T) {
+            var dq = try RealVector(T).init(self.position.len, allocator);
 
             for (0..dq.len) |i| {
-                dq.ptr(i).* = self.momentum[i] / mass[i];
+                dq.ptr(i).* = self.positionDerivativeIndex(mass, i);
             }
 
             return dq;
+        }
+
+        /// Calculates the derivative of the position for the specific coordinate.
+        pub fn positionDerivativeIndex(self: @This(), mass: []const T, i: usize) T {
+            return self.momentum[i] / mass[i];
         }
 
         /// Calculates the derivative of the position. in imaginary time propagation.
@@ -459,12 +457,12 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Compute the potential energy matrix element between this complex Gaussian and another for a given potential function.
-        pub fn potential(self: @This(), other: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T) !ComplexMatrix(T) {
-            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator);
+        pub fn potential(self: @This(), other: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T, allocator: std.mem.Allocator) !ComplexMatrix(T) {
+            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator);
 
-            var variables = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(variables);
-            var sigmas = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(sigmas);
-            var mus = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(mus);
+            var variables = try allocator.alloc(T, pot.ndim()); defer allocator.free(variables);
+            var sigmas = try allocator.alloc(T, pot.ndim()); defer allocator.free(sigmas);
+            var mus = try allocator.alloc(T, pot.ndim()); defer allocator.free(mus);
 
             for (0..pot.ndim()) |i| {
 
@@ -498,7 +496,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                 for (0..V.rows) |j| for (j..V.cols) |k| {
 
-                    const variable_vector = RealVector(T){.data = variables, .len = variables.len, .allocator = null};
+                    const variable_vector = RealVector(T){.data = variables, .len = variables.len};
 
                     const value = try pot.evaluateDiabaticElement(j, k, variable_vector, time);
 
@@ -512,12 +510,12 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Compute the potential energy derivative matrix element between this complex Gaussian and another for a given potential function and a specified coordinate.
-        pub fn potentialDerivative1(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T) !ComplexMatrix(T) {
-            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator);
+        pub fn potentialDerivative1(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !ComplexMatrix(T) {
+            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator);
 
-            var variables = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(variables);
-            var sigmas = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(sigmas);
-            var mus = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(mus);
+            var variables = try allocator.alloc(T, pot.ndim()); defer allocator.free(variables);
+            var sigmas = try allocator.alloc(T, pot.ndim()); defer allocator.free(sigmas);
+            var mus = try allocator.alloc(T, pot.ndim()); defer allocator.free(mus);
 
             for (0..pot.ndim()) |i| {
 
@@ -551,7 +549,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                 for (0..V.rows) |j| for (j..V.cols) |k| {
 
-                    const variable_vector = RealVector(T){.data = variables, .len = variables.len, .allocator = null};
+                    const variable_vector = RealVector(T){.data = variables, .len = variables.len};
 
                     const value = try pot.evaluateDiabaticElementDerivative1(j, k, variable_vector, time, index, fdiff_step);
 
@@ -565,12 +563,12 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Compute the potential energy second derivative matrix element between this complex Gaussian and another for a given potential function and a specified coordinate.
-        pub fn potentialDerivative2(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T) !ComplexMatrix(T) {
-            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), self.allocator);
+        pub fn potentialDerivative2(self: @This(), other: @This(), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !ComplexMatrix(T) {
+            var V = try ComplexMatrix(T).initZero(pot.nstate(), pot.nstate(), allocator);
 
-            var variables = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(variables);
-            var sigmas = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(sigmas);
-            var mus = try self.allocator.alloc(T, pot.ndim()); defer self.allocator.free(mus);
+            var variables = try allocator.alloc(T, pot.ndim()); defer allocator.free(variables);
+            var sigmas = try allocator.alloc(T, pot.ndim()); defer allocator.free(sigmas);
+            var mus = try allocator.alloc(T, pot.ndim()); defer allocator.free(mus);
 
             for (0..pot.ndim()) |i| {
 
@@ -604,7 +602,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                 for (0..V.rows) |j| for (j..V.cols) |k| {
 
-                    const variable_vector = RealVector(T){.data = variables, .len = variables.len, .allocator = null};
+                    const variable_vector = RealVector(T){.data = variables, .len = variables.len};
 
                     const value = try pot.evaluateDiabaticElementDerivative2(j, k, variable_vector, time, index, fdiff_step);
 
@@ -618,8 +616,8 @@ pub fn ComplexGaussian(comptime T: type) type {
         }
 
         /// Returns the potential energy expectation value of this complex Gaussian for a given potential operator.
-        pub fn potentialEnergy(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T) !T {
-            const V = try self.potential(self, pot, n_nodes, time); defer V.deinit();
+        pub fn potentialEnergy(self: @This(), pot: ElectronicPotential(T), coefs: ComplexVector(T), n_nodes: usize, time: T, allocator: std.mem.Allocator) !T {
+            const V = try self.potential(self, pot, n_nodes, time); defer V.deinit(allocator);
 
             var potential_energy: Complex(T) = Complex(T).init(0, 0);
 

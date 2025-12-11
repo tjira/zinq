@@ -15,27 +15,24 @@ pub fn RealVector(comptime T: type) type {
         data: []T,
         len: usize,
 
-        allocator: ?std.mem.Allocator,
-
         /// Initialize a vector with a given length and specify an allocator. The function returns an error if the allocation fails.
-        pub fn init(len: usize, allocator: ?std.mem.Allocator) !@This() {
+        pub fn init(len: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
-                .data = try allocator.?.alloc(T, len),
-                .len = len,
-                .allocator = allocator
+                .data = try allocator.alloc(T, len),
+                .len = len
             };
         }
 
         /// Initialize a vector and fills it with zeros.
-        pub fn initZero(len: usize, allocator: ?std.mem.Allocator) !@This() {
+        pub fn initZero(len: usize, allocator: std.mem.Allocator) !@This() {
             var v = try @This().init(len, allocator); v.zero();
 
             return v;
         }
 
         /// Free the memory allocated for the vector.
-        pub fn deinit(self: @This()) void {
-            if (self.allocator) |allocator| allocator.free(self.data);
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            allocator.free(self.data);
         }
 
         /// Add another vector to this vector.
@@ -52,8 +49,7 @@ pub fn RealVector(comptime T: type) type {
             return RealMatrix(T){
                 .data = self.data,
                 .rows = self.len,
-                .cols = 1,
-                .allocator = null,
+                .cols = 1
             };
         }
 
@@ -63,8 +59,8 @@ pub fn RealVector(comptime T: type) type {
         }
 
         /// Clone the vector.
-        pub fn clone(self: @This()) !@This() {
-            var v = try @This().init(self.len, self.allocator);
+        pub fn clone(self: @This(), allocator: std.mem.Allocator) !@This() {
+            var v = try @This().init(self.len, allocator);
 
             try self.copyTo(&v);
 
@@ -129,8 +125,7 @@ pub fn RealVector(comptime T: type) type {
         pub fn slice(self: @This(), start: usize, end: usize) @This() {
             return @This(){
                 .data = self.data[start..end],
-                .len = end - start,
-                .allocator = null,
+                .len = end - start
             };
         }
 

@@ -113,16 +113,14 @@ pub fn Output(comptime T: type) type {
         S: RealMatrix(T), V: RealMatrix(T), G: ?RealMatrix(T) = null, H: ?RealMatrix(T) = null,
         energy: T, epsilon: RealMatrix(T), frequencies: ?RealVector(T) = null,
 
-        allocator: std.mem.Allocator,
-
         /// Deinitialize the output struct.
-        pub fn deinit(self: @This()) void {
-            self.C.deinit(); self.F.deinit(); self.K.deinit(); self.P.deinit();
-            self.S.deinit(); self.V.deinit(); self.epsilon.deinit();
-            if (self.G != null) self.G.?.deinit();
-            if (self.H != null) self.H.?.deinit();
-            if (self.J != null) self.J.?.deinit();
-            if (self.frequencies != null) self.frequencies.?.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.C.deinit(allocator); self.F.deinit(allocator); self.K.deinit(allocator); self.P.deinit(allocator);
+            self.S.deinit(allocator); self.V.deinit(allocator); self.epsilon.deinit(allocator);
+            if (self.G != null) self.G.?.deinit(allocator);
+            if (self.H != null) self.H.?.deinit(allocator);
+            if (self.J != null) self.J.?.deinit(allocator);
+            if (self.frequencies != null) self.frequencies.?.deinit(allocator);
         }
     };
 }
@@ -134,7 +132,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     if (opt.gradient != null and opt.gradient.? == .analytic) return throw(Output(T), "ANALYTIC GRADIENT NOT IMPLEMENTED", .{});
     if (opt.hessian != null and opt.hessian.? == .analytic) return throw(Output(T), "ANALYTIC HESSIAN NOT IMPLEMENTED", .{});
 
-    var system = try classical_particle.read(T, opt.system, opt.charge, allocator); defer system.deinit();
+    var system = try classical_particle.read(T, opt.system, opt.charge, allocator); defer system.deinit(allocator);
 
     if (enable_printing) {try print("\nINPUT GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
@@ -142,7 +140,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         const optimized_system = try particleSteepestDescent(T, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator);
 
-        system.deinit(); system = optimized_system;
+        system.deinit(allocator); system = optimized_system;
     }
 
     if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
@@ -183,11 +181,11 @@ pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: 
 pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixArray(T), DIIS_E: RealMatrixArray(T), iter: usize, allocator: std.mem.Allocator) !void {
     const size = @min(DIIS_F.len, iter);
 
-    var A = try RealMatrix(T).init(size + 1, size + 1, allocator); defer A.deinit();
-    var b = try RealVector(T).init(size + 1,           allocator); defer b.deinit();
-    var c = try RealVector(T).init(size + 1,           allocator); defer c.deinit();
+    var A = try RealMatrix(T).init(size + 1, size + 1, allocator); defer A.deinit(allocator);
+    var b = try RealVector(T).init(size + 1,           allocator); defer b.deinit(allocator);
+    var c = try RealVector(T).init(size + 1,           allocator); defer c.deinit(allocator);
 
-    var temporary = try RealVector(T).init(c.len, allocator); defer temporary.deinit();
+    var temporary = try RealVector(T).init(c.len, allocator); defer temporary.deinit(allocator);
 
     A.fill(1); b.fill(0); A.ptr(A.rows - 1, A.cols - 1).* = 0; b.ptr(b.len - 1).* = 1;
 
@@ -205,7 +203,7 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
         A.ptr(j, i).* = A.at(i, j);
     };
 
-    const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(); defer AJC.C.deinit();
+    const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
     for (0..b.len) |i| if (@abs(AJC.J.at(i, i)) < SINGULARITY_TOLERANCE) return;
 
@@ -225,11 +223,11 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
 
 /// Function to calculate the error vector.
 pub fn errorVector(comptime T: type, S: RealMatrix(T), F: RealMatrix(T), P: RealMatrix(T), allocator: std.mem.Allocator) !RealMatrix(T) {
-    const SP = try mmAlloc(T, S, false, P, false, allocator); defer SP.deinit();
-    const FP = try mmAlloc(T, F, false, P, false, allocator); defer FP.deinit();
+    const SP = try mmAlloc(T, S, false, P, false, allocator); defer SP.deinit(allocator);
+    const FP = try mmAlloc(T, F, false, P, false, allocator); defer FP.deinit(allocator);
 
-    const SPF = try mmAlloc(T, SP, false, F, false, allocator); defer SPF.deinit();
-    const FPS = try mmAlloc(T, FP, false, S, false, allocator); defer FPS.deinit();
+    const SPF = try mmAlloc(T, SP, false, F, false, allocator); defer SPF.deinit(allocator);
+    const FPS = try mmAlloc(T, FP, false, S, false, allocator); defer FPS.deinit(allocator);
 
     var e = try RealMatrix(T).initZero(P.rows, P.cols, allocator);
 
@@ -262,7 +260,7 @@ pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: R
 
     const factor: T = if (P.rows == 2 * basis.nbf()) 1 else 2; const stype = std.meta.Float(2 * @bitSizeOf(T));
 
-    var fock_parallel_contributions = try RealMatrixArray(stype).initZero(nthread, .{.rows = F.rows, .cols = F.cols}, allocator); defer fock_parallel_contributions.deinit();
+    var fock_parallel_contributions = try RealMatrixArray(stype).initZero(nthread, .{.rows = F.rows, .cols = F.cols}, allocator); defer fock_parallel_contributions.deinit(allocator);
 
     var pool: std.Thread.Pool = undefined; var wait: std.Thread.WaitGroup = undefined; wait.reset();
 
@@ -322,9 +320,9 @@ pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: R
 pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocator) !RealMatrix(T) {
     var X = try RealMatrix(T).init(S.rows, S.cols, allocator);
 
-    var S_C = try RealMatrix(T).init(S.rows, S.cols, allocator); defer S_C.deinit();
+    var S_C = try RealMatrix(T).init(S.rows, S.cols, allocator); defer S_C.deinit(allocator);
 
-    var mm_temp = try RealMatrix(T).init(S.rows, S.cols, allocator); defer mm_temp.deinit();
+    var mm_temp = try RealMatrix(T).init(S.rows, S.cols, allocator); defer mm_temp.deinit(allocator);
 
     try eigensystemSymmetric(T, &X, &S_C, S);
 
@@ -338,7 +336,7 @@ pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocat
 
 /// Perform the SCF procedure and return the output.
 pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    var basis = try BasisSet(T).init(system, opt.basis, allocator); defer basis.deinit();
+    var basis = try BasisSet(T).init(system, opt.basis, allocator); defer basis.deinit(allocator);
 
     const nbf = if (opt.generalized) 2 * basis.nbf() else basis.nbf();
     const nocc = if (opt.generalized) try system.noccSpin() else try system.noccSpatial();
@@ -354,9 +352,9 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     var V = try nuclear(T, system, basis, opt.nthread, allocator);
 
     if (opt.generalized) {
-        try oneAO2AS(T, &S);
-        try oneAO2AS(T, &K);
-        try oneAO2AS(T, &V);
+        try oneAO2AS(T, &S, allocator);
+        try oneAO2AS(T, &K, allocator);
+        try oneAO2AS(T, &V, allocator);
     }
 
     if (enable_printing) try print("{D}\n", .{timer.read()}); timer.reset();
@@ -365,7 +363,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     var J = if (!opt.direct) try coulomb(T, basis, opt.nthread, allocator) else null;
 
-    if (!opt.direct and opt.generalized) try twoAO2AS(T, &J.?);
+    if (!opt.direct and opt.generalized) try twoAO2AS(T, &J.?, allocator);
 
     if (enable_printing and !opt.direct) try print("{D}\n", .{timer.read()});
 
@@ -375,10 +373,10 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     var epsilon = try RealMatrix(T).initZero(nbf, nbf, allocator);
 
-    var X = try getXMatrix(T, S, allocator); defer X.deinit();
+    var X = try getXMatrix(T, S, allocator); defer X.deinit(allocator);
 
-    var DIIS_F = try RealMatrixArray(T).initZero(if (opt.diis != null) opt.diis.?.size else 0, .{.rows = nbf, .cols = nbf}, allocator); defer DIIS_F.deinit();
-    var DIIS_E = try RealMatrixArray(T).initZero(if (opt.diis != null) opt.diis.?.size else 0, .{.rows = nbf, .cols = nbf}, allocator); defer DIIS_E.deinit();
+    var DIIS_F = try RealMatrixArray(T).initZero(if (opt.diis != null) opt.diis.?.size else 0, .{.rows = nbf, .cols = nbf}, allocator); defer DIIS_F.deinit(allocator);
+    var DIIS_E = try RealMatrixArray(T).initZero(if (opt.diis != null) opt.diis.?.size else 0, .{.rows = nbf, .cols = nbf}, allocator); defer DIIS_E.deinit(allocator);
 
     const VNN = system.nuclearRepulsionEnergy();
 
@@ -396,7 +394,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         if (opt.diis != null) {
 
-            const e = try errorVector(T, S, F, P, allocator); defer e.deinit();
+            const e = try errorVector(T, S, F, P, allocator); defer e.deinit(allocator);
 
             try F.copyTo(DIIS_F.ptr(iter % DIIS_F.len));
             try e.copyTo(DIIS_E.ptr(iter % DIIS_E.len));
@@ -415,17 +413,17 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     if (enable_printing) try print("\nHF ENERGY: {d:.14}\n", .{energy + VNN});
 
-    return .{.C = C, .F = F, .J = J, .K = K, .P = P, .S = S, .V = V, .energy = energy + VNN, .epsilon = epsilon, .allocator = allocator};
+    return .{.C = C, .F = F, .J = J, .K = K, .P = P, .S = S, .V = V, .energy = energy + VNN, .epsilon = epsilon};
 }
 
 /// Solver for the Roothaan equations.
 pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: RealMatrix(T), X: RealMatrix(T), allocator: std.mem.Allocator) !void {
-    const FX = try mmAlloc(T, F, false, X, false, allocator); defer FX.deinit();
-    var XFX = try mmAlloc(T, X, false, FX, false, allocator); defer XFX.deinit();
+    const FX = try mmAlloc(T, F, false, X, false, allocator); defer FX.deinit(allocator);
+    var XFX = try mmAlloc(T, X, false, FX, false, allocator); defer XFX.deinit(allocator);
 
     try XFX.symmetrize();
 
-    const XFXJC = try eigensystemSymmetricAlloc(T, XFX, allocator); defer XFXJC.J.deinit(); defer XFXJC.C.deinit();
+    const XFXJC = try eigensystemSymmetricAlloc(T, XFX, allocator); defer XFXJC.J.deinit(allocator); defer XFXJC.C.deinit(allocator);
 
     try mm(T, C, X, false, XFXJC.C, false); try XFXJC.J.copyTo(E);
 }
@@ -436,7 +434,7 @@ test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
         .basis = "sto-3g",
     };
 
-    var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.energy, -74.96590121728507, TEST_TOLERANCE);
 }
@@ -447,7 +445,7 @@ test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
         .basis = "6-31g*",
     };
 
-    var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.energy, -40.19517074914403, TEST_TOLERANCE);
 }

@@ -47,25 +47,22 @@ pub fn Output(comptime T: type) type {
         V: ?RealMatrix(T),
         J: ?RealTensor4(T),
 
-        allocator: std.mem.Allocator,
-
         /// Initialize the output struct.
-        pub fn init(allocator: std.mem.Allocator) @This() {
+        pub fn init() @This() {
             return @This(){
                 .S = null,
                 .K = null,
                 .V = null,
-                .J = null,
-                .allocator = allocator,
+                .J = null
             };
         }
 
         /// Deinitialize the output struct.
-        pub fn deinit(self: @This()) void {
-            if (self.S) |S| S.deinit();
-            if (self.K) |K| K.deinit();
-            if (self.V) |V| V.deinit();
-            if (self.J) |J| J.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            if (self.S) |S| S.deinit(allocator);
+            if (self.K) |K| K.deinit(allocator);
+            if (self.V) |V| V.deinit(allocator);
+            if (self.J) |J| J.deinit(allocator);
         }
     };
 }
@@ -74,10 +71,10 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    const system = try classical_particle.read(T, opt.system, 0, allocator); defer system.deinit();
-    var basis = try BasisSet(T).init(system, opt.basis, allocator); defer basis.deinit();
+    const system = try classical_particle.read(T, opt.system, 0, allocator); defer system.deinit(allocator);
+    var basis = try BasisSet(T).init(system, opt.basis, allocator); defer basis.deinit(allocator);
 
-    var output = Output(T).init(allocator);
+    var output = Output(T).init();
 
     if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{basis.nbf()});
 

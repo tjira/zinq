@@ -21,11 +21,10 @@ var file_potential_data: ?FilePotentialData(f64) = null;
 pub fn FilePotentialData(comptime T: type) type {
     return struct {
         data: RealMatrix(T),
-        allocator: std.mem.Allocator,
 
         /// Free the resources.
-        pub fn deinit(self: *@This()) void {
-            self.data.deinit();
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            self.data.deinit(allocator);
         }
     };
 }
@@ -40,7 +39,8 @@ pub fn FilePotential(comptime T: type) type {
         /// Diabatic potential matrix evaluator.
         pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
             for (0..U.rows) |i| for (i..U.cols) |j| {
-                U.ptr(i, j).* = try evaluateDiabaticElement(self, i, j, position, time); U.ptr(j, i).* = U.at(i, j);
+                U.ptr(i, j).* = try evaluateDiabaticElement(self, i, j, position, time);
+                U.ptr(j, i).* = U.at(i, j);
             };
         }
 
@@ -59,8 +59,7 @@ pub fn FilePotential(comptime T: type) type {
             if (self.ndim + self.nstate * self.nstate != U.cols) return throw(?FilePotentialData(T), "POTENTIAL DATA DIMENSIONS DO NOT MATCH THE SPECIFIED NDIM AND NSTATE", .{});
 
             file_potential_data = .{
-                .data = U,
-                .allocator = allocator
+                .data = U
             };
 
             return file_potential_data;

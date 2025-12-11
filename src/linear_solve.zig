@@ -42,23 +42,23 @@ pub fn linearSolveSymmetric(comptime T: type, x: *RealVector(T), A: RealMatrix(T
 
 /// Solve the linear system Ax = b using the eigenvalue decomposition of A. the result is returned as a new vector.
 pub fn linearSolveSymmetricAlloc(comptime T: type, A: RealMatrix(T), b: RealVector(T), allocator: std.mem.Allocator) !RealVector(T) {
-    const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(); defer AJC.C.deinit();
+    const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
     var x = try RealVector(T).init(b.len, allocator);
     var y = try RealVector(T).init(b.len, allocator);
 
     try linearSolveSymmetric(T, &x, A, AJC.J, AJC.C, b, &y);
 
-    y.deinit();
+    y.deinit(allocator);
 
     return x;
 }
 
 test "Symmetric 3x3 Linear System" {
-    var A = try real_matrix.RealMatrix(f64).init(3, 3, std.testing.allocator); defer A.deinit();
-    var b = try real_vector.RealVector(f64).init(3, std.testing.allocator); defer b.deinit();
+    var A = try real_matrix.RealMatrix(f64).init(3, 3, std.testing.allocator); defer A.deinit(std.testing.allocator);
+    var b = try real_vector.RealVector(f64).init(3, std.testing.allocator); defer b.deinit(std.testing.allocator);
 
-    var x_expected = try real_vector.RealVector(f64).init(3, std.testing.allocator); defer x_expected.deinit();
+    var x_expected = try real_vector.RealVector(f64).init(3, std.testing.allocator); defer x_expected.deinit(std.testing.allocator);
 
     A.ptr(0, 0).* = 4; A.ptr(0, 1).* = 1; A.ptr(0, 2).* = 2;
     A.ptr(1, 0).* = 1; A.ptr(1, 1).* = 3; A.ptr(1, 2).* = 0;
@@ -68,7 +68,7 @@ test "Symmetric 3x3 Linear System" {
 
     x_expected.ptr(0).* = -0.02325581395349; x_expected.ptr(1).* = 1.67441860465116; x_expected.ptr(2).* = 1.20930232558139;
 
-    const x = try linearSolveSymmetricAlloc(f64, A, b, std.testing.allocator); defer x.deinit();
+    const x = try linearSolveSymmetricAlloc(f64, A, b, std.testing.allocator); defer x.deinit(std.testing.allocator);
 
     try std.testing.expect(x.eq(x_expected, TEST_TOLERANCE));
 }

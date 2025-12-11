@@ -17,6 +17,7 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
 const Complex = std.math.Complex;
+const printRealMatrix = device_write.printRealMatrix;
 const ComplexGaussian = complex_gaussian.ComplexGaussian;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const ComplexMatrixArray = object_array.ComplexMatrixArray;
@@ -40,7 +41,6 @@ pub fn SingleSetOfMCG(comptime T: type) type {
     return struct {
         gaussians: []ComplexGaussian(T),
         coefs: ComplexVector(T),
-        allocator: std.mem.Allocator,
 
         /// Initialize a new complex Gaussian with given parameters.
         pub fn init(position: []const []const T, gamma: []const []const T, momentum: []const []const T, state: usize, bf_spread: []const u32, nstate: usize, allocator: std.mem.Allocator) !@This() {
@@ -64,31 +64,34 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
             var mcg = @This(){
                 .gaussians = gaussians,
-                .coefs = coefs,
-                .allocator = allocator,
+                .coefs = coefs
             };
 
-            try mcg.normalize();
+            var S = try ComplexMatrix(T).init(mcg.coefs.len, mcg.coefs.len, allocator); defer S.deinit(allocator);
+
+            try mcg.overlap(&S);
+
+            try mcg.normalize(S);
 
             return mcg;
         }
 
         /// Deinitialize the complex Gaussian array.
-        pub fn deinit(self: @This()) void {
-            for (self.gaussians) |gaussian| gaussian.deinit();
-            self.allocator.free(self.gaussians);
-            self.coefs.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            for (self.gaussians) |gaussian| gaussian.deinit(allocator);
+            allocator.free(self.gaussians);
+            self.coefs.deinit(allocator);
         }
 
         /// Clone the SingleSetOfMCG structure.
-        pub fn clone(self: @This()) !@This() {
-            var gaussians = try self.allocator.alloc(ComplexGaussian(T), self.gaussians.len);
+        pub fn clone(self: @This(), allocator: std.mem.Allocator) !@This() {
+            var gaussians = try allocator.alloc(ComplexGaussian(T), self.gaussians.len);
 
             for (0..self.gaussians.len) |i| {
-                gaussians[i] = try self.gaussians[i].clone();
+                gaussians[i] = try self.gaussians[i].clone(allocator);
             }
 
-            var coefs = try ComplexVector(T).init(self.coefs.len, self.allocator);
+            var coefs = try ComplexVector(T).init(self.coefs.len, allocator);
 
             for (0..self.coefs.len) |i| {
                 coefs.ptr(i).* = self.coefs.at(i);
@@ -96,76 +99,51 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
             return @This(){
                 .gaussians = gaussians,
-                .coefs = coefs,
-                .allocator = self.allocator,
+                .coefs = coefs
             };
         }
 
         /// Calculates the derivative of the coefficients with respect to time.
-        pub fn coefficientDerivative(self: @This(), pot: ElectronicPotential(T), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T), mass: []const T, n_nodes: usize, time: T) !ComplexVector(T) {
-            const S = try self.overlap(); defer S.deinit();
-            const H = try self.hamiltonian(mass, pot, n_nodes, time); defer H.deinit();
-            var tau = try self.overlapDiffTime(dq, dp, dg); defer tau.deinit();
-            const Sinv = try pseudoInverseHermitianAlloc(T, S, SINGULARITY_TOLERANCE, self.allocator); defer Sinv.deinit();
+        pub fn coefficientDerivative(self: @This(), dc: *ComplexVector(T), matrix_eom: anytype, allocator: std.mem.Allocator) !void {
+            const Sinv = try pseudoInverseHermitianAlloc(T, matrix_eom.S, SINGULARITY_TOLERANCE, allocator); defer Sinv.deinit(allocator);
 
-            for (0..self.coefs.len) |j| {
-
-                const norm_rate = tau.at(j, j).re;
-
-                for (0..self.coefs.len) |i| {
-                    tau.ptr(i, j).* = tau.at(i, j).sub(S.at(i, j).mul(Complex(T).init(norm_rate, 0)));
-                }
-            }
-
-            var Heff = try ComplexMatrix(T).initZero(self.coefs.len, self.coefs.len, self.allocator); defer Heff.deinit();
+            var Heff = try ComplexMatrix(T).initZero(self.coefs.len, self.coefs.len, allocator); defer Heff.deinit(allocator);
 
             for (0..Heff.rows) |i| for (0..Heff.cols) |j| {
-                Heff.ptr(i, j).* = H.at(i, j).sub(tau.at(i, j).mulbyi());
+                Heff.ptr(i, j).* = matrix_eom.T.at(i, j).add(matrix_eom.V.at(i, j)).sub(matrix_eom.tau.at(i, j).mulbyi());
             };
 
-            const Hc = try mmAlloc(T, Heff, false, self.coefs.asMatrix(), false, self.allocator); defer Hc.deinit();
-            var dc = try mmAlloc(T, Sinv, false, Hc, false, self.allocator);
+            const Hc = try mmAlloc(T, Heff, false, self.coefs.asMatrix(), false, allocator); defer Hc.deinit(allocator);
+
+            var dc_matrix = dc.asMatrix();
+
+            try mm(T, &dc_matrix, Sinv, false, Hc, false);
 
             dc.muls(Complex(T).init(0, -1));
-
-            return ComplexVector(T){.data = dc.data, .len = dc.rows, .allocator = self.allocator};
         }
 
         /// Calculates the derivative of the coefficients with respect to imaginary time.
-        pub fn coefficientDerivativeImaginary(self: @This(), pot: ElectronicPotential(T), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T), mass: []const T, n_nodes: usize, time: T) !ComplexVector(T) {
-            const S = try self.overlap(); defer S.deinit();
-            const H = try self.hamiltonian(mass, pot, n_nodes, time); defer H.deinit();
-            var tau = try self.overlapDiffTime(dq, dp, dg); defer tau.deinit();
-            const Sinv = try pseudoInverseHermitianAlloc(T, S, SINGULARITY_TOLERANCE, self.allocator); defer Sinv.deinit();
+        pub fn coefficientDerivativeImaginary(self: @This(), dc: *ComplexVector(T), matrix_eom: anytype, allocator: std.mem.Allocator) !void {
+            const Sinv = try pseudoInverseHermitianAlloc(T, matrix_eom.S, SINGULARITY_TOLERANCE, allocator); defer Sinv.deinit(allocator);
 
-            for (0..self.coefs.len) |j| {
-
-                const norm_rate = tau.at(j, j).re;
-
-                for (0..self.coefs.len) |i| {
-                    tau.ptr(i, j).* = tau.at(i, j).sub(S.at(i, j).mul(Complex(T).init(norm_rate, 0)));
-                }
-            }
-
-            var Heff = try ComplexMatrix(T).initZero(self.coefs.len, self.coefs.len, self.allocator); defer Heff.deinit();
+            var Heff = try ComplexMatrix(T).initZero(self.coefs.len, self.coefs.len, allocator); defer Heff.deinit(allocator);
 
             for (0..Heff.rows) |i| for (0..Heff.cols) |j| {
-                Heff.ptr(i, j).* = H.at(i, j).add(tau.at(i, j));
+                Heff.ptr(i, j).* = matrix_eom.T.at(i, j).add(matrix_eom.V.at(i, j)).add(matrix_eom.tau.at(i, j));
             };
 
-            const Hc = try mmAlloc(T, Heff, false, self.coefs.asMatrix(), false, self.allocator); defer Hc.deinit();
-            var dc = try mmAlloc(T, Sinv, false, Hc, false, self.allocator);
+            const Hc = try mmAlloc(T, Heff, false, self.coefs.asMatrix(), false, allocator); defer Hc.deinit(allocator);
+
+            var dc_matrix = dc.asMatrix();
+
+            try mm(T, &dc_matrix, Sinv, false, Hc, false);
 
             dc.muls(Complex(T).init(-1, 0));
-
-            return ComplexVector(T){.data = dc.data, .len = dc.rows, .allocator = self.allocator};
         }
 
         /// Calculates the expectation value of position or momentum.
-        pub fn coordinateExpectation(self: @This(), coord: enum {momentum, position}) !RealVector(T) {
-            var coordinate = try RealVector(T).initZero(self.gaussians[0].momentum.len, self.allocator); var total_norm: T = 0;
-
-            const S = try self.overlap(); defer S.deinit();
+        pub fn coordinateExpectation(self: @This(), coord: enum {momentum, position}, S: ComplexMatrix(T), allocator: std.mem.Allocator) !RealVector(T) {
+            var coordinate = try RealVector(T).initZero(self.gaussians[0].momentum.len, allocator); var total_norm: T = 0;
 
             for (0..self.coefs.len / self.gaussians.len) |i| {
 
@@ -183,9 +161,9 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                         total_norm += c_1.conjugate().mul(c_2).mul(S.at(index_1, index_2)).re;
 
                         const me = switch (coord) {
-                            .momentum => try self.gaussians[j].momentumMatrixElement(self.gaussians[k]),
-                            .position => try self.gaussians[j].positionMatrixElement(self.gaussians[k])
-                        }; defer me.deinit();
+                            .momentum => try self.gaussians[j].momentumMatrixElement(self.gaussians[k], allocator),
+                            .position => try self.gaussians[j].positionMatrixElement(self.gaussians[k], allocator),
+                        }; defer me.deinit(allocator);
 
                         for (0..coordinate.len) |l| {
                             coordinate.ptr(l).* += c_1.conjugate().mul(c_2).mul(me.at(l)).re;
@@ -200,9 +178,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Exports the parameters of the Gaussians and coefficients into a single complex vector. The parameters are in order: positions, momentas, gammas for each Gaussian followed by the coefficients for each state and Gaussian.
-        pub fn exportParameterVector(self: @This()) !ComplexVector(T) {
-            const params = try ComplexVector(T).initZero(3 * self.gaussians[0].position.len * self.gaussians.len + self.coefs.len, self.allocator);
-
+        pub fn exportParameterVector(self: @This(), params: *ComplexVector(T)) void {
             for (self.gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
 
                 const index = 3 * i * gaussian.position.len + j;
@@ -215,58 +191,37 @@ pub fn SingleSetOfMCG(comptime T: type) type {
             for (0..self.coefs.len) |i| {
                 params.ptr(3 * self.gaussians[0].position.len * self.gaussians.len + i).* = self.coefs.at(i);
             }
-
-            return params;
         }
 
         /// Calculates the Ehrenfest-like gamma derivative.
-        pub fn gammaDerivativeEhrenfest(self: @This(), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
-            var dg = try ComplexVector(T).initZero(self.gaussians.len * self.gaussians[0].gamma.len, self.allocator); 
-
+        pub fn gammaDerivativeEhrenfest(self: @This(), dg: *ComplexVector(T), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !void {
             for (self.gaussians, 0..) |gaussian, i| {
 
-                var c_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, self.allocator); defer c_i.deinit();
+                var c_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, allocator); defer c_i.deinit(allocator);
 
                 for (0..c_i.len) |j| {
                     c_i.ptr(j).* = self.coefs.at(j * self.gaussians.len + i);
                 }
 
-                var dg_i = try gaussian.gammaDerivative(pot, c_i, mass, n_nodes, time, fdiff_step); defer dg_i.deinit();
+                var dg_i = try gaussian.gammaDerivative(pot, c_i, mass, n_nodes, time, fdiff_step, allocator); defer dg_i.deinit(allocator);
 
-                for (0..gaussian.momentum.len) |j| {
+                for (0..gaussian.gamma.len) |j| {
                     dg.ptr(gaussian.gamma.len * i + j).* = dg_i.at(j);
                 }
             }
-
-            return dg;
         }
 
         /// Calculates the derivative of the gamma parameter with respect to imaginary time in an Ehrenfest-like manner.
-        pub fn gammaDerivativeImaginaryEhrenfest(self: @This(), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T) !ComplexVector(T) {
-            var dg = try self.gammaDerivativeEhrenfest(pot, mass, n_nodes, time, fdiff_step);
+        pub fn gammaDerivativeImaginaryEhrenfest(self: @This(), dg: *ComplexVector(T), pot: ElectronicPotential(T), mass: []const T, n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !void {
+            try self.gammaDerivativeEhrenfest(dg, pot, mass, n_nodes, time, fdiff_step, allocator);
 
             for (0..dg.len) |i| {
                 dg.ptr(i).* = dg.at(i).mulbyi().neg();
             }
-
-            return dg;
-        }
-
-        /// Calculates the Hamiltonian matrix.
-        pub fn hamiltonian(self: @This(), mass: []const T, pot: ElectronicPotential(T), n_nodes: usize, time: T) !ComplexMatrix(T) {
-            var H = try self.potential(pot, n_nodes, time);
-
-            const K = try self.kinetic(mass); defer K.deinit();
-
-            try H.add(K);
-
-            return H;
         }
 
         /// Calculates the kinetic matrix.
-        pub fn kinetic(self: @This(), mass: []const T) !ComplexMatrix(T) {
-            var K = try ComplexMatrix(T).initZero(self.coefs.len, self.coefs.len, self.allocator);
-
+        pub fn kinetic(self: @This(), K: *ComplexMatrix(T), mass: []const T) !void {
             for (0..K.rows) |i| for (0..K.cols) |j| {
 
                 const ig = i % self.gaussians.len; const is = i / self.gaussians.len;
@@ -276,15 +231,11 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                     K.ptr(i, j).* = try self.gaussians[ig].kinetic(self.gaussians[jg], mass);
                 }
             };
-
-            return K;
         }
 
         /// Calculates the kinetic energy.
-        pub fn kineticEnergy(self: @This(), mass: []const T) !T {
-            const K = try self.kinetic(mass); defer K.deinit();
-
-            return try self.operatorExpectation(K);
+        pub fn kineticEnergy(self: @This(), K: ComplexMatrix(T), S: ComplexMatrix(T)) !T {
+            return try self.operatorExpectation(K, S);
         }
 
         /// Loads the structure from a complex vector with parameters. The parameters are in order: positions, momentas, gammas for each Gaussian followed by the coefficients for each state and Gaussian.
@@ -306,73 +257,69 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the Ehrenfest-like momentum derivative.
-        pub fn momentumDerivativeEhrenfest(self: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
-            var dp = try RealVector(T).initZero(self.gaussians.len * self.gaussians[0].momentum.len, self.allocator); 
-
+        pub fn momentumDerivativeEhrenfest(self: @This(), dp: *RealVector(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !void {
             for (self.gaussians, 0..) |gaussian, i| {
 
-                var c_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, self.allocator); defer c_i.deinit();
+                var c_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, allocator); defer c_i.deinit(allocator);
 
                 for (0..c_i.len) |j| {
                     c_i.ptr(j).* = self.coefs.at(j * self.gaussians.len + i);
                 }
 
-                var dp_i = try gaussian.momentumDerivative(pot, c_i, n_nodes, time, fdiff_step); defer dp_i.deinit();
+                var dp_i = try gaussian.momentumDerivative(pot, c_i, n_nodes, time, fdiff_step, allocator); defer dp_i.deinit(allocator);
 
                 for (0..gaussian.momentum.len) |j| {
                     dp.ptr(gaussian.momentum.len * i + j).* = dp_i.at(j);
                 }
             }
-
-            return dp;
         }
 
         /// Calculates the Ehrenfest-like momentum derivative in imaginary time.
-        pub fn momentumDerivativeImaginaryEhrenfest(self: @This(), mass: []const T) !RealVector(T) {
-            var dp = try self.positionDerivativeEhrenfest(mass); dp.muls(-1);
-
-            return dp;
+        pub fn momentumDerivativeImaginaryEhrenfest(self: @This(), dp: *RealVector(T), mass: []const T) !void {
+            try self.positionDerivativeEhrenfest(dp, mass); dp.muls(-1);
         }
 
         /// Normalizes the coefficient vector in place such that <Psi|Psi> = 1.
-        pub fn normalize(self: *@This()) !void {
-            const S = try self.overlap(); defer S.deinit();
-
+        pub fn normalize(self: *@This(), S: ComplexMatrix(T)) !void {
             var norm_sq: T = 0;
 
-            const SC = try mmAlloc(T, S, false, self.coefs.asMatrix(), false, self.allocator); defer SC.deinit();
-
             for (0..self.coefs.len) |i| {
-                norm_sq += self.coefs.at(i).conjugate().mul(SC.at(i, 0)).re;
+
+                var S_psi_i = Complex(T).init(0, 0);
+                
+                for (0..self.coefs.len) |j| {
+                    S_psi_i = S_psi_i.add(S.at(i, j).mul(self.coefs.at(j)));
+                }
+
+                norm_sq += self.coefs.at(i).conjugate().mul(S_psi_i).re;
             }
 
             self.coefs.divs(Complex(T).init(std.math.sqrt(norm_sq), 0));
         }
 
         /// Calculate the expectation value of an operator given its matrix representation.
-        pub fn operatorExpectation(self: @This(), M: ComplexMatrix(T)) !T {
+        pub fn operatorExpectation(self: @This(), M: ComplexMatrix(T), S: ComplexMatrix(T)) !T {
             var Mexp: T = 0; var norm: T = 0;
 
-            const S = try self.overlap(); defer S.deinit();
-
-            var temp1 = try ComplexVector(T).initZero(self.coefs.len, self.allocator); defer temp1.deinit(); var temp1_matrix = temp1.asMatrix();
-            var temp2 = try ComplexVector(T).initZero(self.coefs.len, self.allocator); defer temp2.deinit(); var temp2_matrix = temp2.asMatrix();
-
-            try mm(T, &temp1_matrix, M, false, self.coefs.asMatrix(), false);
-            try mm(T, &temp2_matrix, S, false, self.coefs.asMatrix(), false);
-
             for (0..self.coefs.len) |i| {
-                Mexp += self.coefs.at(i).conjugate().mul(temp1.at(i)).re;
-                norm += self.coefs.at(i).conjugate().mul(temp2.at(i)).re;
+
+                var row_acc_M = Complex(T).init(0, 0); 
+                var row_acc_S = Complex(T).init(0, 0);
+
+                for (0..self.coefs.len) |j| {
+                    row_acc_M = row_acc_M.add(M.at(i, j).mul(self.coefs.at(j)));
+                    row_acc_S = row_acc_S.add(S.at(i, j).mul(self.coefs.at(j)));
+                }
+
+                Mexp += self.coefs.at(i).conjugate().mul(row_acc_M).re;
+                norm += self.coefs.at(i).conjugate().mul(row_acc_S).re;
             }
 
             return Mexp / norm;
         }
 
         /// Calculates the overlap matrix.
-        pub fn overlap(self: @This()) !ComplexMatrix(T) {
-            var S = try ComplexMatrix(T).initZero(self.coefs.len, self.coefs.len, self.allocator);
-
+        pub fn overlap(self: @This(), S: *ComplexMatrix(T)) !void {
             for (0..S.rows) |i| for (0..S.cols) |j| {
 
                 const ig = i % self.gaussians.len; const is = i / self.gaussians.len;
@@ -382,15 +329,10 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                     S.ptr(i, j).* = try self.gaussians[ig].overlap(self.gaussians[jg]);
                 }
             };
-
-
-            return S;
         }
 
         /// Compute the overlap integral matrix where the ket vector is differentiated in time.
-        pub fn overlapDiffTime(self: @This(), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T)) !ComplexMatrix(T) {
-            var tau = try ComplexMatrix(T).initZero(self.coefs.len, self.coefs.len, self.allocator);
-
+        pub fn overlapDiffTime(self: @This(), tau: *ComplexMatrix(T), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T)) !void {
             for (0..tau.rows) |i| for (0..tau.cols) |j| {
 
                 const ig = i % self.gaussians.len; const is = i / self.gaussians.len;
@@ -405,17 +347,13 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                     tau.ptr(i, j).* = try self.gaussians[ig].overlapDiffTime(self.gaussians[jg], dq_j, dp_j, dg_j);
                 }
             };
-
-            return tau;
         }
 
         /// Calculates the population of a given state. If the coefficients are passed, those are used instead of the internal ones.
-        pub fn population(self : @This(), state: usize, coefs_to_use: ?ComplexVector(T)) !T {
+        pub fn population(self : @This(), S: ComplexMatrix(T), state: usize, coefs_to_use: ?ComplexVector(T)) !T {
             var pop: T = 0;
 
             const coefs = coefs_to_use orelse self.coefs;
-
-            const S = try self.overlap(); defer S.deinit();
 
             for (0..self.gaussians.len) |i| {
 
@@ -436,33 +374,24 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the Ehrenfest-like position derivative.
-        pub fn positionDerivativeEhrenfest(self: @This(), mass: []const T) !RealVector(T) {
-            var dq = try RealVector(T).initZero(self.gaussians.len * self.gaussians[0].position.len, self.allocator);
-
-            for (self.gaussians, 0..) |gaussian, i| {
-
-                const dq_i = try gaussian.positionDerivative(mass); defer dq_i.deinit();
-
-                for (0..gaussian.position.len) |j| {
-                    dq.ptr(gaussian.position.len * i + j).* = dq_i.at(j);
-                }
-            }
-
-            return dq;
+        pub fn positionDerivativeEhrenfest(self: @This(), dq: *RealVector(T), mass: []const T) !void {
+            for (self.gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
+                dq.ptr(gaussian.position.len * i + j).* = gaussian.positionDerivativeIndex(mass, j);
+            };
         }
 
         /// Calculates the Ehrenfest-like position derivative in imaginary time.
-        pub fn positionDerivativeImaginaryEhrenfest(self: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T, fdiff_step: T) !RealVector(T) {
-            return try self.momentumDerivativeEhrenfest(pot, n_nodes, time, fdiff_step);
+        pub fn positionDerivativeImaginaryEhrenfest(self: @This(), dq: *RealVector(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, fdiff_step: T, allocator: std.mem.Allocator) !void {
+            try self.momentumDerivativeEhrenfest(dq, pot, n_nodes, time, fdiff_step, allocator);
         }
 
         /// Calculates the potential matrix for a given potential function.
-        pub fn potential(self: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T) !ComplexMatrix(T) {
-            var V = try ComplexMatrix(T).initZero(self.coefs.len, self.coefs.len, self.allocator);
+        pub fn potential(self: @This(), V: *ComplexMatrix(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, allocator: std.mem.Allocator) !void {
+            V.zero();
 
             for (0..self.gaussians.len) |i| for (0..self.gaussians.len) |j| {
 
-                var Vij = try self.gaussians[i].potential(self.gaussians[j], pot, n_nodes, time); defer Vij.deinit();
+                var Vij = try self.gaussians[i].potential(self.gaussians[j], pot, n_nodes, time, allocator); defer Vij.deinit(allocator);
 
                 for (0..Vij.rows) |k| for (0..Vij.cols) |l| {
 
@@ -472,19 +401,15 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                     V.ptr(row, col).* = V.at(row, col).add(Vij.at(k, l));
                 };
             };
-
-            return V;
         }
 
         /// Calculates the potential energy.
-        pub fn potentialEnergy(self: @This(), pot: ElectronicPotential(T), n_nodes: usize, time: T) !T {
-            const V = try self.potential(pot, n_nodes, time); defer V.deinit();
-
-            return try self.operatorExpectation(V);
+        pub fn potentialEnergy(self: @This(), V: ComplexMatrix(T), S: ComplexMatrix(T)) !T {
+            return try self.operatorExpectation(V, S);
         }
 
         /// Calculates the total scalar overlap between this wavefunction and another wavefunction.
-        pub fn selfOverlap(self: @This(), other: @This()) !Complex(T) {
+        pub fn selfOverlap(self: @This(), other: @This(), allocator: std.mem.Allocator) !Complex(T) {
             const n_states_self = self.coefs.len / self.gaussians.len;
             const n_states_other = other.coefs.len / other.gaussians.len;
 
@@ -492,7 +417,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                 return throw(Complex(T), "CANNOT CALCULATE OVERLAP: STATE COUNTS DO NOT MATCH (SELF: {}, OTHER: {})", .{n_states_self, n_states_other});
             }
 
-            var S = try ComplexMatrix(T).initZero(self.gaussians.len, other.gaussians.len, self.allocator); defer S.deinit();
+            var S = try ComplexMatrix(T).initZero(self.gaussians.len, other.gaussians.len, allocator); defer S.deinit(allocator);
 
             for (0..self.gaussians.len) |i| {
                 for (0..other.gaussians.len) |j| {
@@ -522,20 +447,20 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Returns the transformed coefficients. If to_adiabatic is true, transforms to adiabatic representation; otherwise, to diabatic.
-        pub fn transformedCoefs(self: @This(), pot: ElectronicPotential(T), time: T, to_adiabatic: bool) !ComplexVector(T) {
-            const coefs_after = try ComplexVector(T).initZero(self.coefs.len, self.allocator);
+        pub fn transformedCoefs(self: @This(), pot: ElectronicPotential(T), time: T, to_adiabatic: bool, allocator: std.mem.Allocator) !ComplexVector(T) {
+            const coefs_after = try ComplexVector(T).initZero(self.coefs.len, allocator);
 
-            var diabatic_potential = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, self.allocator); defer diabatic_potential.deinit();
-            var adiabatic_potential = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, self.allocator); defer adiabatic_potential.deinit();
-            var adiabatic_eigenvectors = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, self.allocator); defer adiabatic_eigenvectors.deinit();
-            var previous_eigenvectors = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, self.allocator); defer previous_eigenvectors.deinit();
+            var diabatic_potential = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator); defer diabatic_potential.deinit(allocator);
+            var adiabatic_potential = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator); defer adiabatic_potential.deinit(allocator);
+            var adiabatic_eigenvectors = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator); defer adiabatic_eigenvectors.deinit(allocator);
+            var previous_eigenvectors = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator); defer previous_eigenvectors.deinit(allocator);
 
             for (self.gaussians, 0..) |gaussian, i| {
 
-                const position = RealVector(T){.data = gaussian.position, .len = gaussian.position.len, .allocator = null};
+                const position = RealVector(T){.data = gaussian.position, .len = gaussian.position.len};
 
-                const coefs_before_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, self.allocator); defer coefs_before_i.deinit();
-                const coefs_after_i  = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, self.allocator); defer  coefs_after_i.deinit();
+                const coefs_before_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, allocator); defer coefs_before_i.deinit(allocator);
+                const coefs_after_i  = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, allocator); defer  coefs_after_i.deinit(allocator);
 
                 const coefs_before_i_matrix = coefs_before_i.asMatrix();
                 var    coefs_after_i_matrix =  coefs_after_i.asMatrix();

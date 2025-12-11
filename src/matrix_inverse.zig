@@ -57,14 +57,14 @@ pub fn inverseSymmetricOrHermitian(comptime M: fn (comptime type) type, comptime
 
 /// Form the inverse of a symmetric or hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
 pub fn inverseSymmetricOrHermitianAlloc(comptime M: fn (comptime type) type, comptime T: type, A: M(T), allocator: std.mem.Allocator) !M(T) {
-    const AJC = try eigensystemJacobiAlloc(M, T, A, allocator); defer AJC.J.deinit(); defer AJC.C.deinit();
+    const AJC = try eigensystemJacobiAlloc(M, T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
     var Ainv = try M(T).init(A.rows, A.cols, allocator);
     var Atmp = try M(T).init(A.rows, A.cols, allocator);
 
     try inverseSymmetricOrHermitian(M, T, &Ainv, A, AJC.J, AJC.C, &Atmp);
 
-    Atmp.deinit();
+    Atmp.deinit(allocator);
 
     return Ainv;
 }
@@ -116,22 +116,22 @@ pub fn pseudoInverseSymmetricOrHermitian(comptime M: fn (comptime type) type, co
 
 /// Form the inverse of a symmetric or hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
 pub fn pseudoInverseSymmetricOrHermitianAlloc(comptime M: fn (comptime type) type, comptime T: type, A: M(T), thresh: T, allocator: std.mem.Allocator) !M(T) {
-    const AJC = try eigensystemJacobiAlloc(M, T, A, allocator); defer AJC.J.deinit(); defer AJC.C.deinit();
+    const AJC = try eigensystemJacobiAlloc(M, T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
     var Ainv = try M(T).init(A.rows, A.cols, allocator);
     var Atmp = try M(T).init(A.rows, A.cols, allocator);
 
     try pseudoInverseSymmetricOrHermitian(M, T, &Ainv, A, AJC.J, AJC.C, &Atmp, thresh);
 
-    Atmp.deinit();
+    Atmp.deinit(allocator);
 
     return Ainv;
 }
 
 test "Symmetric 3x3 Inverse" {
-    var A = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer A.deinit();
+    var A = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer A.deinit(std.testing.allocator);
 
-    var Ainv_expected = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer Ainv_expected.deinit();
+    var Ainv_expected = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer Ainv_expected.deinit(std.testing.allocator);
 
     A.ptr(0, 0).* = 1.0; A.ptr(0, 1).* = 2.0; A.ptr(0, 2).* = 3.0;
     A.ptr(1, 0).* = 2.0; A.ptr(1, 1).* = 4.0; A.ptr(1, 2).* = 5.0;
@@ -141,7 +141,7 @@ test "Symmetric 3x3 Inverse" {
     Ainv_expected.ptr(1, 0).* = -3.0; Ainv_expected.ptr(1, 1).* =  3.0; Ainv_expected.ptr(1, 2).* = -1.0;
     Ainv_expected.ptr(2, 0).* =  2.0; Ainv_expected.ptr(2, 1).* = -1.0; Ainv_expected.ptr(2, 2).* =  0.0;
 
-    const Ainv = try inverseSymmetricAlloc(f64, A, std.testing.allocator); defer Ainv.deinit();
+    const Ainv = try inverseSymmetricAlloc(f64, A, std.testing.allocator); defer Ainv.deinit(std.testing.allocator);
 
     try std.testing.expect(Ainv.eq(Ainv_expected, TEST_TOLERANCE));
 }

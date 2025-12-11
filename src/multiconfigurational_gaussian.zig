@@ -41,6 +41,7 @@ const energySpectrum = quantum_dynamics.energySpectrum;
 const positionAtRow = grid_generator.positionAtRow;
 const powi = math_functions.powi;
 const print = device_write.print;
+const printRealMatrix = device_write.printRealMatrix;
 const printComplexMatrix = device_write.printComplexMatrix;
 const printComplexVector = device_write.printComplexVector;
 const printRealVector = device_write.printRealVector;
@@ -121,8 +122,8 @@ pub fn Output(comptime T: type) type {
         }
 
         /// Deallocate the output structure.
-        pub fn deinit(self: @This()) void {
-            self.population.deinit();
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.population.deinit(allocator);
         }
     };
 }
@@ -141,6 +142,23 @@ pub fn Custom(comptime T: type) type {
             potential_energy: T,
             time: T
         };
+
+        /// Matrices needed for the vMCG equations of motion.
+        pub const MatrixEOM = struct {
+            S: ComplexMatrix(T),
+            T: ComplexMatrix(T),
+            V: ComplexMatrix(T),
+            tau: ComplexMatrix(T)
+        };
+
+        /// Structure to hold the variables used in the equations of motion.
+        pub const Variables = struct {
+            all: ComplexVector(T),
+            q: RealVector(T),
+            p: RealVector(T),
+            g: ComplexVector(T),
+            c: ComplexVector(T)
+        };
     };
 }
 
@@ -152,21 +170,52 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
+    const ngauss = opt.method.vMCG.position.len;
+    const nparams = 3 * ngauss * ndim + nstate * ngauss;
 
-    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit();
-    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit();
+    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
+    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
     var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
     
-    var mcg = try SingleSetOfMCG(T).init(opt.method.vMCG.position, opt.method.vMCG.gamma, opt.method.vMCG.momentum, opt.initial_conditions.state, opt.initial_conditions.bf_spread, nstate, allocator); defer mcg.deinit();
+    var mcg = try SingleSetOfMCG(T).init(
+        opt.method.vMCG.position,
+        opt.method.vMCG.gamma,
+        opt.method.vMCG.momentum,
+        opt.initial_conditions.state,
+        opt.initial_conditions.bf_spread,
+        nstate,
+        allocator
+    ); defer mcg.deinit(allocator);
 
-    const mcg_init = try mcg.clone();
+    const mcg_init = try mcg.clone(allocator); defer mcg_init.deinit(allocator);
 
-    var propagator = try ComplexRungeKutta(T).init(3 * mcg.gaussians.len * mcg.gaussians[0].position.len + mcg.coefs.len, allocator); defer propagator.deinit();
+    var matrix_eom = Custom(T).MatrixEOM{
+        .S = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator),
+        .T = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator),
+        .V = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator),
+        .tau = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator)
+    };
 
-    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator) else null;
+    defer inline for (std.meta.fields(@TypeOf(matrix_eom))) |field| @as(field.type, @field(matrix_eom, field.name)).deinit(allocator);
 
-    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit();
+    var vars = Custom(T).Variables{
+        .all = try ComplexVector(T).initZero(nparams, allocator),
+        .q = try RealVector(T).initZero(ngauss * ndim, allocator),
+        .p = try RealVector(T).initZero(ngauss * ndim, allocator),
+        .g = try ComplexVector(T).initZero(ngauss * ndim, allocator),
+        .c = try ComplexVector(T).initZero(nstate * ngauss, allocator)
+    };
+
+    defer inline for (std.meta.fields(@TypeOf(vars))) |field| @as(field.type, @field(vars, field.name)).deinit(allocator);
+
+    var propagator = try ComplexRungeKutta(T).init(nparams, allocator); defer propagator.deinit(allocator);
+
+    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_|
+        try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator)
+    else null;
+
+    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit(allocator);
 
     if (enable_printing) try printIterationHeader(ndim, mcg.coefs.len);
 
@@ -176,30 +225,34 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
-        if (i > 0) try propagate(T, &mcg, opt, &propagator, time, allocator);
+        if (i > 0) try propagate(T, &mcg, opt, &propagator, time, &vars, &matrix_eom, allocator);
 
-        if (i > 0 and opt.renormalize) try mcg.normalize();
+        try mcg.overlap(&matrix_eom.S);
+        try mcg.kinetic(&matrix_eom.T, opt.initial_conditions.mass);
+        try mcg.potential(&matrix_eom.V, opt.potential, opt.integration_nodes, time, allocator);
 
-        acf.ptr(i).* = try mcg_init.selfOverlap(mcg);
+        if (i > 0 and opt.renormalize) try mcg.normalize(matrix_eom.S);
 
-        var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit();
+        acf.ptr(i).* = try mcg_init.selfOverlap(mcg, allocator);
+
+        var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit(allocator);
 
         if (i == 0 and opt.initial_conditions.adiabatic) {
-            coefs_adia = try mcg.transformedCoefs(opt.potential, time, false); try coefs_adia.?.copyTo(&mcg.coefs);
+            coefs_adia = try mcg.transformedCoefs(opt.potential, time, false, allocator); try coefs_adia.?.copyTo(&mcg.coefs);
         }
 
         if (opt.adiabatic) {
-            if (coefs_adia) |c| c.deinit(); coefs_adia = try mcg.transformedCoefs(opt.potential, time, true);
+            if (coefs_adia) |c| c.deinit(allocator); coefs_adia = try mcg.transformedCoefs(opt.potential, time, true, allocator);
         }
 
-        const position = try mcg.coordinateExpectation(.position); defer position.deinit();
-        const momentum = try mcg.coordinateExpectation(.momentum); defer momentum.deinit();
+        const position = try mcg.coordinateExpectation(.position, matrix_eom.S, allocator); defer position.deinit(allocator);
+        const momentum = try mcg.coordinateExpectation(.momentum, matrix_eom.S, allocator); defer momentum.deinit(allocator);
 
-        const kinetic_energy = try mcg.kineticEnergy(opt.initial_conditions.mass);
-        const potential_energy = try mcg.potentialEnergy(opt.potential, opt.integration_nodes, time);
+        const kinetic_energy = try mcg.kineticEnergy(matrix_eom.T, matrix_eom.S);
+        const potential_energy = try mcg.potentialEnergy(matrix_eom.V, matrix_eom.S);
 
         for (0..nstate) |j| {
-            output.population.ptr(i, j).* = try mcg.population(j, if (opt.adiabatic) coefs_adia.? else mcg.coefs);
+            output.population.ptr(i, j).* = try mcg.population(matrix_eom.S, j, if (opt.adiabatic) coefs_adia.? else mcg.coefs);
         }
 
         if (wavefunction_dynamics) |*wfn_container| {
@@ -250,7 +303,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
     if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
 
-    if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit();
+    if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit(allocator);
 
     return output;
 }
@@ -273,6 +326,18 @@ pub fn assignWavefunction(comptime T: type, wfn_container: *RealMatrix(T), gauss
     }
 }
 
+/// Fix gauge for Tau matrix.
+pub fn fixGaugeTauMatrix(comptime T: type, tau: *ComplexMatrix(T), S: ComplexMatrix(T)) void {
+    for (0..tau.rows) |j| {
+
+        const norm_rate = tau.at(j, j).re;
+
+        for (0..tau.cols) |i| {
+            tau.ptr(i, j).* = tau.at(i, j).sub(S.at(i, j).mul(Complex(T).init(norm_rate, 0)));
+        }
+    }
+}
+
 /// Initialize the container for the wavefunction dynamics.
 pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(T).WavefunctionGrid, nstate: usize, iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     if (grid == null) return throw(RealMatrix(T), "WAVEFUNCTION GRID MUST BE PROVIDED WHEN WRITING THE WAVEFUNCTION DYNAMICS", .{});
@@ -281,7 +346,7 @@ pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(
 
     var wavefunction_dynamics: RealMatrix(T) = try RealMatrix(T).init(grid_points, grid.?.limits.len + 2 * nstate * (iterations + 1), allocator);
 
-    var position_at_row = try RealVector(T).init(grid.?.limits.len, allocator); defer position_at_row.deinit();
+    var position_at_row = try RealVector(T).init(grid.?.limits.len, allocator); defer position_at_row.deinit(allocator);
 
     for (0..grid_points) |i| {
 
@@ -296,8 +361,8 @@ pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(
 }
 
 /// Propagates the MCG object using the 4th order Runge-Kutta method.
-pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, allocator: std.mem.Allocator) !void {
-    var vars = try mcg.exportParameterVector(); defer vars.deinit();
+pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, vars: *Custom(T).Variables, matrix_eom: *Custom(T).MatrixEOM, allocator: std.mem.Allocator) !void {
+    mcg.exportParameterVector(&vars.all);
 
     const derivative = struct {
         pub fn call(k: *ComplexVector(T), v: ComplexVector(T), params: anytype) anyerror!void {
@@ -306,42 +371,48 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
             const n_nodes = params.opt.integration_nodes;
             const fdiff_step = params.opt.finite_differences_step;
 
+            var kq = params.kq;
+            var kp = params.kp;
+            var kg = params.kg;
+            var kc = params.kc;
+
             try params.mcg.loadParameterVector(v);
 
-            var kq: RealVector(T) = undefined; defer kq.deinit();
-            var kp: RealVector(T) = undefined; defer kp.deinit();
-            var kg: ComplexVector(T) = undefined; defer kg.deinit();
-            var kc: ComplexVector(T) = undefined; defer kc.deinit();
-
-            if (params.opt.method.vMCG.frozen) {
-                kg = try ComplexVector(T).initZero(params.mcg.gaussians.len * params.mcg.gaussians[0].gamma.len, params.allocator);
-            }
+            try params.mcg.overlap(&params.matrix_eom.S);
+            try params.mcg.kinetic(&params.matrix_eom.T, mass);
+            try params.mcg.potential(&params.matrix_eom.V, pot, n_nodes, params.time, params.allocator);
 
             if (params.opt.imaginary) {
 
-                kq = try params.mcg.positionDerivativeImaginaryEhrenfest(pot, n_nodes, params.time, fdiff_step); kp = try params.mcg.momentumDerivativeImaginaryEhrenfest(mass);
+                try params.mcg.positionDerivativeImaginaryEhrenfest(&kq, pot, n_nodes, params.time, fdiff_step, params.allocator);
+                try params.mcg.momentumDerivativeImaginaryEhrenfest(&kp, mass);
 
                 if (!params.opt.method.vMCG.frozen) {
-                    kg = try params.mcg.gammaDerivativeImaginaryEhrenfest(pot, mass, n_nodes, params.time, fdiff_step);
+                    try params.mcg.gammaDerivativeImaginaryEhrenfest(&kg, pot, mass, n_nodes, params.time, fdiff_step, params.allocator);
                 }
 
-                kc = switch (params.mcg.gaussians.len) {
-                    1 => try params.mcg.gaussians[0].coefficientDerivativeImaginary(params.mcg.coefs, pot, n_nodes, params.time),
-                    else => try params.mcg.coefficientDerivativeImaginary(pot, kq, kp, kg, mass, n_nodes, params.time)
-                };
+                try params.mcg.overlapDiffTime(&params.matrix_eom.tau, kq, kp, kg); fixGaugeTauMatrix(T, &params.matrix_eom.tau, params.matrix_eom.S);
+
+                switch (params.mcg.gaussians.len) {
+                    1 => try params.mcg.gaussians[0].coefficientDerivativeImaginary(&kc, params.mcg.coefs, pot, n_nodes, params.time, params.allocator),
+                    else => try params.mcg.coefficientDerivativeImaginary(&kc, params.matrix_eom, params.allocator)
+                }
 
             } else {
 
-                kq = try params.mcg.positionDerivativeEhrenfest(mass); kp = try params.mcg.momentumDerivativeEhrenfest(pot, n_nodes, params.time, fdiff_step);
+                try params.mcg.positionDerivativeEhrenfest(&kq, mass);
+                try params.mcg.momentumDerivativeEhrenfest(&kp, pot, n_nodes, params.time, fdiff_step, params.allocator);
 
                 if (!params.opt.method.vMCG.frozen) {
-                    kg = try params.mcg.gammaDerivativeEhrenfest(pot, mass, n_nodes, params.time, fdiff_step);
+                    try params.mcg.gammaDerivativeEhrenfest(&kg, pot, mass, n_nodes, params.time, fdiff_step, params.allocator);
                 }
 
-                kc = switch (params.mcg.gaussians.len) {
-                    1 => try params.mcg.gaussians[0].coefficientDerivative(params.mcg.coefs, pot, n_nodes, params.time),
-                    else => try params.mcg.coefficientDerivative(pot, kq, kp, kg, mass, n_nodes, params.time)
-                };
+                try params.mcg.overlapDiffTime(&params.matrix_eom.tau, kq, kp, kg); fixGaugeTauMatrix(T, &params.matrix_eom.tau, params.matrix_eom.S);
+
+                switch (params.mcg.gaussians.len) {
+                    1 => try params.mcg.gaussians[0].coefficientDerivative(&kc, params.mcg.coefs, pot, n_nodes, params.time, params.allocator),
+                    else => try params.mcg.coefficientDerivative(&kc, params.matrix_eom, params.allocator)
+                }
             }
 
             for (0..kq.len / params.mcg.gaussians[0].position.len) |i| for (0..params.mcg.gaussians[0].position.len) |j| {
@@ -356,9 +427,19 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
         }
     }.call;
 
-    try rk.rk4(&vars, derivative, .{.mcg = mcg, .opt = opt, .time = time, .allocator = allocator}, opt.time_step);
+    try rk.rk4(&vars.all, derivative, .{
+        .mcg = mcg,
+        .opt = opt,
+        .time = time,
+        .kq = vars.q,
+        .kp = vars.p,
+        .kg = vars.g,
+        .kc = vars.c,
+        .matrix_eom = matrix_eom,
+        .allocator = allocator
+    }, opt.time_step);
 
-    try mcg.loadParameterVector(vars);
+    try mcg.loadParameterVector(vars.all);
 }
 
 /// Print header for iteration info.
@@ -442,7 +523,7 @@ test "frozen real-time vMCG on Tully's First Potential" {
         .time_step = 1
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06574685612813, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.53765759177167, TEST_TOLERANCE);
@@ -474,7 +555,7 @@ test "thawed real-time vMCG on Tully's First Potential" {
         .time_step = 1
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06763705056010, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.44325081289219, TEST_TOLERANCE);
@@ -506,7 +587,7 @@ test "thawed real-time ss-vMCG on Tully's First Potential" {
         .time_step = 1
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06706660848155, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.44575305875514, TEST_TOLERANCE);
@@ -538,7 +619,7 @@ test "frozen real-time ss-vMCG on Tully's First Potential" {
         .time_step = 1
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit();
+    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.07135428435411, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.55681879770101, TEST_TOLERANCE);

@@ -9,21 +9,18 @@ pub fn RingBuffer(comptime T: type) type {
         len: usize,
         head: usize,
 
-        allocator: std.mem.Allocator,
-
         /// Initialize the ring buffer.
         pub fn init(max_len: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
                 .data = try allocator.alloc(T, max_len),
                 .len = 0,
-                .head = 0,
-                .allocator = allocator,
+                .head = 0
             };
         }
 
         /// Deinitialize the ring buffer.
-        pub fn deinit(self: @This()) void {
-            self.allocator.free(self.data);
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            allocator.free(self.data);
         }
 
         /// Push a new element to the ring buffer.

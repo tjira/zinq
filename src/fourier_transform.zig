@@ -98,7 +98,7 @@ pub fn cfftn(comptime T: type, vector: *ComplexVector(T), shape: []const usize, 
 }
 
 test "cfft1" {
-    var v = try ComplexVector(f64).init(8, std.testing.allocator); defer v.deinit();
+    var v = try ComplexVector(f64).init(8, std.testing.allocator); defer v.deinit(std.testing.allocator);
 
     v.ptr(0).* = Complex(f64).init(0, 0);
     v.ptr(1).* = Complex(f64).init(1, 0);
@@ -109,7 +109,7 @@ test "cfft1" {
     v.ptr(6).* = Complex(f64).init(6, 0);
     v.ptr(7).* = Complex(f64).init(7, 0);
 
-    const v_fft = try ComplexVector(f64).init(8, std.testing.allocator); defer v_fft.deinit();
+    const v_fft = try ComplexVector(f64).init(8, std.testing.allocator); defer v_fft.deinit(std.testing.allocator);
 
     v_fft.ptr(0).* = Complex(f64).init(28.00000000000000,  0.00000000000000);
     v_fft.ptr(1).* = Complex(f64).init(-4.00000000000000,  9.65685424949238);
