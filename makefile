@@ -8,7 +8,7 @@ TIME_REPORT ?= 0
 WATCH       ?= 0
 WEBUI	    ?= 0
 
-SHELL := $(if $(filter $(OS),Windows_NT),powershell.exe,sh)
+SHELL := $(if $(filter $(OS),Windows_NT),pwsh.exe,sh)
 
 ARCH := $(if $(filter $(OS),Windows_NT),x86_64,$(shell uname -m | tr '[:upper:]' '[:lower:]' | sed 's/arm64/aarch64/'))
 OS   := $(if $(filter $(OS),Windows_NT),windows,$(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/'))
@@ -51,7 +51,7 @@ pip: wheel
 	@pip install --force-reinstall dist/zinq-$(shell python setup.py --version)-py3-none-any.whl
 
 phd:
-	@cd tex ; lualatex main ; biber main ; makeglossaries main ; lualatex main ; lualatex main
+	@cd tex && lualatex main && biber main && makeglossaries main && lualatex main && lualatex main
 
 profile: zinq
 	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq
