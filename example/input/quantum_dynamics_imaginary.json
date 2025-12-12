@@ -22,7 +22,7 @@
                         "k" : [1]
                     }
                 },
-                "imaginary" : true,
+                "imaginary" : {},
                 "iterations" : 2000,
                 "time_step" : 0.01
             }

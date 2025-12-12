@@ -229,6 +229,17 @@ pub fn GridWavefunction(comptime T: type) type {
             self.data.divs(Complex(T).init(std.math.sqrt(self.overlap(self.*).magnitude()), 0));
         }
 
+        /// Orthogonalize the wavefunction against another wavefunction.
+        pub fn orthogonalize(self: *@This(), other: @This()) void {
+            const factor = other.overlap(self.*);
+
+            for (0..self.data.rows) |i| for (0..self.nstate) |j| {
+                self.data.ptr(i, j).* = self.data.at(i, j).sub(factor.mul(other.data.at(i, j)));
+            };
+
+            self.normalize();
+        }
+
         /// Calculate the overlap with another wavefunction.
         pub fn overlap(self: @This(), other: @This()) Complex(T) {
             var value = Complex(T).init(0, 0);
