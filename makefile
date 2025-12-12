@@ -1,7 +1,5 @@
 .SHELLFLAGS := $(if $(filter $(OS),Windows_NT),-NoProfile -Command,-c)
 
-VERSION := $(file < VERSION)
-
 CROSS       ?= 0
 DEBUG       ?= 0
 INCREMENTAL ?= 0
@@ -50,7 +48,7 @@ linguist:
 	@github-linguist
 
 pip: wheel
-	@pip install --force-reinstall dist/zinq-$(VERSION)-py3-none-any.whl
+	@pip install --force-reinstall dist/zinq-$(shell python setup.py --version)-py3-none-any.whl
 
 phd:
 	@cd tex ; lualatex main ; biber main ; makeglossaries main ; lualatex main ; lualatex main

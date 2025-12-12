@@ -1,5 +1,17 @@
 import os, setuptools, setuptools.command.build_py, shutil, subprocess
 
+def version(fallback="0.0.0"):
+    if not shutil.which("git"): return fallback
+
+    try:
+        result = subprocess.run(["git", "describe", "--tags"], capture_output=True, text=True)
+
+        if result.returncode != 0: return fallback
+
+        return result.stdout.strip().lstrip("v").replace("-", "+", 1).replace("-", ".")
+
+    except Exception: return fallback
+
 class Build(setuptools.command.build_py.build_py):
     def run(self):
         subprocess.run(["make", "CROSS=1"], check=True, env={**os.environ, **({"OS" : "Windows_NT"} if os.name == "nt" else {})})
@@ -17,7 +29,7 @@ class Build(setuptools.command.build_py.build_py):
         super().run()
 
 setuptools.setup(
-    version = open("VERSION").read().strip(),
+    version = version(),
     packages = setuptools.find_packages(),
     cmdclass = {
         "build_py": Build
