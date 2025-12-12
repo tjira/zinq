@@ -49,6 +49,7 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
 
             for (data) |*element| switch (O(T)) {
                 ComplexMatrix(T) => |object| element.* = try object.initZero(params.rows, params.cols, allocator),
+                ComplexMatrixArray(T) => |object| element.* = try object.initZero(params.len, params.matrix, allocator),
                 ComplexVector(T) => |object| element.* = try object.initZero(params.len, allocator),
                 RingBuffer(T) => |object| element.* = try object.initZero(params.max_len, allocator),
                 RealMatrix(T) => |object| element.* = try object.initZero(params.rows, params.cols, allocator),
@@ -86,6 +87,11 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
 /// Array for storing complex matrices.
 pub fn ComplexMatrixArray(comptime T: type) type {
     return ObjectArray(ComplexMatrix, T);
+}
+
+/// Array for storing arrays of complex matrices.
+pub fn ComplexMatrixArray2(comptime T: type) type {
+    return ObjectArray(ComplexMatrixArray, T);
 }
 
 /// Array for storing complex vectors.
