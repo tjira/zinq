@@ -86,7 +86,7 @@ and check that the missing input message is displayed. If the message appears, t
 
 You can access Zinq's functionality through the dedicated Python wrappers. If you installed Zinq via [PyPI](https://pypi.org/project/zinq), these wrappers are pre-installed and ready to use. However, if you are compiling from source, you will need to build them manually. From the project root, simply run `make pip` to build the wheel and install the package (or `make wheel` to build without installing).
 
-**Included Wrappers:**
+**Included Wrappers:**  
 Once set up, the `zinq` command is added to your PATH. You also gain access to:
 
 * `hf` - Runs Hartree-Fock calculations on `.xyz` geometry files.
