@@ -10,6 +10,7 @@ const derivative_coupling = @import("derivative_coupling.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const error_context = @import("error_context.zig");
 const error_handling = @import("error_handling.zig");
 const fewest_switches = @import("fewest_switches.zig");
 const global_variables = @import("global_variables.zig");
@@ -22,7 +23,6 @@ const matrix_multiplication = @import("matrix_multiplication.zig");
 const nonadiabatic_coupling_vector = @import("nonadiabatic_coupling_vector.zig");
 const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 const object_array = @import("object_array.zig");
-const parallel_tools = @import("parallel_tools.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const ring_buffer = @import("ring_buffer.zig");
@@ -36,6 +36,7 @@ const ComplexRungeKutta = complex_runge_kutta.ComplexRungeKutta;
 const ComplexVector = complex_vector.ComplexVector;
 const DerivativeCoupling = derivative_coupling.DerivativeCoupling;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
+const ErrorContext = error_context.ErrorContext;
 const FewestSwitches = fewest_switches.FewestSwitches;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
 const LandauZener = landau_zener.LandauZener;
@@ -50,20 +51,16 @@ const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorith
 const TullyPotential1 = tully_potential.TullyPotential1;
 
 const binomialConfInt = math_functions.binomialConfInt;
-const checkParallelError = parallel_tools.checkParallelError;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const fixGauge = eigenproblem_solver.fixGauge;
 const mm = matrix_multiplication.mm;
 const print = device_write.print;
 const printJson = device_write.printJson;
-const printRealMatrix = device_write.printRealMatrix;
 const throw = error_handling.throw;
 
 const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
-
-var PARALLEL_ERROR = &global_variables.PARALLEL_ERROR;
 
 /// Classical dynamics options struct.
 pub fn Options(comptime T: type) type {
@@ -231,6 +228,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     try pool.init(.{.n_jobs = opt.nthread, .track_ids = true, .allocator = allocator});
 
+    var error_ctx = ErrorContext{};
+
     for (0..(opt.trajectories + MAX_POOL_SIZE - 1) / MAX_POOL_SIZE) |i| {
 
         wait.reset();
@@ -242,16 +241,16 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             const params = .{opt, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator};
 
             if (opt.nthread == 1) {
-                runTrajectoryParallel(1, T, parallel_results, params);
+                runTrajectoryParallel(1, T, parallel_results, params, &error_ctx);
             } else {
-                pool.spawnWgId(&wait, runTrajectoryParallel, .{T, parallel_results, params});
+                pool.spawnWgId(&wait, runTrajectoryParallel, .{T, parallel_results, params, &error_ctx});
             }
         }
 
         wait.wait();
     }
 
-    pool.deinit(); try checkParallelError();
+    pool.deinit(); if (error_ctx.err) |err| return err;
 
     try finalizeOutput(T, &output, opt, parallel_results);
 
@@ -419,47 +418,49 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 }
 
 /// Parallel function to run a trajectory.
-pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, params: anytype) void {
-    var system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.mass, params[4]) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, params: anytype, error_ctx: *ErrorContext) void {
+    if (error_ctx.err != null) return;
+
+    var system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.mass, params[4]) catch |err| {
+        error_ctx.capture(err); return;
     }; defer system.deinit(params[4]);
 
     var rng = params[3]; var random = rng.random();
 
-    sampleInitialConditions(T, &system, params[0].initial_conditions, &random) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    sampleInitialConditions(T, &system, params[0].initial_conditions, &random) catch |err| {
+        error_ctx.capture(err); return;
     };
 
-    const trajectory_output = runTrajectory(T, params[0], &system, params[1], params[2], params[4]) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    const trajectory_output = runTrajectory(T, params[0], &system, params[1], params[2], params[4]) catch |err| {
+        error_ctx.capture(err); return;
     }; defer trajectory_output.deinit(params[4]);
 
-    results.kinetic_energy_mean.ptr(id - 1).add(trajectory_output.kinetic_energy) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    results.kinetic_energy_mean.ptr(id - 1).add(trajectory_output.kinetic_energy) catch |err| {
+        error_ctx.capture(err); return;
     };
 
-    results.momentum_mean.ptr(id - 1).add(trajectory_output.momentum) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    results.momentum_mean.ptr(id - 1).add(trajectory_output.momentum) catch |err| {
+        error_ctx.capture(err); return;
     };
 
-    results.population_mean.ptr(id - 1).add(trajectory_output.population) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    results.population_mean.ptr(id - 1).add(trajectory_output.population) catch |err| {
+        error_ctx.capture(err); return;
     };
 
-    results.position_mean.ptr(id - 1).add(trajectory_output.position) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    results.position_mean.ptr(id - 1).add(trajectory_output.position) catch |err| {
+        error_ctx.capture(err); return;
     };
 
-    results.potential_energy_mean.ptr(id - 1).add(trajectory_output.potential_energy) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    results.potential_energy_mean.ptr(id - 1).add(trajectory_output.potential_energy) catch |err| {
+        error_ctx.capture(err); return;
     };
 
-    results.time_derivative_coupling_mean.ptr(id - 1).add(trajectory_output.time_derivative_coupling) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    results.time_derivative_coupling_mean.ptr(id - 1).add(trajectory_output.time_derivative_coupling) catch |err| {
+        error_ctx.capture(err); return;
     };
 
-    results.total_energy_mean.ptr(id - 1).add(trajectory_output.total_energy) catch |e| {
-        if (PARALLEL_ERROR.* == null) PARALLEL_ERROR.* = e; return;
+    results.total_energy_mean.ptr(id - 1).add(trajectory_output.total_energy) catch |err| {
+        error_ctx.capture(err); return;
     };
 }
 
