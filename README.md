@@ -64,13 +64,13 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
   Propagate a parametrized wavefunction using the Dirac–Frenkel variational principle.
 
 * **Surface Hopping**  
-  Run nonadiabatic dynamics with FSSH, LZSH or MASH surface hopping algorithms.
+  Run nonadiabatic dynamics with various surface hopping algorithms.
 
 ## Getting Zinq
 
 ### Prebuilt Releases
 
-You can download the latest binaries from the [releases](https://github.com/tjira/zinq/releases/latest) page. The releases are provided for Linux, Windows and MacOS with the common CPU architectures. All binaries are statically linked with no external runtime dependencies. For less common platforms, see the [compilation](#Compilation) section.
+You can download the latest binaries from the [releases](https://github.com/tjira/zinq/releases/latest) page. The releases are provided for Linux, Windows and MacOS with the common CPU architectures. All binaries are statically linked with no external runtime dependencies. For less common platforms, see the [compilation](#Compilation) section. The binaries can also be easily installed using `pip` from [PyPI](https://pypi.org/project/zinq).
 
 ### Compilation
 
@@ -81,6 +81,16 @@ Compiling Zinq is simple, running `make` will automatically download the Zig com
 ```
 
 and check that the missing input message is displayed. If the message appears, the program is compiled correctly.
+
+## Python Wrappers
+
+You can access Zinq's functionality through the dedicated Python wrappers. If you installed Zinq via [PyPI](https://pypi.org/project/zinq), these wrappers are pre-installed and ready to use. However, if you are compiling from source, you will need to build them manually. From the project root, simply run `make pip` to build the wheel and install the package (or `make wheel` to build without installing).
+
+**Included Wrappers:**
+Once set up, the `zinq` command is added to your PATH. You also gain access to:
+
+* `hf` - Runs Hartree-Fock calculations on `.xyz` geometry files.
+* `prime` - Generates prime numbers as a standalone utility tool.
 
 ## License
 
