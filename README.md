@@ -50,7 +50,7 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
   Compute integrals over Gaussian basis functions from .xyz geometries and basis files.
 
 * **Hartree–Fock Methods**  
-  Perform restricted or generalized Hartree-Fock calculation with the option for direct SCF.
+  Perform restricted or generalized Hartree-Fock calculation with DIIS accelerator.
 
 * **Electronic Structure Analysis**  
   Compute energy derivatives and harmonic vibrational frequencies across supported methods.

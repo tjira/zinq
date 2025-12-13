@@ -92,7 +92,6 @@ pub fn Options(comptime T: type) type {
         basis: []const u8,
 
         charge: i32 = 0,
-        direct: bool = false,
         generalized: bool = false,
         maxiter: u32 = 100,
         nthread: u32 = 1,
@@ -253,64 +252,15 @@ pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), n
 }
 
 /// Obtain the Fock matrix form core Hamiltonian and density matrix.
-pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: ?RealTensor4(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !void {
+pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: RealTensor4(T), basis: BasisSet(T)) !void {
     for (0..F.rows) |i| for (0..F.cols) |j| {
         F.ptr(i, j).* = V.at(i, j) + K.at(i, j);
     };
 
-    const factor: T = if (P.rows == 2 * basis.nbf()) 1 else 2; const stype = std.meta.Float(2 * @bitSizeOf(T));
+    const factor: T = if (P.rows == 2 * basis.nbf()) 1 else 2;
 
-    var fock_parallel_contributions = try RealMatrixArray(stype).initZero(nthread, .{.rows = F.rows, .cols = F.cols}, allocator); defer fock_parallel_contributions.deinit(allocator);
-
-    var pool: std.Thread.Pool = undefined; var wait: std.Thread.WaitGroup = undefined; wait.reset();
-
-    try pool.init(.{.n_jobs = nthread, .track_ids = true, .allocator = allocator});
-
-    const parallel_function_direct = struct {
-        pub fn call(id: usize, focks: *RealMatrixArray(stype), params: anytype) void {
-            const i = params[0]; const j = params[1]; const k = params[2]; const l = params[3];
-
-            const cgi = params[5].contracted_gaussians[i];
-            const cgj = params[5].contracted_gaussians[j];
-            const cgk = params[5].contracted_gaussians[k];
-            const cgl = params[5].contracted_gaussians[l];
-
-            const j_int = cgi.coulomb(cgj, cgk, cgl);
-            const k_int = cgi.coulomb(cgl, cgk, cgj);
-
-            for (0..focks.at(id - 1).rows / params[5].nbf()) |s| for (0..focks.at(id - 1).rows / params[5].nbf()) |t| {
-
-                const ii = s * params[5].nbf() + i; const jj = s * params[5].nbf() + j;
-                const kk = t * params[5].nbf() + k; const ll = t * params[5].nbf() + l;
-
-                focks.ptr(id - 1).ptr(kk, ll).* += params[6] * params[4].at(ii, jj) * j_int;
-
-                if (s == t) focks.ptr(id - 1).ptr(kk, ll).* -= params[4].at(ii, jj) * k_int;
-            };
-        }
-    }.call;
-
-    if (J == null) for (0..basis.nbf()) |i| for (0..basis.nbf()) |j| for (0..basis.nbf()) |k| for (0..basis.nbf()) |l| {
-
-        const params = .{i, j, k, l, P, basis, factor};
-
-        if (nthread == 1) {
-            parallel_function_direct(1, &fock_parallel_contributions, params);
-        } else {
-            pool.spawnWgId(&wait, parallel_function_direct, .{&fock_parallel_contributions, params});
-        }
-    };
-
-    if (J != null) for (0..J.?.shape[0]) |i| for (0..J.?.shape[1]) |j| for (0..J.?.shape[2]) |k| for (0..J.?.shape[3]) |l| {
-        F.ptr(k, l).* += P.at(i, j) * (factor * J.?.at(i, j, k, l) - J.?.at(i, l, k, j));
-    };
-
-    pool.deinit();
-
-    if (nthread > 1) for (1..fock_parallel_contributions.len) |i| try fock_parallel_contributions.ptr(0).add(fock_parallel_contributions.at(i));
-
-    for (0..F.rows) |i| for (0..F.cols) |j| {
-        F.ptr(i, j).* += @floatCast(fock_parallel_contributions.at(0).at(i, j));
+    for (0..J.shape[0]) |i| for (0..J.shape[1]) |j| for (0..J.shape[2]) |k| for (0..J.shape[3]) |l| {
+        F.ptr(k, l).* += P.at(i, j) * (factor * J.at(i, j, k, l) - J.at(i, l, k, j));
     };
 
     try F.symmetrize();
@@ -359,13 +309,13 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     if (enable_printing) try print("{D}\n", .{timer.read()}); timer.reset();
 
-    if (enable_printing and !opt.direct) try print("TWO-ELECTRON INTEGRALS: ", .{});
+    if (enable_printing) try print("TWO-ELECTRON INTEGRALS: ", .{});
 
-    var J = if (!opt.direct) try coulomb(T, basis, opt.nthread, allocator) else null;
+    var J = try coulomb(T, basis, opt.nthread, allocator);
 
-    if (!opt.direct and opt.generalized) try twoAO2AS(T, &J.?, allocator);
+    if (opt.generalized) try twoAO2AS(T, &J, allocator);
 
-    if (enable_printing and !opt.direct) try print("{D}\n", .{timer.read()});
+    if (enable_printing) try print("{D}\n", .{timer.read()});
 
     var C = try RealMatrix(T).initZero(nbf, nbf, allocator);
     var F = try RealMatrix(T).initZero(nbf, nbf, allocator);
@@ -390,7 +340,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         timer.reset();
 
-        try getFockMatrix(T, &F, K, V, P, J, basis, opt.nthread, allocator);
+        try getFockMatrix(T, &F, K, V, P, J, basis);
 
         if (opt.diis != null) {
 

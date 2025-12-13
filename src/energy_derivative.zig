@@ -48,7 +48,11 @@ pub fn nuclearGradient(comptime T: type, opt: anytype, system: ClassicalParticle
 
         const params = .{opt, system, efunc, i, enable_printing, allocator}; const result = grad.ptr(i / 3, i % 3);
 
-        if (opt.gradient.?.numeric.nthread == 1) parallel_function(result, params, &error_ctx) else try pool.spawn(parallel_function, .{result, params, &error_ctx});
+        if (opt.gradient.?.numeric.nthread == 1) {
+            parallel_function(result, params, &error_ctx);
+        } else {
+            try pool.spawn(parallel_function, .{result, params, &error_ctx});
+        }
     }
 
     pool.deinit(); if (error_ctx.err) |err| return err;
@@ -76,7 +80,11 @@ pub fn nuclearHessian(comptime T: type, opt: anytype, system: ClassicalParticle(
 
         const params = .{opt, system, efunc, i, j, enable_printing, allocator}; const result = hess.ptr(i, j);
 
-        if (opt.hessian.?.numeric.nthread == 1) parallel_function(result, params, &error_ctx) else try pool.spawn(parallel_function, .{result, params, &error_ctx});
+        if (opt.hessian.?.numeric.nthread == 1) {
+            parallel_function(result, params, &error_ctx);
+        } else {
+            try pool.spawn(parallel_function, .{result, params, &error_ctx});
+        }
     };
 
     pool.deinit(); if (error_ctx.err) |err| return err;

@@ -51,7 +51,6 @@ const printJson = device_write.printJson;
 const throw = error_handling.throw;
 
 const HERMITE_NODES = hermite_quadrature_nodes.HERMITE_NODES;
-const SINGULARITY_TOLERANCE = global_variables.SINGULARITY_TOLERANCE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
@@ -102,11 +101,12 @@ pub fn Options(comptime T: type) type {
         wavefunction_grid: ?WavefunctionGrid = null,
         write: Write = .{},
 
+        adiabatic: bool = false,
         finite_differences_step: T = 1e-6,
+        imaginary: bool = false,
         integration_nodes: u32 = 32,
         renormalize: bool = true,
-        adiabatic: bool = false,
-        imaginary: bool = false
+        singularity_tolerance: T = 1e-8
     };
 }
 
@@ -186,7 +186,7 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.integration_nodes < 1 or opt.integration_nodes > 256) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{256});
+    if (opt.integration_nodes < 1 or opt.integration_nodes > 256) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{HERMITE_NODES.len - 1});
 
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
@@ -386,10 +386,11 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
 
     const derivative = struct {
         pub fn call(k: *ComplexVector(T), v: ComplexVector(T), params: anytype) anyerror!void {
-            const mass = params.opt.initial_conditions.mass;
-            const pot = params.opt.potential;
-            const n_nodes = params.opt.integration_nodes;
             const fdiff_step = params.opt.finite_differences_step;
+            const mass = params.opt.initial_conditions.mass;
+            const n_nodes = params.opt.integration_nodes;
+            const pot = params.opt.potential;
+            const singularity_tolerance = params.opt.singularity_tolerance;
 
             var kq = params.kq;
             var kp = params.kp;
@@ -406,7 +407,7 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
 
             {
                 try eigensystemHermitian(T, &params.temps.M_ngauss_nstate_1, &params.temps.M_ngauss_nstate_2, params.matrix_eom.S);
-                try pseudoInverseHermitian(T, &params.matrix_eom.Sinv, params.temps.M_ngauss_nstate_1, params.temps.M_ngauss_nstate_2, SINGULARITY_TOLERANCE);
+                try pseudoInverseHermitian(T, &params.matrix_eom.Sinv, params.temps.M_ngauss_nstate_1, params.temps.M_ngauss_nstate_2, singularity_tolerance);
             }
 
             if (params.opt.imaginary) {
