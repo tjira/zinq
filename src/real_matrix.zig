@@ -50,17 +50,17 @@ pub fn RealMatrix(comptime T: type) type {
             }
         }
 
-        /// Get the element at (i, j).
-        pub fn at(self: @This(), i: usize, j: usize) T {
-            return self.data[i * self.cols + j];
-        }
-
         /// Returns the matrix as a view to a real vector.
         pub fn asVector(self: @This()) RealVector(T) {
             return RealVector(T){
                 .data = self.data,
                 .len = self.rows * self.cols
             };
+        }
+
+        /// Get the element at (i, j).
+        pub fn at(self: @This(), i: usize, j: usize) T {
+            return self.data[i * self.cols + j];
         }
 
         /// Clone the matrix.
@@ -107,6 +107,31 @@ pub fn RealMatrix(comptime T: type) type {
             }
 
             return true;
+        }
+
+        /// Expand the matrix and keep the index structure.
+        pub fn expand(self: *@This(), m: usize, n: usize, allocator: std.mem.Allocator) !void {
+            if (m < self.rows or n < self.cols) return throw(void, "CAN'T EXPAND A {d}x{d} MATRIX INTO A {d}x{d} MATRIX", .{self.rows, self.cols, m, n});
+
+            self.data = try allocator.realloc(self.data, m * n);
+
+            var cursor = m * n;
+
+            for (0..self.rows) |i| {
+
+                const ii = self.rows - i - 1;
+
+                const src_start = ii * self.cols;
+                const dest_start = ii * n;
+
+                @memmove(self.data[dest_start..dest_start + self.cols], self.data[src_start..src_start + self.cols]);
+
+                @memset(self.data[dest_start + self.cols..cursor], 0);
+
+                cursor = dest_start;
+            }
+
+            self.rows = m; self.cols = n;
         }
 
         /// Fill the matrix with a given value.

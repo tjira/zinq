@@ -301,18 +301,9 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     var V = try nuclear(T, system, basis, opt.nthread, allocator);
 
     if (opt.generalized) {
-
-        var S_AS = try RealMatrix(T).init(2 * S.rows, 2 * S.cols, allocator); defer S_AS.deinit(allocator);
-        var K_AS = try RealMatrix(T).init(2 * K.rows, 2 * K.cols, allocator); defer K_AS.deinit(allocator);
-        var V_AS = try RealMatrix(T).init(2 * V.rows, 2 * V.cols, allocator); defer V_AS.deinit(allocator);
-
-        oneAO2AS(T, &S_AS, S);
-        oneAO2AS(T, &K_AS, K);
-        oneAO2AS(T, &V_AS, V);
-
-        S.deinit(allocator); S = S_AS;
-        K.deinit(allocator); K = K_AS;
-        V.deinit(allocator); V = V_AS;
+        try oneAO2AS(T, &S, allocator);
+        try oneAO2AS(T, &K, allocator);
+        try oneAO2AS(T, &V, allocator);
     }
 
     if (enable_printing) try print("{D}\n", .{timer.read()}); timer.reset();
@@ -322,12 +313,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     var J = try coulomb(T, basis, opt.nthread, allocator);
 
     if (opt.generalized) {
-
-        var J_AS = try RealTensor4(T).init([_]usize{2 * J.shape[0], 2 * J.shape[1], 2 * J.shape[2], 2 * J.shape[3]}, allocator); defer J_AS.deinit(allocator);
-
-        twoAO2AS(T, &J_AS, J);
-
-        J.deinit(allocator); J = J_AS;
+        try twoAO2AS(T, &J, allocator);
     }
 
     if (enable_printing) try print("{D}\n", .{timer.read()});
@@ -396,7 +382,7 @@ pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: 
 test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
     const opt = Options(f64){
         .system = "example/molecule/water.xyz",
-        .basis = "sto-3g",
+        .basis = "sto-3g"
     };
 
     var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
@@ -407,7 +393,31 @@ test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
 test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
     const opt = Options(f64){
         .system = "example/molecule/methane.xyz",
+        .basis = "6-31g*"
+    };
+
+    var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+
+    try std.testing.expectApproxEqAbs(output.energy, -40.19517074914403, TEST_TOLERANCE);
+}
+
+test "Generalized Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
+    const opt = Options(f64){
+        .system = "example/molecule/water.xyz",
+        .basis = "sto-3g",
+        .generalized = true
+    };
+
+    var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+
+    try std.testing.expectApproxEqAbs(output.energy, -74.96590121728507, TEST_TOLERANCE);
+}
+
+test "Generalized Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
+    const opt = Options(f64){
+        .system = "example/molecule/methane.xyz",
         .basis = "6-31g*",
+        .generalized = true
     };
 
     var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);

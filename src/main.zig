@@ -166,6 +166,16 @@ pub fn main() !void {
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
+
+    // var A = try real_matrix.RealMatrix(f64).init(3, 3, allocator); defer A.deinit(allocator);
+    //
+    // A.ptr(0, 0).* = 1.0; A.ptr(0, 1).* = 2.0; A.ptr(0, 2).* = 6.0;
+    // A.ptr(1, 0).* = 3.0; A.ptr(1, 1).* = 4.0; A.ptr(1, 2).* = 5.0;
+    // A.ptr(2, 0).* = 7.0; A.ptr(2, 1).* = 8.0; A.ptr(2, 2).* = 9.0;
+    //
+    // try device_write.printRealMatrix(f64, A);
+    // try A.expand(5, 5, allocator);
+    // try device_write.printRealMatrix(f64, A);
 }
 
 test {

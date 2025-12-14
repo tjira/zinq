@@ -148,14 +148,14 @@ pub fn mp(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
 
     const nbf = if (opt.hartree_fock.generalized) hf_output.S.rows else 2 * hf_output.S.rows; const nocc = try system.noccSpin();
 
-    var F_MS   = try RealMatrix (T).init(nbf, nbf,                     allocator); defer   F_MS.deinit(allocator);
-    var J_MS_A = try RealTensor4(T).init([_]usize{nbf, nbf, nbf, nbf}, allocator); defer J_MS_A.deinit(allocator);
+    var F_MS = try RealMatrix (T).init(nbf, nbf,                     allocator); defer F_MS.deinit(allocator);
+    var J_MS = try RealTensor4(T).init([_]usize{nbf, nbf, nbf, nbf}, allocator); defer J_MS.deinit(allocator);
 
-    try transform(T, &F_MS, &J_MS_A, hf_output.F, hf_output.J, hf_output.C, allocator);
+    try transform(T, &F_MS, &J_MS, hf_output.F, hf_output.J, hf_output.C);
 
     var energy: T = 0;
 
-    if (opt.order >= 2) energy += mp2(T, F_MS, J_MS_A, nocc);
+    if (opt.order >= 2) energy += mp2(T, F_MS, J_MS, nocc);
 
     if (enable_printing) try print("\nMP{d} ENERGY: {d:.14}\n", .{opt.order, hf_output.energy + energy});
 
@@ -165,22 +165,21 @@ pub fn mp(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
 }
 
 /// Returns the second-order Moller-Plesset energy.
-pub fn mp2(comptime T: type, F_MS: RealMatrix(T), J_MS_A: RealTensor4(T), nocc: usize) T {
+pub fn mp2(comptime T: type, F_MS: RealMatrix(T), J_MS: RealTensor4(T), nocc: usize) T {
     var energy: T = 0;
 
-    for (0..nocc) |i| for (0..nocc) |j| for (nocc..J_MS_A.shape[0]) |a| for (nocc..J_MS_A.shape[0]) |b| {
-        energy += 0.25 * J_MS_A.at(i, j, a, b) * J_MS_A.at(a, b, i, j) / (F_MS.at(i, i) + F_MS.at(j, j) - F_MS.at(a, a) - F_MS.at(b, b));
+    for (0..nocc) |i| for (0..nocc) |j| for (nocc..J_MS.shape[0]) |a| for (nocc..J_MS.shape[0]) |b| {
+
+        const J_MS_A_ijab = J_MS.at(i, a, j, b) - J_MS.at(i, b, j, a);
+
+        energy += 0.25 * J_MS_A_ijab * J_MS_A_ijab / (F_MS.at(i, i) + F_MS.at(j, j) - F_MS.at(a, a) - F_MS.at(b, b));
     };
 
     return energy;
 }
 
 /// Function to perform all integrals transformations used in the Moller-Plesset calculations.
-pub fn transform(comptime T: type, F_MS: *RealMatrix(T), J_MS_A: *RealTensor4(T), F: RealMatrix(T), J: RealTensor4(T), C: RealMatrix(T), allocator: std.mem.Allocator) !void {
-    if (F.rows != F_MS.rows) {try oneAO2MS(T, F_MS,   F, C, allocator);} else {try oneAO2MO(T, F_MS,   F, C, allocator);}
-    if (F.rows != F_MS.rows) {try twoAO2MS(T, J_MS_A, J, C, allocator);} else {twoAO2MO(T, J_MS_A, J, C           );}
-
-    for (0..J_MS_A.shape[0]) |i| for (0..J_MS_A.shape[1]) |j| for (0..J_MS_A.shape[2]) |k| for (0..J_MS_A.shape[3]) |l| {
-        J_MS_A.ptr(i, k, j, l).* = J_MS_A.at(i, j, k, l) - J_MS_A.at(i, l, k, j);
-    };
+pub fn transform(comptime T: type, F_MS: *RealMatrix(T), J_MS: *RealTensor4(T), F: RealMatrix(T), J: RealTensor4(T), C: RealMatrix(T)) !void {
+    if (F.rows != F_MS.rows) {oneAO2MS(T, F_MS, F, C);} else {oneAO2MO(T, F_MS, F, C);}
+    if (F.rows != F_MS.rows) {twoAO2MS(T, J_MS, J, C);} else {twoAO2MO(T, J_MS, J, C);}
 }
