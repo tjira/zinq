@@ -108,17 +108,16 @@ pub fn Options(comptime T: type) type {
 /// Hartree-Fock target output.
 pub fn Output(comptime T: type) type {
     return struct {
-        C: RealMatrix(T), F: RealMatrix(T), J: ?RealTensor4(T), K: RealMatrix(T), P: RealMatrix(T),
+        C: RealMatrix(T), F: RealMatrix(T), J: RealTensor4(T), K: RealMatrix(T), P: RealMatrix(T),
         S: RealMatrix(T), V: RealMatrix(T), G: ?RealMatrix(T) = null, H: ?RealMatrix(T) = null,
         energy: T, epsilon: RealMatrix(T), frequencies: ?RealVector(T) = null,
 
         /// Deinitialize the output struct.
         pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
             self.C.deinit(allocator); self.F.deinit(allocator); self.K.deinit(allocator); self.P.deinit(allocator);
-            self.S.deinit(allocator); self.V.deinit(allocator); self.epsilon.deinit(allocator);
+            self.S.deinit(allocator); self.V.deinit(allocator); self.epsilon.deinit(allocator); self.J.deinit(allocator);
             if (self.G != null) self.G.?.deinit(allocator);
             if (self.H != null) self.H.?.deinit(allocator);
-            if (self.J != null) self.J.?.deinit(allocator);
             if (self.frequencies != null) self.frequencies.?.deinit(allocator);
         }
     };
@@ -302,9 +301,18 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     var V = try nuclear(T, system, basis, opt.nthread, allocator);
 
     if (opt.generalized) {
-        try oneAO2AS(T, &S, allocator);
-        try oneAO2AS(T, &K, allocator);
-        try oneAO2AS(T, &V, allocator);
+
+        var S_AS = try RealMatrix(T).init(2 * S.rows, 2 * S.cols, allocator); defer S_AS.deinit(allocator);
+        var K_AS = try RealMatrix(T).init(2 * K.rows, 2 * K.cols, allocator); defer K_AS.deinit(allocator);
+        var V_AS = try RealMatrix(T).init(2 * V.rows, 2 * V.cols, allocator); defer V_AS.deinit(allocator);
+
+        oneAO2AS(T, &S_AS, S);
+        oneAO2AS(T, &K_AS, K);
+        oneAO2AS(T, &V_AS, V);
+
+        S.deinit(allocator); S = S_AS;
+        K.deinit(allocator); K = K_AS;
+        V.deinit(allocator); V = V_AS;
     }
 
     if (enable_printing) try print("{D}\n", .{timer.read()}); timer.reset();
@@ -313,7 +321,14 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     var J = try coulomb(T, basis, opt.nthread, allocator);
 
-    if (opt.generalized) try twoAO2AS(T, &J, allocator);
+    if (opt.generalized) {
+
+        var J_AS = try RealTensor4(T).init([_]usize{2 * J.shape[0], 2 * J.shape[1], 2 * J.shape[2], 2 * J.shape[3]}, allocator); defer J_AS.deinit(allocator);
+
+        twoAO2AS(T, &J_AS, J);
+
+        J.deinit(allocator); J = J_AS;
+    }
 
     if (enable_printing) try print("{D}\n", .{timer.read()});
 

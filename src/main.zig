@@ -45,6 +45,7 @@ pub const math_functions = @import("math_functions.zig");
 pub const matrix_inverse = @import("matrix_inverse.zig");
 pub const matrix_multiplication = @import("matrix_multiplication.zig");
 pub const molecular_integrals = @import("molecular_integrals.zig");
+pub const moller_plesset = @import("moller_plesset.zig");
 pub const morse_potential = @import("morse_potential.zig");
 pub const multiconfigurational_gaussian = @import("multiconfigurational_gaussian.zig");
 pub const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
@@ -73,6 +74,7 @@ pub const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
 pub const HartreeFockOptions = hartree_fock.Options;
 pub const MolecularIntegralsOptions = molecular_integrals.Options;
+pub const MollerPlessetOptions = moller_plesset.Options;
 pub const MulticonfigurationalGaussianOptions = multiconfigurational_gaussian.Options;
 pub const PotentialPlotOptions = potential_plot.Options;
 pub const PrimeNumbersOptions = prime_numbers.Options;
@@ -83,6 +85,7 @@ const Target = enum {
     classical_dynamics,
     hartree_fock,
     molecular_integrals,
+    moller_plesset,
     multiconfigurational_gaussian,
     potential_plot,
     prime_numbers,
@@ -126,6 +129,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
             .hartree_fock => try handle(f64, hartree_fock, options, allocator),
             .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
+            .moller_plesset => try handle(f64, moller_plesset, options, allocator),
             .multiconfigurational_gaussian => try handle(f64, multiconfigurational_gaussian, options, allocator),
             .potential_plot => try handle(f64, potential_plot, options, allocator),
             .prime_numbers => try handle(u64, prime_numbers, options, allocator),

@@ -1,0 +1,14 @@
+{
+    "zinq" : [
+        {
+            "name" : "moller_plesset",
+            "options" : {
+                "hartree_fock" : {
+                    "system" : "molecule.xyz",
+                    "basis" : "sto-3g"
+                },
+                "order" : 2
+            }
+        }
+    ]
+}
