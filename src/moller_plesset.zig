@@ -155,7 +155,11 @@ pub fn mp(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
 
     var energy: T = 0;
 
+    if (opt.order < 2) return throw(Output(T), "MOLLER-PLESSET ORDER MUST BE >= 2", .{});
+
     if (opt.order >= 2) energy += mp2(T, F_MS, J_MS, nocc);
+
+    if (opt.order > 2) return throw(Output(T), "MOLLER-PLESSET OF ORDER HIGHER THAN 2 NOT IMPLEMENTED", .{});
 
     if (enable_printing) try print("\nMP{d} ENERGY: {d:.14}\n", .{opt.order, hf_output.energy + energy});
 
