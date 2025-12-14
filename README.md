@@ -73,7 +73,7 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 
 ### Prebuilt Releases
 
-You can download the latest binaries from the [releases](https://github.com/tjira/zinq/releases/latest) page. The releases are provided for Linux, Windows and MacOS with the common CPU architectures. All binaries are statically linked with no external runtime dependencies. For less common platforms, see the [compilation](#Compilation) section. The binaries can also be easily installed using `pip` from [PyPI](https://pypi.org/project/zinq).
+You can download the latest binaries from the [releases](https://github.com/tjira/zinq/releases/latest) page. The releases are provided for Linux, Windows and MacOS with the common CPU architectures. All binaries are statically linked with no external runtime dependencies. For less common platforms, see the [compilation](#Compilation) section. The binaries can also be installed using `pip` from [PyPI](https://pypi.org/project/zinq).
 
 ### Compilation
 
