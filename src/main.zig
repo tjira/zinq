@@ -1,6 +1,7 @@
 //! Main file of the program.
 
 const builtin = @import("builtin");
+const config = @import("config");
 const std = @import("std");
 
 pub const array_functions = @import("array_functions.zig");
@@ -150,7 +151,7 @@ pub fn main() !void {
         if (gpa.deinit() == .leak) std.debug.panic("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
-    try device_write.print("ZIG VERSION: {d}.{d}.{d}\n", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch});
+    try device_write.print("ZIG VERSION: {d}.{d}.{d}, ZINQ VERSION: {s}\n", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.version});
 
     var argc: usize = 0; var argv = try std.process.argsWithAllocator(allocator); defer argv.deinit(); _ = argv.next();
 
@@ -166,16 +167,6 @@ pub fn main() !void {
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
-
-    // var A = try real_matrix.RealMatrix(f64).init(3, 3, allocator); defer A.deinit(allocator);
-    //
-    // A.ptr(0, 0).* = 1.0; A.ptr(0, 1).* = 2.0; A.ptr(0, 2).* = 6.0;
-    // A.ptr(1, 0).* = 3.0; A.ptr(1, 1).* = 4.0; A.ptr(1, 2).* = 5.0;
-    // A.ptr(2, 0).* = 7.0; A.ptr(2, 1).* = 8.0; A.ptr(2, 2).* = 9.0;
-    //
-    // try device_write.printRealMatrix(f64, A);
-    // try A.expand(5, 5, allocator);
-    // try device_write.printRealMatrix(f64, A);
 }
 
 test {

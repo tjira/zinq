@@ -22,6 +22,8 @@ pub fn build(builder: *std.Build) !void {
     const optimize = builder.standardOptimizeOption(.{});
     const target = builder.standardTargetOptions(.{});
 
+    const version = getVersion(builder); defer builder.allocator.free(version);
+
     for (0..targets.len) |i| {
 
         const target_query = if (target.query.cpu_arch == null) targets[i] else target.query;
@@ -37,6 +39,12 @@ pub fn build(builder: *std.Build) !void {
             }),
             .use_llvm = true // needed for valgrind for now
         });
+
+        const options = builder.addOptions();
+
+        options.addOption([]const u8, "version", version);
+
+        main_executable.root_module.addOptions("config", options);
 
         const main_executable_install = builder.addInstallArtifact(main_executable, .{
             .dest_dir = .{.override = .{.custom = try target_query.zigTriple(builder.allocator)}}
@@ -56,4 +64,31 @@ pub fn build(builder: *std.Build) !void {
 
         if (target.query.cpu_arch != null) break;
     }
+}
+
+fn getVersion(builder: *std.Build) []const u8 {
+    const result = std.process.Child.run(.{.allocator = builder.allocator, .argv = &.{"git", "describe", "--tags"}}) catch {
+        return "UNKNOWN";
+    };
+
+    defer {
+        builder.allocator.free(result.stdout);
+        builder.allocator.free(result.stderr);
+    }
+
+    if (result.term.Exited != 0) {
+        return "UNKNOWN";
+    }
+
+    const version = builder.allocator.dupe(u8, std.mem.trim(u8, result.stdout, " \n\r\t")) catch return "UNKNOWN";
+
+    for (version) |*c| if (c.* == '-') {
+        c.* = '+'; break;
+    };
+
+    for (version) |*c| if (c.* == '-') {
+        c.* = '.'; break;
+    };
+
+    return version;
 }
