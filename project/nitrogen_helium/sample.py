@@ -1,6 +1,6 @@
 import scipy.interpolate, matplotlib.pyplot, numpy
 
-FILENAME, POINTS = "PROB_EXC_1D_2S_BEST.mat", 160
+FILENAME, POINTS = "PROB_EXC_1D_2S.mat", 40
 
 def sample(x, y, n):
     selected = [0, len(x) - 1]
