@@ -34,4 +34,7 @@
 
 __*/
 
+*run.sh
+*sub.sh
+
 !index.md

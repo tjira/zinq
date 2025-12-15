@@ -360,8 +360,8 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
 
     try writer.print("\n{s:8} ", .{"ITER"});
     try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
-    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 9 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 9 * ndim + 2 * (ndim - 1) + 2});
+    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 10 * ndim + 2 * (ndim - 1) + 2});
+    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 10 * ndim + 2 * (ndim - 1) + 2});
     try writer.print("{[value]s:[width]} ", .{.value = "POPULATION", .width = 9 * nstate + 2 * (nstate - 1) + 2});
     try writer.print("{s:4}", .{"TIME"});
 
@@ -380,13 +380,13 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
     try writer.print("[", .{});
 
     for (0..info.position.len) |i| {
-        try writer.print("{d:9.4}{s}", .{info.position.at(i), if (i == info.position.len - 1) "" else ", "});
+        try writer.print("{d:10.4}{s}", .{info.position.at(i), if (i == info.position.len - 1) "" else ", "});
     }
 
     try writer.print("] [", .{});
 
     for (0..info.momentum.len) |i| {
-        try writer.print("{d:9.4}{s}", .{info.momentum.at(i), if (i == info.momentum.len - 1) "" else ", "});
+        try writer.print("{d:10.4}{s}", .{info.momentum.at(i), if (i == info.momentum.len - 1) "" else ", "});
     }
 
     try writer.print("] [", .{});

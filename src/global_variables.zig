@@ -10,7 +10,7 @@ pub var PARALLEL_ERROR: ?anyerror = null;
 
 pub const BOYS_CUTOFF = 1e-8;
 pub const FSSH_DENOMINATOR_OFFSET = 1e-14;
-pub const MAX_INPUT_FILE_BYTES = 8192;
+pub const MAX_INPUT_FILE_BYTES = 1024 * 1024 * 1024; // 1 GB
 pub const MAX_JACOBI_ITERATIONS = 1000;
 pub const SINGULARITY_TOLERANCE = 1e-12;
 pub const TEST_TOLERANCE = 1e-10;
