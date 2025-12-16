@@ -69,6 +69,7 @@ pub const strided_real_vector = @import("strided_real_vector.zig");
 pub const string_manipulation = @import("string_manipulation.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 pub const time_linear_potential = @import("time_linear_potential.zig");
+pub const timestamp = @import("timestamp.zig");
 pub const tully_potential = @import("tully_potential.zig");
 pub const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
@@ -151,7 +152,13 @@ pub fn main() !void {
         if (gpa.deinit() == .leak) std.debug.panic("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
-    try device_write.print("ZIG VERSION: {d}.{d}.{d}, ZINQ VERSION: {s}\n", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.version});
+    try device_write.print("ZIG VERSION: {d}.{d}.{d}, ZINQ VERSION: {s}", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.version});
+
+    {
+        const ts = try timestamp.timestamp(allocator); defer allocator.free(ts);
+
+        try device_write.print(", TIMESTAMP: {s}\n", .{ts});
+    }
 
     var argc: usize = 0; var argv = try std.process.argsWithAllocator(allocator); defer argv.deinit(); _ = argv.next();
 

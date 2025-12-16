@@ -9,6 +9,7 @@ const throw = error_handling.throw;
 pub var PARALLEL_ERROR: ?anyerror = null;
 
 pub const BOYS_CUTOFF = 1e-8;
+pub const EPOCH_YEARS_OFFSET = 1970;
 pub const FSSH_DENOMINATOR_OFFSET = 1e-14;
 pub const MAX_INPUT_FILE_BYTES = 1024 * 1024 * 1024; // 1 GB
 pub const MAX_JACOBI_ITERATIONS = 1000;
