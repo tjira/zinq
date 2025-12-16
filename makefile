@@ -42,7 +42,7 @@ test: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 # CUSTOM TARGETS =======================================================================================================================================================================================
 
 docs: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
-	@./.zig-bin/zig build-lib -femit-docs=docs/code -fno-emit-bin src/main.zig && cd docs && bundle install && bundle exec jekyll build
+	@./.zig-bin/zig build $(ZIG_FLAGS) docs && cd docs && bundle install && bundle exec jekyll build
 
 linguist:
 	@github-linguist

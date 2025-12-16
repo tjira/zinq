@@ -22,7 +22,7 @@ pub fn build(builder: *std.Build) !void {
     const optimize = builder.standardOptimizeOption(.{});
     const target = builder.standardTargetOptions(.{});
 
-    const version = getVersion(builder); defer builder.allocator.free(version);
+    const version = getVersion(builder);
 
     for (0..targets.len) |i| {
 
@@ -50,7 +50,15 @@ pub fn build(builder: *std.Build) !void {
             .dest_dir = .{.override = .{.custom = try target_query.zigTriple(builder.allocator)}}
         });
 
+        const install_docs = builder.addInstallDirectory(.{
+            .source_dir = main_executable.getEmittedDocs(),
+            .install_dir = .prefix,
+            .install_subdir = "../docs/code",
+        });
+
         builder.getInstallStep().dependOn(&main_executable_install.step);
+
+        builder.step("docs", "Generate documentation").dependOn(&install_docs.step);
 
         if (builtin.target.cpu.arch == target_query.cpu_arch and builtin.target.os.tag == target_query.os_tag) {
 
