@@ -50,21 +50,19 @@ pub fn build(builder: *std.Build) !void {
             .dest_dir = .{.override = .{.custom = try target_query.zigTriple(builder.allocator)}}
         });
 
-        const install_docs = builder.addInstallDirectory(.{
-            .source_dir = main_executable.getEmittedDocs(),
-            .install_dir = .prefix,
-            .install_subdir = "../docs/code",
-        });
-
         builder.getInstallStep().dependOn(&main_executable_install.step);
 
-        builder.step("docs", "Generate documentation").dependOn(&install_docs.step);
-
         if (builtin.target.cpu.arch == target_query.cpu_arch and builtin.target.os.tag == target_query.os_tag) {
+
+            const docs_target = builder.addInstallDirectory(.{
+                .source_dir = main_executable.getEmittedDocs(), .install_dir = .prefix, .install_subdir = "../docs/code"
+            });
 
             const test_executable = builder.addTest(.{
                 .name = "test", .root_module = main_executable.root_module,
             });
+
+            builder.step("docs", "Generate documentation").dependOn(&docs_target.step);
 
             builder.step("run",  "Run the compiled executable").dependOn(&builder.addRunArtifact(main_executable).step);
             builder.step("test", "Run unit tests"             ).dependOn(&builder.addRunArtifact(test_executable).step);
