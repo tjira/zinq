@@ -55,7 +55,9 @@ pub fn build(builder: *std.Build) !void {
         if (builtin.target.cpu.arch == target_query.cpu_arch and builtin.target.os.tag == target_query.os_tag) {
 
             const docs_target = builder.addInstallDirectory(.{
-                .source_dir = main_executable.getEmittedDocs(), .install_dir = .prefix, .install_subdir = "../docs/code"
+                .source_dir = builder.addLibrary(.{
+                    .name = "main", .root_module = main_executable.root_module,
+                }).getEmittedDocs(), .install_dir = .prefix, .install_subdir = "../docs/code"
             });
 
             const test_executable = builder.addTest(.{
