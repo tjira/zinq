@@ -1,4 +1,4 @@
-import numpy, os
+import numpy, os, pandas
 
 EXC_1D_2S, EXC_1D_2S_PROB = [], []
 EXC_2D_2S, EXC_2D_2S_PROB = [], []
@@ -35,3 +35,5 @@ for b in numpy.unique(EXC_2D_2S_PROB[:, 0]):
     subset = EXC_2D_2S_PROB[EXC_2D_2S_PROB[:, 0] == b][:, 1:]
 
     numpy.savetxt(f"PROB_EXC_2D_2S_B={b}.mat", subset[numpy.argsort(subset[:, 0])], header=f"{subset.shape[0]} {subset.shape[1]}", comments="")
+
+pandas.DataFrame(EXC_2D_2S_PROB, columns=["b", "E", "P"]).pivot(index="b", columns="E", values="P").rename_axis(index="b\\E", columns=None).to_csv("PROB_EXC_2D_2S.csv", index=True)

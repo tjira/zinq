@@ -93,7 +93,7 @@ for e in (SAMPLED_POINTS if USE_SAMPLED_POINTS else ALL_POINTS):
     inputs_exc_1d_3s.append(inp_exc_1d_3s)
     inputs_exc_1d_2s.append(inp_exc_1d_2s)
 
-    for b in [0, 0.5, 1, 4, 7, 10]:
+    for b in numpy.arange(0, 4.5, 0.5):
 
         inp_exc_2d_3s = copy.deepcopy(input_2d)
 

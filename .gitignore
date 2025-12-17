@@ -9,6 +9,7 @@
 *.bbl*
 *.bcf*
 *.blg*
+*.csv*
 *.ist*
 *.log*
 *.xml*
