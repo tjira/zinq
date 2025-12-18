@@ -13,6 +13,11 @@ jobs:
       - name: Mirror the Repository
         run: git clone --mirror https://github.com/tjira/zinq zinq
 
+      - name: Push the Mirror to Codeberg
+        env:
+          CODEBERG_TOKEN: ${{secrets.CODEBERG_TOKEN}}
+        run: cd zinq && git push --mirror https://tjira:$CODEBERG_TOKEN@codeberg.org/tjira/zinq
+
       - name: Push the Mirror to GitLab
         env:
           GITLAB_TOKEN: ${{secrets.GITLAB_TOKEN}}
