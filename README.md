@@ -34,6 +34,16 @@
     <a href="https://github.com/tjira/zinq/releases/latest">
         <img src="https://img.shields.io/github/downloads/tjira/zinq/total?style=for-the-badge"/>
     </a>
+    <br>
+    <a href="https://gitlab.com/tojira/zinq">
+        <img src="https://img.shields.io/badge/mirror-gitlab-orange?logo=gitlab&style=for-the-badge"/>
+    </a>
+    <a href="https://codeberg.org/tjira/zinq">
+        <img src="https://img.shields.io/badge/mirror-codeberg-blue?logo=codeberg&style=for-the-badge"/>
+    </a>
+    <a href="https://pypi.org/project/zinq">
+        <img src="https://img.shields.io/pypi/v/zinq?style=for-the-badge"/>
+    </a>
 </p>
 
 <p align="center">
