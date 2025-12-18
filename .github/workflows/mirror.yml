@@ -6,7 +6,7 @@ on:
       - 'master'
 
 jobs:
-  gitlab:
+  codeberg:
     runs-on: ubuntu-latest
 
     steps:
@@ -17,6 +17,17 @@ jobs:
         env:
           CODEBERG_TOKEN: ${{secrets.CODEBERG_TOKEN}}
         run: cd zinq && git push --mirror https://tjira:$CODEBERG_TOKEN@codeberg.org/tjira/zinq
+
+      - name: Setup Tmate Session
+        if: failure()
+        uses: mxschmitt/action-tmate/detached@v3
+
+  gitlab:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Mirror the Repository
+        run: git clone --mirror https://github.com/tjira/zinq zinq
 
       - name: Push the Mirror to GitLab
         env:
