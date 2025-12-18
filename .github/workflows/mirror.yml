@@ -10,12 +10,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Full History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Push the Mirror to Codeberg
         env:
           CODEBERG_TOKEN: ${{secrets.CODEBERG_TOKEN}}
-        run: cd zinq && git push --mirror https://tjira:$CODEBERG_TOKEN@codeberg.org/tjira/zinq
+        run: git push --mirror https://tjira:$CODEBERG_TOKEN@codeberg.org/tjira/zinq
 
       - name: Setup Tmate Session
         if: failure()
@@ -25,12 +28,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Full History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Push the Mirror to GitLab
         env:
           GITLAB_TOKEN: ${{secrets.GITLAB_TOKEN}}
-        run: cd zinq && git push --mirror https://oauth2:$GITLAB_TOKEN@gitlab.com/tojira/zinq
+        run: git push --mirror https://oauth2:$GITLAB_TOKEN@gitlab.com/tojira/zinq
 
       - name: Setup Tmate Session
         if: failure()
