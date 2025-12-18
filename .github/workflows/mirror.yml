@@ -10,8 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Mirror the Repository
-        run: git clone --mirror https://github.com/tjira/zinq zinq
+      - uses: actions/checkout@v4
 
       - name: Push the Mirror to Codeberg
         env:
@@ -26,8 +25,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Mirror the Repository
-        run: git clone --mirror https://github.com/tjira/zinq zinq
+      - uses: actions/checkout@v4
 
       - name: Push the Mirror to GitLab
         env:
