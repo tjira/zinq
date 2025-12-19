@@ -18,8 +18,8 @@
     <a href="https://github.com/tjira/zinq/actions/workflows/test.yml">
         <img src="https://img.shields.io/github/actions/workflow/status/tjira/zinq/test.yml?style=for-the-badge&label=test"/>
     </a>
-    <a href="https://github.com/tjira/zinq/releases/latest">
-        <img src="https://img.shields.io/github/v/release/tjira/zinq?display_name=tag&style=for-the-badge"/>
+    <a href="https://pypi.org/project/zinq">
+        <img src="https://img.shields.io/pypi/v/zinq?style=for-the-badge"/>
     </a>
     <br>
     <a href="https://github.com/tjira/zinq">
@@ -35,15 +35,6 @@
         <img src="https://img.shields.io/github/downloads/tjira/zinq/total?style=for-the-badge"/>
     </a>
     <br>
-    <a href="https://gitlab.com/tojira/zinq">
-        <img src="https://img.shields.io/badge/mirror-gitlab-orange?logo=gitlab&style=for-the-badge"/>
-    </a>
-    <a href="https://codeberg.org/tjira/zinq">
-        <img src="https://img.shields.io/badge/mirror-codeberg-blue?logo=codeberg&style=for-the-badge"/>
-    </a>
-    <a href="https://pypi.org/project/zinq">
-        <img src="https://img.shields.io/pypi/v/zinq?style=for-the-badge"/>
-    </a>
 </p>
 
 <p align="center">
@@ -107,3 +98,14 @@ You can access Zinq's functionality through the dedicated Python wrappers. If yo
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+---
+
+<p align="left">
+    <a href="https://gitlab.com/tojira/zinq">
+        <img src="https://img.shields.io/badge/mirror-gitlab-orange?logo=gitlab&style=for-the-badge"/>
+    </a>
+    <a href="https://codeberg.org/tjira/zinq">
+        <img src="https://img.shields.io/badge/mirror-codeberg-blue?logo=codeberg&style=for-the-badge"/>
+    </a>
+</p>

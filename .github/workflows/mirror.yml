@@ -1,10 +1,5 @@
 name: Mirror
 
-on:
-  push:
-    branches:
-      - 'master'
-
 jobs:
   codeberg:
     runs-on: ubuntu-latest

@@ -76,9 +76,14 @@ pub fn Options(comptime T: type) type {
             spectrum: ?[]const u8 = null,
             autocorrelation_function: ?[]const u8 = null
         };
-        pub const WavefunctionGrid = struct {
+        pub const Wavefunction = struct {
+            pub const Write = struct {
+                wavefunction: ?[]const u8 = null,
+            };
+
             limits: []const []const T,
-            points: u32
+            points: u32,
+            write: @This().Write = .{}
         };
         pub const Method = union(enum) {
             vMCG: struct {
@@ -98,7 +103,7 @@ pub fn Options(comptime T: type) type {
 
         log_intervals: LogIntervals = .{},
         spectrum: Spectrum = .{},
-        wavefunction_grid: ?WavefunctionGrid = null,
+        wavefunction: ?Wavefunction = null,
         write: Write = .{},
 
         adiabatic: bool = false,
@@ -243,8 +248,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var propagator = try ComplexRungeKutta(T).init(nparams, allocator); defer propagator.deinit(allocator);
 
-    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_|
-        try initializeWavefunctionDynamicsContainer(T, opt.wavefunction_grid, nstate, opt.iterations, allocator)
+    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.wavefunction) |wfn_opt|
+        try initializeWavefunctionDynamicsContainer(T, wfn_opt, nstate, opt.iterations, allocator)
     else null;
 
     var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit(allocator);
@@ -333,7 +338,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, path, acf.asMatrix(), 0, end_time);
     if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
-    if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
+    if (opt.wavefunction) |wfn_opt| if (wfn_opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
 
     if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit(allocator);
 
@@ -359,7 +364,7 @@ pub fn assignWavefunction(comptime T: type, wfn_container: *RealMatrix(T), gauss
 }
 
 /// Initialize the container for the wavefunction dynamics.
-pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(T).WavefunctionGrid, nstate: usize, iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
+pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(T).Wavefunction, nstate: usize, iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     if (grid == null) return throw(RealMatrix(T), "WAVEFUNCTION GRID MUST BE PROVIDED WHEN WRITING THE WAVEFUNCTION DYNAMICS", .{});
 
     const grid_points = powi(grid.?.points, grid.?.limits.len);
