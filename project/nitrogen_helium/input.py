@@ -32,7 +32,7 @@ input_2d = { "zinq" : [{
     "name" : "quantum_dynamics",
     "options" : {
         "grid" : {
-            "limits" : [[-8, 16], [-8, 8]]
+            "limits" : [[-12, 16], [-12, 12]]
         },
         "initial_conditions" : {
             "gamma" : [2, 2]
@@ -76,7 +76,7 @@ for e in (SAMPLED_POINTS if USE_SAMPLED_POINTS else ALL_POINTS):
 
     inp_exc_1d_3s["zinq"][0]["options"]["grid"]["points"] = points
 
-    inp_exc_1d_3s["zinq"][0]["options"]["iterations"] = int(1100 / numpy.sqrt(e) / time_step)
+    inp_exc_1d_3s["zinq"][0]["options"]["iterations"] = int(1500 / numpy.sqrt(e) / time_step)
     inp_exc_1d_3s["zinq"][0]["options"]["time_step"] = time_step
 
     inp_exc_1d_2s = copy.deepcopy(inp_exc_1d_3s)
@@ -93,7 +93,7 @@ for e in (SAMPLED_POINTS if USE_SAMPLED_POINTS else ALL_POINTS):
     inputs_exc_1d_3s.append(inp_exc_1d_3s)
     inputs_exc_1d_2s.append(inp_exc_1d_2s)
 
-    for b in numpy.arange(0, 4.5, 0.5):
+    for b in list(numpy.arange(0, 3, 0.25)) + list(numpy.arange(3, 4, 0.1)) + [4, 7, 10]:
 
         inp_exc_2d_3s = copy.deepcopy(input_2d)
 
@@ -107,7 +107,7 @@ for e in (SAMPLED_POINTS if USE_SAMPLED_POINTS else ALL_POINTS):
         inp_exc_2d_3s["zinq"][0]["options"]["grid"]["limits"][1] = [limits[0] + b, limits[1] + b]
         inp_exc_2d_3s["zinq"][0]["options"]["grid"]["points"] = points
 
-        inp_exc_2d_3s["zinq"][0]["options"]["iterations"] = int(1100 / numpy.sqrt(e) / time_step)
+        inp_exc_2d_3s["zinq"][0]["options"]["iterations"] = int(1500 / numpy.sqrt(e) / time_step)
         inp_exc_2d_3s["zinq"][0]["options"]["time_step"] = time_step
 
         inp_exc_2d_2s = copy.deepcopy(inp_exc_2d_3s)
@@ -134,7 +134,7 @@ for inp in inputs_exc_1d_3s: input_exc_1d_3s_all["zinq"].append(inp["zinq"][0])
 for inp in inputs_exc_2d_2s: input_exc_2d_2s_all["zinq"].append(inp["zinq"][0])
 for inp in inputs_exc_2d_3s: input_exc_2d_3s_all["zinq"].append(inp["zinq"][0])
 
-with open(f"result/input_exc_1d_2s_all.json", "w") as input_exc_1d_2s_all_file:
+with open(f"result/input_exact_exc_1d_2s_all.json", "w") as input_exc_1d_2s_all_file:
     json.dump(input_exc_1d_2s_all, input_exc_1d_2s_all_file, indent=4)
 
 for inp in inputs_exc_2d_2s:
