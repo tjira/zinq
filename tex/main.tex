@@ -8,12 +8,12 @@
     }
 }
 
-\documentclass[headsepline=true,open=right,parskip=half,twoside=true,12pt]{scrbook}
+\documentclass[headsepline=true,open=right,parskip=half,twoside=true,12pt]{scrbook}\raggedbottom
 
 \title{Algorithms of Quantum Chemistry}\author{Tomáš \textsc{Jíra}}
 
 \usepackage[onehalfspacing]{setspace} % setting the line spacing
-\usepackage[top=25mm,bottom=30mm,inner=25mm,outer=20mm,bindingoffset=20mm]{geometry} % page composition
+\usepackage[top=25mm,bottom=30mm,inner=20mm,outer=15mm,bindingoffset=10mm]{geometry} % page composition
 \usepackage[hidelinks]{hyperref} % hyperlinks and metadata
 \usepackage[backend=biber,style=chem-acs]{biblatex} % bibliography package
 \usepackage{braket} % braket notation
@@ -35,19 +35,6 @@
 \setmainfont{Libertinus Serif} % set the main font
 \setmathfont{Libertinus Math} % set the math font
 \setsansfont{Libertinus Sans} % set the sans-serif font
-
-\renewcommand*{\chapterformat}{%
-	\begin{tikzpicture}[remember picture, overlay]
-		\coordinate (Corner) at ([xshift=-2cm, yshift=-2cm] current page.north east);
-
-		\draw[thick] ([xshift=-4cm] Corner) -- (Corner) -- ([yshift=-4cm] Corner);
-
-		\node[draw, thick, inner sep=15pt, fill=white, font=\Huge\bfseries] at (Corner) {\thechapter};
-
-		\fill[black] ([xshift=-4.2cm] Corner) circle (2pt);
-		\fill[black] ([yshift=-4.2cm] Corner) circle (2pt);
-	\end{tikzpicture}
-}
 
 \newtheorem{definition}{Definition}\numberwithin{definition}{section}
 \newtheorem{theorem}{Theorem}\numberwithin{theorem}{section}
