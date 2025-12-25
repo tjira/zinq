@@ -49,7 +49,7 @@ pub fn RealVector(comptime T: type) type {
             return RealMatrix(T){
                 .data = self.data,
                 .rows = self.len,
-                .cols = 1
+                .cols = if (self.len > 0) 1 else 0
             };
         }
 

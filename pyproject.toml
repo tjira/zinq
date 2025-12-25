@@ -14,7 +14,9 @@ zinq = "zinq.launch:main"
 hf = "zinq.launch:hf"
 molint = "zinq.launch:molint"
 mp2 = "zinq.launch:mp2"
-prime = "zinq.launch:prime"
+primecheck = "zinq.launch:primecheck"
+primefact = "zinq.launch:primefact"
+primegen = "zinq.launch:primegen"
 
 [project.urls]
 "Homepage" = "https://tjira.github.io/zinq/"

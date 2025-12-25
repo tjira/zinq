@@ -3,7 +3,12 @@
         {
             "name" : "prime_numbers",
             "options" : {
-                "filter" : "mersenne"
+                "mode" : {
+                    "generate" : {
+                        "count" : 10,
+                        "filter" : "mersenne"
+                    }
+                }
             }
         }
     ]

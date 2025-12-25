@@ -93,7 +93,9 @@ You can access Zinq's functionality through the dedicated Python wrappers. If yo
 * `hf` - Runs Hartree-Fock calculations on `.xyz` geometry files.
 * `molint` - Computes molecular integrals from `.xyz` geometry files.
 * `mp2` - Performs MP2 energy calculations on `.xyz` geometry files.
-* `prime` - Generates prime numbers as a standalone utility tool.
+* `primecheck` - Checks for primality of numbers as a standalone utility tool.
+* `primefact` - Performs prime factorization as a standalone utility tool.
+* `primegen` - Generates prime numbers as a standalone utility tool.
 
 ## License
 
