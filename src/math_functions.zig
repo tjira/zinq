@@ -16,12 +16,33 @@ pub fn dfact(n: anytype) @TypeOf(n) {
     return n * dfact(n - 2);
 }
 
+/// Multiplication modulo function to prevent overflow.
+pub fn mulMod(a: anytype, b: anytype, m: anytype) @TypeOf(a, b, m) {
+    const T = @typeInfo(@TypeOf(a, b, m));
+
+    return @intCast(@as(std.meta.Int(T.int.signedness, 2 * T.int.bits), a) * b % m);
+}
+
 /// Power function floats raised to integer exponents.
 pub fn powi(base: anytype, exp: usize) @TypeOf(base) {
     var result: @TypeOf(base) = 1;
 
     for (0..exp) |_| {
         result *= base;
+    }
+
+    return result;
+}
+
+/// Exponentiation modulo function.
+pub fn powMod(base: anytype, exp: anytype, m: anytype) @TypeOf(base, exp, m) {
+    var result: @TypeOf(base, exp, m) = 1; var b = base % m; var e = exp;
+
+    while (e > 0) {
+
+        if (e % 2 == 1) result = mulMod(result, b, m);
+
+        b = mulMod(b, b, m); e /= 2;
     }
 
     return result;

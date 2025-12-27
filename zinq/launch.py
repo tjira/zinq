@@ -127,6 +127,7 @@ def primecheck():
 
     parser.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS, help="This help message.")
 
+    parser.add_argument("-b", "--bits", type=int, help="Number of bits to use.", default=64)
     parser.add_argument("-n", "--number", type=str, help="Number to check.", required=True)
 
     parser.add_argument('--mersenne', action=argparse.BooleanOptionalAction)
@@ -141,7 +142,8 @@ def primecheck():
                 "filter" : "mersenne" if args.mersenne else "all",
                 "number" : args.number
             }
-        }
+        },
+        "bits" : args.bits if args.bits else None
     }
 
     executeInput(inp)
@@ -155,6 +157,7 @@ def primefact():
 
     parser.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS, help="This help message.")
 
+    parser.add_argument("-b", "--bits", type=int, help="Number of bits to use.", default=64)
     parser.add_argument("-n", "--number", type=str, help="Number to factorize.", required=True)
 
     args = parser.parse_args()
@@ -166,7 +169,8 @@ def primefact():
             "factorize" : {
                 "number" : args.number
             }
-        }
+        },
+        "bits" : args.bits if args.bits else None
     }
 
     executeInput(inp)
@@ -180,6 +184,7 @@ def primegen():
 
     parser.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS, help="This help message.")
 
+    parser.add_argument("-b", "--bits", type=int, help="Number of bits to use.", default=64)
     parser.add_argument("-c", "--count", type=int, help="Number of primes to generate.", default=10)
     parser.add_argument("-l", "--log", type=str, help="Logging interval.", default=1)
     parser.add_argument("-o", "--output", type=str, help="Output file. Splitting interval can be put after a semicolon.")
@@ -203,7 +208,8 @@ def primegen():
                     "path" : args.output.split(":")[0]
                 } if args.output else None
             }
-        }
+        },
+        "bits" : args.bits if args.bits else None
     }
 
     executeInput(inp)

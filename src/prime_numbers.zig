@@ -3,15 +3,20 @@
 const std = @import("std");
 
 const device_write = @import("device_write.zig");
+const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
+const integer_arithmetic = @import("integer_arithmetic.zig");
 const real_vector = @import("real_vector.zig");
 
 const RealVector = real_vector.RealVector;
 
+const addWithOverflow = integer_arithmetic.addWithOverflow;
 const exportRealMatrix = device_write.exportRealMatrix;
 const print = device_write.print;
 const printJson = device_write.printJson;
 const printRealMatrix = device_write.printRealMatrix;
+const squareWithOverflow = integer_arithmetic.squareWithOverflow;
+const throw = error_handling.throw;
 
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
@@ -46,7 +51,9 @@ pub fn Options(comptime _: type) type {
             }
         };
 
-        mode: Mode
+        bits: ?u32 = 64,
+
+        mode: Mode,
     };
 }
 
@@ -75,28 +82,55 @@ pub fn Output(comptime _: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    switch (opt.mode) {
-        .check => return try checkMode(T, opt.mode.check, enable_printing, allocator),
-        .factorize => return try factorizeMode(T, opt.mode.factorize, enable_printing, allocator),
-        .generate => return try generateMode(T, opt.mode.generate, enable_printing, allocator),
+    const bits: i32 = if (opt.bits != null) @intCast(opt.bits.?) else -1;
+
+    return switch (bits) {
+        8 => try dispatch(u8, opt, enable_printing, allocator),
+        16 => try dispatch(u16, opt, enable_printing, allocator),
+        32 => try dispatch(u32, opt, enable_printing, allocator),
+        64 => try dispatch(u64, opt, enable_printing, allocator),
+        128 => try dispatch(u128, opt, enable_printing, allocator),
+        256 => try dispatch(u256, opt, enable_printing, allocator),
+        512 => try dispatch(u512, opt, enable_printing, allocator),
+        1024 => try dispatch(u1024, opt, enable_printing, allocator),
+        -1 => try dispatch(std.math.big.int.Managed, opt, enable_printing, allocator),
+        else => return throw(Output(T), "BIT SIZE HAS TO BE POWER OF TWO BETWEEN 8 AND 1024, VALUE '{d}' IS INVALID", .{bits})
+    };
+}
+
+/// Helper function to avoid repeating the mode switch logic
+pub fn dispatch(comptime T: type, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) {
+
+        const type_name = if (comptime T == std.math.big.int.Managed) "BIG" else @typeName(T);
+
+        const max_value = if (comptime T == std.math.big.int.Managed) std.math.inf(f128) else @as(f128, @floatFromInt(std.math.maxInt(T)));
+
+        try print("\nUSING TYPE: {s}, MAX VALUE: {e:.3}\n", .{type_name, max_value});
     }
+
+    return switch (opt.mode) {
+        .check => try checkMode(T, opt.mode.check, enable_printing, allocator),
+        .factorize => try factorizeMode(T, opt.mode.factorize, enable_printing, allocator),
+        .generate => try generateMode(T, opt.mode.generate, enable_printing, allocator),
+    };
 }
 
 /// Check mode.
 pub fn checkMode(comptime T: type, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    var number = try std.math.big.int.Managed.init(allocator); defer number.deinit();
+    var number_big = try std.math.big.int.Managed.init(allocator); defer number_big.deinit();
 
-    try number.setString(10, opt.number);
+    try number_big.setString(10, opt.number); const number = if (comptime T == std.math.big.int.Managed) number_big else try number_big.toInt(T);
 
     const is_prime = switch (opt.filter) {
         .all => try isPrime(number, allocator),
-        .mersenne => try isMersenne(try number.toInt(u64), allocator),
+        .mersenne => try isMersenne(number, allocator),
     };
 
     const output = try Output(T).init(if (is_prime) 1 else 0, allocator);
 
     if (is_prime) {
-        output.prime_numbers[0] = try number.clone();
+        output.prime_numbers[0] = try number_big.clone();
     }
 
     if (enable_printing) {
@@ -111,13 +145,17 @@ pub fn checkMode(comptime T: type, opt: anytype, enable_printing: bool, allocato
 
 /// Factorize mode.
 pub fn factorizeMode(comptime T: type, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    var number = try std.math.big.int.Managed.init(allocator); defer number.deinit();
+    var number_big = try std.math.big.int.Managed.init(allocator); defer number_big.deinit();
 
-    try number.setString(10, opt.number);
+    try number_big.setString(10, opt.number); const number = if (comptime T == std.math.big.int.Managed) number_big else try number_big.toInt(T);
 
-    const factors = try factorize(number, allocator);
+    const factors = try factorize(number, allocator); defer allocator.free(factors);
 
-    const output = Output(T){.prime_numbers = factors};
+    var output = Output(T){.prime_numbers = try allocator.alloc(std.math.big.int.Managed, factors.len)};
+
+    for (factors, 0..) |factor, i| {
+        output.prime_numbers[i] = if (comptime T == std.math.big.int.Managed) factor else try std.math.big.int.Managed.initSet(allocator, factor);
+    }
 
     if (enable_printing) {
 
@@ -127,11 +165,11 @@ pub fn factorizeMode(comptime T: type, opt: anytype, enable_printing: bool, allo
 
         try print("\n", .{});
 
-        for (factors, 1..) |factor, i| {
+        for (output.prime_numbers, 1..) |factor, i| {
 
             const factor_str = try factor.toString(allocator, 10, std.fmt.Case.lower); defer allocator.free(factor_str);
 
-            try print("FACTOR {d:4}: {s}\n", .{i, factor_str});
+            try print("FACTOR {[index]d:[width]}: {[string]s}\n", .{.index = i, .width = std.math.log10_int(factors.len) + 1, .string = factor_str});
         }
     }
 
@@ -140,37 +178,45 @@ pub fn factorizeMode(comptime T: type, opt: anytype, enable_printing: bool, allo
 
 /// Generate mode.
 pub fn generateMode(comptime T: type, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try print("\n{s:9} {s:18}\n", .{"INDEX", "PRIME NUMBER"});
+    if (enable_printing) try print("\n{s:9} {s:20} {s:4}\n", .{"INDEX", "PRIME NUMBER", "TIME"});
 
-    var start = try std.math.big.int.Managed.init(allocator); defer start.deinit();
+    var start_big = try std.math.big.int.Managed.init(allocator); defer start_big.deinit();
 
-    try start.setString(10, opt.start);
+    try start_big.setString(10, opt.start); try start_big.addScalar(&start_big, -1);
 
-    var two = try std.math.big.int.Managed.initSet(allocator, 2); defer two.deinit();
+    const start = if (comptime T == std.math.big.int.Managed) start_big else try start_big.toInt(T);
 
     const max_output = if (opt.output != null and opt.output.?.interval != null) @min(opt.count, opt.output.?.interval.?) else opt.count;
 
     var output = try Output(T).init(max_output, allocator);
 
-    output.prime_numbers[0] = if (start.order(two) != std.math.Order.gt) try two.clone() else switch (opt.filter) {
+    var prime_numbers: []T = try allocator.alloc(T, max_output); defer allocator.free(prime_numbers);
+
+    prime_numbers[0] = switch (opt.filter) {
         .all => try nextPrime(start, allocator),
-        .mersenne => try std.math.big.int.Managed.initSet(allocator, try nextMersenne(try start.toInt(u64), allocator))
+        .mersenne => try nextMersenne(start, allocator)
     };
+
+    var timer = try std.time.Timer.start();
 
     for (0..opt.count) |i| {
 
-        if (i >= max_output) output.prime_numbers[i % max_output].deinit();
+        if (comptime T == std.math.big.int.Managed) if (i >= max_output) prime_numbers[i % max_output].deinit();
 
-        if (i > 0 or output.prime_numbers.len == 0) output.prime_numbers[i % max_output] = switch (opt.filter) {
-            .all => try nextPrime(output.prime_numbers[(i - 1) % max_output], allocator),
-            .mersenne => try std.math.big.int.Managed.initSet(allocator, try nextMersenne(try output.prime_numbers[(i - 1) % max_output].toInt(u64), allocator))
+        if (i > 0) prime_numbers[i % max_output] = switch (opt.filter) {
+            .all => try nextPrime(prime_numbers[(i - 1) % max_output], allocator),
+            .mersenne => try nextMersenne(prime_numbers[(i - 1) % max_output], allocator)
         };
 
         if (enable_printing and (i == 0 or (i + 1) % opt.log_interval == 0)) {
 
-            const prime_string = try output.prime_numbers[i % max_output].toString(allocator, 10, std.fmt.Case.lower); defer allocator.free(prime_string);
+            const prime_string = if (comptime T == std.math.big.int.Managed) try prime_numbers[i % max_output].toString(allocator, 10, std.fmt.Case.lower) else "";
 
-            try print("{d:9} {s:18}\n", .{i + 1, prime_string});
+            const format_string = "{d:9} " ++ (if (comptime T == std.math.big.int.Managed) "{s:20}" else "{d:20}") ++ " {D}\n";
+
+            try print(format_string, .{i + 1, if (comptime T == std.math.big.int.Managed) prime_string else prime_numbers[i % max_output], timer.read()});
+
+            if (comptime T == std.math.big.int.Managed) allocator.free(prime_string);
         }
 
         if ((i + 1) % max_output == 0) if (opt.output != null) {
@@ -181,150 +227,176 @@ pub fn generateMode(comptime T: type, opt: anytype, enable_printing: bool, alloc
 
             const path = if (opt.output.?.interval != null) try std.mem.concat(allocator, u8, &.{opt.output.?.path, "_", start_i_str, "-", end_i_str}) else opt.output.?.path;
 
-            try exportPrimeNumbersAsRealMatrix(path, output.prime_numbers, allocator);
+            try exportPrimeNumbersAsRealMatrix(path, prime_numbers, allocator);
 
             if (opt.output.?.interval != null) allocator.free(path);
         };
+    }
+
+    for (prime_numbers, 0..) |prime, j| {
+        output.prime_numbers[j] = if (comptime T == std.math.big.int.Managed) prime else try std.math.big.int.Managed.initSet(allocator, prime);
     }
 
     return output;
 }
 
 /// Factorize a number into its prime factors.
-pub fn factorize(p: std.math.big.int.Managed, allocator: std.mem.Allocator) ![]std.math.big.int.Managed {
-    var one = try std.math.big.int.Managed.initSet(allocator, 1); defer one.deinit();
-    var two = try std.math.big.int.Managed.initSet(allocator, 2); defer two.deinit();
-    var rem = try std.math.big.int.Managed.initSet(allocator, 0); defer rem.deinit();
-    var pfd = try std.math.big.int.Managed.initSet(allocator, 0); defer pfd.deinit();
+pub fn factorize(p: anytype, allocator: std.mem.Allocator) ![]@TypeOf(p) {
+    const T = @TypeOf(p); const ap = T == std.math.big.int.Managed;
 
-    if (p.order(two) == std.math.Order.lt) return &[_]std.math.big.int.Managed{};
+    var one = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 1) else @as(T, 1); defer if (comptime ap) one.deinit();
+    var two = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 2) else @as(T, 2); defer if (comptime ap) two.deinit();
+    var rem = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 0) else @as(T, 0); defer if (comptime ap) rem.deinit();
+    var pfd = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 0) else @as(T, 0); defer if (comptime ap) pfd.deinit();
 
-    var factors: std.ArrayList(std.math.big.int.Managed) = .empty;
+    if (if (comptime ap) p.order(two) == std.math.Order.lt else p < 2) return &[_]T{};
 
-    var n = try p.clone(); var pd = try std.math.big.int.Managed.initSet(allocator, 0);
+    var factors: std.ArrayList(T) = .empty;
 
-    while (!n.eql(one)) {
+    var n = if (comptime ap) try p.clone() else p; var pd = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 0) else @as(T, 0);
 
-        var pd_next = try nextPrime(pd, allocator); defer pd_next.deinit(); try pd.copy(pd_next.toConst());
+    while (if (comptime ap) !n.eql(one) else n != 1) {
 
-        try std.math.big.int.Managed.divFloor(&pfd, &rem, &n, &pd);
+        var pd_next = try nextPrime(pd, allocator); defer if (comptime ap) pd_next.deinit();
 
-        while (rem.eqlZero()) {
+        if (comptime ap) try pd.copy(pd_next.toConst()) else pd = pd_next;
 
-            try factors.append(allocator, try pd.clone()); try n.copy(pfd.toConst());
+        if (comptime ap) try pfd.divFloor(&rem, &n, &pd);
 
-            try std.math.big.int.Managed.divFloor(&pfd, &rem, &n, &pd);
+        while (if (comptime ap) rem.eqlZero() else n % pd == 0) {
+
+            try factors.append(allocator, if (comptime ap) try pd.clone() else pd);
+
+            if (comptime ap) try n.copy(pfd.toConst()) else n /= pd;
+
+            if (comptime ap) try pfd.divFloor(&rem, &n, &pd);
 
         }
     }
 
-    n.deinit(); pd.deinit();
+    if (comptime ap) n.deinit(); if (comptime ap) pd.deinit();
 
     return factors.toOwnedSlice(allocator);
 }
 
 /// Check if the number is prime.
-pub fn isPrime(p: std.math.big.int.Managed, allocator: std.mem.Allocator) !bool {
+pub fn isPrime(p: anytype, allocator: std.mem.Allocator) !bool {
     return trialDivision(p, allocator);
 }
 
 /// Check if the number is Mersenne prime.
 pub fn isMersenne(p: anytype, allocator: std.mem.Allocator) !bool {
-    return try lucasLehmer(p, allocator);
+    if (!try isPrime(p, allocator)) return false;
+
+    const T = @TypeOf(p); const ap = T == std.math.big.int.Managed; const p32 = if (comptime ap) try p.toInt(u32) else @as(u32, @intCast(p));
+
+    var M = try std.math.big.int.Managed.initSet(allocator, 2); defer M.deinit();
+
+    try M.shiftLeft(&M, p32 - 1); try M.addScalar(&M, -1);
+
+    return try lucasLehmer(&M, p32, allocator);
 }
 
 /// The Lucas-Lehmer test for Mersenne primes.
-pub fn lucasLehmer(p: anytype, allocator: std.mem.Allocator) !bool {
-    var p_big = try std.math.big.int.Managed.initSet(allocator, p); defer p_big.deinit();
+pub fn lucasLehmer(M: *const std.math.big.int.Managed, p: u32, allocator: std.mem.Allocator) !bool {
+    if (p == 2) return true;
 
-    if (!try isPrime(p_big, allocator)) return false;
-
-    var M = try std.math.big.int.Managed.initSet(allocator, 2); defer M.deinit();
     var s = try std.math.big.int.Managed.initSet(allocator, 4); defer s.deinit();
+    var q = try std.math.big.int.Managed.initSet(allocator, 0); defer q.deinit();
 
-    var q = try std.math.big.int.Managed.init(allocator); defer q.deinit();
+    try s.ensureCapacity((2 * p + (@bitSizeOf(usize) - 1)) / @bitSizeOf(usize));
+    try q.ensureCapacity((2 * p + (@bitSizeOf(usize) - 1)) / @bitSizeOf(usize));
 
-    try std.math.big.int.Managed.shiftLeft(&M, &M, @as(u32, @intCast(p - 1)));
-    try std.math.big.int.Managed.addScalar(&M, &M, @as(i32, @intCast(0 - 1)));
+    for (0..p - 2) |_| {
 
-    for (0..@as(usize, @intCast(p - 2))) |_| {
+        try s.sqr(&s); try q.shiftRight(&s, p); try s.truncate(&s, .unsigned, p); try s.add(&s, &q);
 
-        try std.math.big.int.Managed.mul(&s, &s, &s);
+        if (s.order(M.*) != .lt) try s.sub(&s, M);
 
-        try std.math.big.int.Managed.addScalar(&s, &s, -2);
+        try s.addScalar(&s, -2);
 
-        try std.math.big.int.Managed.divFloor(&q, &s, &s, &M);
+        if (!s.isPositive()) try s.add(&s, M);
     }
 
-    return std.math.big.int.Managed.eqlZero(s) or p == 2;
+    return std.math.big.int.Managed.eqlZero(s);
 }
 
 /// Get the next Mersenne prime number after a given number.
 pub fn nextMersenne(p: anytype, allocator: std.mem.Allocator) !@TypeOf(p) {
-    if (p < 2) return 2;
+    const T = @TypeOf(p); const ap = T == std.math.big.int.Managed;
 
-    if (p == 2) return 3;
+    var two = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 2) else @as(T, 2); defer if (comptime ap) two.deinit();
 
-    var candidate = if (p % 2 == 0) p + 1 else p + 2;
+    if (if (comptime ap) p.order(two) == std.math.Order.lt else p < 2) {
+        return if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 2) else 2;
+    }
 
-    while (true) : (candidate += 2) {
+    var candidate = if (comptime ap) try p.clone() else if (p % 2 == 0) p - 1 else p;
+
+    if (comptime ap) if (p.isEven()) try candidate.addScalar(&p, -1);
+
+    while (true) {
+
+        if (comptime ap) try candidate.addScalar(&candidate, 2) else candidate = try addWithOverflow(candidate, 2);
+
         if (try isMersenne(candidate, allocator)) return candidate;
     }
 }
 
 /// Get the next prime number after a given number.
-pub fn nextPrime(p: std.math.big.int.Managed, allocator: std.mem.Allocator) !std.math.big.int.Managed {
-    var pfd = try std.math.big.int.Managed.initSet(allocator, 0); defer pfd.deinit();
-    var rem = try std.math.big.int.Managed.initSet(allocator, 0); defer rem.deinit();
-    var two = try std.math.big.int.Managed.initSet(allocator, 2); defer two.deinit();
+pub fn nextPrime(p: anytype, allocator: std.mem.Allocator) !@TypeOf(p) {
+    const T = @TypeOf(p); const ap = T == std.math.big.int.Managed;
 
-    if (p.order(two) == std.math.Order.lt) {
-        return try std.math.big.int.Managed.initSet(allocator, 2);
+    var two = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 2) else @as(T, 2); defer if (comptime ap) two.deinit();
+
+    if (if (comptime ap) p.order(two) == std.math.Order.lt else p < 2) {
+        return if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 2) else 2;
     }
 
-    if (p.eql(two)) {
-        return try std.math.big.int.Managed.initSet(allocator, 3);
-    }
+    var candidate = if (comptime ap) try p.clone() else if (p % 2 == 0) p - 1 else p;
 
-    var candidate = try p.clone();
+    if (comptime ap) if (p.isEven()) try candidate.addScalar(&p, -1);
 
-    try std.math.big.int.Managed.addScalar(&candidate, &candidate, @as(u64, if (p.isEven()) 1 else 2));
+    while (true) {
 
-    while (true) : (try std.math.big.int.Managed.addScalar(&candidate, &candidate, 2)) {
+        if (comptime ap) try candidate.addScalar(&candidate, 2) else candidate = try addWithOverflow(candidate, 2);
+
         if (try isPrime(candidate, allocator)) return candidate;
     }
 }
 
 /// Check if a number is prime using trial division.
-pub fn trialDivision(p: std.math.big.int.Managed, allocator: std.mem.Allocator) !bool {
-    var div = try std.math.big.int.Managed.initSet(allocator, 3); defer div.deinit();
-    var dsq = try std.math.big.int.Managed.initSet(allocator, 9); defer dsq.deinit();
-    var pfd = try std.math.big.int.Managed.initSet(allocator, 0); defer pfd.deinit();
-    var rem = try std.math.big.int.Managed.initSet(allocator, 0); defer rem.deinit();
-    var two = try std.math.big.int.Managed.initSet(allocator, 2); defer two.deinit();
+pub fn trialDivision(p: anytype, allocator: std.mem.Allocator) !bool {
+    const T = @TypeOf(p); const ap = T == std.math.big.int.Managed;
 
-    if (p.order(two) == std.math.Order.lt) return false;
+    var div = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 3) else @as(T, 3); defer if (comptime ap) div.deinit();
+    var dsq = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 9) else @as(T, 9); defer if (comptime ap) dsq.deinit();
+    var pfd = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 0) else @as(T, 0); defer if (comptime ap) pfd.deinit();
+    var rem = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 0) else @as(T, 0); defer if (comptime ap) rem.deinit();
+    var two = if (comptime ap) try std.math.big.int.Managed.initSet(allocator, 2) else @as(T, 2); defer if (comptime ap) two.deinit();
 
-    if (p.eql(two)) return true;
+    if (if (comptime ap) p.order(two) == std.math.Order.lt else p < 2) return false;
 
-    if (p.isEven()) return false;
+    if (if (comptime ap) p.isEven() else p % 2 == 0) return if (comptime ap) p.eql(two) else p == 2;
 
-    while (dsq.order(p) != std.math.Order.gt) {
+    while (if (comptime ap) dsq.order(p) != std.math.Order.gt else dsq <= p) {
 
-        try std.math.big.int.Managed.divFloor(&pfd, &rem, &p, &div);
+        if (comptime ap) try pfd.divFloor(&rem, &p, &div);
 
-        if (rem.eqlZero()) return false;
+        if (if (comptime ap) rem.eqlZero() else p % div == 0) return false;
 
-        try std.math.big.int.Managed.addScalar(&div, &div, 2);
+        if (comptime ap) try div.addScalar(&div, 2) else div += 2;
 
-        try std.math.big.int.Managed.sqr(&dsq, &div);
+        if (comptime ap) try dsq.sqr(&div) else dsq = try squareWithOverflow(div);
     }
 
     return true;
 }
 
 /// Writes the array of prime numbers as a real matrix to a file path.
-pub fn exportPrimeNumbersAsRealMatrix(path: []const u8, prime_numbers: []std.math.big.int.Managed, allocator: std.mem.Allocator) !void {
+pub fn exportPrimeNumbersAsRealMatrix(path: []const u8, prime_numbers: anytype, allocator: std.mem.Allocator) !void {
+    const ap = @TypeOf(prime_numbers[0]) == std.math.big.int.Managed;
+
     var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
 
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
@@ -335,9 +407,11 @@ pub fn exportPrimeNumbersAsRealMatrix(path: []const u8, prime_numbers: []std.mat
 
     for (0..prime_numbers.len) |i| {
 
-        const prime_str = try prime_numbers[i].toString(allocator, 10, std.fmt.Case.lower); defer allocator.free(prime_str);
+        const prime_str = if (comptime ap) try prime_numbers[i].toString(allocator, 10, std.fmt.Case.lower) else "";
 
-        try writer_interface.print("{d:20} {s:20}\n", .{i + 1, prime_str});
+        try writer_interface.print("{d:20} " ++ if (comptime ap) "{s:20}" else "{d:20}" ++ "\n", .{i + 1, if (comptime ap) prime_str else prime_numbers[i]});
+
+        if (comptime ap) allocator.free(prime_str);
     }
 
     try writer_interface.flush();

@@ -15,6 +15,8 @@ const ComplexVector = complex_vector.ComplexVector;
 const StridedComplexVector = strided_complex_vector.StridedComplexVector;
 const RealVector = real_vector.RealVector;
 
+const mulMod = math_functions.mulMod;
+const powMod = math_functions.powMod;
 const prod = array_functions.prod;
 const revk = math_functions.revk;
 const throw = error_handling.throw;
@@ -93,6 +95,60 @@ pub fn cfftn(comptime T: type, vector: *ComplexVector(T), shape: []const usize, 
             var axis_slice = StridedComplexVector(T){.data = vector.data, .len = shape[i], .stride = stride, .zero = offset};
 
             try cfft1(T, &axis_slice, factor);
+        }
+    }
+}
+
+/// Number-theoretic transform (NTT) for a one-dimensional array.
+pub fn ntt(data: []usize, mod: usize, g: usize, backward: bool) void {
+    const T = @TypeOf(g); const n = data.len; var j: usize = 0; var length: T = 2;
+
+    for (1..n) |i| {
+
+        var bit: T = n >> 1;
+
+        while ((j & bit) != 0) : (bit >>= 1) {
+            j ^= bit;
+        }
+
+        j ^= bit;
+
+        if (i < j) {
+            std.mem.swap(T, &data[i], &data[j]);
+        }
+    }
+
+    while (length <= n) : (length <<= 1) {
+
+        var ang = powMod(g, (mod - 1) / length, mod);
+
+        if (backward) {
+            ang = powMod(ang, mod - 2, mod);
+        }
+
+        var i: usize = 0;
+
+        while (i < n) : (i += length) {
+
+            var w: T = 1;
+
+            for (0..length / 2) |k| {
+
+                const u = data[i + k]; const v = (data[i + k + length / 2] * w) % mod;
+
+                data[i + k] = (u + v) % mod; data[i + k + length / 2] = (u + mod - v) % mod;
+
+                w = (w * ang) % mod;
+            }
+        }
+    }
+
+    if (backward) {
+
+        const n_inv = powMod(n, mod - 2, mod);
+
+        for (0..n) |i| {
+            data[i] = (data[i] * n_inv) % mod;
         }
     }
 }

@@ -26,3 +26,4 @@
 - [ ] Figure out a better way to store the file and custom potentials instead of just using global variables.
 - [x] Integrals over gaussians with complex gamma are not implemented. Implement them.
 - [x] The Riccati equations may produce non-unitary propagation in ss-vMCG, since I do not include derivative with respect to gamma in the tau matrix.
+- [ ] Make the Strassen algorithm for squaring large numbers usable.
