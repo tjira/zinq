@@ -175,29 +175,6 @@ pub fn main() !void {
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
-
-    // var A = try std.math.big.int.Managed.init(allocator); defer A.deinit(); try A.setString(10, "7");
-    //
-    // try A.shiftLeft(&A, 1000000);
-    //
-    // // const A_str = try A.toString(allocator, 10, .lower); defer allocator.free(A_str);
-    //
-    // // try device_write.print("DIGITS: {d}\n", .{A_str.len});
-    //
-    // var B = try std.math.big.int.Managed.init(allocator); defer B.deinit();
-    // var C = try std.math.big.int.Managed.init(allocator); defer C.deinit();
-    //
-    // var t1 = try std.time.Timer.start();
-    // try B.sqr(&A);
-    // const e1 = t1.read();
-    //
-    // var t2 = try std.time.Timer.start();
-    // try integer_arithmetic.strassenSquare(&C, &A, allocator);
-    // const e2 = t2.read();
-    //
-    // try device_write.print("TRIVIAL  TIME: {D}\n", .{e1});
-    // try device_write.print("STRASSEN TIME: {D}\n", .{e2});
-    // try device_write.print("EQUAL: {s}\n", .{if (B.eql(C)) "TRUE" else "FALSE"});
 }
 
 test {

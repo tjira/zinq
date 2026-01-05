@@ -99,60 +99,6 @@ pub fn cfftn(comptime T: type, vector: *ComplexVector(T), shape: []const usize, 
     }
 }
 
-/// Number-theoretic transform (NTT) for a one-dimensional array.
-pub fn ntt(data: []usize, mod: usize, g: usize, backward: bool) void {
-    const T = @TypeOf(g); const n = data.len; var j: usize = 0; var length: T = 2;
-
-    for (1..n) |i| {
-
-        var bit: T = n >> 1;
-
-        while ((j & bit) != 0) : (bit >>= 1) {
-            j ^= bit;
-        }
-
-        j ^= bit;
-
-        if (i < j) {
-            std.mem.swap(T, &data[i], &data[j]);
-        }
-    }
-
-    while (length <= n) : (length <<= 1) {
-
-        var ang = powMod(g, (mod - 1) / length, mod);
-
-        if (backward) {
-            ang = powMod(ang, mod - 2, mod);
-        }
-
-        var i: usize = 0;
-
-        while (i < n) : (i += length) {
-
-            var w: T = 1;
-
-            for (0..length / 2) |k| {
-
-                const u = data[i + k]; const v = (data[i + k + length / 2] * w) % mod;
-
-                data[i + k] = (u + v) % mod; data[i + k + length / 2] = (u + mod - v) % mod;
-
-                w = (w * ang) % mod;
-            }
-        }
-    }
-
-    if (backward) {
-
-        const n_inv = powMod(n, mod - 2, mod);
-
-        for (0..n) |i| {
-            data[i] = (data[i] * n_inv) % mod;
-        }
-    }
-}
-
 test "cfft1" {
     var v = try ComplexVector(f64).init(8, std.testing.allocator); defer v.deinit(std.testing.allocator);
 
