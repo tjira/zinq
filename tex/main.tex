@@ -10,7 +10,7 @@
 
 \documentclass[headsepline=true,open=right,parskip=half,twoside=true,12pt]{scrbook}\raggedbottom
 
-\title{Algorithms of Quantum Chemistry}\author{Tomáš \textsc{Jíra}}
+\title{Modeling of Ultrafast Processes in Radiation Chemistry}\author{Tomáš \textsc{Jíra}}
 
 \usepackage[onehalfspacing]{setspace} % setting the line spacing
 \usepackage[top=25mm,bottom=30mm,inner=20mm,outer=15mm,bindingoffset=10mm]{geometry} % page composition
@@ -556,6 +556,10 @@ $\frac{\ket{\Psi(\tau)}}{\lvert\Psi(\tau)\rvert}$ converges to the ground state 
 $\tau\to\infty$. In numerical applications one therefore propagates in small imaginary-time
 steps and renormalizes the wavefunction after each step to prevent decay to the zero
 vector and to extract the ground state.
+\section{Holy Trinity of Variational Principles}\label{sec:variational_principles}
+\subsection{Dirac--Frenkel Principle}\label{sec:dirac_frenkel_principle}
+\subsection{McLachlan's Variational Principle}\label{sec:mclachlan_variational_principle}
+\subsection{Time-Dependent Variational Principle}\label{sec:time_dependent_variational_principle}
 \chapter{Mixed Quantum-Classical Dynamics}\label{sec:mixed_quantum_classical_dynamics}
 \section{Quantum Amplitude Propagation in Mixed Schemes}\label{sec:quantum_amplitude_propagation_in_mixed_themes}
 Under the \acrfull{boa}, the total molecular wavefunction, $\ket{\Psi(t)}$, is formally separable into electronic and nuclear parts because the nuclear masses greatly exceed those of the electrons. However, when two or more electronic states approach degeneracy, the \acrshort{boa} separation fails and nonadiabatic effects become significant. \acrfull{tsh} is a general framework that treats nuclei and electrons separately: nuclei are propagated classically on an adiabatic \acrfull{pes}, while electrons are treated quantum mechanically.
