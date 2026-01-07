@@ -124,22 +124,45 @@ for e in (SAMPLED_POINTS if USE_SAMPLED_POINTS else ALL_POINTS):
         inputs_exc_2d_3s.append(inp_exc_2d_3s)
         inputs_exc_2d_2s.append(inp_exc_2d_2s)
 
+inputs_qen_1d_2s = copy.deepcopy(inputs_exc_1d_2s)
+inputs_qen_2d_2s = copy.deepcopy(inputs_exc_2d_2s)
+
+for inp in inputs_qen_1d_2s: inp["zinq"][0]["options"]["initial_conditions"]["state"] = 1
+for inp in inputs_qen_2d_2s: inp["zinq"][0]["options"]["initial_conditions"]["state"] = 1
+
+for inp in inputs_qen_1d_2s: inp["zinq"][0]["options"]["write"]["population"] = inp["zinq"][0]["options"]["write"]["population"].replace("EXC", "QEN")
+for inp in inputs_qen_2d_2s: inp["zinq"][0]["options"]["write"]["population"] = inp["zinq"][0]["options"]["write"]["population"].replace("EXC", "QEN")
+
 input_exc_1d_2s_all = { "zinq" : []}
 input_exc_1d_3s_all = { "zinq" : []}
 input_exc_2d_2s_all = { "zinq" : []}
 input_exc_2d_3s_all = { "zinq" : []}
+input_qen_1d_2s_all = { "zinq" : []}
+input_qen_2d_2s_all = { "zinq" : []}
 
 for inp in inputs_exc_1d_2s: input_exc_1d_2s_all["zinq"].append(inp["zinq"][0])
 for inp in inputs_exc_1d_3s: input_exc_1d_3s_all["zinq"].append(inp["zinq"][0])
 for inp in inputs_exc_2d_2s: input_exc_2d_2s_all["zinq"].append(inp["zinq"][0])
 for inp in inputs_exc_2d_3s: input_exc_2d_3s_all["zinq"].append(inp["zinq"][0])
+for inp in inputs_qen_1d_2s: input_qen_1d_2s_all["zinq"].append(inp["zinq"][0])
+for inp in inputs_qen_2d_2s: input_qen_2d_2s_all["zinq"].append(inp["zinq"][0])
 
 with open(f"result/input_exact_exc_1d_2s_all.json", "w") as input_exc_1d_2s_all_file:
     json.dump(input_exc_1d_2s_all, input_exc_1d_2s_all_file, indent=4)
 
+with open(f"result/input_exact_qen_1d_2s_all.json", "w") as input_qen_1d_2s_all_file:
+    json.dump(input_qen_1d_2s_all, input_qen_1d_2s_all_file, indent=4)
+
 for inp in inputs_exc_2d_2s:
-    
+
     filename = inp["zinq"][0]["options"]["write"]["population"].lower().replace("population", "input").replace("mat", "json")
 
     with open(f"result/{filename}", "w") as input_exc_2d_2s_file:
         json.dump(inp, input_exc_2d_2s_file, indent=4)
+
+for inp in inputs_qen_2d_2s:
+
+    filename = inp["zinq"][0]["options"]["write"]["population"].lower().replace("population", "input").replace("mat", "json")
+
+    with open(f"result/{filename}", "w") as input_qen_2d_2s_file:
+        json.dump(inp, input_qen_2d_2s_file, indent=4)
