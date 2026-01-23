@@ -12,8 +12,8 @@ def findPlateau(y, window, percentile):
 
     return numpy.where(is_flat)[0][-1]
 
-def extractProbability(column):
-    start = findPlateau(column, 100, 5)
+def extractProbability(column, window=100, percentile=5):
+    start = findPlateau(column, window, percentile)
 
     return column[start:min(start + 10, len(column))].mean()
 
@@ -24,7 +24,7 @@ for filename in os.listdir("result"):
         EXC_2D_2S.append(filename)
     if filename.startswith("POPULATION_EXACT_QEN_1D_2S_E=") and filename.endswith(".mat"):
         QEN_1D_2S.append(filename)
-    if filename.startswith("POPULATION_EXACT_QEN_2D_2S_B") and filename.endswith(".mat"):
+    if filename.startswith("POPULATION_EXACT_QEN_2D_2S_B=") and filename.endswith(".mat"):
         QEN_2D_2S.append(filename)
 
 for filename in EXC_1D_2S:
@@ -57,7 +57,9 @@ for filename in QEN_2D_2S:
 
     data = numpy.loadtxt(os.path.join("result", filename), skiprows=1)
 
-    QEN_2D_2S_PROB.append([float(b), float(e), extractProbability(data[:, 1])])
+    window, percentile = (10, 10 if float(b) < 7 else 20) if float(e) == 0.001 else (100, 5)
+
+    QEN_2D_2S_PROB.append([float(b), float(e), extractProbability(data[:, 1], window=window, percentile=percentile)])
 
 EXC_1D_2S_PROB = numpy.array(EXC_1D_2S_PROB)[numpy.argsort(numpy.array(EXC_1D_2S_PROB)[:, 0])] if EXC_1D_2S_PROB else numpy.array([])
 EXC_2D_2S_PROB = numpy.array(EXC_2D_2S_PROB)[numpy.argsort(numpy.array(EXC_2D_2S_PROB)[:, 0])] if EXC_2D_2S_PROB else numpy.array([])

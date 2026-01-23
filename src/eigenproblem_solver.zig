@@ -59,7 +59,7 @@ pub fn eigensystemJacobi(comptime M: fn (comptime type) type, comptime T: type, 
 
         const g = if (comptime M == RealMatrix) J.at(i, j) else J.at(i, j).magnitude();
 
-        if (@abs(g) < std.math.floatEps(T) * std.math.sqrt(a * a + b * b)) continue;
+        if (@abs(g) <= std.math.floatEps(T) * std.math.sqrt(a * a + b * b)) continue;
 
         const tau = 0.5 * (b - a) / g;
 

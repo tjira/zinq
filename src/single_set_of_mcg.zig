@@ -29,8 +29,6 @@ const fixGauge = eigenproblem_solver.fixGauge;
 const mm = matrix_multiplication.mm;
 const throw = error_handlingg.throw;
 
-const SINGULARITY_TOLERANCE = global_variables.SINGULARITY_TOLERANCE;
-
 /// A linear combination of complex Gaussian functions shared between multiple wavefunctions.
 pub fn SingleSetOfMCG(comptime T: type) type {
     return struct {
