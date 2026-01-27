@@ -75,6 +75,7 @@ pub const tully_potential = @import("tully_potential.zig");
 pub const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
+pub const EigenproblemSolverOptions = eigenproblem_solver.Options;
 pub const HartreeFockOptions = hartree_fock.Options;
 pub const MolecularIntegralsOptions = molecular_integrals.Options;
 pub const MollerPlessetOptions = moller_plesset.Options;
@@ -86,6 +87,7 @@ pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 /// Available targets in the program.
 const Target = enum {
     classical_dynamics,
+    eigenproblem_solver,
     hartree_fock,
     molecular_integrals,
     moller_plesset,
@@ -130,6 +132,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 
         switch (tag) {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
+            .eigenproblem_solver => try handle(f64, eigenproblem_solver, options, allocator),
             .hartree_fock => try handle(f64, hartree_fock, options, allocator),
             .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
             .moller_plesset => try handle(f64, moller_plesset, options, allocator),

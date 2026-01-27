@@ -17,6 +17,7 @@ mp2 = "zinq.launch:mp2"
 primecheck = "zinq.launch:primecheck"
 primefact = "zinq.launch:primefact"
 primegen = "zinq.launch:primegen"
+eigh = "zinq.launch:eigh"
 
 [project.urls]
 "Homepage" = "https://tjira.github.io/zinq/"

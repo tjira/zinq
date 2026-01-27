@@ -3,6 +3,8 @@
 const std = @import("std");
 
 const complex_matrix = @import("complex_matrix.zig");
+const device_read = @import("device_read.zig");
+const device_write = @import("device_write.zig");
 const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
@@ -11,9 +13,89 @@ const Complex = std.math.complex.Complex;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const RealMatrix = real_matrix.RealMatrix;
 
+const exportRealMatrix = device_write.exportRealMatrix;
+const printJson = device_write.printJson;
+const printRealMatrix = device_write.printRealMatrix;
+const readRealMatrix = device_read.readRealMatrix;
 const throw = error_handling.throw;
 
 const MAX_JACOBI_ITERATIONS = global_variables.MAX_JACOBI_ITERATIONS;
+
+/// Options for the eigenvalue solver program.
+pub fn Options(comptime _: type) type {
+    return struct {
+        const Print = struct {
+            input_matrix: bool = true,
+            eigenvalues: bool = false,
+            eigenvectors: bool = false,
+        };
+        const Write = struct{
+            eigenvalues: ?[]const u8 = null,
+            eigenvectors: ?[]const u8 = null
+        };
+
+        matrix_file: []const u8,
+        hermitian: bool = false,
+        real: bool = true,
+
+        print: Print = .{},
+        write: Write = .{},
+    };
+}
+
+/// Output structure for the eigenvalue solver.
+pub fn Output(comptime T: type) type {
+    return struct {
+        AJ: RealMatrix(T),
+        AC: RealMatrix(T),
+
+        /// Initialize the output structure.
+        pub fn init(n: usize, allocator: std.mem.Allocator) !@This() {
+            return @This(){
+                .AJ = try RealMatrix(T).init(n, n, allocator),
+                .AC = try RealMatrix(T).init(n, n, allocator),
+            };
+        }
+
+        /// Free the output structure.
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            self.AJ.deinit(allocator);
+            self.AC.deinit(allocator);
+        }
+    };
+}
+
+/// Run the eigenvalue solver with the provided options.
+pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(opt);
+
+    const A = try readRealMatrix(T, opt.matrix_file, allocator); defer A.deinit(allocator);
+
+    if (!opt.hermitian) return throw(Output(T), "EIGENPROBLEM SOLVER ONLY SUPPORTS HERMITIAN MATRICES CURRENTLY", .{});
+    if (!opt.real) return throw(Output(T), "EIGENPROBLEM SOLVER ONLY SUPPORTS REAL MATRICES CURRENTLY", .{});
+
+    if (enable_printing and opt.print.input_matrix) {
+        try device_write.print("\nINPUT MATRIX:\n", .{}); try printRealMatrix(T, A);
+    }
+
+    var output = try Output(T).init(A.rows, allocator);
+
+    try eigensystemJacobi(RealMatrix, T, &output.AJ, &output.AC, A);
+
+    if (enable_printing) {
+        if (opt.print.eigenvalues) {
+            try device_write.print("\nEIGENVALUES:\n", .{}); try printRealMatrix(T, output.AJ);
+        }
+        if (opt.print.eigenvectors) {
+            try device_write.print("\nEIGENVECTORS:\n", .{}); try printRealMatrix(T, output.AC);
+        }
+    }
+
+    if (opt.write.eigenvalues) |path| try exportRealMatrix(T, path, output.AJ);
+    if (opt.write.eigenvectors) |path| try exportRealMatrix(T, path, output.AC);
+
+    return output;
+}
 
 /// Diagonalize a complex hermitian matrix A. The provided matrix is overwritten by the diagonal form.
 pub fn diagonalizeHermitian(comptime T: type, A: *ComplexMatrix(T)) !void {

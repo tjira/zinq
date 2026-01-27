@@ -30,6 +30,42 @@ def getInputTemplate(name):
 def main():
     sys.exit(subprocess.call([getBinaryPath(), *sys.argv[1:]]))
 
+def eigh():
+    parser = argparse.ArgumentParser(
+        prog="Zinq Eigenproblem Solver Module", description="Wrapper for the eigenproblem solver using the Zinq package.",
+        formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=128),
+        add_help=False, allow_abbrev=False
+    )
+
+    parser.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS, help="This help message.")
+
+    parser.add_argument("-c", "--eigenvectors", type=str, help="Path to the file where to write the eigenvectors.")
+    parser.add_argument("-i", "--input", type=str, help="Path to the input matrix.", default="A.mat")
+    parser.add_argument("-j", "--eigenvalues", type=str, help="Path to the file where to write the eigenvalues.")
+
+    parser.add_argument("--print", action=argparse.BooleanOptionalAction, default=False, help="Print the input matrix, eigenvalues, and eigenvectors to the console.")
+
+    args = parser.parse_args()
+
+    inp = getInputTemplate("eigenproblem_solver")
+
+    inp["zinq"][0]["options"] = {
+        "matrix_file" : args.input,
+        "print" : {
+            "input_matrix" : args.print,
+            "eigenvalues" : args.print,
+            "eigenvectors" : args.print
+        },
+        "write" : {
+            "eigenvalues" : args.eigenvalues if args.eigenvalues else None,
+            "eigenvectors" : args.eigenvectors if args.eigenvectors else None
+        },
+        "hermitian" : True,
+        "real" : True
+    }
+
+    executeInput(inp)
+
 def hf():
     parser = argparse.ArgumentParser(
         prog="Zinq Hartree-Fock Module", description="Wrapper for the Hartree-Fock method using the Zinq package.",
@@ -43,8 +79,6 @@ def hf():
     parser.add_argument("-m", "--molecule", type=str, help="Molecule specification in XYZ format.", default="molecule.xyz")
 
     args = parser.parse_args()
-
-    if not os.path.isfile(args.molecule): raise Exception(f"ERROR: MOLECULE FILE '{args.molecule}' DOES NOT EXIST")
 
     inp = getInputTemplate("hartree_fock")
 
@@ -72,8 +106,6 @@ def molint():
     parser.add_argument("-v", "--nuclear", type=str, help="Calculation of nuclear attraction integrals.", default="")
 
     args = parser.parse_args()
-
-    if not os.path.isfile(args.molecule): raise Exception(f"ERROR: MOLECULE FILE '{args.molecule}' DOES NOT EXIST")
 
     inp = getInputTemplate("molecular_integrals")
 
@@ -104,8 +136,6 @@ def mp2():
 
     args = parser.parse_args()
 
-    if not os.path.isfile(args.molecule): raise Exception(f"ERROR: MOLECULE FILE '{args.molecule}' DOES NOT EXIST")
-
     inp = getInputTemplate("moller_plesset")
 
     inp["zinq"][0]["options"] = {
@@ -130,7 +160,7 @@ def primecheck():
     parser.add_argument("-b", "--bits", type=int, help="Number of bits to use.", default=64)
     parser.add_argument("-n", "--number", type=str, help="Number to check.", required=True)
 
-    parser.add_argument('--mersenne', action=argparse.BooleanOptionalAction)
+    parser.add_argument("--mersenne", action=argparse.BooleanOptionalAction, default=False, help="Check only Mersenne primes.")
 
     args = parser.parse_args()
 

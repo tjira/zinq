@@ -22,9 +22,6 @@ jobs:
         with:
           ruby-version: "3.4"
 
-      # - name: Transpile the Documentation
-      #   run: ./script/transpile_docs.py
-
       - name: Compile the Documentation
         run: make docs
 
