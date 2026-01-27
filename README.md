@@ -97,6 +97,21 @@ You can access Zinq's functionality through the dedicated Python wrappers. If yo
 * `primefact` - Performs prime factorization as a standalone utility tool.
 * `primegen` - Generates prime numbers as a standalone utility tool.
 
+## Citation
+
+If you use Zinq in your research, please cite the project on [Zenodo](https://doi.org/10.5281/zenodo.18386143) using the following general BibTeX entry. If you are referring to a specific version, please visit the Zenodo page and download the corresponding citation there.
+
+```bibtex
+@software{ZinqJira2026,
+    author       = {Tomáš Jíra},
+    title        = {tjira/zinq},
+    year         = 2026,
+    publisher    = {Zenodo},
+    doi          = {10.5281/zenodo.18386143},
+    url          = {https://doi.org/10.5281/zenodo.18386143},
+}
+```
+
 ## License
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
