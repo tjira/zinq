@@ -103,12 +103,12 @@ If you use Zinq in your research, please cite the project on [Zenodo](https://do
 
 ```bibtex
 @software{ZinqJira2026,
-    author       = {Tomáš Jíra},
-    title        = {tjira/zinq},
-    year         = 2026,
-    publisher    = {Zenodo},
-    doi          = {10.5281/zenodo.18386143},
-    url          = {https://doi.org/10.5281/zenodo.18386143},
+    author    = {Tomáš Jíra},
+    title     = {tjira/zinq},
+    year      = 2026,
+    publisher = {Zenodo},
+    doi       = {10.5281/zenodo.18386143},
+    url       = {https://doi.org/10.5281/zenodo.18386143},
 }
 ```
 
