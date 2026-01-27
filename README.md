@@ -96,6 +96,7 @@ You can access Zinq's functionality through the dedicated Python wrappers. If yo
 * `primecheck` - Checks for primality of numbers as a standalone utility tool.
 * `primefact` - Performs prime factorization as a standalone utility tool.
 * `primegen` - Generates prime numbers as a standalone utility tool.
+* `eigh` - Computes eigenvalues and eigenvectors of hermitian matrices.
 
 ## Citation
 
