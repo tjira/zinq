@@ -54,6 +54,7 @@ pub const morse_potential = @import("morse_potential.zig");
 pub const multiconfigurational_gaussian = @import("multiconfigurational_gaussian.zig");
 pub const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
 pub const object_array = @import("object_array.zig");
+pub const orbit_fractal = @import("orbit_fractal.zig");
 pub const particle_optimization = @import("particle_optimization.zig");
 pub const potential_plot = @import("potential_plot.zig");
 pub const prime_numbers = @import("prime_numbers.zig");

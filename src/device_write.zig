@@ -5,12 +5,15 @@ const std = @import("std");
 const classical_particle = @import("classical_particle.zig");
 const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
+const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const image = @import("image.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
 const real_tensor_three = @import("real_tensor_three.zig");
 const real_vector = @import("real_vector.zig");
+
+const throw = error_handling.throw;
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
@@ -46,13 +49,9 @@ pub fn exportImageAsPPM(path: []const u8, img: Image) !void {
 
     var writer = file.writer(&buffer); var writer_interface = &writer.interface;
 
-    try writer_interface.print("P3 {d} {d} 255", .{img.width, img.height});
+    try writer_interface.print("P6 {d} {d} 255\n", .{img.width, img.height});
 
-    for (img.data) |value| try writer_interface.print(" {d}", .{value});
-
-    try writer_interface.print("\n", .{});
-
-    try writer_interface.flush();
+    try writer_interface.writeAll(img.data);
 }
 
 /// Exports the real matrix to a file.
