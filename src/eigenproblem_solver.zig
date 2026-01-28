@@ -27,12 +27,12 @@ const MAX_JACOBI_ITERATIONS = global_variables.MAX_JACOBI_ITERATIONS;
 /// Options for the eigenvalue solver program.
 pub fn Options(comptime _: type) type {
     return struct {
-        const Print = struct {
+        pub const Print = struct {
             input_matrix: bool = true,
             eigenvalues: bool = false,
             eigenvectors: bool = false,
         };
-        const Write = struct{
+        pub const Write = struct{
             eigenvalues: ?[]const u8 = null,
             eigenvectors: ?[]const u8 = null
         };

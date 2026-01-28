@@ -27,6 +27,7 @@ pub const error_handling = @import("error_handling.zig");
 pub const fewest_switches = @import("fewest_switches.zig");
 pub const file_potential = @import("file_potential.zig");
 pub const fourier_transform = @import("fourier_transform.zig");
+pub const fractal_generator = @import("fractal_generator.zig");
 pub const frequency_analysis = @import("frequency_analysis.zig");
 pub const global_variables = @import("global_variables.zig");
 pub const grid_generator = @import("grid_generator.zig");
@@ -35,6 +36,7 @@ pub const hammes_schiffer_tully = @import("hammes_schiffer_tully.zig");
 pub const harmonic_potential = @import("harmonic_potential.zig");
 pub const hartree_fock = @import("hartree_fock.zig");
 pub const hermite_quadrature_nodes = @import("hermite_quadrature_nodes.zig");
+pub const image = @import("image.zig");
 pub const integer_arithmetic = @import("integer_arithmetic.zig");
 pub const integral_functions = @import("integral_functions.zig");
 pub const integral_transform = @import("integral_transform.zig");
@@ -62,6 +64,7 @@ pub const real_tensor_four = @import("real_tensor_four.zig");
 pub const real_tensor_three = @import("real_tensor_three.zig");
 pub const real_vector = @import("real_vector.zig");
 pub const reverse_polish_notation = @import("reverse_polish_notation.zig");
+pub const rgb = @import("rgb.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
 pub const shunting_yard = @import("shunting_yard.zig");
 pub const single_set_of_mcg = @import("single_set_of_mcg.zig");
@@ -76,6 +79,7 @@ pub const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig
 
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
 pub const EigenproblemSolverOptions = eigenproblem_solver.Options;
+pub const FractalGeneratorOptions = fractal_generator.Options;
 pub const HartreeFockOptions = hartree_fock.Options;
 pub const MolecularIntegralsOptions = molecular_integrals.Options;
 pub const MollerPlessetOptions = moller_plesset.Options;
@@ -88,6 +92,7 @@ pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 const Target = enum {
     classical_dynamics,
     eigenproblem_solver,
+    fractal_generator,
     hartree_fock,
     molecular_integrals,
     moller_plesset,
@@ -133,6 +138,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
         switch (tag) {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
             .eigenproblem_solver => try handle(f64, eigenproblem_solver, options, allocator),
+            .fractal_generator => try handle(f64, fractal_generator, options, allocator),
             .hartree_fock => try handle(f64, hartree_fock, options, allocator),
             .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
             .moller_plesset => try handle(f64, moller_plesset, options, allocator),

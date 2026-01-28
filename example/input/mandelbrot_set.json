@@ -1,0 +1,18 @@
+{
+    "zinq" : [
+        {
+            "name" : "fractal_generator",
+            "options" : {
+                "category" : {
+                    "orbit" : {
+                        "fractal" : {
+                            "mandelbrot" : {}
+                        },
+                        "center" : [-0.75, 0],
+                        "zoom" : 1.5
+                    }
+                }
+            }
+        }
+    ]
+}
