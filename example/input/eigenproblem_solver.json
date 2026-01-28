@@ -1,0 +1,16 @@
+{
+    "zinq" : [
+        {
+            "name" : "eigenproblem_solver",
+            "options" : {
+                "matrix_file": "A.mat",
+                "hermitian": true,
+                "real": true,
+                "print": {
+                    "eigenvalues": true,
+                    "eigenvectors": true
+                }
+            }
+        }
+    ]
+}

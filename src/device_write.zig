@@ -22,6 +22,13 @@ const A2AU = global_variables.A2AU;
 
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
+/// Exports the complex matrix to a file.
+pub fn exportComplexMatrix(comptime T: type, path: []const u8, A: ComplexMatrix(T)) !void {
+    var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
+
+    try writeComplexMatrix(T, file, A);
+}
+
 /// Exports the complex matrix to a file with the leftmost column being linspaced values from start to end.
 pub fn exportComplexMatrixWithLinspacedLeftColumn(comptime T: type, path: []const u8, A: ComplexMatrix(T), start: T, end: T) !void {
     var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
@@ -121,7 +128,7 @@ pub fn writeComplexMatrix(comptime T: type, device: std.fs.File, A: ComplexMatri
 
     var writer = device.writer(&buffer); var writer_interface = &writer.interface;
 
-    try writer_interface.print("{d} {d}\n", .{A.rows, 2 * A.cols});
+    try writer_interface.print("{d} {d}\n", .{A.rows, A.cols});
 
     for (0..A.rows) |i| for (0..A.cols) |j| {
         try writer_interface.print("{d:20.14} {d:20.14}{s}", .{A.at(i, j).re, A.at(i, j).im, if (j == A.cols - 1) "\n" else " "});

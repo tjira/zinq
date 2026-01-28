@@ -60,21 +60,9 @@ pub fn Options(comptime _: type) type {
 /// Output structure for the prime number generation target.
 pub fn Output(comptime _: type) type {
     return struct {
-        prime_numbers: []std.math.big.int.Managed,
-
-        /// Initialize the output structure.
-        pub fn init(count: usize, allocator: std.mem.Allocator) !@This() {
-            return @This(){
-                .prime_numbers = try allocator.alloc(std.math.big.int.Managed, count),
-            };
-        }
 
         /// Free the output structure.
-        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-            for (self.prime_numbers) |*p| p.deinit();
-
-            allocator.free(self.prime_numbers);
-        }
+        pub fn deinit(_: @This(), _: std.mem.Allocator) void {}
     };
 }
 
@@ -127,12 +115,6 @@ pub fn checkMode(comptime T: type, opt: anytype, enable_printing: bool, allocato
         .mersenne => try isMersenne(number, allocator),
     };
 
-    const output = try Output(T).init(if (is_prime) 1 else 0, allocator);
-
-    if (is_prime) {
-        output.prime_numbers[0] = try number_big.clone();
-    }
-
     if (enable_printing) {
 
         const s = if (opt.filter == .mersenne) " MERSENNE" else "";
@@ -140,7 +122,7 @@ pub fn checkMode(comptime T: type, opt: anytype, enable_printing: bool, allocato
         try print("\n{s} IS{s} A{s} PRIME NUMBER\n", .{opt.number, if (is_prime) "" else " NOT", s});
     }
 
-    return output;
+    return Output(T){};
 }
 
 /// Factorize mode.
@@ -151,21 +133,21 @@ pub fn factorizeMode(comptime T: type, opt: anytype, enable_printing: bool, allo
 
     const factors = try factorize(number, allocator); defer allocator.free(factors);
 
-    var output = Output(T){.prime_numbers = try allocator.alloc(std.math.big.int.Managed, factors.len)};
+    var prime_numbers = try allocator.alloc(std.math.big.int.Managed, factors.len); defer allocator.free(prime_numbers);
 
     for (factors, 0..) |factor, i| {
-        output.prime_numbers[i] = if (comptime T == std.math.big.int.Managed) factor else try std.math.big.int.Managed.initSet(allocator, factor);
+        prime_numbers[i] = if (comptime T == std.math.big.int.Managed) factor else try std.math.big.int.Managed.initSet(allocator, factor);
     }
 
     if (enable_printing) {
 
         if (factors.len == 0) {
-            try print("\n{s} HAS NO PRIME FACTORS\n", .{opt.number}); return output;
+            try print("\n{s} HAS NO PRIME FACTORS\n", .{opt.number}); return Output(T){};
         }
 
         try print("\n", .{});
 
-        for (output.prime_numbers, 1..) |factor, i| {
+        for (prime_numbers, 1..) |factor, i| {
 
             const factor_str = try factor.toString(allocator, 10, std.fmt.Case.lower); defer allocator.free(factor_str);
 
@@ -173,7 +155,7 @@ pub fn factorizeMode(comptime T: type, opt: anytype, enable_printing: bool, allo
         }
     }
 
-    return output;
+    return Output(T){};
 }
 
 /// Generate mode.
@@ -187,8 +169,6 @@ pub fn generateMode(comptime T: type, opt: anytype, enable_printing: bool, alloc
     const start = if (comptime T == std.math.big.int.Managed) start_big else try start_big.toInt(T);
 
     const max_output = if (opt.output != null and opt.output.?.interval != null) @min(opt.count, opt.output.?.interval.?) else opt.count;
-
-    var output = try Output(T).init(max_output, allocator);
 
     var prime_numbers: []T = try allocator.alloc(T, max_output); defer allocator.free(prime_numbers);
 
@@ -233,11 +213,7 @@ pub fn generateMode(comptime T: type, opt: anytype, enable_printing: bool, alloc
         };
     }
 
-    for (prime_numbers, 0..) |prime, j| {
-        output.prime_numbers[j] = if (comptime T == std.math.big.int.Managed) prime else try std.math.big.int.Managed.initSet(allocator, prime);
-    }
-
-    return output;
+    return Output(T){};
 }
 
 /// Factorize a number into its prime factors.

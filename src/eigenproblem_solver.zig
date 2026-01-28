@@ -13,9 +13,12 @@ const Complex = std.math.complex.Complex;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const RealMatrix = real_matrix.RealMatrix;
 
+const exportComplexMatrix = device_write.exportComplexMatrix;
 const exportRealMatrix = device_write.exportRealMatrix;
 const printJson = device_write.printJson;
+const printComplexMatrix = device_write.printComplexMatrix;
 const printRealMatrix = device_write.printRealMatrix;
+const readComplexMatrix = device_read.readComplexMatrix;
 const readRealMatrix = device_read.readRealMatrix;
 const throw = error_handling.throw;
 
@@ -43,25 +46,12 @@ pub fn Options(comptime _: type) type {
     };
 }
 
-/// Output structure for the eigenvalue solver.
-pub fn Output(comptime T: type) type {
+/// Output of the eigenvalue solver program.
+pub fn Output(comptime _: type) type {
     return struct {
-        AJ: RealMatrix(T),
-        AC: RealMatrix(T),
 
-        /// Initialize the output structure.
-        pub fn init(n: usize, allocator: std.mem.Allocator) !@This() {
-            return @This(){
-                .AJ = try RealMatrix(T).init(n, n, allocator),
-                .AC = try RealMatrix(T).init(n, n, allocator),
-            };
-        }
-
-        /// Free the output structure.
-        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-            self.AJ.deinit(allocator);
-            self.AC.deinit(allocator);
-        }
+        // Deinitialize the output matrices.
+        pub fn deinit(_: @This(), _: std.mem.Allocator) void {}
     };
 }
 
@@ -69,32 +59,55 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    const A = try readRealMatrix(T, opt.matrix_file, allocator); defer A.deinit(allocator);
-
     if (!opt.hermitian) return throw(Output(T), "EIGENPROBLEM SOLVER ONLY SUPPORTS HERMITIAN MATRICES CURRENTLY", .{});
-    if (!opt.real) return throw(Output(T), "EIGENPROBLEM SOLVER ONLY SUPPORTS REAL MATRICES CURRENTLY", .{});
 
-    if (enable_printing and opt.print.input_matrix) {
-        try device_write.print("\nINPUT MATRIX:\n", .{}); try printRealMatrix(T, A);
+    if (opt.real) {
+
+        const A = try readRealMatrix(T, opt.matrix_file, allocator); defer A.deinit(allocator);
+
+        if (enable_printing and opt.print.input_matrix) {
+            try device_write.print("\nINPUT MATRIX:\n", .{}); try printRealMatrix(T, A);
+        }
+
+        const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
+
+        if (enable_printing) {
+            if (opt.print.eigenvalues) {
+                try device_write.print("\nEIGENVALUES:\n", .{}); try printRealMatrix(T, AJC.J);
+            }
+            if (opt.print.eigenvectors) {
+                try device_write.print("\nEIGENVECTORS:\n", .{}); try printRealMatrix(T, AJC.C);
+            }
+        }
+
+        if (opt.write.eigenvalues) |path| try exportRealMatrix(T, path, AJC.J);
+        if (opt.write.eigenvectors) |path| try exportRealMatrix(T, path, AJC.C);
     }
 
-    var output = try Output(T).init(A.rows, allocator);
+    else {
 
-    try eigensystemJacobi(RealMatrix, T, &output.AJ, &output.AC, A);
+        const A = try readComplexMatrix(T, opt.matrix_file, allocator); defer A.deinit(allocator);
 
-    if (enable_printing) {
-        if (opt.print.eigenvalues) {
-            try device_write.print("\nEIGENVALUES:\n", .{}); try printRealMatrix(T, output.AJ);
+        if (enable_printing and opt.print.input_matrix) {
+            try device_write.print("\nINPUT MATRIX:\n", .{}); try printComplexMatrix(T, A);
         }
-        if (opt.print.eigenvectors) {
-            try device_write.print("\nEIGENVECTORS:\n", .{}); try printRealMatrix(T, output.AC);
+
+        const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
+
+        if (enable_printing) {
+            if (opt.print.eigenvalues) {
+                try device_write.print("\nEIGENVALUES:\n", .{}); try printComplexMatrix(T, AJC.J);
+            }
+            if (opt.print.eigenvectors) {
+                try device_write.print("\nEIGENVECTORS:\n", .{}); try printComplexMatrix(T, AJC.C);
+            }
         }
+
+        if (opt.write.eigenvalues) |path| try exportComplexMatrix(T, path, AJC.J);
+        if (opt.write.eigenvectors) |path| try exportComplexMatrix(T, path, AJC.C);
     }
 
-    if (opt.write.eigenvalues) |path| try exportRealMatrix(T, path, output.AJ);
-    if (opt.write.eigenvectors) |path| try exportRealMatrix(T, path, output.AC);
-
-    return output;
+    return Output(T){};
 }
 
 /// Diagonalize a complex hermitian matrix A. The provided matrix is overwritten by the diagonal form.
@@ -110,6 +123,16 @@ pub fn diagonalizeSymmetric(comptime T: type, A: *RealMatrix(T)) !void {
 /// Solve the eigenproblem for a complex hermitian system.
 pub fn eigensystemHermitian(comptime T: type, J: *ComplexMatrix(T), C: *ComplexMatrix(T), A: ComplexMatrix(T)) !void {
     try eigensystemJacobi(ComplexMatrix, T, J, C, A);
+}
+
+/// Solve the eigenproblem for a complex hermitian system, returning the eigenvalues and eigenvectors.
+pub fn eigensystemHermitianAlloc(comptime T: type, A: ComplexMatrix(T), allocator: std.mem.Allocator) !struct {J: ComplexMatrix(T), C: ComplexMatrix(T)} {
+    var J = try ComplexMatrix(T).init(A.rows, A.cols, allocator);
+    var C = try ComplexMatrix(T).init(A.rows, A.cols, allocator);
+
+    try eigensystemHermitian(T, &J, &C, A);
+
+    return .{.J = J, .C = C};
 }
 
 /// Solve the eigenproblem for a symmetric or Hermitian system using the Jacobi method.

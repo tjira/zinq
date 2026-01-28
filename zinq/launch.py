@@ -44,6 +44,7 @@ def eigh():
     parser.add_argument("-j", "--eigenvalues", type=str, help="Path to the file where to write the eigenvalues.")
 
     parser.add_argument("--print", action=argparse.BooleanOptionalAction, default=False, help="Print the input matrix, eigenvalues, and eigenvectors to the console.")
+    parser.add_argument("--complex", action=argparse.BooleanOptionalAction, default=False, help="Flag to indicate whether the matrix is complex.")
 
     args = parser.parse_args()
 
@@ -61,7 +62,7 @@ def eigh():
             "eigenvectors" : args.eigenvectors if args.eigenvectors else None
         },
         "hermitian" : True,
-        "real" : True
+        "real" : not args.complex
     }
 
     executeInput(inp)

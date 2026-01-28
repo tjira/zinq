@@ -27,4 +27,4 @@
 - [x] Integrals over gaussians with complex gamma are not implemented. Implement them.
 - [x] The Riccati equations may produce non-unitary propagation in ss-vMCG, since I do not include derivative with respect to gamma in the tau matrix.
 - [ ] Make the Strassen algorithm for squaring large numbers.
-- [ ] Make the eigenvalue solver target for complex hermitian matrices.
+- [x] Make the eigenvalue solver target for complex hermitian matrices.
