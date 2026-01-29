@@ -24,7 +24,7 @@ class Build(setuptools.command.build_py.build_py):
 
             source, dest = os.path.join("zig-out", directory, "zinq" + suffix), os.path.join("zinq", "bin", "zinq-" + directory + suffix)
 
-            shutil.copyfile(source, dest)
+            shutil.copyfile(source, dest); shutil.copyfile(os.path.join("python", "plot.py"), os.path.join("zinq", "bin", "plot.py"))
 
         super().run()
 

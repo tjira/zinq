@@ -11,6 +11,7 @@ dynamic = ["version"]
 
 [project.scripts]
 zinq = "zinq.launch:main"
+plot = "zinq.launch:plot"
 hf = "zinq.launch:hf"
 molint = "zinq.launch:molint"
 mp2 = "zinq.launch:mp2"

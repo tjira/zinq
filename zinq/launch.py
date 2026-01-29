@@ -30,6 +30,9 @@ def getInputTemplate(name):
 def main():
     sys.exit(subprocess.call([getBinaryPath(), *sys.argv[1:]]))
 
+def plot():
+    sys.exit(subprocess.call(["python", pathlib.Path(__file__).with_name("bin") / "plot.py", *sys.argv[1:]]))
+
 def eigh():
     parser = argparse.ArgumentParser(
         prog="Zinq Eigenproblem Solver Module", description="Wrapper for the eigenproblem solver using the Zinq package.",
