@@ -5,6 +5,7 @@ const std = @import("std");
 const device_write = @import("device_write.zig");
 const image = @import("image.zig");
 const orbit_fractal = @import("orbit_fractal.zig");
+const orbit_fractal_generator = @import("orbit_fractal_generator.zig");
 const rgb = @import("rgb.zig");
 
 const exportImageAsPPM = device_write.exportImageAsPPM;
@@ -13,7 +14,7 @@ const printJson = device_write.printJson;
 
 const Complex = std.math.Complex;
 const Image = image.Image;
-const OrbitFractalGenerator = orbit_fractal.OrbitFractalGenerator;
+const OrbitFractalGenerator = orbit_fractal_generator.OrbitFractalGenerator;
 const RGB = rgb.RGB;
 
 /// The options for the fractal generator.
@@ -21,23 +22,47 @@ pub fn Options(comptime T: type) type {
     return struct {
         pub const Category = union(enum) {
             orbit: struct {
-                algorithm: union(enum) {
-                    escape: orbit_fractal.Escape(T),
-                } = .{.escape = .{}},
-                coloring: union(enum) {
-                    solid: orbit_fractal.Solid(T),
-                    gradient: orbit_fractal.Gradient(T),
-                } = .{.gradient = .{}},
+                pub const Algorithm = union(enum) {
+                    escape: struct{
+                        bailout: T = 8,
+                        maxiter: u32 = 64,
+                    }
+                };
+                pub const Coloring = union(enum) {
+                    solid: struct {
+                        rgb: RGB = .{.r = 255, .g = 255, .b = 255},
+                        seed: ?u32 = null
+                    },
+                    gradient: struct {
+                        start: RGB = .{.r =   0, .g =   0, .b =   0},
+                        end:   RGB = .{.r = 255, .g = 255, .b = 255},
+                        seed: ?u32 = null
+                    },
+                    periodic: struct {
+                        amplitude: [3]T = .{31.93, 30.38, 11.08},
+                        frequency: [3]T = .{ 6.26,  5.86,  0.80},
+                        seed: ?u32 = null
+                    },
+                };
+
                 fractal: union(enum) {
-                    mandelbrot: struct{}
+                    buffalo: struct{},
+                    burningship: struct{},
+                    julia: struct {c: Complex(T) = Complex(T).init(0, 1)},
+                    mandelbrot: struct{},
+                    manowar: struct{},
+                    phoenix: struct{c: Complex(T) = Complex(T).init(0, 0)}
                 },
-                center: [2]T = .{0, 0},
+
+                algorithm: Algorithm = .{.escape = .{}},
+                coloring: Coloring = .{.periodic = .{}},
+                center: Complex(T) = Complex(T).init(0, 0),
                 zoom: T = 1,
                 smooth: bool = true,
             }
         };
 
-        background: [3]u8 = .{0, 0, 0},
+        background: RGB = .{.r = 0, .g = 0, .b = 0},
         resolution: [2]u32 = .{1920, 1080},
         output: []const u8 = "fractal.ppm",
         category: Category,
@@ -73,7 +98,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var output = try Output(T).init(opt.resolution[1], opt.resolution[0], allocator);
 
-    output.canvas.fill(RGB{.r = opt.background[0], .g = opt.background[1], .b = opt.background[2]});
+    output.canvas.fill(opt.background);
 
     if (enable_printing) try print(" {D}\nGENERATING FRACTALS:", .{timer.read()}); timer.reset();
 
