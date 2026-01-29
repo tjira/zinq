@@ -23,9 +23,22 @@ pub fn Options(comptime T: type) type {
         pub const Category = union(enum) {
             orbit: struct {
                 pub const Algorithm = union(enum) {
-                    escape: struct{
+                    escape: struct {
                         bailout: T = 8,
                         maxiter: u32 = 64,
+                        smooth: bool = true
+                    },
+                    orbitrap: struct {
+                        bailout: T = 128,
+                        maxiter: u32 = 64,
+                        fill: bool = false,
+                        trap: enum {
+                            circle,
+                            disk,
+                            linear,
+                            minabs,
+                            mindc
+                        } = .disk
                     }
                 };
                 pub const Coloring = union(enum) {
@@ -58,7 +71,6 @@ pub fn Options(comptime T: type) type {
                 coloring: Coloring = .{.periodic = .{}},
                 center: Complex(T) = Complex(T).init(0, 0),
                 zoom: T = 1,
-                smooth: bool = true,
             }
         };
 

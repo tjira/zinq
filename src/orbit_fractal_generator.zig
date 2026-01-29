@@ -31,7 +31,7 @@ pub fn Coloring(comptime T: type) type {
 /// Orbit fractal generator.
 pub fn OrbitFractalGenerator(comptime T: type) type {
     return struct {
-        fractal: OrbitFractal(T), algorithm: Algorithm(T), coloring: Coloring(T), center: Complex(T), zoom: T, smooth: bool,
+        fractal: OrbitFractal(T), algorithm: Algorithm(T), coloring: Coloring(T), center: Complex(T), zoom: T,
 
         /// Initialize the orbit fractal generator.
         pub fn init(opt: anytype) @This() {
@@ -45,7 +45,7 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
             };
 
             var generator = @This(){
-                .fractal = fractal, .algorithm = opt.algorithm, .coloring = opt.coloring, .center = opt.center, .zoom = opt.zoom, .smooth = opt.smooth
+                .fractal = fractal, .algorithm = opt.algorithm, .coloring = opt.coloring, .center = opt.center, .zoom = opt.zoom
             };
 
             if (opt.coloring == .gradient and opt.coloring.gradient.seed != null) {
@@ -102,13 +102,16 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
 
             switch (self.algorithm) {
                 .escape => |opt| switch (self.fractal) {inline else => |fractal| {
-                    self.escape(canvas, fractal, coloring, opt.bailout, opt.maxiter);
-                }}
+                    self.escape(canvas, fractal, coloring, opt.bailout, opt.maxiter, opt.smooth);
+                }},
+                .orbitrap => |opt| switch (self.fractal) {inline else => |fractal| {
+                    self.orbitrap(canvas, fractal, coloring, opt.bailout, opt.maxiter, opt.fill);
+                }},
             }
         }
 
         /// Escape time algorithm.
-        pub fn escape(self: @This(), canvas: *Image, fractal: anytype, coloring: anytype, bailout: T, maxiter: u32) void {
+        pub fn escape(self: @This(), canvas: *Image, fractal: anytype, coloring: anytype, bailout: T, maxiter: u32, smooth: bool) void {
             const hf: T = @floatFromInt(canvas.height); const wf: T = @floatFromInt(canvas.width);
 
             for (0..canvas.height) |i| for (0..canvas.width) |j| {
@@ -118,8 +121,6 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
 
                 const p = Complex(T).init(re, im); var iter: u32 = 0;
 
-                // var z  = if (fractal.z ) |z | z  else p;
-                // var zp = if (fractal.zp) |zp| zp else p;
                 var z, var zp = fractal.init(p);
 
                 while (z.squaredMagnitude() <= bailout * bailout and iter < maxiter) : (iter += 1) {
@@ -130,9 +131,50 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
 
                     var value: T = @floatFromInt(iter);
 
-                    if (self.smooth) value -= std.math.log2(std.math.log2(z.magnitude()));
+                    if (smooth) value -= std.math.log2(std.math.log2(z.magnitude()));
 
                     canvas.ptr(i, j).* = coloring(self, value / @as(T, @floatFromInt(maxiter)));
+                }
+            };
+        }
+
+        /// Orbitrap algorithm.
+        pub fn orbitrap(self: @This(), canvas: *Image, fractal: anytype, coloring: anytype, bailout: T, maxiter: u32, fill: bool) void {
+            const hf: T = @floatFromInt(canvas.height); const wf: T = @floatFromInt(canvas.width);
+
+            const trap = switch (self.algorithm.orbitrap.trap) {
+                .circle => &@This().circle,
+                .disk => &@This().disk,
+                .linear => &@This().linear,
+                .minabs => &@This().minabs,
+                .mindc => &@This().mindc
+            };
+
+            for (0..canvas.height) |i| for (0..canvas.width) |j| {
+
+                const im = -self.center.im + (3.0 * (@as(T, @floatFromInt(i)) + 0.5) - 1.5 * hf) / self.zoom / hf;
+                const re =  self.center.re + (3.0 * (@as(T, @floatFromInt(j)) + 0.5) - 1.5 * wf) / self.zoom / hf;
+
+                const p = Complex(T).init(re, im); var iter: u32 = 0;
+
+                var z, var zp = fractal.init(p); var dist = std.math.floatMax(T);
+
+                while (z.squaredMagnitude() <= bailout * bailout and iter < maxiter) : (iter += 1) {
+
+                    const zt = z; z = fractal.iterate(p, z, zp); zp = zt; 
+
+                    if (trap(z) < dist) dist = z.magnitude();
+                }
+
+                if (iter < maxiter or !fill) {
+
+                    const value: T = switch (self.coloring) {
+                        .gradient => 1.0 / (1 + 5 * dist),
+                        .periodic => 0.1 * std.math.log10(dist),
+                        .solid => dist
+                    };
+
+                    canvas.ptr(i, j).* = coloring(self, value);
                 }
             };
         }
@@ -164,6 +206,31 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
             const coloring = self.coloring.solid;
 
             return coloring.rgb;
+        }
+
+        /// Circular trap for orbitrap algorithm.
+        pub fn circle(z: Complex(T)) T {
+            return @abs(z.magnitude() - 1);
+        }
+
+        /// Disk trap for orbitrap algorithm.
+        pub fn disk(z: Complex(T)) T {
+            return z.magnitude();
+        }
+
+        /// Linear trap for orbitrap algorithm.
+        pub fn linear(z: Complex(T)) T {
+            return 0.70710678 * @min(@abs(z.re - z.im), @abs(z.re + z.im));
+        }
+
+        /// Minimum of absolute values trap for orbitrap algorithm.
+        pub fn minabs(z: Complex(T)) T {
+            return @min(@abs(z.re), @abs(z.im));
+        }
+
+        /// Minimum between disk and circle trap for orbitrap algorithm.
+        pub fn mindc(z: Complex(T)) T {
+            return @min(disk(z), circle(z));
         }
     };
 }
