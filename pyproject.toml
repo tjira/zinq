@@ -11,14 +11,14 @@ dynamic = ["version"]
 
 [project.scripts]
 zinq = "zinq.launch:main"
-plot = "zinq.launch:plot"
+eigh = "zinq.launch:eigh"
 hf = "zinq.launch:hf"
 molint = "zinq.launch:molint"
 mp2 = "zinq.launch:mp2"
 primecheck = "zinq.launch:primecheck"
 primefact = "zinq.launch:primefact"
 primegen = "zinq.launch:primegen"
-eigh = "zinq.launch:eigh"
+plot = "zinq.plot:main"
 
 [project.urls]
 "Homepage" = "https://tjira.github.io/zinq/"
