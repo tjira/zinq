@@ -8,6 +8,12 @@
                         "fractal" : {
                             "mandelbrot" : {}
                         },
+                        "algorithm" : {
+                            "escape" : {}
+                        },
+                        "coloring" : {
+                            "periodic" : {}
+                        },
                         "center" : {
                             "re" : -0.75, "im" : 0
                         },

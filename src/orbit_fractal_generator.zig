@@ -95,24 +95,85 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
         }
 
         /// Orbit fractal painting function.
-        pub fn paint(self: @This(), canvas: *Image) void {
+        pub fn paint(self: @This(), canvas: *Image, allocator: std.mem.Allocator) !void {
             const coloring = switch (self.coloring) {
                 .gradient => &@This().gradient, .periodic => &@This().periodic, .solid => &@This().solid
             };
 
             switch (self.algorithm) {
-                .escape => |opt| switch (self.fractal) {inline else => |fractal| {
-                    self.escape(canvas, fractal, coloring, opt.bailout, opt.maxiter, opt.smooth);
+                .density => switch (self.fractal) {inline else => |fractal| {
+                    try self.density(canvas, fractal, coloring, allocator);
                 }},
-                .orbitrap => |opt| switch (self.fractal) {inline else => |fractal| {
-                    self.orbitrap(canvas, fractal, coloring, opt.bailout, opt.maxiter, opt.fill);
+                .escape => switch (self.fractal) {inline else => |fractal| {
+                    self.escape(canvas, fractal, coloring);
+                }},
+                .orbitrap => switch (self.fractal) {inline else => |fractal| {
+                    self.orbitrap(canvas, fractal, coloring);
                 }},
             }
         }
 
         /// Escape time algorithm.
-        pub fn escape(self: @This(), canvas: *Image, fractal: anytype, coloring: anytype, bailout: T, maxiter: u32, smooth: bool) void {
+        pub fn density(self: @This(), canvas: *Image, fractal: anytype, coloring: anytype, allocator: std.mem.Allocator) !void {
             const hf: T = @floatFromInt(canvas.height); const wf: T = @floatFromInt(canvas.width);
+
+            const bailout = self.algorithm.density.bailout;
+            const maxiter = self.algorithm.density.maxiter;
+            const samples = self.algorithm.density.samples;
+            const seed = self.algorithm.density.seed;
+
+            var split_mix = std.Random.SplitMix64.init(seed); var rng = std.Random.DefaultPrng.init(split_mix.next());
+
+            var random = rng.random(); const min: T = -3.5; const max: T = 3.5;
+
+            var data = try allocator.alloc(usize, canvas.height * canvas.width); defer allocator.free(data);
+
+            @memset(data, 0);
+
+            var orbit = try allocator.alloc(Complex(T), maxiter); defer allocator.free(orbit);
+
+            for (0..samples) |_| {
+
+                const p = Complex(T).init(random.float(T) * (max - min) + min, random.float(T) * (max - min) + min);
+
+                var z, var zp = fractal.init(p); var iter: u32 = 0;
+
+                while (z.squaredMagnitude() <= bailout * bailout and iter < maxiter) : (iter += 1) {
+                    const zt = z; z = fractal.iterate(p, z, zp); zp = zt; orbit[iter] = z;
+                }
+
+                if (iter == maxiter) continue;
+
+                for (0..iter) |j| {
+
+                    const re = orbit[j].re; const im = orbit[j].im;
+
+                    const ii = @as(i64, @intFromFloat(std.math.round(((im + self.center.im) * hf * self.zoom + 1.5 * hf) / 3.0 - 0.5)));
+                    const jj = @as(i64, @intFromFloat(std.math.round(((re - self.center.re) * hf * self.zoom + 1.5 * wf) / 3.0 - 0.5)));
+
+                    if (ii < 0 or ii >= canvas.height or jj < 0 or jj >= canvas.width) continue;
+
+                    data[@as(usize, @intCast(ii)) * canvas.width + @as(usize, @intCast(jj))] += 1;
+                }
+            }
+
+            var maxval: usize = 0; for (data) |value| {if (value > maxval) maxval = value;}
+
+            for (0..canvas.height) |i| for (0..canvas.width) |j| {
+
+                const value = @as(T, @floatFromInt(data[i * canvas.width + j])) / @as(T, @floatFromInt(maxval));
+
+                if (value > 0) canvas.ptr(i, j).* = coloring(self, value);
+            };
+        }
+
+        /// Escape time algorithm.
+        pub fn escape(self: @This(), canvas: *Image, fractal: anytype, coloring: anytype) void {
+            const hf: T = @floatFromInt(canvas.height); const wf: T = @floatFromInt(canvas.width);
+
+            const bailout = self.algorithm.escape.bailout;
+            const maxiter = self.algorithm.escape.maxiter;
+            const smooth = self.algorithm.escape.smooth;
 
             for (0..canvas.height) |i| for (0..canvas.width) |j| {
 
@@ -139,8 +200,12 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
         }
 
         /// Orbitrap algorithm.
-        pub fn orbitrap(self: @This(), canvas: *Image, fractal: anytype, coloring: anytype, bailout: T, maxiter: u32, fill: bool) void {
+        pub fn orbitrap(self: @This(), canvas: *Image, fractal: anytype, coloring: anytype) void {
             const hf: T = @floatFromInt(canvas.height); const wf: T = @floatFromInt(canvas.width);
+
+            const bailout = self.algorithm.orbitrap.bailout;
+            const maxiter = self.algorithm.orbitrap.maxiter;
+            const fill = self.algorithm.orbitrap.fill;
 
             const trap = switch (self.algorithm.orbitrap.trap) {
                 .circle => &@This().circle,
@@ -163,15 +228,15 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
 
                     const zt = z; z = fractal.iterate(p, z, zp); zp = zt; 
 
-                    if (trap(z) < dist) dist = z.magnitude();
+                    if (trap(z) < dist) dist = trap(z);
                 }
 
                 if (iter < maxiter or !fill) {
 
-                    const value: T = switch (self.coloring) {
+                    const value = switch (self.coloring) {
                         .gradient => 1.0 / (1 + 5 * dist),
                         .periodic => 0.1 * std.math.log10(dist),
-                        .solid => dist
+                        else => dist
                     };
 
                     canvas.ptr(i, j).* = coloring(self, value);

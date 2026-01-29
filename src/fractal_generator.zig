@@ -23,6 +23,12 @@ pub fn Options(comptime T: type) type {
         pub const Category = union(enum) {
             orbit: struct {
                 pub const Algorithm = union(enum) {
+                    density: struct {
+                        bailout: T = 16,
+                        maxiter: u32 = 64,
+                        samples: u32 = 10000000,
+                        seed: u32 = 0
+                    },
                     escape: struct {
                         bailout: T = 8,
                         maxiter: u32 = 64,
@@ -38,7 +44,7 @@ pub fn Options(comptime T: type) type {
                             linear,
                             minabs,
                             mindc
-                        } = .disk
+                        } = .linear
                     }
                 };
                 pub const Coloring = union(enum) {
@@ -116,7 +122,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     switch (opt.category) {
         .orbit => |orbit| {
-            OrbitFractalGenerator(T).init(orbit).paint(&output.canvas);
+            try OrbitFractalGenerator(T).init(orbit).paint(&output.canvas, allocator);
         }
     }
 
