@@ -295,7 +295,7 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Propagate the wavefunction in time using the split-operator method.
-        pub fn propagate(self: *@This(), potential: ElectronicPotential(T), cap: ComplexAbsorbingPotential(T), time: T, time_step: T, imaginary: bool, temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
+        pub fn propagate(self: *@This(), potential: ElectronicPotential(T), cap: ?ComplexAbsorbingPotential(T), time: T, time_step: T, imaginary: bool, temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
             const unit = Complex(T).init(if (imaginary) 1 else 0, if (imaginary) 0 else 1);
 
             try propagateHalfPosition(self, potential, cap, time, time_step, unit, temporary_column, allocator);
@@ -349,7 +349,7 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Propagate the wavefunction half a time step in position space.
-        pub fn propagateHalfPosition(self: *@This(), potential: ElectronicPotential(T), cap: ComplexAbsorbingPotential(T), time: T, time_step: T, unit: Complex(T), temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
+        pub fn propagateHalfPosition(self: *@This(), potential: ElectronicPotential(T), cap: ?ComplexAbsorbingPotential(T), time: T, time_step: T, unit: Complex(T), temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
             var diabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer diabatic_potential.deinit(allocator);
             var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_potential.deinit(allocator);
             var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_eigenvectors.deinit(allocator);
@@ -366,7 +366,9 @@ pub fn GridWavefunction(comptime T: type) type {
 
                 try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position_at_row, time);
 
-                try getPositionPropagator(T, &R, adiabatic_potential, adiabatic_eigenvectors, cap.apply(position_at_row), time_step, unit, &mm_temporary);
+                const capv = if (cap != null) cap.?.apply(position_at_row) else 0;
+
+                try getPositionPropagator(T, &R, adiabatic_potential, adiabatic_eigenvectors, capv, time_step, unit, &mm_temporary);
 
                 for (0..self.nstate) |j| {
 

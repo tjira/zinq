@@ -77,13 +77,13 @@ pub fn Options(comptime T: type) type {
         };
 
         potential: ElectronicPotential(T),
-        cap: ComplexAbsorbingPotential(T),
         grid: Grid,
         initial_conditions: InitialConditions,
 
         iterations: u32,
         time_step: T,
 
+        cap: ?ComplexAbsorbingPotential(T) = null,
         imaginary: ?Imaginary = null,
         log_intervals: LogIntervals = .{},
         spectrum: Spectrum = .{},
