@@ -18,7 +18,8 @@ mp2 = "zinq.launch:mp2"
 primecheck = "zinq.launch:primecheck"
 primefact = "zinq.launch:primefact"
 primegen = "zinq.launch:primegen"
-plot = "zinq.plot:main"
+plot = "zinq.plot:plot"
+heatmap = "zinq.plot:heatmap"
 
 [project.urls]
 "Homepage" = "https://tjira.github.io/zinq/"
