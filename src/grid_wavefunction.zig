@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const complex_absorbing_potential = @import("complex_absorbing_potential.zig");
 const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
 const eigensystem_solver = @import("eigenproblem_solver.zig");
@@ -14,6 +15,7 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
 const Complex = std.math.complex.Complex;
+const ComplexAbsorbingPotential = complex_absorbing_potential.ComplexAbsorbingPotential;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const ComplexVector = complex_vector.ComplexVector;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
@@ -293,14 +295,14 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Propagate the wavefunction in time using the split-operator method.
-        pub fn propagate(self: *@This(), potential: ElectronicPotential(T), time: T, time_step: T, imaginary: bool, temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
+        pub fn propagate(self: *@This(), potential: ElectronicPotential(T), cap: ComplexAbsorbingPotential(T), time: T, time_step: T, imaginary: bool, temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
             const unit = Complex(T).init(if (imaginary) 1 else 0, if (imaginary) 0 else 1);
 
-            try propagateHalfPosition(self, potential, time, time_step, unit, temporary_column, allocator);
+            try propagateHalfPosition(self, potential, cap, time, time_step, unit, temporary_column, allocator);
 
             try propagateFullMomentum(self, time_step, unit, temporary_column, allocator);
 
-            try propagateHalfPosition(self, potential, time, time_step, unit, temporary_column, allocator);
+            try propagateHalfPosition(self, potential, cap, time, time_step, unit, temporary_column, allocator);
 
             if (imaginary) self.normalize();
         }
@@ -347,7 +349,7 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Propagate the wavefunction half a time step in position space.
-        pub fn propagateHalfPosition(self: *@This(), potential: ElectronicPotential(T), time: T, time_step: T, unit: Complex(T), temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
+        pub fn propagateHalfPosition(self: *@This(), potential: ElectronicPotential(T), cap: ComplexAbsorbingPotential(T), time: T, time_step: T, unit: Complex(T), temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !void {
             var diabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer diabatic_potential.deinit(allocator);
             var adiabatic_potential = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_potential.deinit(allocator);
             var adiabatic_eigenvectors = try RealMatrix(T).init(self.nstate, self.nstate, allocator); defer adiabatic_eigenvectors.deinit(allocator);
@@ -364,7 +366,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
                 try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position_at_row, time);
 
-                try getPositionPropagator(T, &R, adiabatic_potential, adiabatic_eigenvectors, time_step, unit, &mm_temporary);
+                try getPositionPropagator(T, &R, adiabatic_potential, adiabatic_eigenvectors, cap.apply(position_at_row), time_step, unit, &mm_temporary);
 
                 for (0..self.nstate) |j| {
 
@@ -422,11 +424,11 @@ pub fn getMomentumPropagator(comptime T: type, K: *ComplexMatrix(T), momentum: R
 }
 
 /// Returns a wavefunction propagator for a half step in position space.
-pub fn getPositionPropagator(comptime T: type, R: *ComplexMatrix(T), adiabatic: RealMatrix(T), eigenvectors: RealMatrix(T), time_step: T, unit: Complex(T), mm_temporary: *ComplexMatrix(T)) !void {
+pub fn getPositionPropagator(comptime T: type, R: *ComplexMatrix(T), adiabatic: RealMatrix(T), eigenvectors: RealMatrix(T), cap: T, time_step: T, unit: Complex(T), mm_temporary: *ComplexMatrix(T)) !void {
     R.zero();
 
     for (0..R.rows) |j| {
-        R.ptr(j, j).* = std.math.complex.exp(Complex(T).init(adiabatic.at(j, j), 0).mul(Complex(T).init(-0.5 * time_step, 0)).mul(unit));
+        R.ptr(j, j).* = std.math.complex.exp(Complex(T).init(adiabatic.at(j, j), cap).mul(Complex(T).init(-0.5 * time_step, 0)).mul(unit));
     }
 
     try mm(T, mm_temporary, eigenvectors, false, R.*, false);

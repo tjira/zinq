@@ -174,15 +174,15 @@ def plot():
     data_errors, cols_errors = zip(*[load(file) for file in args.errors[1:]]) if args.errors else ((), ())
 
     # get the line indices for the error bars, colors, offsets, scales, and alphas
-    lind_errors  = (list(map(lambda x: int(x),  args.errors [0].split(","))) if args.errors [0] not in ["all", "every"] else np.arange(sum([len(col) for col in cols_errors]))  ) if args.errors  else []
-    lind_colors  = (list(map(lambda x: trng(x), args.colors [0].split(","))) if args.colors [0] not in ["all", "every"] else np.arange(len(dcit(data, data_cols)))[np.newaxis].T) if args.colors  else []
-    lind_offsets = (list(map(lambda x: trng(x), args.offsets[0].split(","))) if args.offsets[0] not in ["all", "every"] else np.arange(len(dcit(data, data_cols)))[np.newaxis].T) if args.offsets else []
-    lind_scales  = (list(map(lambda x: trng(x), args.scales [0].split(","))) if args.scales [0] not in ["all", "every"] else np.arange(len(dcit(data, data_cols)))[np.newaxis].T) if args.scales  else []
-    line_alphas  = (list(map(lambda x: trng(x), args.alphas [0].split(","))) if args.alphas [0] not in ["all", "every"] else np.arange(len(dcit(data, data_cols)))[np.newaxis].T) if args.alphas  else []
-    line_legends = (list(map(lambda x: trng(x), args.legends[0].split(","))) if args.legends[0] not in ["all", "every"] else np.arange(len(dcit(data, data_cols)))[np.newaxis].T) if args.legends else []
-    line_widths  = (list(map(lambda x: trng(x), args.widths [0].split(","))) if args.widths [0] not in ["all", "every"] else np.arange(len(dcit(data, data_cols)))[np.newaxis].T) if args.widths  else []
-    line_styles  = (list(map(lambda x: trng(x), args.styles [0].split(","))) if args.styles [0] not in ["all", "every"] else np.arange(len(dcit(data, data_cols)))[np.newaxis].T) if args.styles  else []
-    line_markers = (list(map(lambda x: trng(x), args.markers[0].split(","))) if args.markers[0] not in ["all", "every"] else np.arange(len(dcit(data, data_cols)))[np.newaxis].T) if args.markers else []
+    lind_errors  = (list(map(lambda x: int(x),  args.errors [0].split(","))) if args.errors [0] not in ["all", "every"] else np.arange(sum([len(col) for col in cols_errors]))        ) if args.errors  else []
+    lind_colors  = (list(map(lambda x: trng(x), args.colors [0].split(","))) if args.colors [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.colors  else []
+    lind_offsets = (list(map(lambda x: trng(x), args.offsets[0].split(","))) if args.offsets[0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.offsets else []
+    lind_scales  = (list(map(lambda x: trng(x), args.scales [0].split(","))) if args.scales [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.scales  else []
+    line_alphas  = (list(map(lambda x: trng(x), args.alphas [0].split(","))) if args.alphas [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.alphas  else []
+    line_legends = (list(map(lambda x: trng(x), args.legends[0].split(","))) if args.legends[0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.legends else []
+    line_widths  = (list(map(lambda x: trng(x), args.widths [0].split(","))) if args.widths [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.widths  else []
+    line_styles  = (list(map(lambda x: trng(x), args.styles [0].split(","))) if args.styles [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.styles  else []
+    line_markers = (list(map(lambda x: trng(x), args.markers[0].split(","))) if args.markers[0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.markers else []
 
     # add the scales and offsets to the initial lines in the data
     for (f, s) in ((frame, args.animate if args.animate else 0) for frame in range((data[0].shape[1] - 1) // args.animate if args.animate else 1)):

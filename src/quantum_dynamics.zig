@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const complex_absorbing_potential = @import("complex_absorbing_potential.zig");
 const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
@@ -17,6 +18,7 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const tully_potential = @import("tully_potential.zig");
 
+const ComplexAbsorbingPotential = complex_absorbing_potential.ComplexAbsorbingPotential;
 const Complex = std.math.Complex;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const ComplexVector = complex_vector.ComplexVector;
@@ -75,6 +77,7 @@ pub fn Options(comptime T: type) type {
         };
 
         potential: ElectronicPotential(T),
+        cap: ComplexAbsorbingPotential(T),
         grid: Grid,
         initial_conditions: InitialConditions,
 
@@ -175,7 +178,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
             const time = @as(T, @floatFromInt(j)) * opt.time_step;
 
-            if (j > 0) try wavefunction.propagate(opt.potential, time, opt.time_step, opt.imaginary != null, &temporary_wavefunction_column, allocator);
+            if (j > 0) try wavefunction.propagate(opt.potential, opt.cap, time, opt.time_step, opt.imaginary != null, &temporary_wavefunction_column, allocator);
 
             if (j > 0 and opt.imaginary != null) for (optimized_wavefunctions.items) |owf| wavefunction.orthogonalize(owf);
 

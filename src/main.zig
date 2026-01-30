@@ -9,6 +9,7 @@ pub const basis_set = @import("basis_set.zig");
 pub const bias_potential = @import("bias_potential.zig");
 pub const classical_dynamics = @import("classical_dynamics.zig");
 pub const classical_particle = @import("classical_particle.zig");
+pub const complex_absorbing_potential = @import("complex_absorbing_potential.zig");
 pub const complex_gaussian = @import("complex_gaussian.zig");
 pub const complex_matrix = @import("complex_matrix.zig");
 pub const complex_runge_kutta = @import("complex_runge_kutta.zig");
