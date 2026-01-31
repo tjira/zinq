@@ -97,6 +97,11 @@ pub fn RealVector(comptime T: type) type {
             for (self.data) |*element| element.* = value;
         }
 
+        /// Get the last element of the vector.
+        pub fn last(self: @This()) T {
+            return self.data[self.len - 1];
+        }
+
         /// Calculate the mean of all elements in the vector.
         pub fn mean(self: @This()) T {
             return self.sum() / @as(T, @floatFromInt(self.len));

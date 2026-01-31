@@ -448,8 +448,8 @@ test "Exact Dynamics on 1D Harmonic Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.52726330098766, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.potential_energy, 0.59766836993815, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.52726330098766, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy.last(), 0.59766836993815, TEST_TOLERANCE);
 }
 
 test "Exact Dynamics on 2D Harmonic Potential" {
@@ -476,8 +476,8 @@ test "Exact Dynamics on 2D Harmonic Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.kinetic_energy, 1.05452660197613, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.potential_energy, 1.19533673987723, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 1.05452660197613, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy.last(), 1.19533673987723, TEST_TOLERANCE);
 }
 
 test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
@@ -502,10 +502,10 @@ test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06471011654226, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.06471011654226, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.58949426578088, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 1), 0.41050573421579, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.potential_energy, 0.00178988577130, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy.last(), 0.00178988577130, TEST_TOLERANCE);
 }
 
 test "Imaginary Time Propagation on 1D Harmonic Potential" {
@@ -531,8 +531,8 @@ test "Imaginary Time Propagation on 1D Harmonic Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.25031230493126, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.potential_energy, 0.24968808471946, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.25031230493126, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy.last(), 0.24968808471946, TEST_TOLERANCE);
 }
 
 test "Imaginary Time Propagation on 2D Harmonic Potential" {
@@ -560,6 +560,6 @@ test "Imaginary Time Propagation on 2D Harmonic Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.50062460986252, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.potential_energy, 0.49937616943892, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.50062460986252, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.potential_energy.last(), 0.49937616943892, TEST_TOLERANCE);
 }
