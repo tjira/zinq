@@ -22,6 +22,9 @@
                         "k" : [1]
                     }
                 },
+                "spectrum" : {
+                    "padding_order" : 4
+                },
                 "write" : {
                     "spectrum" : "SPECTRUM_QD.mat"
                 },
@@ -52,6 +55,9 @@
                     "harmonic" : {
                         "k" : [1]
                     }
+                },
+                "spectrum" : {
+                    "padding_order" : 4
                 },
                 "write" : {
                     "spectrum" : "SPECTRUM_VMCG.mat"

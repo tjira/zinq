@@ -70,9 +70,14 @@ pub fn Options(comptime T: type) type {
             padding_order: u32 = 1
         };
         pub const Write = struct {
+            kinetic_energy: ?[]const u8 = null,
+            momentum: ?[]const u8 = null,
             population: ?[]const u8 = null,
+            position: ?[]const u8 = null,
+            potential_energy: ?[]const u8 = null,
             wavefunction: ?[]const u8 = null,
             spectrum: ?[]const u8 = null,
+            total_energy: ?[]const u8 = null,
             autocorrelation_function: ?[]const u8 = null
         };
 
@@ -96,20 +101,33 @@ pub fn Options(comptime T: type) type {
 /// The quantum dynamics output struct.
 pub fn Output(comptime T: type) type {
     return struct {
-        kinetic_energy: T = undefined,
+        kinetic_energy: RealVector(T),
+        momentum: RealMatrix(T),
         population: RealMatrix(T),
-        potential_energy: T = undefined,
+        position: RealMatrix(T),
+        potential_energy: RealVector(T),
+        total_energy: RealVector(T),
 
         /// Allocate the output structure.
         pub fn init(nstate: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
+                .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
+                .momentum = try RealMatrix(T).init(iterations + 1, nstate, allocator),
                 .population = try RealMatrix(T).init(iterations + 1, nstate, allocator),
+                .position = try RealMatrix(T).init(iterations + 1, nstate, allocator),
+                .potential_energy = try RealVector(T).initZero(iterations + 1, allocator),
+                .total_energy = try RealVector(T).initZero(iterations + 1, allocator)
             };
         }
 
         /// Deallocate the output structure.
         pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.kinetic_energy.deinit(allocator);
+            self.momentum.deinit(allocator);
             self.population.deinit(allocator);
+            self.position.deinit(allocator);
+            self.potential_energy.deinit(allocator);
+            self.total_energy.deinit(allocator);
         }
     };
 }
@@ -192,16 +210,16 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             const position = try wavefunction.positionMean(allocator); defer position.deinit(allocator);
             const momentum = try wavefunction.momentumMean(&temporary_wavefunction_column, allocator); defer momentum.deinit(allocator);
 
-            if (i == n_dynamics - 1) for (0..nstate) |k| {
-                output.population.ptr(j, k).* = density_matrix.at(k, k).re;
-            };
+            if (i == n_dynamics - 1) {
+                output.kinetic_energy.ptr(j).* = kinetic_energy;
+                output.potential_energy.ptr(j).* = potential_energy;
+                output.total_energy.ptr(j).* = kinetic_energy + potential_energy;
+                for (0..ndim) |k| output.momentum.ptr(j, k).* = momentum.at(k);
+                for (0..ndim) |k| output.position.ptr(j, k).* = position.at(k);
+                for (0..nstate) |k| output.population.ptr(j, k).* = density_matrix.at(k, k).re;
+            }
 
             if (opt.write.wavefunction != null and i == n_dynamics - 1) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, j, time, opt.adiabatic, allocator);
-
-            if (i == n_dynamics - 1 and j == opt.iterations) {
-                output.kinetic_energy = kinetic_energy;
-                output.potential_energy = potential_energy;
-            }
 
             if (!enable_printing or (j > 0 and j % opt.log_intervals.iteration != 0)) continue;
 
@@ -246,6 +264,11 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, path, acf.asMatrix(), 0, end_time);
     if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
+    if (opt.write.position) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.position, 0, end_time);
+    if (opt.write.momentum) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.momentum, 0, end_time);
+    if (opt.write.kinetic_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.kinetic_energy.asMatrix(), 0, end_time);
+    if (opt.write.potential_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.potential_energy.asMatrix(), 0, end_time);
+    if (opt.write.total_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy.asMatrix(), 0, end_time);
     if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
 
     if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit(allocator);
