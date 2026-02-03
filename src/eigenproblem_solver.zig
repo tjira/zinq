@@ -69,7 +69,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             try device_write.print("\nINPUT MATRIX:\n", .{}); try printRealMatrix(T, A);
         }
 
-        const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
+        const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
         if (enable_printing) {
             if (opt.print.eigenvalues) {
@@ -111,24 +111,23 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 }
 
 /// Diagonalize a complex hermitian matrix A. The provided matrix is overwritten by the diagonal form.
-pub fn diagonalizeHermitian(comptime T: type, A: *ComplexMatrix(T)) !void {
-    try eigensystemJacobi(ComplexMatrix, T, A, null, A.*);
-}
-
-/// Diagonalize a real symmetric matrix A. The provided matrix is overwritten by the diagonal form.
-pub fn diagonalizeSymmetric(comptime T: type, A: *RealMatrix(T)) !void {
-    try eigensystemJacobi(RealMatrix, T, A, null, A.*);
+pub fn diagonalizeHermitian(comptime T: type, A: anytype) !void {
+    if (comptime @TypeOf(A.*) == RealMatrix(T)) {try eigensystemJacobi(RealMatrix, T, A, null, A.*);}
+    else if (comptime @TypeOf(A.*) == ComplexMatrix(T)) {try eigensystemJacobi(ComplexMatrix, T, A, null, A.*);}
+    else @compileError("UNSUPPORTED INPUT MATRIX TYPE IN HERMITIAN DIAGONALIZATION");
 }
 
 /// Solve the eigenproblem for a complex hermitian system.
-pub fn eigensystemHermitian(comptime T: type, J: *ComplexMatrix(T), C: *ComplexMatrix(T), A: ComplexMatrix(T)) !void {
-    try eigensystemJacobi(ComplexMatrix, T, J, C, A);
+pub fn eigensystemHermitian(comptime T: type, J: anytype, C: anytype, A: anytype) !void {
+    if (comptime @TypeOf(A) == RealMatrix(T)) {try eigensystemJacobi(RealMatrix, T, J, C, A);}
+    else if (comptime @TypeOf(A) == ComplexMatrix(T)) {try eigensystemJacobi(ComplexMatrix, T, J, C, A);}
+    else @compileError("UNSUPPORTED INPUT MATRIX TYPE IN HERMITIAN EIGENSOLVER");
 }
 
 /// Solve the eigenproblem for a complex hermitian system, returning the eigenvalues and eigenvectors.
-pub fn eigensystemHermitianAlloc(comptime T: type, A: ComplexMatrix(T), allocator: std.mem.Allocator) !struct {J: ComplexMatrix(T), C: ComplexMatrix(T)} {
-    var J = try ComplexMatrix(T).init(A.rows, A.cols, allocator);
-    var C = try ComplexMatrix(T).init(A.rows, A.cols, allocator);
+pub fn eigensystemHermitianAlloc(comptime T: type, A: anytype, allocator: std.mem.Allocator) !struct {J: @TypeOf(A), C: @TypeOf(A)} {
+    var J = try @TypeOf(A).init(A.rows, A.cols, allocator);
+    var C = try @TypeOf(A).init(A.rows, A.cols, allocator);
 
     try eigensystemHermitian(T, &J, &C, A);
 
@@ -236,21 +235,6 @@ pub fn eigensystemJacobiAlloc(comptime M: fn (comptime type) type, comptime T: t
     var C = try M(T).init(A.rows, A.cols, allocator);
 
     try eigensystemJacobi(M, T, &J, &C, A);
-
-    return .{.J = J, .C = C};
-}
-
-/// Solve the eigenproblem for a real symmetric system.
-pub fn eigensystemSymmetric(comptime T: type, J: *RealMatrix(T), C: *RealMatrix(T), A: RealMatrix(T)) !void {
-    try eigensystemJacobi(RealMatrix, T, J, C, A);
-}
-
-/// Solve the eigenproblem for a real symmetric system, returning the eigenvalues and eigenvectors.
-pub fn eigensystemSymmetricAlloc(comptime T: type, A: RealMatrix(T), allocator: std.mem.Allocator) !struct {J: RealMatrix(T), C: RealMatrix(T)} {
-    var J = try RealMatrix(T).init(A.rows, A.cols, allocator);
-    var C = try RealMatrix(T).init(A.rows, A.cols, allocator);
-
-    try eigensystemSymmetric(T, &J, &C, A);
 
     return .{.J = J, .C = C};
 }

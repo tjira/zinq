@@ -27,8 +27,8 @@ const TimeLinearPotential = time_linear_potential.TimeLinearPotential;
 const TullyPotential1 = tully_potential.TullyPotential1;
 const VibronicCouplingPotential = vibronic_coupling_potential.VibronicCouplingPotential;
 
-const diagonalizeSymmetric = eigenproblem_solver.diagonalizeSymmetric;
-const eigensystemSymmetric = eigenproblem_solver.eigensystemSymmetric;
+const diagonalizeHermitian = eigenproblem_solver.diagonalizeHermitian;
+const eigensystemHermitian = eigenproblem_solver.eigensystemHermitian;
 
 /// Electronic potential mode union.
 pub fn ElectronicPotential(comptime T: type) type {
@@ -55,7 +55,7 @@ pub fn ElectronicPotential(comptime T: type) type {
                 adiabatic_potential.ptr(i, i).* += bias_struct.evaluate(variable);
             };
 
-            try diagonalizeSymmetric(T, adiabatic_potential);
+            try diagonalizeHermitian(T, adiabatic_potential);
         }
 
         /// Evaluate the dabatic potential energy matrix at given system state and time.
@@ -114,7 +114,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T) !void {
             try self.evaluateDiabatic(diabatic, position, time);
 
-            try eigensystemSymmetric(T, adiabatic, eigenvectors, diabatic.*);
+            try eigensystemHermitian(T, adiabatic, eigenvectors, diabatic.*);
         }
 
         /// Evaluate the adabatic potential energy gradient for a specific coordinate index. The adiabatic potential matrix will hold the potential at the r + dr point.

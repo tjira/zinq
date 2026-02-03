@@ -12,7 +12,7 @@ const real_vector = @import("real_vector.zig");
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
-const eigensystemSymmetricAlloc = eigenproblem_solver.eigensystemSymmetricAlloc;
+const eigensystemHermitianAlloc = eigenproblem_solver.eigensystemHermitianAlloc;
 const mm = matrix_multiplication.mm;
 const mmAlloc = matrix_multiplication.mmAlloc;
 const throw = errro_handling.throw;
@@ -42,7 +42,7 @@ pub fn linearSolveSymmetric(comptime T: type, x: *RealVector(T), A: RealMatrix(T
 
 /// Solve the linear system Ax = b using the eigenvalue decomposition of A. the result is returned as a new vector.
 pub fn linearSolveSymmetricAlloc(comptime T: type, A: RealMatrix(T), b: RealVector(T), allocator: std.mem.Allocator) !RealVector(T) {
-    const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
+    const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
     var x = try RealVector(T).init(b.len, allocator);
     var y = try RealVector(T).init(b.len, allocator);

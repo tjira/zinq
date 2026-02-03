@@ -30,8 +30,8 @@ const RealTensor4 = real_tensor_four.RealTensor4;
 const RealVector = real_vector.RealVector;
 
 const coulomb = molecular_integrals.coulomb;
-const eigensystemSymmetric = eigenproblem_solver.eigensystemSymmetric;
-const eigensystemSymmetricAlloc = eigenproblem_solver.eigensystemSymmetricAlloc;
+const eigensystemHermitian = eigenproblem_solver.eigensystemHermitian;
+const eigensystemHermitianAlloc = eigenproblem_solver.eigensystemHermitianAlloc;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealTensorFour = device_write.exportRealTensorFour;
 const kinetic = molecular_integrals.kinetic;
@@ -201,7 +201,7 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
         A.ptr(j, i).* = A.at(i, j);
     };
 
-    const AJC = try eigensystemSymmetricAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
+    const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
     for (0..b.len) |i| if (@abs(AJC.J.at(i, i)) < SINGULARITY_TOLERANCE) return;
 
@@ -273,7 +273,7 @@ pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocat
 
     var mm_temp = try RealMatrix(T).init(S.rows, S.cols, allocator); defer mm_temp.deinit(allocator);
 
-    try eigensystemSymmetric(T, &X, &S_C, S);
+    try eigensystemHermitian(T, &X, &S_C, S);
 
     for (0..S.rows) |i| X.ptr(i, i).* = 1.0 / std.math.sqrt(X.at(i, i));
 
@@ -374,7 +374,7 @@ pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: 
 
     try XFX.symmetrize();
 
-    const XFXJC = try eigensystemSymmetricAlloc(T, XFX, allocator); defer XFXJC.J.deinit(allocator); defer XFXJC.C.deinit(allocator);
+    const XFXJC = try eigensystemHermitianAlloc(T, XFX, allocator); defer XFXJC.J.deinit(allocator); defer XFXJC.C.deinit(allocator);
 
     try mm(T, C, X, false, XFXJC.C, false); try XFXJC.J.copyTo(E);
 }

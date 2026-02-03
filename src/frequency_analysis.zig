@@ -14,7 +14,7 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
 const throw = error_handling.throw;
-const eigensystemSymmetricAlloc = eigenproblem_solver.eigensystemSymmetricAlloc;
+const eigensystemHermitianAlloc = eigenproblem_solver.eigensystemHermitianAlloc;
 
 const AN2M = global_variables.AN2M;
 const Eh = global_variables.Eh;
@@ -32,7 +32,7 @@ pub fn particleHarmonicFrequencies(comptime T: type, system: ClassicalParticle(T
         HM.ptr(i, j).* /= std.math.sqrt(AN2M[system.atoms.?[i / 3]] * AN2M[system.atoms.?[j / 3]]);
     };
 
-    const HMJC = try eigensystemSymmetricAlloc(T, HM, allocator); defer HMJC.J.deinit(allocator); defer HMJC.C.deinit(allocator);
+    const HMJC = try eigensystemHermitianAlloc(T, HM, allocator); defer HMJC.J.deinit(allocator); defer HMJC.C.deinit(allocator);
 
     const factor = 5e-3 / std.math.pi / c * std.math.sqrt(Eh / amu / a0 / a0);
 
