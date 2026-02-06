@@ -175,24 +175,53 @@ pub fn GridWavefunction(comptime T: type) type {
                 for (0..self.data.rows) |j| {
 
                     momentumAtRow(T, &momentum_at_row, j, self.ndim, self.npoint, self.limits);
-                    
-                    var k_sum_squared: T = 0;
 
-                    for (0..self.ndim) |k| {
-                        k_sum_squared += momentum_at_row.at(k) * momentum_at_row.at(k);
-                    }
+                    var psq: T = 0;
 
-                    temporary_column.ptr(j).* = temporary_column.at(j).mul(Complex(T).init(k_sum_squared, 0));
-                }
+                    for (0..self.ndim) |k| psq += momentum_at_row.at(k) * momentum_at_row.at(k);
 
-                try cfftn(T, temporary_column, shape, 1);
-
-                for (0..self.data.rows) |j| {
-                    kinetic_energy += temporary_column.at(j).mul(self.data.at(j, i).conjugate()).re;
+                    kinetic_energy += psq * temporary_column.at(j).squaredMagnitude();
                 }
             }
 
-            return 0.5 * kinetic_energy * self.getIntegrationElement() / self.mass;
+            return 0.5 * kinetic_energy * self.getIntegrationElement() / self.mass / @as(T, @floatFromInt(self.data.rows));
+        }
+
+        /// Kinetic energy and momentum operator in momentum space to save repeated fourier transforms.
+        pub fn kineticEnergyAndMomentumMean(self: @This(), temporary_column: *ComplexVector(T), allocator: std.mem.Allocator) !struct{kinetic_energy: T, momentum: RealVector(T)} {
+            const shape = try self.getShape(allocator); defer allocator.free(shape);
+
+            var momentum_at_row = try RealVector(T).init(self.ndim, allocator); defer momentum_at_row.deinit(allocator);
+
+            var momentum = try RealVector(T).initZero(self.ndim, allocator); var kinetic_energy: T = 0;
+
+            for (0..self.nstate) |i| {
+
+                for (0..self.data.rows) |j| temporary_column.ptr(j).* = self.data.at(j, i);
+
+                try cfftn(T, temporary_column, shape, -1);
+
+                for (0..self.data.rows) |j| {
+
+                    momentumAtRow(T, &momentum_at_row, j, self.ndim, self.npoint, self.limits);
+
+                    var psq: T = 0;
+
+                    for (0..self.ndim) |k| {
+
+                        psq += momentum_at_row.at(k) * momentum_at_row.at(k);
+
+                        momentum.ptr(k).* += momentum_at_row.at(k) * temporary_column.at(j).squaredMagnitude();
+                    }
+
+                    kinetic_energy += psq * temporary_column.at(j).squaredMagnitude();
+                }
+            }
+
+            kinetic_energy = 0.5 * kinetic_energy * self.getIntegrationElement() / self.mass / @as(T, @floatFromInt(self.data.rows));
+            momentum.muls(self.getIntegrationElement() / @as(T, @floatFromInt(self.data.rows)));
+
+            return .{.kinetic_energy = kinetic_energy, .momentum = momentum};
         }
 
         /// Calculate the momentum of the wavefunction. The resulting vector is allocated inside the function and returned.
@@ -203,7 +232,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
             var momentum = try RealVector(T).initZero(self.ndim, allocator);
 
-            for (0..self.ndim) |i| for (0..self.nstate) |j| {
+            for (0..self.nstate) |j| {
 
                 for (0..self.data.rows) |k| temporary_column.ptr(k).* = self.data.at(k, j);
 
@@ -213,15 +242,13 @@ pub fn GridWavefunction(comptime T: type) type {
 
                     momentumAtRow(T, &momentum_at_row, k, self.ndim, self.npoint, self.limits);
 
-                    temporary_column.ptr(k).* = temporary_column.at(k).mul(Complex(T).init(momentum_at_row.at(i), 0));
+                    for (0..self.ndim) |i| {
+                        momentum.ptr(i).* += momentum_at_row.at(i) * temporary_column.at(k).squaredMagnitude();
+                    }
                 }
+            }
 
-                try cfftn(f64, temporary_column, shape, 1);
-
-                for (0..self.data.rows) |k| momentum.ptr(i).* += temporary_column.at(k).mul(self.data.at(k, j).conjugate()).re;
-            };
-
-            momentum.muls(self.getIntegrationElement());
+            momentum.muls(self.getIntegrationElement() / @as(T, @floatFromInt(self.data.rows)));
 
             return momentum;
         }

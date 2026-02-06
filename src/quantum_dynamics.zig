@@ -203,12 +203,10 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             if (initial_wavefunction) |iwf| acf.ptr(j).* = iwf.overlap(wavefunction);
 
             const density_matrix = try wavefunction.density(opt.potential, time, opt.adiabatic, allocator); defer density_matrix.deinit(allocator);
-
             const potential_energy = try wavefunction.potentialEnergy(opt.potential, time, allocator);
-            const kinetic_energy = try wavefunction.kineticEnergy(&temporary_wavefunction_column, allocator);
-
             const position = try wavefunction.positionMean(allocator); defer position.deinit(allocator);
-            const momentum = try wavefunction.momentumMean(&temporary_wavefunction_column, allocator); defer momentum.deinit(allocator);
+            const KeP = try wavefunction.kineticEnergyAndMomentumMean(&temporary_wavefunction_column, allocator);
+            const kinetic_energy = KeP.kinetic_energy; const momentum = KeP.momentum; defer momentum.deinit(allocator);
 
             if (i == n_dynamics - 1) {
                 output.kinetic_energy.ptr(j).* = kinetic_energy;
