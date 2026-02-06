@@ -6,7 +6,6 @@ const targets: []const std.Target.Query = &.{
     .{.os_tag = .freebsd, .cpu_arch = .x86_64 },
     .{.os_tag = .linux,   .cpu_arch = .aarch64},
     .{.os_tag = .linux,   .cpu_arch = .arm    },
-    .{.os_tag = .linux,   .cpu_arch = .riscv32},
     .{.os_tag = .linux,   .cpu_arch = .riscv64},
     .{.os_tag = .linux,   .cpu_arch = .x86    },
     .{.os_tag = .linux,   .cpu_arch = .x86_64 },

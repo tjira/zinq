@@ -60,6 +60,7 @@ pub const particle_optimization = @import("particle_optimization.zig");
 pub const potential_plot = @import("potential_plot.zig");
 pub const prime_numbers = @import("prime_numbers.zig");
 pub const primitive_gaussian = @import("primitive_gaussian.zig");
+pub const process = @import("process.zig");
 pub const quantum_dynamics = @import("quantum_dynamics.zig");
 pub const real_matrix = @import("real_matrix.zig");
 pub const real_tensor_four = @import("real_tensor_four.zig");
@@ -149,6 +150,15 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
             .prime_numbers => try handle(u64, prime_numbers, options, allocator),
             .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator)
         }
+    }
+
+    if (input_json.value.object.get("command")) |command| {
+
+        try device_write.print("\nRUNNING COMMAND: {s}\n", .{command.string});
+
+        const output = try process.executeCommand(command.string, allocator); defer allocator.free(output);
+
+        if (output.len > 0) try device_write.print("COMMAND OUTPUTS:\n{s}", .{output});
     }
 
     allocator.free(file_contents); input_json.deinit();

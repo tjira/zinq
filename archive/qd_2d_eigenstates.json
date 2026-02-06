@@ -1,0 +1,389 @@
+{
+    "zinq" : [
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_01.mat"
+                },
+                "imaginary" : {
+                    "states" : 1
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_02.mat"
+                },
+                "imaginary" : {
+                    "states" : 2
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_03.mat"
+                },
+                "imaginary" : {
+                    "states" : 3
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_04.mat"
+                },
+                "imaginary" : {
+                    "states" : 4
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_05.mat"
+                },
+                "imaginary" : {
+                    "states" : 5
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_06.mat"
+                },
+                "imaginary" : {
+                    "states" : 6
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_07.mat"
+                },
+                "imaginary" : {
+                    "states" : 7
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_08.mat"
+                },
+                "imaginary" : {
+                    "states" : 8
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_09.mat"
+                },
+                "imaginary" : {
+                    "states" : 9
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_10.mat"
+                },
+                "imaginary" : {
+                    "states" : 10
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_11.mat"
+                },
+                "imaginary" : {
+                    "states" : 11
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8]],
+                    "points" : 64
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [0, 0],
+                    "position" : [1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1]
+                    }
+                },
+                "write" : {
+                    "wavefunction" : "WAWEFUNCTION_12.mat"
+                },
+                "imaginary" : {
+                    "states" : 12
+                },
+                "iterations" : 8000,
+                "time_step" : 0.01
+            }
+        }
+    ],
+    "command" : "heatmap WAWEFUNCTION_01.mat:8000,8001 WAWEFUNCTION_02.mat:8000,8001 WAWEFUNCTION_03.mat:8000,8001 WAWEFUNCTION_04.mat:8000,8001 WAWEFUNCTION_05.mat:8000,8001 WAWEFUNCTION_06.mat:8000,8001 WAWEFUNCTION_07.mat:8000,8001 WAWEFUNCTION_08.mat:8000,8001 WAWEFUNCTION_09.mat:8000,8001 WAWEFUNCTION_10.mat:8000,8001 WAWEFUNCTION_11.mat:8000,8001 WAWEFUNCTION_12.mat:8000,8001 --transform norm --xlim -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 --xtickon 0 0 0 0 0 0 0 0 0 0 0 0 --xticklabelon 0 0 0 0 0 0 0 0 0 0 0 0 --ylim -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 --ytickon 0 0 0 0 0 0 0 0 0 0 0 0 --yticklabelon 0 0 0 0 0 0 0 0 0 0 0 0 --output 2D_EIGENSTATES.pdf"
+}

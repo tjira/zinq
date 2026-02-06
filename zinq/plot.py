@@ -36,9 +36,13 @@ def heatmap():
     parser.add_argument("--title", type=str, nargs="+", help="The title of the plot.")
     parser.add_argument("--transform", type=str, default="sum", help="The transform function used when multiple columns are plotted.")
     parser.add_argument("--xlabel", type=str, nargs="+", help="The an x-axis label.")
+    parser.add_argument("--xtickon", type=int, nargs="+", help="Whether to show the x-axis ticks for each subplot.")
+    parser.add_argument("--xticklabelon", type=int, nargs="+", help="Whether to show the x-axis tick labels for each subplot.")
     parser.add_argument("--xlim", type=float, nargs="+", help="The x-axis limits of the plot.")
     parser.add_argument("--ylabel", type=str, nargs="+", help="The an y-axis label.")
     parser.add_argument("--ylim", type=float, nargs="+", help="The y-axis limits of the plot.")
+    parser.add_argument("--ytickon", type=int, nargs="+", help="Whether to show the y-axis ticks for each subplot.")
+    parser.add_argument("--yticklabelon", type=int, nargs="+", help="Whether to show the y-axis tick labels for each subplot.")
 
     # add positional arguments and parse the arguments
     parser.add_argument("files", nargs="+", help="The data files to plot."); args = parser.parse_args()
@@ -81,7 +85,7 @@ def heatmap():
         zmax = np.max([transform(data_i[:, data_cols_i + i * (args.animate if args.animate else 0) + 2]).max() for i in range((data[0].shape[1] - 2) // args.animate if args.animate else 1)])
 
         # plot the data and append the plot to the list
-        plots.append(ax[len(plots)].pcolormesh(x, y, z, cmap=args.colormap, vmin=zmin, vmax=zmax))
+        plots.append(ax[len(plots)].pcolormesh(x, y, z, cmap=args.colormap, edgecolor="face", linewidth=1e-4, vmin=zmin, vmax=zmax))
 
     # set the title
     if args.title: [ax[i].set_title(args.title[i]) for i in range(len(args.title)) if args.title[i]]
@@ -93,6 +97,17 @@ def heatmap():
     # set the axis limits
     if args.xlim: [ax[i].set_xlim([args.xlim[2 * i], args.xlim[2 * i + 1]]) for i in range(0, len(args.xlim) // 2) if not np.isnan(args.xlim[2 * i])]
     if args.ylim: [ax[i].set_ylim([args.ylim[2 * i], args.ylim[2 * i + 1]]) for i in range(0, len(args.ylim) // 2) if not np.isnan(args.ylim[2 * i])]
+
+    # loop over the axes
+    for i in range(len(ax)):
+
+        # enable or disable the x-axis and y-axis ticks
+        if args.xtickon and len(args.xtickon) > i: ax[i].xaxis.set_tick_params(bottom=args.xtickon[i])
+        if args.ytickon and len(args.ytickon) > i: ax[i].yaxis.set_tick_params(left  =args.ytickon[i])
+
+        # enable or disable the x-axis tick labels
+        if args.xticklabelon and len(args.xticklabelon) > i: ax[i].xaxis.set_tick_params(labelbottom=args.xticklabelon[i])
+        if args.yticklabelon and len(args.yticklabelon) > i: ax[i].yaxis.set_tick_params(labelleft  =args.yticklabelon[i])
 
     # set the layout
     fig.tight_layout()
@@ -329,6 +344,3 @@ def plot():
 
     # save or show the plot
     (anim.save(args.output, fps=args.fps) if args.animate else plt.savefig(args.output)) if args.output else plt.show()
-
-# run the main function
-if __name__ == "__main__": heatmap()

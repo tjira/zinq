@@ -109,12 +109,12 @@ pub fn Output(comptime T: type) type {
         total_energy: RealVector(T),
 
         /// Allocate the output structure.
-        pub fn init(nstate: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
+        pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
                 .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
-                .momentum = try RealMatrix(T).init(iterations + 1, nstate, allocator),
+                .momentum = try RealMatrix(T).init(iterations + 1, ndim, allocator),
                 .population = try RealMatrix(T).init(iterations + 1, nstate, allocator),
-                .position = try RealMatrix(T).init(iterations + 1, nstate, allocator),
+                .position = try RealMatrix(T).init(iterations + 1, ndim, allocator),
                 .potential_energy = try RealVector(T).initZero(iterations + 1, allocator),
                 .total_energy = try RealVector(T).initZero(iterations + 1, allocator)
             };
@@ -159,7 +159,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
-    var output = try Output(T).init(nstate, @intCast(opt.iterations), allocator);
+    var output = try Output(T).init(nstate, ndim, @intCast(opt.iterations), allocator);
 
     var wavefunction = try GridWavefunction(T).init(@intCast(opt.grid.points), nstate, ndim, opt.grid.limits, opt.initial_conditions.mass, allocator); defer wavefunction.deinit(allocator);
 
