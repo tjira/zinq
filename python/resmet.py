@@ -2,12 +2,16 @@
 
 import argparse as ap, itertools as it, numpy as np
 
+# set the print options for numpy arrays to be more compact and readable
 np.set_printoptions(edgeitems=30, linewidth=100000, formatter=dict(float=lambda x: "%20.14f" % x))
 
+# define constants
 a0 = 5.29177210544e-11
 
+# define conversions
 A2AU = 1e-10 / a0
 
+# periodic table
 ATOM = {
     "H" :  1,                                                             "He":  2,
     "Li":  3, "Be":  4, "B" :  5, "C" :  6, "N" :  7, "O" :  8, "F" :  9, "Ne": 10,
