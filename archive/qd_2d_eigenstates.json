@@ -23,7 +23,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_01.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_01.mat"
                 },
                 "imaginary" : {
                     "states" : 1
@@ -55,7 +55,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_02.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_02.mat"
                 },
                 "imaginary" : {
                     "states" : 2
@@ -87,7 +87,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_03.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_03.mat"
                 },
                 "imaginary" : {
                     "states" : 3
@@ -119,7 +119,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_04.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_04.mat"
                 },
                 "imaginary" : {
                     "states" : 4
@@ -151,7 +151,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_05.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_05.mat"
                 },
                 "imaginary" : {
                     "states" : 5
@@ -183,7 +183,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_06.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_06.mat"
                 },
                 "imaginary" : {
                     "states" : 6
@@ -215,7 +215,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_07.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_07.mat"
                 },
                 "imaginary" : {
                     "states" : 7
@@ -247,7 +247,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_08.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_08.mat"
                 },
                 "imaginary" : {
                     "states" : 8
@@ -279,7 +279,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_09.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_09.mat"
                 },
                 "imaginary" : {
                     "states" : 9
@@ -311,7 +311,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_10.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_10.mat"
                 },
                 "imaginary" : {
                     "states" : 10
@@ -343,7 +343,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_11.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_11.mat"
                 },
                 "imaginary" : {
                     "states" : 11
@@ -375,7 +375,7 @@
                     }
                 },
                 "write" : {
-                    "wavefunction" : "WAWEFUNCTION_12.mat"
+                    "final_wavefunction" : "WAWEFUNCTION_12.mat"
                 },
                 "imaginary" : {
                     "states" : 12
@@ -385,5 +385,5 @@
             }
         }
     ],
-    "command" : "heatmap WAWEFUNCTION_01.mat:8000,8001 WAWEFUNCTION_02.mat:8000,8001 WAWEFUNCTION_03.mat:8000,8001 WAWEFUNCTION_04.mat:8000,8001 WAWEFUNCTION_05.mat:8000,8001 WAWEFUNCTION_06.mat:8000,8001 WAWEFUNCTION_07.mat:8000,8001 WAWEFUNCTION_08.mat:8000,8001 WAWEFUNCTION_09.mat:8000,8001 WAWEFUNCTION_10.mat:8000,8001 WAWEFUNCTION_11.mat:8000,8001 WAWEFUNCTION_12.mat:8000,8001 --transform norm --xlim -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 --xtickon 0 0 0 0 0 0 0 0 0 0 0 0 --xticklabelon 0 0 0 0 0 0 0 0 0 0 0 0 --ylim -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 --ytickon 0 0 0 0 0 0 0 0 0 0 0 0 --yticklabelon 0 0 0 0 0 0 0 0 0 0 0 0 --output 2D_EIGENSTATES.pdf"
+    "command" : "heatmap WAWEFUNCTION_01.mat WAWEFUNCTION_02.mat WAWEFUNCTION_03.mat WAWEFUNCTION_04.mat WAWEFUNCTION_05.mat WAWEFUNCTION_06.mat WAWEFUNCTION_07.mat WAWEFUNCTION_08.mat WAWEFUNCTION_09.mat WAWEFUNCTION_10.mat WAWEFUNCTION_11.mat WAWEFUNCTION_12.mat --transform norm --xlim -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 --xtickon 0 0 0 0 0 0 0 0 0 0 0 0 --xticklabelon 0 0 0 0 0 0 0 0 0 0 0 0 --ylim -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 -5 5 --ytickon 0 0 0 0 0 0 0 0 0 0 0 0 --yticklabelon 0 0 0 0 0 0 0 0 0 0 0 0 --output 2D_EIGENSTATES.pdf"
 }

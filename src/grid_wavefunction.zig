@@ -9,6 +9,7 @@ const eigensystem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const error_handling = @import("error_handling.zig");
 const fourier_transform = @import("fourier_transform.zig");
+const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const real_matrix = @import("real_matrix.zig");
@@ -29,6 +30,8 @@ const mm = matrix_multiplication.mm;
 const momentumAtRow = grid_generator.momentumAtRow;
 const positionAtRow = grid_generator.positionAtRow;
 const throw = error_handling.throw;
+
+const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
 /// A wavefunction defined on a grid.
 pub fn GridWavefunction(comptime T: type) type {
@@ -434,6 +437,34 @@ pub fn GridWavefunction(comptime T: type) type {
 
                 for (0..self.nstate) |j| self.data.ptr(i, j).* = mm_temporary.at(j, 0);
             }
+        }
+
+        /// Export the wavefunction to a specified path.
+        pub fn write(self: @This(), path: []const u8, allocator: std.mem.Allocator) !void {
+            var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
+
+            var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
+
+            var position_at_row = try RealVector(T).init(self.ndim, allocator); defer position_at_row.deinit(allocator);
+
+            var writer = file.writer(&buffer); var writer_interface = &writer.interface;
+
+            try writer_interface.print("{d} {d}\n", .{self.data.rows, self.data.cols + self.ndim});
+
+            for (0..self.data.rows) |i| {
+
+                positionAtRow(T, &position_at_row, i, self.ndim, self.npoint, self.limits);
+
+                for (0..self.ndim) |j| {
+                    try writer_interface.print("{d:20.14}{s}", .{position_at_row.at(j), if (j == self.ndim - 1) " " else ""});
+                }
+
+                for (0..self.nstate) |j| {
+                    try writer_interface.print(" {d:20.14} {d:20.14}{s}", .{self.data.at(i, j).re, self.data.at(i, j).im, if (j == self.nstate - 1) "\n" else ""});
+                }
+            }
+
+            try writer_interface.flush();
         }
     };
 }

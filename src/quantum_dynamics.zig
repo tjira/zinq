@@ -70,6 +70,7 @@ pub fn Options(comptime T: type) type {
             padding_order: u32 = 1
         };
         pub const Write = struct {
+            final_wavefunction: ?[]const u8 = null,
             kinetic_energy: ?[]const u8 = null,
             momentum: ?[]const u8 = null,
             population: ?[]const u8 = null,
@@ -260,6 +261,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         try exportRealMatrixWithLinspacedLeftColumn(T, path, spectrum.asMatrix(), 0, nyquist_frequency);
     }
 
+    if (opt.write.final_wavefunction) |path| try wavefunction.write(path, allocator);
     if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, path, acf.asMatrix(), 0, end_time);
     if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
     if (opt.write.position) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.position, 0, end_time);
