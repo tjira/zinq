@@ -36,6 +36,13 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
             try rpn.append(number, allocator); i -= 1; j = 0; continue;
         }
 
+        else if (input[i] == 'e') {
+
+            const number: T = std.math.e;
+
+            try rpn.append(number, allocator); j = 0; continue;
+        }
+
         else if (input[i] == '+' or input[i] == '-' or input[i] == '*' or input[i] == '/' or input[i] == '^') {
 
             const op = try operatorFromChar(input[i]); const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
