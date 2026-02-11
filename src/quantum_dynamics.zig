@@ -222,11 +222,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
                 for (0..ndim) |k| output.momentum.ptr(j, k).* = momentum.at(k);
                 for (0..ndim) |k| output.position.ptr(j, k).* = position.at(k);
                 for (0..nstate) |k| output.population.ptr(j, k).* = density_matrix.at(k, k).re;
-                if (nstate == 2) {
-                    output.bloch_vector.ptr(j, 0).* = 2 * density_matrix.at(0, 1).neg().re;
-                    output.bloch_vector.ptr(j, 1).* = 2 * density_matrix.at(0, 1).neg().im;
-                    output.bloch_vector.ptr(j, 2).* = density_matrix.at(1, 1).re - density_matrix.at(0, 0).re;
-                }
+                if (nstate == 2) output.bloch_vector.ptr(j, 0).* = 2 * density_matrix.at(0, 1).re;
+                if (nstate == 2) output.bloch_vector.ptr(j, 1).* = 2 * density_matrix.at(0, 1).im;
+                if (nstate == 2) output.bloch_vector.ptr(j, 2).* = density_matrix.at(1, 1).re - density_matrix.at(0, 0).re;
             }
 
             if (opt.write.wavefunction != null and i == n_dynamics - 1) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, j, time, opt.adiabatic, allocator);

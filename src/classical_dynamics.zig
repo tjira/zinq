@@ -415,20 +415,20 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         output.potential_energy.ptr(i).* = Wpp * potential_energy;
         output.total_energy.ptr(i).* = Wpp * (kinetic_energy + potential_energy);
 
-        if (opt.surface_hopping != null and opt.surface_hopping.? == .fewest_switches) {
-
-            bloch_vector.ptr(0).* = 2 * amplitudes.at(0).mul(amplitudes.at(1).conjugate()).re;
-            bloch_vector.ptr(1).* = 2 * amplitudes.at(0).mul(amplitudes.at(1).conjugate()).im;
-
-            bloch_vector.ptr(2).* = amplitudes.at(1).squaredMagnitude() - amplitudes.at(0).squaredMagnitude();
-        }
-
         for (0..3) |j| output.bloch_vector.ptr(i, j).* = Wcp * bloch_vector.at(j);
 
         for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = Wpp * time_derivative_coupling.at(j / nstate, j % nstate);
 
         for (0..ndim) |j| {
             output.position.ptr(i, j).* = Wpp * system.position.at(j); output.momentum.ptr(i, j).* = Wpp * system.velocity.at(j) * system.masses.at(j);
+        }
+
+        if (opt.surface_hopping != null and opt.surface_hopping.? == .fewest_switches) {
+
+            bloch_vector.ptr(0).* = 2 * amplitudes.at(0).mul(amplitudes.at(1).conjugate()).re;
+            bloch_vector.ptr(1).* = 2 * amplitudes.at(0).mul(amplitudes.at(1).conjugate()).im;
+
+            bloch_vector.ptr(2).* = amplitudes.at(1).squaredMagnitude() - amplitudes.at(0).squaredMagnitude();
         }
 
         if (opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {

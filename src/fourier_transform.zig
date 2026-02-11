@@ -42,7 +42,7 @@ pub fn cfft1(comptime T: type, vector: *StridedComplexVector(T), factor: i32) !v
 
     for (0..bit_count) |stage| {
 
-        const block_size = @as(usize, 1) << @as(u6, @intCast(stage + 1));
+        const block_size = std.math.pow(usize, 2, stage + 1);
         const angle = 2 * std.math.pi * @as(T, @floatFromInt(factor)) / @as(T, @floatFromInt(block_size));
         const twiddle_base = std.math.complex.exp(Complex(T).init(0, angle));
 
