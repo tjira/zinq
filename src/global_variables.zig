@@ -19,6 +19,7 @@ pub const MAX_POOL_SIZE = 10000;
 pub const WRITE_BUFFER_SIZE = 1048576;
 pub const RPN_MAX_STACK_SIZE = 2048;
 pub const MAX_LERP_DIM = 16;
+pub const MAX_NACV_STATES = 16;
 
 pub const Eh  = 4.359744722206e-18; // J
 pub const a0  = 5.29177210544e-11;  // m

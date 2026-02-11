@@ -337,8 +337,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .electronic_potential = opt.potential,
         .position = system.position,
         .velocity = system.velocity,
-        .time = undefined,
-        .allocator = allocator
+        .time = undefined
     };
 
     const npi_parameters: norm_preserving_interpolation.Parameters(T) = .{
