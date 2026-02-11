@@ -736,6 +736,6 @@ test "Mapping Approach to Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.38085761112723, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.60782680817202, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.40573476584447, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.58294965345477, TEST_TOLERANCE);
 }

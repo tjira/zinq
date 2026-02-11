@@ -41,7 +41,7 @@ pub fn MappingApproach(comptime T: type) type {
             jump_probabilities.zero(); var omega_data: [9]T = undefined; var new_bloch_data: [3]T = undefined;
 
             const V = (parameters.adiabatic_potential.at(1, 1) - parameters.adiabatic_potential.at(0, 0)) * parameters.time_step;
-            const C = parameters.derivative_coupling.at(0, 1) * parameters.time_step;
+            const C = parameters.derivative_coupling.at(1, 0) * parameters.time_step;
 
             const a = V * V + 4 * C * C; const b = Complex(T).init(0, std.math.sqrt(a));
             const sinhb = std.math.complex.sinh(b); const coshb = std.math.complex.cosh(b);

@@ -60,7 +60,6 @@
                 },
                 "iterations" : 200,
                 "time_step" : 0.02,
-                "nthread" : 12,
                 "trajectories" : 100000
             }
         },
@@ -94,7 +93,6 @@
                 },
                 "iterations" : 200,
                 "time_step" : 0.02,
-                "nthread" : 12,
                 "trajectories" : 100000
             }
         }
