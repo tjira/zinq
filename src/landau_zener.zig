@@ -49,7 +49,7 @@ pub fn LandauZener(comptime T: type) type {
 
                 if (dZ0 * dZ1 > 0 or (dZ0 * dZ1 < 0 and ddZ0 < 0)) continue;
 
-                const g = Z0; const veff = std.math.sqrt(Z0 * ddZ0); const delta: T = 0.25 * std.math.pow(T, g, 2) / veff;
+                const g = Z1; const veff = std.math.sqrt(Z1 * ddZ0); const delta: T = 0.25 * std.math.pow(T, g, 2) / veff;
 
                 var p = std.math.exp(-2 * std.math.pi * delta); if (std.math.isNan(p)) p = 0;
 
