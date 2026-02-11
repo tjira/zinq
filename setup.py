@@ -26,6 +26,8 @@ class Build(setuptools.command.build_py.build_py):
 
             shutil.copyfile(source, dest)
 
+            if "windows" not in directory: os.chmod(dest, 0o755)
+
         super().run()
 
 setuptools.setup(

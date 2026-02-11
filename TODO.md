@@ -31,3 +31,4 @@
 - [ ] The QD code calculates FFT for propagation and also for kinetic energy. Find a way to reuse the FFTs for both purposes to save time.
 - [ ] The Shunting-Yard algorithm should be extended to treat constants and functions.
 - [x] LZ formula doesnt use the true minimum energy gap. Interpolate the potential energy surfaces somehow.
+- [x] Make the pip executables executable even for other users. Currently they are only executable for the user that installed them.

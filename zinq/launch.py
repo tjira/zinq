@@ -13,8 +13,6 @@ def getBinaryPath():
 
     binary_path = pathlib.Path(__file__).with_name("bin") / ("zinq-" + ARCH + "-" + OS + (".exe" if OS == "windows" else "")) 
 
-    if OS != "windows": os.chmod(binary_path, 0o755)
-
     return binary_path
 
 def getInputTemplate(name):
