@@ -168,17 +168,15 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var optimized_wavefunctions = std.ArrayList(GridWavefunction(T)){}; defer optimized_wavefunctions.deinit(allocator);
 
-    var temporary_wavefunction_column = try ComplexVector(T).init(wavefunction.data.rows, allocator); defer temporary_wavefunction_column.deinit(allocator);
-
     var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit(allocator);
 
     var timer = try std.time.Timer.start(); const n_dynamics = if (opt.imaginary) |f| f.states else 1;
 
     for (0..n_dynamics) |i| {
 
-        try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma, allocator);
+        try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma);
 
-        if (opt.initial_conditions.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false, allocator);
+        if (opt.initial_conditions.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false);
 
         const save_iwf = (opt.write.spectrum != null or opt.write.autocorrelation_function != null) and i == n_dynamics - 1;
 
@@ -197,16 +195,16 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
             const time = @as(T, @floatFromInt(j)) * opt.time_step;
 
-            if (j > 0) try wavefunction.propagate(opt.potential, opt.cap, time, opt.time_step, opt.imaginary != null, &temporary_wavefunction_column, allocator);
+            if (j > 0) try wavefunction.propagate(opt.potential, opt.cap, time, opt.time_step, opt.imaginary != null);
 
             if (j > 0 and opt.imaginary != null) for (optimized_wavefunctions.items) |owf| wavefunction.orthogonalize(owf);
 
             if (initial_wavefunction) |iwf| acf.ptr(j).* = iwf.overlap(wavefunction);
 
             const density_matrix = try wavefunction.density(opt.potential, time, opt.adiabatic, allocator); defer density_matrix.deinit(allocator);
-            const potential_energy = try wavefunction.potentialEnergy(opt.potential, time, allocator);
+            const potential_energy = try wavefunction.potentialEnergy(opt.potential, time);
             const position = try wavefunction.positionMean(allocator); defer position.deinit(allocator);
-            const KeP = try wavefunction.kineticEnergyAndMomentumMean(&temporary_wavefunction_column, allocator);
+            const KeP = try wavefunction.kineticEnergyAndMomentumMean(allocator);
             const kinetic_energy = KeP.kinetic_energy; const momentum = KeP.momentum; defer momentum.deinit(allocator);
 
             if (i == n_dynamics - 1) {
@@ -243,7 +241,10 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     for (optimized_wavefunctions.items) |wf| wf.deinit(allocator);
 
     if (enable_printing and nstate > 1) for (0..nstate) |i| {
-        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i)});
+
+        const tag = if (opt.adiabatic) "ADIABATIC" else "DIABATIC";
+
+        try print("{s}FINAL {s} POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", tag, i, output.population.at(opt.iterations, i)});
     };
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;

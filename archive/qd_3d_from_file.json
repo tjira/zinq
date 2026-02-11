@@ -1,0 +1,48 @@
+{
+    "zinq" : [
+        {
+            "name" : "potential_plot",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8], [-8, 8]],
+                    "points" : 32
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1, 1]
+                    }
+                },
+                "output" : "U.mat"
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8], [-8, 8]],
+                    "points" : 32
+                },
+                "initial_conditions" : {
+                    "mass" : 1,
+                    "momentum" : [1, 1, 1],
+                    "position" : [1, 1, 1],
+                    "state" : 0,
+                    "gamma" : [2, 2, 2]
+                },
+                "log_intervals" : {
+                    "iteration" : 200
+                },
+                "potential" : {
+                    "file" : {
+                        "ndim" : 3,
+                        "nstate" : 1,
+                        "path" : "U.mat"
+                    }
+                },
+                "imaginary" : {},
+                "iterations" : 1000,
+                "time_step" : 0.01
+            }
+        }
+    ]
+}

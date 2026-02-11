@@ -30,3 +30,4 @@
 - [x] Make the eigenvalue solver target for complex hermitian matrices.
 - [ ] The QD code calculates FFT for propagation and also for kinetic energy. Find a way to reuse the FFTs for both purposes to save time.
 - [ ] The Shunting-Yard algorithm should be extended to treat constants and functions.
+- [ ] LZ formula doesnt use the true minimum energy gap. Interpolate the potential energy surfaces somehow.

@@ -360,11 +360,11 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
-        if (i > 0) {
-            try system.propagateVelocityVerlet(opt.potential, &adiabatic_potential, time, current_state, opt.time_step, opt.finite_differences_step, opt.bias);
-        }
+        if (i > 0) system.propagateVelocityVerletFirstHalf(opt.time_step);
 
         try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time);
+
+        var potential_energy = adiabatic_potential.at(current_state, current_state);
 
         if (i > 0) {
 
@@ -381,11 +381,19 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         };
 
         if (opt.surface_hopping) |algorithm| if (i > 1) {
-            current_state = try algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, adiabatic_potential, current_state, &random);
+
+            const new_state = try algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, adiabatic_potential, current_state, &random);
+
+            if (new_state != current_state) {
+                current_state = new_state; potential_energy = adiabatic_potential.at(current_state, current_state);
+            }
         };
 
+        try system.calculateAcceleration(opt.potential, &adiabatic_potential, time, current_state, opt.finite_differences_step, opt.bias);
+
+        if (i > 0) try system.propagateVelocityVerletSecondHalf(opt.time_step);
+
         const kinetic_energy = system.kineticEnergy();
-        const potential_energy = adiabatic_potential.at(current_state, current_state);
 
         output.kinetic_energy.ptr(i).* = kinetic_energy;
         output.population.ptr(i, current_state).* = 1;

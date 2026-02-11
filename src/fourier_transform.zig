@@ -42,7 +42,7 @@ pub fn cfft1(comptime T: type, vector: *StridedComplexVector(T), factor: i32) !v
 
     for (0..bit_count) |stage| {
 
-        const block_size = std.math.pow(usize, 2, stage + 1);
+        const block_size = @as(usize, 1) << @as(u6, @intCast(stage + 1));
         const angle = 2 * std.math.pi * @as(T, @floatFromInt(factor)) / @as(T, @floatFromInt(block_size));
         const twiddle_base = std.math.complex.exp(Complex(T).init(0, angle));
 
@@ -81,20 +81,16 @@ pub fn cfftn(comptime T: type, vector: *ComplexVector(T), shape: []const usize, 
 
         const stride = prod(usize, shape[0..i]);
 
-        for (0..N / shape[i]) |j| {
+        for (0..prod(usize, shape[i + 1..])) |outer| {
 
-            var offset: usize = 0; var index: usize = 0;
-
-            for (0..shape.len) |k| if (k != i) {
-
-                const block = prod(usize, shape[k + 1..]) / (if (k < i) shape[i] else 1);
-
-                offset += (j / block % shape[k]) * prod(usize, shape[0..k]); index += 1;
-            };
+            const block_start = outer * (shape[i] * stride);
             
-            var axis_slice = StridedComplexVector(T){.data = vector.data, .len = shape[i], .stride = stride, .zero = offset};
+            for (0..stride) |inner| {
 
-            try cfft1(T, &axis_slice, factor);
+                var axis_slice = StridedComplexVector(T){.data = vector.data, .len = shape[i], .stride = stride, .zero = block_start + inner};
+
+                try cfft1(T, &axis_slice, factor);
+            }
         }
     }
 }

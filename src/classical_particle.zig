@@ -73,6 +73,16 @@ pub fn ClassicalParticle(comptime T: type) type {
             self.masses.deinit(allocator);
         }
 
+        /// Calculate the acceleration of the classical particle using the forces from the electronic potential.
+        pub fn calculateAcceleration(self: *@This(), pot: ElectronicPotential(T), pot_matrix: *RealMatrix(T), time: T, current_state: usize, fdiff_step: T, bias: ?BiasPotential(T)) !void {
+            for (0..self.ndim) |i| {
+
+                const force = try pot.forceAdiabatic(pot_matrix, self.position, time, current_state, i, fdiff_step, bias);
+
+                self.acceleration.ptr(i).* = force / self.masses.at(i);
+            }
+        }
+
         /// Clone the classical particle.
         pub fn clone(self: @This(), allocator: std.mem.Allocator) !@This() {
             var atoms: ?[]usize = null;
@@ -152,21 +162,18 @@ pub fn ClassicalParticle(comptime T: type) type {
             return energy;
         }
 
-        /// Propagate the classical particle using velocity verlet algorithm.
-        pub fn propagateVelocityVerlet(self: *@This(), pot: ElectronicPotential(T), pot_matrix: *RealMatrix(T), time: T, current_state: usize, time_step: T, fdiff_step: T, bias: ?BiasPotential(T)) !void {
+        /// First half of the velocity verlet algorithm, which updates the positions and velocities using the current accelerations. The second half of the algorithm should be called after updating the accelerations.
+        pub fn propagateVelocityVerletFirstHalf(self: *@This(), time_step: T) void {
             for (0..self.ndim) |i| {
-                self.position.ptr(i).* += (self.velocity.at(i) + 0.5 * self.acceleration.at(i) * time_step) * time_step;
+                self.velocity.ptr(i).* += 0.5 * self.acceleration.at(i) * time_step;
+                self.position.ptr(i).* += self.velocity.at(i) * time_step;
             }
+        }
 
+        /// Second half of the velocity verlet algorithm, which updates the velocities using the new accelerations. The first half of the algorithm should be called before updating the accelerations.
+        pub fn propagateVelocityVerletSecondHalf(self: *@This(), time_step: T) !void {
             for (0..self.ndim) |i| {
-
-                const force = try pot.forceAdiabatic(pot_matrix, self.position, time, current_state, i, fdiff_step, bias);
-
-                const previous_acceleration = self.acceleration.at(i);
-
-                self.acceleration.ptr(i).* = force / self.masses.at(i);
-
-                self.velocity.ptr(i).* += 0.5 * (previous_acceleration + self.acceleration.at(i)) * time_step;
+                self.velocity.ptr(i).* += 0.5 * self.acceleration.at(i) * time_step;
             }
         }
 
