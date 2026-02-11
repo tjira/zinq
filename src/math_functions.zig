@@ -16,6 +16,11 @@ pub fn dfact(n: anytype) @TypeOf(n) {
     return n * dfact(n - 2);
 }
 
+/// Heaviside step function.
+pub fn h(x: anytype) @TypeOf(x) {
+    if (x < 0) return 0; return 1;
+}
+
 /// Multiplication modulo function to prevent overflow.
 pub fn mulMod(a: anytype, b: anytype, m: anytype) @TypeOf(a, b, m) {
     const T = @typeInfo(@TypeOf(a, b, m));

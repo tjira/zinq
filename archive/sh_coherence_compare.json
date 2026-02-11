@@ -1,0 +1,102 @@
+{
+    "zinq" : [
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-16, 16]],
+                    "points" : 8192
+                },
+                "initial_conditions" : {
+                    "adiabatic" : true,
+                    "mass" : 1,
+                    "momentum" : [0],
+                    "position" : [3],
+                    "state" : 1,
+                    "gamma" : [2]
+                },
+                "log_intervals" : {
+                    "iteration" : 100
+                },
+                "potential" : {
+                    "avoided_crossing" : {}
+                },
+                "write" : {
+                    "population" : "POPULATION_EXACT.mat",
+                    "bloch_vector" : "BLOCH_EXACT.mat"
+                },
+                "adiabatic" : true,
+                "iterations" : 200,
+                "time_step" : 0.02
+            }
+        },
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "mass" : [1],
+                    "momentum_mean" : [0],
+                    "momentum_std" : [1],
+                    "position_mean" : [3],
+                    "position_std" : [0.5],
+                    "state" : 1
+                },
+                "log_intervals" : {
+                    "iteration" : 1000,
+                    "trajectory" : 10000
+                },
+                "potential" : {
+                    "avoided_crossing" : {}
+                },
+                "surface_hopping" : {
+                    "fewest_switches" : {}
+                },
+                "derivative_coupling" : {
+                    "npi" : {}
+                },
+                "write" : {
+                    "population_mean" : "POPULATION_FSSH.mat",
+                    "bloch_vector_mean" : "BLOCH_FSSH.mat"
+                },
+                "iterations" : 200,
+                "time_step" : 0.02,
+                "nthread" : 12,
+                "trajectories" : 100000
+            }
+        },
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "mass" : [1],
+                    "momentum_mean" : [0],
+                    "momentum_std" : [1],
+                    "position_mean" : [3],
+                    "position_std" : [0.5],
+                    "state" : 1
+                },
+                "log_intervals" : {
+                    "iteration" : 1000,
+                    "trajectory" : 10000
+                },
+                "potential" : {
+                    "avoided_crossing" : {}
+                },
+                "surface_hopping" : {
+                    "mapping_approach" : {}
+                },
+                "derivative_coupling" : {
+                    "npi" : {}
+                },
+                "write" : {
+                    "population_mean" : "POPULATION_MASH.mat",
+                    "bloch_vector_mean" : "BLOCH_MASH.mat"
+                },
+                "iterations" : 200,
+                "time_step" : 0.02,
+                "nthread" : 12,
+                "trajectories" : 100000
+            }
+        }
+    ]
+}

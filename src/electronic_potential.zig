@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const avoided_crossing_potential = @import("avoided_crossing_potential.zig");
 const bias_potential = @import("bias_potential.zig");
 const custom_potential = @import("custom_potential.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
@@ -15,6 +16,7 @@ const time_linear_potential = @import("time_linear_potential.zig");
 const tully_potential = @import("tully_potential.zig");
 const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
+const AvoidedCrossingPotential = avoided_crossing_potential.AvoidedCrossingPotential;
 const BiasPotential = bias_potential.BiasPotential;
 const CustomPotential = custom_potential.CustomPotential;
 const FilePotential = file_potential.FilePotential;
@@ -33,6 +35,7 @@ const eigensystemHermitian = eigenproblem_solver.eigensystemHermitian;
 /// Electronic potential mode union.
 pub fn ElectronicPotential(comptime T: type) type {
     return union(enum) {
+        avoided_crossing: AvoidedCrossingPotential(T),
         custom: CustomPotential(T),
         file: FilePotential(T),
         harmonic: HarmonicPotential(T),
@@ -141,6 +144,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Getter for number of dimensions.
         pub fn ndim(self: @This()) usize {
             return switch (self) {
+                .avoided_crossing => 1,
                 .custom => |field| field.variables.len,
                 .file => |field| field.ndim,
                 .harmonic => |field| field.k.len,
@@ -155,6 +159,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Getter for number of electronic states.
         pub fn nstate(self: @This()) usize {
             return switch (self) {
+                .avoided_crossing => 2,
                 .custom => |field| field.matrix.len,
                 .file => |field| field.nstate,
                 .harmonic => 1,

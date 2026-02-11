@@ -32,3 +32,4 @@
 - [ ] The Shunting-Yard algorithm should be extended to treat constants and functions.
 - [x] LZ formula doesnt use the true minimum energy gap. Interpolate the potential energy surfaces somehow.
 - [x] Make the pip executables executable even for other users. Currently they are only executable for the user that installed them.
+- [ ] Check the coherences calculation in FSSH, MASH and QD, since it seems to be wrong. It should be the same for all methods, but it is not.

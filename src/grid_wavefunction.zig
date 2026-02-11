@@ -7,6 +7,7 @@ const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
 const eigensystem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const error_handling = @import("error_handling.zig");
 const fourier_transform = @import("fourier_transform.zig");
 const global_variables = @import("global_variables.zig");
@@ -30,6 +31,7 @@ const mm = matrix_multiplication.mm;
 const momentumAtRow = grid_generator.momentumAtRow;
 const positionAtRow = grid_generator.positionAtRow;
 const throw = error_handling.throw;
+const fixGauge = eigenproblem_solver.fixGauge;
 
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
@@ -39,6 +41,7 @@ pub fn GridWavefunction(comptime T: type) type {
         pub const Workspace = struct {
             adiabatic_eigenvectors: RealMatrix(T),
             adiabatic_potential: RealMatrix(T),
+            previous_eigenvectors: RealMatrix(T),
             column: ComplexVector(T),
             diabatic_potential: RealMatrix(T),
             matrix: ComplexMatrix(T),
@@ -73,6 +76,7 @@ pub fn GridWavefunction(comptime T: type) type {
                 .position_at_row = try RealVector(T).init(ndim, allocator),
                 .momentum_at_row = try RealVector(T).init(ndim, allocator),
                 .matrix = try ComplexMatrix(T).init(nstate, nstate, allocator),
+                .previous_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator),
                 .propagator = try ComplexMatrix(T).init(nstate, nstate, allocator),
                 .column = try ComplexVector(T).init(std.math.pow(usize, npoint, ndim), allocator)
             };
@@ -100,6 +104,7 @@ pub fn GridWavefunction(comptime T: type) type {
             self.workspace.matrix.deinit(allocator);
             self.workspace.momentum_at_row.deinit(allocator);
             self.workspace.position_at_row.deinit(allocator);
+            self.workspace.previous_eigenvectors.deinit(allocator);
             self.workspace.propagator.deinit(allocator);
         }
 
@@ -116,19 +121,23 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Calculate the density matrix of the wavefunction. The matrix is allocated and returned.
         pub fn density(self: *@This(), potential: ElectronicPotential(T), time: T, adiabatic: bool, allocator: std.mem.Allocator) !ComplexMatrix(T) {
-            var density_matrix = try ComplexMatrix(T).init(self.nstate, self.nstate, allocator);
+            var density_matrix = try ComplexMatrix(T).initZero(self.nstate, self.nstate, allocator);
 
             var wavefunction_row = try ComplexMatrix(T).init(self.nstate, 1, allocator); defer wavefunction_row.deinit(allocator);
-            
+
             for (0..self.data.rows) |i| {
 
                 for (0..self.nstate) |j| wavefunction_row.ptr(j, 0).* = self.data.at(i, j);
 
                 if (adiabatic) {
 
+                    try self.workspace.adiabatic_eigenvectors.copyTo(&self.workspace.previous_eigenvectors);
+
                     positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
 
                     try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time);
+
+                    if (i > 0) try fixGauge(T, &self.workspace.adiabatic_eigenvectors, self.workspace.previous_eigenvectors);
 
                     try mm(T, &wavefunction_row, self.workspace.adiabatic_eigenvectors, true, self.data.row(i).asMatrix(), false);
                 }

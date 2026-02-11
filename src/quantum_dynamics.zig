@@ -8,6 +8,7 @@ const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
+const error_handling = @import("error_handling.zig");
 const fourier_transform = @import("fourier_transform.zig");
 const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
@@ -40,6 +41,7 @@ const positionAtRow = grid_generator.positionAtRow;
 const positionGridAlloc = grid_generator.positionGridAlloc;
 const print = device_write.print;
 const printJson = device_write.printJson;
+const throw = error_handling.throw;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
@@ -70,6 +72,7 @@ pub fn Options(comptime T: type) type {
             padding_order: u32 = 1
         };
         pub const Write = struct {
+            bloch_vector: ?[]const u8 = null,
             final_wavefunction: ?[]const u8 = null,
             kinetic_energy: ?[]const u8 = null,
             momentum: ?[]const u8 = null,
@@ -102,6 +105,7 @@ pub fn Options(comptime T: type) type {
 /// The quantum dynamics output struct.
 pub fn Output(comptime T: type) type {
     return struct {
+        bloch_vector: RealMatrix(T),
         kinetic_energy: RealVector(T),
         momentum: RealMatrix(T),
         population: RealMatrix(T),
@@ -112,6 +116,7 @@ pub fn Output(comptime T: type) type {
         /// Allocate the output structure.
         pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
+                .bloch_vector = try RealMatrix(T).init(iterations + 1, 3, allocator),
                 .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
                 .momentum = try RealMatrix(T).init(iterations + 1, ndim, allocator),
                 .population = try RealMatrix(T).init(iterations + 1, nstate, allocator),
@@ -123,6 +128,7 @@ pub fn Output(comptime T: type) type {
 
         /// Deallocate the output structure.
         pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.bloch_vector.deinit(allocator);
             self.kinetic_energy.deinit(allocator);
             self.momentum.deinit(allocator);
             self.population.deinit(allocator);
@@ -156,6 +162,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
+
+    if (nstate != 2 and opt.write.bloch_vector != null) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
@@ -214,6 +222,11 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
                 for (0..ndim) |k| output.momentum.ptr(j, k).* = momentum.at(k);
                 for (0..ndim) |k| output.position.ptr(j, k).* = position.at(k);
                 for (0..nstate) |k| output.population.ptr(j, k).* = density_matrix.at(k, k).re;
+                if (nstate == 2) {
+                    output.bloch_vector.ptr(j, 0).* = 2 * density_matrix.at(0, 1).re;
+                    output.bloch_vector.ptr(j, 1).* = 2 * density_matrix.at(0, 1).im;
+                    output.bloch_vector.ptr(j, 2).* = density_matrix.at(1, 1).re - density_matrix.at(0, 0).re;
+                }
             }
 
             if (opt.write.wavefunction != null and i == n_dynamics - 1) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, j, time, opt.adiabatic, allocator);
@@ -262,12 +275,13 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         try exportRealMatrixWithLinspacedLeftColumn(T, path, spectrum.asMatrix(), 0, nyquist_frequency);
     }
 
-    if (opt.write.final_wavefunction) |path| try wavefunction.write(path, allocator);
     if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, path, acf.asMatrix(), 0, end_time);
+    if (opt.write.bloch_vector) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.bloch_vector, 0, end_time);
+    if (opt.write.final_wavefunction) |path| try wavefunction.write(path, allocator);
+    if (opt.write.kinetic_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.kinetic_energy.asMatrix(), 0, end_time);
+    if (opt.write.momentum) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.momentum, 0, end_time);
     if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
     if (opt.write.position) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.position, 0, end_time);
-    if (opt.write.momentum) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.momentum, 0, end_time);
-    if (opt.write.kinetic_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.kinetic_energy.asMatrix(), 0, end_time);
     if (opt.write.potential_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.potential_energy.asMatrix(), 0, end_time);
     if (opt.write.total_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy.asMatrix(), 0, end_time);
     if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);

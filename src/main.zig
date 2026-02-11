@@ -5,6 +5,7 @@ const config = @import("config");
 const std = @import("std");
 
 pub const array_functions = @import("array_functions.zig");
+pub const avoided_crossing_potential = @import("avoided_crossing_potential.zig");
 pub const basis_set = @import("basis_set.zig");
 pub const bias_potential = @import("bias_potential.zig");
 pub const classical_dynamics = @import("classical_dynamics.zig");

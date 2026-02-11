@@ -54,12 +54,14 @@ const binomialConfInt = math_functions.binomialConfInt;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
 const fixGauge = eigenproblem_solver.fixGauge;
+const h = math_functions.h;
 const mm = matrix_multiplication.mm;
 const print = device_write.print;
 const printJson = device_write.printJson;
 const throw = error_handling.throw;
 
 const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
+const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
 /// Classical dynamics options struct.
@@ -78,6 +80,7 @@ pub fn Options(comptime T: type) type {
             iteration: u32 = 1
         };
         pub const Write = struct {
+            bloch_vector_mean: ?[]const u8 = null,
             kinetic_energy_mean: ?[]const u8 = null,
             momentum_mean: ?[]const u8 = null,
             population_mean: ?[]const u8 = null,
@@ -109,6 +112,7 @@ pub fn Options(comptime T: type) type {
 /// Structure that hold the output of the simulation.
 pub fn Output(comptime T: type) type {
     return struct {
+        bloch_vector_mean: RealMatrix(T),
         kinetic_energy_mean: RealVector(T),
         momentum_mean: RealMatrix(T),
         population_mean: RealMatrix(T),
@@ -120,6 +124,7 @@ pub fn Output(comptime T: type) type {
         /// Allocate the output structure.
         pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
+                .bloch_vector_mean = try RealMatrix(T).initZero(iterations + 1, 3, allocator),
                 .kinetic_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
                 .momentum_mean = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                 .population_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
@@ -132,6 +137,7 @@ pub fn Output(comptime T: type) type {
 
         /// Free the memory allocated for the output structure.
         pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            self.bloch_vector_mean.deinit(allocator);
             self.kinetic_energy_mean.deinit(allocator);
             self.momentum_mean.deinit(allocator);
             self.population_mean.deinit(allocator);
@@ -161,6 +167,7 @@ pub fn Custom(comptime T: type) type {
 
         /// Structure to hold a single trajectory output.
         pub const TrajectoryOutput = struct {
+            bloch_vector: RealMatrix(T),
             kinetic_energy: RealVector(T),
             momentum: RealMatrix(T),
             population: RealMatrix(T),
@@ -172,6 +179,7 @@ pub fn Custom(comptime T: type) type {
             /// Allocate the trajectory output structure.
             pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
                 return @This(){
+                    .bloch_vector = try RealMatrix(T).initZero(iterations + 1, 3, allocator),
                     .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
                     .momentum = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                     .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
@@ -184,6 +192,7 @@ pub fn Custom(comptime T: type) type {
 
             /// Free the memory allocated for the trajectory output structure.
             pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+                self.bloch_vector.deinit(allocator);
                 self.kinetic_energy.deinit(allocator);
                 self.momentum.deinit(allocator);
                 self.population.deinit(allocator);
@@ -203,12 +212,15 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const ndim = opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
+    if (nstate != 2 and opt.write.bloch_vector_mean != null) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});
+
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
     var output = try Output(T).init(nstate, ndim, opt.iterations, allocator);
 
     const parallel_results = .{
+        .bloch_vector_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = 3}, allocator),
         .kinetic_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
         .momentum_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
         .population_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
@@ -285,18 +297,22 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     var amplitudes = try ComplexVector(T).initZero(nstate, allocator); defer amplitudes.deinit(allocator);
     var bloch_vector = try RealVector(T).initZero(3, allocator); defer bloch_vector.deinit(allocator);
 
-    amplitudes.ptr(current_state).* = Complex(T).init(1, 0); bloch_vector.ptr(2).* = if (current_state == 1) 1 else -1;
+    amplitudes.ptr(current_state).* = Complex(T).init(1, 0); bloch_vector.ptr(2).* = amplitudes.at(1).squaredMagnitude() - amplitudes.at(0).squaredMagnitude();
+
+    var Wcp: T = 1; var Wpp: T = 1; var Sz0: T = bloch_vector.at(2);
 
     if (opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
 
         const phi = 2 * std.math.pi * random.float(T);
 
-        const cos_theta = bloch_vector.at(2) * std.math.sqrt(random.float(T));
+        const cos_theta = if (current_state == 1) random.float(T) else random.float(T) - 1;
         const sin_theta = std.math.sqrt(1 - cos_theta * cos_theta);
 
         bloch_vector.ptr(0).* = sin_theta * std.math.cos(phi);
         bloch_vector.ptr(1).* = sin_theta * std.math.sin(phi);
         bloch_vector.ptr(2).* = cos_theta;
+
+        Sz0 = bloch_vector.at(2); Wcp = 2; Wpp = 2 * @abs(Sz0);
     }
 
     const fs_parameters: fewest_switches.Parameters(T) = .{
@@ -394,15 +410,29 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         const kinetic_energy = system.kineticEnergy();
 
-        output.kinetic_energy.ptr(i).* = kinetic_energy;
-        output.population.ptr(i, current_state).* = 1;
-        output.potential_energy.ptr(i).* = potential_energy;
-        output.total_energy.ptr(i).* = kinetic_energy + potential_energy;
+        output.kinetic_energy.ptr(i).* = Wpp * kinetic_energy;
+        output.population.ptr(i, current_state).* = Wpp;
+        output.potential_energy.ptr(i).* = Wpp * potential_energy;
+        output.total_energy.ptr(i).* = Wpp * (kinetic_energy + potential_energy);
 
-        for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = time_derivative_coupling.at(j / nstate, j % nstate);
+        if (opt.surface_hopping != null and opt.surface_hopping.? == .fewest_switches) {
+
+            bloch_vector.ptr(0).* = 2 * amplitudes.at(0).mul(amplitudes.at(1).conjugate()).re;
+            bloch_vector.ptr(1).* = 2 * amplitudes.at(0).mul(amplitudes.at(1).conjugate()).im;
+
+            bloch_vector.ptr(2).* = amplitudes.at(1).squaredMagnitude() - amplitudes.at(0).squaredMagnitude();
+        }
+
+        for (0..3) |j| output.bloch_vector.ptr(i, j).* = Wcp * bloch_vector.at(j);
+
+        for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = Wpp * time_derivative_coupling.at(j / nstate, j % nstate);
 
         for (0..ndim) |j| {
-            output.position.ptr(i, j).* = system.position.at(j); output.momentum.ptr(i, j).* = system.velocity.at(j) * system.masses.at(j);
+            output.position.ptr(i, j).* = Wpp * system.position.at(j); output.momentum.ptr(i, j).* = Wpp * system.velocity.at(j) * system.masses.at(j);
+        }
+
+        if (opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
+            output.bloch_vector.ptr(i, 2).* = Wpp * std.math.sign(bloch_vector.at(2));
         }
 
         if (!enable_printing or (index > 0 and (index + 1) % opt.log_intervals.trajectory != 0) or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;
@@ -441,6 +471,10 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
     const trajectory_output = runTrajectory(T, params[0], &system, params[1], params[2], params[4]) catch |err| {
         error_ctx.capture(err); return;
     }; defer trajectory_output.deinit(params[4]);
+
+    results.bloch_vector_mean.ptr(id - 1).add(trajectory_output.bloch_vector) catch |err| {
+        error_ctx.capture(err); return;
+    };
 
     results.kinetic_energy_mean.ptr(id - 1).add(trajectory_output.kinetic_energy) catch |err| {
         error_ctx.capture(err); return;
@@ -498,6 +532,7 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
 
 /// Add the partial results to the output vectors and export them if requested.
 pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), parallel_results: anytype) !void {
+    const output_bloch_vector_mean = parallel_results.bloch_vector_mean;
     const output_kinetic_energy_mean = parallel_results.kinetic_energy_mean;
     const output_momentum_mean = parallel_results.momentum_mean;
     const output_population_mean = parallel_results.population_mean;
@@ -507,6 +542,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     const output_total_energy_mean = parallel_results.total_energy_mean;
 
     for (0..opt.nthread) |i| {
+        try output.bloch_vector_mean.add(output_bloch_vector_mean.at(i));
         try output.kinetic_energy_mean.add(output_kinetic_energy_mean.at(i));
         try output.momentum_mean.add(output_momentum_mean.at(i));
         try output.population_mean.add(output_population_mean.at(i));
@@ -516,6 +552,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
         try output.total_energy_mean.add(output_total_energy_mean.at(i));
     }
 
+    output.bloch_vector_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.kinetic_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.momentum_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.population_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
@@ -526,6 +563,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
+    if (opt.write.bloch_vector_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.bloch_vector_mean, 0, end_time);
     if (opt.write.kinetic_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.kinetic_energy_mean.asMatrix(), 0, end_time);
     if (opt.write.momentum_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.momentum_mean, 0, end_time);
     if (opt.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population_mean, 0, end_time);
@@ -698,6 +736,6 @@ test "Mapping Approach to Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.385);
-    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.615);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.38085761112723, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.60782680817202, TEST_TOLERANCE);
 }

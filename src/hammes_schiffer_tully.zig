@@ -15,7 +15,7 @@ pub fn Parameters(comptime T: type) type {
     };
 }
 
-/// Norm Preserving interpolation coupling implementation.
+/// Hammes-Schiffer-Tully coupling implementation.
 pub fn HammesSchifferTully(comptime T: type) type {
     return struct {
 
