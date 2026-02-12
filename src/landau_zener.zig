@@ -2,9 +2,12 @@
 
 const std = @import("std");
 
+const complex_vector = @import("complex_vector.zig");
 const real_vector = @import("real_vector.zig");
 const object_array = @import("object_array.zig");
 
+const Complex = std.math.complex.Complex;
+const ComplexVector = complex_vector.ComplexVector;
 const RealVector = real_vector.RealVector;
 const RingBufferArray = object_array.RingBufferArray;
 
@@ -12,6 +15,7 @@ const RingBufferArray = object_array.RingBufferArray;
 pub fn Parameters(comptime T: type) type {
     return struct {
         energy_gaps: RingBufferArray(T),
+        coefficients: *ComplexVector(T),
         time_step: T
     };
 }
@@ -56,6 +60,14 @@ pub fn LandauZener(comptime T: type) type {
                 const veff = std.math.sqrt(g * ddZ1); const delta: T = 0.25 * std.math.pow(T, g, 2) / veff;
 
                 var p = std.math.exp(-2 * std.math.pi * delta); if (std.math.isNan(p)) p = 0;
+
+                const s00 = Complex(T).init(std.math.sqrt(1 - p), 0); const s01 = Complex(T).init(-std.math.sqrt(p),    0);
+                const s10 = Complex(T).init(std.math.sqrt(p),     0); const s11 = Complex(T).init(std.math.sqrt(1 - p), 0);
+
+                const c0 = parameters.coefficients.at(current_state); const c1 = parameters.coefficients.at(i);
+
+                parameters.coefficients.ptr(current_state).* = s00.mul(c0).add(s01.mul(c1));
+                parameters.coefficients.ptr(i).*             = s10.mul(c0).add(s11.mul(c1));
 
                 if (jump_probabilities.len > 2 and self.three_state_variant != .normalied_probability) {
 
