@@ -19,7 +19,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
     var stack = std.ArrayList(union(enum) {op: Operator, bracket: u8}){}; defer stack.deinit(allocator);
 
-    var i: usize = 0; var j: usize = 0; var buffer: [64]u8 = undefined;
+    var i: usize = 0; var j: usize = 0; var buffer: [64]u8 = undefined; var expect_operand: bool = true;
 
     parser: while (i < input.len) : (i += 1) {
 
@@ -33,17 +33,23 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
             const number = try std.fmt.parseFloat(T, buffer[0..j]);
 
-            try rpn.append(number, allocator); i -= 1; j = 0; continue;
+            try rpn.append(number, allocator); i -= 1; j = 0;
+
+            expect_operand = false; continue;
         }
 
         else if (input[i] == 'e') {
 
             const number: T = std.math.e;
 
-            try rpn.append(number, allocator); j = 0; continue;
+            try rpn.append(number, allocator); j = 0;
+
+            expect_operand = false; continue;
         }
 
         else if (input[i] == '+' or input[i] == '-' or input[i] == '*' or input[i] == '/' or input[i] == '^') {
+
+            if (expect_operand) return throw(ReversePolishNotation(T), "UNARY OPERATORS NOT SUPPORTED", .{});
 
             const op = try operatorFromChar(input[i]); const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
 
@@ -51,11 +57,11 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
                 if (operatorPrecedence(stack.getLast().op) > opp or (operatorPrecedence(stack.getLast().op) == opp and opa == .Left)) try rpn.append(stack.pop().?.op, allocator) else break;
             }
 
-            try stack.append(allocator, .{.op = op});
+            try stack.append(allocator, .{.op = op}); expect_operand = true;
         }
 
         else if (input[i] == '(') {
-            try stack.append(allocator, .{.bracket = input[i]});
+            try stack.append(allocator, .{.bracket = input[i]}); expect_operand = true;
         }
 
         else if (input[i] == ')') {
@@ -66,14 +72,14 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
             if (stack.items.len == 0) return throw(ReversePolishNotation(T), "MISMATCHED PARENTHESES IN EXPRESSION", .{});
 
-            _ = stack.pop();
+            _ = stack.pop(); expect_operand = false;
         }
 
         else {
 
             for (variables) |variable| {
                 if (std.mem.eql(u8, variable, input[i..i + variable.len])) {
-                    try rpn.append(variable, allocator); i += variable.len - 1; continue :parser;
+                    try rpn.append(variable, allocator); i += variable.len - 1; expect_operand = false; continue :parser;
                 }
             }
 
