@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const complex_vector = @import("complex_vector.zig");
+const integral_functions = @import("integral_functions.zig");
 const real_vector = @import("real_vector.zig");
 const object_array = @import("object_array.zig");
 
@@ -10,6 +11,8 @@ const Complex = std.math.complex.Complex;
 const ComplexVector = complex_vector.ComplexVector;
 const RealVector = real_vector.RealVector;
 const RingBufferArray = object_array.RingBufferArray;
+
+const lnGamma = integral_functions.lnGamma;
 
 /// Parameters for the Landau-Zener method.
 pub fn Parameters(comptime T: type) type {
@@ -53,7 +56,7 @@ pub fn LandauZener(comptime T: type) type {
 
                 if (dZ0 * dZ1 > 0 or (dZ0 * dZ1 < 0 and ddZ1 < 0)) continue;
 
-                const A = ddZ1 / 2; const B = (Z2 - Z0) / (2 * parameters.time_step); const C = Z1;
+                const A = ddZ1 / 2; const B = (Z0 - Z2) / (2 * parameters.time_step); const C = Z1;
 
                 const t0 = -B / (2 * A); const g = A * t0 * t0 + B * t0 + C;
 
@@ -61,8 +64,13 @@ pub fn LandauZener(comptime T: type) type {
 
                 var p = std.math.exp(-2 * std.math.pi * delta); if (std.math.isNan(p)) p = 0;
 
-                const s00 = Complex(T).init(std.math.sqrt(1 - p), 0); const s01 = Complex(T).init(-std.math.sqrt(p),    0);
-                const s10 = Complex(T).init(std.math.sqrt(p),     0); const s11 = Complex(T).init(std.math.sqrt(1 - p), 0);
+                const phi = std.math.pi / 4.0 + delta * (std.math.log(T, std.math.e, delta) - 1) + lnGamma(Complex(T).init(1, -delta)).im;
+
+                const s00 = Complex(T).init(std.math.sqrt(1 - p), 0).mul(std.math.complex.exp(Complex(T).init(0, -phi)));
+                const s11 = Complex(T).init(std.math.sqrt(1 - p), 0).mul(std.math.complex.exp(Complex(T).init(0,  phi)));
+
+                const s01 = Complex(T).init(-std.math.sqrt(p), 0);
+                const s10 = Complex(T).init( std.math.sqrt(p), 0);
 
                 const c0 = parameters.coefficients.at(current_state); const c1 = parameters.coefficients.at(i);
 

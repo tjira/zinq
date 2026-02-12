@@ -111,3 +111,22 @@ pub fn erf(x: anytype) @TypeOf(x) {
         return 1 - (std.math.exp(-x * x) / x * (1.0 / std.math.sqrt(std.math.pi) + P / Q / (x * x)));
     }
 }
+
+/// Calculate logarithm of the complex Gamma function.
+pub fn lnGamma(z: anytype) @TypeOf(z) {
+    var zbase = z; var phase = @TypeOf(z).init(0, 0); const one = @TypeOf(z).init(1, 0);
+
+    while (zbase.re < 7) {
+        phase = phase.sub(std.math.complex.log(zbase)); zbase = zbase.add(@TypeOf(z).init(1, 0));
+    }
+
+    const lnzbase = std.math.complex.log(zbase); const ln2pi = @TypeOf(z).init(std.math.log(@TypeOf(z.re), std.math.e, 2 * std.math.pi), 0);
+
+    var lng = zbase.sub(@TypeOf(z).init(0.5, 0)).mul(lnzbase).sub(zbase).add(ln2pi.mul(@TypeOf(z).init(0.5, 0)));
+
+    lng = lng.add(one.div(@TypeOf(z).init(  12, 0).mul(std.math.complex.pow(zbase, @TypeOf(z).init(1, 0)))));
+    lng = lng.sub(one.div(@TypeOf(z).init( 360, 0).mul(std.math.complex.pow(zbase, @TypeOf(z).init(3, 0)))));
+    lng = lng.add(one.div(@TypeOf(z).init(1260, 0).mul(std.math.complex.pow(zbase, @TypeOf(z).init(5, 0)))));
+
+    return lng.add(phase);
+}
