@@ -126,7 +126,7 @@ pub fn Output(comptime T: type) type {
         /// Allocate the output structure.
         pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
-                .bloch_vector_mean = try RealMatrix(T).initZero(iterations + 1, 3, allocator),
+                .bloch_vector_mean = try RealMatrix(T).initZero(iterations + 1, 4, allocator),
                 .coefficient_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                 .kinetic_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
                 .momentum_mean = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
@@ -184,7 +184,7 @@ pub fn Custom(comptime T: type) type {
             /// Allocate the trajectory output structure.
             pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
                 return @This(){
-                    .bloch_vector = try RealMatrix(T).initZero(iterations + 1, 3, allocator),
+                    .bloch_vector = try RealMatrix(T).initZero(iterations + 1, 4, allocator),
                     .coefficients = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                     .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
                     .momentum = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
@@ -227,7 +227,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var output = try Output(T).init(nstate, ndim, opt.iterations, allocator);
 
     const parallel_results = .{
-        .bloch_vector_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = 3}, allocator),
+        .bloch_vector_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = 4}, allocator),
         .coefficient_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
         .kinetic_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
         .momentum_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
@@ -438,6 +438,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             output.bloch_vector.ptr(i, 1).* = 2 * coefficients.at(0).mul(coefficients.at(1).conjugate()).im;
 
             output.bloch_vector.ptr(i, 2).* = coefficients.at(1).squaredMagnitude() - coefficients.at(0).squaredMagnitude();
+
+            output.bloch_vector.ptr(i, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(i, 0), 2) + std.math.pow(T, output.bloch_vector.at(i, 1), 2));
         }
 
         if (opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
@@ -448,6 +450,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
             output.coefficients.ptr(i, 0).* = (1 - output.bloch_vector.at(i, 2)) / 2;
             output.coefficients.ptr(i, 1).* = (1 + output.bloch_vector.at(i, 2)) / 2;
+
+            output.bloch_vector.ptr(i, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(i, 0), 2) + std.math.pow(T, output.bloch_vector.at(i, 1), 2));
         }
 
         if (!enable_printing or (index > 0 and (index + 1) % opt.log_intervals.trajectory != 0) or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;

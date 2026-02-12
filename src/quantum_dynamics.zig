@@ -116,7 +116,7 @@ pub fn Output(comptime T: type) type {
         /// Allocate the output structure.
         pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
-                .bloch_vector = try RealMatrix(T).init(iterations + 1, 3, allocator),
+                .bloch_vector = try RealMatrix(T).init(iterations + 1, 4, allocator),
                 .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
                 .momentum = try RealMatrix(T).init(iterations + 1, ndim, allocator),
                 .population = try RealMatrix(T).init(iterations + 1, nstate, allocator),
@@ -225,6 +225,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
                 if (nstate == 2) output.bloch_vector.ptr(j, 0).* = 2 * density_matrix.at(0, 1).re;
                 if (nstate == 2) output.bloch_vector.ptr(j, 1).* = 2 * density_matrix.at(0, 1).im;
                 if (nstate == 2) output.bloch_vector.ptr(j, 2).* = density_matrix.at(1, 1).re - density_matrix.at(0, 0).re;
+                if (nstate == 2) output.bloch_vector.ptr(j, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(j, 0), 2) + std.math.pow(T, output.bloch_vector.at(j, 1), 2));
             }
 
             if (opt.write.wavefunction != null and i == n_dynamics - 1) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, j, time, opt.adiabatic, allocator);
