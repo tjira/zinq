@@ -96,5 +96,6 @@
                 "trajectories" : 100000
             }
         }
-    ]
+    ],
+    "command" : "plot BLOCH_EXACT.mat BLOCH_MASH.mat BLOCH_FSSH.mat --legends every '$\\Braket{\\sigma_x}$' '$\\Braket{\\sigma_y}$' '$\\Braket{\\sigma_z}$' '$\\Braket{\\sigma_x}$' '$\\Braket{\\sigma_y}$' '$\\Braket{\\sigma_z}$' '$\\Braket{\\sigma_x}$' '$\\Braket{\\sigma_y}$' '$\\Braket{\\sigma_z}$' --scales 0-1 -1 --subplots 221 221 221 222 222 222 223 223 223 --title EXACT MASH FSSH --xlabel '$t$ (a.u.)' '$t$ (a.u.)' '$t$ (a.u.)' --ylabel 'Vector Element' 'Vector Element' 'Vector Element' --output SH_COHERENCE_COMPARE.pdf"
 }
