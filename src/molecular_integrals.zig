@@ -74,7 +74,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const system = try classical_particle.read(T, opt.system, 0, allocator); defer system.deinit(allocator);
     var basis = try BasisSet(T).init(system, opt.basis, allocator); defer basis.deinit(allocator);
 
-    var output = Output(T).init();
+    var output = Output(T).init(); errdefer output.deinit(allocator);
 
     if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{basis.nbf()});
 

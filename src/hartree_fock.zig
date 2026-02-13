@@ -143,7 +143,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
-    var output = try scf(T, opt, system, enable_printing, allocator);
+    var output = try scf(T, opt, system, enable_printing, allocator); errdefer output.deinit(allocator);
 
     output.G = if (opt.gradient != null) try nuclearGradient(T, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
 

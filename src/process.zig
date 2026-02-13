@@ -42,7 +42,7 @@ pub fn executeCommand(command: []const u8, allocator: std.mem.Allocator) ![]u8 {
         if (token[0] == '\'') string = true; if (token[token.len - 1] == '\'') string = false;
     }
 
-    var stdout = std.ArrayList(u8){}; var stderr = std.ArrayList(u8){}; defer stderr.deinit(allocator);
+    var stdout = std.ArrayList(u8){}; var stderr = std.ArrayList(u8){}; errdefer stdout.deinit(allocator); defer stderr.deinit(allocator);
 
     var child = std.process.Child.init(args.items, allocator);
 

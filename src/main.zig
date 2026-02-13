@@ -109,10 +109,31 @@ const Target = enum {
     quantum_dynamics
 };
 
+/// Find out if the input JSON file contains an unrecognized field and print the expected field.
+fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value, err: anyerror) !void {
+    inline for (std.meta.fields(Struct)) |field| if (@typeInfo(field.type) == .@"struct") {
+        try checkForUnrecognizedFields(field.type, options.object.get(field.name).?, err);
+    };
+
+    for (options.object.keys()) |provided| {
+
+        var found = false;
+
+        for (std.meta.fieldNames(Struct)) |expected| if (std.mem.eql(u8, provided, expected)) {
+            found = true; break;
+        };
+
+        if (!found) return error_handling.throwSpecific(void, "UNRECOGNIZED FIELD '{s}' IN INPUT", .{provided}, err);
+    }
+}
+
 /// Handle a specific module by parsing its options and running it.
 fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
     var parsed = std.json.parseFromValue(Module.Options(T), allocator, options, .{}) catch |err| {
-        return error_handling.throwSpecific(void, "ERROR WHILE PARSING INPUT", .{}, err);
+
+        try checkForUnrecognizedFields(Module.Options(T), options, err);
+
+        return error_handling.throwSpecific(void, "UNHANDLED ERROR WHILE PARSING INPUT", .{}, err);
     };
 
     var output = try Module.run(T, parsed.value, true, allocator); defer output.deinit(allocator);

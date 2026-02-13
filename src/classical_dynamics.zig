@@ -225,7 +225,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
-    var output = try Output(T).init(nstate, ndim, opt.iterations, allocator);
+    var output = try Output(T).init(nstate, ndim, opt.iterations, allocator); errdefer output.deinit(allocator);
 
     const parallel_results = .{
         .bloch_vector_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = 4}, allocator),

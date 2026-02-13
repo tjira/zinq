@@ -121,7 +121,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Calculate the density matrix of the wavefunction. The matrix is allocated and returned.
         pub fn density(self: *@This(), potential: ElectronicPotential(T), time: T, adiabatic: bool, allocator: std.mem.Allocator) !ComplexMatrix(T) {
-            var density_matrix = try ComplexMatrix(T).initZero(self.nstate, self.nstate, allocator);
+            var density_matrix = try ComplexMatrix(T).initZero(self.nstate, self.nstate, allocator); errdefer density_matrix.deinit(allocator);
 
             var wavefunction_row = try ComplexMatrix(T).init(self.nstate, 1, allocator); defer wavefunction_row.deinit(allocator);
 
@@ -194,7 +194,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Kinetic energy and momentum operator in momentum space to save repeated fourier transforms.
         pub fn kineticEnergyAndMomentumMean(self: *@This(), allocator: std.mem.Allocator) !struct{kinetic_energy: T, momentum: RealVector(T)} {
-            var momentum = try RealVector(T).initZero(self.ndim, allocator); var kinetic_energy: T = 0;
+            var momentum = try RealVector(T).initZero(self.ndim, allocator); errdefer momentum.deinit(allocator); var kinetic_energy: T = 0;
 
             for (0..self.nstate) |i| {
 
@@ -254,7 +254,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Calculate the position of the wavefunction. The resulting vector is allocated inside the function and returned.
         pub fn positionMean(self: *@This(), allocator: std.mem.Allocator) !RealVector(T) {
-            var position = try RealVector(T).initZero(self.ndim, allocator);
+            var position = try RealVector(T).initZero(self.ndim, allocator); errdefer position.deinit(allocator);
 
             for (0..self.data.rows) |i| {
 

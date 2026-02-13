@@ -23,7 +23,7 @@ pub fn BasisSet(comptime T: type) type {
 
         /// Get the basis set for the given system and name.
         pub fn init(system: ClassicalParticle(T), name: []const u8, allocator: std.mem.Allocator) !BasisSet(T) {
-            var basis = std.ArrayList(ContractedGaussian(T)){};
+            var basis = std.ArrayList(ContractedGaussian(T)){}; errdefer basis.deinit(allocator);
 
             const basis_file_contents = BASIS_FILES.get(name) orelse return throw(BasisSet(T), "BASIS SET \"{s}\" NOT FOUND", .{name});
 

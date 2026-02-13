@@ -127,7 +127,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
-    var output = try mp(T, opt, system, enable_printing, allocator);
+    var output = try mp(T, opt, system, enable_printing, allocator); errdefer output.deinit(allocator);
 
     output.G = if (opt.gradient != null) try nuclearGradient(T, opt, system, mp, "MOLLER-PLESSET", enable_printing, allocator) else null;
 

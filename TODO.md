@@ -35,4 +35,5 @@
 - [x] Check the coherences calculation in FSSH, MASH and QD, since it seems to be wrong. It should be the same for all methods, but it is not.
 - [x] Operators in Shunting-Yard algorithm are binary, so negative numbers cannot be treated. Implement a way to treat negative numbers in the Shunting-Yard algorithm.
 - [ ] Shunting-Yard algorithm should be extended to treat complex numbers.
-- [ ] The JSON parser should tell user what fields are not recognized and what fields are missing.
+- [x] The JSON parser should tell user what fields are not recognized.
+- [ ] The JSON parser should tell user what fields are not missing.
