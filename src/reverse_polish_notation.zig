@@ -18,8 +18,10 @@ pub const Associativity = enum {
 
 /// Available operators.
 pub const Operator = enum {
+    Affirm,
     Plus,
     Minus,
+    Negate,
     Multiply,
     Divide,
     Power
@@ -77,7 +79,11 @@ pub fn ReversePolishNotation(comptime T: type) type {
             for (self.data.items) |element| {
                 switch (element) {
                     .number => |num| self.stack.appendAssumeCapacity(num),
-                    .op => |op| self.stack.appendAssumeCapacity(applyOperator(op, self.stack.pop().?, self.stack.pop().?)),
+                    .op => |op| switch (operatorArity(op)) {
+                        1 => self.stack.appendAssumeCapacity(applyUnaryOperator(op, self.stack.pop().?)),
+                        2 => self.stack.appendAssumeCapacity(applyBinaryOperator(op, self.stack.pop().?, self.stack.pop().?)),
+                        else => unreachable
+                    },
                     .variable => |variable| self.stack.appendAssumeCapacity(map.get(variable) orelse return throw(T, "UNKNOWN '{s}' VARIABLE IN RPN EVALUATION", .{variable})),
                     .constant => |constant| self.stack.appendAssumeCapacity(C2V.get(constant) orelse return throw(T, "UNKNOWN '{s}' CONSTANT IN RPN EVALUATION", .{constant})),
                 }
@@ -97,10 +103,12 @@ pub fn ReversePolishNotation(comptime T: type) type {
                 switch (element) {
 
                     .number => |num| try buffer.print(allocator, "{d}", .{num}),
-                    
+
                     .op => |op| try buffer.print(allocator, "{s}", .{switch (op) {
                         .Plus => "+",
                         .Minus => "-",
+                        .Affirm => "AFF",
+                        .Negate => "NEG",
                         .Multiply => "*",
                         .Divide => "/",
                         .Power => "^",
@@ -116,14 +124,24 @@ pub fn ReversePolishNotation(comptime T: type) type {
     };
 }
 
-/// Applys the given operator to two operands.
-pub fn applyOperator(op: Operator, n1: anytype, n2: @TypeOf(n1)) @TypeOf(n1, n2) {
+/// Applies the given unary operator to the provided number and returns the result.
+pub fn applyUnaryOperator(op: Operator, n: anytype) @TypeOf(n) {
+    return switch (op) {
+        .Affirm => n,
+        .Negate => -n,
+        else => unreachable
+    };
+}
+
+/// Applies the given binary operator to the two provided numbers and returns the result.
+pub fn applyBinaryOperator(op: Operator, n1: anytype, n2: @TypeOf(n1)) @TypeOf(n1, n2) {
     return switch (op) {
         .Plus => n2 + n1,
         .Minus => n2 - n1,
         .Multiply => n2 * n1,
         .Divide => n2 / n1,
-        .Power => std.math.pow(@TypeOf(n1, n2), n2, n1)
+        .Power => std.math.pow(@TypeOf(n1, n2), n2, n1),
+        else => unreachable
     };
 }
 
@@ -131,7 +149,7 @@ pub fn applyOperator(op: Operator, n1: anytype, n2: @TypeOf(n1)) @TypeOf(n1, n2)
 pub fn operatorAssociativity(op: Operator) Associativity {
     return switch (op) {
         .Plus, .Minus, .Multiply, .Divide => .Left,
-        .Power => .Right
+        .Power, .Negate, .Affirm => .Right
     };
 }
 
@@ -147,11 +165,19 @@ pub fn operatorFromChar(char: u8) !Operator {
     };
 }
 
+/// Returns the operator arity (number of operands) for the given operator.
+pub fn operatorArity(op: Operator) u8 {
+    return switch (op) {
+        .Plus, .Minus, .Multiply, .Divide, .Power => 2,
+        .Negate, .Affirm => 1,
+    };
+}
+
 /// Returns the precedence of the given operator.
 pub fn operatorPrecedence(op: Operator) u8 {
     return switch (op) {
         .Plus, .Minus => 2,
         .Multiply, .Divide => 3,
-        .Power => 4
+        .Power, .Negate, .Affirm => 4,
     };
 }

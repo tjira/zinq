@@ -43,9 +43,15 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         else if (input[i] == '+' or input[i] == '-' or input[i] == '*' or input[i] == '/' or input[i] == '^') {
 
-            if (expect_operand) return throw(ReversePolishNotation(T), "UNARY OPERATORS NOT SUPPORTED", .{});
+            var op: Operator = undefined;
 
-            const op = try operatorFromChar(input[i]); const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
+            if (input[i] == '-' and expect_operand) op = .Negate
+            else if (input[i] == '+' and expect_operand) op = .Affirm
+            else {
+                if (expect_operand) return throw(ReversePolishNotation(T), "UNEXPECTED UNARY OPERATOR", .{}); op = try operatorFromChar(input[i]);
+            }
+
+            const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
 
             while (stack.items.len > 0 and switch(stack.getLast()) {.op => true, .bracket => |bracket| bracket != '('}) {
                 if (operatorPrecedence(stack.getLast().op) > opp or (operatorPrecedence(stack.getLast().op) == opp and opa == .Left)) try rpn.append(stack.pop().?.op, allocator) else break;
