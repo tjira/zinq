@@ -35,6 +35,8 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         if (std.ascii.isDigit(input[i])) {
 
+            if (!expect_operand) return throw(ReversePolishNotation(T), "MISSING OPERATOR BEFORE NUMBER", .{});
+
             while (i < input.len and (std.ascii.isDigit(input[i]) or input[i] == '.')) : (i += 1) {
                 buffer[j] = input[i]; j += 1;
             }
@@ -66,6 +68,9 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
         }
 
         else if (input[i] == '(') {
+
+            if (!expect_operand) return throw(ReversePolishNotation(T), "MISSING OPERATOR BEFORE PARENTHESIS", .{});
+
             try stack.append(allocator, .{.bracket = input[i]}); expect_operand = true;
         }
 
@@ -91,6 +96,8 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         else {
 
+            if (!expect_operand) return throw(ReversePolishNotation(T), "MISSING OPERATOR BEFORE IDENTIFIER/FUNCTION", .{});
+
             for (STR2F.keys()) |func| {
                 if (i + func.len - 1 < input.len and std.mem.eql(u8, input[i..i + func.len], func)) {
                     try stack.append(allocator, .{.func = STR2F.get(func).?}); i += func.len - 1; continue :parser;
@@ -98,7 +105,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
             }
 
             for (C2V.keys()) |constant| {
-                if (std.mem.eql(u8, constant, input[i..i + constant.len])) {
+                if (i + constant.len - 1 < input.len and std.mem.eql(u8, constant, input[i..i + constant.len])) {
                     try rpn.append(constant, allocator); i += constant.len - 1; expect_operand = false; continue :parser;
                 }
             }
