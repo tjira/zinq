@@ -38,6 +38,11 @@ pub const EV2RCM = 1e-2 * e / h / c; // eV of a photon to its wavenumber in cm^-
 pub const J2AU = 1.0 / Eh;           // J to a.u. of energy
 pub const U2AU = amu / me;           // g/mol to a.u
 
+/// Constant symbol to value map.
+pub const C2V = std.StaticStringMap(f64).initComptime(.{
+    .{"e", std.math.e},
+});
+
 /// Atomic symbol to atomic number map.
 pub const SM2AN = std.StaticStringMap(usize).initComptime(.{
     .{ "H",   1},                                                                                                                                                                                                                                 .{"He",   2},

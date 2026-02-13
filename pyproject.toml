@@ -18,6 +18,7 @@ mp2 = "zinq.launch:mp2"
 primecheck = "zinq.launch:primecheck"
 primefact = "zinq.launch:primefact"
 primegen = "zinq.launch:primegen"
+exprev = "zinq.launch:exprev"
 plot = "zinq.plot:plot"
 heatmap = "zinq.plot:heatmap"
 

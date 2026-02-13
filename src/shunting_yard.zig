@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const error_handling = @import("error_handling.zig");
+const global_variables = @import("global_variables.zig");
 const reverse_polish_notation = @import("reverse_polish_notation.zig");
 
 const Operator = reverse_polish_notation.Operator;
@@ -12,6 +13,8 @@ const operatorAssociativity = reverse_polish_notation.operatorAssociativity;
 const operatorFromChar = reverse_polish_notation.operatorFromChar;
 const operatorPrecedence = reverse_polish_notation.operatorPrecedence;
 const throw = error_handling.throw;
+
+const C2V = global_variables.C2V;
 
 /// Parses the input expression using the Shunting Yard algorithm and returns the RPN output.
 pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []const u8, allocator: std.mem.Allocator) !ReversePolishNotation(T) {
@@ -34,15 +37,6 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
             const number = try std.fmt.parseFloat(T, buffer[0..j]);
 
             try rpn.append(number, allocator); i -= 1; j = 0;
-
-            expect_operand = false; continue;
-        }
-
-        else if (input[i] == 'e') {
-
-            const number: T = std.math.e;
-
-            try rpn.append(number, allocator); j = 0;
 
             expect_operand = false; continue;
         }
@@ -80,6 +74,12 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
             for (variables) |variable| {
                 if (std.mem.eql(u8, variable, input[i..i + variable.len])) {
                     try rpn.append(variable, allocator); i += variable.len - 1; expect_operand = false; continue :parser;
+                }
+            }
+
+            for (C2V.keys()) |constant| {
+                if (std.mem.eql(u8, constant, input[i..i + constant.len])) {
+                    try rpn.append(constant, allocator); i += constant.len - 1; expect_operand = false; continue :parser;
                 }
             }
 

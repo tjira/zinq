@@ -7,6 +7,7 @@ const global_variables = @import("global_variables.zig");
 
 const throw = error_handling.throw;
 
+const C2V = global_variables.C2V;
 const RPN_MAX_STACK_SIZE = global_variables.RPN_MAX_STACK_SIZE;
 
 /// Associativity types.
@@ -30,7 +31,8 @@ pub fn ReversePolishNotation(comptime T: type) type {
         const Element = union(enum) {
             number: T,
             op: Operator,
-            variable: []const u8
+            variable: []const u8,
+            constant: []const u8
         };
 
         data: std.ArrayList(Element),
@@ -57,6 +59,13 @@ pub fn ReversePolishNotation(comptime T: type) type {
             } else if (@TypeOf(element) == Operator) {
                 try self.data.append(allocator, Element{.op = element});
             } else if (@TypeOf(element) == []const u8) {
+
+                for (C2V.keys()) |constant| {
+                    if (std.mem.eql(u8, element, constant)) {
+                        try self.data.append(allocator, Element{.constant = element}); return;
+                    }
+                }
+
                 try self.data.append(allocator, Element{.variable = element});
             } else {
                 return throw(void, "INVALID ELEMENT TYPE FOR RPN", .{});
@@ -70,10 +79,39 @@ pub fn ReversePolishNotation(comptime T: type) type {
                     .number => |num| self.stack.appendAssumeCapacity(num),
                     .op => |op| self.stack.appendAssumeCapacity(applyOperator(op, self.stack.pop().?, self.stack.pop().?)),
                     .variable => |variable| self.stack.appendAssumeCapacity(map.get(variable) orelse return throw(T, "UNKNOWN '{s}' VARIABLE IN RPN EVALUATION", .{variable})),
+                    .constant => |constant| self.stack.appendAssumeCapacity(C2V.get(constant) orelse return throw(T, "UNKNOWN '{s}' CONSTANT IN RPN EVALUATION", .{constant})),
                 }
             }
 
             return self.stack.pop().?;
+        }
+
+        /// Rerutns the RPN as a string.
+        pub fn toString(self: @This(), allocator: std.mem.Allocator) ![]u8 {
+            var buffer = std.ArrayList(u8){};
+
+            for (self.data.items, 0..) |element, i| {
+
+                if (i > 0 and i < self.data.items.len) try buffer.print(allocator, " ", .{});
+
+                switch (element) {
+
+                    .number => |num| try buffer.print(allocator, "{d}", .{num}),
+                    
+                    .op => |op| try buffer.print(allocator, "{s}", .{switch (op) {
+                        .Plus => "+",
+                        .Minus => "-",
+                        .Multiply => "*",
+                        .Divide => "/",
+                        .Power => "^",
+                    }}),
+                    
+                    .variable => |variable| try buffer.print(allocator, "{s}", .{variable}),
+                    .constant => |constant| try buffer.print(allocator, "{s}", .{constant}),
+                }
+            }
+
+            return buffer.toOwnedSlice(allocator);
         }
     };
 }

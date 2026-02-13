@@ -65,6 +65,30 @@ def eigh():
 
     executeInput(inp)
 
+def exprev():
+    parser = argparse.ArgumentParser(
+        prog="Zinq Expression Evaluator Module", description="Wrapper for the expression evaluator using the Zinq package.",
+        formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=128),
+        add_help=False, allow_abbrev=False
+    )
+
+    parser.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS, help="This help message.")
+
+    parser.add_argument("-e", "--expression", type=str, help="Expression to evaluate.", required=True)
+    parser.add_argument("-v", "--variables", nargs="+", help="Variables for the expression in the form name=value.", default=[])
+
+    args = parser.parse_args()
+
+    inp = getInputTemplate("expression_evaluator")
+
+    inp["zinq"][0]["options"] = {
+        "expression" : args.expression,
+        "variables" : [var[0] for var in (var.split("=") for var in args.variables)],
+        "values" : [var[1] for var in (var.split("=") for var in args.variables)]
+    }
+
+    executeInput(inp)
+
 def hf():
     parser = argparse.ArgumentParser(
         prog="Zinq Hartree-Fock Module", description="Wrapper for the Hartree-Fock method using the Zinq package.",

@@ -26,6 +26,7 @@ pub const embedded_files = @import("embedded_files.zig");
 pub const energy_derivative = @import("energy_derivative.zig");
 pub const error_context = @import("error_context.zig");
 pub const error_handling = @import("error_handling.zig");
+pub const expression_evaluator = @import("expression_evaluator.zig");
 pub const fewest_switches = @import("fewest_switches.zig");
 pub const file_potential = @import("file_potential.zig");
 pub const fourier_transform = @import("fourier_transform.zig");
@@ -83,6 +84,7 @@ pub const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig
 
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
 pub const EigenproblemSolverOptions = eigenproblem_solver.Options;
+pub const ExpressionEvaluatorOptions = expression_evaluator.Options;
 pub const FractalGeneratorOptions = fractal_generator.Options;
 pub const HartreeFockOptions = hartree_fock.Options;
 pub const MolecularIntegralsOptions = molecular_integrals.Options;
@@ -96,6 +98,7 @@ pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 const Target = enum {
     classical_dynamics,
     eigenproblem_solver,
+    expression_evaluator,
     fractal_generator,
     hartree_fock,
     molecular_integrals,
@@ -142,13 +145,14 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
         switch (tag) {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
             .eigenproblem_solver => try handle(f64, eigenproblem_solver, options, allocator),
+            .expression_evaluator => try handle(f64, expression_evaluator, options, allocator),
             .fractal_generator => try handle(f64, fractal_generator, options, allocator),
             .hartree_fock => try handle(f64, hartree_fock, options, allocator),
             .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
             .moller_plesset => try handle(f64, moller_plesset, options, allocator),
             .multiconfigurational_gaussian => try handle(f64, multiconfigurational_gaussian, options, allocator),
             .potential_plot => try handle(f64, potential_plot, options, allocator),
-            .prime_numbers => try handle(u64, prime_numbers, options, allocator),
+            .prime_numbers => try handle(f64, prime_numbers, options, allocator),
             .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator)
         }
     }
