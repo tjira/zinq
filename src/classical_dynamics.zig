@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const andersen_thermostat = @import("andersen_thermostat.zig");
 const berendsen_thermostat = @import("berendsen_thermostat.zig");
 const bias_potential = @import("bias_potential.zig");
 const classical_particle = @import("classical_particle.zig");
@@ -390,12 +391,19 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .npi_parameters = npi_parameters
     };
 
+    const andersen_parameters: andersen_thermostat.Parameters(T) = .{
+        .time_step = opt.time_step,
+        .masses = system.masses,
+        .random = &random
+    };
+
     const berendsen_parameters: berendsen_thermostat.Parameters(T) = .{
         .time_step = opt.time_step,
         .temperature = undefined
     };
 
     var thermostat_parameters: thermostat.Parameters(T) = .{
+        .andersen_params = andersen_parameters,
         .berendsen_params = berendsen_parameters
     };
 
