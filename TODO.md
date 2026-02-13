@@ -37,3 +37,4 @@
 - [ ] Shunting-Yard algorithm should be extended to treat complex numbers.
 - [x] The JSON parser should tell user what fields are not recognized.
 - [ ] The JSON parser should tell user what fields are not missing.
+- [ ] In kinetic temperature calculation, the number of degrees of freedom should be calculated, it is now set to ndim, which is correct for a single particle.

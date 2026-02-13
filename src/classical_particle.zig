@@ -21,6 +21,7 @@ const uncr = string_manipulation.uncr;
 const A2AU = global_variables.A2AU;
 const AN2M = global_variables.AN2M;
 const SM2AN = global_variables.SM2AN;
+const AU2K = global_variables.AU2K;
 
 /// Classical particle struct that holds all information about the classical-like coordinates, velocities and masses.
 pub fn ClassicalParticle(comptime T: type) type {
@@ -114,6 +115,15 @@ pub fn ClassicalParticle(comptime T: type) type {
             }
 
             return kinetic_energy;
+        }
+
+        /// Calculate the kinetic temperature of the system using the equipartition theorem.
+        pub fn kineticTemperature(self: @This()) T {
+            const n_dof = @as(T, @floatFromInt(self.ndim));
+
+            if (n_dof == 0) return 0;
+
+            return 2 * self.kineticEnergy() / n_dof * AU2K;
         }
 
         /// Get the number of occupied spatial orbitals.

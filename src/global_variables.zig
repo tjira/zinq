@@ -37,6 +37,7 @@ pub const AU2EV = Eh / e;            // a.u. of energy to eV
 pub const EV2RCM = 1e-2 * e / h / c; // eV of a photon to its wavenumber in cm^-1
 pub const J2AU = 1.0 / Eh;           // J to a.u. of energy
 pub const U2AU = amu / me;           // g/mol to a.u
+pub const AU2K = Eh / kB;            // a.u. of energy to Kelvin
 
 // Function name to function pointer map.
 pub const STR2F = std.StaticStringMap(*const fn(f64) f64).initComptime(.{

@@ -30,7 +30,7 @@ pub fn Parameters(comptime T: type) type {
     };
 }
 
-/// Electronic potential mode union.
+/// Surface hopping algorithm union type.
 pub fn SurfaceHoppingAlgorithm(comptime T: type) type {
     return union(enum) {
         fewest_switches: FewestSwitches(T),

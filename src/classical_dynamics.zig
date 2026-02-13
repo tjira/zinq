@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const berendsen_thermostat = @import("berendsen_thermostat.zig");
 const bias_potential = @import("bias_potential.zig");
 const classical_particle = @import("classical_particle.zig");
 const complex_runge_kutta = @import("complex_runge_kutta.zig");
@@ -27,6 +28,7 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const ring_buffer = @import("ring_buffer.zig");
 const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
+const thermostat = @import("thermostat.zig");
 const tully_potential = @import("tully_potential.zig");
 
 const BiasPotential = bias_potential.BiasPotential;
@@ -49,6 +51,7 @@ const RealMatrixArray = object_array.RealMatrixArray;
 const RealVectorArray = object_array.RealVectorArray;
 const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorithm;
 const TullyPotential1 = tully_potential.TullyPotential1;
+const Thermostat = thermostat.Thermostat;
 
 const applyDecoherenceCorrection = surface_hopping_algorithm.applyDecoherenceCorrection;
 const binomialConfInt = math_functions.binomialConfInt;
@@ -74,7 +77,7 @@ pub fn Options(comptime T: type) type {
             momentum_std: []const T,
             position_mean: []const T,
             position_std: []const T,
-            state: u32
+            state: u32 = 0
         };
         pub const LogIntervals = struct {
             trajectory: u32 = 1,
@@ -89,6 +92,7 @@ pub fn Options(comptime T: type) type {
             position_mean: ?[]const u8 = null,
             potential_energy_mean: ?[]const u8 = null,
             time_derivative_coupling_mean: ?[]const u8 = null,
+            temperature_mean: ?[]const u8 = null,
             total_energy_mean: ?[]const u8 = null
         };
 
@@ -103,6 +107,7 @@ pub fn Options(comptime T: type) type {
         derivative_coupling: ?DerivativeCoupling(T) = null,
         log_intervals: LogIntervals = .{},
         surface_hopping: ?SurfaceHoppingAlgorithm(T) = null,
+        thermostat: ?Thermostat(T) = null,
         write: Write = .{},
 
         finite_differences_step: T = 1e-8,
@@ -122,6 +127,7 @@ pub fn Output(comptime T: type) type {
         position_mean: RealMatrix(T),
         potential_energy_mean: RealVector(T),
         time_derivative_coupling_mean: RealMatrix(T),
+        temperature_mean: RealVector(T),
         total_energy_mean: RealVector(T),
 
         /// Allocate the output structure.
@@ -135,6 +141,7 @@ pub fn Output(comptime T: type) type {
                 .position_mean = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                 .potential_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
                 .time_derivative_coupling_mean = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
+                .temperature_mean = try RealVector(T).initZero(iterations + 1, allocator),
                 .total_energy_mean = try RealVector(T).initZero(iterations + 1, allocator)
             };
         }
@@ -149,6 +156,7 @@ pub fn Output(comptime T: type) type {
             self.position_mean.deinit(allocator);
             self.potential_energy_mean.deinit(allocator);
             self.time_derivative_coupling_mean.deinit(allocator);
+            self.temperature_mean.deinit(allocator);
             self.total_energy_mean.deinit(allocator);
         }
     };
@@ -167,6 +175,7 @@ pub fn Custom(comptime T: type) type {
             system: ClassicalParticle(T),
             time: T,
             trajectory: usize,
+            temperature: T,
             coefficients: ComplexVector(T)
         };
 
@@ -180,6 +189,7 @@ pub fn Custom(comptime T: type) type {
             position: RealMatrix(T),
             potential_energy: RealVector(T),
             time_derivative_coupling: RealMatrix(T),
+            temperature: RealVector(T),
             total_energy: RealVector(T),
 
             /// Allocate the trajectory output structure.
@@ -193,6 +203,7 @@ pub fn Custom(comptime T: type) type {
                     .position = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                     .potential_energy = try RealVector(T).initZero(iterations + 1, allocator),
                     .time_derivative_coupling = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
+                    .temperature = try RealVector(T).initZero(iterations + 1, allocator),
                     .total_energy = try RealVector(T).initZero(iterations + 1, allocator),
                 };
             }
@@ -207,6 +218,7 @@ pub fn Custom(comptime T: type) type {
                 self.position.deinit(allocator);
                 self.potential_energy.deinit(allocator);
                 self.time_derivative_coupling.deinit(allocator);
+                self.temperature.deinit(allocator);
                 self.total_energy.deinit(allocator);
             }
         };
@@ -236,6 +248,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         .position_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
         .potential_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
         .time_derivative_coupling_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate * nstate}, allocator),
+        .temperature_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
         .total_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
     };
 
@@ -243,7 +256,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var split_mix = std.Random.SplitMix64.init(opt.seed);
 
-    if (enable_printing) try printIterationHeader(T, ndim, nstate, opt.surface_hopping);
+    if (enable_printing) try printIterationHeader(T, ndim, nstate, opt.surface_hopping, opt.thermostat);
 
     var pool: std.Thread.Pool = undefined; var wait: std.Thread.WaitGroup = undefined;
 
@@ -306,7 +319,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     var coefficients = try ComplexVector(T).initZero(nstate, allocator); defer coefficients.deinit(allocator);
     var bloch_vector = try RealVector(T).initZero(3, allocator); defer bloch_vector.deinit(allocator);
 
-    coefficients.ptr(current_state).* = Complex(T).init(1, 0); bloch_vector.ptr(2).* = coefficients.at(1).squaredMagnitude() - coefficients.at(0).squaredMagnitude();
+    coefficients.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficients.at(1).squaredMagnitude() - coefficients.at(0).squaredMagnitude();
 
     var Wcp: T = 1; var Wpp: T = 1; var Sz0: T = bloch_vector.at(2);
 
@@ -371,17 +384,26 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .time_step = opt.time_step
     };
 
-    const derivative_coupling_parameters: derivative_coupling.Parameters(T) = .{
+    var derivative_coupling_parameters: derivative_coupling.Parameters(T) = .{
         .hst_parameters = hst_parameters,
         .nacv_parameters = nacv_parameters,
         .npi_parameters = npi_parameters
+    };
+
+    const berendsen_parameters: berendsen_thermostat.Parameters(T) = .{
+        .time_step = opt.time_step,
+        .temperature = undefined
+    };
+
+    var thermostat_parameters: thermostat.Parameters(T) = .{
+        .berendsen_params = berendsen_parameters
     };
 
     var timer = try std.time.Timer.start();
 
     for (0..opt.iterations + 1) |i| {
 
-        const time = @as(T, @floatFromInt(i)) * opt.time_step; @constCast(&nacv_parameters.time).* = time;
+        const time = @as(T, @floatFromInt(i)) * opt.time_step; derivative_coupling_parameters.nacv_parameters.time = time;
 
         try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
@@ -422,12 +444,20 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         if (i > 0) try system.propagateVelocityVerletSecondHalf(opt.time_step);
 
-        const kinetic_energy = system.kineticEnergy();
+        if (opt.thermostat) |thm| {
+
+            thermostat_parameters.berendsen_params.temperature = system.kineticTemperature();
+
+            try thm.apply(&system.velocity, thermostat_parameters);
+        }
+
+        const kinetic_energy = system.kineticEnergy(); const temperature = system.kineticTemperature();
 
         output.kinetic_energy.ptr(i).* = Wpp * kinetic_energy;
         output.population.ptr(i, current_state).* = Wpp;
         output.potential_energy.ptr(i).* = Wpp * potential_energy;
         output.total_energy.ptr(i).* = Wpp * (kinetic_energy + potential_energy);
+        output.temperature.ptr(i).* = Wpp * temperature;
 
         for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = Wpp * time_derivative_coupling.at(j / nstate, j % nstate);
 
@@ -469,10 +499,11 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             .system = system.*,
             .time = time,
             .trajectory = index,
+            .temperature = temperature,
             .coefficients = coefficients
         };
 
-        try printIterationInfo(T, iteration_info, opt.surface_hopping, &timer);
+        try printIterationInfo(T, iteration_info, opt.surface_hopping, opt.thermostat, &timer);
     }
 
     return output;
@@ -528,13 +559,17 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
         error_ctx.capture(err); return;
     };
 
+    results.temperature_mean.ptr(id - 1).add(trajectory_output.temperature) catch |err| {
+        error_ctx.capture(err); return;
+    };
+
     results.total_energy_mean.ptr(id - 1).add(trajectory_output.total_energy) catch |err| {
         error_ctx.capture(err); return;
     };
 }
 
 /// Print header for iteration info.
-pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surface_hopping: ?SurfaceHoppingAlgorithm(T)) !void {
+pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surface_hopping: ?SurfaceHoppingAlgorithm(T), thm: ?Thermostat(T)) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     const ndim_header_width = 9 * @as(usize, @min(ndim, 3)) + 2 * (@as(usize, @min(ndim, 3)) - 1) + @as(usize, if (ndim > 3) 7 else 2);
@@ -543,10 +578,13 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:8} {s:8} ", .{"TRAJ", "ITER"});
-    try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
+    try writer.print("{s:12} {s:12} {s:12} ", .{"KIN (Eh)", "POT (Eh)", "TOT (Eh)"});
+
+    if (thm) |_| try writer.print("{s:12} ", .{"TEMP (K)"});
+
     try writer.print("{s:5} ", .{"STATE"});
-    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = ndim_header_width});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = ndim_header_width});
+    try writer.print("{[value]s:[width]} ", .{.value = "POS (a0)", .width = ndim_header_width});
+    try writer.print("{[value]s:[width]} ", .{.value = "MOM (a0)", .width = ndim_header_width});
 
     if (surface_hopping) |algorithm| switch (algorithm) {
         .fewest_switches => try writer.print("{[value]s:[width]} ", .{.value = "|COEFS|^2", .width = nstate_header_width}),
@@ -568,6 +606,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     const output_position_mean = parallel_results.position_mean;
     const output_potential_energy_mean = parallel_results.potential_energy_mean;
     const output_time_derivative_coupling_mean = parallel_results.time_derivative_coupling_mean;
+    const output_temperature_mean = parallel_results.temperature_mean;
     const output_total_energy_mean = parallel_results.total_energy_mean;
 
     for (0..opt.nthread) |i| {
@@ -579,6 +618,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
         try output.position_mean.add(output_position_mean.at(i));
         try output.potential_energy_mean.add(output_potential_energy_mean.at(i));
         try output.time_derivative_coupling_mean.add(output_time_derivative_coupling_mean.at(i));
+        try output.temperature_mean.add(output_temperature_mean.at(i));
         try output.total_energy_mean.add(output_total_energy_mean.at(i));
     }
 
@@ -590,6 +630,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     output.position_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.potential_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.time_derivative_coupling_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+    output.temperature_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.total_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
@@ -602,6 +643,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     if (opt.write.position_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.position_mean, 0, end_time);
     if (opt.write.potential_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.potential_energy_mean.asMatrix(), 0, end_time);
     if (opt.write.time_derivative_coupling_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.time_derivative_coupling_mean, 0, end_time);
+    if (opt.write.temperature_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.temperature_mean.asMatrix(), 0, end_time);
     if (opt.write.total_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy_mean.asMatrix(), 0, end_time);
 }
 
@@ -635,13 +677,16 @@ pub fn printFinalDetails(comptime T: type, opt: Options(T), output: Output(T)) !
 }
 
 /// Prints the iteration info to standard output.
-pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T), timer: *std.time.Timer) !void {
+pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T), thm: ?Thermostat(T), timer: *std.time.Timer) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("{d:8} {d:8} ", .{info.trajectory + 1, info.iteration});
     try writer.print("{d:12.6} {d:12.6} {d:12.6} ", .{info.kinetic_energy, info.potential_energy, info.kinetic_energy + info.potential_energy});
+
+    if (thm) |_| try writer.print("{d:12.3} ", .{info.temperature});
+
     try writer.print("{d:5} ", .{info.state});
 
     try writer.print("[", .{});
