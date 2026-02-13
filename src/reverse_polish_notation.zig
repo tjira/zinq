@@ -7,6 +7,7 @@ const global_variables = @import("global_variables.zig");
 
 const throw = error_handling.throw;
 
+const STR2F = global_variables.STR2F;
 const C2V = global_variables.C2V;
 const RPN_MAX_STACK_SIZE = global_variables.RPN_MAX_STACK_SIZE;
 
@@ -32,6 +33,7 @@ pub fn ReversePolishNotation(comptime T: type) type {
     return struct {
         const Element = union(enum) {
             number: T,
+            func: *const fn(T) T,
             op: Operator,
             variable: []const u8,
             constant: []const u8
@@ -58,6 +60,8 @@ pub fn ReversePolishNotation(comptime T: type) type {
         pub fn append(self: *@This(), element: anytype, allocator: std.mem.Allocator) !void {
             if (@TypeOf(element) == T) {
                 try self.data.append(allocator, Element{.number = element});
+            } else if (@TypeOf(element) == *const fn(T) T) {
+                try self.data.append(allocator, Element{.func = element});
             } else if (@TypeOf(element) == Operator) {
                 try self.data.append(allocator, Element{.op = element});
             } else if (@TypeOf(element) == []const u8) {
@@ -79,6 +83,7 @@ pub fn ReversePolishNotation(comptime T: type) type {
             for (self.data.items) |element| {
                 switch (element) {
                     .number => |num| self.stack.appendAssumeCapacity(num),
+                    .func => |func| self.stack.appendAssumeCapacity(func(self.stack.pop().?)),
                     .op => |op| switch (operatorArity(op)) {
                         1 => self.stack.appendAssumeCapacity(applyUnaryOperator(op, self.stack.pop().?)),
                         2 => self.stack.appendAssumeCapacity(applyBinaryOperator(op, self.stack.pop().?, self.stack.pop().?)),
@@ -96,13 +101,22 @@ pub fn ReversePolishNotation(comptime T: type) type {
         pub fn toString(self: @This(), allocator: std.mem.Allocator) ![]u8 {
             var buffer = std.ArrayList(u8){};
 
-            for (self.data.items, 0..) |element, i| {
+            outer: for (self.data.items, 0..) |element, i| {
 
                 if (i > 0 and i < self.data.items.len) try buffer.print(allocator, " ", .{});
 
                 switch (element) {
 
                     .number => |num| try buffer.print(allocator, "{d}", .{num}),
+
+                    .func => |func| {
+
+                        for (STR2F.keys(), STR2F.values()) |key, value| if (func == value) {
+                            for (key) |c| try buffer.print(allocator, "{c}", .{std.ascii.toUpper(c)}); continue :outer;
+                        };
+
+                        return throw([]u8, "UNKNOWN FUNCTION IN RPN TO STRING", .{});
+                    },
 
                     .op => |op| try buffer.print(allocator, "{s}", .{switch (op) {
                         .Plus => "+",

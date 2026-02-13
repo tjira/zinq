@@ -15,14 +15,19 @@ const operatorPrecedence = reverse_polish_notation.operatorPrecedence;
 const throw = error_handling.throw;
 
 const C2V = global_variables.C2V;
+const STR2F = global_variables.STR2F;
 
 /// Parses the input expression using the Shunting Yard algorithm and returns the RPN output.
 pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []const u8, allocator: std.mem.Allocator) !ReversePolishNotation(T) {
     var rpn = try ReversePolishNotation(T).init(allocator);
 
-    var stack = std.ArrayList(union(enum) {op: Operator, bracket: u8}){}; defer stack.deinit(allocator);
+    var stack = std.ArrayList(union(enum) {op: Operator, bracket: u8, func: *const fn(T) T}){}; defer stack.deinit(allocator);
 
     var i: usize = 0; var j: usize = 0; var buffer: [64]u8 = undefined; var expect_operand: bool = true;
+
+    for (variables) |variable| for (C2V.keys()) |constant| {
+        if (std.mem.eql(u8, variable, constant)) return throw(ReversePolishNotation(T), "VARIABLE NAME CANNOT BE THE SAME AS A KNOWN CONSTANT", .{});
+    };
 
     parser: while (i < input.len) : (i += 1) {
 
@@ -53,7 +58,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
             const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
 
-            while (stack.items.len > 0 and switch(stack.getLast()) {.op => true, .bracket => |bracket| bracket != '('}) {
+            while (stack.items.len > 0 and switch(stack.getLast()) {.op => true, .func => false, .bracket => |bracket| bracket != '('}) {
                 if (operatorPrecedence(stack.getLast().op) > opp or (operatorPrecedence(stack.getLast().op) == opp and opa == .Left)) try rpn.append(stack.pop().?.op, allocator) else break;
             }
 
@@ -66,26 +71,41 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         else if (input[i] == ')') {
 
-            while (stack.items.len > 0 and switch(stack.getLast()) {.op => true, .bracket => |bracket| bracket != '('}) {
+            while (stack.items.len > 0 and switch(stack.getLast()) {.op => true, .func => false, .bracket => |bracket| bracket != '('}) {
                 try rpn.append(stack.pop().?.op, allocator);
             }
 
             if (stack.items.len == 0) return throw(ReversePolishNotation(T), "MISMATCHED PARENTHESES IN EXPRESSION", .{});
 
-            _ = stack.pop(); expect_operand = false;
+            _ = stack.pop();
+
+            if (stack.items.len > 0) {
+                switch (stack.getLast()) {
+                    .func => try rpn.append(stack.pop().?.func, allocator),
+                    else => {}
+                }
+            }
+
+            expect_operand = false;
         }
 
         else {
 
-            for (variables) |variable| {
-                if (std.mem.eql(u8, variable, input[i..i + variable.len])) {
-                    try rpn.append(variable, allocator); i += variable.len - 1; expect_operand = false; continue :parser;
+            for (STR2F.keys()) |func| {
+                if (i + func.len - 1 < input.len and std.mem.eql(u8, input[i..i + func.len], func)) {
+                    try stack.append(allocator, .{.func = STR2F.get(func).?}); i += func.len - 1; continue :parser;
                 }
             }
 
             for (C2V.keys()) |constant| {
                 if (std.mem.eql(u8, constant, input[i..i + constant.len])) {
                     try rpn.append(constant, allocator); i += constant.len - 1; expect_operand = false; continue :parser;
+                }
+            }
+
+            for (variables) |variable| {
+                if (std.mem.eql(u8, variable, input[i..i + variable.len])) {
+                    try rpn.append(variable, allocator); i += variable.len - 1; expect_operand = false; continue :parser;
                 }
             }
 

@@ -38,9 +38,36 @@ pub const EV2RCM = 1e-2 * e / h / c; // eV of a photon to its wavenumber in cm^-
 pub const J2AU = 1.0 / Eh;           // J to a.u. of energy
 pub const U2AU = amu / me;           // g/mol to a.u
 
+// Function name to function pointer map.
+pub const STR2F = std.StaticStringMap(*const fn(f64) f64).initComptime(.{
+    .{"sqrt", struct {fn f(x: f64) f64 {return std.math.sqrt(x);}}.f},
+    .{"sin", struct {fn f(x: f64) f64 {return std.math.sin(x);}}.f},
+    .{"cos", struct {fn f(x: f64) f64 {return std.math.cos(x);}}.f},
+    .{"tan", struct {fn f(x: f64) f64 {return std.math.tan(x);}}.f},
+    .{"exp", struct {fn f(x: f64) f64 {return std.math.exp(x);}}.f},
+    .{"log", struct {fn f(x: f64) f64 {return std.math.log(f64, 10, x);}}.f},
+    .{"ln", struct {fn f(x: f64) f64 {return std.math.log(f64, std.math.e, x);}}.f},
+    .{"abs", struct {fn f(x: f64) f64 {return @abs(x);}}.f},
+    .{"atan", struct {fn f(x: f64) f64 {return std.math.atan(x);}}.f},
+    .{"asin", struct {fn f(x: f64) f64 {return std.math.asin(x);}}.f},
+    .{"acos", struct {fn f(x: f64) f64 {return std.math.acos(x);}}.f},
+    .{"sinh", struct {fn f(x: f64) f64 {return std.math.sinh(x);}}.f},
+    .{"cosh", struct {fn f(x: f64) f64 {return std.math.cosh(x);}}.f},
+    .{"tanh", struct {fn f(x: f64) f64 {return std.math.tanh(x);}}.f},
+    .{"floor", struct {fn f(x: f64) f64 {return std.math.floor(x);}}.f},
+    .{"ceil", struct {fn f(x: f64) f64 {return std.math.ceil(x);}}.f},
+    .{"sgn", struct {fn f(x: f64) f64 {return std.math.sign(x);}}.f},
+    .{"acosh", struct {fn f(x: f64) f64 {return std.math.acosh(x);}}.f},
+    .{"asinh", struct {fn f(x: f64) f64 {return std.math.asinh(x);}}.f},
+    .{"atanh", struct {fn f(x: f64) f64 {return std.math.atanh(x);}}.f},
+    .{"gamma", struct {fn f(x: f64) f64 {return std.math.gamma(f64, x);}}.f},
+    .{"lgamma", struct {fn f(x: f64) f64 {return std.math.lgamma(f64, x);}}.f},
+});
+
 /// Constant symbol to value map.
 pub const C2V = std.StaticStringMap(f64).initComptime(.{
     .{"e", std.math.e},
+    .{"pi", std.math.pi}
 });
 
 /// Atomic symbol to atomic number map.

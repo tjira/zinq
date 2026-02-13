@@ -29,8 +29,9 @@
 - [ ] Make the Strassen algorithm for squaring large numbers.
 - [x] Make the eigenvalue solver target for complex hermitian matrices.
 - [ ] The QD code calculates FFT for propagation and also for kinetic energy. Find a way to reuse the FFTs for both purposes to save time.
-- [ ] The Shunting-Yard algorithm should be extended to treat constants and functions.
+- [x] The Shunting-Yard algorithm should be extended to treat constants and functions.
 - [x] LZ formula doesnt use the true minimum energy gap. Interpolate the potential energy surfaces somehow.
 - [x] Make the pip executables executable even for other users. Currently they are only executable for the user that installed them.
 - [x] Check the coherences calculation in FSSH, MASH and QD, since it seems to be wrong. It should be the same for all methods, but it is not.
-- [ ] Operators in Shunting-Yard algorithm are binary, so negative numbers cannot be treated. Implement a way to treat negative numbers in the Shunting-Yard algorithm.
+- [x] Operators in Shunting-Yard algorithm are binary, so negative numbers cannot be treated. Implement a way to treat negative numbers in the Shunting-Yard algorithm.
+- [ ] Shunting-Yard algorithm should be extended to treat complex numbers.
