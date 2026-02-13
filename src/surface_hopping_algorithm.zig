@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const classical_particle = @import("classical_particle.zig");
+const complex_vector = @import("complex_vector.zig");
 const fewest_switches = @import("fewest_switches.zig");
 const landau_zener = @import("landau_zener.zig");
 const mapping_approach = @import("mapping_approach.zig");
@@ -11,6 +12,8 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
+const Complex = std.math.complex.Complex;
+const ComplexVector = complex_vector.ComplexVector;
 const FewestSwitches = fewest_switches.FewestSwitches;
 const LandauZener = landau_zener.LandauZener;
 const MappingApproach = mapping_approach.MappingApproach;
@@ -88,4 +91,25 @@ pub fn SurfaceHoppingAlgorithm(comptime T: type) type {
             return new_state;
         }
     };
+}
+
+/// Function to apply decoherence correction to the coefficients after a jump.
+pub fn applyDecoherenceCorrection(comptime T: type, coefficients: *ComplexVector(T), adiabatic_potential: RealMatrix(T), kinetic_energy: T, current_state: usize, time_step: T, alpha: T) void {
+    for (0..coefficients.len) |j| if (j != current_state) {
+
+        const tau = (1 + alpha / kinetic_energy) / @abs(adiabatic_potential.at(j, j) - adiabatic_potential.at(current_state, current_state));
+
+        coefficients.ptr(j).* = coefficients.at(j).mul(Complex(T).init(std.math.exp(-0.5 * time_step / tau), 0));
+    };
+
+    var sumc: T = 0; for (0..coefficients.len) |j| if (j != current_state) {
+        sumc += coefficients.at(j).magnitude() * coefficients.at(j).magnitude();
+    };
+
+    if (coefficients.at(current_state).magnitude() > 0) {
+
+        const num = 1 - sumc; const denom = coefficients.at(current_state).magnitude() * coefficients.at(current_state).magnitude();
+
+        coefficients.ptr(current_state).* = coefficients.at(current_state).mul(Complex(T).init(std.math.sqrt(num / denom), 0));
+    }
 }

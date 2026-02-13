@@ -31,6 +31,7 @@ pub fn Parameters(comptime T: type) type {
 pub fn FewestSwitches(comptime T: type) type {
     return struct {
         substeps: u32 = 10,
+        decoh_alpha: ?T = null,
 
         /// Get the jump probabilities for the current state.
         pub fn getJumpProbabilities(self: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) void {

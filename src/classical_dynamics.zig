@@ -50,6 +50,7 @@ const RealVectorArray = object_array.RealVectorArray;
 const SurfaceHoppingAlgorithm = surface_hopping_algorithm.SurfaceHoppingAlgorithm;
 const TullyPotential1 = tully_potential.TullyPotential1;
 
+const applyDecoherenceCorrection = surface_hopping_algorithm.applyDecoherenceCorrection;
 const binomialConfInt = math_functions.binomialConfInt;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
@@ -227,15 +228,15 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var output = try Output(T).init(nstate, ndim, opt.iterations, allocator);
 
     const parallel_results = .{
-        .bloch_vector_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = 4}, allocator),
-        .coefficient_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
-        .kinetic_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
-        .momentum_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
-        .population_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
-        .position_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
-        .potential_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
-        .time_derivative_coupling_mean = try RealMatrixArray(T).init(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate * nstate}, allocator),
-        .total_energy_mean = try RealVectorArray(T).init(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
+        .bloch_vector_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = 4}, allocator),
+        .coefficient_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
+        .kinetic_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
+        .momentum_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
+        .population_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
+        .position_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
+        .potential_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
+        .time_derivative_coupling_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate * nstate}, allocator),
+        .total_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
     };
 
     defer inline for (std.meta.fields(@TypeOf(parallel_results))) |field| @as(field.type, @field(parallel_results, field.name)).deinit(allocator);
@@ -410,6 +411,10 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
             if (new_state != current_state) {
                 current_state = new_state; potential_energy = adiabatic_potential.at(current_state, current_state);
+            }
+
+            if (algorithm == .fewest_switches and algorithm.fewest_switches.decoh_alpha != null) {
+                applyDecoherenceCorrection(T, &coefficients, adiabatic_potential, system.kineticEnergy(), current_state, opt.time_step, algorithm.fewest_switches.decoh_alpha.?);
             }
         };
 
@@ -623,7 +628,7 @@ pub fn printFinalDetails(comptime T: type, opt: Options(T), output: Output(T)) !
 
         const population_error = binomialConfInt(output.population_mean.at(opt.iterations, i), opt.trajectories);
 
-        const print_payload = .{if (i == 0) "\n" else "", i, output.population_mean.at(opt.iterations, i), population_error};
+        const print_payload = .{if (i == 0) "\n" else "", i, output.population_mean.at(opt.iterations, i), if (std.math.isNan(population_error)) 0 else population_error};
 
         try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} ± {:.6}\n", print_payload);
     }
