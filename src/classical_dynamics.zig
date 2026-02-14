@@ -457,7 +457,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             energy_gaps.ptr(j * (2 * nstate - j - 1) / 2 + (k - j - 1)).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
         };
 
-        if (opt.surface_hopping) |algorithm| if (i > 1) {
+        if (opt.surface_hopping) |algorithm| if (i > (if (algorithm == .landau_zener) @as(usize, 1) else @as(usize, 0))) {
 
             const new_state = try algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, adiabatic_potential, current_state, &random);
 
@@ -786,8 +786,8 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.371);
-    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.629);
+    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.372);
+    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.628);
 }
 
 test "Landau-Lener Surface Hopping on Tully's First Potential" {
@@ -843,6 +843,6 @@ test "Mapping Approach to Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.40573476584447, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.58294965345477, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.40697437617713, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.58171004312212, TEST_TOLERANCE);
 }
