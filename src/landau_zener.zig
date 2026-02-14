@@ -18,7 +18,7 @@ const lnGamma = integral_functions.lnGamma;
 pub fn Parameters(comptime T: type) type {
     return struct {
         energy_gaps: RingBufferArray(T),
-        coefficients: *ComplexVector(T),
+        coefficient: *ComplexVector(T),
         time_step: T
     };
 }
@@ -72,10 +72,10 @@ pub fn LandauZener(comptime T: type) type {
                 const s01 = Complex(T).init(-std.math.sqrt(p), 0);
                 const s10 = Complex(T).init( std.math.sqrt(p), 0);
 
-                const c0 = parameters.coefficients.at(current_state); const c1 = parameters.coefficients.at(i);
+                const c0 = parameters.coefficient.at(current_state); const c1 = parameters.coefficient.at(i);
 
-                parameters.coefficients.ptr(current_state).* = s00.mul(c0).add(s01.mul(c1));
-                parameters.coefficients.ptr(i).*             = s10.mul(c0).add(s11.mul(c1));
+                parameters.coefficient.ptr(current_state).* = s00.mul(c0).add(s01.mul(c1));
+                parameters.coefficient.ptr(i).*             = s10.mul(c0).add(s11.mul(c1));
 
                 if (jump_probabilities.len > 2 and self.three_state_variant != .normalied_probability) {
 

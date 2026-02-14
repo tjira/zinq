@@ -42,7 +42,7 @@
                     "state" : 1
                 },
                 "log_intervals" : {
-                    "iteration" : 1000,
+                    "iteration" : 100,
                     "trajectory" : 10000
                 },
                 "potential" : {
@@ -75,7 +75,7 @@
                     "state" : 1
                 },
                 "log_intervals" : {
-                    "iteration" : 1000,
+                    "iteration" : 100,
                     "trajectory" : 10000
                 },
                 "potential" : {
@@ -108,7 +108,7 @@
                     "state" : 1
                 },
                 "log_intervals" : {
-                    "iteration" : 1000,
+                    "iteration" : 100,
                     "trajectory" : 10000
                 },
                 "potential" : {

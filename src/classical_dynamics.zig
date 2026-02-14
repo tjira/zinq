@@ -180,13 +180,13 @@ pub fn Custom(comptime T: type) type {
             time: T,
             trajectory: usize,
             temperature: T,
-            coefficients: ComplexVector(T)
+            coefficient: ComplexVector(T)
         };
 
         /// Structure to hold a single trajectory output.
         pub const TrajectoryOutput = struct {
             bloch_vector: RealMatrix(T),
-            coefficients: RealMatrix(T),
+            coefficient: RealMatrix(T),
             kinetic_energy: RealVector(T),
             momentum: RealMatrix(T),
             population: RealMatrix(T),
@@ -200,7 +200,7 @@ pub fn Custom(comptime T: type) type {
             pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
                 return @This(){
                     .bloch_vector = try RealMatrix(T).initZero(iterations + 1, 4, allocator),
-                    .coefficients = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
+                    .coefficient = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                     .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
                     .momentum = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                     .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
@@ -215,7 +215,7 @@ pub fn Custom(comptime T: type) type {
             /// Free the memory allocated for the trajectory output structure.
             pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
                 self.bloch_vector.deinit(allocator);
-                self.coefficients.deinit(allocator);
+                self.coefficient.deinit(allocator);
                 self.kinetic_energy.deinit(allocator);
                 self.momentum.deinit(allocator);
                 self.population.deinit(allocator);
@@ -320,10 +320,10 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     var energy_gaps = try RingBufferArray(T).init(nstate * (nstate - 1) / 2, .{.max_len = 5}, allocator); defer energy_gaps.deinit(allocator);
     var jump_probabilities = try RealVector(T).init(nstate, allocator); defer jump_probabilities.deinit(allocator);
     var runge_kutta_solver = try ComplexRungeKutta(T).init(nstate, allocator); defer runge_kutta_solver.deinit(allocator);
-    var coefficients = try ComplexVector(T).initZero(nstate, allocator); defer coefficients.deinit(allocator);
+    var coefficient = try ComplexVector(T).initZero(nstate, allocator); defer coefficient.deinit(allocator);
     var bloch_vector = try RealVector(T).initZero(3, allocator); defer bloch_vector.deinit(allocator);
 
-    coefficients.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficients.at(1).squaredMagnitude() - coefficients.at(0).squaredMagnitude();
+    coefficient.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
 
     var Wcp: T = 1; var Wpp: T = 1; var Sz0: T = bloch_vector.at(2); var xi: T = 0;
 
@@ -343,7 +343,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
     const fs_parameters: fewest_switches.Parameters(T) = .{
         .adiabatic_potential = adiabatic_potential,
-        .coefficients = &coefficients,
+        .coefficient = &coefficient,
         .derivative_coupling = time_derivative_coupling,
         .runge_kutta = runge_kutta_solver,
         .time_step = opt.time_step
@@ -352,7 +352,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     const lz_parameters: landau_zener.Parameters(T) = .{
         .energy_gaps = energy_gaps,
         .time_step = opt.time_step,
-        .coefficients = &coefficients
+        .coefficient = &coefficient
     };
 
     const ma_parameters: mapping_approach.Parameters(T) = .{
@@ -466,7 +466,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             }
 
             if (algorithm == .fewest_switches and algorithm.fewest_switches.decoh_alpha != null) {
-                applyDecoherenceCorrection(T, &coefficients, adiabatic_potential, system.kineticEnergy(), current_state, opt.time_step, algorithm.fewest_switches.decoh_alpha.?);
+                applyDecoherenceCorrection(T, &coefficient, adiabatic_potential, system.kineticEnergy(), current_state, opt.time_step, algorithm.fewest_switches.decoh_alpha.?);
             }
         };
 
@@ -497,12 +497,12 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         if (opt.surface_hopping != null and (opt.surface_hopping.? == .fewest_switches or opt.surface_hopping.? == .landau_zener)) {
 
-            for (0..nstate) |j| output.coefficients.ptr(i, j).* = coefficients.at(j).squaredMagnitude();
+            for (0..nstate) |j| output.coefficient.ptr(i, j).* = coefficient.at(j).squaredMagnitude();
 
-            output.bloch_vector.ptr(i, 0).* = 2 * coefficients.at(0).mul(coefficients.at(1).conjugate()).re;
-            output.bloch_vector.ptr(i, 1).* = 2 * coefficients.at(0).mul(coefficients.at(1).conjugate()).im;
+            output.bloch_vector.ptr(i, 0).* = 2 * coefficient.at(0).mul(coefficient.at(1).conjugate()).re;
+            output.bloch_vector.ptr(i, 1).* = 2 * coefficient.at(0).mul(coefficient.at(1).conjugate()).im;
 
-            output.bloch_vector.ptr(i, 2).* = coefficients.at(1).squaredMagnitude() - coefficients.at(0).squaredMagnitude();
+            output.bloch_vector.ptr(i, 2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
 
             output.bloch_vector.ptr(i, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(i, 0), 2) + std.math.pow(T, output.bloch_vector.at(i, 1), 2));
         }
@@ -513,8 +513,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
             output.bloch_vector.ptr(i, 2).* = Wpp * std.math.sign(bloch_vector.at(2));
 
-            output.coefficients.ptr(i, 0).* = (1 - output.bloch_vector.at(i, 2)) / 2;
-            output.coefficients.ptr(i, 1).* = (1 + output.bloch_vector.at(i, 2)) / 2;
+            output.coefficient.ptr(i, 0).* = (1 - output.bloch_vector.at(i, 2)) / 2;
+            output.coefficient.ptr(i, 1).* = (1 + output.bloch_vector.at(i, 2)) / 2;
 
             output.bloch_vector.ptr(i, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(i, 0), 2) + std.math.pow(T, output.bloch_vector.at(i, 1), 2));
         }
@@ -530,7 +530,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             .time = time,
             .trajectory = index,
             .temperature = temperature,
-            .coefficients = coefficients
+            .coefficient = coefficient
         };
 
         try printIterationInfo(T, iteration_info, opt.surface_hopping, opt.thermostat, &timer);
@@ -556,46 +556,15 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
     const trajectory_output = runTrajectory(T, params[0], &system, params[1], params[2], params[4]) catch |err| {
         error_ctx.capture(err); return;
     }; defer trajectory_output.deinit(params[4]);
+    
+    inline for (std.meta.fields(@TypeOf(results))) |field| {
 
-    results.bloch_vector_mean.ptr(id - 1).add(trajectory_output.bloch_vector) catch |err| {
-        error_ctx.capture(err); return;
-    };
+        const result = @as(field.type, @field(results, field.name)).ptr(id - 1); const output = @field(trajectory_output, field.name[0..field.name.len - 5]);
 
-    results.coefficient_mean.ptr(id - 1).add(trajectory_output.coefficients) catch |err| {
-        error_ctx.capture(err); return;
-    };
-
-    results.kinetic_energy_mean.ptr(id - 1).add(trajectory_output.kinetic_energy) catch |err| {
-        error_ctx.capture(err); return;
-    };
-
-    results.momentum_mean.ptr(id - 1).add(trajectory_output.momentum) catch |err| {
-        error_ctx.capture(err); return;
-    };
-
-    results.population_mean.ptr(id - 1).add(trajectory_output.population) catch |err| {
-        error_ctx.capture(err); return;
-    };
-
-    results.position_mean.ptr(id - 1).add(trajectory_output.position) catch |err| {
-        error_ctx.capture(err); return;
-    };
-
-    results.potential_energy_mean.ptr(id - 1).add(trajectory_output.potential_energy) catch |err| {
-        error_ctx.capture(err); return;
-    };
-
-    results.time_derivative_coupling_mean.ptr(id - 1).add(trajectory_output.time_derivative_coupling) catch |err| {
-        error_ctx.capture(err); return;
-    };
-
-    results.temperature_mean.ptr(id - 1).add(trajectory_output.temperature) catch |err| {
-        error_ctx.capture(err); return;
-    };
-
-    results.total_energy_mean.ptr(id - 1).add(trajectory_output.total_energy) catch |err| {
-        error_ctx.capture(err); return;
-    };
+        result.add(output) catch |err| {
+            error_ctx.capture(err); return;
+        };
+    }
 }
 
 /// Print header for iteration info.
@@ -741,11 +710,11 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surfa
 
         if (algorithm == .fewest_switches) {
 
-            for (0..@min(4, info.coefficients.len)) |i| {
-                try writer.print("{d:7.4}{s}", .{std.math.pow(T, info.coefficients.at(i).magnitude(), 2), if (i == info.coefficients.len - 1) "" else ", "});
+            for (0..@min(4, info.coefficient.len)) |i| {
+                try writer.print("{d:7.4}{s}", .{std.math.pow(T, info.coefficient.at(i).magnitude(), 2), if (i == info.coefficient.len - 1) "" else ", "});
             }
 
-            if (info.coefficients.len > 4) try writer.print("...", .{});
+            if (info.coefficient.len > 4) try writer.print("...", .{});
         }
     }
 

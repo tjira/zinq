@@ -20,7 +20,7 @@ const FSSH_DENOMINATOR_OFFSET = global_variables.FSSH_DENOMINATOR_OFFSET;
 pub fn Parameters(comptime T: type) type {
     return struct {
         adiabatic_potential: RealMatrix(T),
-        coefficients: *ComplexVector(T),
+        coefficient: *ComplexVector(T),
         derivative_coupling: RealMatrix(T),
         runge_kutta: ComplexRungeKutta(T),
         time_step: T
@@ -40,16 +40,16 @@ pub fn FewestSwitches(comptime T: type) type {
             const quantum_step = parameters.time_step / @as(T, @floatFromInt(self.substeps));
 
             const coefficient_derivative = struct {
-                pub fn get(k: *ComplexVector(T), coefficients: ComplexVector(T), derivative_parameters: anytype) !void {
+                pub fn get(k: *ComplexVector(T), coefficient: ComplexVector(T), derivative_parameters: anytype) !void {
                     const adiabatic_potential = derivative_parameters.adiabatic_potential;
                     const derivative_coupling = derivative_parameters.derivative_coupling;
 
-                    for (0..coefficients.len) |i| {
-                        k.ptr(i).* = coefficients.at(i).mul(Complex(T).init(adiabatic_potential.at(i, i), 0)).mulbyi().neg();
+                    for (0..coefficient.len) |i| {
+                        k.ptr(i).* = coefficient.at(i).mul(Complex(T).init(adiabatic_potential.at(i, i), 0)).mulbyi().neg();
                     }
 
-                    for (0..coefficients.len) |i| for (0..coefficients.len) |j| {
-                        k.ptr(i).* = k.at(i).sub(coefficients.at(j).mul(Complex(T).init(derivative_coupling.at(i, j), 0)));
+                    for (0..coefficient.len) |i| for (0..coefficient.len) |j| {
+                        k.ptr(i).* = k.at(i).sub(coefficient.at(j).mul(Complex(T).init(derivative_coupling.at(i, j), 0)));
                     };
                 }
             };
@@ -59,13 +59,13 @@ pub fn FewestSwitches(comptime T: type) type {
                 .derivative_coupling = parameters.derivative_coupling
             };
 
-            try @constCast(&parameters.runge_kutta).rk4(parameters.coefficients, coefficient_derivative.get, coefficient_derivative_parameters, quantum_step);
+            try @constCast(&parameters.runge_kutta).rk4(parameters.coefficient, coefficient_derivative.get, coefficient_derivative_parameters, quantum_step);
 
-            for (0..parameters.coefficients.len) |j| if (j != current_state) {
+            for (0..parameters.coefficient.len) |j| if (j != current_state) {
 
-                const re = parameters.coefficients.at(j).mul(parameters.coefficients.at(current_state).conjugate()).re;
+                const re = parameters.coefficient.at(j).mul(parameters.coefficient.at(current_state).conjugate()).re;
 
-                const denominator = std.math.pow(T, parameters.coefficients.at(current_state).magnitude(), 2) + FSSH_DENOMINATOR_OFFSET;
+                const denominator = std.math.pow(T, parameters.coefficient.at(current_state).magnitude(), 2) + FSSH_DENOMINATOR_OFFSET;
 
                 const p = 2 * parameters.derivative_coupling.at(current_state, j) * re / denominator * quantum_step;
 
