@@ -114,6 +114,7 @@ pub fn Options(comptime T: type) type {
         thermostat: ?Thermostat(T) = null,
         write: Write = .{},
 
+        equilibration_iterations: u32 = 0,
         finite_differences_step: T = 1e-8,
         seed: u32 = 0,
         nthread: u32 = 1
@@ -323,7 +324,9 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     var coefficient = try ComplexVector(T).initZero(nstate, allocator); defer coefficient.deinit(allocator);
     var bloch_vector = try RealVector(T).initZero(3, allocator); defer bloch_vector.deinit(allocator);
 
-    coefficient.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
+    if (opt.surface_hopping != null) {
+        coefficient.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
+    }
 
     var Wcp: T = 1; var Wpp: T = 1; var Sz0: T = bloch_vector.at(2); var xi: T = 0;
 
@@ -552,6 +555,20 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
     sampleInitialConditions(T, &system, params[0].initial_conditions, &random) catch |err| {
         error_ctx.capture(err); return;
     };
+
+    if (params[0].equilibration_iterations > 0) {
+
+        var equilibration_options = params[0];
+
+        equilibration_options.iterations = params[0].equilibration_iterations;
+        equilibration_options.surface_hopping = null;
+        equilibration_options.derivative_coupling = null;
+        equilibration_options.write = .{};
+
+        const equilibration_output = runTrajectory(T, equilibration_options, &system, params[1], false, params[4]) catch |err| {
+            error_ctx.capture(err); return;
+        }; defer equilibration_output.deinit(params[4]);
+    }
 
     const trajectory_output = runTrajectory(T, params[0], &system, params[1], params[2], params[4]) catch |err| {
         error_ctx.capture(err); return;
