@@ -24,6 +24,7 @@ const math_functions = @import("math_functions.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const nonadiabatic_coupling_vector = @import("nonadiabatic_coupling_vector.zig");
 const norm_preserving_interpolation = @import("norm_preserving_interpolation.zig");
+const nose_hoover_thermostat = @import("nose_hoover_thermostat.zig");
 const object_array = @import("object_array.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -65,6 +66,7 @@ const print = device_write.print;
 const printJson = device_write.printJson;
 const throw = error_handling.throw;
 
+const AU2K = global_variables.AU2K;
 const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
@@ -322,7 +324,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
     coefficients.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficients.at(1).squaredMagnitude() - coefficients.at(0).squaredMagnitude();
 
-    var Wcp: T = 1; var Wpp: T = 1; var Sz0: T = bloch_vector.at(2);
+    var Wcp: T = 1; var Wpp: T = 1; var Sz0: T = bloch_vector.at(2); var xi: T = 0;
 
     if (opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
 
@@ -402,9 +404,17 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .temperature = undefined
     };
 
+    const nose_hoover_parameters: nose_hoover_thermostat.Parameters(T) = .{
+        .time_step = opt.time_step,
+        .ndof = @as(T, @floatFromInt(system.ndof)),
+        .masses = system.masses,
+        .xi = &xi
+    };
+
     var thermostat_parameters: thermostat.Parameters(T) = .{
         .andersen_params = andersen_parameters,
-        .berendsen_params = berendsen_parameters
+        .berendsen_params = berendsen_parameters,
+        .nose_hoover_params = nose_hoover_parameters
     };
 
     var timer = try std.time.Timer.start();
@@ -414,6 +424,10 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         const time = @as(T, @floatFromInt(i)) * opt.time_step; derivative_coupling_parameters.nacv_parameters.time = time;
 
         try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
+
+        if (i > 0 and opt.thermostat != null) {
+            try opt.thermostat.?.apply(&system.velocity, thermostat_parameters, .Before);
+        }
 
         if (i > 0) system.propagateVelocityVerletFirstHalf(opt.time_step);
 
@@ -452,11 +466,11 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         if (i > 0) try system.propagateVelocityVerletSecondHalf(opt.time_step);
 
-        if (opt.thermostat) |thm| {
+        if (i > 0 and opt.thermostat != null) {
 
             thermostat_parameters.berendsen_params.temperature = system.kineticTemperature();
 
-            try thm.apply(&system.velocity, thermostat_parameters);
+            try opt.thermostat.?.apply(&system.velocity, thermostat_parameters, .After);
         }
 
         const kinetic_energy = system.kineticEnergy(); const temperature = system.kineticTemperature();
