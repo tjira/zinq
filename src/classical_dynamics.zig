@@ -19,6 +19,7 @@ const global_variables = @import("global_variables.zig");
 const hammes_schiffer_tully = @import("hammes_schiffer_tully.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const landau_zener = @import("landau_zener.zig");
+const langevin_thermostat = @import("langevin_thermostat.zig");
 const mapping_approach = @import("mapping_approach.zig");
 const math_functions = @import("math_functions.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
@@ -404,6 +405,12 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .temperature = undefined
     };
 
+    const langevin_parameters: langevin_thermostat.Parameters(T) = .{
+        .time_step = opt.time_step,
+        .masses = system.masses,
+        .random = &random
+    };
+
     const nose_hoover_parameters: nose_hoover_thermostat.Parameters(T) = .{
         .time_step = opt.time_step,
         .ndof = @as(T, @floatFromInt(system.ndof)),
@@ -414,6 +421,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     var thermostat_parameters: thermostat.Parameters(T) = .{
         .andersen_params = andersen_parameters,
         .berendsen_params = berendsen_parameters,
+        .langevin_params = langevin_parameters,
         .nose_hoover_params = nose_hoover_parameters
     };
 

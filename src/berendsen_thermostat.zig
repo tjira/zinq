@@ -2,9 +2,12 @@
 
 const std = @import("std");
 
+const global_variables = @import("global_variables.zig");
 const real_vector = @import("real_vector.zig");
 
 const RealVector = real_vector.RealVector;
+
+const BERENDSEN_TOLERANCE = 1e-6;
 
 /// Parameters for the Berendsen thermostat.
 pub fn Parameters(comptime T: type) type {
@@ -22,6 +25,8 @@ pub fn Berendsen(comptime T: type) type {
 
         /// Apply the Berendsen thermostat.
         pub fn apply(self: @This(), velocities: *RealVector(T), parameters: Parameters(T)) !void {
+            if (parameters.temperature < 1e-6) return;
+
             const lambda = std.math.sqrt(1 + parameters.time_step / self.tau * (self.temperature / parameters.temperature - 1));
 
             for (0..velocities.len) |i| velocities.ptr(i).* *= lambda;

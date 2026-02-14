@@ -4,11 +4,13 @@ const std = @import("std");
 
 const andersen_thermostat = @import("andersen_thermostat.zig");
 const berendsen_thermostat = @import("berendsen_thermostat.zig");
+const langevin_thermostat = @import("langevin_thermostat.zig");
 const nose_hoover_thermostat = @import("nose_hoover_thermostat.zig");
 const real_vector = @import("real_vector.zig");
 
 const Andersen = andersen_thermostat.Andersen;
 const Berendsen = berendsen_thermostat.Berendsen;
+const Langevin = langevin_thermostat.Langevin;
 const NoseHoover = nose_hoover_thermostat.NoseHoover;
 const RealVector = real_vector.RealVector;
 
@@ -17,6 +19,7 @@ pub fn Parameters(comptime T: type) type {
     return struct {
         andersen_params: andersen_thermostat.Parameters(T),
         berendsen_params: berendsen_thermostat.Parameters(T),
+        langevin_params: langevin_thermostat.Parameters(T),
         nose_hoover_params: nose_hoover_thermostat.Parameters(T)
     };
 }
@@ -26,6 +29,7 @@ pub fn Thermostat(comptime T: type) type {
     return union(enum) {
         andersen: Andersen(T),
         berendsen: Berendsen(T),
+        langevin: Langevin(T),
         nose_hoover: NoseHoover(T),
 
         /// Apply the thermostat.
@@ -33,6 +37,7 @@ pub fn Thermostat(comptime T: type) type {
             switch (self) {
                 .andersen => |field| if (stage == .After) try field.apply(velocities, parameters.andersen_params),
                 .berendsen => |field| if (stage == .After) try field.apply(velocities, parameters.berendsen_params),
+                .langevin => |field| try field.apply(velocities, parameters.langevin_params),
                 .nose_hoover => |field| {
                     if (stage == .Before) try field.applyBefore(velocities, parameters.nose_hoover_params);
                     if (stage == .After) try field.applyAfter(velocities, parameters.nose_hoover_params);

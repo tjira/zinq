@@ -37,5 +37,6 @@
 - [ ] Shunting-Yard algorithm should be extended to treat complex numbers.
 - [x] The JSON parser should tell user what fields are not recognized.
 - [ ] The JSON parser should tell user what fields are not missing.
-- [ ] In kinetic temperature calculation, the number of degrees of freedom should be calculated, it is now set to ndim, which is correct for a single particle.
-- [ ] Andersen thermostat is not thermalizing real systems correctly.
+- [x] In kinetic temperature calculation, the number of degrees of freedom should be calculated, it is now set to ndim, which is correct for a single particle.
+- [ ] Andersen thermostat is not thermalizing real systems correctly because it does not take into account that particles have 3 coordinates.
+- [ ] Add chains to Nosé-Hoover thermostat to make it work better for real systems.
