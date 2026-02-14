@@ -1,0 +1,117 @@
+{
+    "zinq" : [
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "mass" : [1],
+                    "momentum_mean" : [0],
+                    "momentum_std" : [1],
+                    "position_mean" : [1],
+                    "position_std" : [0.5]
+                },
+                "log_intervals" : {
+                    "iteration" : 2000,
+                    "trajectory" : 2000
+                },
+                "potential" : {
+                    "harmonic" : {}
+                },
+                "thermostat" : {
+                    "berendsen" : {}
+                },
+                "write" : {
+                    "temperature_mean" : "TEMPERATURE_BERENDSEN.mat"
+                },
+                "iterations" : 10000,
+                "time_step" : 0.01,
+                "trajectories" : 10000
+            }
+        },
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "mass" : [1],
+                    "momentum_mean" : [0],
+                    "momentum_std" : [1],
+                    "position_mean" : [1],
+                    "position_std" : [0.5]
+                },
+                "log_intervals" : {
+                    "iteration" : 2000,
+                    "trajectory" : 2000
+                },
+                "potential" : {
+                    "harmonic" : {}
+                },
+                "thermostat" : {
+                    "andersen" : {}
+                },
+                "write" : {
+                    "temperature_mean" : "TEMPERATURE_ANDERSEN.mat"
+                },
+                "iterations" : 10000,
+                "time_step" : 0.01,
+                "trajectories" : 10000
+            }
+        },
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "mass" : [1],
+                    "momentum_mean" : [0],
+                    "momentum_std" : [1],
+                    "position_mean" : [1],
+                    "position_std" : [0.5]
+                },
+                "log_intervals" : {
+                    "iteration" : 2000,
+                    "trajectory" : 2000
+                },
+                "potential" : {
+                    "harmonic" : {}
+                },
+                "thermostat" : {
+                    "nose_hoover" : {}
+                },
+                "write" : {
+                    "temperature_mean" : "TEMPERATURE_NH.mat"
+                },
+                "iterations" : 10000,
+                "time_step" : 0.01,
+                "trajectories" : 10000
+            }
+        },
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "mass" : [1],
+                    "momentum_mean" : [0],
+                    "momentum_std" : [1],
+                    "position_mean" : [1],
+                    "position_std" : [0.5]
+                },
+                "log_intervals" : {
+                    "iteration" : 2000,
+                    "trajectory" : 2000
+                },
+                "potential" : {
+                    "harmonic" : {}
+                },
+                "thermostat" : {
+                    "langevin" : {}
+                },
+                "write" : {
+                    "temperature_mean" : "TEMPERATURE_LANGEVIN.mat"
+                },
+                "iterations" : 10000,
+                "time_step" : 0.01,
+                "trajectories" : 10000
+            }
+        }
+    ],
+    "command" : "plot TEMPERATURE_BERENDSEN.mat TEMPERATURE_ANDERSEN.mat TEMPERATURE_NH.mat TEMPERATURE_LANGEVIN.mat --legends every BERENDSEN ANDERSEN NOSE-HOOVER LANGEVIN --xlabel '$t$ (a.u.)' --xlim 20 100 --ylabel '$T$ (K)' --ylim 50 400 --output THERMOSTATS_HO.pdf"
+}
