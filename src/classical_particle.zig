@@ -31,6 +31,7 @@ pub fn ClassicalParticle(comptime T: type) type {
         charge: i32,
         masses: RealVector(T),
         ndim: usize,
+        ndof: usize,
         position: RealVector(T),
         velocity: RealVector(T),
 
@@ -44,6 +45,7 @@ pub fn ClassicalParticle(comptime T: type) type {
                 .charge = 0,
                 .masses = try RealVector(T).init(ndim, allocator),
                 .ndim = ndim,
+                .ndof = ndim,
                 .position = try RealVector(T).init(ndim, allocator),
                 .velocity = try RealVector(T).init(ndim, allocator)
             };
@@ -101,6 +103,7 @@ pub fn ClassicalParticle(comptime T: type) type {
                 .charge = self.charge,
                 .masses = try self.masses.clone(allocator),
                 .ndim = self.ndim,
+                .ndof = self.ndof,
                 .position = try self.position.clone(allocator),
                 .velocity = try self.velocity.clone(allocator)
             };
@@ -119,11 +122,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Calculate the kinetic temperature of the system using the equipartition theorem.
         pub fn kineticTemperature(self: @This()) T {
-            const n_dof = @as(T, @floatFromInt(self.ndim));
-
-            if (n_dof == 0) return 0;
-
-            return 2 * self.kineticEnergy() / n_dof * AU2K;
+            return 2 * self.kineticEnergy() / @as(T, @floatFromInt(self.ndof)) * AU2K;
         }
 
         /// Get the number of occupied spatial orbitals.
@@ -240,7 +239,7 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.
 
     var system = try ClassicalParticle(T).initZero(3 * natom, masses, allocator);
 
-    system.atoms = atoms; system.charge = charge; try position.copyTo(&system.position);
+    system.atoms = atoms; system.charge = charge; system.ndof -= 6; try position.copyTo(&system.position);
 
     return system;
 }
