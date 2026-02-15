@@ -299,7 +299,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 }
 
 /// Run a single trajectory.
-pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalParticle(T), index: usize, enable_printing: bool, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
+pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalParticle(T), index: usize, equilibrate: bool, enable_printing: bool, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
     const nstate = opt.potential.nstate();
     const ndim = opt.potential.ndim();
 
@@ -324,9 +324,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     var coefficient = try ComplexVector(T).initZero(nstate, allocator); defer coefficient.deinit(allocator);
     var bloch_vector = try RealVector(T).initZero(3, allocator); defer bloch_vector.deinit(allocator);
 
-    if (opt.surface_hopping != null) {
-        coefficient.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
-    }
+    coefficient.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
 
     var Wcp: T = 1; var Wpp: T = 1; var Sz0: T = bloch_vector.at(2); var xi: T = 0;
 
@@ -430,7 +428,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
     var timer = try std.time.Timer.start();
 
-    for (0..opt.iterations + 1) |i| {
+    for (0..if (equilibrate) opt.equilibration_iterations + 1 else opt.iterations + 1) |i| {
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step; derivative_coupling_parameters.nacv_parameters.time = time;
 
@@ -446,7 +444,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         var potential_energy = adiabatic_potential.at(current_state, current_state);
 
-        if (i > 0) {
+        if (!equilibrate and i > 0) {
 
             try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
             try mm(T, &eigenvector_overlap, previous_eigenvectors, true, adiabatic_eigenvectors, false);
@@ -456,11 +454,11 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             }
         }
 
-        for (0..nstate) |j| for (j + 1..nstate) |k| {
+        if (!equilibrate) for (0..nstate) |j| for (j + 1..nstate) |k| {
             energy_gaps.ptr(j * (2 * nstate - j - 1) / 2 + (k - j - 1)).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
         };
 
-        if (opt.surface_hopping) |algorithm| if (i > (if (algorithm == .landau_zener) @as(usize, 1) else @as(usize, 0))) {
+        if (opt.surface_hopping) |algorithm| if (!equilibrate and i > (if (algorithm == .landau_zener) @as(usize, 1) else @as(usize, 0))) {
 
             const new_state = try algorithm.jump(system, &jump_probabilities, surface_hopping_parameters, adiabatic_potential, current_state, &random);
 
@@ -498,7 +496,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             output.position.ptr(i, j).* = Wpp * system.position.at(j); output.momentum.ptr(i, j).* = Wpp * system.velocity.at(j) * system.masses.at(j);
         }
 
-        if (opt.surface_hopping != null and (opt.surface_hopping.? == .fewest_switches or opt.surface_hopping.? == .landau_zener)) {
+        if (!equilibrate and opt.surface_hopping != null and (opt.surface_hopping.? == .fewest_switches or opt.surface_hopping.? == .landau_zener)) {
 
             for (0..nstate) |j| output.coefficient.ptr(i, j).* = coefficient.at(j).squaredMagnitude();
 
@@ -510,7 +508,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             output.bloch_vector.ptr(i, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(i, 0), 2) + std.math.pow(T, output.bloch_vector.at(i, 1), 2));
         }
 
-        if (opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
+        if (!equilibrate and opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
 
             for (0..3) |j| output.bloch_vector.ptr(i, j).* = Wcp * bloch_vector.at(j);
 
@@ -536,7 +534,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             .coefficient = coefficient
         };
 
-        try printIterationInfo(T, iteration_info, opt.surface_hopping, opt.thermostat, &timer);
+        try printIterationInfo(T, iteration_info, opt.surface_hopping, opt.thermostat, equilibrate, &timer);
     }
 
     return output;
@@ -557,20 +555,12 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
     };
 
     if (params[0].equilibration_iterations > 0) {
-
-        var equilibration_options = params[0];
-
-        equilibration_options.iterations = params[0].equilibration_iterations;
-        equilibration_options.surface_hopping = null;
-        equilibration_options.derivative_coupling = null;
-        equilibration_options.write = .{};
-
-        const equilibration_output = runTrajectory(T, equilibration_options, &system, params[1], false, params[4]) catch |err| {
+        const equilibration_output = runTrajectory(T, params[0], &system, params[1], true, params[2], params[4]) catch |err| {
             error_ctx.capture(err); return;
         }; defer equilibration_output.deinit(params[4]);
     }
 
-    const trajectory_output = runTrajectory(T, params[0], &system, params[1], params[2], params[4]) catch |err| {
+    const trajectory_output = runTrajectory(T, params[0], &system, params[1], false, params[2], params[4]) catch |err| {
         error_ctx.capture(err); return;
     }; defer trajectory_output.deinit(params[4]);
     
@@ -593,7 +583,7 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
 
     var writer = std.io.Writer.fixed(&buffer);
 
-    try writer.print("\n{s:8} {s:8} ", .{"TRAJ", "ITER"});
+    try writer.print("\n{s:9} {s:8} ", .{"TRAJ", "ITER"});
     try writer.print("{s:12} {s:12} {s:12} ", .{"KIN (Eh)", "POT (Eh)", "TOT (Eh)"});
 
     if (thm) |_| try writer.print("{s:12} ", .{"TEMP (K)"});
@@ -693,12 +683,13 @@ pub fn printFinalDetails(comptime T: type, opt: Options(T), output: Output(T)) !
 }
 
 /// Prints the iteration info to standard output.
-pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T), thm: ?Thermostat(T), timer: *std.time.Timer) !void {
+pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T), thm: ?Thermostat(T), equilibrate: bool, timer: *std.time.Timer) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     var writer = std.io.Writer.fixed(&buffer);
 
-    try writer.print("{d:8} {d:8} ", .{info.trajectory + 1, info.iteration});
+    if (equilibrate) try writer.print("{d:6}-EQ {d:8} ", .{info.trajectory + 1, info.iteration}) else try writer.print("{d:9} {d:8} ", .{info.trajectory + 1, info.iteration});
+
     try writer.print("{d:12.6} {d:12.6} {d:12.6} ", .{info.kinetic_energy, info.potential_energy, info.kinetic_energy + info.potential_energy});
 
     if (thm) |_| try writer.print("{d:12.3} ", .{info.temperature});
