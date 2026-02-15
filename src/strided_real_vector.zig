@@ -2,6 +2,10 @@
 
 const std = @import("std");
 
+const error_handling = @import("error_handling.zig");
+
+const throw = error_handling.throw;
+
 /// Real strided vector class.
 pub fn StridedRealVector(comptime T: type) type {
     return struct {
@@ -26,11 +30,36 @@ pub fn StridedRealVector(comptime T: type) type {
             return high;
         }
 
+        /// Covariance of the strided array elements with another strided array.
+        pub fn covariance(self: @This(), other: @This()) !T {
+            if (self.len != other.len) return throw(T, "CAN'T CALCULATE THE COVARIANCE OF TWO STRIDED VECTORS OF DIFFERENT LENGTHS", .{});
+            if (self.len < 2) return throw(T, "CAN'T CALCULATE THE COVARIANCE OF TWO STRIDED VECTORS OF LENGTH LESS THAN 2", .{});
+
+            var total: T = 0; const mean1 = self.mean(); const mean2 = other.mean();
+
+            for (0..self.len) |i| {
+                total += (self.at(i) - mean1) * (other.at(i) - mean2);
+            }
+
+            return total / @as(T, @floatFromInt(self.len - 1));
+        }
+
         /// Fill the strided array elements with a constant value.
         pub fn fill(self: @This(), value: T) void {
             for (0..self.len) |i| {
                 self.ptr(i).* = value;
             }
+        }
+
+        /// Mean of the strided array elements.
+        pub fn mean(self: @This()) T {
+            var total: T = 0;
+
+            for (0..self.len) |i| {
+                total += self.at(i);
+            }
+
+            return total / @as(T, @floatFromInt(self.len));
         }
 
         /// Multiply the strided array elements with a constant value.

@@ -20,6 +20,7 @@ pub const complex_vector = @import("complex_vector.zig");
 pub const contracted_gaussian = @import("contracted_gaussian.zig");
 pub const custom_potential = @import("custom_potential.zig");
 pub const derivative_coupling = @import("derivative_coupling.zig");
+pub const determinant = @import("determinant.zig");
 pub const device_read = @import("device_read.zig");
 pub const device_write = @import("device_write.zig");
 pub const eigenproblem_solver = @import("eigenproblem_solver.zig");

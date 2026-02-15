@@ -93,6 +93,17 @@ pub fn RealMatrix(comptime T: type) type {
             }
         }
 
+        /// Covariance matrix where each column is a variable and each row is an observation. The covariance is calculated using the unbiased estimator (dividing by n - 1).
+        pub fn cov(self: @This(), allocator: std.mem.Allocator) !RealMatrix(T) {
+            var result = try @This().init(self.cols, self.cols, allocator); errdefer result.deinit(allocator);
+
+            for (0..self.cols) |i| for (i..self.cols) |j| {
+                result.ptr(i, j).* = try self.column(i).covariance(self.column(j)); result.ptr(j, i).* = result.at(i, j);
+            };
+
+            return result;
+        }
+
         /// Divide the matrix by a scalar value.
         pub fn divs(self: *@This(), value: T) void {
             for (self.data) |*element| element.* /= value;

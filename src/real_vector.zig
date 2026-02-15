@@ -76,6 +76,20 @@ pub fn RealVector(comptime T: type) type {
             }
         }
 
+        /// Calculate the covariance between this vector and another vector.
+        pub fn covariance(self: @This(), other: @This()) !T {
+            if (self.len != other.len) return throw(void, "CAN'T CALCULATE THE COVARIANCE OF A VECTOR OF LENGTH {d} WITH A VECTOR OF LENGTH {d}", .{other.len, self.len});
+            if (self.len < 2) return throw(void, "COVARIANCE CAN'T BE CALCULATED FOR VECTORS OF LENGTH LESS THAN 2", .{});
+
+            var total: T = 0; const mean1 = self.mean(); const mean2 = other.mean();
+
+            for (self.data, 0..) |element, index| {
+                total += (element - mean1) * (other.data[index] - mean2);
+            }
+
+            return total / @as(T, @floatFromInt(self.len - 1));
+        }
+
         /// Divide the vector by a scalar value.
         pub fn divs(self: *@This(), value: T) void {
             for (self.data) |*element| element.* /= value;

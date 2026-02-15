@@ -103,7 +103,6 @@ pub fn Options(comptime T: type) type {
         potential: ElectronicPotential(T),
         initial_conditions: InitialConditions,
 
-        trajectories: u32,
         iterations: u32,
         time_step: T,
 
@@ -116,6 +115,7 @@ pub fn Options(comptime T: type) type {
 
         equilibration_iterations: u32 = 0,
         finite_differences_step: T = 1e-8,
+        trajectories: u32 = 1,
         seed: u32 = 0,
         nthread: u32 = 1
     };
