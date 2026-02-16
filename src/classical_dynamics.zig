@@ -32,6 +32,7 @@ const real_vector = @import("real_vector.zig");
 const ring_buffer = @import("ring_buffer.zig");
 const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 const thermostat = @import("thermostat.zig");
+const trajectory_thermodynamics = @import("trajectory_thermodynamics.zig");
 const tully_potential = @import("tully_potential.zig");
 
 const BiasPotential = bias_potential.BiasPotential;
@@ -65,6 +66,7 @@ const h = math_functions.h;
 const mm = matrix_multiplication.mm;
 const print = device_write.print;
 const printJson = device_write.printJson;
+const schlitterEntropy = trajectory_thermodynamics.schlitterEntropy;
 const throw = error_handling.throw;
 
 const AU2K = global_variables.AU2K;
@@ -87,6 +89,9 @@ pub fn Options(comptime T: type) type {
             trajectory: u32 = 1,
             iteration: u32 = 1
         };
+        pub const Thermodynamics = struct {
+            schlitter_entropy: bool = false
+        };
         pub const Write = struct {
             bloch_vector_mean: ?[]const u8 = null,
             coefficient_mean: ?[]const u8 = null,
@@ -97,7 +102,8 @@ pub fn Options(comptime T: type) type {
             potential_energy_mean: ?[]const u8 = null,
             time_derivative_coupling_mean: ?[]const u8 = null,
             temperature_mean: ?[]const u8 = null,
-            total_energy_mean: ?[]const u8 = null
+            total_energy_mean: ?[]const u8 = null,
+            schlitter_entropy: ?[]const u8 = null
         };
 
         potential: ElectronicPotential(T),
@@ -111,6 +117,7 @@ pub fn Options(comptime T: type) type {
         log_intervals: LogIntervals = .{},
         surface_hopping: ?SurfaceHoppingAlgorithm(T) = null,
         thermostat: ?Thermostat(T) = null,
+        thermodynamics: Thermodynamics = .{},
         write: Write = .{},
 
         equilibration_iterations: u32 = 0,
@@ -134,9 +141,10 @@ pub fn Output(comptime T: type) type {
         time_derivative_coupling_mean: RealMatrix(T),
         temperature_mean: RealVector(T),
         total_energy_mean: RealVector(T),
+        schlitter_entropy: RealVector(T),
 
         /// Allocate the output structure.
-        pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
+        pub fn init(nstate: usize, ndim: usize, iterations: usize, trajectories: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
                 .bloch_vector_mean = try RealMatrix(T).initZero(iterations + 1, 4, allocator),
                 .coefficient_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
@@ -147,7 +155,8 @@ pub fn Output(comptime T: type) type {
                 .potential_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
                 .time_derivative_coupling_mean = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
                 .temperature_mean = try RealVector(T).initZero(iterations + 1, allocator),
-                .total_energy_mean = try RealVector(T).initZero(iterations + 1, allocator)
+                .total_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
+                .schlitter_entropy = try RealVector(T).initZero(trajectories, allocator)
             };
         }
 
@@ -163,6 +172,7 @@ pub fn Output(comptime T: type) type {
             self.time_derivative_coupling_mean.deinit(allocator);
             self.temperature_mean.deinit(allocator);
             self.total_energy_mean.deinit(allocator);
+            self.schlitter_entropy.deinit(allocator);
         }
     };
 }
@@ -186,6 +196,10 @@ pub fn Custom(comptime T: type) type {
 
         /// Structure to hold a single trajectory output.
         pub const TrajectoryOutput = struct {
+            pub const Thermodynamics = struct {
+                schlitter_entropy: ?T = null
+            };
+
             bloch_vector: RealMatrix(T),
             coefficient: RealMatrix(T),
             kinetic_energy: RealVector(T),
@@ -196,6 +210,7 @@ pub fn Custom(comptime T: type) type {
             time_derivative_coupling: RealMatrix(T),
             temperature: RealVector(T),
             total_energy: RealVector(T),
+            thermodynamics: Thermodynamics = .{},
 
             /// Allocate the trajectory output structure.
             pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
@@ -242,7 +257,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
-    var output = try Output(T).init(nstate, ndim, opt.iterations, allocator); errdefer output.deinit(allocator);
+    var output = try Output(T).init(nstate, ndim, opt.iterations, opt.trajectories, allocator); errdefer output.deinit(allocator);
 
     const parallel_results = .{
         .bloch_vector_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = 4}, allocator),
@@ -257,7 +272,13 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         .total_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
     };
 
+    var trajectory_based_results = .{
+        .schlitter_entropy = try RealVector(T).initZero(opt.trajectories, allocator)
+    };
+
     defer inline for (std.meta.fields(@TypeOf(parallel_results))) |field| @as(field.type, @field(parallel_results, field.name)).deinit(allocator);
+
+    defer inline for (std.meta.fields(@TypeOf(trajectory_based_results))) |field| @as(field.type, @field(trajectory_based_results, field.name)).deinit(allocator);
 
     var split_mix = std.Random.SplitMix64.init(opt.seed);
 
@@ -280,9 +301,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             const params = .{opt, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator};
 
             if (opt.nthread == 1) {
-                runTrajectoryParallel(1, T, parallel_results, params, &error_ctx);
+                runTrajectoryParallel(1, T, parallel_results, &trajectory_based_results, params, &error_ctx);
             } else {
-                pool.spawnWgId(&wait, runTrajectoryParallel, .{T, parallel_results, params, &error_ctx});
+                pool.spawnWgId(&wait, runTrajectoryParallel, .{T, parallel_results, &trajectory_based_results, params, &error_ctx});
             }
         }
 
@@ -291,7 +312,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     pool.deinit(); if (error_ctx.err) |err| return err;
 
-    try finalizeOutput(T, &output, opt, parallel_results);
+    try finalizeOutput(T, &output, opt, parallel_results, trajectory_based_results);
 
     if (enable_printing) try printFinalDetails(T, opt, output);
 
@@ -537,11 +558,18 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         try printIterationInfo(T, iteration_info, opt.surface_hopping, opt.thermostat, equilibrate, &timer);
     }
 
+    if (!equilibrate) {
+
+        try getThermodynamicProperties(T, &output, system.*, opt, allocator);
+
+        if (enable_printing and opt.trajectories == 1) try printThermodynamicProperties(T, output.thermodynamics);
+    }
+
     return output;
 }
 
 /// Parallel function to run a trajectory.
-pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, params: anytype, error_ctx: *ErrorContext) void {
+pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, trajectory_based_results: anytype, params: anytype, error_ctx: *ErrorContext) void {
     if (error_ctx.err != null) return;
 
     var system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.mass, params[4]) catch |err| {
@@ -563,6 +591,10 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, para
     const trajectory_output = runTrajectory(T, params[0], &system, params[1], false, params[2], params[4]) catch |err| {
         error_ctx.capture(err); return;
     }; defer trajectory_output.deinit(params[4]);
+
+    inline for (std.meta.fields(@TypeOf(trajectory_output.thermodynamics))) |field| {
+        if (@field(trajectory_output.thermodynamics, field.name)) |val| @field(trajectory_based_results, field.name).ptr(params[1]).* = val;
+    }
     
     inline for (std.meta.fields(@TypeOf(results))) |field| {
 
@@ -586,7 +618,7 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
     try writer.print("\n{s:9} {s:8} ", .{"TRAJ", "ITER"});
     try writer.print("{s:12} {s:12} {s:12} ", .{"KIN (Eh)", "POT (Eh)", "TOT (Eh)"});
 
-    if (thm) |_| try writer.print("{s:12} ", .{"TEMP (K)"});
+    if (thm) |_| try writer.print("{s:10} ", .{"TEMP (K)"});
 
     try writer.print("{s:5} ", .{"STATE"});
     try writer.print("{[value]s:[width]} ", .{.value = "POS (a0)", .width = ndim_header_width});
@@ -603,7 +635,7 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
 }
 
 /// Add the partial results to the output vectors and export them if requested.
-pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), parallel_results: anytype) !void {
+pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), parallel_results: anytype, trajectory_based_results: anytype) !void {
     const output_bloch_vector_mean = parallel_results.bloch_vector_mean;
     const output_coefficient_mean = parallel_results.coefficient_mean;
     const output_kinetic_energy_mean = parallel_results.kinetic_energy_mean;
@@ -651,6 +683,19 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     if (opt.write.time_derivative_coupling_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.time_derivative_coupling_mean, 0, end_time);
     if (opt.write.temperature_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.temperature_mean.asMatrix(), 0, end_time);
     if (opt.write.total_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy_mean.asMatrix(), 0, end_time);
+
+    if (opt.write.schlitter_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, trajectory_based_results.schlitter_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
+}
+
+/// Calculate thermodynamic properties from the trajectory output.
+pub fn getThermodynamicProperties(comptime T: type, output: *Custom(T).TrajectoryOutput, system: ClassicalParticle(T), opt: Options(T), allocator: std.mem.Allocator) !void {
+    const temp = if (opt.thermostat) |thm| switch (thm) {
+        inline else => |field| field.temperature
+    } else 0;
+
+    if (opt.thermodynamics.schlitter_entropy or opt.write.schlitter_entropy != null) {
+        output.thermodynamics.schlitter_entropy = try schlitterEntropy(T, output.position, system.masses, temp, allocator);
+    }
 }
 
 /// Initialize random number generators for parallel environment.
@@ -692,7 +737,9 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surfa
 
     try writer.print("{d:12.6} {d:12.6} {d:12.6} ", .{info.kinetic_energy, info.potential_energy, info.kinetic_energy + info.potential_energy});
 
-    if (thm) |_| try writer.print("{d:12.3} ", .{info.temperature});
+    if (thm) |_| {
+        if (info.temperature < 1e7) try writer.print("{d:10.3} ", .{info.temperature}) else try writer.print("{e:10.4} ", .{info.temperature});
+    }
 
     try writer.print("{d:5} ", .{info.state});
 
@@ -729,6 +776,15 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surfa
     try writer.print("] {D}", .{timer.read()}); timer.reset();
 
     try print("{s}\n", .{writer.buffered()});
+}
+
+/// Print the thermodynamic properties to standard output.
+pub fn printThermodynamicProperties(comptime T: type, output: Custom(T).TrajectoryOutput.Thermodynamics) !void {
+    inline for (std.meta.fields(@TypeOf(output))) |field| if (@field(output, field.name) != null) {
+        try print("\n", .{}); break;
+    };
+
+    if (output.schlitter_entropy) |out| try print("SCHLITTER ENTROPY: {d:.14} Eh/K\n", .{out});
 }
 
 /// Samples the initial conditions.

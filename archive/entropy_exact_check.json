@@ -1,0 +1,34 @@
+{
+    "zinq" : [
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "mass" : [1],
+                    "momentum_mean" : [0],
+                    "momentum_std" : [1],
+                    "position_mean" : [0],
+                    "position_std" : [0.5]
+                },
+                "log_intervals" : {
+                    "iteration" : 2000000
+                },
+                "potential" : {
+                    "harmonic" : {}
+                },
+                "thermostat" : {
+                    "langevin" : {
+                        "temperature" : 1000000000
+                    }
+                },
+                "thermodynamics" : {
+                    "schlitter_entropy" : true
+                },
+                "iterations" : 10000000,
+                "equilibration_iterations" : 4000000,
+                "time_step" : 0.01
+            }
+        }
+    ],
+    "command" : "python -c 'import numpy as np;T=1e9;Eh=4.359744722206e-18;kB=1.380649e-23;kBT=kB*T/Eh;print(f\"{kB/Eh*(1/(kBT*(np.exp(1/kBT)-1))-np.log(1-np.exp(-1/kBT))):.14f}\")'"
+}

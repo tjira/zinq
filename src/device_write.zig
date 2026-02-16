@@ -165,7 +165,7 @@ pub fn writeComplexMatrixWithLinspacedLeftColumn(comptime T: type, device: std.f
 
     for (0..A.rows) |i| {
 
-        const x = start + (end - start) * @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(A.rows - 1));
+        const x = if (A.rows > 1) start + (end - start) * @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(A.rows - 1)) else start;
 
         try writer_interface.print("{d:20.14}", .{x});
 
@@ -215,7 +215,7 @@ pub fn writeRealMatrixWithLinspacedLeftColumn(comptime T: type, device: std.fs.F
 
     for (0..A.rows) |i| {
 
-        const x = start + (end - start) * @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(A.rows - 1));
+        const x = if (A.rows > 1) start + (end - start) * @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(A.rows - 1)) else start;
 
         try writer_interface.print("{d:20.14}", .{x});
 
