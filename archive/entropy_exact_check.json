@@ -30,5 +30,5 @@
             }
         }
     ],
-    "command" : "python -c 'import numpy as np;T=1e9;Eh=4.359744722206e-18;kB=1.380649e-23;kBT=kB*T/Eh;print(f\"{kB/Eh*(1/(kBT*(np.exp(1/kBT)-1))-np.log(1-np.exp(-1/kBT))):.14f}\")'"
+    "command" : "python -c 'import numpy as np;T=1e9;Eh=4.359744722206e-18;kB=1.380649e-23;Na=6.02214076e23;kBT=kB*T/Eh;print(f\"{Na*kB*(1/(kBT*(np.exp(1/kBT)-1))-np.log(1-np.exp(-1/kBT))):.14f}\")'"
 }

@@ -71,7 +71,6 @@ const throw = error_handling.throw;
 
 const Eh = global_variables.Eh;
 const Na = global_variables.Na;
-const AU2K = global_variables.AU2K;
 const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
