@@ -4,9 +4,11 @@ const std = @import("std");
 
 const complex_vector = @import("complex_vector.zig");
 const error_handling = @import("error_handling.zig");
+const strided_complex_vector = @import("strided_complex_vector.zig");
 
 const Complex = std.math.complex.Complex;
 const ComplexVector = complex_vector.ComplexVector;
+const StridedComplexVector = strided_complex_vector.StridedComplexVector;
 
 const throw = error_handling.throw;
 
@@ -60,6 +62,16 @@ pub fn ComplexMatrix(comptime T: type) type {
         /// Get the element at (i, j).
         pub fn at(self: @This(), i: usize, j: usize) Complex(T) {
             return self.data[i * self.cols + j];
+        }
+
+        /// Returns the column as a view to a strided real vector.
+        pub fn column(self: @This(), j: usize) StridedComplexVector(T) {
+            return StridedComplexVector(T){
+                .data = self.data,
+                .len = self.rows,
+                .stride = self.cols,
+                .zero = j
+            };
         }
 
         /// Copy the contents of this matrix to another matrix.

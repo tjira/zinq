@@ -67,6 +67,7 @@ const mm = matrix_multiplication.mm;
 const print = device_write.print;
 const printJson = device_write.printJson;
 const schlitterEntropy = trajectory_thermodynamics.schlitterEntropy;
+const sreEntropy = trajectory_thermodynamics.sreEntropy;
 const throw = error_handling.throw;
 
 const Eh = global_variables.Eh;
@@ -91,7 +92,8 @@ pub fn Options(comptime T: type) type {
             iteration: u32 = 1
         };
         pub const Thermodynamics = struct {
-            schlitter_entropy: bool = false
+            schlitter_entropy: bool = false,
+            sre_entropy: bool = false
         };
         pub const Write = struct {
             bloch_vector_mean: ?[]const u8 = null,
@@ -104,7 +106,8 @@ pub fn Options(comptime T: type) type {
             time_derivative_coupling_mean: ?[]const u8 = null,
             temperature_mean: ?[]const u8 = null,
             total_energy_mean: ?[]const u8 = null,
-            schlitter_entropy: ?[]const u8 = null
+            schlitter_entropy: ?[]const u8 = null,
+            sre_entropy: ?[]const u8 = null
         };
 
         potential: ElectronicPotential(T),
@@ -143,6 +146,7 @@ pub fn Output(comptime T: type) type {
         temperature_mean: RealVector(T),
         total_energy_mean: RealVector(T),
         schlitter_entropy: RealVector(T),
+        sre_entropy: RealVector(T),
 
         /// Allocate the output structure.
         pub fn init(nstate: usize, ndim: usize, iterations: usize, trajectories: usize, allocator: std.mem.Allocator) !@This() {
@@ -157,7 +161,8 @@ pub fn Output(comptime T: type) type {
                 .time_derivative_coupling_mean = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
                 .temperature_mean = try RealVector(T).initZero(iterations + 1, allocator),
                 .total_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
-                .schlitter_entropy = try RealVector(T).initZero(trajectories, allocator)
+                .schlitter_entropy = try RealVector(T).initZero(trajectories, allocator),
+                .sre_entropy = try RealVector(T).initZero(trajectories, allocator)
             };
         }
 
@@ -174,6 +179,7 @@ pub fn Output(comptime T: type) type {
             self.temperature_mean.deinit(allocator);
             self.total_energy_mean.deinit(allocator);
             self.schlitter_entropy.deinit(allocator);
+            self.sre_entropy.deinit(allocator);
         }
     };
 }
@@ -198,7 +204,8 @@ pub fn Custom(comptime T: type) type {
         /// Structure to hold a single trajectory output.
         pub const TrajectoryOutput = struct {
             pub const Thermodynamics = struct {
-                schlitter_entropy: ?T = null
+                schlitter_entropy: ?T = null,
+                sre_entropy: ?T = null
             };
 
             bloch_vector: RealMatrix(T),
@@ -274,7 +281,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     };
 
     var trajectory_based_results = .{
-        .schlitter_entropy = try RealVector(T).initZero(opt.trajectories, allocator)
+        .schlitter_entropy = try RealVector(T).initZero(opt.trajectories, allocator),
+        .sre_entropy = try RealVector(T).initZero(opt.trajectories, allocator)
     };
 
     defer inline for (std.meta.fields(@TypeOf(parallel_results))) |field| @as(field.type, @field(parallel_results, field.name)).deinit(allocator);
@@ -686,6 +694,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     if (opt.write.total_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy_mean.asMatrix(), 0, end_time);
 
     if (opt.write.schlitter_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, trajectory_based_results.schlitter_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
+    if (opt.write.sre_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, trajectory_based_results.sre_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
 }
 
 /// Calculate thermodynamic properties from the trajectory output.
@@ -696,6 +705,10 @@ pub fn getThermodynamicProperties(comptime T: type, output: *Custom(T).Trajector
 
     if (opt.thermodynamics.schlitter_entropy or opt.write.schlitter_entropy != null) {
         output.thermodynamics.schlitter_entropy = try schlitterEntropy(T, output.position, system.masses, temp, allocator);
+    }
+
+    if (opt.thermodynamics.sre_entropy or opt.write.sre_entropy != null) {
+        output.thermodynamics.sre_entropy = try sreEntropy(T, output.momentum, system.masses, temp, opt.time_step, system.ndof, allocator);
     }
 }
 
@@ -786,6 +799,7 @@ pub fn printThermodynamicProperties(comptime T: type, output: Custom(T).Trajecto
     };
 
     if (output.schlitter_entropy) |out| try print("SCHLITTER ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{out, out * Na * Eh});
+    if (output.sre_entropy) |out| try print("SRE ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{out, out * Na * Eh});
 }
 
 /// Samples the initial conditions.

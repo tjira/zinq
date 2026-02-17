@@ -42,3 +42,4 @@
 - [ ] Add chains to Nosé-Hoover thermostat to make it work better for real systems.
 - [x] Implement equilibration phase for classical dynamics simulations, where the system is thermalized before the production run.
 - [x] Add the ability to somehow log the equilibration phase in classical dynamics simulations, so that the user can check if the system is thermalized before the production run.
+- [ ] Entropy calculators do not work for molecular systems, since they do not take into account the fact rotations and translations do not contribute to the entropy.
