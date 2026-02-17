@@ -69,6 +69,8 @@ const printJson = device_write.printJson;
 const schlitterEntropy = trajectory_thermodynamics.schlitterEntropy;
 const throw = error_handling.throw;
 
+const Eh = global_variables.Eh;
+const Na = global_variables.Na;
 const AU2K = global_variables.AU2K;
 const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
@@ -784,7 +786,7 @@ pub fn printThermodynamicProperties(comptime T: type, output: Custom(T).Trajecto
         try print("\n", .{}); break;
     };
 
-    if (output.schlitter_entropy) |out| try print("SCHLITTER ENTROPY: {d:.14} Eh/K\n", .{out});
+    if (output.schlitter_entropy) |out| try print("SCHLITTER ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{out, out * Na * Eh});
 }
 
 /// Samples the initial conditions.

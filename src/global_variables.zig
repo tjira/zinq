@@ -31,7 +31,7 @@ pub const e   = 1.602176634e-19;    // C
 pub const h   = 6.62607015e-34;     // J.s
 pub const kB  = 1.380649e-23;       // J/K
 pub const me  = 9.109383701528e-31; // kg
-pub const NA  = 6.02214076e23;      // mol^-1
+pub const Na  = 6.02214076e23;      // mol^-1
 
 pub const A2AU = 1e-10 / a0;         // Å to a.u. of length
 pub const AU2EV = Eh / e;            // a.u. of energy to eV
