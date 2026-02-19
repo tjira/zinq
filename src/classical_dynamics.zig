@@ -642,9 +642,7 @@ pub fn sampleFromBoltzmann(comptime T: type, system: *ClassicalParticle(T), temp
 pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, trajectory_based_results: anytype, params: anytype, error_ctx: *ErrorContext) void {
     if (error_ctx.err != null) return;
 
-    var system: ClassicalParticle(T) = undefined; defer system.deinit(params[4]);
-
-    var rng = params[3]; var random = rng.random();
+    var system: ClassicalParticle(T) = undefined; var rng = params[3]; var random = rng.random();
 
     if (params[0].potential == .ab_initio) {
 
@@ -698,6 +696,8 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
             error_ctx.capture(err); return;
         };
     }
+
+    system.deinit(params[4]);
 }
 
 /// Print header for iteration info.
