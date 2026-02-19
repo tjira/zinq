@@ -44,10 +44,14 @@ pub fn FewestSwitches(comptime T: type) type {
                     const adiabatic_potential = derivative_parameters.adiabatic_potential;
                     const derivative_coupling = derivative_parameters.derivative_coupling;
 
-                    const reference_energy = adiabatic_potential.at(0, 0);
+                    var energy_avg: T = 0;
+
+                    for (0..adiabatic_potential.rows) |i| energy_avg += adiabatic_potential.at(i, i);
+
+                    energy_avg /= @as(T, @floatFromInt(adiabatic_potential.rows));
 
                     for (0..coefficient.len) |i| {
-                        k.ptr(i).* = coefficient.at(i).mul(Complex(T).init(adiabatic_potential.at(i, i) - reference_energy, 0)).mulbyi().neg();
+                        k.ptr(i).* = coefficient.at(i).mul(Complex(T).init(adiabatic_potential.at(i, i) - energy_avg, 0)).mulbyi().neg();
                     }
 
                     for (0..coefficient.len) |i| for (0..coefficient.len) |j| {
