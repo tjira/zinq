@@ -41,7 +41,7 @@ pub fn AbInitioPotential(comptime T: type) type {
         }
 
         /// Comptime adiabatic force evaluation. The evaluateAdiabatic function needs to be run first.
-        pub fn forceAdiabatic(_: @This(), i: usize, _: RealVector(T), _: T, dir: std.fs.Dir) !T {
+        pub fn forceAdiabatic(_: @This(), i: usize, position: RealVector(T), _: T, state: usize, dir: std.fs.Dir) !T {
             const allocator = std.heap.page_allocator;
 
             const dirname = try dir.realpathAlloc(allocator, "."); defer allocator.free(dirname);
@@ -49,7 +49,7 @@ pub fn AbInitioPotential(comptime T: type) type {
 
             const GRADIENT = try readRealMatrix(T, path, allocator); defer GRADIENT.deinit(allocator);
 
-            return -GRADIENT.at(i, 0);
+            return -GRADIENT.at(state * position.len + i, 0);
         }
 
         pub fn runElectronicStructureCalculation(self: @This(), system: ClassicalParticle(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {

@@ -133,7 +133,7 @@ pub fn ElectronicPotential(comptime T: type) type {
 
         /// Evaluate the adabatic potential energy gradient for a specific coordinate index. The adiabatic potential matrix will hold the potential at the r + dr point.
         pub fn forceAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T), dir: std.fs.Dir) !T {
-            if (self == .ab_initio) return try self.ab_initio.forceAdiabatic(index, position, time, dir);
+            if (self == .ab_initio) return try self.ab_initio.forceAdiabatic(index, position, time, state, dir);
 
             const original_position = position.at(index);
 
