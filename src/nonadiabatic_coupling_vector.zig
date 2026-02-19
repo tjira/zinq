@@ -96,7 +96,7 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
 
             const NACV = try readRealMatrix(T, path, params.allocator); defer NACV.deinit(params.allocator);
 
-            var l: usize = 0;
+            var l: usize = 0; derivative_coupling.zero();
 
             for (0..derivative_coupling.rows) |i| for (i + 1..derivative_coupling.cols) |j| {
 

@@ -76,6 +76,7 @@ const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 const A2AU = global_variables.A2AU;
+const AU2K = global_variables.AU2K;
 
 /// Classical dynamics options struct.
 pub fn Options(comptime T: type) type {
@@ -92,6 +93,7 @@ pub fn Options(comptime T: type) type {
             molecule : struct {
                 position: []const u8,
                 velocity: ?[]const u8 = null,
+                temperature: ?T = null,
                 state: u32 = 0,
                 charge: i32 = 0
             }
@@ -280,6 +282,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     if (opt.potential == .ab_initio and opt.derivative_coupling != null and opt.derivative_coupling.? != .nacv) {
         return throw(Output(T), "ONLY NACV DERIVATIVE COUPLING IS SUPPORTED FOR AB INITIO POTENTIALS", .{});
     }
+    if (opt.initial_conditions == .molecule and opt.initial_conditions.molecule.velocity != null and opt.initial_conditions.molecule.temperature != null) {
+        return throw(Output(T), "INITIAL VELOCITY AND TEMPERATURE CONDITIONS ARE MUTUALLY EXCLUSIVE", .{});
+    }
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
@@ -463,7 +468,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     const andersen_parameters: andersen_thermostat.Parameters(T) = .{
         .time_step = opt.time_step,
         .masses = system.masses,
-        .random = &random
+        .random = &random,
+        .molecule = opt.potential == .ab_initio
     };
 
     const berendsen_parameters: berendsen_thermostat.Parameters(T) = .{
@@ -621,11 +627,24 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     return output;
 }
 
+/// Sample initial conditions for a trajectory from Boltzmann distribution.
+pub fn sampleFromBoltzmann(comptime T: type, system: *ClassicalParticle(T), temperature: T, random: *std.Random) void {
+    const kBT = temperature / AU2K;
+
+    for (0..system.velocity.len) |i| {
+        system.velocity.ptr(i).* = std.math.sqrt(kBT / system.masses.at(i)) * random.floatNorm(T);
+    }
+
+    return;
+}
+
 /// Parallel function to run a trajectory.
 pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, trajectory_based_results: anytype, params: anytype, error_ctx: *ErrorContext) void {
     if (error_ctx.err != null) return;
 
     var system: ClassicalParticle(T) = undefined; defer system.deinit(params[4]);
+
+    var rng = params[3]; var random = rng.random();
 
     if (params[0].potential == .ab_initio) {
 
@@ -645,13 +664,13 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
 
             for (0..system.velocity.len) |i| system.velocity.ptr(i).* = velocity_system.position.at(i) / A2AU;
         }
+
+        if (params[0].initial_conditions.molecule.temperature) |temp| sampleFromBoltzmann(T, &system, temp, &random);
     }
 
     if (params[0].potential != .ab_initio) system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.model.mass, params[4]) catch |err| {
         error_ctx.capture(err); return;
     };
-
-    var rng = params[3]; var random = rng.random();
 
     if (params[0].potential != .ab_initio) sampleInitialConditions(T, &system, params[0].initial_conditions.model, &random) catch |err| {
         error_ctx.capture(err); return;

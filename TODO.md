@@ -38,13 +38,14 @@
 - [x] The JSON parser should tell user what fields are not recognized.
 - [ ] The JSON parser should tell user what fields are not missing.
 - [x] In kinetic temperature calculation, the number of degrees of freedom should be calculated, it is now set to ndim, which is correct for a single particle.
-- [ ] Andersen thermostat is not thermalizing real systems correctly because it does not take into account that particles have 3 coordinates.
+- [x] Andersen thermostat is not thermalizing real systems correctly because it does not take into account that particles have 3 coordinates.
 - [ ] Add chains to Nosé-Hoover thermostat to make it work better for real systems.
 - [x] Implement equilibration phase for classical dynamics simulations, where the system is thermalized before the production run.
 - [x] Add the ability to somehow log the equilibration phase in classical dynamics simulations, so that the user can check if the system is thermalized before the production run.
 - [ ] Entropy calculators do not work for molecular systems, since they do not take into account the fact rotations and translations do not contribute to the entropy.
 - [ ] The heap allocators in ab initio potential are ugly.
-- [ ] Boltzmann sampling of initial conditions for classical dynamics should be implemented.
+- [x] Boltzmann sampling of initial conditions for classical dynamics should be implemented.
 - [x] Add reading of initial velocities from file for classical dynamics simulations, so that the user can specify the initial conditions in a more flexible way.
 - [x] Fix the calculation of TDC from NACV using ab initio potentials, since it is currently wrong.
 - [ ] Implement NACV interpolation during FSSH and MASH simulations.
+- [ ] Remove initial translations and rotations from the Boltzmann sampling of initial conditions for classical dynamics simulations.
