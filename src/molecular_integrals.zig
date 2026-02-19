@@ -71,7 +71,7 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    const system = try classical_particle.read(T, opt.system, 0, allocator); defer system.deinit(allocator);
+    const system = try classical_particle.read(T, opt.system, 0, 0, allocator); defer system.deinit(allocator);
     var basis = try BasisSet(T).init(system, opt.basis, allocator); defer basis.deinit(allocator);
 
     var output = Output(T).init(); errdefer output.deinit(allocator);

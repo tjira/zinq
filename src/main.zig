@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const config = @import("config");
 const std = @import("std");
 
+pub const abinitio_potential = @import("abinitio_potential.zig");
 pub const andersen_thermostat = @import("andersen_thermostat.zig");
 pub const array_functions = @import("array_functions.zig");
 pub const avoided_crossing_potential = @import("avoided_crossing_potential.zig");

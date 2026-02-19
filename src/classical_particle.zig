@@ -15,9 +15,11 @@ const ElectronicPotential = electronic_potential.ElectronicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
+const AN2SM = global_variables.AN2SM;
 const throw = error_handling.throw;
 const uncr = string_manipulation.uncr;
 
+const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 const A2AU = global_variables.A2AU;
 const AN2M = global_variables.AN2M;
 const SM2AN = global_variables.SM2AN;
@@ -77,10 +79,10 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Calculate the acceleration of the classical particle using the forces from the electronic potential.
-        pub fn calculateAcceleration(self: *@This(), pot: ElectronicPotential(T), pot_matrix: *RealMatrix(T), time: T, current_state: usize, fdiff_step: T, bias: ?BiasPotential(T)) !void {
+        pub fn calculateAcceleration(self: *@This(), pot: ElectronicPotential(T), pot_matrix: *RealMatrix(T), time: T, current_state: usize, fdiff_step: T, bias: ?BiasPotential(T), dir: std.fs.Dir) !void {
             for (0..self.ndim) |i| {
 
-                const force = try pot.forceAdiabatic(pot_matrix, self.position, time, current_state, i, fdiff_step, bias);
+                const force = try pot.forceAdiabatic(pot_matrix, self.position, time, current_state, i, fdiff_step, bias, dir);
 
                 self.acceleration.ptr(i).* = force / self.masses.at(i);
             }
@@ -203,11 +205,35 @@ pub fn ClassicalParticle(comptime T: type) type {
                 self.velocity.ptr(i).* = (mean[i] + stdev[i] * random.floatNorm(T)) / self.masses.at(i);
             }
         }
+
+        /// Write the coordinates of the system to an .xyz file. The coordinates are converted from atomic units to Angstroms before writing.
+        pub fn writeCoordinatesToXYZ(self: @This(), filename: []const u8, dir: std.fs.Dir) !void {
+            if (self.atoms == null) return throw(void, "CAN'T WRITE COORDINATES TO FILE IF ATOMS VECTOR IS NULL", .{});
+
+            const file = try dir.createFile(filename, .{}); defer file.close();
+
+            var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
+
+            var writer = file.writer(&buffer); var writer_interface = &writer.interface;
+
+            try writer_interface.print("{d}\n\n", .{self.position.len / 3});
+
+            for (0..self.position.len / 3) |i| {
+
+                const x = self.position.at(i * 3 + 0) / A2AU;
+                const y = self.position.at(i * 3 + 1) / A2AU;
+                const z = self.position.at(i * 3 + 2) / A2AU;
+                
+                try writer_interface.print("{s:2} {d:20.14} {d:20.14} {d:20.14}\n", .{try AN2SM(self.atoms.?[i]), x, y, z});
+            }
+
+            try writer_interface.flush();
+        }
     };
 }
 
 /// Read the system from a .xyz file.
-pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.Allocator) !ClassicalParticle(T) {
+pub fn read(comptime T: type, path: []const u8, charge: i32, geometry: usize, allocator: std.mem.Allocator) !ClassicalParticle(T) {
     const file = try std.fs.cwd().openFile(path, .{}); defer file.close();
 
     var buffer: [1024]u8 = undefined; var reader = file.reader(&buffer); var reader_interface = &reader.interface;
@@ -217,6 +243,8 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, allocator: std.mem.
     var atoms = try allocator.alloc(usize, natom);
 
     reader_interface.toss(1); _ = try reader_interface.discardDelimiterInclusive('\n');
+
+    for (0..(natom + 2) * geometry) |_| _ = try reader_interface.discardDelimiterInclusive('\n');
 
     var position = try RealVector(T).init(3 * natom, allocator); defer position.deinit(allocator);
 

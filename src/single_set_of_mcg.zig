@@ -490,7 +490,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                     coefs_before_i.ptr(j).* = self.coefs.at(j * self.gaussians.len + i);
                 }
 
-                try pot.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position, time);
+                try pot.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position, time, null);
 
                 if (i > 0) try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
 

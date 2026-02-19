@@ -79,13 +79,20 @@ const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 /// Classical dynamics options struct.
 pub fn Options(comptime T: type) type {
     return struct {
-        pub const InitialConditions = struct {
-            mass: []const T,
-            momentum_mean: []const T,
-            momentum_std: []const T,
-            position_mean: []const T,
-            position_std: []const T,
-            state: u32 = 0
+        pub const InitialConditions = union(enum) {
+            model: struct {
+                mass: []const T,
+                momentum_mean: []const T,
+                momentum_std: []const T,
+                position_mean: []const T,
+                position_std: []const T,
+                state: u32 = 0
+            },
+            molecule : struct {
+                position : []const u8,
+                state: u32 = 0,
+                charge: i32 = 0
+            }
         };
         pub const LogIntervals = struct {
             trajectory: u32 = 1,
@@ -103,6 +110,7 @@ pub fn Options(comptime T: type) type {
             population_mean: ?[]const u8 = null,
             position_mean: ?[]const u8 = null,
             potential_energy_mean: ?[]const u8 = null,
+            state_potential_energy_mean: ?[]const u8 = null,
             time_derivative_coupling_mean: ?[]const u8 = null,
             temperature_mean: ?[]const u8 = null,
             total_energy_mean: ?[]const u8 = null,
@@ -125,7 +133,7 @@ pub fn Options(comptime T: type) type {
         write: Write = .{},
 
         equilibration_iterations: u32 = 0,
-        finite_differences_step: T = 1e-8,
+        finite_differences_step: T = 1e-6,
         trajectories: u32 = 1,
         seed: u32 = 0,
         nthread: u32 = 1
@@ -142,6 +150,7 @@ pub fn Output(comptime T: type) type {
         population_mean: RealMatrix(T),
         position_mean: RealMatrix(T),
         potential_energy_mean: RealVector(T),
+        state_potential_energy_mean: RealMatrix(T),
         time_derivative_coupling_mean: RealMatrix(T),
         temperature_mean: RealVector(T),
         total_energy_mean: RealVector(T),
@@ -158,6 +167,7 @@ pub fn Output(comptime T: type) type {
                 .population_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                 .position_mean = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                 .potential_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
+                .state_potential_energy_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                 .time_derivative_coupling_mean = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
                 .temperature_mean = try RealVector(T).initZero(iterations + 1, allocator),
                 .total_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
@@ -175,6 +185,7 @@ pub fn Output(comptime T: type) type {
             self.population_mean.deinit(allocator);
             self.position_mean.deinit(allocator);
             self.potential_energy_mean.deinit(allocator);
+            self.state_potential_energy_mean.deinit(allocator);
             self.time_derivative_coupling_mean.deinit(allocator);
             self.temperature_mean.deinit(allocator);
             self.total_energy_mean.deinit(allocator);
@@ -215,6 +226,7 @@ pub fn Custom(comptime T: type) type {
             population: RealMatrix(T),
             position: RealMatrix(T),
             potential_energy: RealVector(T),
+            state_potential_energy: RealMatrix(T),
             time_derivative_coupling: RealMatrix(T),
             temperature: RealVector(T),
             total_energy: RealVector(T),
@@ -230,6 +242,7 @@ pub fn Custom(comptime T: type) type {
                     .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                     .position = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                     .potential_energy = try RealVector(T).initZero(iterations + 1, allocator),
+                    .state_potential_energy = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                     .time_derivative_coupling = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
                     .temperature = try RealVector(T).initZero(iterations + 1, allocator),
                     .total_energy = try RealVector(T).initZero(iterations + 1, allocator),
@@ -245,6 +258,7 @@ pub fn Custom(comptime T: type) type {
                 self.population.deinit(allocator);
                 self.position.deinit(allocator);
                 self.potential_energy.deinit(allocator);
+                self.state_potential_energy.deinit(allocator);
                 self.time_derivative_coupling.deinit(allocator);
                 self.temperature.deinit(allocator);
                 self.total_energy.deinit(allocator);
@@ -261,6 +275,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const nstate = opt.potential.nstate();
 
     if (nstate != 2 and opt.write.bloch_vector_mean != null) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});
+    if (opt.potential == .ab_initio and opt.derivative_coupling != null and opt.derivative_coupling.? != .nacv) {
+        return throw(Output(T), "ONLY NACV DERIVATIVE COUPLING IS SUPPORTED FOR AB INITIO POTENTIALS", .{});
+    }
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
@@ -275,6 +292,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         .population_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
         .position_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
         .potential_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
+        .state_potential_energy_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
         .time_derivative_coupling_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate * nstate}, allocator),
         .temperature_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
         .total_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
@@ -332,12 +350,25 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalParticle(T), index: usize, equilibrate: bool, enable_printing: bool, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
     const nstate = opt.potential.nstate();
     const ndim = opt.potential.ndim();
+    var dir = std.fs.cwd();
+
+    if (opt.potential == .ab_initio) {
+
+        const dir_name = try std.fmt.allocPrint(allocator, "TRAJ_{d}", .{index + 1}); defer allocator.free(dir_name);
+
+        try std.fs.cwd().deleteTree(dir_name); try std.fs.cwd().makeDir(dir_name);
+
+        dir = try std.fs.cwd().openDir(dir_name, .{});
+    }
 
     var split_mix = std.Random.SplitMix64.init(opt.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
     var output = try Custom(T).TrajectoryOutput.init(nstate, ndim, opt.iterations, allocator);
 
-    var current_state: usize = @intCast(opt.initial_conditions.state);
+    var current_state: usize = switch (opt.initial_conditions) {
+        .model => opt.initial_conditions.model.state,
+        .molecule => opt.initial_conditions.molecule.state
+    };
 
     if (current_state >= nstate) return throw(Custom(T).TrajectoryOutput, "ACTIVE STATE MUST NOT BE HIGHER THAN THE TOTAL NUMBER OF STATES", .{});
 
@@ -411,7 +442,9 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .electronic_potential = opt.potential,
         .position = system.position,
         .velocity = system.velocity,
-        .time = undefined
+        .time = undefined,
+        .dir = dir,
+        .allocator = allocator
     };
 
     const npi_parameters: norm_preserving_interpolation.Parameters(T) = .{
@@ -470,16 +503,23 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         if (i > 0) system.propagateVelocityVerletFirstHalf(opt.time_step);
 
-        try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time);
+        if (opt.potential == .ab_initio) try opt.potential.ab_initio.runElectronicStructureCalculation(system.*, dir, allocator);
+
+        try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time, dir);
 
         var potential_energy = adiabatic_potential.at(current_state, current_state);
 
+        for (0..nstate) |j| output.state_potential_energy.ptr(i, j).* = Wpp * adiabatic_potential.at(j, j);
+
         if (!equilibrate and i > 0) {
 
-            try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
-            try mm(T, &eigenvector_overlap, previous_eigenvectors, true, adiabatic_eigenvectors, false);
-
             if (opt.derivative_coupling) |time_derivative_coupling_algorithm| {
+
+                if (time_derivative_coupling_algorithm != .nacv) {
+                    try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
+                    try mm(T, &eigenvector_overlap, previous_eigenvectors, true, adiabatic_eigenvectors, false);
+                }
+
                 try time_derivative_coupling_algorithm.evaluate(&time_derivative_coupling, derivative_coupling_parameters);
             }
         }
@@ -501,7 +541,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             }
         };
 
-        try system.calculateAcceleration(opt.potential, &adiabatic_potential, time, current_state, opt.finite_differences_step, opt.bias);
+        try system.calculateAcceleration(opt.potential, &adiabatic_potential, time, current_state, opt.finite_differences_step, opt.bias, dir);
 
         if (i > 0) try system.propagateVelocityVerletSecondHalf(opt.time_step);
 
@@ -574,6 +614,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         if (enable_printing and opt.trajectories == 1) try printThermodynamicProperties(T, output.thermodynamics);
     }
 
+    if (opt.potential == .ab_initio) dir.close();
+
     return output;
 }
 
@@ -581,13 +623,25 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, trajectory_based_results: anytype, params: anytype, error_ctx: *ErrorContext) void {
     if (error_ctx.err != null) return;
 
-    var system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.mass, params[4]) catch |err| {
+    var system: ClassicalParticle(T) = undefined; defer system.deinit(params[4]);
+
+    if (params[0].potential == .ab_initio) {
+
+        const position = params[0].initial_conditions.molecule.position;
+        const charge = params[0].initial_conditions.molecule.charge;
+
+        system = classical_particle.read(T, position, charge, params[1], params[4]) catch |err| {
+            error_ctx.capture(err); return;
+        };
+    }
+
+    if (params[0].potential != .ab_initio) system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.model.mass, params[4]) catch |err| {
         error_ctx.capture(err); return;
-    }; defer system.deinit(params[4]);
+    };
 
     var rng = params[3]; var random = rng.random();
 
-    sampleInitialConditions(T, &system, params[0].initial_conditions, &random) catch |err| {
+    if (params[0].potential != .ab_initio) sampleInitialConditions(T, &system, params[0].initial_conditions.model, &random) catch |err| {
         error_ctx.capture(err); return;
     };
 
@@ -652,6 +706,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     const output_population_mean = parallel_results.population_mean;
     const output_position_mean = parallel_results.position_mean;
     const output_potential_energy_mean = parallel_results.potential_energy_mean;
+    const output_state_potential_energy_mean = parallel_results.state_potential_energy_mean;
     const output_time_derivative_coupling_mean = parallel_results.time_derivative_coupling_mean;
     const output_temperature_mean = parallel_results.temperature_mean;
     const output_total_energy_mean = parallel_results.total_energy_mean;
@@ -664,6 +719,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
         try output.population_mean.add(output_population_mean.at(i));
         try output.position_mean.add(output_position_mean.at(i));
         try output.potential_energy_mean.add(output_potential_energy_mean.at(i));
+        try output.state_potential_energy_mean.add(output_state_potential_energy_mean.at(i));
         try output.time_derivative_coupling_mean.add(output_time_derivative_coupling_mean.at(i));
         try output.temperature_mean.add(output_temperature_mean.at(i));
         try output.total_energy_mean.add(output_total_energy_mean.at(i));
@@ -676,6 +732,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     output.population_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.position_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.potential_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+    output.state_potential_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.time_derivative_coupling_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.temperature_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.total_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
@@ -689,6 +746,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     if (opt.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population_mean, 0, end_time);
     if (opt.write.position_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.position_mean, 0, end_time);
     if (opt.write.potential_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.potential_energy_mean.asMatrix(), 0, end_time);
+    if (opt.write.state_potential_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.state_potential_energy_mean, 0, end_time);
     if (opt.write.time_derivative_coupling_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.time_derivative_coupling_mean, 0, end_time);
     if (opt.write.temperature_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.temperature_mean.asMatrix(), 0, end_time);
     if (opt.write.total_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy_mean.asMatrix(), 0, end_time);
@@ -803,7 +861,7 @@ pub fn printThermodynamicProperties(comptime T: type, output: Custom(T).Trajecto
 }
 
 /// Samples the initial conditions.
-pub fn sampleInitialConditions(comptime T: type, system: *ClassicalParticle(T), initial_conditions: Options(T).InitialConditions, random: *std.Random) !void {
+pub fn sampleInitialConditions(comptime T: type, system: *ClassicalParticle(T), initial_conditions: anytype, random: *std.Random) !void {
     try system.setPositionRandn(initial_conditions.position_mean, initial_conditions.position_std, random);
     try system.setMomentumRandn(initial_conditions.momentum_mean, initial_conditions.momentum_std, random);
 }
@@ -814,12 +872,14 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
             .npi = NormPreservingInterpolation(f64){}
         },
         .initial_conditions = .{
-            .mass = &.{2000},
-            .momentum_mean = &.{15},
-            .momentum_std = &.{1},
-            .position_mean = &.{-10},
-            .position_std = &.{0.5},
-            .state = 1
+            .model = .{
+                .mass = &.{2000},
+                .momentum_mean = &.{15},
+                .momentum_std = &.{1},
+                .position_mean = &.{-10},
+                .position_std = &.{0.5},
+                .state = 1
+            }
         },
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
@@ -841,12 +901,14 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
 test "Landau-Lener Surface Hopping on Tully's First Potential" {
     const opt = Options(f64){
         .initial_conditions = .{
-            .mass = &.{2000},
-            .momentum_mean = &.{15},
-            .momentum_std = &.{1},
-            .position_mean = &.{-10},
-            .position_std = &.{0.5},
-            .state = 1
+            .model = .{
+                .mass = &.{2000},
+                .momentum_mean = &.{15},
+                .momentum_std = &.{1},
+                .position_mean = &.{-10},
+                .position_std = &.{0.5},
+                .state = 1
+            }
         },
         .potential = .{
             .tully_1 = TullyPotential1(f64){}
@@ -871,12 +933,14 @@ test "Mapping Approach to Surface Hopping on Tully's First Potential" {
             .npi = NormPreservingInterpolation(f64){}
         },
         .initial_conditions = .{
-            .mass = &.{2000},
-            .momentum_mean = &.{15},
-            .momentum_std = &.{1},
-            .position_mean = &.{-10},
-            .position_std = &.{0.5},
-            .state = 1
+            .model = .{
+                .mass = &.{2000},
+                .momentum_mean = &.{15},
+                .momentum_std = &.{1},
+                .position_mean = &.{-10},
+                .position_std = &.{0.5},
+                .state = 1
+            }
         },
         .potential = .{
             .tully_1 = TullyPotential1(f64){}

@@ -4,11 +4,13 @@
             "name" : "classical_dynamics",
             "options" : {
                 "initial_conditions" : {
-                    "mass" : [1],
-                    "momentum_mean" : [0],
-                    "momentum_std" : [1],
-                    "position_mean" : [1],
-                    "position_std" : [0.5]
+                    "model" : {
+                        "mass" : [1],
+                        "momentum_mean" : [0],
+                        "momentum_std" : [1],
+                        "position_mean" : [1],
+                        "position_std" : [0.5]
+                    }
                 },
                 "log_intervals" : {
                     "iteration" : 2000,
@@ -32,11 +34,13 @@
             "name" : "classical_dynamics",
             "options" : {
                 "initial_conditions" : {
-                    "mass" : [1],
-                    "momentum_mean" : [0],
-                    "momentum_std" : [1],
-                    "position_mean" : [1],
-                    "position_std" : [0.5]
+                    "model" : {
+                        "mass" : [1],
+                        "momentum_mean" : [0],
+                        "momentum_std" : [1],
+                        "position_mean" : [1],
+                        "position_std" : [0.5]
+                    }
                 },
                 "log_intervals" : {
                     "iteration" : 2000,
@@ -60,11 +64,13 @@
             "name" : "classical_dynamics",
             "options" : {
                 "initial_conditions" : {
-                    "mass" : [1],
-                    "momentum_mean" : [0],
-                    "momentum_std" : [1],
-                    "position_mean" : [1],
-                    "position_std" : [0.5]
+                    "model" : {
+                        "mass" : [1],
+                        "momentum_mean" : [0],
+                        "momentum_std" : [1],
+                        "position_mean" : [1],
+                        "position_std" : [0.5]
+                    }
                 },
                 "log_intervals" : {
                     "iteration" : 2000,
@@ -88,11 +94,13 @@
             "name" : "classical_dynamics",
             "options" : {
                 "initial_conditions" : {
-                    "mass" : [1],
-                    "momentum_mean" : [0],
-                    "momentum_std" : [1],
-                    "position_mean" : [1],
-                    "position_std" : [0.5]
+                    "model" : {
+                        "mass" : [1],
+                        "momentum_mean" : [0],
+                        "momentum_std" : [1],
+                        "position_mean" : [1],
+                        "position_std" : [0.5]
+                    }
                 },
                 "log_intervals" : {
                     "iteration" : 2000,

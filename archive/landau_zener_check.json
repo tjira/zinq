@@ -4,12 +4,14 @@
             "name" : "classical_dynamics",
             "options" : {
                 "initial_conditions" : {
-                    "mass" : [1],
-                    "momentum_mean" : [0],
-                    "momentum_std" : [1],
-                    "position_mean" : [0],
-                    "position_std" : [0.5],
-                    "state" : 1
+                    "model" : {
+                        "mass" : [1],
+                        "momentum_mean" : [0],
+                        "momentum_std" : [1],
+                        "position_mean" : [0],
+                        "position_std" : [0.5],
+                        "state" : 1
+                    }
                 },
                 "log_intervals" : {
                     "iteration" : 5000,

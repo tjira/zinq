@@ -43,3 +43,8 @@
 - [x] Implement equilibration phase for classical dynamics simulations, where the system is thermalized before the production run.
 - [x] Add the ability to somehow log the equilibration phase in classical dynamics simulations, so that the user can check if the system is thermalized before the production run.
 - [ ] Entropy calculators do not work for molecular systems, since they do not take into account the fact rotations and translations do not contribute to the entropy.
+- [ ] The heap allocators in ab initio potential are ugly.
+- [ ] Boltzmann sampling of initial conditions for classical dynamics should be implemented.
+- [ ] Add reading of initial velocities from file for classical dynamics simulations, so that the user can specify the initial conditions in a more flexible way.
+- [ ] Fix the calculation of TDC from NACV using ab initio potentials, since it is currently wrong.
+- [ ] Implement NACV interpolation during FSSH and MASH simulations.

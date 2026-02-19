@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const device_read = @import("device_read.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const error_handling = @import("error_handling.zig");
@@ -10,6 +11,7 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
 const fixGauge = eigenproblem_solver.fixGauge;
+const readRealMatrix = device_read.readRealMatrix;
 const throw = error_handling.throw;
 
 const ElectronicPotential = electronic_potential.ElectronicPotential;
@@ -27,7 +29,9 @@ pub fn Parameters(comptime T: type) type {
         electronic_potential: ElectronicPotential(T),
         position: RealVector(T),
         velocity: RealVector(T),
-        time: T
+        time: T,
+        dir: std.fs.Dir,
+        allocator: std.mem.Allocator
     };
 }
 
@@ -38,6 +42,8 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
 
         /// Evaluate the time derivative coupling.
         pub fn evaluate(self: @This(), derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
+            if (parameters.electronic_potential == .ab_initio) return try self.evaluateAbInitio(derivative_coupling, parameters);
+
             if (derivative_coupling.rows > MAX_NACV_STATES or derivative_coupling.cols > MAX_NACV_STATES) {
                 return throw(void, "MAXIMUM NUMBER OF STATES FOR NACV METHOD IS {d}", .{MAX_NACV_STATES});
             }
@@ -62,11 +68,11 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
 
                 @constCast(&position).ptr(i).* = original_position + self.finite_differences_step; 
 
-                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_plus, position, time);
+                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_plus, position, time, parameters.dir);
 
                 @constCast(&position).ptr(i).* = original_position - self.finite_differences_step;
 
-                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_minus, position, time);
+                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_minus, position, time, parameters.dir);
 
                 @constCast(&position).ptr(i).* = original_position;
 
@@ -81,6 +87,25 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
                     derivative_coupling.ptr(k, j).* -= bra * ket * velocity.at(i);
                 };
             }
+        }
+
+        /// Evaluate nonadiabatic coupling vector for an ab initio potential.
+        pub fn evaluateAbInitio(_: @This(), derivative_coupling: *RealMatrix(T), params: Parameters(T)) !void {
+            const dirname = try params.dir.realpathAlloc(params.allocator, "."); defer params.allocator.free(dirname);
+            const path = try std.mem.concat(params.allocator, u8, &.{dirname, "/NACV.mat"}); defer params.allocator.free(path);
+
+            const NACV = try readRealMatrix(T, path, params.allocator); defer NACV.deinit(params.allocator);
+
+            var l: usize = 0;
+
+            for (0..derivative_coupling.rows) |i| for (i + 1..derivative_coupling.cols) |j| {
+
+                for (0..params.velocity.len) |k| {
+                    derivative_coupling.ptr(i, j).* += params.velocity.at(k) * NACV.at(l, 0); l += 1;
+                }
+
+                derivative_coupling.ptr(j, i).* = -derivative_coupling.at(i, j);
+            };
         }
     };
 }

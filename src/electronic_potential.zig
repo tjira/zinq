@@ -2,10 +2,12 @@
 
 const std = @import("std");
 
+const abinitio_potential = @import("abinitio_potential.zig");
 const avoided_crossing_potential = @import("avoided_crossing_potential.zig");
 const bias_potential = @import("bias_potential.zig");
 const custom_potential = @import("custom_potential.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
+const error_handling = @import("error_handling.zig");
 const file_potential = @import("file_potential.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
 const jahn_teller_potential = @import("jahn_teller_potential.zig");
@@ -16,6 +18,7 @@ const time_linear_potential = @import("time_linear_potential.zig");
 const tully_potential = @import("tully_potential.zig");
 const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
+const AbInitioPotential = abinitio_potential.AbInitioPotential;
 const AvoidedCrossingPotential = avoided_crossing_potential.AvoidedCrossingPotential;
 const BiasPotential = bias_potential.BiasPotential;
 const CustomPotential = custom_potential.CustomPotential;
@@ -31,10 +34,12 @@ const VibronicCouplingPotential = vibronic_coupling_potential.VibronicCouplingPo
 
 const diagonalizeHermitian = eigenproblem_solver.diagonalizeHermitian;
 const eigensystemHermitian = eigenproblem_solver.eigensystemHermitian;
+const throw = error_handling.throw;
 
 /// Electronic potential mode union.
 pub fn ElectronicPotential(comptime T: type) type {
     return union(enum) {
+        ab_initio: AbInitioPotential(T),
         avoided_crossing: AvoidedCrossingPotential(T),
         custom: CustomPotential(T),
         file: FilePotential(T),
@@ -64,6 +69,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Evaluate the dabatic potential energy matrix at given system state and time.
         pub fn evaluateDiabatic(self: @This(), diabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) !void {
             switch (self) {
+                .ab_initio => return throw(void, "AB INITIO POTENTIAL DOES NOT SUPPORT DIABATIC EVALUATION.", .{}),
                 inline else => |field| try field.evaluateDiabatic(diabatic_potential, position, time)
             }
         }
@@ -71,6 +77,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Evaluate the dabatic potential energy matrix element.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
             return switch (self) {
+                .ab_initio => return throw(T, "AB INITIO POTENTIAL DOES NOT SUPPORT DIABATIC ELEMENT EVALUATION.", .{}),
                 inline else => |field| field.evaluateDiabaticElement(i, j, position, time)
             };
         }
@@ -114,14 +121,20 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Evaluate adiabatic eigensystem at given system state and time.
-        pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T) !void {
+        pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T, dir: ?std.fs.Dir) !void {
+            if (self == .ab_initio) {
+                try self.ab_initio.evaluateAdiabatic(adiabatic, position, time, dir.?); diabatic.fill(std.math.nan(T)); eigenvectors.fill(std.math.nan(T)); return;
+            }
+
             try self.evaluateDiabatic(diabatic, position, time);
 
             try eigensystemHermitian(T, adiabatic, eigenvectors, diabatic.*);
         }
 
         /// Evaluate the adabatic potential energy gradient for a specific coordinate index. The adiabatic potential matrix will hold the potential at the r + dr point.
-        pub fn forceAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T)) !T {
+        pub fn forceAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T), dir: std.fs.Dir) !T {
+            if (self == .ab_initio) return try self.ab_initio.forceAdiabatic(index, position, time, dir);
+
             const original_position = position.at(index);
 
             @constCast(&position).ptr(index).* = original_position - fdiff_step;
@@ -144,6 +157,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Getter for number of dimensions.
         pub fn ndim(self: @This()) usize {
             return switch (self) {
+                .ab_initio => |field| field.ndim(),
                 .avoided_crossing => 1,
                 .custom => |field| field.variables.len,
                 .file => |field| field.ndim,
@@ -159,6 +173,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Getter for number of electronic states.
         pub fn nstate(self: @This()) usize {
             return switch (self) {
+                .ab_initio => |field| field.nstate(),
                 .avoided_crossing => 2,
                 .custom => |field| field.matrix.len,
                 .file => |field| field.nstate,

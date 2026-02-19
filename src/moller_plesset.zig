@@ -114,7 +114,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     if (opt.gradient != null and opt.gradient.? == .analytic) return throw(Output(T), "ANALYTIC GRADIENT NOT IMPLEMENTED", .{});
     if (opt.hessian != null and opt.hessian.? == .analytic) return throw(Output(T), "ANALYTIC HESSIAN NOT IMPLEMENTED", .{});
 
-    var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, allocator); defer system.deinit(allocator);
+    var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator); defer system.deinit(allocator);
 
     if (enable_printing) {try print("\nINPUT GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
