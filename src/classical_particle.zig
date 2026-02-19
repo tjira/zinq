@@ -24,6 +24,7 @@ const A2AU = global_variables.A2AU;
 const AN2M = global_variables.AN2M;
 const SM2AN = global_variables.SM2AN;
 const AU2K = global_variables.AU2K;
+const U2AU = global_variables.U2AU;
 
 /// Classical particle struct that holds all information about the classical-like coordinates, velocities and masses.
 pub fn ClassicalParticle(comptime T: type) type {
@@ -263,7 +264,7 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, geometry: usize, al
 
     var masses = try allocator.alloc(T, 3 * natom); defer allocator.free(masses);
 
-    for (0..3 * natom) |i| masses[i] = AN2M[atoms[i / 3]];
+    for (0..3 * natom) |i| masses[i] = AN2M[atoms[i / 3]] * U2AU;
 
     var system = try ClassicalParticle(T).initZero(3 * natom, masses, allocator);
 

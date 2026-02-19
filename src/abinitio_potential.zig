@@ -4,6 +4,7 @@ const std = @import("std");
 
 const classical_particle = @import("classical_particle.zig");
 const device_read = @import("device_read.zig");
+const device_write = @import("device_write.zig");
 const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const prcess = @import("process.zig");
