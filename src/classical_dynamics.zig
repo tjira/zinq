@@ -75,6 +75,7 @@ const Na = global_variables.Na;
 const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
+const A2AU = global_variables.A2AU;
 
 /// Classical dynamics options struct.
 pub fn Options(comptime T: type) type {
@@ -89,7 +90,8 @@ pub fn Options(comptime T: type) type {
                 state: u32 = 0
             },
             molecule : struct {
-                position : []const u8,
+                position: []const u8,
+                velocity: ?[]const u8 = null,
                 state: u32 = 0,
                 charge: i32 = 0
             }
@@ -628,11 +630,21 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
     if (params[0].potential == .ab_initio) {
 
         const position = params[0].initial_conditions.molecule.position;
+        const velocity = params[0].initial_conditions.molecule.velocity;
         const charge = params[0].initial_conditions.molecule.charge;
 
         system = classical_particle.read(T, position, charge, params[1], params[4]) catch |err| {
             error_ctx.capture(err); return;
         };
+
+        if (velocity) |vel| {
+
+            const velocity_system = classical_particle.read(T, vel, charge, params[1], params[4]) catch |err| {
+                error_ctx.capture(err); return;
+            }; defer velocity_system.deinit(params[4]);
+
+            for (0..system.velocity.len) |i| system.velocity.ptr(i).* = velocity_system.position.at(i) / A2AU;
+        }
     }
 
     if (params[0].potential != .ab_initio) system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.model.mass, params[4]) catch |err| {

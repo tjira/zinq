@@ -45,6 +45,6 @@
 - [ ] Entropy calculators do not work for molecular systems, since they do not take into account the fact rotations and translations do not contribute to the entropy.
 - [ ] The heap allocators in ab initio potential are ugly.
 - [ ] Boltzmann sampling of initial conditions for classical dynamics should be implemented.
-- [ ] Add reading of initial velocities from file for classical dynamics simulations, so that the user can specify the initial conditions in a more flexible way.
-- [ ] Fix the calculation of TDC from NACV using ab initio potentials, since it is currently wrong.
+- [x] Add reading of initial velocities from file for classical dynamics simulations, so that the user can specify the initial conditions in a more flexible way.
+- [x] Fix the calculation of TDC from NACV using ab initio potentials, since it is currently wrong.
 - [ ] Implement NACV interpolation during FSSH and MASH simulations.
