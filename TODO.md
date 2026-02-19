@@ -49,3 +49,5 @@
 - [x] Fix the calculation of TDC from NACV using ab initio potentials, since it is currently wrong.
 - [ ] Implement NACV interpolation during FSSH and MASH simulations.
 - [ ] Remove initial translations and rotations from the Boltzmann sampling of initial conditions for classical dynamics simulations.
+- [ ] Fix gauge of the ab initio calculated NACV.
+- [ ] The weighing of the trajectory observabples is probably not the best thing to do, since all thermodynamics is then calculated from the weighed trajectories, which may not be correct.
