@@ -448,7 +448,6 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
     const nacv_parameters: nonadiabatic_coupling_vector.Parameters(T) = .{
         .adiabatic_potential = adiabatic_potential,
-        .diabatic_potential = diabatic_potential,
         .adiabatic_eigenvectors = adiabatic_eigenvectors,
         .electronic_potential = opt.potential,
         .previous_nacv = previous_nacv,
@@ -531,8 +530,9 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
             if (opt.derivative_coupling) |time_derivative_coupling_algorithm| {
 
+                if (opt.potential != .ab_initio) try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
+
                 if (time_derivative_coupling_algorithm != .nacv) {
-                    try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
                     try mm(T, &eigenvector_overlap, previous_eigenvectors, true, adiabatic_eigenvectors, false);
                 }
 

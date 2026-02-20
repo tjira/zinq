@@ -23,7 +23,7 @@
                 },
                 "derivative_coupling" : {
                     "nacv" : {
-                        "minimum_energy_gap" : 0.07
+                        "maximum_energy_gap" : 0.07
                     }
                 },
                 "iterations" : 100,
