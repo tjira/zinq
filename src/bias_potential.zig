@@ -61,12 +61,12 @@ pub fn BiasPotential(comptime T: type) type {
         }
 
         /// Evaluate the force from the bias potential for the specified system state and coordinate index.
-        pub fn force(self: @This(), adiabatic_potential: RealMatrix(T), state: usize, _: usize, dVdx: T) T {
+        pub fn force(self: @This(), adiabatic_potential: RealMatrix(T), state: usize, _: usize) T {
             const variable = switch (self.variable) {
                 .potential_energy => adiabatic_potential.at(state, state)
             };
 
-            return self.evaluateForce(variable) * dVdx;
+            return self.evaluateForce(variable);
          }
     };
 }

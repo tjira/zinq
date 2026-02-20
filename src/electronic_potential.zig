@@ -130,6 +130,8 @@ pub fn ElectronicPotential(comptime T: type) type {
         pub fn forceAdiabatic(self: @This(), adiabatic: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T)) !T {
             if (self == .ab_initio) return throw(T, "ADIABATIC FORCE EVALUATION FOR AB INITIO POTENTIAL IS NOT SUPPORTED IN THIS FUNCTION", .{});
 
+            const bias_force = if (bias) |bs| bs.force(adiabatic.*, state, index) else 0;
+
             const original_position = position.at(index);
 
             @constCast(&position).ptr(index).* = original_position - fdiff_step;
@@ -148,7 +150,7 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step;
 
-            return -gradient + if (bias) |bs| bs.force(adiabatic.*, state, index, gradient) else 0;
+            return -gradient + bias_force * gradient;
         }
 
         /// Getter for number of dimensions.
