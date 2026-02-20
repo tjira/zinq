@@ -80,10 +80,10 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Calculate the acceleration of the classical particle using the forces from the electronic potential.
-        pub fn calculateAcceleration(self: *@This(), pot: ElectronicPotential(T), pot_matrix: *RealMatrix(T), time: T, current_state: usize, fdiff_step: T, bias: ?BiasPotential(T), dir: std.fs.Dir) !void {
+        pub fn calculateAcceleration(self: *@This(), pot: ElectronicPotential(T), adiabatic: *RealMatrix(T), time: T, state: usize, fdiff_step: T, bias: ?BiasPotential(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
             for (0..self.ndim) |i| {
 
-                const force = try pot.forceAdiabatic(pot_matrix, self.position, time, current_state, i, fdiff_step, bias, dir);
+                const force = try pot.forceAdiabatic(adiabatic, self.position, time, state, i, fdiff_step, bias, dir, allocator);
 
                 self.acceleration.ptr(i).* = force / self.masses.at(i);
             }

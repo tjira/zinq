@@ -391,6 +391,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     var runge_kutta_solver = try ComplexRungeKutta(T).init(nstate, allocator); defer runge_kutta_solver.deinit(allocator);
     var coefficient = try ComplexVector(T).initZero(nstate, allocator); defer coefficient.deinit(allocator);
     var bloch_vector = try RealVector(T).initZero(3, allocator); defer bloch_vector.deinit(allocator);
+    var previous_nacv = try RealVector(T).initZero(nstate * (nstate - 1) / 2, allocator); defer previous_nacv.deinit(allocator);
 
     coefficient.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
 
@@ -447,6 +448,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .diabatic_potential = diabatic_potential,
         .adiabatic_eigenvectors = adiabatic_eigenvectors,
         .electronic_potential = opt.potential,
+        .previous_nacv = previous_nacv,
         .position = system.position,
         .velocity = system.velocity,
         .time = undefined,
@@ -513,7 +515,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         if (opt.potential == .ab_initio) try opt.potential.ab_initio.runElectronicStructureCalculation(system.*, dir, allocator);
 
-        try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time, dir);
+        try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time, dir, allocator);
 
         var potential_energy = adiabatic_potential.at(current_state, current_state);
 
@@ -549,7 +551,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             }
         };
 
-        try system.calculateAcceleration(opt.potential, &adiabatic_potential, time, current_state, opt.finite_differences_step, opt.bias, dir);
+        try system.calculateAcceleration(opt.potential, &adiabatic_potential, time, current_state, opt.finite_differences_step, opt.bias, dir, allocator);
 
         if (i > 0) try system.propagateVelocityVerletSecondHalf(opt.time_step);
 

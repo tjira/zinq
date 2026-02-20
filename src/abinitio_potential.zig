@@ -23,13 +23,11 @@ const throw = error_handling.throw;
 pub fn AbInitioPotential(comptime T: type) type {
     return struct {
         command: []const u8,
+        states: usize = 1,
         ncoord: usize,
-        states: usize,
 
         /// Evaluate the adiabatic potential energy matrix at given system state and time.
-        pub fn evaluateAdiabatic(_: @This(), adiabatic_potential: *RealMatrix(T), _: RealVector(T), _: T, dir: std.fs.Dir) !void {
-            const allocator = std.heap.page_allocator;
-
+        pub fn evaluateAdiabatic(_: @This(), adiabatic_potential: *RealMatrix(T), _: RealVector(T), _: T, dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
             const dirname = try dir.realpathAlloc(allocator, "."); defer allocator.free(dirname);
             const path = try std.mem.concat(allocator, u8, &.{dirname, "/ENERGY.mat"}); defer allocator.free(path);
 
@@ -41,9 +39,7 @@ pub fn AbInitioPotential(comptime T: type) type {
         }
 
         /// Comptime adiabatic force evaluation. The evaluateAdiabatic function needs to be run first.
-        pub fn forceAdiabatic(_: @This(), i: usize, position: RealVector(T), _: T, state: usize, dir: std.fs.Dir) !T {
-            const allocator = std.heap.page_allocator;
-
+        pub fn forceAdiabatic(_: @This(), i: usize, position: RealVector(T), _: T, state: usize, dir: std.fs.Dir, allocator: std.mem.Allocator) !T {
             const dirname = try dir.realpathAlloc(allocator, "."); defer allocator.free(dirname);
             const path = try std.mem.concat(allocator, u8, &.{dirname, "/GRADIENT.mat"}); defer allocator.free(path);
 

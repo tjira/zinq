@@ -27,6 +27,7 @@ pub fn Parameters(comptime T: type) type {
         diabatic_potential: RealMatrix(T),
         adiabatic_eigenvectors: RealMatrix(T),
         electronic_potential: ElectronicPotential(T),
+        previous_nacv: RealVector(T),
         position: RealVector(T),
         velocity: RealVector(T),
         time: T,
@@ -39,6 +40,7 @@ pub fn Parameters(comptime T: type) type {
 pub fn NonadiabaticCouplingVector(comptime T: type) type {
     return struct {
         finite_differences_step: T = 1e-8,
+        minimum_energy_gap: T = 0,
 
         /// Evaluate the time derivative coupling.
         pub fn evaluate(self: @This(), derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
@@ -68,37 +70,55 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
 
                 @constCast(&position).ptr(i).* = original_position + self.finite_differences_step; 
 
-                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_plus, position, time, parameters.dir);
+                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_plus, position, time, parameters.dir, parameters.allocator);
 
                 @constCast(&position).ptr(i).* = original_position - self.finite_differences_step;
 
-                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_minus, position, time, parameters.dir);
+                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_minus, position, time, parameters.dir, parameters.allocator);
 
                 @constCast(&position).ptr(i).* = original_position;
 
                 try fixGauge(T, &eigenvectors_plus, adiabatic_eigenvectors);
                 try fixGauge(T, &eigenvectors_minus, adiabatic_eigenvectors);
 
-                for (0..derivative_coupling.rows) |j| for (j + 1..derivative_coupling.cols) |k| for (0..derivative_coupling.cols) |l| {
+                for (0..derivative_coupling.rows) |j| for (j + 1..derivative_coupling.cols) |k| {
 
-                    const bra = adiabatic_eigenvectors.at(l, j); const ket = (eigenvectors_plus.at(l, k) - eigenvectors_minus.at(l, k)) / (2 * self.finite_differences_step);
+                    if (@abs(adiabatic_potential.at(j, j) - adiabatic_potential.at(k, k)) > self.minimum_energy_gap) continue;
 
-                    derivative_coupling.ptr(j, k).* += bra * ket * velocity.at(i);
-                    derivative_coupling.ptr(k, j).* -= bra * ket * velocity.at(i);
+                    for (0..derivative_coupling.cols) |l| {
+
+                        const bra = adiabatic_eigenvectors.at(l, j); const ket = (eigenvectors_plus.at(l, k) - eigenvectors_minus.at(l, k)) / (2 * self.finite_differences_step);
+
+                        derivative_coupling.ptr(j, k).* += bra * ket * velocity.at(i);
+                        derivative_coupling.ptr(k, j).* -= bra * ket * velocity.at(i);
+                    }
                 };
             }
         }
 
         /// Evaluate nonadiabatic coupling vector for an ab initio potential.
-        pub fn evaluateAbInitio(_: @This(), derivative_coupling: *RealMatrix(T), params: Parameters(T)) !void {
+        pub fn evaluateAbInitio(self: @This(), derivative_coupling: *RealMatrix(T), params: Parameters(T)) !void {
             const dirname = try params.dir.realpathAlloc(params.allocator, "."); defer params.allocator.free(dirname);
             const path = try std.mem.concat(params.allocator, u8, &.{dirname, "/NACV.mat"}); defer params.allocator.free(path);
 
-            const NACV = try readRealMatrix(T, path, params.allocator); defer NACV.deinit(params.allocator);
+            var NACV = try readRealMatrix(T, path, params.allocator); defer NACV.deinit(params.allocator);
 
             var l: usize = 0; derivative_coupling.zero();
 
+            if (params.time > 0) for (0..NACV.rows / params.velocity.len) |i| {
+
+                var overlap: T = 0;
+
+                for (0..params.velocity.len) |j| overlap += params.previous_nacv.at(i * params.velocity.len + j) * NACV.at(i * params.velocity.len + j, 0);
+
+                if (overlap < 0) for (0..params.velocity.len) |j| {NACV.ptr(i * params.velocity.len + j, 0).* *= -1;};
+            };
+
+            l = 0;
+
             for (0..derivative_coupling.rows) |i| for (i + 1..derivative_coupling.cols) |j| {
+
+                if (@abs(params.adiabatic_potential.at(i, i) - params.adiabatic_potential.at(j, j)) > self.minimum_energy_gap) continue;
 
                 for (0..params.velocity.len) |k| {
                     derivative_coupling.ptr(i, j).* += params.velocity.at(k) * NACV.at(l, 0); l += 1;
@@ -106,6 +126,8 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
 
                 derivative_coupling.ptr(j, i).* = -derivative_coupling.at(i, j);
             };
+
+            for (0..NACV.rows) |i| @constCast(&params.previous_nacv).ptr(i).* = NACV.at(i, 0);
         }
     };
 }

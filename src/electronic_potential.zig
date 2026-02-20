@@ -121,9 +121,14 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Evaluate adiabatic eigensystem at given system state and time.
-        pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T, dir: ?std.fs.Dir) !void {
+        pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T, dir: ?std.fs.Dir, allocator: ?std.mem.Allocator) !void {
             if (self == .ab_initio) {
-                try self.ab_initio.evaluateAdiabatic(adiabatic, position, time, dir.?); diabatic.fill(std.math.nan(T)); eigenvectors.fill(std.math.nan(T)); return;
+
+                if (dir == null or allocator == null) return throw(void, "AB INITIO POTENTIAL REQUIRES FILE SYSTEM ACCESS FOR EIGENSYSTEM EVALUATION.", .{});
+
+                diabatic.fill(std.math.nan(T)); eigenvectors.fill(std.math.nan(T));
+
+                return try self.ab_initio.evaluateAdiabatic(adiabatic, position, time, dir.?, allocator.?);
             }
 
             try self.evaluateDiabatic(diabatic, position, time);
@@ -132,22 +137,29 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Evaluate the adabatic potential energy gradient for a specific coordinate index. The adiabatic potential matrix will hold the potential at the r + dr point.
-        pub fn forceAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T), dir: std.fs.Dir) !T {
-            if (self == .ab_initio) return try self.ab_initio.forceAdiabatic(index, position, time, state, dir);
+        pub fn forceAdiabatic(self: @This(), adiabatic: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T), dir: ?std.fs.Dir, allocator: ?std.mem.Allocator) !T {
+            if (self == .ab_initio) {
+
+                if (dir == null or allocator == null) return throw(T, "AB INITIO POTENTIAL REQUIRES FILE SYSTEM ACCESS FOR FORCE EVALUATION.", .{});
+
+                if (bias != null) return throw(T, "AB INITIO POTENTIAL DOES NOT SUPPORT BIASED FORCE EVALUATION.", .{});
+
+                return try self.ab_initio.forceAdiabatic(index, position, time, state, dir.?, allocator.?);
+            }
 
             const original_position = position.at(index);
 
             @constCast(&position).ptr(index).* = original_position - fdiff_step;
 
-            try self.evaluateAdiabatic(adiabatic_potential, position, time, bias);
+            try self.evaluateAdiabatic(adiabatic, position, time, bias);
 
-            const energy_minus = adiabatic_potential.at(state, state);
+            const energy_minus = adiabatic.at(state, state);
 
             @constCast(&position).ptr(index).* = original_position + fdiff_step;
 
-            try self.evaluateAdiabatic(adiabatic_potential, position, time, bias);
+            try self.evaluateAdiabatic(adiabatic, position, time, bias);
 
-            const energy_plus = adiabatic_potential.at(state, state);
+            const energy_plus = adiabatic.at(state, state);
 
             @constCast(&position).ptr(index).* = original_position;
 
