@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const bias_potential = @import("bias_potential.zig");
 const classical_particle = @import("classical_particle.zig");
 const device_read = @import("device_read.zig");
 const device_write = @import("device_write.zig");
@@ -11,6 +12,7 @@ const prcess = @import("process.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
+const BiasPotential = bias_potential.BiasPotential;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
@@ -27,7 +29,7 @@ pub fn AbInitioPotential(comptime T: type) type {
         ncoord: usize,
 
         /// Evaluate the adiabatic potential energy matrix at given system state and time.
-        pub fn evaluateAdiabatic(_: @This(), adiabatic_potential: *RealMatrix(T), _: RealVector(T), _: T, dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
+        pub fn evaluateAdiabatic(_: @This(), adiabatic_potential: *RealMatrix(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
             const dirname = try dir.realpathAlloc(allocator, "."); defer allocator.free(dirname);
             const path = try std.mem.concat(allocator, u8, &.{dirname, "/ENERGY.mat"}); defer allocator.free(path);
 
@@ -39,13 +41,19 @@ pub fn AbInitioPotential(comptime T: type) type {
         }
 
         /// Comptime adiabatic force evaluation. The evaluateAdiabatic function needs to be run first.
-        pub fn forceAdiabatic(_: @This(), i: usize, position: RealVector(T), _: T, state: usize, dir: std.fs.Dir, allocator: std.mem.Allocator) !T {
+        pub fn forceAdiabatic(_: @This(), i: usize, position: RealVector(T), _: T, state: usize, bias: ?BiasPotential(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !T {
             const dirname = try dir.realpathAlloc(allocator, "."); defer allocator.free(dirname);
-            const path = try std.mem.concat(allocator, u8, &.{dirname, "/GRADIENT.mat"}); defer allocator.free(path);
+            const path_gradient = try std.mem.concat(allocator, u8, &.{dirname, "/GRADIENT.mat"}); defer allocator.free(path_gradient);
+            const path_energy = try std.mem.concat(allocator, u8, &.{dirname, "/ENERGY.mat"}); defer allocator.free(path_energy);
 
-            const GRADIENT = try readRealMatrix(T, path, allocator); defer GRADIENT.deinit(allocator);
+            const ENERGY = try readRealMatrix(T, path_energy, allocator); defer ENERGY.deinit(allocator);
+            const GRADIENT = try readRealMatrix(T, path_gradient, allocator); defer GRADIENT.deinit(allocator);
 
-            return -GRADIENT.at(state * position.len + i, 0);
+            var adiabatic = try RealMatrix(T).initZero(ENERGY.rows, ENERGY.rows, allocator); defer adiabatic.deinit(allocator);
+
+            for (0..ENERGY.rows) |j| adiabatic.ptr(j, j).* = ENERGY.at(j, 0);
+
+            return -GRADIENT.at(state * position.len + i, 0) + if (bias) |bs| bs.force(adiabatic, state, i) else 0;
         }
 
         pub fn runElectronicStructureCalculation(self: @This(), system: ClassicalParticle(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {

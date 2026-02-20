@@ -70,11 +70,11 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
 
                 @constCast(&position).ptr(i).* = original_position + self.finite_differences_step; 
 
-                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_plus, position, time, parameters.dir, parameters.allocator);
+                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_plus, position, time);
 
                 @constCast(&position).ptr(i).* = original_position - self.finite_differences_step;
 
-                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_minus, position, time, parameters.dir, parameters.allocator);
+                try parameters.electronic_potential.evaluateEigensystem(@constCast(&diabatic_potential), @constCast(&adiabatic_potential), &eigenvectors_minus, position, time);
 
                 @constCast(&position).ptr(i).* = original_position;
 

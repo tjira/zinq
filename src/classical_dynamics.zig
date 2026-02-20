@@ -253,7 +253,7 @@ pub fn Custom(comptime T: type) type {
                 };
             }
 
-            /// Free the memory allocated for the trajectory output structure.
+            /// Free the memory allocated for the trajectory output structure.class
             pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
                 self.bloch_vector.deinit(allocator);
                 self.coefficient.deinit(allocator);
@@ -513,9 +513,12 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         if (i > 0) system.propagateVelocityVerletFirstHalf(opt.time_step);
 
-        if (opt.potential == .ab_initio) try opt.potential.ab_initio.runElectronicStructureCalculation(system.*, dir, allocator);
+        if (opt.potential == .ab_initio) {
+            try opt.potential.ab_initio.runElectronicStructureCalculation(system.*, dir, allocator);
+            try opt.potential.ab_initio.evaluateAdiabatic(&adiabatic_potential, dir, allocator);
+        }
 
-        try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time, dir, allocator);
+        else try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time);
 
         var potential_energy = adiabatic_potential.at(current_state, current_state);
 

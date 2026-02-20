@@ -51,17 +51,10 @@ pub fn ElectronicPotential(comptime T: type) type {
         vibronic_coupling: VibronicCouplingPotential(T),
 
         /// Evaluate the adabatic potential energy matrix at given system state and time.
-        pub fn evaluateAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T, bias: ?BiasPotential(T)) !void {
+        pub fn evaluateAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) !void {
+            if (self == .ab_initio) return throw(void, "EVALUATE ADIABATIC CAN NOT BE CALLED FOR AB INITIO POTENTIAL", .{});
+
             try self.evaluateDiabatic(adiabatic_potential, position, time);
-
-            if (bias) |bias_struct| for (0..adiabatic_potential.rows) |i| {
-
-                const variable = switch (bias_struct.variable) {
-                    .potential_energy => adiabatic_potential.at(i, i)
-                };
-
-                adiabatic_potential.ptr(i, i).* += bias_struct.evaluate(variable);
-            };
 
             try diagonalizeHermitian(T, adiabatic_potential);
         }
@@ -69,7 +62,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Evaluate the dabatic potential energy matrix at given system state and time.
         pub fn evaluateDiabatic(self: @This(), diabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) !void {
             switch (self) {
-                .ab_initio => return throw(void, "AB INITIO POTENTIAL DOES NOT SUPPORT DIABATIC EVALUATION.", .{}),
+                .ab_initio => return throw(void, "AB INITIO POTENTIAL DOES NOT SUPPORT DIABATIC EVALUATION", .{}),
                 inline else => |field| try field.evaluateDiabatic(diabatic_potential, position, time)
             }
         }
@@ -77,13 +70,15 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Evaluate the dabatic potential energy matrix element.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
             return switch (self) {
-                .ab_initio => return throw(T, "AB INITIO POTENTIAL DOES NOT SUPPORT DIABATIC ELEMENT EVALUATION.", .{}),
+                .ab_initio => return throw(T, "AB INITIO POTENTIAL DOES NOT SUPPORT DIABATIC ELEMENT EVALUATION", .{}),
                 inline else => |field| field.evaluateDiabaticElement(i, j, position, time)
             };
         }
 
         /// Evaluate the matrix element of potential derivative.
         pub fn evaluateDiabaticElementDerivative1(self: @This(), i: usize, j: usize, position: RealVector(T), time: T, index: usize, fdiff_step: T) !T {
+            if (self == .ab_initio) return throw(T, "AB INITIO POTENTIAL DOES NOT SUPPORT DIABATIC ELEMENT DERIVATIVE EVALUATION", .{});
+
             const original_position = position.at(index);
 
             @constCast(&position).ptr(index).* = original_position - fdiff_step;
@@ -101,6 +96,8 @@ pub fn ElectronicPotential(comptime T: type) type {
 
         /// Evaluate the matrix element of potential second derivative.
         pub fn evaluateDiabaticElementDerivative2(self: @This(), i: usize, j: usize, position: RealVector(T), time: T, index: usize, fdiff_step: T) !T {
+            if (self == .ab_initio) return throw(T, "AB INITIO POTENTIAL DOES NOT SUPPORT DIABATIC SECOND DERIVATIVE EVALUATION", .{});
+
             const original_position = position.at(index);
 
             @constCast(&position).ptr(index).* = original_position - fdiff_step;
@@ -121,15 +118,8 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Evaluate adiabatic eigensystem at given system state and time.
-        pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T, dir: ?std.fs.Dir, allocator: ?std.mem.Allocator) !void {
-            if (self == .ab_initio) {
-
-                if (dir == null or allocator == null) return throw(void, "AB INITIO POTENTIAL REQUIRES FILE SYSTEM ACCESS FOR EIGENSYSTEM EVALUATION.", .{});
-
-                diabatic.fill(std.math.nan(T)); eigenvectors.fill(std.math.nan(T));
-
-                return try self.ab_initio.evaluateAdiabatic(adiabatic, position, time, dir.?, allocator.?);
-            }
+        pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T) !void {
+            if (self == .ab_initio) return throw(void, "EVALUATE EIGENSYSTEM CAN NOT BE CALLED FOR AB INITIO POTENTIAL", .{});
 
             try self.evaluateDiabatic(diabatic, position, time);
 
@@ -137,33 +127,26 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Evaluate the adabatic potential energy gradient for a specific coordinate index. The adiabatic potential matrix will hold the potential at the r + dr point.
-        pub fn forceAdiabatic(self: @This(), adiabatic: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T), dir: ?std.fs.Dir, allocator: ?std.mem.Allocator) !T {
-            if (self == .ab_initio) {
-
-                if (dir == null or allocator == null) return throw(T, "AB INITIO POTENTIAL REQUIRES FILE SYSTEM ACCESS FOR FORCE EVALUATION.", .{});
-
-                if (bias != null) return throw(T, "AB INITIO POTENTIAL DOES NOT SUPPORT BIASED FORCE EVALUATION.", .{});
-
-                return try self.ab_initio.forceAdiabatic(index, position, time, state, dir.?, allocator.?);
-            }
+        pub fn forceAdiabatic(self: @This(), adiabatic: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T)) !T {
+            if (self == .ab_initio) return throw(T, "ADIABATIC FORCE EVALUATION FOR AB INITIO POTENTIAL IS NOT SUPPORTED IN THIS FUNCTION", .{});
 
             const original_position = position.at(index);
 
             @constCast(&position).ptr(index).* = original_position - fdiff_step;
 
-            try self.evaluateAdiabatic(adiabatic, position, time, bias);
+            try self.evaluateAdiabatic(adiabatic, position, time);
 
             const energy_minus = adiabatic.at(state, state);
 
             @constCast(&position).ptr(index).* = original_position + fdiff_step;
 
-            try self.evaluateAdiabatic(adiabatic, position, time, bias);
+            try self.evaluateAdiabatic(adiabatic, position, time);
 
             const energy_plus = adiabatic.at(state, state);
 
             @constCast(&position).ptr(index).* = original_position;
 
-            return 0.5 * (energy_minus - energy_plus) / fdiff_step;
+            return 0.5 * (energy_minus - energy_plus) / fdiff_step + if (bias) |bs| bs.force(adiabatic.*, state, index) else 0;
         }
 
         /// Getter for number of dimensions.

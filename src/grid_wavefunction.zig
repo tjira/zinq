@@ -135,7 +135,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
                     positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
 
-                    try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time, null, null);
+                    try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time);
 
                     if (i > 0) try fixGauge(T, &self.workspace.adiabatic_eigenvectors, self.workspace.previous_eigenvectors);
 
@@ -341,7 +341,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
                 positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
 
-                try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time, null, null);
+                try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time);
 
                 const capv = if (cap != null) cap.?.apply(self.workspace.position_at_row) else 0;
 
@@ -366,7 +366,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
                 positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
 
-                try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time, null, null);
+                try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time);
 
                 if (to_adiabatic) {
                     try mm(T, &self.workspace.matrix, self.workspace.adiabatic_eigenvectors, true, self.data.row(i).asMatrix(), false);
