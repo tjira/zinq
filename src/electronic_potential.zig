@@ -146,7 +146,9 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             @constCast(&position).ptr(index).* = original_position;
 
-            return 0.5 * (energy_minus - energy_plus) / fdiff_step + if (bias) |bs| bs.force(adiabatic.*, state, index) else 0;
+            const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step;
+
+            return -gradient + if (bias) |bs| bs.force(adiabatic.*, state, index, gradient) else 0;
         }
 
         /// Getter for number of dimensions.

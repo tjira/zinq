@@ -53,7 +53,7 @@ pub fn AbInitioPotential(comptime T: type) type {
 
             for (0..ENERGY.rows) |j| adiabatic.ptr(j, j).* = ENERGY.at(j, 0);
 
-            return -GRADIENT.at(state * position.len + i, 0) + if (bias) |bs| bs.force(adiabatic, state, i) else 0;
+            return -GRADIENT.at(state * position.len + i, 0) + if (bias) |bs| bs.force(adiabatic, state, i, GRADIENT.at(state * position.len + i, 0)) else 0;
         }
 
         pub fn runElectronicStructureCalculation(self: @This(), system: ClassicalParticle(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
