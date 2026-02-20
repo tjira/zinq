@@ -160,7 +160,9 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    const ndim = opt.potential.ndim();
+    if (opt.potential == .ab_initio) return throw(Output(T), "AB INITIO POTENTIAL IS NOT SUPPORTED IN QUANTUM DYNAMICS SIMULATIONS", .{});
+
+    const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
     if (nstate != 2 and opt.write.bloch_vector != null) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});

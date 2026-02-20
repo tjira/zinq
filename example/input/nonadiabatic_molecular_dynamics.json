@@ -13,7 +13,6 @@
                 "potential" : {
                     "ab_initio" : {
                         "command" : "./interface/wrapbagel.sh -a 2 -c 4 -m casscf -b svp",
-                        "ncoord" : 9,
                         "states" : 2
                     }
                 },

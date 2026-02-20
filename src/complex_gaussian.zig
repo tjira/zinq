@@ -376,11 +376,11 @@ pub fn ComplexGaussian(comptime T: type) type {
         pub fn potential(self: @This(), other: @This(), V: *ComplexMatrix(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, q: *RealVector(T)) !void {
             V.zero();
 
-            for (0..powi(n_nodes, pot.ndim())) |i| {
+            for (0..powi(n_nodes, q.len)) |i| {
 
                 var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
 
-                for (0..pot.ndim()) |j| {
+                for (0..q.len) |j| {
 
                     const s1 = 1 / std.math.sqrt(self.gamma[j].re); const s2 = 1 / std.math.sqrt(other.gamma[j].re);
 
@@ -418,11 +418,11 @@ pub fn ComplexGaussian(comptime T: type) type {
         pub fn potentialDerivative1(self: @This(), other: @This(), dV: *ComplexMatrix(T), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, q: *RealVector(T)) !void {
             dV.zero();
 
-            for (0..powi(n_nodes, pot.ndim())) |i| {
+            for (0..powi(n_nodes, q.len)) |i| {
 
                 var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
 
-                for (0..pot.ndim()) |j| {
+                for (0..q.len) |j| {
 
                     const s1 = 1 / std.math.sqrt(self.gamma[j].re); const s2 = 1 / std.math.sqrt(other.gamma[j].re);
 
@@ -460,11 +460,11 @@ pub fn ComplexGaussian(comptime T: type) type {
         pub fn potentialDerivative2(self: @This(), other: @This(), ddV: *ComplexMatrix(T), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, q: *RealVector(T)) !void {
             ddV.zero();
 
-            for (0..powi(n_nodes, pot.ndim())) |i| {
+            for (0..powi(n_nodes, q.len)) |i| {
 
                 var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
 
-                for (0..pot.ndim()) |j| {
+                for (0..q.len) |j| {
 
                     const s1 = 1 / std.math.sqrt(self.gamma[j].re); const s2 = 1 / std.math.sqrt(other.gamma[j].re);
 

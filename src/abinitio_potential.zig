@@ -26,7 +26,6 @@ pub fn AbInitioPotential(comptime T: type) type {
     return struct {
         command: []const u8,
         states: usize = 1,
-        ncoord: usize,
 
         /// Evaluate the adiabatic potential energy matrix at given system state and time.
         pub fn evaluateAdiabatic(_: @This(), adiabatic_potential: *RealMatrix(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
@@ -64,11 +63,6 @@ pub fn AbInitioPotential(comptime T: type) type {
             const command = try std.mem.concat(allocator, u8, &.{self.command, " -k ", states_str, " -s ", path, "/molecule.xyz"}); defer allocator.free(command);
 
             const command_output = try executeCommand(command, allocator); defer allocator.free(command_output);
-        }
-
-        /// Number of dimensions getter.
-        pub fn ndim(self: @This()) usize {
-            return self.ncoord;
         }
 
         /// Number of states getter.

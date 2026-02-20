@@ -11,8 +11,7 @@
                 },
                 "potential" : {
                     "ab_initio" : {
-                        "command" : "./interface/wraporca.sh -m mp2 -b sto-3g",
-                        "ncoord" : 9
+                        "command" : "./interface/wraporca.sh -m mp2 -b sto-3g"
                     }
                 },
                 "iterations" : 100,

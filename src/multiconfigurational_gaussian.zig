@@ -192,8 +192,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     if (enable_printing) try printJson(opt);
 
     if (opt.integration_nodes < 1 or opt.integration_nodes > 256) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{HERMITE_NODES.len - 1});
+    if (opt.potential == .ab_initio) return throw(Output(T), "AB INITIO POTENTIAL IS NOT SUPPORTED FOR VMCG DYNAMICS", .{});
 
-    const ndim = opt.potential.ndim();
+    const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
     const ngauss = opt.method.vMCG.position.len;
     const nparams = 3 * ngauss * ndim + nstate * ngauss;

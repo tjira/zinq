@@ -154,9 +154,9 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Getter for number of dimensions.
-        pub fn ndim(self: @This()) usize {
+        pub fn ndim(self: @This()) !usize {
             return switch (self) {
-                .ab_initio => |field| field.ndim(),
+                .ab_initio => throw(usize, "NUMBER OF DIMENSIONS FOR AB INITIO POTENTIAL MUST BE PROVIDED SEPARATELY", .{}),
                 .avoided_crossing => 1,
                 .custom => |field| field.variables.len,
                 .file => |field| field.ndim,

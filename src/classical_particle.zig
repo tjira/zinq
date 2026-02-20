@@ -236,6 +236,17 @@ pub fn ClassicalParticle(comptime T: type) type {
     };
 }
 
+/// Function to extract the number of dimensions from a .xyz file. The number of dimensions is equal to three times the number of atoms in the system.
+pub fn extractDims(path: []const u8) !usize {
+    const file = try std.fs.cwd().openFile(path, .{}); defer file.close();
+
+    var buffer: [1024]u8 = undefined; var reader = file.reader(&buffer); var reader_interface = &reader.interface;
+
+    const natom = try std.fmt.parseInt(usize, uncr(try reader_interface.takeDelimiterExclusive('\n')), 10);
+
+    return 3 * natom;
+}
+
 /// Read the system from a .xyz file.
 pub fn read(comptime T: type, path: []const u8, charge: i32, geometry: usize, allocator: std.mem.Allocator) !ClassicalParticle(T) {
     const file = try std.fs.cwd().openFile(path, .{}); defer file.close();

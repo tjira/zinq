@@ -54,7 +54,9 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    const ndim = opt.potential.ndim();
+    if (opt.potential == .ab_initio) return throw(Output(T), "POTENTIAL PLOT CAN NOT BE RUN FOR AB INITIO POTENTIAL", .{});
+
+    const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);

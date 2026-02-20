@@ -61,6 +61,7 @@ const applyDecoherenceCorrection = surface_hopping_algorithm.applyDecoherenceCor
 const binomialConfInt = math_functions.binomialConfInt;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealMatrixWithLinspacedLeftColumn = device_write.exportRealMatrixWithLinspacedLeftColumn;
+const extractDims = classical_particle.extractDims;
 const fixGauge = eigenproblem_solver.fixGauge;
 const h = math_functions.h;
 const mm = matrix_multiplication.mm;
@@ -275,7 +276,9 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    const ndim = opt.potential.ndim();
+    if (opt.potential == .ab_initio and opt.initial_conditions != .molecule) return throw(Output(T), "AB INITIO POTENTIALS REQUIRE MOLECULAR INITIAL CONDITIONS", .{});
+
+    const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
     if (nstate != 2 and opt.write.bloch_vector_mean != null) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});
@@ -356,7 +359,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 /// Run a single trajectory.
 pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalParticle(T), index: usize, equilibrate: bool, enable_printing: bool, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
     const nstate = opt.potential.nstate();
-    const ndim = opt.potential.ndim();
+    const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     var dir = std.fs.cwd();
 
     if (opt.potential == .ab_initio) {
@@ -671,9 +674,16 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
         if (params[0].initial_conditions.molecule.temperature) |temp| sampleFromBoltzmann(T, &system, temp, &random);
     }
 
-    if (params[0].potential != .ab_initio) system = ClassicalParticle(T).initZero(params[0].potential.ndim(), params[0].initial_conditions.model.mass, params[4]) catch |err| {
-        error_ctx.capture(err); return;
-    };
+    if (params[0].potential != .ab_initio) {
+        
+        const ndim = params[0].potential.ndim() catch |err| {
+            error_ctx.capture(err); return;
+        };
+
+        system = ClassicalParticle(T).initZero(ndim, params[0].initial_conditions.model.mass, params[4]) catch |err| {
+            error_ctx.capture(err); return;
+        };
+    }
 
     if (params[0].potential != .ab_initio) sampleInitialConditions(T, &system, params[0].initial_conditions.model, &random) catch |err| {
         error_ctx.capture(err); return;

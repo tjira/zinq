@@ -54,3 +54,4 @@
 - [ ] The TDC using NACV is maybe calculated with the wrong velocity.
 - [x] Add bias potential to ab initio potentials.
 - [ ] Rescale the velocities after jump in the direction of NACV.
+- [x] Make it so that the number of dimensions is not necessary in the ab initio potential.
