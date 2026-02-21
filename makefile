@@ -48,7 +48,7 @@ linguist:
 	@github-linguist
 
 pip: wheel
-	@pip install --force-reinstall dist/zinq-$(shell python setup.py --version)-py3-none-$(OS)_$(ARCH).whl
+	@pip install --force-reinstall dist/zinq-$(shell python setup.py --version)-py3-none-*$(if $(filter $(OS),windows),win,$(OS))*$(ARCH).whl
 
 profile: zinq
 	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq
@@ -60,7 +60,14 @@ serve: docs
 
 wheel:
 	@python -m build --wheel
-	@wheel tags --remove --python-tag py3 --abi-tag none dist/*.whl
+
+wheels:
+	@$(MAKE) wheel PLATFORM=linux_aarch64
+	@$(MAKE) wheel PLATFORM=linux_x86_64
+	@$(MAKE) wheel PLATFORM=macos_aarch64
+	@$(MAKE) wheel PLATFORM=macos_x86_64
+	@$(MAKE) wheel PLATFORM=windows_aarch64
+	@$(MAKE) wheel PLATFORM=windows_x86_64
 
 # EXTERNAL TARGETS =====================================================================================================================================================================================
 
