@@ -10,24 +10,9 @@ readme = "README.md"
 dynamic = ["version"]
 
 [project.scripts]
-zinq = "zinq.launch:main"
-eigh = "zinq.launch:eigh"
-hf = "zinq.launch:hf"
-molint = "zinq.launch:molint"
-mp2 = "zinq.launch:mp2"
-primecheck = "zinq.launch:primecheck"
-primefact = "zinq.launch:primefact"
-primegen = "zinq.launch:primegen"
-exprev = "zinq.launch:exprev"
-plot = "zinq.plot:plot"
-heatmap = "zinq.plot:heatmap"
+plot = "pyzinq.plot:plot"
+heatmap = "pyzinq.plot:heatmap"
 
 [project.urls]
 "Homepage" = "https://tjira.github.io/zinq/"
 "Bug Tracker" = "https://github.com/tjira/zinq/issues"
-
-[tool.setuptools]
-include-package-data = false
-
-[tool.setuptools.package-data]
-"zinq" = ["bin/*"]

@@ -1,6 +1,9 @@
-import os, setuptools, setuptools.command.build_py, shutil, subprocess
+import os, platform, setuptools, setuptools.command.build_py, shutil, subprocess
+
+ARCH, OS = platform.uname().machine.lower().replace("arm64", "aarch64").replace("amd64", "x86_64") , platform.uname().system.lower().replace("darwin", "macos")
 
 def version(fallback="0.0.0"):
+
     if not shutil.which("git"): return fallback
 
     try:
@@ -14,26 +17,19 @@ def version(fallback="0.0.0"):
 
 class Build(setuptools.command.build_py.build_py):
     def run(self):
-        subprocess.run(["make", "CROSS=1"], check=True, env={**os.environ, **({"OS" : "Windows_NT"} if os.name == "nt" else {})})
 
-        os.makedirs(os.path.join("zinq", "bin"), exist_ok=True)
+        environment = {**os.environ, **({"OS" : "Windows_NT"} if OS == "windows" else {})}
 
-        for directory in os.listdir("zig-out"):
-
-            suffix = ".exe" if "windows" in directory else ""
-
-            source, dest = os.path.join("zig-out", directory, "zinq" + suffix), os.path.join("zinq", "bin", "zinq-" + directory + suffix)
-
-            shutil.copyfile(source, dest)
-
-            if "windows" not in directory: os.chmod(dest, 0o755)
+        subprocess.run(["make", "CROSS=1"], check=True, env=environment)
 
         super().run()
+
+binaries = [f"zig-out/{ARCH}-{OS}/" + binary + (".exe" if OS == "windows" else "") for binary in ["zinq"]]
 
 setuptools.setup(
     version = version(),
     packages = setuptools.find_packages(),
-    cmdclass = {
-        "build_py": Build
-    }
+    has_ext_modules=lambda: True,
+    data_files = [("Scripts" if OS == "windows" else "bin", binaries)],
+    cmdclass = {"build_py": Build}
 )

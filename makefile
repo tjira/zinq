@@ -48,10 +48,7 @@ linguist:
 	@github-linguist
 
 pip: wheel
-	@pip install --force-reinstall dist/zinq-$(shell python setup.py --version)-py3-none-any.whl
-
-phd:
-	@cd tex && lualatex main && biber main && makeglossaries main && lualatex main && lualatex main
+	@pip install --force-reinstall dist/zinq-$(shell python setup.py --version)-py3-none-$(OS)_$(ARCH).whl
 
 profile: zinq
 	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq
@@ -63,6 +60,7 @@ serve: docs
 
 wheel:
 	@python -m build --wheel
+	@wheel tags --remove --python-tag py3 --abi-tag none dist/*.whl
 
 # EXTERNAL TARGETS =====================================================================================================================================================================================
 

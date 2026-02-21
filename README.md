@@ -86,18 +86,6 @@ Compiling Zinq is simple, running `make` will automatically download the Zig com
 
 and check that the missing input message is displayed. If the message appears, the program is compiled correctly.
 
-## Python Wrappers
-
-You can access Zinq's functionality through the dedicated Python wrappers. If you installed Zinq via [PyPI](https://pypi.org/project/zinq), these wrappers are pre-installed and ready to use. However, if you are compiling from source, you will need to build them manually. From the project root, simply run `make pip` to build the wheel and install the package (or `make wheel` to build without installing). Once set up, the `zinq` command is added to your PATH. You also gain access to:
-
-* `hf` - Runs Hartree-Fock calculations on `.xyz` geometry files.
-* `molint` - Computes molecular integrals from `.xyz` geometry files.
-* `mp2` - Performs MP2 energy calculations on `.xyz` geometry files.
-* `primecheck` - Checks for primality of numbers as a standalone utility tool.
-* `primefact` - Performs prime factorization as a standalone utility tool.
-* `primegen` - Generates prime numbers as a standalone utility tool.
-* `eigh` - Computes eigenvalues and eigenvectors of hermitian matrices.
-
 ## Citation
 
 If you use Zinq in your research, please cite the project on [Zenodo](https://doi.org/10.5281/zenodo.18386143) using the following general BibTeX entry. If you are referring to a specific version, please visit the Zenodo page and download the corresponding citation there.
