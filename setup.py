@@ -35,13 +35,12 @@ class Bdist(setuptools.command.bdist_wheel.bdist_wheel):
         replacements = {
             "linux" : "manylinux_2_5",
             "macos" : "macosx_10_0",
-            "windows" : "win",
-            "aarch64" : "arm64"
+            "windows" : "win"
         }
 
         plat = f"{replacements.get(OS, OS)}_{replacements.get(ARCH, ARCH)}"
 
-        return "py3", "none", plat.replace("win_x86_64", "win_amd64").replace("manylinux_2_5_arm64", "manylinux_2_5_aarch64")
+        return "py3", "none", plat.replace("win_aarch64", "win_arm64").replace("win_x86_64", "win_amd64")
 
 class Build(setuptools.command.build_py.build_py):
     def run(self):
