@@ -1,0 +1,39 @@
+{
+    "zinq" : [
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "model" : {
+                        "mass" : [1],
+                        "momentum_mean" : [0],
+                        "momentum_std" : [1],
+                        "position_mean" : [1],
+                        "position_std" : [0.5]
+                    }
+                },
+                "log_intervals" : {
+                    "iteration" : 500
+                },
+                "potential" : {
+                    "harmonic" : {}
+                },
+                "bias" : {
+                    "variable" : {
+                        "potential_energy" : {
+                            "value" : 1.2
+                        }
+                    },
+                    "function" : {
+                        "harmonic" : {
+                            "k" : 10
+                        }
+                    }
+                },
+                "iterations" : 2000,
+                "time_step" : 0.01,
+                "trajectories" : 1
+            }
+        }
+    ]
+}

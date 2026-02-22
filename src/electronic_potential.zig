@@ -150,7 +150,9 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step;
 
-            return -gradient + bias_force * gradient;
+            return -gradient + if (bias) |bs| switch (bs.variable) {
+                .potential_energy => bias_force * gradient
+            } else 0;
         }
 
         /// Getter for number of dimensions.
