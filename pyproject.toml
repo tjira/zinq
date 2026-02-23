@@ -10,8 +10,10 @@ readme = "README.md"
 dynamic = ["version"]
 
 [project.scripts]
-plot = "pyzinq.plot:plot"
-heatmap = "pyzinq.plot:heatmap"
+heatmap = "python.heatmap:heatmap"
+neqdet = "python.neqdet:neqdet"
+plot = "python.plot:plot"
+resmet = "python.resmet:resmet"
 
 [project.urls]
 "Homepage" = "https://tjira.github.io/zinq/"

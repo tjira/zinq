@@ -47,9 +47,6 @@ docs: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 linguist:
 	@github-linguist
 
-pip: wheel
-	@pip install --force-reinstall dist/zinq-$(shell python setup.py --version)-py3-none-*$(if $(filter $(OS),windows),win,$(OS))*$(ARCH).whl
-
 profile: zinq
 	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq
 	@gprof2dot -e 1 -f callgrind -n 5 -o profile.dot -z main.main callgrind.out
