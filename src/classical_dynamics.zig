@@ -590,8 +590,6 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             output.bloch_vector.ptr(i, 1).* = 2 * coefficient.at(0).mul(coefficient.at(1).conjugate()).im;
 
             output.bloch_vector.ptr(i, 2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
-
-            output.bloch_vector.ptr(i, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(i, 0), 2) + std.math.pow(T, output.bloch_vector.at(i, 1), 2));
         }
 
         if (!equilibrate and opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
@@ -602,8 +600,6 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
             output.coefficient.ptr(i, 0).* = (1 - output.bloch_vector.at(i, 2)) / 2;
             output.coefficient.ptr(i, 1).* = (1 + output.bloch_vector.at(i, 2)) / 2;
-
-            output.bloch_vector.ptr(i, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(i, 0), 2) + std.math.pow(T, output.bloch_vector.at(i, 1), 2));
         }
 
         if (!enable_printing or (index > 0 and (index + 1) % opt.log_intervals.trajectory != 0) or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;
@@ -769,6 +765,10 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
         try output.time_derivative_coupling_mean.add(output_time_derivative_coupling_mean.at(i));
         try output.temperature_mean.add(output_temperature_mean.at(i));
         try output.total_energy_mean.add(output_total_energy_mean.at(i));
+    }
+
+    for (0..output.bloch_vector_mean.rows) |i| {
+        output.bloch_vector_mean.ptr(i, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector_mean.at(i, 0), 2) + std.math.pow(T, output.bloch_vector_mean.at(i, 1), 2));
     }
 
     output.bloch_vector_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
