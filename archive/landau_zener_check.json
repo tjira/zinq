@@ -63,5 +63,5 @@
             }
         }
     ],
-    "command" : "plot POPULATION_EXACT.mat:0 POPULATION_MEAN.mat:0 BLOCH_EXACT.mat:2 BLOCH_MEAN.mat:2 BLOCH_EXACT.mat:3 BLOCH_MEAN.mat:3 --legends every EXACT LZSH EXACT LZSH EXACT LZSH --figsize 4 16 --subplots 131 131 132 132 133 133 --title Population '$\\Braket{\\sigma_z}$' '$\\sqrt{\\Braket{\\sigma_x}^2+\\Braket{\\sigma_y}^2}$' --xlabel '$t$ (a.u.)' '$t$ (a.u.)' '$t$ (a.u.)' --output LZSH_COMPARE.pdf"
+    "command" : "plot POPULATION_EXACT.mat:0 POPULATION_MEAN.mat:0 BLOCH_EXACT.mat:3 BLOCH_MEAN.mat:3 --legends every Exact LZSH Exact LZSH --figsize 3 8 --subplots 121 121 122 122 --title Population '$\\Braket{\\sigma_\\perp}$' --xlabel '$t$ (a.u.)' '$t$ (a.u.)' --output LZSH_COMPARE.pdf"
 }
