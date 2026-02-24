@@ -54,7 +54,7 @@ pub fn LandauZener(comptime T: type) type {
 
                 const ddZ1 = (Z0 - 2 * Z1 + Z2) / parameters.time_step / parameters.time_step;
 
-                if (dZ0 * dZ1 > 0 or (dZ0 * dZ1 < 0 and ddZ1 < 0)) continue;
+                if (dZ0 * dZ1 > 0 or ddZ1 <= 0) continue;
 
                 const A = ddZ1 / 2; const B = (Z0 - Z2) / (2 * parameters.time_step); const C = Z1;
 
