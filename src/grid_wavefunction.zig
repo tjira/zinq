@@ -120,36 +120,45 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Calculate the density matrix of the wavefunction. The matrix is allocated and returned.
-        pub fn density(self: *@This(), potential: ElectronicPotential(T), time: T, adiabatic: bool, allocator: std.mem.Allocator) !ComplexMatrix(T) {
+        pub fn density(self: *@This(), potential: ElectronicPotential(T), time: T, adiabatic: bool, fix_gauge: bool, allocator: std.mem.Allocator) !ComplexMatrix(T) {
             var density_matrix = try ComplexMatrix(T).initZero(self.nstate, self.nstate, allocator); errdefer density_matrix.deinit(allocator);
-
+            var density_matrix_row = try ComplexMatrix(T).init(self.nstate, self.nstate, allocator); defer density_matrix_row.deinit(allocator);
             var wavefunction_row = try ComplexMatrix(T).init(self.nstate, 1, allocator); defer wavefunction_row.deinit(allocator);
 
             for (0..self.data.rows) |i| {
 
-                for (0..self.nstate) |j| wavefunction_row.ptr(j, 0).* = self.data.at(i, j);
-
-                if (adiabatic) {
-
-                    try self.workspace.adiabatic_eigenvectors.copyTo(&self.workspace.previous_eigenvectors);
-
-                    positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
-
-                    try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time);
-
-                    if (i > 0) try fixGauge(T, &self.workspace.adiabatic_eigenvectors, self.workspace.previous_eigenvectors);
-
-                    try mm(T, &wavefunction_row, self.workspace.adiabatic_eigenvectors, true, self.data.row(i).asMatrix(), false);
-                }
+                try self.densityAtRow(&density_matrix_row, &wavefunction_row, i, potential, time, adiabatic, fix_gauge);
 
                 for (0..self.nstate) |j| for (0..self.nstate) |k| {
-                    density_matrix.ptr(j, k).* = density_matrix.at(j, k).add(wavefunction_row.at(j, 0).mul(wavefunction_row.at(k, 0).conjugate()));
+                    density_matrix.ptr(j, k).* = density_matrix.at(j, k).add(density_matrix_row.at(j, k));
                 };
             }
 
             density_matrix.muls(Complex(T).init(self.getIntegrationElement(), 0));
 
             return density_matrix;
+        }
+
+        /// Calculates the density matrix at a row index.
+        pub fn densityAtRow(self: *@This(), density_matrix: *ComplexMatrix(T), row: *ComplexMatrix(T), i: usize, potential: ElectronicPotential(T), time: T, adiabatic: bool, fix_gauge: bool) !void {
+            for (0..self.nstate) |j| row.ptr(j, 0).* = self.data.at(i, j);
+
+            if (adiabatic) {
+
+                try self.workspace.adiabatic_eigenvectors.copyTo(&self.workspace.previous_eigenvectors);
+
+                positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
+
+                try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time);
+
+                if (i > 0 and fix_gauge) try fixGauge(T, &self.workspace.adiabatic_eigenvectors, self.workspace.previous_eigenvectors);
+
+                try mm(T, row, self.workspace.adiabatic_eigenvectors, true, self.data.row(i).asMatrix(), false);
+            }
+
+            for (0..self.nstate) |j| for (0..self.nstate) |k| {
+                density_matrix.ptr(j, k).* = row.at(j, 0).mul(row.at(k, 0).conjugate());
+            };
         }
 
         /// Get the size of the elemet of the grid.

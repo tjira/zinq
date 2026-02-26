@@ -8,6 +8,19 @@ const MAX_COMMAND_OUTPUT_BYTES = global_variables.MAX_COMMAND_OUTPUT_BYTES;
 
 /// Executes a provided string as a command in the terminal and returns its output.
 pub fn executeCommand(command: []const u8, allocator: std.mem.Allocator) ![]u8 {
+    if (std.mem.containsAtLeast(u8, command, 1, "&&")) {
+
+        var outputs = std.ArrayList(u8){}; errdefer outputs.deinit(allocator);
+
+        var iterator = std.mem.tokenizeAny(u8, command, "&&");
+
+        while (iterator.next()) |cmd| {
+            const output = try executeCommand(cmd, allocator); try outputs.appendSlice(allocator, output);
+        }
+
+        return try outputs.toOwnedSlice(allocator);
+    }
+
     var args = std.ArrayList([]u8){}; defer args.deinit(allocator);
 
     var iterator = std.mem.tokenizeAny(u8, command, " "); var string = false;

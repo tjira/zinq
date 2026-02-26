@@ -72,6 +72,7 @@ pub fn Options(comptime T: type) type {
             padding_order: u32 = 1
         };
         pub const Write = struct {
+            spatial_bloch_vector: ?[]const u8 = null,
             bloch_vector: ?[]const u8 = null,
             final_wavefunction: ?[]const u8 = null,
             kinetic_energy: ?[]const u8 = null,
@@ -99,6 +100,7 @@ pub fn Options(comptime T: type) type {
         write: Write = .{},
 
         adiabatic: bool = false,
+        fix_gauge: bool = true
     };
 }
 
@@ -165,7 +167,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
-    if (nstate != 2 and opt.write.bloch_vector != null) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});
+    if (nstate != 2 and (opt.write.bloch_vector != null or opt.write.spatial_bloch_vector != null)) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
@@ -174,7 +176,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var wavefunction = try GridWavefunction(T).init(@intCast(opt.grid.points), nstate, ndim, opt.grid.limits, opt.initial_conditions.mass, allocator); defer wavefunction.deinit(allocator);
 
-    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeWavefunctionDynamicsContainer(T, wavefunction, opt.iterations, allocator) else null;
+    var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeTemporalGridContainer(T, wavefunction, opt.iterations, 2 * wavefunction.nstate, allocator) else null;
+    var spatial_bloch: ?RealMatrix(T) = if (opt.write.spatial_bloch_vector) |_| try initializeTemporalGridContainer(T, wavefunction, opt.iterations, 3, allocator) else null;
 
     var optimized_wavefunctions = std.ArrayList(GridWavefunction(T)){}; defer optimized_wavefunctions.deinit(allocator);
 
@@ -211,7 +214,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
             if (initial_wavefunction) |iwf| acf.ptr(j).* = iwf.overlap(wavefunction);
 
-            const density_matrix = try wavefunction.density(opt.potential, time, opt.adiabatic, allocator); defer density_matrix.deinit(allocator);
+            const density_matrix = try wavefunction.density(opt.potential, time, opt.adiabatic, opt.fix_gauge, allocator); defer density_matrix.deinit(allocator);
             const potential_energy = try wavefunction.potentialEnergy(opt.potential, time);
             const position = try wavefunction.positionMean(allocator); defer position.deinit(allocator);
             const KeP = try wavefunction.kineticEnergyAndMomentumMean(allocator);
@@ -230,7 +233,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
                 if (nstate == 2) output.bloch_vector.ptr(j, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(j, 0), 2) + std.math.pow(T, output.bloch_vector.at(j, 1), 2));
             }
 
-            if (opt.write.wavefunction != null and i == n_dynamics - 1) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, j, time, opt.adiabatic, allocator);
+            if (nstate == 2 and opt.write.spatial_bloch_vector != null) try assignSpatialBlochStep(T, &spatial_bloch.?, &wavefunction, opt.potential, j, time, opt.adiabatic, opt.fix_gauge, allocator);
+            if (opt.write.wavefunction != null and i == n_dynamics - 1) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, j, time, opt.adiabatic, opt.fix_gauge, allocator);
 
             if (!enable_printing or (j > 0 and j % opt.log_intervals.iteration != 0)) continue;
 
@@ -286,14 +290,31 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     if (opt.write.potential_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.potential_energy.asMatrix(), 0, end_time);
     if (opt.write.total_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy.asMatrix(), 0, end_time);
     if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
+    if (opt.write.spatial_bloch_vector) |path| try exportRealMatrix(T, path, spatial_bloch.?);
 
+    if (spatial_bloch != null) spatial_bloch.?.deinit(allocator);
     if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit(allocator);
 
     return output;
 }
 
+/// Assign current spatial Bloch vector to the spatial Bloch dynamics matrix.
+pub fn assignSpatialBlochStep(comptime T: type, spatial_bloch: *RealMatrix(T), wavefunction: *GridWavefunction(T), potential: ElectronicPotential(T), iter: usize, time: T, adiabatic: bool, fix_gauge: bool, allocator: std.mem.Allocator) !void {
+    var density_matrix_row = try ComplexMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer density_matrix_row.deinit(allocator);
+    var wavefunction_row = try ComplexMatrix(T).init(wavefunction.nstate, 1, allocator); defer wavefunction_row.deinit(allocator);
+
+    for (0..wavefunction.data.rows) |i| {
+
+        try wavefunction.densityAtRow(&density_matrix_row, &wavefunction_row, i, potential, time, adiabatic, fix_gauge);
+
+        spatial_bloch.ptr(i, wavefunction.ndim + 3 * iter + 0).* = 2 * density_matrix_row.at(0, 1).re;
+        spatial_bloch.ptr(i, wavefunction.ndim + 3 * iter + 1).* = 2 * density_matrix_row.at(0, 1).im;
+        spatial_bloch.ptr(i, wavefunction.ndim + 3 * iter + 2).* = density_matrix_row.at(1, 1).re - density_matrix_row.at(0, 0).re;
+    }
+}
+
 /// Assign current wavefunction to the wavefunction dynamics matrix.
-pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatrix(T), wavefunction: GridWavefunction(T), potential: ElectronicPotential(T), iter: usize, time: T, adiabatic: bool, allocator: std.mem.Allocator) !void {
+pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatrix(T), wavefunction: GridWavefunction(T), potential: ElectronicPotential(T), iter: usize, time: T, adiabatic: bool, fix_gauge: bool, allocator: std.mem.Allocator) !void {
     var diabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer diabatic_potential.deinit(allocator);
     var adiabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer adiabatic_potential.deinit(allocator);
     var adiabatic_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer adiabatic_eigenvectors.deinit(allocator);
@@ -315,7 +336,7 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
 
             try potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, position_at_row, time);
 
-            if (i > 0) try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
+            if (i > 0 and fix_gauge) try fixGauge(T, &adiabatic_eigenvectors, previous_eigenvectors);
 
             try mm(T, &wavefunction_row, adiabatic_eigenvectors, true, wavefunction.data.row(i).asMatrix(), false);
         }
@@ -376,9 +397,9 @@ pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options:
     return spectrum;
 }
 
-/// Initialize the container for the wavefunction dynamics.
-pub fn initializeWavefunctionDynamicsContainer(comptime T: type, wavefunction: GridWavefunction(T), iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
-    var wavefunction_dynamics: RealMatrix(T) = try RealMatrix(T).init(wavefunction.data.rows, wavefunction.ndim + 2 * wavefunction.nstate * (iterations + 1), allocator);
+/// Initialize the container for the spatial Bloch vector.
+pub fn initializeTemporalGridContainer(comptime T: type, wavefunction: GridWavefunction(T), iterations: usize, elements: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
+    var container: RealMatrix(T) = try RealMatrix(T).init(wavefunction.data.rows, wavefunction.ndim + elements * (iterations + 1), allocator);
 
     var position_at_row = try RealVector(T).init(wavefunction.ndim, allocator); defer position_at_row.deinit(allocator);
 
@@ -387,11 +408,11 @@ pub fn initializeWavefunctionDynamicsContainer(comptime T: type, wavefunction: G
         positionAtRow(T, &position_at_row, i, wavefunction.ndim, wavefunction.npoint, wavefunction.limits);
 
         for (0..wavefunction.ndim) |j| {
-            wavefunction_dynamics.ptr(i, j).* = position_at_row.at(j);
+            container.ptr(i, j).* = position_at_row.at(j);
         }
     }
 
-    return wavefunction_dynamics;
+    return container;
 }
 
 /// Print header for iteration info.

@@ -1,0 +1,69 @@
+{
+    "zinq" : [
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-16, 16]],
+                    "points" : 2048
+                },
+                "initial_conditions" : {
+                    "adiabatic" : true,
+                    "mass" : 2000,
+                    "momentum" : [15],
+                    "position" : [-5],
+                    "state" : 1,
+                    "gamma" : [2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "write" : {
+                    "bloch_vector" : "BLOCH_FIX.mat",
+                    "wavefunction" : "WFN_FIX.mat",
+                    "spatial_bloch_vector" : "BLOCH_SPATIAL_FIX.mat"
+                },
+                "adiabatic" : true,
+                "iterations" : 1200,
+                "fix_gauge" : true,
+                "time_step" : 1
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-16, 16]],
+                    "points" : 2048
+                },
+                "initial_conditions" : {
+                    "adiabatic" : true,
+                    "mass" : 2000,
+                    "momentum" : [15],
+                    "position" : [-5],
+                    "state" : 1,
+                    "gamma" : [2]
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "write" : {
+                    "bloch_vector" : "BLOCH_NOFIX.mat",
+                    "wavefunction" : "WFN_NOFIX.mat",
+                    "spatial_bloch_vector" : "BLOCH_SPATIAL_NOFIX.mat"
+                },
+                "adiabatic" : true,
+                "iterations" : 1200,
+                "fix_gauge" : false,
+                "time_step" : 1
+            }
+        }
+    ],
+    "command" : "plot WFN_NOFIX.mat:0,1,2,3 WFN_FIX.mat:0,1,2,3 --legends every '$\\Re\\Ket{\\chi_0}$' '$\\Im\\Ket{\\chi_0}$' '$\\Re\\Ket{\\chi_1}$' '$\\Im\\Ket{\\chi_1}$' '$\\Re\\Ket{\\chi_0}$' '$\\Im\\Ket{\\chi_0}$' '$\\Re\\Ket{\\chi_1}$' '$\\Im\\Ket{\\chi_1}$' --offsets every -1 -1 1 1 -1 -1 1 1 -a 20 --subplots 211 211 211 211 212 212 212 212 --title 'No Gauge Fix' 'Gauge Fix' --xlabel '' 'Position (a.u.)' --xlim -10 10 -10 10 --widths all 1.2 --output WAVEFUNCTION_GAUGE.gif && plot BLOCH_SPATIAL_NOFIX.mat:0,1,2 BLOCH_SPATIAL_FIX.mat:0,1,2 --legends every '$\\Braket{\\sigma_x}$' '$\\Braket{\\sigma_y}$' '$\\Braket{\\sigma_z}$' '$\\Braket{\\sigma_x}$' '$\\Braket{\\sigma_y}$' '$\\Braket{\\sigma_z}$' -a 15 --subplots 211 211 211 212 212 212 --title 'No Gauge Fix' 'Gauge Fix' --xlabel '' 'Position (a.u.)' --xlim -10 10 -10 10 --output BLOCH_VECTOR_GAUGE.gif && plot BLOCH_SPATIAL_NOFIX.mat:1800 BLOCH_SPATIAL_FIX.mat:1800 BLOCH_NOFIX.mat:0 BLOCH_FIX.mat:0 --figsize 3 8 --legends every 'No Gauge Fix' 'Gauge Fix' 'No Gauge Fix' 'Gauge Fix' --subplots 121 121 122 122 --title '$\\sigma_x$ for $t=600$~a.u.' '$\\Braket{\\sigma_x}$' --xlabel 'Position (a.u.)' '$t$ (a.u.)' --xlim -10 10 --output GAUGE_FIX_COMPARE.pdf"
+}
