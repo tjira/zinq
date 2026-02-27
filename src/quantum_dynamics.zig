@@ -181,6 +181,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var optimized_wavefunctions = std.ArrayList(GridWavefunction(T)){}; defer optimized_wavefunctions.deinit(allocator);
 
+    var density_matrix = try ComplexMatrix(T).init(nstate, nstate, allocator); defer density_matrix.deinit(allocator);
+    var position = try RealVector(T).init(ndim, allocator); defer position.deinit(allocator);
+    var momentum = try RealVector(T).init(ndim, allocator); defer momentum.deinit(allocator);
     var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit(allocator);
 
     var timer = try std.time.Timer.start(); const n_dynamics = if (opt.imaginary) |f| f.states else 1;
@@ -208,17 +211,17 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
             const time = @as(T, @floatFromInt(j)) * opt.time_step;
 
-            if (j > 0) try wavefunction.propagate(opt.potential, opt.cap, time, opt.time_step, opt.imaginary != null);
+            if (j > 0) try wavefunction.propagate(opt.potential, opt.cap, time, opt.time_step, opt.adiabatic, opt.imaginary != null, opt.fix_gauge);
 
             if (j > 0 and opt.imaginary != null) for (optimized_wavefunctions.items) |owf| wavefunction.orthogonalize(owf);
 
             if (initial_wavefunction) |iwf| acf.ptr(j).* = iwf.overlap(wavefunction);
 
-            const density_matrix = try wavefunction.density(opt.potential, time, opt.adiabatic, opt.fix_gauge, allocator); defer density_matrix.deinit(allocator);
+            try wavefunction.density(&density_matrix, opt.potential, time, opt.adiabatic, opt.fix_gauge);
+            wavefunction.positionMean(&position);
+
+            const kinetic_energy = try wavefunction.kineticEnergyAndMomentumMean(&momentum);
             const potential_energy = try wavefunction.potentialEnergy(opt.potential, time);
-            const position = try wavefunction.positionMean(allocator); defer position.deinit(allocator);
-            const KeP = try wavefunction.kineticEnergyAndMomentumMean(allocator);
-            const kinetic_energy = KeP.kinetic_energy; const momentum = KeP.momentum; defer momentum.deinit(allocator);
 
             if (i == n_dynamics - 1) {
                 output.kinetic_energy.ptr(j).* = kinetic_energy;
@@ -301,11 +304,10 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 /// Assign current spatial Bloch vector to the spatial Bloch dynamics matrix.
 pub fn assignSpatialBlochStep(comptime T: type, spatial_bloch: *RealMatrix(T), wavefunction: *GridWavefunction(T), potential: ElectronicPotential(T), iter: usize, time: T, adiabatic: bool, fix_gauge: bool, allocator: std.mem.Allocator) !void {
     var density_matrix_row = try ComplexMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer density_matrix_row.deinit(allocator);
-    var wavefunction_row = try ComplexMatrix(T).init(wavefunction.nstate, 1, allocator); defer wavefunction_row.deinit(allocator);
 
     for (0..wavefunction.data.rows) |i| {
 
-        try wavefunction.densityAtRow(&density_matrix_row, &wavefunction_row, i, potential, time, adiabatic, fix_gauge);
+        try wavefunction.densityAtRow(&density_matrix_row, i, potential, time, adiabatic, fix_gauge);
 
         spatial_bloch.ptr(i, wavefunction.ndim + 3 * iter + 0).* = 2 * density_matrix_row.at(0, 1).re;
         spatial_bloch.ptr(i, wavefunction.ndim + 3 * iter + 1).* = 2 * density_matrix_row.at(0, 1).im;

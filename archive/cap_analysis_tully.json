@@ -1,0 +1,73 @@
+{
+    "zinq" : [
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-16, 16]],
+                    "points" : 2048
+                },
+                "initial_conditions" : {
+                    "adiabatic" : true,
+                    "mass" : 2000,
+                    "momentum" : [15],
+                    "position" : [-5],
+                    "state" : 1,
+                    "gamma" : [2]
+                },
+                "log_intervals" : {
+                    "iteration" : 500
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "cap" : {
+                    "limits" : [[-8, 8]],
+                    "strength" : 0.001,
+                    "track_density" : false
+                },
+                "write" : {
+                    "population" : "POPULATION_NOTRACK.mat"
+                },
+                "adiabatic" : true,
+                "iterations" : 3000,
+                "time_step" : 1
+            }
+        },
+                {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-16, 16]],
+                    "points" : 2048
+                },
+                "initial_conditions" : {
+                    "adiabatic" : true,
+                    "mass" : 2000,
+                    "momentum" : [15],
+                    "position" : [-5],
+                    "state" : 1,
+                    "gamma" : [2]
+                },
+                "log_intervals" : {
+                    "iteration" : 500
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "cap" : {
+                    "limits" : [[-8, 8]],
+                    "strength" : 0.001,
+                    "track_density" : true
+                },
+                "write" : {
+                    "population" : "POPULATION_TRACK.mat"
+                },
+                "adiabatic" : true,
+                "iterations" : 3000,
+                "time_step" : 1
+            }
+        }
+    ],
+    "command" : "plot POPULATION_NOTRACK.mat POPULATION_TRACK.mat --figsize 3 8 --legends every '$V_{00}$' '$V_{11}$' '$V_{00}$' '$V_{11}$' --subplots 121 121 122 122 --title 'No Density Tracking' 'Density Tracking' --xlabel '$t$ (a.u.)' '$t$ (a.u.)' --ylabel 'State Population' --output CAP_ANALYSIS.pdf"
+}
