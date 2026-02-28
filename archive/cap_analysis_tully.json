@@ -34,7 +34,7 @@
                 "time_step" : 1
             }
         },
-                {
+        {
             "name" : "quantum_dynamics",
             "options" : {
                 "grid" : {

@@ -8,7 +8,7 @@ TIME_REPORT ?= 0
 WATCH       ?= 0
 WEBUI	    ?= 0
 
-SHELL := $(if $(filter $(OS),Windows_NT),pwsh.exe,sh)
+SHELL := $(if $(filter $(OS),Windows_NT),powershell.exe,sh)
 
 ARCH := $(if $(filter $(OS),Windows_NT),x86_64,$(shell uname -m | tr '[:upper:]' '[:lower:]' | sed 's/arm64/aarch64/'))
 OS   := $(if $(filter $(OS),Windows_NT),windows,$(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/'))
@@ -72,9 +72,9 @@ ifeq ($(OS), windows)
 .zig-bin/zig.exe:
 	cmd /c curl -Ls -o zig.zip https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).zip
 	cmd /c curl -Ls -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip
-	Add-Type -AssemblyName System.IO.Compression.FileSystem && [System.IO.Compression.ZipFile]::ExtractToDirectory("$$PWD\zig.zip", "$$PWD")
-	Move-Item zig-$(ARCH)-$(OS)-$(ZIG_VERSION) .zig-bin && Remove-Item .zig-bin/LICENSE, .zig-bin/README.md
-	Add-Type -AssemblyName System.IO.Compression.FileSystem && [System.IO.Compression.ZipFile]::ExtractToDirectory("$$PWD\zls.zip", "$$PWD/.zig-bin")
+	Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory("$$PWD\zig.zip", "$$PWD")
+	Move-Item zig-$(ARCH)-$(OS)-$(ZIG_VERSION) .zig-bin ; Remove-Item .zig-bin/LICENSE, .zig-bin/README.md
+	Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory("$$PWD\zls.zip", "$$PWD/.zig-bin")
 	Remove-Item zig.zip, zls.zip
 else
 .zig-bin/zig:

@@ -148,6 +148,7 @@ pub fn Custom(comptime T: type) type {
         /// Structure to hold information about each iteration used for logging.
         pub const IterationInfo = struct {
             density_matrix: ComplexMatrix(T),
+            population_loss: RealVector(T),
             iteration: usize,
             kinetic_energy: T,
             momentum: RealVector(T),
@@ -229,7 +230,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
                 output.total_energy.ptr(j).* = kinetic_energy + potential_energy;
                 for (0..ndim) |k| output.momentum.ptr(j, k).* = momentum.at(k);
                 for (0..ndim) |k| output.position.ptr(j, k).* = position.at(k);
-                for (0..nstate) |k| output.population.ptr(j, k).* = density_matrix.at(k, k).re;
+                for (0..nstate) |k| output.population.ptr(j, k).* = density_matrix.at(k, k).re + wavefunction.population_loss.at(k);
                 if (nstate == 2) output.bloch_vector.ptr(j, 0).* = 2 * density_matrix.at(0, 1).re;
                 if (nstate == 2) output.bloch_vector.ptr(j, 1).* = 2 * density_matrix.at(0, 1).im;
                 if (nstate == 2) output.bloch_vector.ptr(j, 2).* = density_matrix.at(1, 1).re - density_matrix.at(0, 0).re;
@@ -243,6 +244,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
             const iteration_info = Custom(T).IterationInfo{
                 .density_matrix = density_matrix,
+                .population_loss = wavefunction.population_loss,
                 .iteration = j,
                 .kinetic_energy = kinetic_energy,
                 .momentum = momentum,
@@ -457,7 +459,7 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
     try writer.print("] [", .{});
 
     for (0..info.density_matrix.rows) |i| {
-        try writer.print("{d:9.4}{s}", .{info.density_matrix.at(i, i).re, if (i == info.density_matrix.rows - 1) "" else ", "});
+        try writer.print("{d:9.4}{s}", .{info.density_matrix.at(i, i).re + info.population_loss.at(i), if (i == info.density_matrix.rows - 1) "" else ", "});
     }
 
     try writer.print("] {D}", .{timer.read()}); timer.reset();

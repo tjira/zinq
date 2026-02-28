@@ -61,7 +61,7 @@ pub fn GridWavefunction(comptime T: type) type {
         nstate: usize,
         ndim: usize,
         mass: T,
-        density_loss: ComplexMatrix(T),
+        population_loss: RealVector(T),
         workspace: Workspace,
 
         /// Allocate a wavefunction on a grid.
@@ -92,7 +92,7 @@ pub fn GridWavefunction(comptime T: type) type {
 
             return @This(){
                 .data = try ComplexMatrix(T).init(std.math.pow(usize, npoint, ndim), nstate, allocator),
-                .density_loss = try ComplexMatrix(T).initZero(nstate, nstate, allocator),
+                .population_loss = try RealVector(T).init(nstate, allocator),
                 .shape = shape,
                 .limits = limits,
                 .npoint = npoint,
@@ -106,12 +106,12 @@ pub fn GridWavefunction(comptime T: type) type {
         /// Free the memory allocated for the wavefunction.
         pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
             allocator.free(self.shape);
+            self.population_loss.deinit(allocator);
             self.workspace.density_at_row.deinit(allocator);
             self.workspace.density_before.deinit(allocator);
             self.workspace.density_after.deinit(allocator);
             self.workspace.wavefunction_row.deinit(allocator);
             self.data.deinit(allocator);
-            self.density_loss.deinit(allocator);
             self.workspace.adiabatic_eigenvectors.deinit(allocator);
             self.workspace.adiabatic_potential.deinit(allocator);
             self.workspace.column.deinit(allocator);
@@ -148,8 +148,6 @@ pub fn GridWavefunction(comptime T: type) type {
             }
 
             density_matrix.muls(Complex(T).init(self.getIntegrationElement(), 0));
-
-            try density_matrix.add(self.density_loss);
         }
 
         /// Calculates the density matrix at a row index.
@@ -322,8 +320,8 @@ pub fn GridWavefunction(comptime T: type) type {
 
                 if (pot.track_density) try self.density(&self.workspace.density_after, potential, time, adiabatic, fix_gauge);
 
-                if (pot.track_density) for (0..self.nstate) |j| for (0..self.nstate) |k| {
-                    self.density_loss.ptr(j, k).* = self.density_loss.at(j, k).add(self.workspace.density_before.at(j, k).sub(self.workspace.density_after.at(j, k)));
+                if (pot.track_density) for (0..self.nstate) |j| {
+                    self.population_loss.ptr(j).* += self.workspace.density_before.at(j, j).re - self.workspace.density_after.at(j, j).re;
                 };
             }
 
@@ -339,8 +337,8 @@ pub fn GridWavefunction(comptime T: type) type {
 
                 if (pot.track_density) try self.density(&self.workspace.density_after, potential, time, adiabatic, fix_gauge);
 
-                if (pot.track_density) for (0..self.nstate) |j| for (0..self.nstate) |k| {
-                    self.density_loss.ptr(j, k).* = self.density_loss.at(j, k).add(self.workspace.density_before.at(j, k).sub(self.workspace.density_after.at(j, k)));
+                if (pot.track_density) for (0..self.nstate) |j| {
+                    self.population_loss.ptr(j).* += self.workspace.density_before.at(j, j).re - self.workspace.density_after.at(j, j).re;
                 };
             }
 
