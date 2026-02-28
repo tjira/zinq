@@ -24,7 +24,7 @@
                 "cap" : {
                     "limits" : [[-8, 8]],
                     "strength" : 0.001,
-                    "track_density" : false
+                    "track_population" : false
                 },
                 "write" : {
                     "population" : "POPULATION_NOTRACK.mat"
@@ -58,7 +58,7 @@
                 "cap" : {
                     "limits" : [[-8, 8]],
                     "strength" : 0.001,
-                    "track_density" : true
+                    "track_population" : true
                 },
                 "write" : {
                     "population" : "POPULATION_TRACK.mat"

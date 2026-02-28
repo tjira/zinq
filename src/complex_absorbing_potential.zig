@@ -11,7 +11,7 @@ pub fn ComplexAbsorbingPotential(comptime T: type) type {
     return struct {
         limits: []const []const T,
         strength: T = 0.001,
-        track_density: bool = true,
+        track_population: bool = true,
 
         /// Get the value of the CAP at the specified point.
         pub fn apply(self: @This(), position: RealVector(T)) T {

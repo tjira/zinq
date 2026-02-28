@@ -314,13 +314,13 @@ pub fn GridWavefunction(comptime T: type) type {
 
             if (cap) |pot| {
 
-                if (pot.track_density) try self.density(&self.workspace.density_before, potential, time, adiabatic, fix_gauge);
+                if (pot.track_population) try self.density(&self.workspace.density_before, potential, time, adiabatic, fix_gauge);
 
                 try propagateHalfCap(self, pot, time_step, unit);
 
-                if (pot.track_density) try self.density(&self.workspace.density_after, potential, time, adiabatic, fix_gauge);
+                if (pot.track_population) try self.density(&self.workspace.density_after, potential, time, adiabatic, fix_gauge);
 
-                if (pot.track_density) for (0..self.nstate) |j| {
+                if (pot.track_population) for (0..self.nstate) |j| {
                     self.population_loss.ptr(j).* += self.workspace.density_before.at(j, j).re - self.workspace.density_after.at(j, j).re;
                 };
             }
@@ -331,13 +331,13 @@ pub fn GridWavefunction(comptime T: type) type {
 
             if (cap) |pot| {
 
-                if (pot.track_density) try self.density(&self.workspace.density_before, potential, time, adiabatic, fix_gauge);
+                if (pot.track_population) try self.density(&self.workspace.density_before, potential, time, adiabatic, fix_gauge);
 
                 try propagateHalfCap(self, pot, time_step, unit);
 
-                if (pot.track_density) try self.density(&self.workspace.density_after, potential, time, adiabatic, fix_gauge);
+                if (pot.track_population) try self.density(&self.workspace.density_after, potential, time, adiabatic, fix_gauge);
 
-                if (pot.track_density) for (0..self.nstate) |j| {
+                if (pot.track_population) for (0..self.nstate) |j| {
                     self.population_loss.ptr(j).* += self.workspace.density_before.at(j, j).re - self.workspace.density_after.at(j, j).re;
                 };
             }
