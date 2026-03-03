@@ -50,7 +50,7 @@ const print = device_write.print;
 const printJson = device_write.printJson;
 const throw = error_handling.throw;
 
-const HERMITE_NODES = hermite_quadrature_nodes.HERMITE_NODES;
+const MAX_HERMITE_QUADRATURE_POINTS = global_variables.MAX_HERMITE_QUADRATURE_POINTS;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
@@ -72,7 +72,6 @@ pub fn Options(comptime T: type) type {
         };
         pub const Write = struct {
             population: ?[]const u8 = null,
-            wavefunction: ?[]const u8 = null,
             spectrum: ?[]const u8 = null,
             autocorrelation_function: ?[]const u8 = null
         };
@@ -109,7 +108,7 @@ pub fn Options(comptime T: type) type {
         adiabatic: bool = false,
         finite_differences_step: T = 1e-6,
         imaginary: bool = false,
-        integration_nodes: u32 = 32,
+        integration_nodes: u32 = 16,
         renormalize: bool = true,
         singularity_tolerance: T = 1e-8
     };
@@ -191,7 +190,7 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.integration_nodes < 1 or opt.integration_nodes > 256) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{HERMITE_NODES.len - 1});
+    if (opt.integration_nodes < 1 or opt.integration_nodes > MAX_HERMITE_QUADRATURE_POINTS) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{MAX_HERMITE_QUADRATURE_POINTS});
     if (opt.potential == .ab_initio) return throw(Output(T), "AB INITIO POTENTIAL IS NOT SUPPORTED FOR VMCG DYNAMICS", .{});
 
     const ndim = try opt.potential.ndim();
