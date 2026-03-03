@@ -214,7 +214,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (ics_pos) |qstruct| for (0..qstruct.step.len) |i| {
 
-        if (qstruct.step[i] <= 0) return throw(Output(T), "POSITION STEP MUST BE POSITIVE", .{});
+        if (qstruct.step[i] == 0) return throw(Output(T), "INITIAL CONDITIONS POSITION SPREAD STEP CANNOT BE ZERO", .{});
+
+        if (qstruct.end[i] < q0[i] and qstruct.step[i] > 0) return throw(Output(T), "INITIAL CONDITIONS POSITION SPREAD END MUST BE GREATER THAN START FOR POSITIVE STEP", .{});
 
         qsteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((q1[i] - q0[i]) / qstruct.step[i]))) + 1;
 
@@ -223,7 +225,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (ics_mom) |pstruct| for (0..pstruct.step.len) |i| {
 
-        if (pstruct.step[i] <= 0) return throw(Output(T), "MOMENTUM STEP MUST BE POSITIVE", .{});
+        if (pstruct.step[i] == 0) return throw(Output(T), "INITIAL CONDITIONS MOMENTUM SPREAD STEP CANNOT BE ZERO", .{});
+
+        if (pstruct.end[i] < p0[i] and pstruct.step[i] > 0) return throw(Output(T), "INITIAL CONDITIONS MOMENTUM SPREAD END MUST BE GREATER THAN START FOR POSITIVE STEP", .{});
 
         psteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((p1[i] - p0[i]) / pstruct.step[i]))) + 1;
 

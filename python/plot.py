@@ -41,7 +41,6 @@ def plot():
     parser.add_argument("--xlabel", type=str, nargs="+", help="The an x-axis labels for each subplot.")
     parser.add_argument("--xlim", type=float, nargs="+", help="The x-axis limits for each subplot.")
     parser.add_argument("--legpos", type=float, nargs="+", help="The bbox position of the legend boxes.")
-    parser.add_argument("--xcol", type=int, nargs="+", help="The column of the data files to use as x values for each subplot.")
     parser.add_argument("--xticklabelon", type=int, nargs="+", help="Whether to show the x-axis tick labels for each subplot.")
     parser.add_argument("--ylabel", type=str, nargs="+", help="The an y-axis label for each subplot.")
     parser.add_argument("--ylim", type=float, nargs="+", help="The y-axis limits for each subplot.")
@@ -58,6 +57,7 @@ def plot():
     parser.add_argument("--scales", nargs="+", help="Scales for the plotted lines.")
     parser.add_argument("--styles", nargs="+", help="Styles for the plotted lines.")
     parser.add_argument("--widths", nargs="+", help="Widths of the plotted lines.")
+    parser.add_argument("--xcols", nargs="+", help="The columns of the data files to use as x values for each line.")
     parser.add_argument("--subplots", nargs="+", help="Divide the lines into subplots.", default=["111"])
 
     # add positional arguments and parse the arguments
@@ -83,6 +83,7 @@ def plot():
     line_widths  = (list(map(lambda x: trng(x), args.widths [0].split(","))) if args.widths [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.widths  else []
     line_styles  = (list(map(lambda x: trng(x), args.styles [0].split(","))) if args.styles [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.styles  else []
     line_markers = (list(map(lambda x: trng(x), args.markers[0].split(","))) if args.markers[0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.markers else []
+    line_xcols   = (list(map(lambda x: trng(x), args.xcols  [0].split(","))) if args.xcols  [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.xcols   else []
 
     # add the scales and offsets to the initial lines in the data
     for (f, s) in ((frame, args.animate if args.animate else 0) for frame in range((data[0].shape[1] - 1) // args.animate if args.animate else 1)):
@@ -113,13 +114,11 @@ def plot():
         legend =   str(args.legends[indc(line_legends, i)[0] + 1 if args.legends[0] != "all" else 1]) if indc(line_legends, i) else ""
         marker =   str(args.markers[indc(line_markers, i)[0] + 1 if args.markers[0] != "all" else 1]) if indc(line_markers, i) else ""
         style  =   str(args.styles [indc(line_styles,  i)[0] + 1 if args.styles [0] != "all" else 1]) if indc(line_styles,  i) else "-"
+        xcol   =   int(args.xcols  [indc(line_xcols,   i)[0] + 1 if args.xcols  [0] != "all" else 1]) if indc(line_xcols,   i) else 0
         width  = float(args.widths [indc(line_widths,  i)[0] + 1 if args.widths [0] != "all" else 1]) if indc(line_widths,  i) else 2.2
 
-        # extract the x column if provided where args.xcol is array of x columns for each subplot and the default is 0 for all subplots
-        xcol = data_i[:, args.xcol[len(plots) % len(args.xcol)] if args.xcol and len(plots) % len(args.xcol) < len(args.xcol) else 0]
-
         # plot the data and append the plot to the list
-        plots.append(axes[args.subplots[len(plots) % len(args.subplots)]].plot(xcol, data_i[:, j + 1], alpha=alpha, color=color, label=legend, linestyle=style, linewidth=width, marker=marker))
+        plots.append(axes[args.subplots[len(plots) % len(args.subplots)]].plot(data_i[:, xcol], data_i[:, j + 1], alpha=alpha, color=color, label=legend, linestyle=style, linewidth=width, marker=marker))
 
     # loop over the error bars and their columns
     for (data_errors_i, j) in dcit(data_errors, cols_errors):

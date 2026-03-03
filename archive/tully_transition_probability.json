@@ -5,18 +5,18 @@
             "options" : {
                 "grid" : {
                     "limits" : [[-12, 12]],
-                    "points" : 256
+                    "points" : 512
                 },
                 "initial_conditions" : {
                     "adiabatic" : true,
                     "mass" : 2000,
-                    "momentum" : [5],
+                    "momentum" : [4],
                     "position" : [-5],
                     "state" : 0,
                     "gamma" : [2],
                     "spread" :  {
                         "momentum" : {
-                            "end" : [15],
+                            "end" : [50],
                             "step" : [1]
                         }
                     }
@@ -33,7 +33,6 @@
                     "track_population" : true
                 },
                 "write" : {
-                    "population" : "POP.mat",
                     "transition_probability" : "TP.mat"
                 },
                 "adiabatic" : true,
@@ -41,5 +40,6 @@
                 "time_step" : 1
             }
         }
-    ]
+    ],
+    "command" : "awk 'BEGIN {print \"8 2\\n 3.9179 0.0037\\n 5.5970 0.0037\\n 6.8656 0.0037\\n 9.8507 0.1401\\n11.3059 0.1988\\n16.0820 0.3579\\n22.6865 0.5643\\n32.0149 0.7405\" > \"TP_TULLY_1.mat\"}' && plot TP.mat:2 TP_TULLY_1.mat --markers 1 o --styles 1 none --xcols 0 1 --output TP_TULLY_1.pdf"
 }
