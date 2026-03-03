@@ -41,6 +41,7 @@ def plot():
     parser.add_argument("--xlabel", type=str, nargs="+", help="The an x-axis labels for each subplot.")
     parser.add_argument("--xlim", type=float, nargs="+", help="The x-axis limits for each subplot.")
     parser.add_argument("--legpos", type=float, nargs="+", help="The bbox position of the legend boxes.")
+    parser.add_argument("--xcol", type=int, nargs="+", help="The column of the data files to use as x values for each subplot.")
     parser.add_argument("--xticklabelon", type=int, nargs="+", help="Whether to show the x-axis tick labels for each subplot.")
     parser.add_argument("--ylabel", type=str, nargs="+", help="The an y-axis label for each subplot.")
     parser.add_argument("--ylim", type=float, nargs="+", help="The y-axis limits for each subplot.")
@@ -114,8 +115,11 @@ def plot():
         style  =   str(args.styles [indc(line_styles,  i)[0] + 1 if args.styles [0] != "all" else 1]) if indc(line_styles,  i) else "-"
         width  = float(args.widths [indc(line_widths,  i)[0] + 1 if args.widths [0] != "all" else 1]) if indc(line_widths,  i) else 2.2
 
+        # extract the x column if provided where args.xcol is array of x columns for each subplot and the default is 0 for all subplots
+        xcol = data_i[:, args.xcol[len(plots) % len(args.xcol)] if args.xcol and len(plots) % len(args.xcol) < len(args.xcol) else 0]
+
         # plot the data and append the plot to the list
-        plots.append(axes[args.subplots[len(plots) % len(args.subplots)]].plot(data_i[:, 0], data_i[:, j + 1], alpha=alpha, color=color, label=legend, linestyle=style, linewidth=width, marker=marker))
+        plots.append(axes[args.subplots[len(plots) % len(args.subplots)]].plot(xcol, data_i[:, j + 1], alpha=alpha, color=color, label=legend, linestyle=style, linewidth=width, marker=marker))
 
     # loop over the error bars and their columns
     for (data_errors_i, j) in dcit(data_errors, cols_errors):

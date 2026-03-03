@@ -177,6 +177,17 @@ pub fn ComplexMatrix(comptime T: type) type {
             };
         }
 
+        /// Returns the trace of the matrix.
+        pub fn trace(self: @This()) Complex(T) {
+            var result = Complex(T).init(0, 0);
+
+            for (0..@min(self.rows, self.cols)) |i| {
+                result = result.add(self.at(i, i));
+            }
+
+            return result;
+        }
+
         /// Fills the matrix with zeros.
         pub fn zero(self: *@This()) void {
             self.fill(Complex(T).init(0, 0));

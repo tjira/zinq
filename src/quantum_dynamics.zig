@@ -2,6 +2,7 @@
 
 const std = @import("std");
 
+const array_functions = @import("array_functions.zig");
 const complex_absorbing_potential = @import("complex_absorbing_potential.zig");
 const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
@@ -41,10 +42,13 @@ const positionAtRow = grid_generator.positionAtRow;
 const positionGridAlloc = grid_generator.positionGridAlloc;
 const print = device_write.print;
 const printJson = device_write.printJson;
+const prod = array_functions.prod;
 const throw = error_handling.throw;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
+const MAX_PATH_LENGTH = global_variables.MAX_PATH_LENGTH;
+const QD_MOMENTUM_TOLERANCE = global_variables.QD_MOMENTUM_TOLERANCE;
 
 /// The quantum dynamics options struct.
 pub fn Options(comptime T: type) type {
@@ -57,12 +61,24 @@ pub fn Options(comptime T: type) type {
             states: u32 = 1
         };
         pub const InitialConditions = struct {
+            pub const Spread = struct {
+                momentum: ?struct {
+                    end: []const T,
+                    step: []const T
+                } = null,
+                position: ?struct {
+                    end: []const T,
+                    step: []const T
+                } = null
+            };
+
             adiabatic: bool = false,
             gamma: []const T,
             mass: T,
             momentum: []const T,
             position: []const T,
-            state: u32
+            state: u32,
+            spread: ?Spread = null
         };
         pub const LogIntervals = struct {
             iteration: u32 = 1
@@ -83,7 +99,8 @@ pub fn Options(comptime T: type) type {
             wavefunction: ?[]const u8 = null,
             spectrum: ?[]const u8 = null,
             total_energy: ?[]const u8 = null,
-            autocorrelation_function: ?[]const u8 = null
+            autocorrelation_function: ?[]const u8 = null,
+            transition_probability: ?[]const u8 = null
         };
 
         potential: ElectronicPotential(T),
@@ -118,11 +135,11 @@ pub fn Output(comptime T: type) type {
         /// Allocate the output structure.
         pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
             return @This(){
-                .bloch_vector = try RealMatrix(T).init(iterations + 1, 4, allocator),
+                .bloch_vector = try RealMatrix(T).initZero(iterations + 1, 4, allocator),
                 .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
-                .momentum = try RealMatrix(T).init(iterations + 1, ndim, allocator),
-                .population = try RealMatrix(T).init(iterations + 1, nstate, allocator),
-                .position = try RealMatrix(T).init(iterations + 1, ndim, allocator),
+                .momentum = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
+                .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
+                .position = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                 .potential_energy = try RealVector(T).initZero(iterations + 1, allocator),
                 .total_energy = try RealVector(T).initZero(iterations + 1, allocator)
             };
@@ -159,19 +176,119 @@ pub fn Custom(comptime T: type) type {
     };
 }
 
-/// Run quantum dynamics simulation.
+/// Run quantum dynamics simulations.
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
     if (opt.potential == .ab_initio) return throw(Output(T), "AB INITIO POTENTIAL IS NOT SUPPORTED IN QUANTUM DYNAMICS SIMULATIONS", .{});
 
-    const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
+    const ndim = try opt.potential.ndim();
 
     if (nstate != 2 and (opt.write.bloch_vector != null or opt.write.spatial_bloch_vector != null)) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
+
+    if (opt.initial_conditions.spread) |ics| if (ics.position) |qstruct| if (qstruct.end.len != ndim or qstruct.step.len != ndim) {
+        return throw(Output(T), "INITIAL CONDITIONS POSITION SPREAD MUST HAVE THE SAME LENGTH AS THE NUMBER OF DIMENSIONS", .{});
+    };
+
+    if (opt.initial_conditions.spread) |ics| if (ics.momentum) |pstruct| if (pstruct.end.len != ndim or pstruct.step.len != ndim) {
+        return throw(Output(T), "INITIAL CONDITIONS MOMENTUM SPREAD MUST HAVE THE SAME LENGTH AS THE NUMBER OF DIMENSIONS", .{});
+    };
+
+    var output: Output(T) = undefined;
+
+    const ics_pos = if (opt.initial_conditions.spread) |ics| ics.position else null;
+    const ics_mom = if (opt.initial_conditions.spread) |ics| ics.momentum else null;
+
+    const q0 = opt.initial_conditions.position; var q1: []const T = undefined;
+    const p0 = opt.initial_conditions.momentum; var p1: []const T = undefined;
+
+    if (ics_pos) |qstruct| q1 = qstruct.end else q1 = q0;
+    if (ics_mom) |pstruct| p1 = pstruct.end else p1 = p0;
+
+    var qsteps_i = try allocator.alloc(usize, ndim); defer allocator.free(qsteps_i); var qsteps: usize = 1; @memset(qsteps_i, 1);
+    var psteps_i = try allocator.alloc(usize, ndim); defer allocator.free(psteps_i); var psteps: usize = 1; @memset(psteps_i, 1);
+
+    if (ics_pos) |qstruct| for (0..qstruct.step.len) |i| {
+
+        if (qstruct.step[i] <= 0) return throw(Output(T), "POSITION STEP MUST BE POSITIVE", .{});
+
+        qsteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((q1[i] - q0[i]) / qstruct.step[i]))) + 1;
+
+        qsteps *= qsteps_i[i];
+    };
+
+    if (ics_mom) |pstruct| for (0..pstruct.step.len) |i| {
+
+        if (pstruct.step[i] <= 0) return throw(Output(T), "MOMENTUM STEP MUST BE POSITIVE", .{});
+
+        psteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((p1[i] - p0[i]) / pstruct.step[i]))) + 1;
+
+        psteps *= psteps_i[i];
+    };
+
+    var q = try allocator.alloc(T, ndim); defer allocator.free(q);
+    var p = try allocator.alloc(T, ndim); defer allocator.free(p);
+
+    var transition_probability = try RealMatrix(T).initZero(qsteps * psteps, 2 * ndim + nstate, allocator); defer transition_probability.deinit(allocator);
+
+    for (0..qsteps) |i| for (0..psteps) |j| {
+
+        var temp_i = i; var temp_j = j;
+
+        for (0..ndim) |k| {q[k] = q0[k] + @as(T, @floatFromInt(temp_i % qsteps_i[k])) * if (ics_pos) |qstruct| qstruct.step[k] else 0; temp_i /= qsteps_i[k];}
+        for (0..ndim) |k| {p[k] = p0[k] + @as(T, @floatFromInt(temp_j % psteps_i[k])) * if (ics_mom) |pstruct| pstruct.step[k] else 0; temp_j /= psteps_i[k];}
+
+        var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p;
+
+        try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum);
+
+        const result = try performDynamics(T, options, enable_printing, allocator);
+
+        for (0..ndim) |k| transition_probability.ptr(i * psteps + j,        k).* = q[k];
+        for (0..ndim) |k| transition_probability.ptr(i * psteps + j, ndim + k).* = p[k];
+
+        for (0..nstate) |k| transition_probability.ptr(i * psteps + j, 2 * ndim + k).* = result.population.at(result.population.rows - 1, k);
+
+        if (i == 0 and j == 0) output = result else result.deinit(allocator);
+    };
+
+    if (opt.write.transition_probability) |path| try exportRealMatrix(T, path, transition_probability);
+
+    return output;
+}
+
+/// Appends the position and momentum to all output files.
+pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(T), q: []const T, p: []const T) !void {
+    inline for (std.meta.fields(@TypeOf(opt.write))) |field| if (@as(field.type, @field(opt.write, field.name)) != null) {
+
+        const path = &@field(opt.write, field.name).?; var new_path: [MAX_PATH_LENGTH]u8 = undefined;
+
+        var fbs = std.io.fixedBufferStream(&new_path); const writer = fbs.writer();
+
+        try writer.print("{s}_Q=", .{path.*[0 .. path.len - 4]});
+
+        for (q, 0..) |val, i| {
+            if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
+        }
+
+        try writer.writeAll("_P=");
+
+        for (p, 0..) |val, i| {
+            if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
+        }
+
+        try writer.writeAll(".mat"); path.* = fbs.getWritten();
+    };
+}
+
+/// Perform the quantum dynamics simulation.
+pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    const ndim = try opt.potential.ndim();
+    const nstate = opt.potential.nstate();
 
     var output = try Output(T).init(nstate, ndim, @intCast(opt.iterations), allocator); errdefer output.deinit(allocator);
 
@@ -224,6 +341,10 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             const kinetic_energy = try wavefunction.kineticEnergyAndMomentumMean(&momentum);
             const potential_energy = try wavefunction.potentialEnergy(opt.potential, time);
 
+            if (j == 0) for (0..momentum.len) |k| if (@abs(momentum.at(k) - opt.initial_conditions.momentum[k]) > QD_MOMENTUM_TOLERANCE) {
+                return throw(Output(T), "YOUR GRID IS NOT SUFFICIENTLY DENSE TO ACCURATELY REPRESENT THE MOMENTUM, CONSIDER INCREASING THE NUMBER OF GRID POINTS OR TIGHTENING THE GRID LIMITS", .{});
+            };
+
             if (i == n_dynamics - 1) {
                 output.kinetic_energy.ptr(j).* = kinetic_energy;
                 output.potential_energy.ptr(j).* = potential_energy;
@@ -267,7 +388,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         const tag = if (opt.adiabatic) "ADIABATIC" else "DIABATIC";
 
-        try print("{s}FINAL {s} POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", tag, i, output.population.at(opt.iterations, i)});
+        try print("{s}FINAL {s} POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", tag, i, output.population.at(output.population.rows - 1, i)});
     };
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
