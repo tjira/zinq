@@ -254,7 +254,7 @@ pub fn Custom(comptime T: type) type {
                 };
             }
 
-            /// Free the memory allocated for the trajectory output structure.class
+            /// Free the memory allocated for the trajectory output structure.
             pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
                 self.bloch_vector.deinit(allocator);
                 self.coefficient.deinit(allocator);
@@ -373,7 +373,9 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
     var split_mix = std.Random.SplitMix64.init(opt.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
-    var output = try Custom(T).TrajectoryOutput.init(nstate, ndim, opt.iterations, allocator);
+    const total_iterations = if (equilibrate) opt.equilibration_iterations else opt.iterations;
+
+    var output = try Custom(T).TrajectoryOutput.init(nstate, ndim, total_iterations, allocator);
 
     var current_state: usize = switch (opt.initial_conditions) {
         .model => opt.initial_conditions.model.state,
@@ -944,7 +946,7 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
     try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.628);
 }
 
-test "Landau-Lener Surface Hopping on Tully's First Potential" {
+test "Landau-Zener Surface Hopping on Tully's First Potential" {
     const opt = Options(f64){
         .initial_conditions = .{
             .model = .{
