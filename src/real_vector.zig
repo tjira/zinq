@@ -140,6 +140,13 @@ pub fn RealVector(comptime T: type) type {
             return &self.data[i];
         }
 
+        /// Shrinks the vector to the specified length. The function returns an error if the new length is greater than the current length.
+        pub fn shrink(self: *@This(), new_len: usize, allocator: std.mem.Allocator) !void {
+            if (new_len > self.len) return throw(void, "CAN'T SHRINK A VECTOR OF LENGTH {d} TO A VECTOR OF LENGTH {d}", .{self.len, new_len});
+
+            self.data = try allocator.realloc(self.data, new_len); self.len = new_len;
+        }
+
         /// Get a slice of the internal data in the form of a vector.
         pub fn slice(self: @This(), start: usize, end: usize) @This() {
             return @This(){

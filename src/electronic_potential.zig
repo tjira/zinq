@@ -30,6 +30,7 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 const TimeLinearPotential = time_linear_potential.TimeLinearPotential;
 const TullyPotential1 = tully_potential.TullyPotential1;
+const TullyPotential2 = tully_potential.TullyPotential2;
 const VibronicCouplingPotential = vibronic_coupling_potential.VibronicCouplingPotential;
 
 const diagonalizeHermitian = eigenproblem_solver.diagonalizeHermitian;
@@ -48,6 +49,7 @@ pub fn ElectronicPotential(comptime T: type) type {
         morse: MorsePotential(T),
         time_linear: TimeLinearPotential(T),
         tully_1: TullyPotential1(T),
+        tully_2: TullyPotential2(T),
         vibronic_coupling: VibronicCouplingPotential(T),
 
         /// Evaluate the adabatic potential energy matrix at given system state and time.
@@ -167,6 +169,7 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .morse => 1,
                 .time_linear => 1,
                 .tully_1 => 1,
+                .tully_2 => 1,
                 .vibronic_coupling => |field| field.ndim()
             };
         }
@@ -183,6 +186,7 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .morse => 1,
                 .time_linear => 2,
                 .tully_1 => 2,
+                .tully_2 => 2,
                 .vibronic_coupling => |field| field.nstate()
             };
         }

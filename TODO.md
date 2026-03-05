@@ -56,5 +56,5 @@
 - [ ] Rescale the velocities after jump in the direction of NACV.
 - [x] Make it so that the number of dimensions is not necessary in the ab initio potential.
 - [ ] Frustrated hops are not accounted for in surface hopping simulations.
-- [ ] Implement stop norm to CAP.
-- [ ] Implement some printing when multiple IC are provided for QD.
+- [x] Implement stop norm to CAP.
+- [x] Implement some printing when multiple IC are provided for QD.

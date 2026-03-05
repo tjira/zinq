@@ -20,8 +20,8 @@ const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const tully_potential = @import("tully_potential.zig");
 
-const ComplexAbsorbingPotential = complex_absorbing_potential.ComplexAbsorbingPotential;
 const Complex = std.math.Complex;
+const ComplexAbsorbingPotential = complex_absorbing_potential.ComplexAbsorbingPotential;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const ComplexVector = complex_vector.ComplexVector;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
@@ -155,6 +155,17 @@ pub fn Output(comptime T: type) type {
             self.potential_energy.deinit(allocator);
             self.total_energy.deinit(allocator);
         }
+
+        /// Shrink the output structure to the specified number of iterations.
+        pub fn shrink(self: *@This(), iterations: usize, allocator: std.mem.Allocator) !void {
+            try self.bloch_vector.shrinkRows(iterations + 1, allocator);
+            try self.kinetic_energy.shrink(iterations + 1, allocator);
+            try self.momentum.shrinkRows(iterations + 1, allocator);
+            try self.population.shrinkRows(iterations + 1, allocator);
+            try self.position.shrinkRows(iterations + 1, allocator);
+            try self.potential_energy.shrink(iterations + 1, allocator);
+            try self.total_energy.shrink(iterations + 1, allocator);
+        }
     };
 }
 
@@ -241,14 +252,18 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     for (0..qsteps) |i| for (0..psteps) |j| {
 
+        if (enable_printing and (qsteps != 1 or psteps != 1)) try print("\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}: ", .{i * psteps + j + 1, qsteps * psteps});
+
         var temp_i = i; var temp_j = j;
 
         for (0..ndim) |k| {q[k] = q0[k] + @as(T, @floatFromInt(temp_i % qsteps_i[k])) * if (ics_pos) |qstruct| qstruct.step[k] else 0; temp_i /= qsteps_i[k];}
         for (0..ndim) |k| {p[k] = p0[k] + @as(T, @floatFromInt(temp_j % psteps_i[k])) * if (ics_mom) |pstruct| pstruct.step[k] else 0; temp_j /= psteps_i[k];}
 
         var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p;
-
-        try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum);
+    
+        if (qsteps != 1 or psteps != 1) {
+            try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum);
+        }
 
         const result = try performDynamics(T, options, enable_printing, allocator);
 
@@ -365,6 +380,18 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
             if (nstate == 2 and opt.write.spatial_bloch_vector != null) try assignSpatialBlochStep(T, &spatial_bloch.?, &wavefunction, opt.potential, j, time, opt.adiabatic, opt.fix_gauge, allocator);
             if (opt.write.wavefunction != null and i == n_dynamics - 1) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, j, time, opt.adiabatic, opt.fix_gauge, allocator);
 
+            if (opt.cap) |cap| if (density_matrix.trace().re < cap.stop_norm) {
+
+                if (enable_printing) try print("\nWAVEFUNCTION NORM BELOW CAP STOP NORM, STOPPING SIMULATION\n", .{});
+
+                try output.shrink(j, allocator);
+
+                if (wavefunction_dynamics) |*wfd| try wfd.shrinkCols(2 * (j + 1) * nstate + 1, allocator);
+                if (spatial_bloch) |*sb| try sb.shrinkCols(3 * (j + 1) + 1, allocator);
+
+                break;
+            };
+
             if (!enable_printing or (j > 0 and j % opt.log_intervals.iteration != 0)) continue;
 
             const iteration_info = Custom(T).IterationInfo{
@@ -395,7 +422,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
         try print("{s}FINAL {s} POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", tag, i, output.population.at(output.population.rows - 1, i)});
     };
 
-    const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
+    const end_time = @as(T, @floatFromInt(output.population.rows - 1)) * opt.time_step;
 
     if (opt.write.spectrum) |path| {
 
@@ -555,7 +582,7 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
     try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = 10 * ndim + 2 * (ndim - 1) + 2});
     try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = 10 * ndim + 2 * (ndim - 1) + 2});
     try writer.print("{[value]s:[width]} ", .{.value = "POPULATION", .width = 9 * nstate + 2 * (nstate - 1) + 2});
-    try writer.print("{s:4}", .{"TIME"});
+    try writer.print("{s:10} {s:4}", .{"NORM", "TIME"});
 
     try print("{s}\n", .{writer.buffered()});
 }
@@ -587,7 +614,7 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
         try writer.print("{d:9.4}{s}", .{info.density_matrix.at(i, i).re + info.population_loss.at(i), if (i == info.density_matrix.rows - 1) "" else ", "});
     }
 
-    try writer.print("] {D}", .{timer.read()}); timer.reset();
+    try writer.print("] {e:10.3} {D}", .{info.density_matrix.trace().re, timer.read()}); timer.reset();
 
     try print("{s}\n", .{writer.buffered()});
 }

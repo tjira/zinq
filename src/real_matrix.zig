@@ -223,6 +223,27 @@ pub fn RealMatrix(comptime T: type) type {
             };
         }
 
+        /// Shrink the matrix to a provided number of rows.
+        pub fn shrinkRows(self: *@This(), m: usize, allocator: std.mem.Allocator) !void {
+            if (m > self.rows) return throw(void, "CAN'T SHRINK A MATRIX OF {d} ROWS TO A MATRIX OF {d} ROWS", .{self.rows, m});
+
+            self.data = try allocator.realloc(self.data, m * self.cols); self.rows = m;
+        }
+
+        /// Shrink the matrix to a provided number of columns.
+        pub fn shrinkCols(self: *@This(), n: usize, allocator: std.mem.Allocator) !void {
+            if (n > self.cols) return throw(void, "CAN'T SHRINK A MATRIX OF {d} COLUMNS TO A MATRIX OF {d} COLUMNS", .{self.cols, n});
+
+            for (0..self.rows) |i| {
+
+                const src_start = i * self.cols; const dest_start = i * n;
+
+                std.mem.copyForwards(T, self.data[dest_start..dest_start + n], self.data[src_start..src_start + n]);
+            }
+
+            self.data = try allocator.realloc(self.data, self.rows * n); self.cols = n;
+        }
+
         /// Symmetrize the matrix: A = 0.5 * (A + A^T)
         pub fn symmetrize(self: *@This()) !void {
             if (!self.isSquare()) {

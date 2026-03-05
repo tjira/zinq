@@ -14,25 +14,35 @@ const throw = error_handling.throw;
 
 const MAX_HERMITE_QUADRATURE_POINTS = global_variables.MAX_HERMITE_QUADRATURE_POINTS;
 
-const HERIMITE_NODES_AND_WEIGHTS = naw: {
-    @setEvalBranchQuota(100000000); break :naw getNodesAndWeightsTo(f64, MAX_HERMITE_QUADRATURE_POINTS) catch @compileError("FAILED TO COMPUTE HERMITE QUADRATURE NODES AND WEIGHTS");
-};
-
-const HERMITE_NODES = HERIMITE_NODES_AND_WEIGHTS.nodes;
-const HERMITE_WEIGHTS = HERIMITE_NODES_AND_WEIGHTS.weights;
-
 /// Gets the nodes for Gaussian-Hermite quadrature for a given n.
 pub fn getNodes(comptime T: type, n: usize) ![]const T {
-    if (n > MAX_HERMITE_QUADRATURE_POINTS) return throw([]const T, "REQUESTED NUMBER OF HERMITE QUADRATURE POINTS EXCEEDS MAXIMUM ALLOWED", .{});
+    return (try getPrecalculatedNodesAndWeights(T, n)).nodes;
+}
 
-    return HERMITE_NODES[n];
+/// Gets the precalculated nodes and weights for Gaussian-Hermite quadrature for a given n.
+pub fn getPrecalculatedNodesAndWeights(comptime T: type, n: usize) !struct {nodes: []const T, weights: []const T} {
+
+    if (n > MAX_HERMITE_QUADRATURE_POINTS) {
+
+        const return_type = @typeInfo(@TypeOf(getPrecalculatedNodesAndWeights)).@"fn".return_type.?;
+
+        return throw(return_type, "REQUESTED NUMBER OF QUADRATURE POINTS EXCEEDS THE MAXIMUM SUPPORTED", .{});
+    }
+
+    @setEvalBranchQuota(100000000);
+
+    const HERMITE_NODES_AND_WEIGHTS = comptime naw: {
+        break :naw getNodesAndWeightsTo(f64, MAX_HERMITE_QUADRATURE_POINTS) catch {
+            @compileError("FAILED TO COMPUTE HERMITE QUADRATURE NODES AND WEIGHTS");
+        };
+    };
+
+    return .{.nodes = HERMITE_NODES_AND_WEIGHTS.nodes[n], .weights = HERMITE_NODES_AND_WEIGHTS.weights[n]};
 }
 
 /// Gets the weights for Gaussian-Hermite quadrature for a given n.
 pub fn getWeights(comptime T: type, n: usize) ![]const T {
-    if (n > MAX_HERMITE_QUADRATURE_POINTS) return throw([]const T, "REQUESTED NUMBER OF HERMITE QUADRATURE POINTS EXCEEDS MAXIMUM ALLOWED", .{});
-
-    return HERMITE_WEIGHTS[n];
+    return (try getPrecalculatedNodesAndWeights(T, n)).weights;
 }
 
 /// Computes the nodes and weights for Gaussian-Hermite quadrature using the Golub-Welsch algorithm.

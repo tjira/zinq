@@ -48,3 +48,42 @@ pub fn TullyPotential1(comptime T: type) type {
         }
     };
 }
+
+/// Struct holding parameters for the second Tully's potential.
+pub fn TullyPotential2(comptime T: type) type {
+    return struct {
+        A: T = 0.1,
+        B: T = 0.28,
+        C: T = 0.015,
+        D: T = 0.06,
+        E0: T = 0.05,
+
+        /// Diabatic potential matrix evaluator.
+        pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
+            U.ptr(0, 0).* = self.evaluateDiabaticElementComptime(0, 0, position, time);
+            U.ptr(0, 1).* = self.evaluateDiabaticElementComptime(0, 1, position, time);
+            U.ptr(1, 0).* = self.evaluateDiabaticElementComptime(1, 0, position, time);
+            U.ptr(1, 1).* = self.evaluateDiabaticElementComptime(1, 1, position, time);
+        }
+
+        /// Diabatic potential matrix element evaluator.
+        pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
+            return switch (i + j) {
+                0 => self.evaluateDiabaticElementComptime(0, 0, position, time),
+                1 => self.evaluateDiabaticElementComptime(0, 1, position, time),
+                2 => self.evaluateDiabaticElementComptime(1, 1, position, time),
+                else => throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{})
+            };
+        }
+
+        /// Comptime potential matrix element evaluator.
+        pub fn evaluateDiabaticElementComptime(self: @This(), comptime i: usize, comptime j: usize, position: RealVector(T), _: T) T {
+            return switch (i + j) {
+                0 => 0,
+                1 => self.C * std.math.exp(-self.D * position.at(0) * position.at(0)),
+                2 => -self.A * std.math.exp(-self.B * position.at(0) * position.at(0)) + self.E0,
+                else => @compileError("INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT"),
+            };
+        }
+    };
+}
