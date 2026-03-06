@@ -209,7 +209,7 @@ pub fn main() !void {
         if (gpa.deinit() == .leak) std.debug.panic("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
-    try device_write.print("ZIG VERSION: {d}.{d}.{d}, ZINQ VERSION: {s}", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.version});
+    try device_write.print("ZIG VERSION: {d}.{d}.{d}, ZINQ VERSION: {s}", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.zinq_version});
 
     {
         const ts = try timestamp.timestamp(allocator); defer allocator.free(ts);

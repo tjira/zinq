@@ -1,6 +1,5 @@
 .SHELLFLAGS := $(if $(filter $(OS),Windows_NT),-NoProfile -Command,-c)
 
-CROSS       ?= 0
 DEBUG       ?= 0
 INCREMENTAL ?= 0
 SUMMARY     ?= 0
@@ -17,7 +16,6 @@ ZIG_VERSION := 0.15.2
 ZLS_VERSION := 0.15.0
 
 ZIG_FLAGS := $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
-ZIG_FLAGS := $(if $(filter 1,$(CROSS)),$(ZIG_FLAGS),$(ZIG_FLAGS) -Dtarget=$(ARCH)-$(OS))
 ZIG_FLAGS := $(if $(filter 1,$(INCREMENTAL)),$(ZIG_FLAGS) -fincremental,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(SUMMARY)),$(ZIG_FLAGS) --summary all,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(TIME_REPORT)),$(ZIG_FLAGS) --time-report,$(ZIG_FLAGS))
@@ -28,10 +26,13 @@ all: zinq
 
 # ACORN BUILDING TARGETS ===============================================================================================================================================================================
 
-.PHONY: zinq run test docs
+.PHONY: zinq cross run test docs
 
 zinq: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 	./.zig-bin/zig build $(ZIG_FLAGS)
+
+cross: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
+	./.zig-bin/zig build $(ZIG_FLAGS) cross
 
 run: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
 	./.zig-bin/zig build $(ZIG_FLAGS) run

@@ -48,7 +48,7 @@ class Build(setuptools.command.build_py.build_py):
 
         environment = {**os.environ, **({"OS" : "Windows_NT"} if os.name == "nt" else {})}
 
-        subprocess.run(["make", "CROSS=1"], check=True, env=environment)
+        subprocess.run(["make", "cross"], check=True, env=environment)
 
         super().run()
 

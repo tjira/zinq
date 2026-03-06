@@ -29,8 +29,6 @@ pub fn getPrecalculatedNodesAndWeights(comptime T: type, n: usize) !struct {node
         return throw(return_type, "REQUESTED NUMBER OF QUADRATURE POINTS EXCEEDS THE MAXIMUM SUPPORTED", .{});
     }
 
-    @setEvalBranchQuota(100000000);
-
     const HERMITE_NODES_AND_WEIGHTS = comptime naw: {
         break :naw getNodesAndWeightsTo(f64, MAX_HERMITE_QUADRATURE_POINTS) catch {
             @compileError("FAILED TO COMPUTE HERMITE QUADRATURE NODES AND WEIGHTS");
@@ -55,17 +53,17 @@ pub fn getNodesAndWeights(comptime T: type, comptime n: usize) !struct {nodes: [
     var JJ = RealMatrix(T){.rows = n, .cols = n, .data = workspace[1 * n * n..2 * n * n]};
     var JA = RealMatrix(T){.rows = n, .cols = n, .data = workspace[2 * n * n..3 * n * n]};
 
-    for (1..n) |i| {
+    inline for (1..n) |i| {
         J.ptr(i, i - 1).* = std.math.sqrt(0.5 * @as(T, @floatFromInt(i))); J.ptr(i - 1, i).* = J.at(i, i - 1);
     }
 
     try eigensystemHermitian(T, &JJ, &JA, J);
 
-    for (0..n) |i| {
+    inline for (0..n) |i| {
         nodes[i] = JJ.at(i, i); weights[i] = std.math.sqrt(std.math.pi) * JA.at(0, i) * JA.at(0, i);
     }
 
-    for (0..n / 2) |i| {
+    inline for (0..n / 2) |i| {
 
         const j = n - 1 - i;
 
@@ -83,11 +81,13 @@ pub fn getNodesAndWeights(comptime T: type, comptime n: usize) !struct {nodes: [
 
 /// Precomputes the nodes and weights for Gaussian-Hermite quadrature for all n from 1 to the specified maximum n, and stores them in static arrays.
 pub fn getNodesAndWeightsTo(comptime T: type, comptime n: usize) !struct {nodes: [n + 1][]const T, weights: [n + 1][]const T} {
+    @setEvalBranchQuota(100_000_000);
+
     var nodes: [n + 1][]const T = undefined; var weights: [n + 1][]const T = undefined;
 
     nodes[0] = &.{}; weights[0] = &.{};
 
-    for (1..n + 1) |i| {
+    inline for (1..n + 1) |i| {
 
         const nodes_and_weights = try getNodesAndWeights(T, i);
 
