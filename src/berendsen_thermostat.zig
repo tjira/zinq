@@ -2,12 +2,9 @@
 
 const std = @import("std");
 
-const global_variables = @import("global_variables.zig");
 const real_vector = @import("real_vector.zig");
 
 const RealVector = real_vector.RealVector;
-
-const BERENDSEN_TOLERANCE = 1e-6;
 
 /// Parameters for the Berendsen thermostat.
 pub fn Parameters(comptime T: type) type {

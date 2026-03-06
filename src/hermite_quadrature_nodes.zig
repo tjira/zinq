@@ -43,37 +43,43 @@ pub fn getWeights(comptime T: type, n: usize) ![]const T {
     return (try getPrecalculatedNodesAndWeights(T, n)).weights;
 }
 
-/// Computes the nodes and weights for Gaussian-Hermite quadrature using the Golub-Welsch algorithm.
+/// Computes the nodes and weights for Gaussian-Hermite quadrature using the Newton-Raphson method.
 pub fn getNodesAndWeights(comptime T: type, comptime n: usize) !struct {nodes: [n]T, weights: [n]T} {
-    var nodes: [n]T = undefined; var weights: [n]T = undefined;
+    var nodes: [n]T = undefined; var weights: [n]T = undefined; const m = (n + 1) / 2;
+        
+    var z: T = undefined; var dp: T = undefined; const nf: T = @floatFromInt(n);
 
-    var workspace: [3 * n * n]T = undefined; for (0..workspace.len) |i| workspace[i] = 0;
+    for (0..m) |i| {
 
-    var J  = RealMatrix(T){.rows = n, .cols = n, .data = workspace[0 * n * n..1 * n * n]};
-    var JJ = RealMatrix(T){.rows = n, .cols = n, .data = workspace[1 * n * n..2 * n * n]};
-    var JA = RealMatrix(T){.rows = n, .cols = n, .data = workspace[2 * n * n..3 * n * n]};
+        if (i == 0) {
+            z = std.math.sqrt(2 * nf + 1) - 1.85575 * std.math.pow(T, 2 * nf + 1, -0.16667);
+        } else if (i == 1) {
+            z = z - 1.14 * std.math.pow(T, nf, 0.426) / z;
+        } else if (i == 2) {
+            z = 1.86 * z - 0.86 * nodes[n - 1];
+        } else {
+            z = 1.91 * z - 0.91 * nodes[n - i + 1];
+        }
 
-    inline for (1..n) |i| {
-        J.ptr(i, i - 1).* = std.math.sqrt(0.5 * @as(T, @floatFromInt(i))); J.ptr(i - 1, i).* = J.at(i, i - 1);
-    }
+        for (0..100) |_| {
 
-    try eigensystemHermitian(T, &JJ, &JA, J);
+            var p1: T = 1 / std.math.pow(T, std.math.pi, 0.25); var p2: T = 0;
 
-    inline for (0..n) |i| {
-        nodes[i] = JJ.at(i, i); weights[i] = std.math.sqrt(std.math.pi) * JA.at(0, i) * JA.at(0, i);
-    }
+            for (1..n + 1) |k| {
 
-    inline for (0..n / 2) |i| {
+                const kf: T = @floatFromInt(k); const p3 = p2; p2 = p1; 
+                
+                p1 = z * std.math.sqrt(2 / kf) * p2 - std.math.sqrt((kf - 1) / kf) * p3;
+            }
 
-        const j = n - 1 - i;
+            dp = std.math.sqrt(2.0 * nf) * p2;
 
-        const average_node = (@abs(nodes[i]) + @abs(nodes[j])) / 2;
+            const z_old = z; z = z - p1 / dp;
 
-        nodes[i] = -average_node; nodes[j] = average_node;
+            if (@abs(z - z_old) < 1e-14) break;
+        }
 
-        const average_weight = (weights[i] + weights[j]) / 2;
-
-        weights[i] = average_weight; weights[j] = average_weight;
+        nodes[i] = -z; nodes[n - i - 1] = z; weights[i] = 2 / (dp * dp); weights[n - i - 1] = weights[i];
     }
 
     return .{.nodes = nodes, .weights = weights};
@@ -81,7 +87,7 @@ pub fn getNodesAndWeights(comptime T: type, comptime n: usize) !struct {nodes: [
 
 /// Precomputes the nodes and weights for Gaussian-Hermite quadrature for all n from 1 to the specified maximum n, and stores them in static arrays.
 pub fn getNodesAndWeightsTo(comptime T: type, comptime n: usize) !struct {nodes: [n + 1][]const T, weights: [n + 1][]const T} {
-    @setEvalBranchQuota(100_000_000);
+    @setEvalBranchQuota(1000000);
 
     var nodes: [n + 1][]const T = undefined; var weights: [n + 1][]const T = undefined;
 

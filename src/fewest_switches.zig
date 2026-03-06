@@ -4,7 +4,6 @@ const std = @import("std");
 
 const complex_runge_kutta = @import("complex_runge_kutta.zig");
 const complex_vector = @import("complex_vector.zig");
-const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
@@ -13,8 +12,6 @@ const ComplexRungeKutta = complex_runge_kutta.ComplexRungeKutta;
 const ComplexVector = complex_vector.ComplexVector;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
-
-const FSSH_DENOMINATOR_OFFSET = global_variables.FSSH_DENOMINATOR_OFFSET;
 
 /// Parameters for the Fewest Switches method.
 pub fn Parameters(comptime T: type) type {
@@ -71,7 +68,7 @@ pub fn FewestSwitches(comptime T: type) type {
 
                 const re = parameters.coefficient.at(j).mul(parameters.coefficient.at(current_state).conjugate()).re;
 
-                const denominator = std.math.pow(T, parameters.coefficient.at(current_state).magnitude(), 2) + FSSH_DENOMINATOR_OFFSET;
+                const denominator = std.math.pow(T, parameters.coefficient.at(current_state).magnitude(), 2) + 1e-14;
 
                 const p = 2 * parameters.derivative_coupling.at(current_state, j) * re / denominator * quantum_step;
 

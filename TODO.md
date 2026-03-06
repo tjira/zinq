@@ -58,3 +58,4 @@
 - [ ] Frustrated hops are not accounted for in surface hopping simulations.
 - [x] Implement stop norm to CAP.
 - [x] Implement some printing when multiple IC are provided for QD.
+- [ ] Fix the bound checking for Hermite node length.

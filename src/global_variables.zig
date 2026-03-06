@@ -10,7 +10,6 @@ pub var PARALLEL_ERROR: ?anyerror = null;
 
 pub const BOYS_CUTOFF = 1e-8;
 pub const EPOCH_YEARS_OFFSET = 1970;
-pub const FSSH_DENOMINATOR_OFFSET = 1e-14;
 pub const MAX_INPUT_FILE_BYTES = 1024 * 1024 * 1024; // 1 GB
 pub const MAX_JACOBI_ITERATIONS = 1000;
 pub const SINGULARITY_TOLERANCE = 1e-12;
@@ -21,7 +20,6 @@ pub const RPN_MAX_STACK_SIZE = 2048;
 pub const MAX_LERP_DIM = 16;
 pub const MAX_NACV_STATES = 16;
 pub const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024; // 16 MB
-pub const BERENDSEN_TOLERANCE = 1e-6;
 pub const MAX_PATH_LENGTH = 4096;
 pub const QD_MOMENTUM_TOLERANCE = 1e-8;
 pub const MAX_HERMITE_QUADRATURE_POINTS = 32;

@@ -231,6 +231,15 @@ pub fn main() !void {
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
+
+    // const n = 32;
+    //
+    // const nodes = try hermite_quadrature_nodes.getNodes(f64, n);
+    // const weights = try hermite_quadrature_nodes.getWeights(f64, n);
+    //
+    // for (0..n) |i| {
+    //     try device_write.print("NODE {d:2}: {d:20.14}, WEIGHT {d:2}: {d:20.14}\n", .{i, nodes[i], i, weights[i]});
+    // }
 }
 
 test {
