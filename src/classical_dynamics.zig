@@ -13,7 +13,6 @@ const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const error_context = @import("error_context.zig");
-const error_handling = @import("error_handling.zig");
 const fewest_switches = @import("fewest_switches.zig");
 const global_variables = @import("global_variables.zig");
 const hammes_schiffer_tully = @import("hammes_schiffer_tully.zig");
@@ -69,7 +68,6 @@ const print = device_write.print;
 const printJson = device_write.printJson;
 const schlitterEntropy = trajectory_thermodynamics.schlitterEntropy;
 const sreEntropy = trajectory_thermodynamics.sreEntropy;
-const throw = error_handling.throw;
 
 const Eh = global_variables.Eh;
 const Na = global_variables.Na;
@@ -276,18 +274,14 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.potential == .ab_initio and opt.initial_conditions != .molecule) return throw(Output(T), "AB INITIO POTENTIALS REQUIRE MOLECULAR INITIAL CONDITIONS", .{});
+    if (opt.potential == .ab_initio and opt.initial_conditions != .molecule) return error.InvalidPotential;
 
     const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
-    if (nstate != 2 and opt.write.bloch_vector_mean != null) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});
-    if (opt.potential == .ab_initio and opt.derivative_coupling != null and opt.derivative_coupling.? != .nacv) {
-        return throw(Output(T), "ONLY NACV DERIVATIVE COUPLING IS SUPPORTED FOR AB INITIO POTENTIALS", .{});
-    }
-    if (opt.initial_conditions == .molecule and opt.initial_conditions.molecule.velocity != null and opt.initial_conditions.molecule.temperature != null) {
-        return throw(Output(T), "INITIAL VELOCITY AND TEMPERATURE CONDITIONS ARE MUTUALLY EXCLUSIVE", .{});
-    }
+    if (nstate != 2 and opt.write.bloch_vector_mean != null) return error.InvalidWriteOption;
+    if (opt.potential == .ab_initio and opt.derivative_coupling != null and opt.derivative_coupling.? != .nacv) return error.InvalidDerivativeCoupling;
+    if (opt.initial_conditions == .molecule and opt.initial_conditions.molecule.velocity != null and opt.initial_conditions.molecule.temperature != null) return error.InvalidInitialConditions;
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
@@ -380,7 +374,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .molecule => opt.initial_conditions.molecule.state
     };
 
-    if (current_state >= nstate) return throw(Custom(T).TrajectoryOutput, "ACTIVE STATE MUST NOT BE HIGHER THAN THE TOTAL NUMBER OF STATES", .{});
+    if (current_state >= nstate) return error.InvalidInitialState;
 
     var diabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer diabatic_potential.deinit(allocator);
     var adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_potential.deinit(allocator);

@@ -8,7 +8,6 @@ const complex_vector = @import("complex_vector.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const strided_complex_vector = @import("strided_complex_vector.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const error_handlingg = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const object_array = @import("object_array.zig");
@@ -27,7 +26,6 @@ const RealVector = real_vector.RealVector;
 
 const fixGauge = eigenproblem_solver.fixGauge;
 const mm = matrix_multiplication.mm;
-const throw = error_handlingg.throw;
 
 /// A linear combination of complex Gaussian functions shared between multiple wavefunctions.
 pub fn SingleSetOfMCG(comptime T: type) type {
@@ -37,13 +35,8 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
         /// Initialize a new complex Gaussian with given parameters.
         pub fn init(position: []const []const T, gamma: []const []const T, momentum: []const []const T, state: usize, bf_spread: []const u32, nstate: usize, allocator: std.mem.Allocator) !@This() {
-            if (position.len != gamma.len or position.len != momentum.len or gamma.len != momentum.len) {
-                return throw(@This(), "POSITION, GAMMA, AND MOMENTUM ARRAYS MUST HAVE THE SAME LENGTH", .{});
-            }
-
-            if (position.len != bf_spread.len) {
-                return throw(@This(), "BASIS FUNCTION SPREAD LENGTH MUST MATCH NUMBER OF GAUSSIANS", .{});
-            }
+            if (position.len != gamma.len or position.len != momentum.len or gamma.len != momentum.len) return error.ParameterLengthMismatch;
+            if (position.len != bf_spread.len) return error.ParameterLengthMismatch;
 
             var gaussians = try allocator.alloc(ComplexGaussian(T), position.len); var coefs = try ComplexVector(T).initZero(nstate * gaussians.len, allocator);
 
@@ -253,7 +246,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
         /// Loads the structure from a complex vector with parameters. The parameters are in order: positions, momentas, gammas for each Gaussian followed by the coefficients for each state and Gaussian.
         pub fn loadParameterVector(self: *@This(), params: ComplexVector(T)) !void {
-            if (params.len != 3 * self.gaussians[0].position.len * self.gaussians.len + self.coefs.len) return throw(void, "PARAMETER VECTOR LENGTH MISMATCH", .{});
+            if (params.len != 3 * self.gaussians[0].position.len * self.gaussians.len + self.coefs.len) return error.ParameterLengthMismatch;
 
             for (self.gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
 
@@ -432,11 +425,8 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Calculates the total scalar overlap between this wavefunction and another wavefunction.
         pub fn selfOverlap(self: @This(), other: @This(), allocator: std.mem.Allocator) !Complex(T) {
             const n_states_self = self.coefs.len / self.gaussians.len;
-            const n_states_other = other.coefs.len / other.gaussians.len;
 
-            if (self.coefs.len / self.gaussians.len != other.coefs.len / other.gaussians.len) {
-                return throw(Complex(T), "CANNOT CALCULATE OVERLAP: STATE COUNTS DO NOT MATCH (SELF: {}, OTHER: {})", .{n_states_self, n_states_other});
-            }
+            if (self.coefs.len / self.gaussians.len != other.coefs.len / other.gaussians.len) return error.StateNumberMismatch;
 
             var S = try ComplexMatrix(T).initZero(self.gaussians.len, other.gaussians.len, allocator); defer S.deinit(allocator);
 

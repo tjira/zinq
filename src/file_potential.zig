@@ -3,7 +3,6 @@
 const std = @import("std");
 
 const device_read = @import("device_read.zig");
-const error_handling = @import("error_handling.zig");
 const linear_interpolation = @import("linear_interpolation.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -13,7 +12,6 @@ const RealVector = real_vector.RealVector;
 
 const lerp = linear_interpolation.lerp;
 const readRealMatrix = device_read.readRealMatrix;
-const throw = error_handling.throw;
 
 var file_potential_data: ?FilePotentialData(f64) = null;
 
@@ -46,8 +44,8 @@ pub fn FilePotential(comptime T: type) type {
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
-            if (file_potential_data == null) return throw(T, "POTENTIAL DATA NOT INITIALIZED, CALL init() FIRST", .{});
-            if (i >= self.nstate or j >= self.nstate) return throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{});
+            if (file_potential_data == null) return error.PotentialDataNotInitialized;
+            if (i >= self.nstate or j >= self.nstate) return error.InvalidStateIndex;
 
             return try lerp(T, file_potential_data.?.data, self.ndim + i * self.nstate + j, position);
         }
@@ -56,7 +54,7 @@ pub fn FilePotential(comptime T: type) type {
         pub fn init(self: @This(), allocator: std.mem.Allocator) !?FilePotentialData(T) {
             const U = try readRealMatrix(T, self.path, allocator);
 
-            if (self.ndim + self.nstate * self.nstate != U.cols) return throw(?FilePotentialData(T), "POTENTIAL DATA DIMENSIONS DO NOT MATCH THE SPECIFIED NDIM AND NSTATE", .{});
+            if (self.ndim + self.nstate * self.nstate != U.cols) return error.InvalidPotentialData;
 
             file_potential_data = .{
                 .data = U

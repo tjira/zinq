@@ -4,7 +4,6 @@ const std = @import("std");
 
 const array_functions = @import("array_functions.zig");
 const complex_vector = @import("complex_vector.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const math_functions = @import("math_functions.zig");
 const real_vector = @import("real_vector.zig");
@@ -19,7 +18,6 @@ const mulMod = math_functions.mulMod;
 const powMod = math_functions.powMod;
 const prod = array_functions.prod;
 const revk = math_functions.revk;
-const throw = error_handling.throw;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
@@ -27,9 +25,7 @@ const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 pub fn cfft1(comptime T: type, vector: *StridedComplexVector(T), factor: i32) !void {
     const n = vector.len; const bit_count: u6 = @intCast(std.math.log2(n));
 
-    if (std.math.pow(usize, 2, @intCast(bit_count)) != n) {
-        return throw(void, "FOURIER TRANSFORM ONLY IMPLEMENTED FOR LENGTHS THAT ARE POWERS OF 2", .{});
-    }
+    if (std.math.pow(usize, 2, @intCast(bit_count)) != n) return error.InvalidDataInFourierTransform;
 
     for (0..n) |i| {
 
@@ -73,9 +69,7 @@ pub fn cfft1(comptime T: type, vector: *StridedComplexVector(T), factor: i32) !v
 pub fn cfftn(comptime T: type, vector: *ComplexVector(T), shape: []const usize, factor: i32) !void {
     const N = prod(usize, shape);
 
-    if (std.math.pow(usize, shape[0], shape.len) != N) {
-        return throw(void, "FOURIER TRANSFORM ONLY IMPLEMENTED FOR CUBIC ARRAYS", .{});
-    }
+    if (std.math.pow(usize, shape[0], shape.len) != N) return error.InvalidDataInFourierTransform;
 
     for (0..shape.len) |i| {
 

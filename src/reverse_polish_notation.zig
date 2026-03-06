@@ -2,10 +2,7 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
-
-const throw = error_handling.throw;
 
 const STR2F = global_variables.STR2F;
 const C2V = global_variables.C2V;
@@ -74,7 +71,7 @@ pub fn ReversePolishNotation(comptime T: type) type {
 
                 try self.data.append(allocator, Element{.variable = element});
             } else {
-                return throw(void, "INVALID ELEMENT TYPE FOR RPN", .{});
+                return error.UnsupportedElementTypeForRpn;
             }
         }
 
@@ -89,8 +86,8 @@ pub fn ReversePolishNotation(comptime T: type) type {
                         2 => self.stack.appendAssumeCapacity(applyBinaryOperator(op, self.stack.pop().?, self.stack.pop().?)),
                         else => unreachable
                     },
-                    .variable => |variable| self.stack.appendAssumeCapacity(map.get(variable) orelse return throw(T, "UNKNOWN '{s}' VARIABLE IN RPN EVALUATION", .{variable})),
-                    .constant => |constant| self.stack.appendAssumeCapacity(C2V.get(constant) orelse return throw(T, "UNKNOWN '{s}' CONSTANT IN RPN EVALUATION", .{constant})),
+                    .variable => |variable| self.stack.appendAssumeCapacity(map.get(variable) orelse return error.UndefinedVariableInRpnEvaluation),
+                    .constant => |constant| self.stack.appendAssumeCapacity(C2V.get(constant) orelse return error.UndefinedConstantInRpnEvaluation),
                 }
             }
 
@@ -115,7 +112,7 @@ pub fn ReversePolishNotation(comptime T: type) type {
                             for (key) |c| try buffer.print(allocator, "{c}", .{std.ascii.toUpper(c)}); continue :outer;
                         };
 
-                        return throw([]u8, "UNKNOWN FUNCTION IN RPN TO STRING", .{});
+                        return error.UnknownFunctionInRpnToString;
                     },
 
                     .op => |op| try buffer.print(allocator, "{s}", .{switch (op) {
@@ -175,7 +172,7 @@ pub fn operatorFromChar(char: u8) !Operator {
         '*' => Operator.Multiply,
         '/' => Operator.Divide,
         '^' => Operator.Power,
-        else => return throw(Operator, "UNKNOWN OPERATOR CHARACTER", .{}),
+        else => return error.UnknownOperator
     };
 }
 

@@ -2,7 +2,6 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const reverse_polish_notation = @import("reverse_polish_notation.zig");
 
@@ -12,7 +11,6 @@ const ReversePolishNotation = reverse_polish_notation.ReversePolishNotation;
 const operatorAssociativity = reverse_polish_notation.operatorAssociativity;
 const operatorFromChar = reverse_polish_notation.operatorFromChar;
 const operatorPrecedence = reverse_polish_notation.operatorPrecedence;
-const throw = error_handling.throw;
 
 const C2V = global_variables.C2V;
 const STR2F = global_variables.STR2F;
@@ -26,7 +24,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
     var i: usize = 0; var j: usize = 0; var buffer: [64]u8 = undefined; var expect_operand: bool = true;
 
     for (variables) |variable| for (C2V.keys()) |constant| {
-        if (std.mem.eql(u8, variable, constant)) return throw(ReversePolishNotation(T), "VARIABLE NAME CANNOT BE THE SAME AS A KNOWN CONSTANT", .{});
+        if (std.mem.eql(u8, variable, constant)) return error.VariableNameConflictWithConstant;
     };
 
     parser: while (i < input.len) : (i += 1) {
@@ -35,7 +33,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         if (std.ascii.isDigit(input[i])) {
 
-            if (!expect_operand) return throw(ReversePolishNotation(T), "MISSING OPERATOR BEFORE NUMBER", .{});
+            if (!expect_operand) return error.UnexpectedNumberWithoutOperator;
 
             while (i < input.len and (std.ascii.isDigit(input[i]) or input[i] == '.')) : (i += 1) {
                 buffer[j] = input[i]; j += 1;
@@ -55,7 +53,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
             if (input[i] == '-' and expect_operand) op = .Negate
             else if (input[i] == '+' and expect_operand) op = .Affirm
             else {
-                if (expect_operand) return throw(ReversePolishNotation(T), "UNEXPECTED UNARY OPERATOR", .{}); op = try operatorFromChar(input[i]);
+                if (expect_operand) return error.UnexpectedOperatorWithoutOperand;
             }
 
             const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
@@ -69,7 +67,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         else if (input[i] == '(') {
 
-            if (!expect_operand) return throw(ReversePolishNotation(T), "MISSING OPERATOR BEFORE PARENTHESIS", .{});
+            if (!expect_operand) return error.UnexpectedLeftParenthesisWithoutOperator;
 
             try stack.append(allocator, .{.bracket = input[i]}); expect_operand = true;
         }
@@ -80,7 +78,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
                 try rpn.append(stack.pop().?.op, allocator);
             }
 
-            if (stack.items.len == 0) return throw(ReversePolishNotation(T), "MISMATCHED PARENTHESES IN EXPRESSION", .{});
+            if (stack.items.len == 0) return error.MismatchedParentheses;
 
             _ = stack.pop();
 
@@ -96,7 +94,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         else {
 
-            if (!expect_operand) return throw(ReversePolishNotation(T), "MISSING OPERATOR BEFORE IDENTIFIER/FUNCTION", .{});
+            if (!expect_operand) return error.UnexpectedTokenWithoutOperator;
 
             for (STR2F.keys()) |func| {
                 if (i + func.len - 1 < input.len and std.mem.eql(u8, input[i..i + func.len], func)) {
@@ -116,7 +114,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
                 }
             }
 
-            return throw(ReversePolishNotation(T), "UNKNOWN TOKEN IN EXPRESSION", .{});
+            return error.UnrecognizedTokenInInput;
         }
     }
 

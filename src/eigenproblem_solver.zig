@@ -5,7 +5,6 @@ const std = @import("std");
 const complex_matrix = @import("complex_matrix.zig");
 const device_read = @import("device_read.zig");
 const device_write = @import("device_write.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 
@@ -20,7 +19,6 @@ const printComplexMatrix = device_write.printComplexMatrix;
 const printRealMatrix = device_write.printRealMatrix;
 const readComplexMatrix = device_read.readComplexMatrix;
 const readRealMatrix = device_read.readRealMatrix;
-const throw = error_handling.throw;
 
 const MAX_JACOBI_ITERATIONS = global_variables.MAX_JACOBI_ITERATIONS;
 
@@ -59,7 +57,7 @@ pub fn Output(comptime _: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (!opt.hermitian) return throw(Output(T), "EIGENPROBLEM SOLVER ONLY SUPPORTS HERMITIAN MATRICES CURRENTLY", .{});
+    if (!opt.hermitian) return error.MatrixNotHermitian;
 
     if (opt.real) {
 
@@ -136,14 +134,14 @@ pub fn eigensystemHermitianAlloc(comptime T: type, A: anytype, allocator: std.me
 
 /// Solve the eigenproblem for a symmetric or Hermitian system using the Jacobi method.
 pub fn eigensystemJacobi(comptime M: fn (comptime type) type, comptime T: type, J: *M(T), C: ?*M(T), A: M(T)) !void {
-    if (!A.isSquare()) return throw(void, "MATRIX MUST BE SQUARE TO SOLVE THE EIGENPROBLEM", .{});
-    if (A.rows != J.rows or A.cols != J.cols) return throw(void, "EIGENVALUE MATRIX MUST HAVE THE SAME DIMENSIONS AS THE INPUT MATRIX", .{});
-    if (C != null and (C.?.rows != A.rows or C.?.cols != A.cols)) return throw(void, "EIGENVECTOR MATRIX MUST HAVE THE SAME DIMENSIONS AS THE INPUT MATRIX", .{});
+    if (!A.isSquare()) return error.MatrixNotSquare;
+    if (A.rows != J.rows or A.cols != J.cols) return error.MatrixDimensionMismatch;
+    if (C != null and (C.?.rows != A.rows or C.?.cols != A.cols)) return error.MatrixDimensionMismatch;
 
     if (comptime M == RealMatrix) {
-        if (!A.isSymmetric(0)) return throw(void, "THE MATRIX YOU ARE PASSING TO THE JACOBI EIGENSOLVER IS NOT SYMMETRIC", .{});
+        if (!A.isSymmetric(0)) return error.MatrixNotHermitian;
     } else {
-        if (!A.isHermitian(0)) return throw(void, "THE MATRIX YOU ARE PASSING TO THE JACOBI EIGENSOLVER IS NOT HERMITIAN", .{});
+        if (!A.isHermitian(0)) return error.MatrixNotHermitian;
     }
 
     const n = A.rows; var iter: usize = 0; if (J.data.ptr != A.data.ptr) try A.copyTo(J);
@@ -154,9 +152,7 @@ pub fn eigensystemJacobi(comptime M: fn (comptime type) type, comptime T: type, 
 
     while (J.offDiagonalFrobeniusNorm() > tol) : (iter += 1) for (0..n - 1) |i| for (i + 1..n) |j| {
 
-        if (iter == MAX_JACOBI_ITERATIONS) {
-            return throw(void, "JACOBI EIGENSOLVER DID NOT CONVERGE IN {d} ITERATIONS WITH {e:5.3} OFF-DIAGONAL NORM", .{MAX_JACOBI_ITERATIONS, J.offDiagonalFrobeniusNorm()});
-        }
+        if (iter == MAX_JACOBI_ITERATIONS) return error.JacobiDidNotConverge;
 
         const a = if (comptime M == RealMatrix) J.at(i, i) else J.at(i, i).re;
         const b = if (comptime M == RealMatrix) J.at(j, j) else J.at(j, j).re;
@@ -241,9 +237,7 @@ pub fn eigensystemJacobiAlloc(comptime M: fn (comptime type) type, comptime T: t
 
 /// Function to fix the gauge of eigenvectors.
 pub fn fixGauge(comptime T: type, eigenvectors: *RealMatrix(T), reference: RealMatrix(T)) !void {
-    if (eigenvectors.rows != reference.rows or eigenvectors.cols != reference.cols) {
-        return throw(void, "EIGENVECTOR AND REFERENCE MATRICES MUST HAVE THE SAME DIMENSIONS TO FIX THE GAUGE", .{});
-    }
+    if (eigenvectors.rows != reference.rows or eigenvectors.cols != reference.cols) return error.MatrixDimensionMismatch;
 
     for (0..eigenvectors.cols) |i| {
 

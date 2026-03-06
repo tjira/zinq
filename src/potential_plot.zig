@@ -5,7 +5,6 @@ const std = @import("std");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const error_handling = @import("error_handling.zig");
 const grid_generator = @import("grid_generator.zig");
 const real_matrix = @import("real_matrix.zig");
 
@@ -16,7 +15,6 @@ const exportRealMatrix = device_write.exportRealMatrix;
 const positionAtRow = grid_generator.positionAtRow;
 const print = device_write.print;
 const printJson = device_write.printJson;
-const throw = error_handling.throw;
 
 /// The potential plot options struct.
 pub fn Options(comptime T: type) type {
@@ -54,7 +52,7 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.potential == .ab_initio) return throw(Output(T), "POTENTIAL PLOT CAN NOT BE RUN FOR AB INITIO POTENTIAL", .{});
+    if (opt.potential == .ab_initio) return error.AdiabaticPotentialPlotNotImplementedForAbInitio;
 
     const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
@@ -62,8 +60,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
-    if (opt.grid.limits.len != ndim) return throw(Output(T), "LIMITS LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
-    for (0..ndim) |i| if (opt.grid.limits[i].len != 2) return throw(Output(T), "EACH LIMIT MUST HAVE A LENGTH OF 2", .{});
+    if (opt.grid.limits.len != ndim) return error.GridLimitsLengthMustMatchPotentialDimensionality;
+    for (0..ndim) |i| if (opt.grid.limits[i].len != 2) return error.GridLimitsMustHaveLengthTwo;
 
     const potential_matrix = try RealMatrix(T).init(std.math.pow(usize, @intCast(opt.grid.points), ndim), ndim + nstate * nstate, allocator);
 

@@ -2,7 +2,6 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 const reverse_polish_notation = @import("reverse_polish_notation.zig");
@@ -13,7 +12,6 @@ const RealVector = real_vector.RealVector;
 const ReversePolishNotation = reverse_polish_notation.ReversePolishNotation;
 
 const shuntingYard = shunting_yard.shuntingYard;
-const throw = error_handling.throw;
 
 var custom_potential_data: ?CustomPotentialData(f64) = null;
 
@@ -47,7 +45,7 @@ pub fn CustomPotential(comptime T: type) type {
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
-            if (i >= self.matrix.len or j >= self.matrix.len) return throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{});
+            if (i >= self.matrix.len or j >= self.matrix.len) return error.InvalidIndex;
 
             custom_potential_data.?.map.putAssumeCapacity("t", time);
 
@@ -61,7 +59,7 @@ pub fn CustomPotential(comptime T: type) type {
             var rpn_array = try allocator.alloc(ReversePolishNotation(T), self.matrix.len * self.matrix.len);
             var map = std.StringHashMap(T).init(allocator);
 
-            for (0..self.matrix.len) |i| if (self.matrix[i].len != self.matrix.len) return throw(?CustomPotentialData(T), "CUSTOM POTENTIAL MATRIX MUST BE SQUARE", .{});
+            for (0..self.matrix.len) |i| if (self.matrix[i].len != self.matrix.len) return error.InvalidDimension;
 
             for (0..self.matrix.len) |i| for (0..self.matrix.len) |j| {
                 rpn_array[i * self.matrix.len + j] = try shuntingYard(T, self.matrix[i][j], self.variables, allocator);

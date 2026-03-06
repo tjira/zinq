@@ -2,7 +2,6 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 const complex_matrix = @import("complex_matrix.zig");
 const global_variables = @import("global_variables.zig");
@@ -10,8 +9,6 @@ const global_variables = @import("global_variables.zig");
 const RealMatrix = real_matrix.RealMatrix;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const Complex = std.math.complex.Complex;
-
-const throw = error_handling.throw;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
@@ -22,22 +19,38 @@ pub fn mm(comptime T: type, C: anytype, A: anytype, comptime at: bool, B: anytyp
     }
 
     if (comptime !at and !bt) if (A.cols != B.rows) {
-        return throw(void, "CAN'T MULTIPLY A MATRIX WITH {d} COLUMNS BY A MATRIX WITH {d} ROWS", .{A.cols, B.rows});
+        return error.InvalidMatrixDimensions;
     };
     if (comptime at and !bt) if (A.rows != B.rows) {
-        return throw(void, "CAN'T MULTIPLY A TRANSPOSED MATRIX WITH {d} COLUMNS BY A MATRIX WITH {d} ROWS", .{A.rows, B.rows});
+        return error.InvalidMatrixDimensions;
     };
     if (comptime !at and bt) if (A.cols != B.cols) {
-        return throw(void, "CAN'T MULTIPLY A MATRIX WITH {d} COLUMNS BY A MATRIX WITH {d} ROWS", .{A.cols, B.cols});
+        return error.InvalidMatrixDimensions;
     };
     if (comptime at and bt) if (A.rows != B.cols) {
-        return throw(void, "CAN'T MULTIPLY A TRANSPOSED MATRIX WITH {d} COLUMNS BY A MATRIX WITH {d} ROWS", .{A.rows, B.cols});
+        return error.InvalidMatrixDimensions;
+    };
+
+    if (comptime !at and !bt) if (C.rows != A.rows or C.cols != B.cols) {
+        return error.InvalidMatrixDimensions;
+    };
+
+    if (comptime at and !bt) if (C.rows != A.cols or C.cols != B.cols) {
+        return error.InvalidMatrixDimensions;
+    };
+
+    if (comptime !at and bt) if (C.rows != A.rows or C.cols != B.rows) {
+        return error.InvalidMatrixDimensions;
+    };
+
+    if (comptime at and bt) if (C.rows != A.cols or C.cols != B.rows) {
+        return error.InvalidMatrixDimensions;
     };
 
     if (comptime @TypeOf(C) == *RealMatrix(T)) return mmReal(T, C, A, at, B, bt);
     if (comptime @TypeOf(C) == *ComplexMatrix(T)) return mmComplex(T, C, A, at, B, bt);
 
-    return throw(void, "UNSUPPORTED OUTPUT MATRIX TYPE IN MATRIX MULTIPLICATION", .{});
+    return error.UnsupportedMatrixType;
 }
 
 /// General matrix multiplication function that returns a new matrix.

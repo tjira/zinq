@@ -5,15 +5,12 @@ const std = @import("std");
 const classical_particle = @import("classical_particle.zig");
 const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const image = @import("image.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
 const real_tensor_three = @import("real_tensor_three.zig");
 const real_vector = @import("real_vector.zig");
-
-const throw = error_handling.throw;
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ComplexMatrix = complex_matrix.ComplexMatrix;

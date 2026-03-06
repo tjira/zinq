@@ -8,7 +8,6 @@ const complex_vector = @import("complex_vector.zig");
 const eigensystem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
-const error_handling = @import("error_handling.zig");
 const fourier_transform = @import("fourier_transform.zig");
 const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
@@ -30,7 +29,6 @@ const eigensystemSymmetric = eigensystem_solver.eigensystemSymmetric;
 const mm = matrix_multiplication.mm;
 const momentumAtRow = grid_generator.momentumAtRow;
 const positionAtRow = grid_generator.positionAtRow;
-const throw = error_handling.throw;
 const fixGauge = eigenproblem_solver.fixGauge;
 
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
@@ -66,9 +64,9 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Allocate a wavefunction on a grid.
         pub fn init(npoint: usize, nstate: usize, ndim: usize, limits: []const []const T, mass: T, allocator: std.mem.Allocator) !@This() {
-            if (limits.len != ndim) return throw(@This(), "LIMITS LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
-            for (0..ndim) |i| if (limits[i].len != 2) return throw(@This(), "EACH LIMIT MUST HAVE A LENGTH OF 2", .{});
-            if (npoint < 2) return throw(@This(), "NUMBER OF POINTS MUST BE AT LEAST 2", .{});
+            if (limits.len != ndim) return error.InvalidLimits;
+            for (0..ndim) |i| if (limits[i].len != 2) return error.InvalidLimits;
+            if (npoint < 2) return error.InvalidNumberOfPoints;
 
             const shape = try allocator.alloc(usize, ndim);
 
@@ -185,10 +183,10 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Initialize the position of the wavefunction as a Gaussian wavepacket.
         pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: []const T) !void {
-            if (position.len != self.ndim) return throw(void, "POSITION LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
-            if (momentum.len != self.ndim) return throw(void, "MOMENTUM LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
-            if (gamma.len != self.ndim) return throw(void, "GAMMA LENGTH MUST BE EQUAL TO NUMBER OF DIMENSIONS", .{});
-            if (state >= self.nstate) return throw(void, "STATE INDEX OUT OF BOUNDS", .{});
+            if (position.len != self.ndim) return error.InvalidInitialPosition;
+            if (momentum.len != self.ndim) return error.InvalidInitialMomentum;
+            if (gamma.len != self.ndim) return error.InvalidGamma;
+            if (state >= self.nstate) return error.InvalidInitialState;
 
             for (0..self.data.rows) |i| {
 

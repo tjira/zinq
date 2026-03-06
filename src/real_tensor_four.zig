@@ -3,10 +3,8 @@
 const std = @import("std");
 
 const array_functions = @import("array_functions.zig");
-const error_handling = @import("error_handling.zig");
 
 const prod = array_functions.prod;
-const throw = error_handling.throw;
 
 /// Real tensor class. The tensor is stored in a flat array in row-major order.
 pub fn RealTensor4(comptime T: type) type {
@@ -41,9 +39,7 @@ pub fn RealTensor4(comptime T: type) type {
 
         /// Expands the tensor, keeping the correct indices.
         pub fn expand(self: *@This(), new_shape: [4]usize, allocator: std.mem.Allocator) !void {
-            if (new_shape[0] < self.shape[0] or new_shape[1] < self.shape[1] or new_shape[2] < self.shape[2] or new_shape[3] < self.shape[3]) {
-                return throw(void, "CAN'T EXPAND TENSOR FROM {d}x{d}x{d}x{d} TO {d}x{d}x{d}x{d}", .{self.shape[0], self.shape[1], self.shape[2], self.shape[3], new_shape[0], new_shape[1], new_shape[2], new_shape[3]});
-            }
+            if (new_shape[0] < self.shape[0] or new_shape[1] < self.shape[1] or new_shape[2] < self.shape[2] or new_shape[3] < self.shape[3]) return error.InvalidNewShape;
 
             self.data = try allocator.realloc(self.data, prod(usize, &new_shape));
 

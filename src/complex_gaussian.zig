@@ -5,7 +5,6 @@ const std = @import("std");
 const complex_matrix = @import("complex_matrix.zig");
 const complex_vector = @import("complex_vector.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const error_handling = @import("error_handling.zig");
 const hermite_quadrature_nodes = @import("hermite_quadrature_nodes.zig");
 const math_functions = @import("math_functions.zig");
 const real_matrix = @import("real_matrix.zig");
@@ -21,7 +20,6 @@ const RealVector = real_vector.RealVector;
 const getNodes = hermite_quadrature_nodes.getNodes;
 const getWeights = hermite_quadrature_nodes.getWeights;
 const powi = math_functions.powi;
-const throw = error_handling.throw;
 
 /// Complex Gaussian function implementation in Zig.
 pub fn ComplexGaussian(comptime T: type) type {
@@ -33,7 +31,7 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Initialize a new complex Gaussian with given parameters.
         pub fn init(position: []const T, gamma: []const T, momentum: []const T, allocator: std.mem.Allocator) !@This() {
             if (position.len != gamma.len or position.len != momentum.len or gamma.len != momentum.len) {
-                return throw(ComplexGaussian(T), "POSITION, GAMMA, AND MOMENTUM MUST HAVE THE SAME DIMENSIONALITY", .{});
+                return error.InvalidDimension;
             }
 
             var cg = @This(){
@@ -144,9 +142,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Calculate the kinetic matrix element between this complex Gaussian and another.
         pub fn kinetic(self: @This(), other: @This(), mass: []const T) !Complex(T) {
-            if (self.position.len != other.position.len or self.position.len != mass.len or other.position.len != mass.len) {
-                return throw(Complex(T), "BOTH POSITION AND MASS ARRAY MUST HAVE THE SAME DIMENSIONALITY", .{});
-            }
+            if (self.position.len != other.position.len or self.position.len != mass.len or other.position.len != mass.len) return error.InvalidDimension;
 
             var result = Complex(T).init(0, 0);
 
@@ -191,7 +187,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Calculates the matrix element of the momentum operator between this complex Gaussian and another.
         pub fn momentumMatrixElementIndex(self: @This(), other: @This(), i: usize) !Complex(T) {
-            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+            if (self.position.len != other.position.len) return error.InvalidDimension;
 
             var result = Complex(T).init(0, 0);
 
@@ -209,7 +205,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Calculates the matrix element of the position operator between this complex Gaussian and another.
         pub fn positionMatrixElementIndex(self: @This(), other: @This(), i: usize) !Complex(T) {
-            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+            if (self.position.len != other.position.len) return error.InvalidDimension;
 
             var result = Complex(T).init(0, 0);
 
@@ -235,7 +231,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another.
         pub fn overlap(self: @This(), other: @This()) !Complex(T) {
-            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+            if (self.position.len != other.position.len) return error.InvalidDimension;
 
             var result = Complex(T).init(1, 0);
 
@@ -260,7 +256,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to its width (gamma).
         pub fn overlapDiffGamma(self: @This(), other: @This()) !Complex(T) {
-            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+            if (self.position.len != other.position.len) return error.InvalidDimension;
 
             var result = Complex(T).init(0, 0);
 
@@ -283,7 +279,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to momentum.
         pub fn overlapDiffMomentum(self: @This(), other: @This()) !Complex(T) {
-            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+            if (self.position.len != other.position.len) return error.InvalidDimension;
 
             var result = Complex(T).init(0, 0);
 
@@ -303,7 +299,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to position.
         pub fn overlapDiffPosition(self: @This(), other: @This()) !Complex(T) {
-            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+            if (self.position.len != other.position.len) return error.InvalidDimension;
 
             var result = Complex(T).init(0, 0);
 
@@ -323,7 +319,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to time.
         pub fn overlapDiffTime(self: @This(), other: @This(), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T)) !Complex(T) {
-            if (self.position.len != other.position.len) return throw(Complex(T), "BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSIONALITY", .{});
+            if (self.position.len != other.position.len) return error.InvalidDimension;
 
             var result = Complex(T).init(0, 0);
 

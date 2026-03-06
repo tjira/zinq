@@ -2,12 +2,9 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
-
-const throw = error_handling.throw;
 
 /// Real vector class.
 pub fn RealVector(comptime T: type) type {
@@ -37,7 +34,7 @@ pub fn RealVector(comptime T: type) type {
 
         /// Add another vector to this vector.
         pub fn add(self: *@This(), other: @This()) !void {
-            if (self.len != other.len) return throw(void, "CAN'T ADD A VECTOR OF LENGTH {d} TO A VECTOR OF LENGTH {d}", .{other.len, self.len});
+            if (self.len != other.len) return error.VectorsOfDifferentLength;
 
             for (self.data, 0..) |*element, index| {
                 element.* += other.data[index];
@@ -69,7 +66,7 @@ pub fn RealVector(comptime T: type) type {
 
         /// Copy the contents of this vector to another vector.
         pub fn copyTo(self: @This(), other: *@This()) !void {
-            if (self.len != other.len) return throw(void, "CAN'T COPY A VECTOR OF LENGTH {d} TO A VECTOR OF LENGTH {d}", .{self.len, other.len});
+            if (self.len != other.len) return error.VectorsOfDifferentLength;
 
             for (self.data, 0..) |element, index| {
                 other.data[index] = element;
@@ -78,8 +75,8 @@ pub fn RealVector(comptime T: type) type {
 
         /// Calculate the covariance between this vector and another vector.
         pub fn covariance(self: @This(), other: @This()) !T {
-            if (self.len != other.len) return throw(void, "CAN'T CALCULATE THE COVARIANCE OF A VECTOR OF LENGTH {d} WITH A VECTOR OF LENGTH {d}", .{other.len, self.len});
-            if (self.len < 2) return throw(void, "COVARIANCE CAN'T BE CALCULATED FOR VECTORS OF LENGTH LESS THAN 2", .{});
+            if (self.len != other.len) return error.VectorsOfDifferentLength;
+            if (self.len < 2) return error.VectorsTooShortForCovariance;
 
             var total: T = 0; const mean1 = self.mean(); const mean2 = other.mean();
 
@@ -142,7 +139,7 @@ pub fn RealVector(comptime T: type) type {
 
         /// Shrinks the vector to the specified length. The function returns an error if the new length is greater than the current length.
         pub fn shrink(self: *@This(), new_len: usize, allocator: std.mem.Allocator) !void {
-            if (new_len > self.len) return throw(void, "CAN'T SHRINK A VECTOR OF LENGTH {d} TO A VECTOR OF LENGTH {d}", .{self.len, new_len});
+            if (new_len > self.len) return error.NewLengthGreaterThanCurrentLength;
 
             self.data = try allocator.realloc(self.data, new_len); self.len = new_len;
         }
@@ -157,7 +154,7 @@ pub fn RealVector(comptime T: type) type {
 
         /// Subtract another vector from this vector.
         pub fn sub(self: *@This(), other: @This()) !void {
-            if (self.len != other.len) return throw(void, "CAN'T SUBTRACT A VECTOR OF LENGTH {d} FROM A VECTOR OF LENGTH {d}", .{other.len, self.len});
+            if (self.len != other.len) return error.VectorsOfDifferentLength;
 
             for (self.data, 0..) |*element, index| {
                 element.* -= other.data[index];

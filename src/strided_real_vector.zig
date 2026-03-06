@@ -2,10 +2,6 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
-
-const throw = error_handling.throw;
-
 /// Real strided vector class.
 pub fn StridedRealVector(comptime T: type) type {
     return struct {
@@ -32,8 +28,8 @@ pub fn StridedRealVector(comptime T: type) type {
 
         /// Covariance of the strided array elements with another strided array.
         pub fn covariance(self: @This(), other: @This()) !T {
-            if (self.len != other.len) return throw(T, "CAN'T CALCULATE THE COVARIANCE OF TWO STRIDED VECTORS OF DIFFERENT LENGTHS", .{});
-            if (self.len < 2) return throw(T, "CAN'T CALCULATE THE COVARIANCE OF TWO STRIDED VECTORS OF LENGTH LESS THAN 2", .{});
+            if (self.len != other.len) return error.LengthMismatch;
+            if (self.len < 2) return error.NotEnoughElements;
 
             var total: T = 0; const mean1 = self.mean(); const mean2 = other.mean();
 

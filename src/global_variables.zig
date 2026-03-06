@@ -2,17 +2,10 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
-
-const throw = error_handling.throw;
-
 pub var PARALLEL_ERROR: ?anyerror = null;
 
-pub const BOYS_CUTOFF = 1e-8;
-pub const EPOCH_YEARS_OFFSET = 1970;
 pub const MAX_INPUT_FILE_BYTES = 1024 * 1024 * 1024; // 1 GB
 pub const MAX_JACOBI_ITERATIONS = 1000;
-pub const SINGULARITY_TOLERANCE = 1e-12;
 pub const TEST_TOLERANCE = 1e-10;
 pub const MAX_POOL_SIZE = 10000;
 pub const WRITE_BUFFER_SIZE = 1048576;
@@ -22,7 +15,7 @@ pub const MAX_NACV_STATES = 16;
 pub const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024; // 16 MB
 pub const MAX_PATH_LENGTH = 4096;
 pub const QD_MOMENTUM_TOLERANCE = 1e-8;
-pub const MAX_HERMITE_QUADRATURE_POINTS = 32;
+pub const MAX_HERMITE_QUADRATURE_POINTS = 64;
 
 pub const Eh  = 4.359744722206e-18; // J
 pub const a0  = 5.29177210544e-11;  // m
@@ -133,5 +126,5 @@ pub fn AN2SM(AN: usize) ![]const u8 {
         return key;
     };
 
-    return throw([]const u8, "ATOMIC NUMBER {d} NOT FOUND IN SM2AN MAP", .{AN});
+    return error.InvalidAtomicNumber;
 }

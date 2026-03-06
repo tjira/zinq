@@ -2,12 +2,9 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
-
-const throw = error_handling.throw;
 
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
@@ -16,11 +13,11 @@ const MAX_LERP_DIM = global_variables.MAX_LERP_DIM;
 
 /// Function to get a function value of a point in a grid using multilinear interpolation.
 pub fn lerp(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(T)) !T {
-    if (r.len > MAX_LERP_DIM) return throw(T, "LINEAR INTERPOLATION ONLY IMPLEMENTED FOR UP TO {d} DIMENSIONS", .{MAX_LERP_DIM});
+    if (r.len > MAX_LERP_DIM) return error.TooManyDimensionsInLerp;
 
     const size = @as(usize, @intFromFloat(@round(std.math.pow(T, @as(T, @floatFromInt(grid.rows)), 1 / @as(T, @floatFromInt(r.len))))));
 
-    if (std.math.pow(usize, size, r.len) != grid.rows) return throw(T, "DATA PASSED TO LERP FUNCTION DOES NOT HAVE THE SAME NUMBER OF POINTS IN EACH DIMENSION", .{});
+    if (std.math.pow(usize, size, r.len) != grid.rows) return error.GridSizeNotCompatibleWithLerpDimensions;
 
     var indices: [MAX_LERP_DIM]usize = undefined;
     var weights: [MAX_LERP_DIM]T = undefined;

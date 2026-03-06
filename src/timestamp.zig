@@ -2,10 +2,6 @@
 
 const std = @import("std");
 
-const global_variables = @import("global_variables.zig");
-
-const EPOCH_YEARS_OFFSET = global_variables.EPOCH_YEARS_OFFSET;
-
 /// Get the current timestamp in the ISO 8601 format.
 pub fn timestamp(allocator: std.mem.Allocator) ![]const u8 {
     const mts: u64 = @intCast(std.time.milliTimestamp());
@@ -23,7 +19,7 @@ pub fn timestamp(allocator: std.mem.Allocator) ![]const u8 {
 
 /// Get the day (1-31) from milliseconds timestamp since epoch.
 pub fn getDay(mts: u64) u5 {
-    var days = @divTrunc(mts, std.time.ms_per_day); var year: std.time.epoch.Year = EPOCH_YEARS_OFFSET;
+    var days = @divTrunc(mts, std.time.ms_per_day); var year: std.time.epoch.Year = 1970;
 
     while (days >= std.time.epoch.getDaysInYear(year)) {
         days -= std.time.epoch.getDaysInYear(year); year += 1;
@@ -55,7 +51,7 @@ pub fn getMinute(mts: u64) u6 {
 
 /// Get the month (1-12) from milliseconds timestamp since epoch.
 pub fn getMonth(mts: u64) u4 {
-    var days = @divTrunc(mts, std.time.ms_per_day); var year: std.time.epoch.Year = EPOCH_YEARS_OFFSET;
+    var days = @divTrunc(mts, std.time.ms_per_day); var year: std.time.epoch.Year = 1970;
 
     while (days >= std.time.epoch.getDaysInYear(year)) {
         days -= std.time.epoch.getDaysInYear(year); year += 1;

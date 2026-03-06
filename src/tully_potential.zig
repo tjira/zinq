@@ -2,14 +2,11 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
-
-const throw = error_handling.throw;
 
 /// Struct holding parameters for the first Tully's potential.
 pub fn TullyPotential1(comptime T: type) type {
@@ -33,7 +30,7 @@ pub fn TullyPotential1(comptime T: type) type {
                 0 => self.evaluateDiabaticElementComptime(0, 0, position, time),
                 1 => self.evaluateDiabaticElementComptime(0, 1, position, time),
                 2 => self.evaluateDiabaticElementComptime(1, 1, position, time),
-                else => throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{})
+                else => error.InvalidIndex
             };
         }
 
@@ -72,7 +69,7 @@ pub fn TullyPotential2(comptime T: type) type {
                 0 => self.evaluateDiabaticElementComptime(0, 0, position, time),
                 1 => self.evaluateDiabaticElementComptime(0, 1, position, time),
                 2 => self.evaluateDiabaticElementComptime(1, 1, position, time),
-                else => throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{})
+                else => error.InvalidIndex
             };
         }
 

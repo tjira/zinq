@@ -3,13 +3,11 @@
 const std = @import("std");
 
 const device_write = @import("device_write.zig");
-const error_handling = @import("error_handling.zig");
 const shunting_yard = @import("shunting_yard.zig");
 
 const print = device_write.print;
 const printJson = device_write.printJson;
 const shuntingYard = shunting_yard.shuntingYard;
-const throw = error_handling.throw;
 
 /// Options for the expression evaluator target.
 pub fn Options(comptime _: type) type {
@@ -34,7 +32,7 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.variables.len != opt.values.len) return throw(Output(T), "VARIABLES AND VALUES LENGTH MISMATCH", .{});
+    if (opt.variables.len != opt.values.len) return error.InvalidInput;
 
     if (enable_printing) try print("\nEXPRESSION: '{s}'", .{opt.expression});
 

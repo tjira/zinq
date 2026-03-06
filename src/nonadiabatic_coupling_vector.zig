@@ -5,14 +5,12 @@ const std = @import("std");
 const device_read = @import("device_read.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
 const fixGauge = eigenproblem_solver.fixGauge;
 const readRealMatrix = device_read.readRealMatrix;
-const throw = error_handling.throw;
 
 const ElectronicPotential = electronic_potential.ElectronicPotential;
 const RealMatrix = real_matrix.RealMatrix;
@@ -45,9 +43,7 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
         pub fn evaluate(self: @This(), derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
             if (parameters.electronic_potential == .ab_initio) return try self.evaluateAbInitio(derivative_coupling, parameters);
 
-            if (derivative_coupling.rows > MAX_NACV_STATES or derivative_coupling.cols > MAX_NACV_STATES) {
-                return throw(void, "MAXIMUM NUMBER OF STATES FOR NACV METHOD IS {d}", .{MAX_NACV_STATES});
-            }
+            if (derivative_coupling.rows > MAX_NACV_STATES or derivative_coupling.cols > MAX_NACV_STATES) return error.TooManyStatesForNacv;
 
             derivative_coupling.zero();
 

@@ -3,7 +3,6 @@
 const std = @import("std");
 
 const device_write = @import("device_write.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const integer_arithmetic = @import("integer_arithmetic.zig");
 const real_vector = @import("real_vector.zig");
@@ -16,7 +15,6 @@ const print = device_write.print;
 const printJson = device_write.printJson;
 const printRealMatrix = device_write.printRealMatrix;
 const squareWithOverflow = integer_arithmetic.squareWithOverflow;
-const throw = error_handling.throw;
 
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
@@ -82,7 +80,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         512 => try dispatch(u512, opt, enable_printing, allocator),
         1024 => try dispatch(u1024, opt, enable_printing, allocator),
         -1 => try dispatch(std.math.big.int.Managed, opt, enable_printing, allocator),
-        else => return throw(Output(T), "BIT SIZE HAS TO BE POWER OF TWO BETWEEN 8 AND 1024, VALUE '{d}' IS INVALID", .{bits})
+        else => return error.InvalidBitSize
     };
 }
 

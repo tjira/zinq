@@ -3,14 +3,11 @@
 const std = @import("std");
 
 const complex_vector = @import("complex_vector.zig");
-const error_handling = @import("error_handling.zig");
 const strided_complex_vector = @import("strided_complex_vector.zig");
 
 const Complex = std.math.complex.Complex;
 const ComplexVector = complex_vector.ComplexVector;
 const StridedComplexVector = strided_complex_vector.StridedComplexVector;
-
-const throw = error_handling.throw;
 
 /// Complex matrix class. The matrix is stored in a flat array in row-major order.
 pub fn ComplexMatrix(comptime T: type) type {
@@ -42,9 +39,7 @@ pub fn ComplexMatrix(comptime T: type) type {
 
         /// Add another matrix to this matrix.
         pub fn add(self: *@This(), other: @This()) !void {
-            if (self.rows != other.rows or self.cols != other.cols) {
-                return throw(void, "CAN'T ADD A {d}x{d} MATRIX TO A {d}x{d} MATRIX", .{other.rows, other.cols, self.rows, self.cols});
-            }
+            if (self.rows != other.rows or self.cols != other.cols) return error.MatricesIncompatible;
 
             for (self.data, 0..) |*element, index| {
                 element.* = element.add(other.data[index]);
@@ -76,9 +71,7 @@ pub fn ComplexMatrix(comptime T: type) type {
 
         /// Copy the contents of this matrix to another matrix.
         pub fn copyTo(self: @This(), other: *@This()) !void {
-            if (self.rows != other.rows or self.cols != other.cols) {
-                return throw(void, "CAN'T COPY A {d}x{d} MATRIX TO A {d}x{d} MATRIX", .{self.rows, self.cols, other.rows, other.cols});
-            }
+            if (self.rows != other.rows or self.cols != other.cols) return error.MatricesIncompatible;
 
             for (self.data, 0..) |element, index| {
                 other.data[index] = element;
@@ -118,6 +111,34 @@ pub fn ComplexMatrix(comptime T: type) type {
             }
 
             return std.math.sqrt(sum);
+        }
+
+        /// Maximum absolute value on the diagonal of the matrix.
+        pub fn maxAbsDiagonal(self: @This()) T {
+            var max: T = 0;
+
+            for (0..@min(self.rows, self.cols)) |i| {
+
+                const abs_value = self.at(i, i).magnitude();
+
+                if (abs_value > max) max = abs_value;
+            }
+
+            return max;
+        }
+
+        /// Minimum absolute value on the diagonal of the matrix.
+        pub fn minAbsDiagonal(self: @This()) T {
+            var min: T = std.math.inf(T);
+
+            for (0..@min(self.rows, self.cols)) |i| {
+
+                const abs_value = self.at(i, i).magnitude();
+
+                if (abs_value < min) min = abs_value;
+            }
+
+            return min;
         }
 
         /// Set the matrix to the identity matrix.

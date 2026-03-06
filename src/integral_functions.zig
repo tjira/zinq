@@ -2,13 +2,11 @@
 
 const std = @import("std");
 
-const global_variables = @import("global_variables.zig");
-
-const BOYS_CUTOFF = global_variables.BOYS_CUTOFF;
-
 /// Boys function.
 pub fn boys(n: usize, t: anytype) @TypeOf(t) {
-    if (t < BOYS_CUTOFF) {
+    const cutoff = if (@TypeOf(t) == f32) 1e-4 else 1e-8;
+
+    if (t < cutoff) {
         return 1 / @as(@TypeOf(t), @floatFromInt(2 * n + 1)) - t / @as(@TypeOf(t), @floatFromInt(2 * n + 3));
     } else if (n == 0) {
         return std.math.sqrt(std.math.pi / (4 * t)) * erf(std.math.sqrt(t));

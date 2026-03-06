@@ -5,13 +5,10 @@ const std = @import("std");
 const contracted_gaussian = @import("contracted_gaussian.zig");
 const classical_particle = @import("classical_particle.zig");
 const embedded_files = @import("embedded_files.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
 const ClassicalParticle = classical_particle.ClassicalParticle;
-
-const throw = error_handling.throw;
 
 const AN2SM = global_variables.AN2SM;
 const BASIS_FILES = embedded_files.BASIS_FILES;
@@ -25,7 +22,7 @@ pub fn BasisSet(comptime T: type) type {
         pub fn init(system: ClassicalParticle(T), name: []const u8, allocator: std.mem.Allocator) !BasisSet(T) {
             var basis = std.ArrayList(ContractedGaussian(T)){}; errdefer basis.deinit(allocator);
 
-            const basis_file_contents = BASIS_FILES.get(name) orelse return throw(BasisSet(T), "BASIS SET \"{s}\" NOT FOUND", .{name});
+            const basis_file_contents = BASIS_FILES.get(name) orelse return error.BasisNotFound;
 
             const basis_json = try std.json.parseFromSlice(std.json.Value, allocator, basis_file_contents, .{}); defer basis_json.deinit();
 
@@ -36,7 +33,7 @@ pub fn BasisSet(comptime T: type) type {
                 const atomic_number_length = (try std.fmt.bufPrint(&atomic_number_string, "{d}", .{system.atoms.?[i]})).len;
 
                 if (basis_json.value.object.get("elements").?.object.get(atomic_number_string[0..atomic_number_length]) == null) {
-                    return throw(BasisSet(T), "ATOMIC NUMBER {d} ({s}) NOT FOUND IN BASIS SET FILE", .{system.atoms.?[i], try AN2SM(system.atoms.?[i])});
+                    return error.InvalidAtomicNumber;
                 }
 
                 const shells = basis_json.value.object.get("elements").?.object.get(atomic_number_string[0..atomic_number_length]).?.object.get("electron_shells").?.array.items;

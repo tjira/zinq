@@ -4,7 +4,6 @@ const std = @import("std");
 
 const bias_potential = @import("bias_potential.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -16,7 +15,6 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
 const AN2SM = global_variables.AN2SM;
-const throw = error_handling.throw;
 const uncr = string_manipulation.uncr;
 
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
@@ -40,7 +38,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Initialize the system using the number of dimensions, an array of masses, and an allocator. The positions and velocities are undefined after initialization.
         pub fn init(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !@This() {
-            if (ndim != masses.len) return throw(@This(), "THE LENGTH OF MASSES VECTOR MUST BE THE SAME AS NUMBER OF DIMENSIONS", .{});
+            if (ndim != masses.len) return error.InvalidIndex;
 
             var particle = @This(){
                 .atoms = null,
@@ -135,9 +133,7 @@ pub fn ClassicalParticle(comptime T: type) type {
         pub fn noccSpatial(self: @This()) !usize {
             const spin = try self.noccSpin();
 
-            if (spin % 2 != 0) {
-                return throw(usize, "THE NUMBER OF OCCUPIED SPIN ORBITALS MUST BE EVEN TO GET THE NUMBER OF OCCUPIED SPATIAL ORBITALS", .{});
-            }
+            if (spin % 2 != 0) return error.InvalidSpin;
 
             return spin / 2;
         }
@@ -150,9 +146,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
             for (0..self.atoms.?.len) |i| sum += self.atoms.?[i];
 
-            if (self.charge > @as(i32, @intCast(sum))) {
-                return throw(usize, "THE SYSTEM CHARGE CAN'T BE LARGER THAN THE NUMBER OF ELECTRONS", .{});
-            }
+            if (self.charge > @as(i32, @intCast(sum))) return error.InvalidCharge;
 
             return @intCast(@as(i32, @intCast(sum)) - self.charge);
         }
@@ -194,7 +188,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Sets the position of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
         pub fn setPositionRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) return throw(void, "POSITION MEAN AND STDEV MUST HAVE THE SAME DIMENSION AS THE SYSTEM", .{});
+            if (mean.len != self.ndim or stdev.len != self.ndim) return error.InvalidDimension;
 
             for (0..self.ndim) |i| {
                 self.position.ptr(i).* = mean[i] + stdev[i] * random.floatNorm(T);
@@ -203,7 +197,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Sets the momentum of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
         pub fn setMomentumRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) return throw(void, "MOMENTUM MEAN AND STDEV MUST HAVE THE SAME DIMENSION AS THE SYSTEM", .{});
+            if (mean.len != self.ndim or stdev.len != self.ndim) return error.InvalidDimension;
 
             for (0..self.ndim) |i| {
                 self.velocity.ptr(i).* = (mean[i] + stdev[i] * random.floatNorm(T)) / self.masses.at(i);
@@ -212,7 +206,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Write the coordinates of the system to an .xyz file. The coordinates are converted from atomic units to Angstroms before writing.
         pub fn writeCoordinatesToXYZ(self: @This(), filename: []const u8, dir: std.fs.Dir) !void {
-            if (self.atoms == null) return throw(void, "CAN'T WRITE COORDINATES TO FILE IF ATOMS VECTOR IS NULL", .{});
+            if (self.atoms == null) return error.InvalidSystem;
 
             const file = try dir.createFile(filename, .{}); defer file.close();
 

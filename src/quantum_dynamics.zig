@@ -9,7 +9,6 @@ const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const error_handling = @import("error_handling.zig");
 const fourier_transform = @import("fourier_transform.zig");
 const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
@@ -43,7 +42,6 @@ const positionGridAlloc = grid_generator.positionGridAlloc;
 const print = device_write.print;
 const printJson = device_write.printJson;
 const prod = array_functions.prod;
-const throw = error_handling.throw;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
@@ -191,23 +189,19 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.potential == .ab_initio) return throw(Output(T), "AB INITIO POTENTIAL IS NOT SUPPORTED IN QUANTUM DYNAMICS SIMULATIONS", .{});
+    if (opt.potential == .ab_initio) return error.AbInitioPotentialNotSupportedInQuantumDynamics;
 
     const nstate = opt.potential.nstate();
     const ndim = try opt.potential.ndim();
 
-    if (nstate != 2 and (opt.write.bloch_vector != null or opt.write.spatial_bloch_vector != null)) return throw(Output(T), "BLOCH VECTOR OUTPUT IS ONLY SUPPORTED FOR TWO-STATE SYSTEMS", .{});
+    if (nstate != 2 and (opt.write.bloch_vector != null or opt.write.spatial_bloch_vector != null)) return error.BlochVectorOutputOnlySupportedForTwoStateSystems;
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
-    if (opt.initial_conditions.spread) |ics| if (ics.position) |qstruct| if (qstruct.end.len != ndim or qstruct.step.len != ndim) {
-        return throw(Output(T), "INITIAL CONDITIONS POSITION SPREAD MUST HAVE THE SAME LENGTH AS THE NUMBER OF DIMENSIONS", .{});
-    };
+    if (opt.initial_conditions.spread) |ics| if (ics.position) |qstruct| if (qstruct.end.len != ndim or qstruct.step.len != ndim) return error.InvalidInitialConditionsSpreadForPosition;
 
-    if (opt.initial_conditions.spread) |ics| if (ics.momentum) |pstruct| if (pstruct.end.len != ndim or pstruct.step.len != ndim) {
-        return throw(Output(T), "INITIAL CONDITIONS MOMENTUM SPREAD MUST HAVE THE SAME LENGTH AS THE NUMBER OF DIMENSIONS", .{});
-    };
+    if (opt.initial_conditions.spread) |ics| if (ics.momentum) |pstruct| if (pstruct.end.len != ndim or pstruct.step.len != ndim) return error.InvalidInitialConditionsSpreadForMomentum;
 
     var output: Output(T) = undefined;
 
@@ -225,9 +219,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (ics_pos) |qstruct| for (0..qstruct.step.len) |i| {
 
-        if (qstruct.step[i] == 0) return throw(Output(T), "INITIAL CONDITIONS POSITION SPREAD STEP CANNOT BE ZERO", .{});
+        if (qstruct.step[i] == 0) return error.InvalidInitialConditionsSpreadForPosition;
 
-        if (qstruct.end[i] < q0[i] and qstruct.step[i] > 0) return throw(Output(T), "INITIAL CONDITIONS POSITION SPREAD END MUST BE GREATER THAN START FOR POSITIVE STEP", .{});
+        if (qstruct.end[i] < q0[i] and qstruct.step[i] > 0) return error.InvalidInitialConditionsSpreadForPosition;
 
         qsteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((q1[i] - q0[i]) / qstruct.step[i]))) + 1;
 
@@ -236,9 +230,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (ics_mom) |pstruct| for (0..pstruct.step.len) |i| {
 
-        if (pstruct.step[i] == 0) return throw(Output(T), "INITIAL CONDITIONS MOMENTUM SPREAD STEP CANNOT BE ZERO", .{});
+        if (pstruct.step[i] == 0) return error.InvalidInitialConditionsSpreadForMomentum;
 
-        if (pstruct.end[i] < p0[i] and pstruct.step[i] > 0) return throw(Output(T), "INITIAL CONDITIONS MOMENTUM SPREAD END MUST BE GREATER THAN START FOR POSITIVE STEP", .{});
+        if (pstruct.end[i] < p0[i] and pstruct.step[i] > 0) return error.InvalidInitialConditionsSpreadForMomentum;
 
         psteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((p1[i] - p0[i]) / pstruct.step[i]))) + 1;
 
@@ -361,7 +355,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
             const potential_energy = try wavefunction.potentialEnergy(opt.potential, time);
 
             if (j == 0) for (0..momentum.len) |k| if (@abs(momentum.at(k) - opt.initial_conditions.momentum[k]) > QD_MOMENTUM_TOLERANCE) {
-                return throw(Output(T), "YOUR GRID IS NOT SUFFICIENTLY DENSE TO ACCURATELY REPRESENT THE MOMENTUM, CONSIDER INCREASING THE NUMBER OF GRID POINTS OR TIGHTENING THE GRID LIMITS", .{});
+                return error.InitialMomentumDoesNotMatchMeanMomentum;
             };
 
             if (i == n_dynamics - 1) {

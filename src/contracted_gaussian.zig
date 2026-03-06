@@ -4,14 +4,12 @@ const std = @import("std");
 
 const array_functions = @import("array_functions.zig");
 const classical_particle = @import("classical_particle.zig");
-const error_handling = @import("error_handling.zig");
 const primitive_gaussian = @import("primitive_gaussian.zig");
 
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const PrimitiveGaussian = primitive_gaussian.PrimitiveGaussian;
 
 const sum = array_functions.sum;
-const throw = error_handling.throw;
 
 /// Contracted Gaussian type.
 pub fn ContractedGaussian(comptime T: type) type {
@@ -23,9 +21,7 @@ pub fn ContractedGaussian(comptime T: type) type {
 
         /// Initialize a contracted Gaussian.
         pub fn init(center: [3]T, angular: [3]T, coef: []const T, alpha: []const T, allocator: std.mem.Allocator) !ContractedGaussian(T) {
-            if (coef.len != alpha.len) {
-                return throw(ContractedGaussian(T), "THE LENGTH OF THE COEFFICIENTS AND EXPONENTS MUST BE THE SAME", .{});
-            }
+            if (coef.len != alpha.len) return error.InvalidDimension;
 
             const cg = ContractedGaussian(T) {
                 .center = center,

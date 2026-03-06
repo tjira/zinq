@@ -29,7 +29,6 @@ pub const electronic_potential = @import("electronic_potential.zig");
 pub const embedded_files = @import("embedded_files.zig");
 pub const energy_derivative = @import("energy_derivative.zig");
 pub const error_context = @import("error_context.zig");
-pub const error_handling = @import("error_handling.zig");
 pub const expression_evaluator = @import("expression_evaluator.zig");
 pub const fewest_switches = @import("fewest_switches.zig");
 pub const file_potential = @import("file_potential.zig");
@@ -132,7 +131,12 @@ fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value, er
             found = true; break;
         };
 
-        if (!found) return error_handling.throwSpecific(void, "UNRECOGNIZED FIELD '{s}' IN INPUT", .{provided}, err);
+        if (!found) {
+
+            std.log.err("UNRECOGNIZED '{s}' FIELD IN INPUT", .{provided});
+
+            return error.InvalidInput;
+        }
     }
 }
 
@@ -142,7 +146,7 @@ fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allo
 
         try checkForUnrecognizedFields(Module.Options(T), options, err);
 
-        return error_handling.throwSpecific(void, "UNHANDLED ERROR WHILE PARSING INPUT", .{}, err);
+        return err;
     };
 
     var output = try Module.run(T, parsed.value, true, allocator); defer output.deinit(allocator);
@@ -160,7 +164,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
     var diagnostics = std.json.Diagnostics{}; scanner.enableDiagnostics(&diagnostics);
 
     const input_json = std.json.parseFromTokenSource(std.json.Value, allocator, &scanner, .{}) catch |err| {
-        return error_handling.throwSpecific(void, "ERROR IN INPUT ON LINE {d}", .{diagnostics.line_number}, err);
+        std.log.err("ERROR ON INPUT LINE {d}\n", .{diagnostics.line_number}); return err;
     };
 
     for (input_json.value.object.get("zinq").?.array.items, 1..) |object, i| {
@@ -231,15 +235,6 @@ pub fn main() !void {
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
-
-    // const n = 32;
-    //
-    // const nodes = try hermite_quadrature_nodes.getNodes(f64, n);
-    // const weights = try hermite_quadrature_nodes.getWeights(f64, n);
-    //
-    // for (0..n) |i| {
-    //     try device_write.print("NODE {d:2}: {d:20.14}, WEIGHT {d:2}: {d:20.14}\n", .{i, nodes[i], i, weights[i]});
-    // }
 }
 
 test {

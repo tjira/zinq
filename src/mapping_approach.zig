@@ -4,7 +4,6 @@ const std = @import("std");
 
 const complex_runge_kutta = @import("complex_runge_kutta.zig");
 const complex_vector = @import("complex_vector.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const real_matrix = @import("real_matrix.zig");
@@ -36,7 +35,7 @@ pub fn MappingApproach(comptime T: type) type {
 
         /// Get the jump probabilities for the current state.
         pub fn getJumpProbabilities(_: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) !void {
-            if (jump_probabilities.len != 2) return error_handling.throw(void, "MAPPING APPROACH ONLY IMPLEMENTED FOR 2 STATES", .{});
+            if (jump_probabilities.len != 2) return error.MashImplementationRequiresTwoStates;
 
             jump_probabilities.zero(); var omega_data: [9]T = undefined; var new_bloch_data: [3]T = undefined;
 

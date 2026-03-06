@@ -3,7 +3,6 @@
 const std = @import("std");
 
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
-const errro_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const matrix_multiplication = @import("matrix_multiplication.zig");
 const real_matrix = @import("real_matrix.zig");
@@ -15,20 +14,14 @@ const RealVector = real_vector.RealVector;
 const eigensystemHermitianAlloc = eigenproblem_solver.eigensystemHermitianAlloc;
 const mm = matrix_multiplication.mm;
 const mmAlloc = matrix_multiplication.mmAlloc;
-const throw = errro_handling.throw;
 
-const SINGULARITY_TOLERANCE = global_variables.SINGULARITY_TOLERANCE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// Solve the linear system Ax = b using the eigenvalue decomposition of A. The matrix A must be symmetric.
-pub fn linearSolveSymmetric(comptime T: type, x: *RealVector(T), A: RealMatrix(T), AJ: RealMatrix(T), AC: RealMatrix(T), b: RealVector(T), y: *RealVector(T)) !void {
-    if (!A.isSymmetric(0)) return throw(void, "THE MATRIX YOU ARE PASSING TO THE SYMMETRIC LINEAR SYSTEM SOLVER IS NOT SYMMETRIC", .{});
-    if (!AJ.isSquare() or !AC.isSquare()) return throw(void, "EIGENVALUE MATRIX OR EIGENVECTOR MATRIX IS NOT SQUARE AND THE LINEAR SYSTEM CAN'T BE SOLVED", .{});
-    if (AJ.rows != AC.rows or AJ.cols != AC.cols) return throw(void, "EIGENVALUE MATRIX AND EIGENVECTOR MATRIX MUST HAVE THE SAME DIMENSIONS", .{});
-    if (AJ.rows != b.len) return throw(void, "THE LENGTH OF THE RIGHT-HAND SIDE VECTOR MUST BE EQUAL TO THE DIMENSIONS OF THE EIGENVALUE MATRIX", .{});
-    if (x.len != b.len) return throw(void, "THE LENGTH OF THE SOLUTION VECTOR MUST BE EQUAL TO THE LENGTH OF THE RIGHT-HAND SIDE VECTOR", .{});
-    if (y.len != b.len) return throw(void, "THE LENGTH OF THE TEMPORARY VECTOR MUST BE EQUAL TO THE LENGTH OF THE RIGHT-HAND SIDE VECTOR", .{});
-    for (0..AJ.rows) |i| if (@abs(AJ.at(i, i)) < SINGULARITY_TOLERANCE) return throw(void, "THE MATRIX IS SINGULAR AND THE LINEAR SYSTEM CAN'T BE SOLVED", .{});
+pub fn linearSolveSymmetric(comptime T: type, x: *RealVector(T), AJ: RealMatrix(T), AC: RealMatrix(T), b: RealVector(T), y: *RealVector(T)) !void {
+    const tolerance = @as(T, @floatFromInt(AJ.rows)) * std.math.floatEps(T) * AJ.maxAbsDiagonal();
+
+    for (0..AJ.rows) |i| if (@abs(AJ.at(i, i)) <= tolerance) return error.SingularMatrix;
 
     var x_matrix = x.asMatrix();
     var y_matrix = y.asMatrix();
@@ -47,7 +40,7 @@ pub fn linearSolveSymmetricAlloc(comptime T: type, A: RealMatrix(T), b: RealVect
     var x = try RealVector(T).init(b.len, allocator);
     var y = try RealVector(T).init(b.len, allocator);
 
-    try linearSolveSymmetric(T, &x, A, AJC.J, AJC.C, b, &y);
+    try linearSolveSymmetric(T, &x, AJC.J, AJC.C, b, &y);
 
     y.deinit(allocator);
 

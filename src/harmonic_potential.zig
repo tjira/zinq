@@ -2,14 +2,11 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
-
-const throw = error_handling.throw;
 
 /// Struct holding parameters for the multidimensional harmonic potential.
 pub fn HarmonicPotential(comptime T: type) type {
@@ -23,7 +20,7 @@ pub fn HarmonicPotential(comptime T: type) type {
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
-            if (i >= 1 or j >= 1) return throw(T, "INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT", .{});
+            if (i >= 1 or j >= 1) return error.InvalidIndex;
 
             return self.evaluateDiabaticElementComptime(0, 0, position, time);
         }

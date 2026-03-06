@@ -8,7 +8,6 @@ const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const energy_derivative = @import("energy_derivative.zig");
-const errror_handling = @import("error_handling.zig");
 const hartree_fock = @import("hartree_fock.zig");
 const frequency_analysis = @import("frequency_analysis.zig");
 const global_variables = @import("global_variables.zig");
@@ -52,7 +51,6 @@ const print = device_write.print;
 const printClassicalParticleAsMolecule = device_write.printClassicalParticleAsMolecule;
 const printJson = device_write.printJson;
 const printRealMatrix = device_write.printRealMatrix;
-const throw = errror_handling.throw;
 const twoAO2MO = integral_transform.twoAO2MO;
 const twoAO2MS = integral_transform.twoAO2MS;
 
@@ -111,8 +109,8 @@ pub fn Output(comptime T: type) type {
 
 /// Run the Moller-Plesset calculation with the given options.
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (opt.gradient != null and opt.gradient.? == .analytic) return throw(Output(T), "ANALYTIC GRADIENT NOT IMPLEMENTED", .{});
-    if (opt.hessian != null and opt.hessian.? == .analytic) return throw(Output(T), "ANALYTIC HESSIAN NOT IMPLEMENTED", .{});
+    if (opt.gradient != null and opt.gradient.? == .analytic) return error.AnalyticGradientNotImplemented;
+    if (opt.hessian != null and opt.hessian.? == .analytic) return error.AnalyticHessianNotImplemented;
 
     var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator); defer system.deinit(allocator);
 
@@ -155,11 +153,11 @@ pub fn mp(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
 
     var energy: T = 0;
 
-    if (opt.order < 2) return throw(Output(T), "MOLLER-PLESSET ORDER MUST BE >= 2", .{});
+    if (opt.order < 2) return error.InvalidMollerPlessetOrder;
 
     if (opt.order >= 2) energy += mp2(T, F_MS, J_MS, nocc);
 
-    if (opt.order > 2) return throw(Output(T), "MOLLER-PLESSET OF ORDER HIGHER THAN 2 NOT IMPLEMENTED", .{});
+    if (opt.order > 2) return error.MollerPlessetOrderNotImplemented;
 
     if (enable_printing) try print("\nMP{d} ENERGY: {d:.14}\n", .{opt.order, hf_output.energy + energy});
 

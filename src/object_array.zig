@@ -5,7 +5,6 @@ const std = @import("std");
 const complex_vector = @import("complex_vector.zig");
 const complex_matrix = @import("complex_matrix.zig");
 const device_write = @import("device_write.zig");
-const error_handling = @import("error_handling.zig");
 const ring_buffer = @import("ring_buffer.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
@@ -15,8 +14,6 @@ const ComplexMatrix = complex_matrix.ComplexMatrix;
 const RingBuffer = ring_buffer.RingBuffer;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
-
-const throw = error_handling.throw;
 
 /// Array for storing object in an array.
 pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
@@ -34,7 +31,7 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
                 RingBuffer(T) => |object| element.* = try object.init(params.max_len, allocator),
                 RealMatrix(T) => |object| element.* = try object.init(params.rows, params.cols, allocator),
                 RealVector(T) => |object| element.* = try object.init(params.rows, allocator),
-                else => return throw(@This(), "UNSUPPORTED OBJECT TYPE FOR OBJECTARRAY", .{}),
+                else => return error.UnsupportedObjectTypeForObjectArray,
             };
 
             return @This(){
@@ -54,7 +51,7 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
                 RingBuffer(T) => |object| element.* = try object.initZero(params.max_len, allocator),
                 RealMatrix(T) => |object| element.* = try object.initZero(params.rows, params.cols, allocator),
                 RealVector(T) => |object| element.* = try object.initZero(params.rows, allocator),
-                else => return throw(@This(), "UNSUPPORTED OBJECT TYPE FOR OBJECTARRAY", .{}),
+                else => return error.UnsupportedObjectTypeForObjectArray,
             };
 
             return @This(){

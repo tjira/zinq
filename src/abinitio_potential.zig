@@ -6,7 +6,6 @@ const bias_potential = @import("bias_potential.zig");
 const classical_particle = @import("classical_particle.zig");
 const device_read = @import("device_read.zig");
 const device_write = @import("device_write.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const prcess = @import("process.zig");
 const real_matrix = @import("real_matrix.zig");
@@ -19,7 +18,6 @@ const RealVector = real_vector.RealVector;
 
 const executeCommand = prcess.executeCommand;
 const readRealMatrix = device_read.readRealMatrix;
-const throw = error_handling.throw;
 
 /// Struct holding parameters for the multidimensional ab initio potential.
 pub fn AbInitioPotential(comptime T: type) type {

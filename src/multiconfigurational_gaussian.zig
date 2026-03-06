@@ -9,7 +9,6 @@ const complex_vector = @import("complex_vector.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const error_handling = @import("error_handling.zig");
 const global_variables = @import("global_variables.zig");
 const grid_generator = @import("grid_generator.zig");
 const harmonic_potential = @import("harmonic_potential.zig");
@@ -48,7 +47,6 @@ const positionAtRow = grid_generator.positionAtRow;
 const powi = math_functions.powi;
 const print = device_write.print;
 const printJson = device_write.printJson;
-const throw = error_handling.throw;
 
 const MAX_HERMITE_QUADRATURE_POINTS = global_variables.MAX_HERMITE_QUADRATURE_POINTS;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
@@ -190,8 +188,7 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.integration_nodes < 1 or opt.integration_nodes > MAX_HERMITE_QUADRATURE_POINTS) return throw(Output(T), "INTEGRATION NODES MUST BE BETWEEN 1 AND {d}", .{MAX_HERMITE_QUADRATURE_POINTS});
-    if (opt.potential == .ab_initio) return throw(Output(T), "AB INITIO POTENTIAL IS NOT SUPPORTED FOR VMCG DYNAMICS", .{});
+    if (opt.potential == .ab_initio) return error.InvalidPotential;
 
     const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
@@ -365,7 +362,7 @@ pub fn assignWavefunction(comptime T: type, wfn_container: *RealMatrix(T), gauss
 
 /// Initialize the container for the wavefunction dynamics.
 pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(T).Wavefunction, nstate: usize, iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
-    if (grid == null) return throw(RealMatrix(T), "WAVEFUNCTION GRID MUST BE PROVIDED WHEN WRITING THE WAVEFUNCTION DYNAMICS", .{});
+    if (grid == null) return error.InvalidWavefunctionGrid;
 
     const grid_points = powi(grid.?.points, grid.?.limits.len);
 

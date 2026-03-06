@@ -2,14 +2,11 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const real_vector = @import("real_vector.zig");
 const strided_real_vector = @import("strided_real_vector.zig");
 
 const RealVector = real_vector.RealVector;
 const StridedRealVector = strided_real_vector.StridedRealVector;
-
-const throw = error_handling.throw;
 
 /// Real matrix class. The matrix is stored in a flat array in row-major order.
 pub fn RealMatrix(comptime T: type) type {
@@ -41,9 +38,7 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Add another matrix to this matrix.
         pub fn add(self: *@This(), other: @This()) !void {
-            if (self.rows != other.rows or self.cols != other.cols) {
-                return throw(void, "CAN'T ADD A {d}x{d} MATRIX TO A {d}x{d} MATRIX", .{other.rows, other.cols, self.rows, self.cols});
-            }
+            if (self.rows != other.rows or self.cols != other.cols) return error.DimensionMismatch;
 
             for (self.data, 0..) |*element, index| {
                 element.* += other.data[index];
@@ -84,9 +79,7 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Copy the contents of this matrix to another matrix.
         pub fn copyTo(self: @This(), other: *@This()) !void {
-            if (self.rows != other.rows or self.cols != other.cols) {
-                return throw(void, "CAN'T COPY A {d}x{d} MATRIX TO A {d}x{d} MATRIX", .{self.rows, self.cols, other.rows, other.cols});
-            }
+            if (self.rows != other.rows or self.cols != other.cols) return error.DimensionMismatch;
 
             for (self.data, 0..) |element, index| {
                 other.data[index] = element;
@@ -122,7 +115,7 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Expand the matrix and keep the index structure.
         pub fn expand(self: *@This(), m: usize, n: usize, allocator: std.mem.Allocator) !void {
-            if (m < self.rows or n < self.cols) return throw(void, "CAN'T EXPAND A {d}x{d} MATRIX INTO A {d}x{d} MATRIX", .{self.rows, self.cols, m, n});
+            if (m < self.rows or n < self.cols) return error.DimensionMismatch;
 
             self.data = try allocator.realloc(self.data, m * n);
 
@@ -148,6 +141,43 @@ pub fn RealMatrix(comptime T: type) type {
         /// Fill the matrix with a given value.
         pub fn fill(self: *@This(), value: T) void {
             for (self.data) |*element| element.* = value;
+        }
+
+        /// Trace of a matrix.
+        pub fn trace(self: @This()) void {
+            var result: T = 0;
+
+            for (0..@min(self.rows, self.cols)) |i| result += self.at(i, i);
+
+            return result;
+        }
+
+        /// Maximum absolute value of the diagonal elements of the matrix.
+        pub fn maxAbsDiagonal(self: @This()) T {
+            var max: T = 0;
+
+            for (0..@min(self.rows, self.cols)) |i| {
+
+                const abs_value = @abs(self.at(i, i));
+
+                if (abs_value > max) max = abs_value;
+            }
+
+            return max;
+        }
+
+        /// Minimum absolute value of the diagonal elements of the matrix.
+        pub fn minAbsDiagonal(self: @This()) T {
+            var min: T = std.math.inf(T);
+
+            for (0..@min(self.rows, self.cols)) |i| {
+
+                const abs_value = @abs(self.at(i, i));
+
+                if (abs_value < min) min = abs_value;
+            }
+            
+            return min;
         }
 
         /// Calculate the Frobenius norm of the matrix.
@@ -209,7 +239,7 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Reshape the matrix.
         pub fn reshape(self: *@This(), m: usize, n: usize) !void {
-            if (m * n != self.rows * self.cols) return throw(void, "CAN'T RESHAPE A {d}x{d} MATRIX INTO A {d}x{d} MATRIX", .{self.rows, self.cols, m, n});
+            if (m * n != self.rows * self.cols) return error.DimensionMismatch;
 
             self.rows = m;
             self.cols = n;
@@ -225,14 +255,14 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Shrink the matrix to a provided number of rows.
         pub fn shrinkRows(self: *@This(), m: usize, allocator: std.mem.Allocator) !void {
-            if (m > self.rows) return throw(void, "CAN'T SHRINK A MATRIX OF {d} ROWS TO A MATRIX OF {d} ROWS", .{self.rows, m});
+            if (m > self.rows) return error.DimensionMismatch;
 
             self.data = try allocator.realloc(self.data, m * self.cols); self.rows = m;
         }
 
         /// Shrink the matrix to a provided number of columns.
         pub fn shrinkCols(self: *@This(), n: usize, allocator: std.mem.Allocator) !void {
-            if (n > self.cols) return throw(void, "CAN'T SHRINK A MATRIX OF {d} COLUMNS TO A MATRIX OF {d} COLUMNS", .{self.cols, n});
+            if (n > self.cols) return error.DimensionMismatch;
 
             for (0..self.rows) |i| {
 
@@ -246,9 +276,7 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Symmetrize the matrix: A = 0.5 * (A + A^T)
         pub fn symmetrize(self: *@This()) !void {
-            if (!self.isSquare()) {
-                return throw(void, "CAN'T SYMMETRIZE A NON-SQUARE {d}x{d} MATRIX", .{self.rows, self.cols});
-            }
+            if (!self.isSquare()) return error.MatrixNotSquare;
 
             for (0..self.rows) |i| for (i + 1..self.cols) |j| {
 

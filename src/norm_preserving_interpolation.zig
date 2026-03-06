@@ -2,13 +2,10 @@
 
 const std = @import("std");
 
-const error_handling = @import("error_handling.zig");
 const real_matrix = @import("real_matrix.zig");
 
 const Complex = std.math.Complex;
 const RealMatrix = real_matrix.RealMatrix;
-
-const throw = error_handling.throw;
 
 /// Parameters for the Norm Preserving Interpolation method.
 pub fn Parameters(comptime T: type) type {
@@ -24,7 +21,7 @@ pub fn NormPreservingInterpolation(comptime T: type) type {
 
         /// Evaluate the time derivative coupling.
         pub fn evaluate(_: @This(), derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
-            if (derivative_coupling.rows != 2) return throw(void, "NORM PRESERVING INTERPOLATION ONLY IMPLEMENTED FOR 2 STATES", .{});
+            if (derivative_coupling.rows != 2) return error.InvalidMatrixSizeForNormPreservingInterpolation;
 
             derivative_coupling.zero();
 

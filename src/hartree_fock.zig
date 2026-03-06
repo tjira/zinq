@@ -8,7 +8,6 @@ const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const energy_derivative = @import("energy_derivative.zig");
-const errror_handling = @import("error_handling.zig");
 const frequency_analysis = @import("frequency_analysis.zig");
 const global_variables = @import("global_variables.zig");
 const integral_transform = @import("integral_transform.zig");
@@ -49,11 +48,9 @@ const print = device_write.print;
 const printClassicalParticleAsMolecule = device_write.printClassicalParticleAsMolecule;
 const printJson = device_write.printJson;
 const printRealMatrix = device_write.printRealMatrix;
-const throw = errror_handling.throw;
 const twoAO2AS = integral_transform.twoAO2AS;
 
 const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
-const SINGULARITY_TOLERANCE = global_variables.SINGULARITY_TOLERANCE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// Hartree-Fock target options.
@@ -127,8 +124,8 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
     
-    if (opt.gradient != null and opt.gradient.? == .analytic) return throw(Output(T), "ANALYTIC GRADIENT NOT IMPLEMENTED", .{});
-    if (opt.hessian != null and opt.hessian.? == .analytic) return throw(Output(T), "ANALYTIC HESSIAN NOT IMPLEMENTED", .{});
+    if (opt.gradient != null and opt.gradient.? == .analytic) return error.GradientNotImplemented;
+    if (opt.hessian != null and opt.hessian.? == .analytic) return error.HessianNotImplemented;
 
     var system = try classical_particle.read(T, opt.system, opt.charge, 0, allocator); defer system.deinit(allocator);
 
@@ -203,9 +200,9 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
 
     const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
-    for (0..b.len) |i| if (@abs(AJC.J.at(i, i)) < SINGULARITY_TOLERANCE) return;
+    linearSolveSymmetric(T, &c, AJC.J, AJC.C, b, &temporary) catch return;
 
-    try linearSolveSymmetric(T, &c, A, AJC.J, AJC.C, b, &temporary); F.zero();
+    F.zero();
 
     for (0..size) |i| {
 
@@ -337,7 +334,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     while (@abs(energy - energy_prev) > opt.threshold) : (iter += 1) {
 
-        if (iter >= opt.maxiter) return throw(Output(T), "HARTREE-FOCK DID NOT CONVERGE IN {d} ITERATIONS", .{opt.maxiter});
+        if (iter >= opt.maxiter) return error.ScfNotConverged;
 
         timer.reset();
 
