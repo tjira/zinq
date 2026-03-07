@@ -13,12 +13,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Compile the Project
-        run: make cross
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
 
-      - name: Rename and Move Binaries
+      - name: Compile Project
+        run: zig build --release=fast cross
+
+      - name: Move Binaries
         run: |
           mkdir -p bin && cd zig-out && for FOLDER in *64*linux*;  do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
           mkdir -p bin && cd zig-out && for FOLDER in *64*macos;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
@@ -39,7 +44,7 @@ jobs:
     needs: [build]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download Artifacts
         uses: actions/download-artifact@v4

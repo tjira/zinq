@@ -13,10 +13,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Run Tests
-        run: make test
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Run Tests in ReleaseFast Mode
+        run: zig build --release=fast test
 
       - name: Setup Tmate Session
         if: failure()
@@ -26,10 +31,15 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Run Tests
-        run: make test
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Run Tests in ReleaseFast Mode
+        run: zig build --release=fast test
 
       - name: Setup Tmate Session
         if: failure()
@@ -39,10 +49,15 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - name: Run Tests
-        run: make test
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Run Tests in ReleaseFast Mode
+        run: zig build --release=fast test
 
       - name: Setup Tmate Session
         if: failure()

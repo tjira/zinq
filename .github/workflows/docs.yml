@@ -27,14 +27,14 @@ jobs:
         with:
           ruby-version: 3.4
 
-      - name: Compile the Code Documentation
+      - name: Compile Code Documentation
         run: zig build docs
 
-      - name: Install the Jekyll Dependencies
+      - name: Install Jekyll Dependencies
         working-directory: docs
         run: bundle install
 
-      - name: Build the Jekyll Site
+      - name: Build Jekyll Site
         working-directory: docs
         run: bundle exec jekyll build
 
