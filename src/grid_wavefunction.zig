@@ -39,17 +39,18 @@ pub fn GridWavefunction(comptime T: type) type {
         pub const Workspace = struct {
             adiabatic_eigenvectors: RealMatrix(T),
             adiabatic_potential: RealMatrix(T),
-            density_before: ComplexMatrix(T),
+            column: ComplexVector(T),
             density_after: ComplexMatrix(T),
             density_at_row: ComplexMatrix(T),
-            wavefunction_row: ComplexMatrix(T),
-            previous_eigenvectors: RealMatrix(T),
-            column: ComplexVector(T),
+            density_before: ComplexMatrix(T),
             diabatic_potential: RealMatrix(T),
             matrix: ComplexMatrix(T),
             momentum_at_row: RealVector(T),
             position_at_row: RealVector(T),
-            propagator: ComplexMatrix(T)
+            previous_eigenvectors: RealMatrix(T),
+            propagator: ComplexMatrix(T),
+            vector: ComplexVector(T),
+            wavefunction_row: ComplexMatrix(T)
         };
 
         data: ComplexMatrix(T),
@@ -73,19 +74,20 @@ pub fn GridWavefunction(comptime T: type) type {
             for (0..ndim) |i| shape[i] = npoint;
 
             const workspace = Workspace{
+                .adiabatic_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator),
+                .adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator),
+                .column = try ComplexVector(T).init(std.math.pow(usize, npoint, ndim), allocator),
+                .density_after = try ComplexMatrix(T).init(nstate, nstate, allocator),
                 .density_at_row = try ComplexMatrix(T).init(nstate, nstate, allocator),
                 .density_before = try ComplexMatrix(T).init(nstate, nstate, allocator),
-                .density_after = try ComplexMatrix(T).init(nstate, nstate, allocator),
-                .wavefunction_row = try ComplexMatrix(T).init(nstate, 1, allocator),
                 .diabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator),
-                .adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator),
-                .adiabatic_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator),
-                .position_at_row = try RealVector(T).init(ndim, allocator),
-                .momentum_at_row = try RealVector(T).init(ndim, allocator),
                 .matrix = try ComplexMatrix(T).init(nstate, nstate, allocator),
+                .momentum_at_row = try RealVector(T).init(ndim, allocator),
+                .position_at_row = try RealVector(T).init(ndim, allocator),
                 .previous_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator),
                 .propagator = try ComplexMatrix(T).init(nstate, nstate, allocator),
-                .column = try ComplexVector(T).init(std.math.pow(usize, npoint, ndim), allocator)
+                .vector = try ComplexVector(T).init(nstate, allocator),
+                .wavefunction_row = try ComplexMatrix(T).init(nstate, 1, allocator)
             };
 
             return @This(){
@@ -104,21 +106,22 @@ pub fn GridWavefunction(comptime T: type) type {
         /// Free the memory allocated for the wavefunction.
         pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
             allocator.free(self.shape);
-            self.population_loss.deinit(allocator);
-            self.workspace.density_at_row.deinit(allocator);
-            self.workspace.density_before.deinit(allocator);
-            self.workspace.density_after.deinit(allocator);
-            self.workspace.wavefunction_row.deinit(allocator);
             self.data.deinit(allocator);
+            self.population_loss.deinit(allocator);
             self.workspace.adiabatic_eigenvectors.deinit(allocator);
             self.workspace.adiabatic_potential.deinit(allocator);
             self.workspace.column.deinit(allocator);
+            self.workspace.density_after.deinit(allocator);
+            self.workspace.density_at_row.deinit(allocator);
+            self.workspace.density_before.deinit(allocator);
             self.workspace.diabatic_potential.deinit(allocator);
             self.workspace.matrix.deinit(allocator);
             self.workspace.momentum_at_row.deinit(allocator);
             self.workspace.position_at_row.deinit(allocator);
             self.workspace.previous_eigenvectors.deinit(allocator);
             self.workspace.propagator.deinit(allocator);
+            self.workspace.vector.deinit(allocator);
+            self.workspace.wavefunction_row.deinit(allocator);
         }
 
         /// Clone the wavefunction.
@@ -427,13 +430,15 @@ pub fn GridWavefunction(comptime T: type) type {
 
                 try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time);
 
+                var temp = self.workspace.vector.asMatrix();
+
                 if (to_adiabatic) {
-                    try mm(T, &self.workspace.matrix, self.workspace.adiabatic_eigenvectors, true, self.data.row(i).asMatrix(), false);
+                    try mm(T, &temp, self.workspace.adiabatic_eigenvectors, true, self.data.row(i).asMatrix(), false);
                 } else {
-                    try mm(T, &self.workspace.matrix, self.workspace.adiabatic_eigenvectors, false, self.data.row(i).asMatrix(), false);
+                    try mm(T, &temp, self.workspace.adiabatic_eigenvectors, false, self.data.row(i).asMatrix(), false);
                 }
 
-                for (0..self.nstate) |j| self.data.ptr(i, j).* = self.workspace.matrix.at(j, 0);
+                for (0..self.nstate) |j| self.data.ptr(i, j).* = temp.at(j, 0);
             }
         }
 

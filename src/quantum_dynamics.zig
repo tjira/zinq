@@ -67,6 +67,10 @@ pub fn Options(comptime T: type) type {
                 position: ?struct {
                     end: []const T,
                     step: []const T
+                } = null,
+                gamma: ?struct {
+                    end: []const T,
+                    step: []const T
                 } = null
             };
 
@@ -207,18 +211,19 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     const ics_pos = if (opt.initial_conditions.spread) |ics| ics.position else null;
     const ics_mom = if (opt.initial_conditions.spread) |ics| ics.momentum else null;
+    const ics_gam = if (opt.initial_conditions.spread) |ics| ics.gamma    else null;
 
     const q0 = opt.initial_conditions.position; var q1: []const T = undefined; if (q0.len != ndim) return error.InvalidInitialPosition;
     const p0 = opt.initial_conditions.momentum; var p1: []const T = undefined; if (p0.len != ndim) return error.InvalidInitialMomentum;
     const g0 = opt.initial_conditions.gamma;    var g1: []const T = undefined; if (g0.len != ndim) return error.InvalidInitialGamma;
 
-    g1 = g1;
-
     if (ics_pos) |qstruct| q1 = qstruct.end else q1 = q0;
     if (ics_mom) |pstruct| p1 = pstruct.end else p1 = p0;
+    if (ics_gam) |gstruct| g1 = gstruct.end else g1 = g0;
 
     var qsteps_i = try allocator.alloc(usize, ndim); defer allocator.free(qsteps_i); var qsteps: usize = 1; @memset(qsteps_i, 1);
     var psteps_i = try allocator.alloc(usize, ndim); defer allocator.free(psteps_i); var psteps: usize = 1; @memset(psteps_i, 1);
+    var gsteps_i = try allocator.alloc(usize, ndim); defer allocator.free(gsteps_i); var gsteps: usize = 1; @memset(gsteps_i, 1);
 
     if (ics_pos) |qstruct| for (0..qstruct.step.len) |i| {
 
@@ -242,32 +247,46 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         psteps *= psteps_i[i];
     };
 
+    if (ics_gam) |gstruct| for (0..gstruct.step.len) |i| {
+
+        if (gstruct.step[i] == 0) return error.InvalidInitialConditionsSpreadForGamma;
+
+        if (gstruct.end[i] < g0[i] and gstruct.step[i] > 0) return error.InvalidInitialConditionsSpreadForGamma;
+
+        gsteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((g1[i] - g0[i]) / gstruct.step[i]))) + 1;
+
+        gsteps *= gsteps_i[i];
+    };
+
     var q = try allocator.alloc(T, ndim); defer allocator.free(q);
     var p = try allocator.alloc(T, ndim); defer allocator.free(p);
+    var g = try allocator.alloc(T, ndim); defer allocator.free(g);
 
-    var transition_probability = try RealMatrix(T).initZero(qsteps * psteps, 2 * ndim + nstate, allocator); defer transition_probability.deinit(allocator);
+    var transition_probability = try RealMatrix(T).initZero(qsteps * psteps, 3 * ndim + nstate, allocator); defer transition_probability.deinit(allocator);
 
-    for (0..qsteps) |i| for (0..psteps) |j| {
+    for (0..qsteps) |i| for (0..psteps) |j| for (0..gsteps) |k| {
 
         if (enable_printing and (qsteps != 1 or psteps != 1)) try print("\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}: ", .{i * psteps + j + 1, qsteps * psteps});
 
-        var temp_i = i; var temp_j = j;
+        var temp_i = i; var temp_j = j; var temp_k = k;
 
-        for (0..ndim) |k| {q[k] = q0[k] + @as(T, @floatFromInt(temp_i % qsteps_i[k])) * if (ics_pos) |qstruct| qstruct.step[k] else 0; temp_i /= qsteps_i[k];}
-        for (0..ndim) |k| {p[k] = p0[k] + @as(T, @floatFromInt(temp_j % psteps_i[k])) * if (ics_mom) |pstruct| pstruct.step[k] else 0; temp_j /= psteps_i[k];}
+        for (0..ndim) |l| {q[l] = q0[l] + @as(T, @floatFromInt(temp_i % qsteps_i[l])) * if (ics_pos) |qstruct| qstruct.step[k] else 0; temp_i /= qsteps_i[l];}
+        for (0..ndim) |l| {p[l] = p0[l] + @as(T, @floatFromInt(temp_j % psteps_i[l])) * if (ics_mom) |pstruct| pstruct.step[k] else 0; temp_j /= psteps_i[l];}
+        for (0..ndim) |l| {g[l] = g0[l] + @as(T, @floatFromInt(temp_k % gsteps_i[l])) * if (ics_gam) |gstruct| gstruct.step[k] else 0; temp_k /= gsteps_i[l];}
 
-        var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p;
+        var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p; options.initial_conditions.gamma = g;
     
         if (qsteps != 1 or psteps != 1) {
-            try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum);
+            try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma);
         }
 
         const result = try performDynamics(T, options, enable_printing, allocator);
 
-        for (0..ndim) |k| transition_probability.ptr(i * psteps + j,        k).* = q[k];
-        for (0..ndim) |k| transition_probability.ptr(i * psteps + j, ndim + k).* = p[k];
+        for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 0 * ndim + l).* = q[l];
+        for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 1 * ndim + l).* = p[l];
+        for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 2 * ndim + l).* = g[l];
 
-        for (0..nstate) |k| transition_probability.ptr(i * psteps + j, 2 * ndim + k).* = result.population.at(result.population.rows - 1, k);
+        for (0..nstate) |l| transition_probability.ptr(i * psteps + j, 3 * ndim + l).* = result.population.at(result.population.rows - 1, l);
 
         if (i == 0 and j == 0) output = result else result.deinit(allocator);
     };
@@ -278,7 +297,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 }
 
 /// Appends the position and momentum to all output files.
-pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(T), q: []const T, p: []const T) !void {
+pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(T), q: []const T, p: []const T, g: []const T) !void {
     inline for (std.meta.fields(@TypeOf(opt.write))) |field| if (@as(field.type, @field(opt.write, field.name)) != null) {
 
         const path = &@field(opt.write, field.name).?; var new_path: [MAX_PATH_LENGTH]u8 = undefined;
@@ -294,6 +313,12 @@ pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(
         try writer.writeAll("_P=");
 
         for (p, 0..) |val, i| {
+            if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
+        }
+
+        try writer.writeAll("_G=");
+
+        for (g, 0..) |val, i| {
             if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
         }
 
