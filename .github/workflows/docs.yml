@@ -15,15 +15,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
 
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.4"
 
       - name: Compile the Code Documentation
-        run: make docs
+        run: zig build docs
 
       - name: Install the Jekyll Dependencies
         working-directory: docs
