@@ -33,7 +33,7 @@ jobs:
       - name: Push the Mirror to Gitea
         env:
           GITEA_TOKEN: ${{secrets.GITEA_TOKEN}}
-        run: git push --force https://tjira:$GITEA_TOKEN@codeberg.org/tjira/zinq "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
+        run: git push --force https://tjira:$GITEA_TOKEN@gitea.com/tjira/zinq "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
 
       - name: Setup Tmate Session
         if: failure()
