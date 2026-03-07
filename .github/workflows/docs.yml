@@ -19,9 +19,13 @@ jobs:
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
 
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.4
 
       - name: Compile the Code Documentation
         run: zig build docs
