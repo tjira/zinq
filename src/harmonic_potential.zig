@@ -20,7 +20,7 @@ pub fn HarmonicPotential(comptime T: type) type {
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
-            if (i >= 1 or j >= 1) return error.InvalidIndex;
+            if (i >= 1 or j >= 1) return error.InvalidDiabaticElementIndex;
 
             return self.evaluateDiabaticElementComptime(0, 0, position, time);
         }

@@ -208,8 +208,11 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const ics_pos = if (opt.initial_conditions.spread) |ics| ics.position else null;
     const ics_mom = if (opt.initial_conditions.spread) |ics| ics.momentum else null;
 
-    const q0 = opt.initial_conditions.position; var q1: []const T = undefined;
-    const p0 = opt.initial_conditions.momentum; var p1: []const T = undefined;
+    const q0 = opt.initial_conditions.position; var q1: []const T = undefined; if (q0.len != ndim) return error.InvalidInitialPosition;
+    const p0 = opt.initial_conditions.momentum; var p1: []const T = undefined; if (p0.len != ndim) return error.InvalidInitialMomentum;
+    const g0 = opt.initial_conditions.gamma;    var g1: []const T = undefined; if (g0.len != ndim) return error.InvalidInitialGamma;
+
+    g1 = g1;
 
     if (ics_pos) |qstruct| q1 = qstruct.end else q1 = q0;
     if (ics_mom) |pstruct| p1 = pstruct.end else p1 = p0;
@@ -320,7 +323,6 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     var timer = try std.time.Timer.start(); const n_dynamics = if (opt.imaginary) |f| f.states else 1;
 
     for (0..n_dynamics) |i| {
-
         try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma);
 
         if (opt.initial_conditions.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false);

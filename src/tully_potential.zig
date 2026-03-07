@@ -30,7 +30,7 @@ pub fn TullyPotential1(comptime T: type) type {
                 0 => self.evaluateDiabaticElementComptime(0, 0, position, time),
                 1 => self.evaluateDiabaticElementComptime(0, 1, position, time),
                 2 => self.evaluateDiabaticElementComptime(1, 1, position, time),
-                else => error.InvalidIndex
+                else => error.InvalidDiabaticElementIndex,
             };
         }
 
@@ -69,7 +69,7 @@ pub fn TullyPotential2(comptime T: type) type {
                 0 => self.evaluateDiabaticElementComptime(0, 0, position, time),
                 1 => self.evaluateDiabaticElementComptime(0, 1, position, time),
                 2 => self.evaluateDiabaticElementComptime(1, 1, position, time),
-                else => error.InvalidIndex
+                else => error.InvalidDiabaticElementIndex,
             };
         }
 

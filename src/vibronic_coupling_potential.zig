@@ -39,7 +39,7 @@ pub fn VibronicCouplingPotential(comptime T: type) type {
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
-            if (i >= self.nstate() or j >= self.nstate()) return error.InvalidIndex;
+            if (i >= self.nstate() or j >= self.nstate()) return error.InvalidDiabaticElementIndex;
 
             var value = if (i == j) self.energy[i] else 0;
 

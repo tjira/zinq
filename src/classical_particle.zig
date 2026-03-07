@@ -38,7 +38,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Initialize the system using the number of dimensions, an array of masses, and an allocator. The positions and velocities are undefined after initialization.
         pub fn init(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !@This() {
-            if (ndim != masses.len) return error.InvalidIndex;
+            if (ndim != masses.len) return error.MassDimensionMismatch;
 
             var particle = @This(){
                 .atoms = null,
@@ -188,7 +188,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Sets the position of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
         pub fn setPositionRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) return error.InvalidDimension;
+            if (mean.len != self.ndim or stdev.len != self.ndim) return error.PositionMeanDoesNotMatchStdev;
 
             for (0..self.ndim) |i| {
                 self.position.ptr(i).* = mean[i] + stdev[i] * random.floatNorm(T);
@@ -197,7 +197,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Sets the momentum of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
         pub fn setMomentumRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) return error.InvalidDimension;
+            if (mean.len != self.ndim or stdev.len != self.ndim) return error.MomentumMeanDoesNotMatchStdev;
 
             for (0..self.ndim) |i| {
                 self.velocity.ptr(i).* = (mean[i] + stdev[i] * random.floatNorm(T)) / self.masses.at(i);

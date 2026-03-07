@@ -15,12 +15,16 @@ OS   := $(if $(filter $(OS),Windows_NT),windows,$(shell uname -s | tr '[:upper:]
 ZIG_VERSION := 0.15.2
 ZLS_VERSION := 0.15.0
 
-ZIG_FLAGS := $(if $(filter 1,$(DEBUG)),-Doptimize=Debug,-Doptimize=ReleaseFast)
+ZIG_FLAGS := $(if $(filter 0,$(DEBUG)),--release=fast)
 ZIG_FLAGS := $(if $(filter 1,$(INCREMENTAL)),$(ZIG_FLAGS) -fincremental,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(SUMMARY)),$(ZIG_FLAGS) --summary all,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(TIME_REPORT)),$(ZIG_FLAGS) --time-report,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(WATCH)),$(ZIG_FLAGS) --watch,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(WEBUI)),$(ZIG_FLAGS) --webui=[::1]:12345,$(ZIG_FLAGS))
+
+HAS_ZIG := $(shell command -v zig 2> /dev/null)
+
+COMPILER := $(if $(HAS_ZIG),zig,./.zig-bin/zig$(if $(filter $(OS),windows),.exe))
 
 all: zinq
 
@@ -28,33 +32,30 @@ all: zinq
 
 .PHONY: zinq cross run test docs
 
-zinq: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
-	./.zig-bin/zig build $(ZIG_FLAGS)
+zinq: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
+	$(COMPILER) build $(ZIG_FLAGS)
 
-cross: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
-	./.zig-bin/zig build $(ZIG_FLAGS) cross
+cross: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
+	$(COMPILER) build $(ZIG_FLAGS) cross
 
-run: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
-	./.zig-bin/zig build $(ZIG_FLAGS) run
+docs: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
+	@$(COMPILER) build $(ZIG_FLAGS) docs
 
-test: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
-	./.zig-bin/zig build $(ZIG_FLAGS) test
+run: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
+	$(COMPILER) build $(ZIG_FLAGS) run
+
+test: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
+	$(COMPILER) build $(ZIG_FLAGS) test
 
 # CUSTOM TARGETS =======================================================================================================================================================================================
-
-docs: .zig-bin/zig$(if $(filter $(OS),windows),.exe)
-	@./.zig-bin/zig build $(ZIG_FLAGS) docs && cd docs && bundle install && bundle exec jekyll build
 
 linguist:
 	@github-linguist
 
 profile: zinq
-	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/$(ARCH)-$(OS)/zinq
+	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/bin/zinq
 	@gprof2dot -e 1 -f callgrind -n 5 -o profile.dot -z main.main callgrind.out
 	@dot -T pdf profile.dot -o profile.pdf
-
-serve: docs
-	@cd docs && bundle exec jekyll serve
 
 wheel:
 	@python -m build --wheel

@@ -22,8 +22,16 @@ jobs:
         with:
           ruby-version: "3.4"
 
-      - name: Compile the Documentation
+      - name: Compile the Code Documentation
         run: make docs
+
+      - name: Install the Jekyll Dependencies
+        working-directory: docs
+        run: bundle install
+
+      - name: Build the Jekyll Site
+        working-directory: docs
+        run: bundle exec jekyll build
 
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3

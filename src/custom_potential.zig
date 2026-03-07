@@ -45,7 +45,7 @@ pub fn CustomPotential(comptime T: type) type {
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
-            if (i >= self.matrix.len or j >= self.matrix.len) return error.InvalidIndex;
+            if (i >= self.matrix.len or j >= self.matrix.len) return error.InvalidDiabaticElementIndex;
 
             custom_potential_data.?.map.putAssumeCapacity("t", time);
 
@@ -59,7 +59,7 @@ pub fn CustomPotential(comptime T: type) type {
             var rpn_array = try allocator.alloc(ReversePolishNotation(T), self.matrix.len * self.matrix.len);
             var map = std.StringHashMap(T).init(allocator);
 
-            for (0..self.matrix.len) |i| if (self.matrix[i].len != self.matrix.len) return error.InvalidDimension;
+            for (0..self.matrix.len) |i| if (self.matrix[i].len != self.matrix.len) return error.DimensionMismatchInCustomPotentialMatrix;
 
             for (0..self.matrix.len) |i| for (0..self.matrix.len) |j| {
                 rpn_array[i * self.matrix.len + j] = try shuntingYard(T, self.matrix[i][j], self.variables, allocator);

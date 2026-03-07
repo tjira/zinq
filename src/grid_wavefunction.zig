@@ -183,9 +183,6 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Initialize the position of the wavefunction as a Gaussian wavepacket.
         pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: []const T) !void {
-            if (position.len != self.ndim) return error.InvalidInitialPosition;
-            if (momentum.len != self.ndim) return error.InvalidInitialMomentum;
-            if (gamma.len != self.ndim) return error.InvalidGamma;
             if (state >= self.nstate) return error.InvalidInitialState;
 
             for (0..self.data.rows) |i| {
