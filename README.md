@@ -108,6 +108,9 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 ---
 
 <p align="left">
+    <a href="https://github.com/tjira/zinq">
+        <img src="https://img.shields.io/badge/mirror-github-black?logo=github&style=for-the-badge"/>
+    </a>
     <a href="https://gitlab.com/tojira/zinq">
         <img src="https://img.shields.io/badge/mirror-gitlab-orange?logo=gitlab&style=for-the-badge"/>
     </a>

@@ -18,9 +18,6 @@ jobs:
       matrix:
         include:
           - os: codeberg-medium
-            mode_name: Debug
-            build_flags: ""
-          - os: codeberg-medium
             mode_name: ReleaseFast
             build_flags: "--release=fast"
           - os: codeberg-medium
