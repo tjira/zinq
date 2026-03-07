@@ -109,7 +109,7 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 
 <p align="left">
     <a href="https://github.com/tjira/zinq">
-        <img src="https://img.shields.io/badge/mirror-github-black?logo=github&style=for-the-badge"/>
+        <img src="https://img.shields.io/badge/main-github-black?logo=github&style=for-the-badge"/>
     </a>
     <a href="https://gitea.com/tjira/zinq">
         <img src="https://img.shields.io/badge/mirror-gitea-green?logo=gitea&style=for-the-badge"/>
