@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   test:
-    name: ${{ matrix.os }} / ${{ matrix.mode_name }}
-    runs-on: ${{ matrix.os }}
+    name: ${{matrix.os}} / ${{matrix.mode_name}}
+    runs-on: ${{matrix.os}}
 
     strategy:
       fail-fast: false
@@ -23,12 +23,36 @@ jobs:
           - os: ubuntu-latest
             mode_name: ReleaseFast
             build_flags: "--release=fast"
+          - os: ubuntu-latest
+            mode_name: ReleaseSafe
+            build_flags: "--release=safe"
+          - os: ubuntu-latest
+            mode_name: ReleaseSmall
+            build_flags: "--release=small"
+          - os: macos-latest
+            mode_name: Debug
+            build_flags: ""
           - os: macos-latest
             mode_name: ReleaseFast
             build_flags: "--release=fast"
+          - os: macos-latest
+            mode_name: ReleaseSafe
+            build_flags: "--release=safe"
+          - os: macos-latest
+            mode_name: ReleaseSmall
+            build_flags: "--release=small"
+          - os: windows-latest
+            mode_name: Debug
+            build_flags: ""
           - os: windows-latest
             mode_name: ReleaseFast
             build_flags: "--release=fast"
+          - os: windows-latest
+            mode_name: ReleaseSafe
+            build_flags: "--release=safe"
+          - os: windows-latest
+            mode_name: ReleaseSmall
+            build_flags: "--release=small"
 
     steps:
       - uses: actions/checkout@v6
@@ -38,8 +62,8 @@ jobs:
         with:
           version: 0.15.2
 
-      - name: Run Tests in ${{ matrix.mode_name }} Mode
-        run: zig build ${{ matrix.build_flags }} test
+      - name: Run Tests in ${{matrix.mode_name}} Mode
+        run: zig build ${{matrix.build_flags}} test
 
       - name: Setup Tmate Session
         if: failure()
