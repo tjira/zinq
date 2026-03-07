@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: codeberg-medium
 
     steps:
       - uses: actions/checkout@v6
@@ -35,10 +35,6 @@ jobs:
           name: bin
           path: bin
 
-      - name: Setup Tmate Session
-        if: failure()
-        uses: mxschmitt/action-tmate/detached@v3
-
   release:
     runs-on: ubuntu-latest
     needs: [build]
@@ -56,7 +52,3 @@ jobs:
           file_glob: true
           file: bin/zinq*
           tag: ${{github.ref}}
-
-      - name: Setup Tmate Session
-        if: failure()
-        uses: mxschmitt/action-tmate/detached@v3
