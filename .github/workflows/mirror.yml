@@ -21,6 +21,24 @@ jobs:
         if: failure()
         uses: mxschmitt/action-tmate/detached@v3
 
+  gitea:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Full History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push the Mirror to Gitea
+        env:
+          GITEA_TOKEN: ${{secrets.GITEA_TOKEN}}
+        run: git push --force https://tjira:$GITEA_TOKEN@codeberg.org/tjira/zinq "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
+
+      - name: Setup Tmate Session
+        if: failure()
+        uses: mxschmitt/action-tmate/detached@v3
+
   gitlab:
     runs-on: ubuntu-latest
 

@@ -78,10 +78,10 @@ You can download the latest binaries from the [releases](https://github.com/tjir
 
 ### Compilation
 
-Compiling Zinq is simple, running `make` will automatically download the Zig compiler to the project root and compile the Zinq binaries. The resulting executables are placed in the `zig-out` directory, organized by operating system and architecture. On Linux and Windows, most users will want the `x86_64` binary, while on MacOS the `aarch64` binary is usually appropriate. To verify the build, execute
+Compiling Zinq is simple, running `make` will automatically download the Zig compiler to the project root and compile the Zinq binaries. The resulting executables are placed in the `zig-out/bin` directory. To verify the build, execute
 
 ```bash
-./zig-out/<arch-os>/zinq
+./zig-out/bin/zinq
 ```
 
 and check that the missing input message is displayed. If the message appears, the program is compiled correctly.
@@ -110,6 +110,9 @@ This project is licensed under the MIT License. See [LICENSE](LICENSE) for detai
 <p align="left">
     <a href="https://github.com/tjira/zinq">
         <img src="https://img.shields.io/badge/mirror-github-black?logo=github&style=for-the-badge"/>
+    </a>
+    <a href="https://gitea.com/tjira/zinq">
+        <img src="https://img.shields.io/badge/mirror-gitea-green?logo=gitea&style=for-the-badge"/>
     </a>
     <a href="https://gitlab.com/tojira/zinq">
         <img src="https://img.shields.io/badge/mirror-gitlab-orange?logo=gitlab&style=for-the-badge"/>
