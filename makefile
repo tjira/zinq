@@ -22,7 +22,7 @@ ZIG_FLAGS := $(if $(filter 1,$(TIME_REPORT)),$(ZIG_FLAGS) --time-report,$(ZIG_FL
 ZIG_FLAGS := $(if $(filter 1,$(WATCH)),$(ZIG_FLAGS) --watch,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(WEBUI)),$(ZIG_FLAGS) --webui=[::1]:12345,$(ZIG_FLAGS))
 
-HAS_ZIG := $(shell command -v zig 2> /dev/null)
+HAS_ZIG := $(shell $(if $(filter windows,$(OS)),(Get-Command zig -ErrorAction SilentlyContinue).Path,command -v zig 2> /dev/null))
 
 COMPILER := $(if $(HAS_ZIG),zig,./.zig-bin/zig$(if $(filter $(OS),windows),.exe))
 
@@ -70,7 +70,7 @@ wheels:
 
 # EXTERNAL TARGETS =====================================================================================================================================================================================
 
-ifeq ($(OS), windows)
+ifeq ($(OS),windows)
 .zig-bin/zig.exe:
 	cmd /c curl -Ls -o zig.zip https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).zip
 	cmd /c curl -Ls -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip
