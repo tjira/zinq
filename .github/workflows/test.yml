@@ -9,8 +9,26 @@ permissions:
   contents: read
 
 jobs:
-  linux:
-    runs-on: ubuntu-latest
+  test:
+    name: ${{ matrix.os }} / ${{ matrix.mode_name }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            mode_name: Debug
+            build_flags: ""
+          - os: ubuntu-latest
+            mode_name: ReleaseFast
+            build_flags: "--release=fast"
+          - os: macos-latest
+            mode_name: ReleaseFast
+            build_flags: "--release=fast"
+          - os: windows-latest
+            mode_name: ReleaseFast
+            build_flags: "--release=fast"
 
     steps:
       - uses: actions/checkout@v6
@@ -20,44 +38,8 @@ jobs:
         with:
           version: 0.15.2
 
-      - name: Run Tests in ReleaseFast Mode
-        run: zig build --release=fast test
-
-      - name: Setup Tmate Session
-        if: failure()
-        uses: mxschmitt/action-tmate/detached@v3
-
-  macos:
-    runs-on: macos-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - name: Run Tests in ReleaseFast Mode
-        run: zig build --release=fast test
-
-      - name: Setup Tmate Session
-        if: failure()
-        uses: mxschmitt/action-tmate/detached@v3
-
-  windows:
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Setup Zig
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.15.2
-
-      - name: Run Tests in ReleaseFast Mode
-        run: zig build --release=fast test
+      - name: Run Tests in ${{ matrix.mode_name }} Mode
+        run: zig build ${{ matrix.build_flags }} test
 
       - name: Setup Tmate Session
         if: failure()
