@@ -31,7 +31,12 @@ pub fn AvoidedCrossingPotential(comptime T: type) type {
                 0 => self.evaluateDiabaticElementComptime(0, 0, position, time),
                 1 => self.evaluateDiabaticElementComptime(0, 1, position, time),
                 2 => self.evaluateDiabaticElementComptime(1, 1, position, time),
-                else => error.InvalidDiabaticElementIndex,
+                else => {
+
+                    std.log.err("INVALID INDEX ({d}, {d}) WHEN EVALUATING DIABATIC MATRIX ELEMENT, THE POTENTIAL MATRIX IS {d}X{d}", .{i, j, 2, 2});
+
+                    return error.ProgrammingError;
+                }
             };
         }
 

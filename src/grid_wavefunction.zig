@@ -65,9 +65,26 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Allocate a wavefunction on a grid.
         pub fn init(npoint: usize, nstate: usize, ndim: usize, limits: []const []const T, mass: T, allocator: std.mem.Allocator) !@This() {
-            if (limits.len != ndim) return error.InvalidLimits;
-            for (0..ndim) |i| if (limits[i].len != 2) return error.InvalidLimits;
-            if (npoint < 2) return error.InvalidNumberOfPoints;
+            if (limits.len != ndim) {
+
+                std.log.err("THE LENGTH OF THE LIMITS ARRAY MUST BE EQUAL TO THE NUMBER OF DIMENSIONS, EXPECTED {d} BUT GOT {d}", .{ndim, limits.len});
+
+                return error.InvalidInput;
+            }
+
+            for (0..ndim) |i| if (limits[i].len != 2) {
+
+                std.log.err("EACH ELEMENT OF THE LIMITS ARRAY MUST BE AN ARRAY OF LENGTH 2, BUT THE {d}-TH ELEMENT HAS LENGTH {d}", .{i, limits[i].len});
+
+                return error.InvalidInput;
+            };
+
+            if (npoint < 2) {
+
+                std.log.err("THE NUMBER OF POINTS IN EACH DIMENSION MUST BE AT LEAST 2, BUT GOT {d}", .{npoint});
+
+                return error.InvalidInput;
+            }
 
             const shape = try allocator.alloc(usize, ndim);
 
@@ -186,7 +203,12 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Initialize the position of the wavefunction as a Gaussian wavepacket.
         pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: []const T) !void {
-            if (state >= self.nstate) return error.InvalidInitialState;
+            if (state >= self.nstate) {
+
+                std.log.err("INITIAL STATE INDEX OUT OF BOUNDS, EXPECTED LESS THAN {d} BUT GOT {d}", .{self.nstate, state});
+
+                return error.InvalidInput;
+            }
 
             for (0..self.data.rows) |i| {
 

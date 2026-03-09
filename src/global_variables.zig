@@ -14,7 +14,6 @@ pub const MAX_LERP_DIM = 16;
 pub const MAX_NACV_STATES = 16;
 pub const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024; // 16 MB
 pub const MAX_PATH_LENGTH = 4096;
-pub const QD_MOMENTUM_TOLERANCE = 1e-8;
 pub const MAX_HERMITE_QUADRATURE_POINTS = 64;
 
 pub const Eh  = 4.359744722206e-18; // J

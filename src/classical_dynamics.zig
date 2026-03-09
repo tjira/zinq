@@ -274,14 +274,37 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.potential == .ab_initio and opt.initial_conditions != .molecule) return error.InvalidPotential;
+    if (opt.potential == .ab_initio and opt.initial_conditions != .molecule) {
+
+        std.log.err("AB INITIO POTENTIAL CAN ONLY BE USED WITH MOLECULE INITIAL CONDITIONS", .{});
+
+        return error.InvalidInput;
+    }
 
     const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
-    if (nstate != 2 and opt.write.bloch_vector_mean != null) return error.InvalidWriteOption;
-    if (opt.potential == .ab_initio and opt.derivative_coupling != null and opt.derivative_coupling.? != .nacv) return error.InvalidDerivativeCoupling;
-    if (opt.initial_conditions == .molecule and opt.initial_conditions.molecule.velocity != null and opt.initial_conditions.molecule.temperature != null) return error.InvalidInitialConditions;
+    if (nstate != 2 and opt.write.bloch_vector_mean != null) {
+
+        std.log.err("BLOCH VECTOR CAN ONLY BE CALCULATED FOR TWO-STATE SYSTEMS", .{});
+
+        return error.InvalidInput;
+    }
+
+
+    if (opt.potential == .ab_initio and opt.derivative_coupling != null and opt.derivative_coupling.? != .nacv) {
+
+        std.log.err("FOR AB INITIO POTENTIALS, ONLY NACV DERIVATIVE COUPLING CAN BE USED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.initial_conditions == .molecule and opt.initial_conditions.molecule.velocity != null and opt.initial_conditions.molecule.temperature != null) {
+
+        std.log.err("INITIAL VELOCITY AND TEMPERATURE CANNOT BE BOTH SPECIFIED", .{});
+
+        return error.InvalidInput;
+    }
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
@@ -374,7 +397,12 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .molecule => opt.initial_conditions.molecule.state
     };
 
-    if (current_state >= nstate) return error.InvalidInitialState;
+    if (current_state >= nstate) {
+
+        std.log.err("INITIAL STATE {d} OUT OF BOUNDS FOR NUMBER OF STATES {d}", .{current_state, nstate});
+
+        return error.InvalidInput;
+    }
 
     var diabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer diabatic_potential.deinit(allocator);
     var adiabatic_potential = try RealMatrix(T).init(nstate, nstate, allocator); defer adiabatic_potential.deinit(allocator);

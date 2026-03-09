@@ -25,7 +25,12 @@ const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 pub fn cfft1(comptime T: type, vector: *StridedComplexVector(T), factor: i32) !void {
     const n = vector.len; const bit_count: u6 = @intCast(std.math.log2(n));
 
-    if (std.math.pow(usize, 2, @intCast(bit_count)) != n) return error.InvalidDataInFourierTransform;
+    if (std.math.pow(usize, 2, @intCast(bit_count)) != n) {
+
+        std.log.err("DATA SIZE IN THE FOURIER TRANSFORM MUST BE A POWER OF 2, BUT GOT {d}", .{n});
+
+        return error.NumericalError;
+    }
 
     for (0..n) |i| {
 
@@ -69,7 +74,12 @@ pub fn cfft1(comptime T: type, vector: *StridedComplexVector(T), factor: i32) !v
 pub fn cfftn(comptime T: type, vector: *ComplexVector(T), shape: []const usize, factor: i32) !void {
     const N = prod(usize, shape);
 
-    if (std.math.pow(usize, shape[0], shape.len) != N) return error.InvalidDataInFourierTransform;
+    if (std.math.pow(usize, shape[0], shape.len) != N) {
+
+        std.log.err("DATA SIZE IN THE FOURIER TRANSFORM MUST BE A POWER OF 2, BUT GOT {d}", .{N});
+
+        return error.NumericalError;
+    }
 
     for (0..shape.len) |i| {
 

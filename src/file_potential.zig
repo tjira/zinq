@@ -44,8 +44,19 @@ pub fn FilePotential(comptime T: type) type {
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
-            if (file_potential_data == null) return error.PotentialDataNotInitialized;
-            if (i >= self.nstate or j >= self.nstate) return error.InvalidStateIndex;
+            if (file_potential_data == null) {
+
+                std.log.err("FILE POTENTIAL DATA IS NOT INITIALIZED, MAKE SURE TO CALL init() BEFORE EVALUATING THE FILE POTENTIAL", .{});
+
+                return error.ProgrammingError;
+            }
+
+            if (i >= self.nstate or j >= self.nstate) {
+
+                std.log.err("INVALID INDEX ({d}, {d}) WHEN EVALUATING DIABATIC MATRIX ELEMENT, THE POTENTIAL MATRIX IS {d}X{d}", .{i, j, self.nstate, self.nstate});
+
+                return error.ProgrammingError;
+            }
 
             return try lerp(T, file_potential_data.?.data, self.ndim + i * self.nstate + j, position);
         }
@@ -54,7 +65,12 @@ pub fn FilePotential(comptime T: type) type {
         pub fn init(self: @This(), allocator: std.mem.Allocator) !?FilePotentialData(T) {
             const U = try readRealMatrix(T, self.path, allocator);
 
-            if (self.ndim + self.nstate * self.nstate != U.cols) return error.InvalidPotentialData;
+            if (self.ndim + self.nstate * self.nstate != U.cols) {
+
+                std.log.err("INVALID NUMBER OF COLUMNS IN THE FILE, EXPECTED {d} BUT GOT {d}", .{self.ndim + self.nstate * self.nstate, U.cols});
+
+                return error.InputError;
+            }
 
             file_potential_data = .{
                 .data = U

@@ -171,10 +171,26 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 
         try device_write.print("\nINPUT #{d}:\n", .{i});
 
-        const name = object.object.get("name") orelse return error.MissingTargetName;
-        const options = object.object.get("options") orelse return error.MissingTargetOptions;
+        const name = object.object.get("name") orelse {
 
-        const tag = std.meta.stringToEnum(Target, name.string) orelse return error.UnknownTarget;
+            std.log.err("MISSING 'name' FIELD IN INPUT, EACH SPECIFIED TARGET MUST HAVE A 'name' FIELD", .{});
+
+            return error.InvalidInput;
+        };
+
+        const options = object.object.get("options") orelse {
+
+            std.log.err("MISSING 'options' FIELD IN INPUT, EACH SPECIFIED TARGET MUST HAVE AN 'options' FIELD WITH THE CORRESPONDING OPTIONS FOR THE TARGET", .{});
+
+            return error.InvalidInput;
+        };
+
+        const tag = std.meta.stringToEnum(Target, name.string) orelse return {
+
+            std.log.err("UNRECOGNIZED '{s}' TARGET IN INPUT", .{name.string});
+
+            return error.InvalidInput;
+        };
 
         switch (tag) {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
@@ -210,7 +226,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){}; const allocator = gpa.allocator();
 
     defer {
-        if (gpa.deinit() == .leak) std.debug.panic("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
+        if (gpa.deinit() == .leak) std.log.err("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
     try device_write.print("ZIG VERSION: {d}.{d}.{d}, ZINQ VERSION: {s}", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.zinq_version});

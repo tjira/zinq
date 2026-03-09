@@ -45,13 +45,31 @@ pub fn CustomPotential(comptime T: type) type {
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
-            if (i >= self.matrix.len or j >= self.matrix.len) return error.InvalidDiabaticElementIndex;
+            if (i >= self.matrix.len or j >= self.matrix.len) {
 
-            custom_potential_data.?.map.putAssumeCapacity("t", time);
+                std.log.err("INVALID INDEX ({d}, {d}) WHEN EVALUATING DIABATIC MATRIX ELEMENT, THE POTENTIAL MATRIX IS {d}X{d}", .{i, j, 2, 2});
 
-            for (0..position.len) |q| custom_potential_data.?.map.putAssumeCapacity(self.variables[q], position.at(q));
+                return error.ProgrammingError;
+            }
 
-            return try custom_potential_data.?.rpn_array[i * self.matrix.len + j].evaluate(custom_potential_data.?.map);
+            if (custom_potential_data) |*cpd| {
+
+                cpd.map.putAssumeCapacity("t", time);
+
+                for (0..position.len) |q| {
+                    cpd.map.putAssumeCapacity(self.variables[q], position.at(q));
+                }
+
+                const value = try cpd.rpn_array[i * self.matrix.len + j].evaluate(custom_potential_data.?.map);
+
+                return value;
+
+            } else {
+
+                std.log.err("CUSTOM POTENTIAL DATA NOT INITIALIZED, CALL init() BEFORE EVALUATING THE POTENTIAL", .{});
+
+                return error.ProgrammingError;
+            }
         }
 
         /// Parse and initialize the custom potential from the provided expression matrix.
@@ -59,11 +77,18 @@ pub fn CustomPotential(comptime T: type) type {
             var rpn_array = try allocator.alloc(ReversePolishNotation(T), self.matrix.len * self.matrix.len);
             var map = std.StringHashMap(T).init(allocator);
 
-            for (0..self.matrix.len) |i| if (self.matrix[i].len != self.matrix.len) return error.DimensionMismatchInCustomPotentialMatrix;
+            for (0..self.matrix.len) |i| if (self.matrix[i].len != self.matrix.len) {
+
+                std.log.err("THE POTENTIAL MATRIX MUST BE SQUARE, BUT THE PROVIDED MATRIX HAS {d} ROWS AND {d} COLUMNS", .{self.matrix.len, self.matrix[i].len});
+
+                return error.InputError;
+            };
 
             for (0..self.matrix.len) |i| for (0..self.matrix.len) |j| {
                 rpn_array[i * self.matrix.len + j] = try shuntingYard(T, self.matrix[i][j], self.variables, allocator);
             };
+
+            try map.put("t", undefined);
 
             for (0..self.variables.len) |k| try map.put(self.variables[k], undefined);
 

@@ -46,7 +46,6 @@ const prod = array_functions.prod;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 const MAX_PATH_LENGTH = global_variables.MAX_PATH_LENGTH;
-const QD_MOMENTUM_TOLERANCE = global_variables.QD_MOMENTUM_TOLERANCE;
 
 /// The quantum dynamics options struct.
 pub fn Options(comptime T: type) type {
@@ -193,19 +192,46 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.potential == .ab_initio) return error.AbInitioPotentialNotSupportedInQuantumDynamics;
+    if (opt.potential == .ab_initio) {
+
+        std.log.err("AB INITIO POTENTIAL NOT SUPPORTED FOR QUANTUM DYNAMICS SIMULATIONS", .{});
+
+        return error.InvalidInput;
+    }
 
     const nstate = opt.potential.nstate();
     const ndim = try opt.potential.ndim();
 
-    if (nstate != 2 and (opt.write.bloch_vector != null or opt.write.spatial_bloch_vector != null)) return error.BlochVectorOutputOnlySupportedForTwoStateSystems;
+    if (nstate != 2 and (opt.write.bloch_vector != null or opt.write.spatial_bloch_vector != null)) {
+
+        std.log.err("BLOCH VECTOR CAN ONLY BE CALCULATED FOR TWO-STATE SYSTEMS", .{});
+
+        return error.InvalidInput;
+    }
 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
-    if (opt.initial_conditions.spread) |ics| if (ics.position) |qstruct| if (qstruct.end.len != ndim or qstruct.step.len != ndim) return error.InvalidInitialConditionsSpreadForPosition;
+    if (opt.initial_conditions.spread) |ics| if (ics.position) |qstruct| if (qstruct.end.len != ndim or qstruct.step.len != ndim) {
 
-    if (opt.initial_conditions.spread) |ics| if (ics.momentum) |pstruct| if (pstruct.end.len != ndim or pstruct.step.len != ndim) return error.InvalidInitialConditionsSpreadForMomentum;
+        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, qstruct.end.len});
+
+        return error.InvalidInput;
+    };
+
+    if (opt.initial_conditions.spread) |ics| if (ics.momentum) |pstruct| if (pstruct.end.len != ndim or pstruct.step.len != ndim) {
+
+        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, pstruct.end.len});
+
+        return error.InvalidInput;
+    };
+
+    if (opt.initial_conditions.spread) |ics| if (ics.gamma) |gstruct| if (gstruct.end.len != ndim or gstruct.step.len != ndim) {
+
+        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, gstruct.end.len});
+
+        return error.InvalidInput;
+    };
 
     var output: Output(T) = undefined;
 
@@ -213,9 +239,30 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const ics_mom = if (opt.initial_conditions.spread) |ics| ics.momentum else null;
     const ics_gam = if (opt.initial_conditions.spread) |ics| ics.gamma    else null;
 
-    const q0 = opt.initial_conditions.position; var q1: []const T = undefined; if (q0.len != ndim) return error.InvalidInitialPosition;
-    const p0 = opt.initial_conditions.momentum; var p1: []const T = undefined; if (p0.len != ndim) return error.InvalidInitialMomentum;
-    const g0 = opt.initial_conditions.gamma;    var g1: []const T = undefined; if (g0.len != ndim) return error.InvalidInitialGamma;
+    const q0 = opt.initial_conditions.position; var q1: []const T = undefined;
+    const p0 = opt.initial_conditions.momentum; var p1: []const T = undefined;
+    const g0 = opt.initial_conditions.gamma;    var g1: []const T = undefined;
+
+    if (q0.len != ndim) {
+
+        std.log.err("INVALID INITIAL POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, q0.len});
+
+        return error.InvalidInput;
+    }
+
+    if (p0.len != ndim) {
+
+        std.log.err("INVALID INITIAL MOMENTUM, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, p0.len});
+
+        return error.InvalidInput;
+    }
+
+    if (g0.len != ndim) {
+
+        std.log.err("INVALID INITIAL GAMMA, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, g0.len});
+
+        return error.InvalidInput;
+    }
 
     if (ics_pos) |qstruct| q1 = qstruct.end else q1 = q0;
     if (ics_mom) |pstruct| p1 = pstruct.end else p1 = p0;
@@ -227,9 +274,26 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (ics_pos) |qstruct| for (0..qstruct.step.len) |i| {
 
-        if (qstruct.step[i] == 0) return error.InvalidInitialConditionsSpreadForPosition;
+        if (qstruct.step[i] == 0 and q1[i] != q0[i]) {
 
-        if (qstruct.end[i] < q0[i] and qstruct.step[i] > 0) return error.InvalidInitialConditionsSpreadForPosition;
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, STEP CANNOT BE ZERO IF END VALUE IS DIFFERENT FROM START VALUE", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (qstruct.end[i] < q0[i] and qstruct.step[i] > 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, END VALUE MUST BE GREATER THAN START VALUE FOR POSITIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (qstruct.end[i] > q0[i] and qstruct.step[i] < 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, END VALUE MUST BE LESS THAN START VALUE FOR NEGATIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
 
         qsteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((q1[i] - q0[i]) / qstruct.step[i]))) + 1;
 
@@ -238,9 +302,26 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (ics_mom) |pstruct| for (0..pstruct.step.len) |i| {
 
-        if (pstruct.step[i] == 0) return error.InvalidInitialConditionsSpreadForMomentum;
+        if (pstruct.step[i] == 0 and p1[i] != p0[i]) {
 
-        if (pstruct.end[i] < p0[i] and pstruct.step[i] > 0) return error.InvalidInitialConditionsSpreadForMomentum;
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, STEP CANNOT BE ZERO IF END VALUE IS DIFFERENT FROM START VALUE", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (pstruct.end[i] < p0[i] and pstruct.step[i] > 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, END VALUE MUST BE GREATER THAN START VALUE FOR POSITIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (pstruct.end[i] > p0[i] and pstruct.step[i] < 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, END VALUE MUST BE LESS THAN START VALUE FOR NEGATIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
 
         psteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((p1[i] - p0[i]) / pstruct.step[i]))) + 1;
 
@@ -249,9 +330,26 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     if (ics_gam) |gstruct| for (0..gstruct.step.len) |i| {
 
-        if (gstruct.step[i] == 0) return error.InvalidInitialConditionsSpreadForGamma;
+        if (gstruct.step[i] == 0 and g1[i] != g0[i]) {
 
-        if (gstruct.end[i] < g0[i] and gstruct.step[i] > 0) return error.InvalidInitialConditionsSpreadForGamma;
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, STEP CANNOT BE ZERO IF END VALUE IS DIFFERENT FROM START VALUE", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (gstruct.end[i] < g0[i] and gstruct.step[i] > 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, END VALUE MUST BE GREATER THAN START VALUE FOR POSITIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (gstruct.end[i] > g0[i] and gstruct.step[i] < 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, END VALUE MUST BE LESS THAN START VALUE FOR NEGATIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
 
         gsteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((g1[i] - g0[i]) / gstruct.step[i]))) + 1;
 
@@ -274,13 +372,13 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         for (0..ndim) |l| {p[l] = p0[l] + @as(T, @floatFromInt(temp_j % psteps_i[l])) * if (ics_mom) |pstruct| pstruct.step[k] else 0; temp_j /= psteps_i[l];}
         for (0..ndim) |l| {g[l] = g0[l] + @as(T, @floatFromInt(temp_k % gsteps_i[l])) * if (ics_gam) |gstruct| gstruct.step[k] else 0; temp_k /= gsteps_i[l];}
 
-        var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p; options.initial_conditions.gamma = g;
-    
-        if (qsteps != 1 or psteps != 1) {
-            try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma);
-        }
+        // var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p; options.initial_conditions.gamma = g;
+        //
+        // if (qsteps != 1 or psteps != 1) {
+        //     try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma);
+        // }
 
-        const result = try performDynamics(T, options, enable_printing, allocator);
+        const result = try performDynamics(T, opt, enable_printing, allocator);
 
         for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 0 * ndim + l).* = q[l];
         for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 1 * ndim + l).* = p[l];
@@ -348,6 +446,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     var timer = try std.time.Timer.start(); const n_dynamics = if (opt.imaginary) |f| f.states else 1;
 
     for (0..n_dynamics) |i| {
+
         try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma);
 
         if (opt.initial_conditions.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false);
@@ -381,8 +480,11 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
             const kinetic_energy = try wavefunction.kineticEnergyAndMomentumMean(&momentum);
             const potential_energy = try wavefunction.potentialEnergy(opt.potential, time);
 
-            if (j == 0) for (0..momentum.len) |k| if (@abs(momentum.at(k) - opt.initial_conditions.momentum[k]) > QD_MOMENTUM_TOLERANCE) {
-                return error.InitialMomentumDoesNotMatchMeanMomentum;
+            if (j == 0) for (0..momentum.len) |k| if (@abs(momentum.at(k) - opt.initial_conditions.momentum[k]) > 1e-8) {
+
+                std.log.err("INITIAL MOMENTUM DOES NOT MATCH MEAN MOMENTUM OF INITIAL WAVEFUNCTION, EXPECTED {e:.3} BUT GOT {e:.3}", .{opt.initial_conditions.momentum[k], momentum.at(k)});
+
+                return error.NumericalError;
             };
 
             if (i == n_dynamics - 1) {
