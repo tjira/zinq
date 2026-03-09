@@ -372,11 +372,11 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         for (0..ndim) |l| {p[l] = p0[l] + @as(T, @floatFromInt(temp_j % psteps_i[l])) * if (ics_mom) |pstruct| pstruct.step[k] else 0; temp_j /= psteps_i[l];}
         for (0..ndim) |l| {g[l] = g0[l] + @as(T, @floatFromInt(temp_k % gsteps_i[l])) * if (ics_gam) |gstruct| gstruct.step[k] else 0; temp_k /= gsteps_i[l];}
 
-        // var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p; options.initial_conditions.gamma = g;
-        //
-        // if (qsteps != 1 or psteps != 1) {
-        //     try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma);
-        // }
+        var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p; options.initial_conditions.gamma = g;
+
+        if (qsteps != 1 or psteps != 1) {
+            try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma);
+        }
 
         const result = try performDynamics(T, opt, enable_printing, allocator);
 
