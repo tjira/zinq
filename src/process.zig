@@ -2,10 +2,6 @@
 
 const std = @import("std");
 
-const global_variables = @import("global_variables.zig");
-
-const MAX_COMMAND_OUTPUT_BYTES = global_variables.MAX_COMMAND_OUTPUT_BYTES;
-
 /// Executes a provided string as a command in the terminal and returns its output.
 pub fn executeCommand(command: []const u8, allocator: std.mem.Allocator) ![]u8 {
     if (std.mem.containsAtLeast(u8, command, 1, "&&")) {
@@ -62,7 +58,7 @@ pub fn executeCommand(command: []const u8, allocator: std.mem.Allocator) ![]u8 {
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Pipe;
 
-    try child.spawn(); try child.collectOutput(allocator, &stdout, &stderr, MAX_COMMAND_OUTPUT_BYTES);
+    try child.spawn(); try child.collectOutput(allocator, &stdout, &stderr, 16 * 1024 * 1024);
 
     const term = try child.wait();
 

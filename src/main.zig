@@ -156,7 +156,7 @@ fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allo
 
 /// Parse the input JSON file and run the corresponding target.
 pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
-    const file_contents = std.fs.cwd().readFileAlloc(allocator, path, global_variables.MAX_INPUT_FILE_BYTES) catch return error.InputFileNotFound;
+    const file_contents = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024 * 1024) catch return error.InputFileNotFound;
 
     try device_write.print("\nPROCESSED FILE: {s}\n", .{path});
 

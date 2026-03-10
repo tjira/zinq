@@ -4,11 +4,9 @@ const std = @import("std");
 
 pub var PARALLEL_ERROR: ?anyerror = null;
 
-pub const MAX_INPUT_FILE_BYTES = 1024 * 1024 * 1024; // 1 GB
 pub const TEST_TOLERANCE = 1e-10;
 pub const MAX_POOL_SIZE = 10000;
 pub const WRITE_BUFFER_SIZE = 1048576;
-pub const MAX_COMMAND_OUTPUT_BYTES = 16 * 1024 * 1024; // 16 MB
 pub const MAX_HERMITE_QUADRATURE_POINTS = 64;
 
 pub const Eh  = 4.359744722206e-18; // J
