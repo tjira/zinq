@@ -19,38 +19,67 @@ pub fn mm(comptime T: type, C: anytype, A: anytype, comptime at: bool, B: anytyp
     }
 
     if (comptime !at and !bt) if (A.cols != B.rows) {
-        return error.InvalidMatrixDimensions;
+
+        std.log.err("INPUT MATRIX DIMENSIONS DON'T MATCH THE REQUIREMENTS FOR MULTIPLICATION", .{});
+
+        return error.InvalidInput;
     };
+
     if (comptime at and !bt) if (A.rows != B.rows) {
-        return error.InvalidMatrixDimensions;
+
+        std.log.err("INPUT MATRIX DIMENSIONS DON'T MATCH THE REQUIREMENTS FOR MULTIPLICATION", .{});
+
+        return error.InvalidInput;
     };
+
     if (comptime !at and bt) if (A.cols != B.cols) {
-        return error.InvalidMatrixDimensions;
+
+        std.log.err("INPUT MATRIX DIMENSIONS DON'T MATCH THE REQUIREMENTS FOR MULTIPLICATION", .{});
+
+        return error.InvalidInput;
     };
+
     if (comptime at and bt) if (A.rows != B.cols) {
-        return error.InvalidMatrixDimensions;
+
+        std.log.err("INPUT MATRIX DIMENSIONS DON'T MATCH THE REQUIREMENTS FOR MULTIPLICATION", .{});
+
+        return error.InvalidInput;
     };
 
     if (comptime !at and !bt) if (C.rows != A.rows or C.cols != B.cols) {
-        return error.InvalidMatrixDimensions;
+
+        std.log.err("OUTPUT MATRIX DIMENSIONS DON'T MATCH THE EXPECTED DIMENSIONS FROM MULTIPLYING THE INPUT MATRICES", .{});
+
+        return error.InvalidInput;
     };
 
     if (comptime at and !bt) if (C.rows != A.cols or C.cols != B.cols) {
-        return error.InvalidMatrixDimensions;
+
+        std.log.err("OUTPUT MATRIX DIMENSIONS DON'T MATCH THE EXPECTED DIMENSIONS FROM MULTIPLYING THE INPUT MATRICES", .{});
+
+        return error.InvalidInput;
     };
 
     if (comptime !at and bt) if (C.rows != A.rows or C.cols != B.rows) {
-        return error.InvalidMatrixDimensions;
+
+        std.log.err("OUTPUT MATRIX DIMENSIONS DON'T MATCH THE EXPECTED DIMENSIONS FROM MULTIPLYING THE INPUT MATRICES", .{});
+
+        return error.InvalidInput;
     };
 
     if (comptime at and bt) if (C.rows != A.cols or C.cols != B.rows) {
-        return error.InvalidMatrixDimensions;
+
+        std.log.err("OUTPUT MATRIX DIMENSIONS DON'T MATCH THE EXPECTED DIMENSIONS FROM MULTIPLYING THE INPUT MATRICES", .{});
+
+        return error.InvalidInput;
     };
 
     if (comptime @TypeOf(C) == *RealMatrix(T)) return mmReal(T, C, A, at, B, bt);
     if (comptime @TypeOf(C) == *ComplexMatrix(T)) return mmComplex(T, C, A, at, B, bt);
 
-    return error.UnsupportedMatrixType;
+    std.log.err("UNSUPPORTED MATRIX TYPE IN MATRIX MULTIPLICATION", .{});
+
+    return error.InvalidInput;
 }
 
 /// General matrix multiplication function that returns a new matrix.

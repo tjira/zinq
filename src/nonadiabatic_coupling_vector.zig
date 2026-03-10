@@ -5,7 +5,6 @@ const std = @import("std");
 const device_read = @import("device_read.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const global_variables = @import("global_variables.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_vector = @import("real_vector.zig");
 
@@ -15,8 +14,6 @@ const readRealMatrix = device_read.readRealMatrix;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
-
-const MAX_NACV_STATES = global_variables.MAX_NACV_STATES;
 
 /// Parameters for the Nonadiabatic Coupling Vector method.
 pub fn Parameters(comptime T: type) type {
@@ -41,9 +38,16 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
 
         /// Evaluate the time derivative coupling.
         pub fn evaluate(self: @This(), derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
+            const max_states = 16;
+
             if (parameters.electronic_potential == .ab_initio) return try self.evaluateAbInitio(derivative_coupling, parameters);
 
-            if (derivative_coupling.rows > MAX_NACV_STATES or derivative_coupling.cols > MAX_NACV_STATES) return error.TooManyStatesForNacv;
+            if (derivative_coupling.rows > max_states or derivative_coupling.cols > max_states) {
+
+                std.log.err("NACV METHOD EXCEEDS MAXIMUM NUMBER OF STATES, MAXIMUM IS {d} BUT GOT {d}, THIS CAN BE CHANGED IN THE SOURCE CODE", .{max_states, derivative_coupling.rows});
+
+                return error.InvalidInput;
+            }
 
             derivative_coupling.zero();
 
@@ -52,8 +56,8 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
             const velocity = parameters.velocity;
             const time = parameters.time;
 
-            var data_plus: [MAX_NACV_STATES * MAX_NACV_STATES]T = undefined; var data_minus: [MAX_NACV_STATES * MAX_NACV_STATES]T = undefined;
-            var adia_data: [MAX_NACV_STATES * MAX_NACV_STATES]T = undefined; var dia_data: [MAX_NACV_STATES * MAX_NACV_STATES]T = undefined;
+            var data_plus: [max_states * max_states]T = undefined; var data_minus: [max_states * max_states]T = undefined;
+            var adia_data: [max_states * max_states]T = undefined; var dia_data: [max_states * max_states]T = undefined;
 
             var eigenvectors_plus = RealMatrix(T){.data = &data_plus, .rows = adiabatic_eigenvectors.rows, .cols = adiabatic_eigenvectors.cols};
             var eigenvectors_minus = RealMatrix(T){.data = &data_minus, .rows = adiabatic_eigenvectors.rows, .cols = adiabatic_eigenvectors.cols};

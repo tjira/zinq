@@ -109,8 +109,19 @@ pub fn Output(comptime T: type) type {
 
 /// Run the Moller-Plesset calculation with the given options.
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (opt.gradient != null and opt.gradient.? == .analytic) return error.AnalyticGradientNotImplemented;
-    if (opt.hessian != null and opt.hessian.? == .analytic) return error.AnalyticHessianNotImplemented;
+    if (opt.gradient != null and opt.gradient.? == .analytic) {
+
+        std.log.err("ANALYTIC GRADIENT NOT IMPLEMENTED FOR MOLLER-PLESSET METHOD", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.hessian != null and opt.hessian.? == .analytic) {
+
+        std.log.err("ANALYTIC HESSIAN NOT IMPLEMENTED FOR MOLLER-PLESSET METHOD", .{});
+
+        return error.InvalidInput;
+    }
 
     var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator); defer system.deinit(allocator);
 
@@ -153,11 +164,21 @@ pub fn mp(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
 
     var energy: T = 0;
 
-    if (opt.order < 2) return error.InvalidMollerPlessetOrder;
+    if (opt.order < 2) {
+
+        std.log.err("MOLLER-PLESSET ORDER MUST BE GREATER THAN OR EQUAL TO 2, GOT {d}", .{opt.order});
+
+        return error.InvalidInput;
+    }
 
     if (opt.order >= 2) energy += mp2(T, F_MS, J_MS, nocc);
 
-    if (opt.order > 2) return error.MollerPlessetOrderNotImplemented;
+    if (opt.order > 2) {
+
+        std.log.err("MOLLER-PLESSET ORDER {d} NOT IMPLEMENTED, ONLY MP2 IS AVAILABLE", .{opt.order});
+
+        return error.InvalidInput;
+    }
 
     if (enable_printing) try print("\nMP{d} ENERGY: {d:.14}\n", .{opt.order, hf_output.energy + energy});
 

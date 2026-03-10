@@ -9,19 +9,29 @@ const real_vector = @import("real_vector.zig");
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
-const MAX_LERP_DIM = global_variables.MAX_LERP_DIM;
-
 /// Function to get a function value of a point in a grid using multilinear interpolation.
 pub fn lerp(comptime T: type, grid: RealMatrix(T), column: usize, r: RealVector(T)) !T {
-    if (r.len > MAX_LERP_DIM) return error.TooManyDimensionsInLerp;
+    const max_dim = 16;
+
+    if (r.len > max_dim) {
+
+        std.log.err("LERP DIMENSION EXCEEDS MAXIMUM, MAXIMUM IS {d} BUT GOT {d}, THIS CAN BE CHANGED IN THE SOURCE CODE", .{max_dim, r.len});
+
+        return error.InvalidInput;
+    }
 
     const size = @as(usize, @intFromFloat(@round(std.math.pow(T, @as(T, @floatFromInt(grid.rows)), 1 / @as(T, @floatFromInt(r.len))))));
 
-    if (std.math.pow(usize, size, r.len) != grid.rows) return error.GridSizeNotCompatibleWithLerpDimensions;
+    if (std.math.pow(usize, size, r.len) != grid.rows) {
 
-    var indices: [MAX_LERP_DIM]usize = undefined;
-    var weights: [MAX_LERP_DIM]T = undefined;
-    var strides: [MAX_LERP_DIM]usize = undefined;
+        std.log.err("GRID SIZE INCONSISTENT WITH LERP DIMENSION, EXPECTED {d} BUT GOT {d}", .{size, grid.rows});
+
+        return error.InvalidInput;
+    }
+
+    var indices: [max_dim]usize = undefined;
+    var weights: [max_dim]T = undefined;
+    var strides: [max_dim]usize = undefined;
 
     for (0..r.len) |d| {
 

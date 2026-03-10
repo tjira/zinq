@@ -31,7 +31,12 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
                 RingBuffer(T) => |object| element.* = try object.init(params.max_len, allocator),
                 RealMatrix(T) => |object| element.* = try object.init(params.rows, params.cols, allocator),
                 RealVector(T) => |object| element.* = try object.init(params.rows, allocator),
-                else => return error.UnsupportedObjectTypeForObjectArray,
+                else => {
+
+                    std.log.err("UNSUPPORTED OBJECT TYPE FOR OBJECT ARRAY", .{});
+
+                    return error.InvalidInput;
+                }
             };
 
             return @This(){
@@ -51,7 +56,12 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
                 RingBuffer(T) => |object| element.* = try object.initZero(params.max_len, allocator),
                 RealMatrix(T) => |object| element.* = try object.initZero(params.rows, params.cols, allocator),
                 RealVector(T) => |object| element.* = try object.initZero(params.rows, allocator),
-                else => return error.UnsupportedObjectTypeForObjectArray,
+                else => {
+
+                    std.log.err("UNSUPPORTED OBJECT TYPE FOR OBJECT ARRAY", .{});
+
+                    return error.InvalidInput;
+                }
             };
 
             return @This(){

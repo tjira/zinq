@@ -28,8 +28,19 @@ pub fn StridedRealVector(comptime T: type) type {
 
         /// Covariance of the strided array elements with another strided array.
         pub fn covariance(self: @This(), other: @This()) !T {
-            if (self.len != other.len) return error.LengthMismatch;
-            if (self.len < 2) return error.NotEnoughElements;
+            if (self.len != other.len) {
+
+                std.log.err("COVARIANCE CAN ONLY BE CALCULATED FOR STRIDED VECTORS OF THE SAME LENGTH, BUT GOT {d} AND {d}", .{self.len, other.len});
+
+                return error.InvalidInput;
+            }
+
+            if (self.len < 2) {
+
+                std.log.err("COVARIANCE CAN ONLY BE CALCULATED FOR STRIDED VECTORS OF LENGTH AT LEAST 2, BUT GOT {d}", .{self.len});
+
+                return error.InvalidInput;
+            }
 
             var total: T = 0; const mean1 = self.mean(); const mean2 = other.mean();
 

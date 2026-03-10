@@ -39,7 +39,12 @@ pub fn RealTensor4(comptime T: type) type {
 
         /// Expands the tensor, keeping the correct indices.
         pub fn expand(self: *@This(), new_shape: [4]usize, allocator: std.mem.Allocator) !void {
-            if (new_shape[0] < self.shape[0] or new_shape[1] < self.shape[1] or new_shape[2] < self.shape[2] or new_shape[3] < self.shape[3]) return error.InvalidNewShape;
+            if (new_shape[0] < self.shape[0] or new_shape[1] < self.shape[1] or new_shape[2] < self.shape[2] or new_shape[3] < self.shape[3]) {
+
+                std.log.err("NEW SHAPE MUST BE LARGER THAN OR EQUAL TO THE CURRENT SHAPE", .{});
+
+                return error.InvalidInput;
+            }
 
             self.data = try allocator.realloc(self.data, prod(usize, &new_shape));
 

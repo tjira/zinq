@@ -22,7 +22,12 @@ pub fn BasisSet(comptime T: type) type {
         pub fn init(system: ClassicalParticle(T), name: []const u8, allocator: std.mem.Allocator) !BasisSet(T) {
             var basis = std.ArrayList(ContractedGaussian(T)){}; errdefer basis.deinit(allocator);
 
-            const basis_file_contents = BASIS_FILES.get(name) orelse return error.BasisNotFound;
+            const basis_file_contents = BASIS_FILES.get(name) orelse {
+
+                std.log.err("BASIS SET '{s}' NOT FOUND", .{name});
+
+                return error.InvalidInput;
+            };
 
             const basis_json = try std.json.parseFromSlice(std.json.Value, allocator, basis_file_contents, .{}); defer basis_json.deinit();
 
@@ -33,7 +38,10 @@ pub fn BasisSet(comptime T: type) type {
                 const atomic_number_length = (try std.fmt.bufPrint(&atomic_number_string, "{d}", .{system.atoms.?[i]})).len;
 
                 if (basis_json.value.object.get("elements").?.object.get(atomic_number_string[0..atomic_number_length]) == null) {
-                    return error.InvalidAtomicNumber;
+
+                    std.log.err("BASIS SET '{s}' NOT DEFINED FOR ATOMIC NUMBER {d}", .{name, system.atoms.?[i]});
+
+                    return error.InvalidInput;
                 }
 
                 const shells = basis_json.value.object.get("elements").?.object.get(atomic_number_string[0..atomic_number_length]).?.object.get("electron_shells").?.array.items;

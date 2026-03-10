@@ -5,7 +5,7 @@
             "options" : {
                 "grid" : {
                     "limits" : [[-8, 8], [-8, 8], [-8, 8]],
-                    "points" : 32
+                    "points" : 64
                 },
                 "potential" : {
                     "harmonic" : {
@@ -20,7 +20,7 @@
             "options" : {
                 "grid" : {
                     "limits" : [[-8, 8], [-8, 8], [-8, 8]],
-                    "points" : 32
+                    "points" : 64
                 },
                 "initial_conditions" : {
                     "mass" : 1,

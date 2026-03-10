@@ -17,14 +17,19 @@ const STR2F = global_variables.STR2F;
 
 /// Parses the input expression using the Shunting Yard algorithm and returns the RPN output.
 pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []const u8, allocator: std.mem.Allocator) !ReversePolishNotation(T) {
-    var rpn = try ReversePolishNotation(T).init(allocator);
+    var rpn = try ReversePolishNotation(T).init();
 
     var stack = std.ArrayList(union(enum) {op: Operator, bracket: u8, func: *const fn(T) T}){}; defer stack.deinit(allocator);
 
     var i: usize = 0; var j: usize = 0; var buffer: [64]u8 = undefined; var expect_operand: bool = true;
 
     for (variables) |variable| for (C2V.keys()) |constant| {
-        if (std.mem.eql(u8, variable, constant)) return error.VariableNameConflictWithConstant;
+        if (std.mem.eql(u8, variable, constant)) {
+
+            std.log.err("VARIABLE NAME CONFLICT WITH CONSTANT NAME '{s}'", .{variable});
+
+            return error.InvalidInput;
+        }
     };
 
     parser: while (i < input.len) : (i += 1) {
@@ -33,7 +38,12 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         if (std.ascii.isDigit(input[i])) {
 
-            if (!expect_operand) return error.UnexpectedNumberWithoutOperator;
+            if (!expect_operand) {
+
+                std.log.err("UNEXPECTED NUMBER WITHOUT OPERATOR", .{});
+
+                return error.InvalidInput;
+            }
 
             while (i < input.len and (std.ascii.isDigit(input[i]) or input[i] == '.')) : (i += 1) {
                 buffer[j] = input[i]; j += 1;
@@ -53,7 +63,15 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
             if (input[i] == '-' and expect_operand) op = .Negate
             else if (input[i] == '+' and expect_operand) op = .Affirm
             else {
-                if (expect_operand) return error.UnexpectedOperatorWithoutOperand; op = try operatorFromChar(input[i]);
+
+                if (expect_operand) {
+
+                    std.log.err("UNEXPECTED OPERATOR '{c}' WITHOUT OPERAND", .{input[i]});
+
+                    return error.InvalidInput;
+                }
+
+                op = try operatorFromChar(input[i]);
             }
 
             const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
@@ -67,7 +85,12 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         else if (input[i] == '(') {
 
-            if (!expect_operand) return error.UnexpectedLeftParenthesisWithoutOperator;
+            if (!expect_operand) {
+
+                std.log.err("UNEXPECTED '(' WITHOUT OPERATOR", .{});
+
+                return error.InvalidInput;
+            }
 
             try stack.append(allocator, .{.bracket = input[i]}); expect_operand = true;
         }
@@ -78,7 +101,12 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
                 try rpn.append(stack.pop().?.op, allocator);
             }
 
-            if (stack.items.len == 0) return error.MismatchedParentheses;
+            if (stack.items.len == 0) {
+
+                std.log.err("MISMATCHED PARENTHESES", .{});
+
+                return error.InvalidInput;
+            }
 
             _ = stack.pop();
 
@@ -94,7 +122,12 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
 
         else {
 
-            if (!expect_operand) return error.UnexpectedTokenWithoutOperator;
+            if (!expect_operand) {
+
+                std.log.err("UNEXPECTED TOKEN '{c}' WITHOUT OPERATOR", .{input[i]});
+
+                return error.InvalidInput;
+            }
 
             for (STR2F.keys()) |func| {
                 if (i + func.len - 1 < input.len and std.mem.eql(u8, input[i..i + func.len], func)) {
@@ -114,7 +147,9 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
                 }
             }
 
-            return error.UnrecognizedTokenInInput;
+            std.log.err("UNRECOGNIZED TOKEN '{c}' IN EXPRESSION", .{input[i]});
+
+            return error.InvalidInput;
         }
     }
 

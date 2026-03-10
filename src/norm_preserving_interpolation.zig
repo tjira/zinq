@@ -21,7 +21,12 @@ pub fn NormPreservingInterpolation(comptime T: type) type {
 
         /// Evaluate the time derivative coupling.
         pub fn evaluate(_: @This(), derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
-            if (derivative_coupling.rows != 2) return error.InvalidMatrixSizeForNormPreservingInterpolation;
+            if (derivative_coupling.rows != 2) {
+
+                std.log.err("NORM PRESERVING INTERPOLATION IS ONLY IMPLEMENTED FOR 2 STATES, BUT GOT {d}", .{derivative_coupling.rows});
+
+                return error.InvalidInput;
+            }
 
             derivative_coupling.zero();
 

@@ -35,7 +35,12 @@ pub fn MappingApproach(comptime T: type) type {
 
         /// Get the jump probabilities for the current state.
         pub fn getJumpProbabilities(_: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) !void {
-            if (jump_probabilities.len != 2) return error.MashImplementationRequiresTwoStates;
+            if (jump_probabilities.len != 2) {
+
+                std.log.err("MAPPING APPROACH IS DEFINED FOR 2 STATES, BUT GOT {d}", .{jump_probabilities.len});
+
+                return error.InvalidInput;
+            }
 
             jump_probabilities.zero(); var omega_data: [9]T = undefined; var new_bloch_data: [3]T = undefined;
 

@@ -35,8 +35,20 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
         /// Initialize a new complex Gaussian with given parameters.
         pub fn init(position: []const []const T, gamma: []const []const T, momentum: []const []const T, state: usize, bf_spread: []const u32, nstate: usize, allocator: std.mem.Allocator) !@This() {
-            if (position.len != gamma.len or position.len != momentum.len or gamma.len != momentum.len) return error.ParameterLengthMismatch;
-            if (position.len != bf_spread.len) return error.ParameterLengthMismatch;
+            if (position.len != gamma.len or position.len != momentum.len or gamma.len != momentum.len) {
+
+                std.log.err("PARAMETER LENGTH MISMATCH WHEN INITIALIZING SINGLE SET OF MCG, POSITION LENGTH: {d}, GAMMA LENGTH: {d}, MOMENTUM LENGTH: {d}", .{position.len, gamma.len, momentum.len});
+
+                return error.InvalidInput;
+            }
+
+
+            if (position.len != bf_spread.len) {
+
+                std.log.err("PARAMETER LENGTH MISMATCH WHEN INITIALIZING SINGLE SET OF MCG, POSITION LENGTH: {d}, BASIS FUNCTION SPREAD LENGTH: {d}", .{position.len, bf_spread.len});
+
+                return error.InvalidInput;
+            }
 
             var gaussians = try allocator.alloc(ComplexGaussian(T), position.len); var coefs = try ComplexVector(T).initZero(nstate * gaussians.len, allocator);
 
@@ -246,7 +258,12 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
         /// Loads the structure from a complex vector with parameters. The parameters are in order: positions, momentas, gammas for each Gaussian followed by the coefficients for each state and Gaussian.
         pub fn loadParameterVector(self: *@This(), params: ComplexVector(T)) !void {
-            if (params.len != 3 * self.gaussians[0].position.len * self.gaussians.len + self.coefs.len) return error.ParameterLengthMismatch;
+            if (params.len != 3 * self.gaussians[0].position.len * self.gaussians.len + self.coefs.len) {
+
+                std.log.err("PARAMETER VECTOR LENGTH MISMATCH WHEN LOADING SINGLE SET OF MCG, EXPECTED {d} BUT GOT {d}", .{3 * self.gaussians[0].position.len * self.gaussians.len + self.coefs.len, params.len});
+
+                return error.InvalidInput;
+            }
 
             for (self.gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
 
@@ -426,7 +443,12 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         pub fn selfOverlap(self: @This(), other: @This(), allocator: std.mem.Allocator) !Complex(T) {
             const n_states_self = self.coefs.len / self.gaussians.len;
 
-            if (self.coefs.len / self.gaussians.len != other.coefs.len / other.gaussians.len) return error.StateNumberMismatch;
+            if (self.coefs.len / self.gaussians.len != other.coefs.len / other.gaussians.len) {
+
+                std.log.err("STATE NUMBER MISMATCH WHEN CALCULATING OVERLAP BETWEEN TWO SINGLE SETS OF MCG, FIRST HAS {d} STATES AND SECOND HAS {d} STATES", .{self.coefs.len / self.gaussians.len, other.coefs.len / other.gaussians.len});
+
+                return error.InvalidInput;
+            }
 
             var S = try ComplexMatrix(T).initZero(self.gaussians.len, other.gaussians.len, allocator); defer S.deinit(allocator);
 

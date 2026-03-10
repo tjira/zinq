@@ -38,7 +38,12 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Add another matrix to this matrix.
         pub fn add(self: *@This(), other: @This()) !void {
-            if (self.rows != other.rows or self.cols != other.cols) return error.DimensionMismatch;
+            if (self.rows != other.rows or self.cols != other.cols) {
+
+                std.log.err("CANNOT ADD MATRICES OF DIFFERENT DIMENSIONS, FIRST WITH DIMENSIONS {d}x{d}, SECOND WITH DIMENSIONS {d}x{d}", .{self.rows, self.cols, other.rows, other.cols});
+
+                return error.ProgrammigError;
+            }
 
             for (self.data, 0..) |*element, index| {
                 element.* += other.data[index];
@@ -79,7 +84,12 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Copy the contents of this matrix to another matrix.
         pub fn copyTo(self: @This(), other: *@This()) !void {
-            if (self.rows != other.rows or self.cols != other.cols) return error.DimensionMismatch;
+            if (self.rows != other.rows or self.cols != other.cols) {
+
+                std.log.err("CANNOT COPY MATRICES OF DIFFERENT DIMENSIONS, FIRST WITH DIMENSIONS {d}x{d}, SECOND WITH DIMENSIONS {d}x{d}", .{self.rows, self.cols, other.rows, other.cols});
+
+                return error.ProgrammigError;
+            }
 
             for (self.data, 0..) |element, index| {
                 other.data[index] = element;
@@ -115,7 +125,12 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Expand the matrix and keep the index structure.
         pub fn expand(self: *@This(), m: usize, n: usize, allocator: std.mem.Allocator) !void {
-            if (m < self.rows or n < self.cols) return error.DimensionMismatch;
+            if (m < self.rows or n < self.cols) {
+
+                std.log.err("CANNOT EXPAND MATRIX TO SMALLER DIMENSIONS, CURRENT DIMENSIONS {d}x{d}, NEW DIMENSIONS {d}x{d}", .{self.rows, self.cols, m, n});
+
+                return error.ProgrammigError;
+            }
 
             self.data = try allocator.realloc(self.data, m * n);
 
@@ -239,7 +254,12 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Reshape the matrix.
         pub fn reshape(self: *@This(), m: usize, n: usize) !void {
-            if (m * n != self.rows * self.cols) return error.DimensionMismatch;
+            if (m * n != self.rows * self.cols) {
+
+                std.log.err("CANNOT RESHAPE MATRIX TO INCOMPATIBLE DIMENSIONS, CURRENT DIMENSIONS {d}x{d}, NEW DIMENSIONS {d}x{d}", .{self.rows, self.cols, m, n});
+
+                return error.ProgrammigError;
+            }
 
             self.rows = m;
             self.cols = n;
@@ -255,14 +275,24 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Shrink the matrix to a provided number of rows.
         pub fn shrinkRows(self: *@This(), m: usize, allocator: std.mem.Allocator) !void {
-            if (m > self.rows) return error.DimensionMismatch;
+            if (m > self.rows) {
+
+                std.log.err("CANNOT SHRINK MATRIX TO A NUMBER OF ROWS GREATER THAN THE CURRENT NUMBER OF ROWS, CURRENT NUMBER OF ROWS {d}, NEW NUMBER OF ROWS {d}", .{self.rows, m});
+
+                return error.ProgrammigError;
+            }
 
             self.data = try allocator.realloc(self.data, m * self.cols); self.rows = m;
         }
 
         /// Shrink the matrix to a provided number of columns.
         pub fn shrinkCols(self: *@This(), n: usize, allocator: std.mem.Allocator) !void {
-            if (n > self.cols) return error.DimensionMismatch;
+            if (n > self.cols) {
+
+                std.log.err("CANNOT SHRINK MATRIX TO A NUMBER OF COLUMNS GREATER THAN THE CURRENT NUMBER OF COLUMNS, CURRENT NUMBER OF COLUMNS {d}, NEW NUMBER OF COLUMNS {d}", .{self.cols, n});
+
+                return error.ProgrammigError;
+            }
 
             for (0..self.rows) |i| {
 
@@ -276,7 +306,12 @@ pub fn RealMatrix(comptime T: type) type {
 
         /// Symmetrize the matrix: A = 0.5 * (A + A^T)
         pub fn symmetrize(self: *@This()) !void {
-            if (!self.isSquare()) return error.MatrixNotSquare;
+            if (!self.isSquare()) {
+
+                std.log.err("CANNOT SYMMETRIZE A NON-SQUARE MATRIX, CURRENT DIMENSIONS {d}x{d}", .{self.rows, self.cols});
+
+                return error.ProgrammigError;
+            }
 
             for (0..self.rows) |i| for (i + 1..self.cols) |j| {
 

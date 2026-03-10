@@ -6,7 +6,6 @@ const global_variables = @import("global_variables.zig");
 
 const STR2F = global_variables.STR2F;
 const C2V = global_variables.C2V;
-const RPN_MAX_STACK_SIZE = global_variables.RPN_MAX_STACK_SIZE;
 
 /// Associativity types.
 pub const Associativity = enum {
@@ -37,20 +36,17 @@ pub fn ReversePolishNotation(comptime T: type) type {
         };
 
         data: std.ArrayList(Element),
-        stack: std.ArrayList(T),
 
         /// Initializes the RPN structure.
-        pub fn init(allocator: std.mem.Allocator) !@This() {
+        pub fn init() !@This() {
             return @This(){
                 .data = std.ArrayList(Element){},
-                .stack = try std.ArrayList(T).initCapacity(allocator, RPN_MAX_STACK_SIZE)
             };
         }
 
         /// Free the resources used by the RPN structure.
         pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
             self.data.deinit(allocator);
-            self.stack.deinit(allocator);
         }
 
         /// Appends a number to the RPN output.
@@ -71,27 +67,109 @@ pub fn ReversePolishNotation(comptime T: type) type {
 
                 try self.data.append(allocator, Element{.variable = element});
             } else {
-                return error.UnsupportedElementTypeForRpn;
+
+                std.log.err("UNSUPPORTED ELEMENT TYPE '{s}' IN RPN APPEND, EXPECTED A NUMBER, FUNCTION POINTER, OPERATOR OR VARIABLE/CONSTANT NAME", .{std.meta.typeName(@TypeOf(element))});
+
+                return error.InvalidInput;
             }
         }
 
         /// Evaluates the RPN expression and returns the result.
-        pub fn evaluate(self: *@This(), map: std.StringHashMap(T)) !T {
+        pub fn evaluate(self: @This(), map: std.StringHashMap(T)) !T {
+            var stack: [2048]T = undefined; var length: usize = 0;
+
             for (self.data.items) |element| {
                 switch (element) {
-                    .number => |num| self.stack.appendAssumeCapacity(num),
-                    .func => |func| self.stack.appendAssumeCapacity(func(self.stack.pop().?)),
-                    .op => |op| switch (operatorArity(op)) {
-                        1 => self.stack.appendAssumeCapacity(applyUnaryOperator(op, self.stack.pop().?)),
-                        2 => self.stack.appendAssumeCapacity(applyBinaryOperator(op, self.stack.pop().?, self.stack.pop().?)),
-                        else => unreachable
+                    .number => |num| {
+                        if (length >= stack.len) {
+
+                            std.log.err("RPN STACK OVERFLOW, MAX STACK SIZE IS {d}, MAXIMUM STACK SIZE CAN BE CHANGED IN THE SOURCE CODE", .{stack.len});
+
+                            return error.ProgrammingError;
+                        }
+                        stack[length] = num; length += 1;
                     },
-                    .variable => |variable| self.stack.appendAssumeCapacity(map.get(variable) orelse return error.UndefinedVariableInRpnEvaluation),
-                    .constant => |constant| self.stack.appendAssumeCapacity(C2V.get(constant) orelse return error.UndefinedConstantInRpnEvaluation),
+                    .func => |func| {
+                        if (length < 1) {
+
+                            std.log.err("RPN STACK UNDERFLOW WHEN APPLYING FUNCTION, NOT ENOUGH OPERANDS IN THE STACK", .{});
+
+                            return error.ProgrammingError;
+                        }
+                        stack[length - 1] = func(stack[length - 1]);
+                    },
+                    .op => |op| switch (operatorArity(op)) {
+                        1 => {
+                            if (length < 1) {
+
+                                std.log.err("RPN STACK UNDERFLOW WHEN APPLYING UNARY OPERATOR, NOT ENOUGH OPERANDS IN THE STACK", .{});
+
+                                return error.ProgrammingError;
+                            }
+                            stack[length - 1] = applyUnaryOperator(op, stack[length - 1]);
+                        },
+                        2 => {
+                            if (length < 2) {
+
+                                std.log.err("RPN STACK UNDERFLOW WHEN APPLYING BINARY OPERATOR, NOT ENOUGH OPERANDS IN THE STACK", .{});
+
+                                return error.ProgrammingError;
+                            }
+                            const n1 = stack[length - 1]; const n2 = stack[length - 2];
+                            stack[length - 2] = applyBinaryOperator(op, n1, n2); length -= 1;
+                        },
+                        else => {
+
+                            std.log.err("UNKNOWN OPERATOR ARITY {d} FOR OPERATOR", .{operatorArity(op)});
+
+                            return error.ProgrammingError;
+                        }
+                    },
+                    .variable => |variable| {
+                        if (map.get(variable) == null) {
+
+                            std.log.err("UNDEFINED VARIABLE '{s}' IN RPN EVALUATION", .{variable});
+
+                            return error.InvalidInput;
+                        }
+
+                        if (length >= stack.len) {
+
+                            std.log.err("RPN STACK OVERFLOW, MAX STACK SIZE IS {d}", .{stack.len});
+
+                            return error.ProgrammingError;
+                        }
+
+                        stack[length] = map.get(variable).?; length += 1;
+                    },
+                    .constant => |constant| {
+                        if (C2V.get(constant) == null) {
+
+                            std.log.err("UNDEFINED CONSTANT '{s}' IN RPN EVALUATION", .{constant});
+
+                            return error.InvalidInput;
+                        }
+
+                        if (length >= stack.len) {
+
+                            std.log.err("RPN STACK OVERFLOW, MAX STACK SIZE IS {d}", .{stack.len});
+
+                            return error.ProgrammingError;
+                        }
+
+                        stack[length] = C2V.get(constant).?; length += 1;
+                    }
                 }
             }
 
-            return self.stack.pop().?;
+            if (length != 1) {
+
+                std.log.err("ERROR IN EVALUATION OF RPN EXPRESSION, EXPECTED A SINGLE RESULT BUT GOT {d} ELEMENTS IN THE STACK", .{length});
+
+                return error.ProgrammingError;
+            }
+
+            return stack[0];
         }
 
         /// Rerutns the RPN as a string.
@@ -112,7 +190,9 @@ pub fn ReversePolishNotation(comptime T: type) type {
                             for (key) |c| try buffer.print(allocator, "{c}", .{std.ascii.toUpper(c)}); continue :outer;
                         };
 
-                        return error.UnknownFunctionInRpnToString;
+                        std.log.err("UNKNOWN FUNCTION PASSED TO RPN TO STRING", .{});
+
+                        return error.InvalidInput;
                     },
 
                     .op => |op| try buffer.print(allocator, "{s}", .{switch (op) {
@@ -172,7 +252,7 @@ pub fn operatorFromChar(char: u8) !Operator {
         '*' => Operator.Multiply,
         '/' => Operator.Divide,
         '^' => Operator.Power,
-        else => return error.UnknownOperator
+        else => return error.InvalidInput
     };
 }
 

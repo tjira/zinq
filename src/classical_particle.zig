@@ -38,7 +38,12 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Initialize the system using the number of dimensions, an array of masses, and an allocator. The positions and velocities are undefined after initialization.
         pub fn init(ndim: usize, masses: []const T, allocator: std.mem.Allocator) !@This() {
-            if (ndim != masses.len) return error.MassDimensionMismatch;
+            if (ndim != masses.len) {
+
+                std.log.err("NUMBER OF DIMENSIONS DOES NOT MATCH NUMBER OF MASSES, NUMBER OF DIMENSIONS IS {d} BUT GOT {d} MASSES", .{ndim, masses.len});
+
+                return error.InvalidInput;
+            }
 
             var particle = @This(){
                 .atoms = null,
@@ -133,7 +138,12 @@ pub fn ClassicalParticle(comptime T: type) type {
         pub fn noccSpatial(self: @This()) !usize {
             const spin = try self.noccSpin();
 
-            if (spin % 2 != 0) return error.InvalidSpin;
+            if (spin % 2 != 0) {
+
+                std.log.err("NUMBER OF OCCUPIED SPIN ORBITALS IS ODD, THIS SHOULD NOT HAPPEN FOR A CLOSED SHELL SYSTEM, GOT {d} OCCUPIED SPIN ORBITALS", .{spin});
+
+                return error.InvalidInput;
+            }
 
             return spin / 2;
         }
@@ -146,7 +156,12 @@ pub fn ClassicalParticle(comptime T: type) type {
 
             for (0..self.atoms.?.len) |i| sum += self.atoms.?[i];
 
-            if (self.charge > @as(i32, @intCast(sum))) return error.InvalidCharge;
+            if (self.charge > @as(i32, @intCast(sum))) {
+
+                std.log.err("SYSTEM CHARGE EXCEEDS NUMBER OF ELECTRONS, SYSTEM HAS {d} PROTONS BUT GOT {d} POSITIVE CHARGE", .{sum, self.charge});
+
+                return error.InvalidInput;
+            }
 
             return @intCast(@as(i32, @intCast(sum)) - self.charge);
         }
@@ -188,7 +203,12 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Sets the position of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
         pub fn setPositionRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) return error.PositionMeanDoesNotMatchStdev;
+            if (mean.len != self.ndim or stdev.len != self.ndim) {
+
+                std.log.err("MEAN AND STANDARD DEVIATION ARRAYS MUST MATCH NUMBER OF DIMENSIONS, NUMBER OF DIMENSIONS IS {d}", .{self.ndim});
+
+                return error.InvalidInput;
+            }
 
             for (0..self.ndim) |i| {
                 self.position.ptr(i).* = mean[i] + stdev[i] * random.floatNorm(T);
@@ -197,7 +217,12 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Sets the momentum of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
         pub fn setMomentumRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) return error.MomentumMeanDoesNotMatchStdev;
+            if (mean.len != self.ndim or stdev.len != self.ndim) {
+
+                std.log.err("MEAN AND STANDARD DEVIATION ARRAYS MUST MATCH NUMBER OF DIMENSIONS, NUMBER OF DIMENSIONS IS {d}", .{self.ndim});
+
+                return error.InvalidInput;
+            }
 
             for (0..self.ndim) |i| {
                 self.velocity.ptr(i).* = (mean[i] + stdev[i] * random.floatNorm(T)) / self.masses.at(i);
@@ -206,7 +231,12 @@ pub fn ClassicalParticle(comptime T: type) type {
 
         /// Write the coordinates of the system to an .xyz file. The coordinates are converted from atomic units to Angstroms before writing.
         pub fn writeCoordinatesToXYZ(self: @This(), filename: []const u8, dir: std.fs.Dir) !void {
-            if (self.atoms == null) return error.InvalidSystem;
+            if (self.atoms == null) {
+
+                std.log.err("ATOMIC NUMBERS NOT DEFINED, CANNOT WRITE COORDINATES TO XYZ FILE", .{});
+
+                return error.InvalidInput;
+            }
 
             const file = try dir.createFile(filename, .{}); defer file.close();
 
@@ -243,7 +273,14 @@ pub fn extractDims(path: []const u8) !usize {
 
 /// Read the system from a .xyz file.
 pub fn read(comptime T: type, path: []const u8, charge: i32, geometry: usize, allocator: std.mem.Allocator) !ClassicalParticle(T) {
-    const file = try std.fs.cwd().openFile(path, .{}); defer file.close();
+    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
+
+        std.log.err("FILE '{s}' NOT FOUND", .{path});
+
+        return err;
+    };
+
+    defer file.close();
 
     var buffer: [1024]u8 = undefined; var reader = file.reader(&buffer); var reader_interface = &reader.interface;
 

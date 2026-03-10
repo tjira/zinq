@@ -31,7 +31,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Initialize a new complex Gaussian with given parameters.
         pub fn init(position: []const T, gamma: []const T, momentum: []const T, allocator: std.mem.Allocator) !@This() {
             if (position.len != gamma.len or position.len != momentum.len or gamma.len != momentum.len) {
-                return error.InvalidDimensionInComplexGaussianInitialization;
+
+                std.log.err("INVALID DIMENSION OF COMPLEX GAUSSIAN PARAMETERS, ALL PARAMETERS MUST HAVE THE SAME LENGTH, GOT position: {d}, gamma: {d}, momentum: {d}", .{position.len, gamma.len, momentum.len});
+
+                return error.InvalidInput;
             }
 
             var cg = @This(){
@@ -142,7 +145,12 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Calculate the kinetic matrix element between this complex Gaussian and another.
         pub fn kinetic(self: @This(), other: @This(), mass: []const T) !Complex(T) {
-            if (self.position.len != other.position.len or self.position.len != mass.len or other.position.len != mass.len) return error.InvalidGaussianKineticMatrixElementDimension;
+            if (self.position.len != other.position.len or self.position.len != mass.len or other.position.len != mass.len) {
+
+                std.log.err("INVALID DIMENSION IN KINETIC MATRIX ELEMENT, ALL PARAMETERS MUST HAVE THE SAME LENGTH, GOT SELF POSITION: {d}, OTHER POSITION: {d}, MASS: {d}", .{self.position.len, other.position.len, mass.len});
+
+                return error.InvalidInput;
+            }
 
             var result = Complex(T).init(0, 0);
 
@@ -187,7 +195,12 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Calculates the matrix element of the momentum operator between this complex Gaussian and another.
         pub fn momentumMatrixElementIndex(self: @This(), other: @This(), i: usize) !Complex(T) {
-            if (self.position.len != other.position.len) return error.InvalidDimensionInMomentumMatrixElement;
+            if (self.position.len != other.position.len) {
+
+                std.log.err("INVALID DIMENSION IN MOMENTUM MATRIX ELEMENT, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+
+                return error.InvalidInput;
+            }
 
             var result = Complex(T).init(0, 0);
 
@@ -205,7 +218,12 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Calculates the matrix element of the position operator between this complex Gaussian and another.
         pub fn positionMatrixElementIndex(self: @This(), other: @This(), i: usize) !Complex(T) {
-            if (self.position.len != other.position.len) return error.InvalidDimensionInPositionMatrixElement;
+            if (self.position.len != other.position.len) {
+
+                std.log.err("INVALID DIMENSION IN POSITION MATRIX ELEMENT, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+
+                return error.InvalidInput;
+            }
 
             var result = Complex(T).init(0, 0);
 
@@ -231,7 +249,12 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another.
         pub fn overlap(self: @This(), other: @This()) !Complex(T) {
-            if (self.position.len != other.position.len) return error.InvalidDimensionInOverlapIntegral;
+            if (self.position.len != other.position.len) {
+
+                std.log.err("INVALID DIMENSION IN OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+
+                return error.InvalidInput;
+            }
 
             var result = Complex(T).init(1, 0);
 
@@ -256,7 +279,12 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to its width (gamma).
         pub fn overlapDiffGamma(self: @This(), other: @This()) !Complex(T) {
-            if (self.position.len != other.position.len) return error.InvalidDimensionInDiffGammaOverlapIntegral;
+            if (self.position.len != other.position.len) {
+
+                std.log.err("INVALID DIMENSION IN GAMMA DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+
+                return error.InvalidInput;
+            }
 
             var result = Complex(T).init(0, 0);
 
@@ -279,7 +307,12 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to momentum.
         pub fn overlapDiffMomentum(self: @This(), other: @This()) !Complex(T) {
-            if (self.position.len != other.position.len) return error.InvalidDimensionInDiffMomentumOverlapIntegral;
+            if (self.position.len != other.position.len) {
+
+                std.log.err("INVALID DIMENSION IN MOMENTUM DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+
+                return error.InvalidInput;
+            }
 
             var result = Complex(T).init(0, 0);
 
@@ -299,7 +332,12 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to position.
         pub fn overlapDiffPosition(self: @This(), other: @This()) !Complex(T) {
-            if (self.position.len != other.position.len) return error.InvalidDimensionInDiffPositionOverlapIntegral;
+            if (self.position.len != other.position.len) {
+
+                std.log.err("INVALID DIMENSION IN POSITION DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+
+                return error.InvalidInput;
+            }
 
             var result = Complex(T).init(0, 0);
 
@@ -319,7 +357,12 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to time.
         pub fn overlapDiffTime(self: @This(), other: @This(), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T)) !Complex(T) {
-            if (self.position.len != other.position.len) return error.InvalidDimensionInDiffTimeOverlapIntegral;
+            if (self.position.len != other.position.len) {
+
+                std.log.err("INVALID DIMENSION IN TIME DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+
+                return error.InvalidInput;
+            }
 
             var result = Complex(T).init(0, 0);
 

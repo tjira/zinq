@@ -21,7 +21,9 @@ const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 pub fn linearSolveSymmetric(comptime T: type, x: *RealVector(T), AJ: RealMatrix(T), AC: RealMatrix(T), b: RealVector(T), y: *RealVector(T)) !void {
     const tolerance = @as(T, @floatFromInt(AJ.rows)) * std.math.floatEps(T) * AJ.maxAbsDiagonal();
 
-    for (0..AJ.rows) |i| if (@abs(AJ.at(i, i)) <= tolerance) return error.SingularMatrix;
+    for (0..AJ.rows) |i| if (@abs(AJ.at(i, i)) <= tolerance) {
+        return error.NumericalError;
+    };
 
     var x_matrix = x.asMatrix();
     var y_matrix = y.asMatrix();

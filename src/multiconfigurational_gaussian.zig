@@ -188,7 +188,12 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.potential == .ab_initio) return error.InvalidPotential;
+    if (opt.potential == .ab_initio) {
+
+        std.log.err("AB INITIO POTENTIALS ARE NOT IMPLEMENTED FOR VMCG DYNAMICS", .{});
+
+        return error.InvalidInput;
+    }
 
     const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
@@ -362,7 +367,12 @@ pub fn assignWavefunction(comptime T: type, wfn_container: *RealMatrix(T), gauss
 
 /// Initialize the container for the wavefunction dynamics.
 pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(T).Wavefunction, nstate: usize, iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
-    if (grid == null) return error.InvalidWavefunctionGrid;
+    if (grid == null) {
+
+        std.log.err("WAVEFUNCTION DYNAMICS CONTAINER CANNOT BE INITIALIZED WITHOUT GRID INFORMATION, PLEASE PROVIDE THE GRID LIMITS AND NUMBER OF POINTS", .{});
+
+        return error.InvalidInput;
+    }
 
     const grid_points = powi(grid.?.points, grid.?.limits.len);
 

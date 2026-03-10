@@ -34,7 +34,12 @@ pub fn RealVector(comptime T: type) type {
 
         /// Add another vector to this vector.
         pub fn add(self: *@This(), other: @This()) !void {
-            if (self.len != other.len) return error.VectorsOfDifferentLength;
+            if (self.len != other.len) {
+
+                std.log.err("CANNOT ADD VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+
+                return error.ProgrammigError;
+            }
 
             for (self.data, 0..) |*element, index| {
                 element.* += other.data[index];
@@ -66,7 +71,12 @@ pub fn RealVector(comptime T: type) type {
 
         /// Copy the contents of this vector to another vector.
         pub fn copyTo(self: @This(), other: *@This()) !void {
-            if (self.len != other.len) return error.VectorsOfDifferentLength;
+            if (self.len != other.len) {
+
+                std.log.err("CANNOT COPY VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+
+                return error.ProgrammigError;
+            }
 
             for (self.data, 0..) |element, index| {
                 other.data[index] = element;
@@ -75,8 +85,19 @@ pub fn RealVector(comptime T: type) type {
 
         /// Calculate the covariance between this vector and another vector.
         pub fn covariance(self: @This(), other: @This()) !T {
-            if (self.len != other.len) return error.VectorsOfDifferentLength;
-            if (self.len < 2) return error.VectorsTooShortForCovariance;
+            if (self.len != other.len) {
+
+                std.log.err("CANNOT CALCULATE COVARIANCE OF VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+
+                return error.ProgrammigError;
+            }
+
+            if (self.len < 2) {
+
+                std.log.err("CANNOT CALCULATE COVARIANCE OF VECTORS WITH LESS THAN 2 ELEMENTS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+
+                return error.ProgrammigError;
+            }
 
             var total: T = 0; const mean1 = self.mean(); const mean2 = other.mean();
 
@@ -139,7 +160,12 @@ pub fn RealVector(comptime T: type) type {
 
         /// Shrinks the vector to the specified length. The function returns an error if the new length is greater than the current length.
         pub fn shrink(self: *@This(), new_len: usize, allocator: std.mem.Allocator) !void {
-            if (new_len > self.len) return error.NewLengthGreaterThanCurrentLength;
+            if (new_len > self.len) {
+
+                std.log.err("CANNOT SHRINK VECTOR TO A LENGTH GREATER THAN THE CURRENT LENGTH, CURRENT LENGTH {d}, NEW LENGTH {d}", .{self.len, new_len});
+
+                return error.ProgrammigError;
+            }
 
             self.data = try allocator.realloc(self.data, new_len); self.len = new_len;
         }
@@ -154,7 +180,12 @@ pub fn RealVector(comptime T: type) type {
 
         /// Subtract another vector from this vector.
         pub fn sub(self: *@This(), other: @This()) !void {
-            if (self.len != other.len) return error.VectorsOfDifferentLength;
+            if (self.len != other.len) {
+
+                std.log.err("CANNOT SUBTRACT VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+
+                return error.ProgrammigError;
+            }
 
             for (self.data, 0..) |*element, index| {
                 element.* -= other.data[index];

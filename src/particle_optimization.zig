@@ -15,7 +15,12 @@ const print = device_write.print;
 
 /// Optimizes the positions of a set of classical particles using the steepest descent method and a gradient.
 pub fn particleSteepestDescent(comptime T: type, opt: anytype, system: ClassicalParticle(T), efunc: anytype, method: []const u8, enable_printing: bool, allocator: std.mem.Allocator) !ClassicalParticle(T) {
-    if (opt.gradient == null) return error.GradientRequiredForOptimization;
+    if (opt.gradient == null) {
+
+        std.log.err("GRADIENT FUNCTION NOT PROVIDED FOR OPTIMIZATION", .{});
+
+        return error.InvalidInput;
+    }
 
     var optimized_system = try system.clone(allocator);
 
@@ -23,7 +28,12 @@ pub fn particleSteepestDescent(comptime T: type, opt: anytype, system: Classical
 
     for (0..opt.optimize.?.maxiter + 1) |i| {
 
-        if (i == opt.optimize.?.maxiter) return error.MaximumIterationsReached;
+        if (i == opt.optimize.?.maxiter) {
+
+            std.log.err("MAXIMUM NUMBER OF ITERATIONS REACHED WITHOUT CONVERGENCE", .{});
+
+            return error.NumericalError;
+        }
 
         var timer = try std.time.Timer.start();
 

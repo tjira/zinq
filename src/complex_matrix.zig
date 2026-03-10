@@ -39,7 +39,12 @@ pub fn ComplexMatrix(comptime T: type) type {
 
         /// Add another matrix to this matrix.
         pub fn add(self: *@This(), other: @This()) !void {
-            if (self.rows != other.rows or self.cols != other.cols) return error.MatricesIncompatible;
+            if (self.rows != other.rows or self.cols != other.cols) {
+
+                std.log.err("CANNOT ADD MATRICES OF DIFFERENT SIZES, FIRST WITH SIZE {d}x{d}, SECOND WITH SIZE {d}x{d}", .{self.rows, self.cols, other.rows, other.cols});
+
+                return error.ProgrammigError;
+            }
 
             for (self.data, 0..) |*element, index| {
                 element.* = element.add(other.data[index]);
@@ -71,7 +76,12 @@ pub fn ComplexMatrix(comptime T: type) type {
 
         /// Copy the contents of this matrix to another matrix.
         pub fn copyTo(self: @This(), other: *@This()) !void {
-            if (self.rows != other.rows or self.cols != other.cols) return error.MatricesIncompatible;
+            if (self.rows != other.rows or self.cols != other.cols) {
+
+                std.log.err("CANNOT COPY MATRICES OF DIFFERENT SIZES, FIRST WITH SIZE {d}x{d}, SECOND WITH SIZE {d}x{d}", .{self.rows, self.cols, other.rows, other.cols});
+
+                return error.ProgrammigError;
+            }
 
             for (self.data, 0..) |element, index| {
                 other.data[index] = element;

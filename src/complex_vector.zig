@@ -72,7 +72,12 @@ pub fn ComplexVector(comptime T: type) type {
 
         /// Copy the contents of this matrix to another matrix.
         pub fn copyTo(self: @This(), other: *@This()) !void {
-            if (self.len != other.len) return error.VectorsIncompatible;
+            if (self.len != other.len) {
+
+                std.log.err("CANNOT COPY VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+
+                return error.ProgrammigError;
+            }
 
             for (self.data, 0..) |element, index| {
                 other.data[index] = element;

@@ -24,7 +24,12 @@ const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 pub fn inverseHermitian(comptime T: type, Ainv: anytype, AJ: anytype, AC: anytype) !void {
     const tolerance = @as(T, @floatFromInt(AJ.rows)) * std.math.floatEps(T) * AJ.maxAbsDiagonal();
 
-    for (0..AJ.rows) |i| if (@abs(AJ.at(i, i)) < tolerance) return error.SingularMatrix;
+    for (0..AJ.rows) |i| if (@abs(AJ.at(i, i)) < tolerance) {
+
+        std.log.err("MATRIX PASSED TO INVERSE FUNCTION IS SINGULAR OR NEARLY SINGULAR", .{});
+
+        return error.NumericalError;
+    };
 
     if (comptime @TypeOf(AJ, AC) == RealMatrix(T)) {return try pseudoInverseSpectral(RealMatrix, T, Ainv, AJ, AC, tolerance);} 
     else if (comptime @TypeOf(AJ, AC) == ComplexMatrix(T)) {return try pseudoInverseSpectral(ComplexMatrix, T, Ainv, AJ, AC, tolerance);} 

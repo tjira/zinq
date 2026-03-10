@@ -24,7 +24,12 @@ const c = global_variables.c;
 pub fn particleHarmonicFrequencies(comptime T: type, system: ClassicalParticle(T), hessian: RealMatrix(T), allocator: std.mem.Allocator) !RealVector(T) {
     var freqs = try RealVector(T).init(hessian.rows, allocator); var HM = try hessian.clone(allocator); defer HM.deinit(allocator);
 
-    for (system.atoms.?) |atom| {if (atom - 1 > AN2M.len) return error.InvalidAtomicNumber;}
+    for (system.atoms.?) |atom| if (atom - 1 > AN2M.len) {
+
+        std.log.err("ATOMIC NUMBER {d} NOT FOUND", .{atom});
+
+        return error.InvalidInput;
+    };
 
     for (0..hessian.rows) |i| for (0..hessian.rows) |j| {
         HM.ptr(i, j).* /= std.math.sqrt(AN2M[system.atoms.?[i / 3]] * AN2M[system.atoms.?[j / 3]]);

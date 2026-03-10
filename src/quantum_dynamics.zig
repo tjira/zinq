@@ -45,7 +45,6 @@ const prod = array_functions.prod;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
-const MAX_PATH_LENGTH = global_variables.MAX_PATH_LENGTH;
 
 /// The quantum dynamics options struct.
 pub fn Options(comptime T: type) type {
@@ -378,7 +377,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
             try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma);
         }
 
-        const result = try performDynamics(T, opt, enable_printing, allocator);
+        const result = try performDynamics(T, options, enable_printing, allocator);
 
         for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 0 * ndim + l).* = q[l];
         for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 1 * ndim + l).* = p[l];
@@ -398,7 +397,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(T), q: []const T, p: []const T, g: []const T) !void {
     inline for (std.meta.fields(@TypeOf(opt.write))) |field| if (@as(field.type, @field(opt.write, field.name)) != null) {
 
-        const path = &@field(opt.write, field.name).?; var new_path: [MAX_PATH_LENGTH]u8 = undefined;
+        const path = &@field(opt.write, field.name).?; var new_path: [4096]u8 = undefined;
 
         var fbs = std.io.fixedBufferStream(&new_path); const writer = fbs.writer();
 
@@ -482,7 +481,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
 
             if (j == 0) for (0..momentum.len) |k| if (@abs(momentum.at(k) - opt.initial_conditions.momentum[k]) > 1e-8) {
 
-                std.log.err("INITIAL MOMENTUM DOES NOT MATCH MEAN MOMENTUM OF INITIAL WAVEFUNCTION, EXPECTED {e:.3} BUT GOT {e:.3}", .{opt.initial_conditions.momentum[k], momentum.at(k)});
+                std.log.err("INITIAL MOMENTUM DOES NOT MATCH MEAN MOMENTUM OF INITIAL WAVEFUNCTION, EXPECTED {e:.8} BUT GOT {e:.8}", .{opt.initial_conditions.momentum[k], momentum.at(k)});
 
                 return error.NumericalError;
             };

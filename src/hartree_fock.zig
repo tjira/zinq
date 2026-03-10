@@ -124,8 +124,19 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
     
-    if (opt.gradient != null and opt.gradient.? == .analytic) return error.GradientNotImplemented;
-    if (opt.hessian != null and opt.hessian.? == .analytic) return error.HessianNotImplemented;
+    if (opt.gradient != null and opt.gradient.? == .analytic) {
+
+        std.log.err("ANALYTIC GRADIENT NOT IMPLEMENTED FOR HARTREE-FOCK METHOD", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.hessian != null and opt.hessian.? == .analytic) {
+
+        std.log.err("ANALYTIC HESSIAN NOT IMPLEMENTED FOR HARTREE-FOCK METHOD", .{});
+
+        return error.InvalidInput;
+    }
 
     var system = try classical_particle.read(T, opt.system, opt.charge, 0, allocator); defer system.deinit(allocator);
 
@@ -334,7 +345,12 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     while (@abs(energy - energy_prev) > opt.threshold) : (iter += 1) {
 
-        if (iter >= opt.maxiter) return error.ScfNotConverged;
+        if (iter >= opt.maxiter) {
+
+            std.log.err("SCF DID NOT CONVERGE IN {d} ITERATIONS", .{opt.maxiter});
+
+            return error.NumericalError;
+        }
 
         timer.reset();
 

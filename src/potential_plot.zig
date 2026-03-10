@@ -52,7 +52,12 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    if (opt.potential == .ab_initio) return error.AdiabaticPotentialPlotNotImplementedForAbInitio;
+    if (opt.potential == .ab_initio) {
+
+        std.log.err("AB INITIO POTENTIAL IS NOT SUPPORTED IN THE POTENTIAL PLOT TARGET", .{});
+
+        return error.InvalidInput;
+    }
 
     const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
@@ -60,8 +65,20 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
-    if (opt.grid.limits.len != ndim) return error.GridLimitsLengthMustMatchPotentialDimensionality;
-    for (0..ndim) |i| if (opt.grid.limits[i].len != 2) return error.GridLimitsMustHaveLengthTwo;
+    if (opt.grid.limits.len != ndim) {
+
+        std.log.err("GRID LIMITS MUST HAVE THE SAME LENGTH AS THE NUMBER OF DIMENSIONS, BUT GOT {d} AND {d}", .{opt.grid.limits.len, ndim});
+
+        return error.InvalidInput;
+    }
+
+
+    for (0..ndim) |i| if (opt.grid.limits[i].len != 2) {
+
+        std.log.err("EACH GRID LIMIT MUST HAVE EXACTLY 2 ELEMENTS, BUT GOT {d} FOR DIMENSION {d}", .{opt.grid.limits[i].len, i});
+
+        return error.InvalidInput;
+    };
 
     const potential_matrix = try RealMatrix(T).init(std.math.pow(usize, @intCast(opt.grid.points), ndim), ndim + nstate * nstate, allocator);
 
