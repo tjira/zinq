@@ -211,6 +211,13 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
     var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
+    if (opt.write.spectrum != null and opt.spectrum.padding_order == 0) {
+
+        std.log.err("SPECTRUM PADDING ORDER MUST BE GREATER THAN ZERO, 1 MEANS PADDING TO THE FIRST POWER OF TWO GREATER THAN OR EQUAL TO THE NUMBER OF ITERATIONS", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.initial_conditions.spread) |ics| if (ics.position) |qstruct| if (qstruct.end.len != ndim or qstruct.step.len != ndim) {
 
         std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, qstruct.end.len});
@@ -359,7 +366,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var p = try allocator.alloc(T, ndim); defer allocator.free(p);
     var g = try allocator.alloc(T, ndim); defer allocator.free(g);
 
-    var transition_probability = try RealMatrix(T).initZero(qsteps * psteps, 3 * ndim + nstate, allocator); defer transition_probability.deinit(allocator);
+    var transition_probability = try RealMatrix(T).initZero(qsteps * psteps * gsteps, 3 * ndim + nstate, allocator); defer transition_probability.deinit(allocator);
 
     for (0..qsteps) |i| for (0..psteps) |j| for (0..gsteps) |k| {
 
@@ -367,9 +374,9 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         var temp_i = i; var temp_j = j; var temp_k = k;
 
-        for (0..ndim) |l| {q[l] = q0[l] + @as(T, @floatFromInt(temp_i % qsteps_i[l])) * if (ics_pos) |qstruct| qstruct.step[k] else 0; temp_i /= qsteps_i[l];}
-        for (0..ndim) |l| {p[l] = p0[l] + @as(T, @floatFromInt(temp_j % psteps_i[l])) * if (ics_mom) |pstruct| pstruct.step[k] else 0; temp_j /= psteps_i[l];}
-        for (0..ndim) |l| {g[l] = g0[l] + @as(T, @floatFromInt(temp_k % gsteps_i[l])) * if (ics_gam) |gstruct| gstruct.step[k] else 0; temp_k /= gsteps_i[l];}
+        for (0..ndim) |l| {q[l] = q0[l] + @as(T, @floatFromInt(temp_i % qsteps_i[l])) * if (ics_pos) |qstruct| qstruct.step[l] else 0; temp_i /= qsteps_i[l];}
+        for (0..ndim) |l| {p[l] = p0[l] + @as(T, @floatFromInt(temp_j % psteps_i[l])) * if (ics_mom) |pstruct| pstruct.step[l] else 0; temp_j /= psteps_i[l];}
+        for (0..ndim) |l| {g[l] = g0[l] + @as(T, @floatFromInt(temp_k % gsteps_i[l])) * if (ics_gam) |gstruct| gstruct.step[l] else 0; temp_k /= gsteps_i[l];}
 
         var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p; options.initial_conditions.gamma = g;
 
@@ -385,7 +392,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         for (0..nstate) |l| transition_probability.ptr(i * psteps + j, 3 * ndim + l).* = result.population.at(result.population.rows - 1, l);
 
-        if (i == 0 and j == 0) output = result else result.deinit(allocator);
+        if (i == 0 and j == 0 and k == 0) output = result else result.deinit(allocator);
     };
 
     if (opt.write.transition_probability) |path| try exportRealMatrix(T, path, transition_probability);
