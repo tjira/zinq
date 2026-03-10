@@ -42,7 +42,7 @@ pub fn RealMatrix(comptime T: type) type {
 
                 std.log.err("CANNOT ADD MATRICES OF DIFFERENT DIMENSIONS, FIRST WITH DIMENSIONS {d}x{d}, SECOND WITH DIMENSIONS {d}x{d}", .{self.rows, self.cols, other.rows, other.cols});
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             for (self.data, 0..) |*element, index| {
@@ -88,7 +88,7 @@ pub fn RealMatrix(comptime T: type) type {
 
                 std.log.err("CANNOT COPY MATRICES OF DIFFERENT DIMENSIONS, FIRST WITH DIMENSIONS {d}x{d}, SECOND WITH DIMENSIONS {d}x{d}", .{self.rows, self.cols, other.rows, other.cols});
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             for (self.data, 0..) |element, index| {
@@ -129,7 +129,7 @@ pub fn RealMatrix(comptime T: type) type {
 
                 std.log.err("CANNOT EXPAND MATRIX TO SMALLER DIMENSIONS, CURRENT DIMENSIONS {d}x{d}, NEW DIMENSIONS {d}x{d}", .{self.rows, self.cols, m, n});
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             self.data = try allocator.realloc(self.data, m * n);
@@ -159,7 +159,7 @@ pub fn RealMatrix(comptime T: type) type {
         }
 
         /// Trace of a matrix.
-        pub fn trace(self: @This()) void {
+        pub fn trace(self: @This()) T {
             var result: T = 0;
 
             for (0..@min(self.rows, self.cols)) |i| result += self.at(i, i);
@@ -258,7 +258,7 @@ pub fn RealMatrix(comptime T: type) type {
 
                 std.log.err("CANNOT RESHAPE MATRIX TO INCOMPATIBLE DIMENSIONS, CURRENT DIMENSIONS {d}x{d}, NEW DIMENSIONS {d}x{d}", .{self.rows, self.cols, m, n});
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             self.rows = m;
@@ -279,7 +279,7 @@ pub fn RealMatrix(comptime T: type) type {
 
                 std.log.err("CANNOT SHRINK MATRIX TO A NUMBER OF ROWS GREATER THAN THE CURRENT NUMBER OF ROWS, CURRENT NUMBER OF ROWS {d}, NEW NUMBER OF ROWS {d}", .{self.rows, m});
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             self.data = try allocator.realloc(self.data, m * self.cols); self.rows = m;
@@ -291,7 +291,7 @@ pub fn RealMatrix(comptime T: type) type {
 
                 std.log.err("CANNOT SHRINK MATRIX TO A NUMBER OF COLUMNS GREATER THAN THE CURRENT NUMBER OF COLUMNS, CURRENT NUMBER OF COLUMNS {d}, NEW NUMBER OF COLUMNS {d}", .{self.cols, n});
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             for (0..self.rows) |i| {
@@ -310,7 +310,7 @@ pub fn RealMatrix(comptime T: type) type {
 
                 std.log.err("CANNOT SYMMETRIZE A NON-SQUARE MATRIX, CURRENT DIMENSIONS {d}x{d}", .{self.rows, self.cols});
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             for (0..self.rows) |i| for (i + 1..self.cols) |j| {
