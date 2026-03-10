@@ -53,7 +53,7 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
             if (input[i] == '-' and expect_operand) op = .Negate
             else if (input[i] == '+' and expect_operand) op = .Affirm
             else {
-                if (expect_operand) return error.UnexpectedOperatorWithoutOperand;
+                if (expect_operand) return error.UnexpectedOperatorWithoutOperand; op = try operatorFromChar(input[i]);
             }
 
             const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
