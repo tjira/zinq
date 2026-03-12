@@ -65,7 +65,7 @@ pub fn main() !void {
         try print(", TIMESTAMP: {s}\n", .{ts});
     }
 
-    const mm_results = try benchmark(f64, MmBenchStruct(f64), 2, 600, 1000, allocator); try exportRealMatrix(f64, "MM.mat", mm_results); mm_results.deinit(allocator);
+    const mm_results = try benchmark(f64, MmBenchStruct(f64), 2, 300, 100, allocator); try exportRealMatrix(f64, "MM.mat", mm_results); mm_results.deinit(allocator);
 }
 
 pub fn sortAndAnalyzeTimings(timings: []f64) !struct{min: u64, median: u64, mean: u64, max: u64, sd: u64} {
@@ -119,7 +119,7 @@ pub fn benchmark(comptime T: type, bench_type: anytype, min_size: usize, max_siz
         results.ptr(i - min_size, 4).* = @as(T, @floatFromInt(analysis.max   ));
         results.ptr(i - min_size, 5).* = @as(T, @floatFromInt(analysis.sd    ));
 
-        for (1..6) |col| results.ptr(i - min_size, col).* /= 1000 * 1000;
+        for (1..6) |col| results.ptr(i - min_size, col).* /= std.time.ns_per_ms;
 
         const print_payload = .{.value = i, .min = analysis.min, .median = analysis.median, .mean = analysis.mean, .max = analysis.max, .sd = analysis.sd};
 
