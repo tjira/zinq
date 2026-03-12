@@ -51,6 +51,7 @@ def plot():
     parser.add_argument("--alphas", nargs="+", help="Alpha values for the plotted lines.")
     parser.add_argument("--colors", nargs="+", help="Individual colors for the plotted lines.")
     parser.add_argument("--errors", nargs="+", help="Error bars for the plotted lines.")
+    parser.add_argument("--fits", nargs="+", help="Fit lines to the plotted data.")
     parser.add_argument("--legends", nargs="+", help="Labels of the plotted lines.")
     parser.add_argument("--markers", nargs="+", help="Markers for the plotted lines.")
     parser.add_argument("--offsets", nargs="+", help="Vertical offsets for the plotted lines.")
@@ -74,10 +75,11 @@ def plot():
     data_errors, cols_errors = zip(*[load(file) for file in args.errors[1:]]) if args.errors else ((), ())
 
     # get the line indices for the error bars, colors, offsets, scales, and alphas
-    lind_errors  = (list(map(lambda x: int(x),  args.errors [0].split(","))) if args.errors [0] not in ["all", "every"] else np.arange(sum([len(col) for col in cols_errors]))        ) if args.errors  else []
-    lind_colors  = (list(map(lambda x: trng(x), args.colors [0].split(","))) if args.colors [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.colors  else []
-    lind_offsets = (list(map(lambda x: trng(x), args.offsets[0].split(","))) if args.offsets[0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.offsets else []
-    lind_scales  = (list(map(lambda x: trng(x), args.scales [0].split(","))) if args.scales [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.scales  else []
+    line_errors  = (list(map(lambda x: int(x),  args.errors [0].split(","))) if args.errors [0] not in ["all", "every"] else np.arange(sum([len(col) for col in cols_errors]))        ) if args.errors  else []
+    line_fits    = (list(map(lambda x: trng(x), args.fits   [0].split(","))) if args.fits   [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.fits    else []
+    line_colors  = (list(map(lambda x: trng(x), args.colors [0].split(","))) if args.colors [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.colors  else []
+    line_offsets = (list(map(lambda x: trng(x), args.offsets[0].split(","))) if args.offsets[0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.offsets else []
+    line_scales  = (list(map(lambda x: trng(x), args.scales [0].split(","))) if args.scales [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.scales  else []
     line_alphas  = (list(map(lambda x: trng(x), args.alphas [0].split(","))) if args.alphas [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.alphas  else []
     line_legends = (list(map(lambda x: trng(x), args.legends[0].split(","))) if args.legends[0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.legends else []
     line_widths  = (list(map(lambda x: trng(x), args.widths [0].split(","))) if args.widths [0] not in ["all", "every"] else np.arange(len(list(dcit(data, data_cols))))[np.newaxis].T) if args.widths  else []
@@ -88,10 +90,10 @@ def plot():
     # add the scales and offsets to the initial lines in the data
     for (f, s) in ((frame, args.animate if args.animate else 0) for frame in range((data[0].shape[1] - 1) // args.animate if args.animate else 1)):
         for i, (data_i, j) in enumerate(dcit(data, data_cols)):
-            data_i[:, j + f * s + 1] *= float(args.scales [indc(lind_scales,  i)[0] + 1 if args.scales[0]  != "all" else 1]) if indc(lind_scales,  i) else 1
+            data_i[:, j + f * s + 1] *= float(args.scales [indc(line_scales,  i)[0] + 1 if args.scales[0]  != "all" else 1]) if indc(line_scales,  i) else 1
     for (f, s) in ((frame, args.animate if args.animate else 0) for frame in range((data[0].shape[1] - 1) // args.animate if args.animate else 1)):
         for i, (data_i, j) in enumerate(dcit(data, data_cols)):
-            data_i[:, j + f * s + 1] += float(args.offsets[indc(lind_offsets, i)[0] + 1 if args.offsets[0] != "all" else 1]) if indc(lind_offsets, i) else 0
+            data_i[:, j + f * s + 1] += float(args.offsets[indc(line_offsets, i)[0] + 1 if args.offsets[0] != "all" else 1]) if indc(line_offsets, i) else 0
 
     # create the figure and the container for plots and error bars
     fig = plt.figure(dpi=args.dpi if args.output else 96, figsize=(args.figsize[1], args.figsize[0])); axes, plots, ebars = {}, [], []
@@ -108,27 +110,72 @@ def plot():
         # extract the color from the colormap
         color = cmap[len([line for line in axes[args.subplots[len(plots) % len(args.subplots)]].get_lines() if not isinstance(line.get_color(), str)]) % len(cmap)]
 
-        # set the color and alpha if provided
+        # extract the alpha, color, legend, marker, style, xcol, and width for the current line
         alpha  = float(args.alphas [indc(line_alphas,  i)[0] + 1 if args.alphas [0] != "all" else 1]) if indc(line_alphas,  i) else 1
-        color  =   str(args.colors [indc(lind_colors,  i)[0] + 1 if args.colors [0] != "all" else 1]) if indc(lind_colors,  i) else color
+        color  =   str(args.colors [indc(line_colors,  i)[0] + 1 if args.colors [0] != "all" else 1]) if indc(line_colors,  i) else color
         legend =   str(args.legends[indc(line_legends, i)[0] + 1 if args.legends[0] != "all" else 1]) if indc(line_legends, i) else ""
         marker =   str(args.markers[indc(line_markers, i)[0] + 1 if args.markers[0] != "all" else 1]) if indc(line_markers, i) else ""
         style  =   str(args.styles [indc(line_styles,  i)[0] + 1 if args.styles [0] != "all" else 1]) if indc(line_styles,  i) else "-"
         xcol   =   int(args.xcols  [indc(line_xcols,   i)[0] + 1 if args.xcols  [0] != "all" else 1]) if indc(line_xcols,   i) else 0
         width  = float(args.widths [indc(line_widths,  i)[0] + 1 if args.widths [0] != "all" else 1]) if indc(line_widths,  i) else 2.2
 
+        # extract the plot params for the line
+        kwargs = {"alpha": alpha, "color": color, "label": legend, "linestyle": style, "linewidth": width, "marker": marker}
+
         # plot the data and append the plot to the list
-        plots.append(axes[args.subplots[len(plots) % len(args.subplots)]].plot(data_i[:, xcol], data_i[:, j + 1], alpha=alpha, color=color, label=legend, linestyle=style, linewidth=width, marker=marker))
+        plots.append(axes[args.subplots[len(plots) % len(args.subplots)]].plot(data_i[:, xcol], data_i[:, j + 1], **kwargs))
+
+    # loop over data again to plot the fits if provided
+    for i, (data_i, j) in enumerate(dcit(data, data_cols)):
+
+        # extract the color from the colormap
+        color = cmap[len([line for line in axes[args.subplots[len(plots) % len(args.subplots)]].get_lines() if not isinstance(line.get_color(), str)]) % len(cmap)]
+
+        # extract the fit expression and the x column for the current line
+        fitf   =   str(args.fits   [indc(line_fits,    i)[0] + 1 if args.fits   [0] != "all" else 1]) if indc(line_fits,    i) else None
+        xcol   =   int(args.xcols  [indc(line_xcols,   i)[0] + 1 if args.xcols  [0] != "all" else 1]) if indc(line_xcols,   i) else 0
+
+        # extract the alpha, color, legend, marker, style, and width for the current fit
+        alpha  = float(args.alphas [indc(line_alphas,  i + len(data_cols))[0] + 1 if args.alphas [0] != "all" else 1]) if indc(line_alphas,  i + len(data_cols)) else 1
+        color  =   str(args.colors [indc(line_colors,  i + len(data_cols))[0] + 1 if args.colors [0] != "all" else 1]) if indc(line_colors,  i + len(data_cols)) else color
+        legend =   str(args.legends[indc(line_legends, i + len(data_cols))[0] + 1 if args.legends[0] != "all" else 1]) if indc(line_legends, i + len(data_cols)) else ""
+        marker =   str(args.markers[indc(line_markers, i + len(data_cols))[0] + 1 if args.markers[0] != "all" else 1]) if indc(line_markers, i + len(data_cols)) else ""
+        style  =   str(args.styles [indc(line_styles,  i + len(data_cols))[0] + 1 if args.styles [0] != "all" else 1]) if indc(line_styles,  i + len(data_cols)) else "-"
+        width  = float(args.widths [indc(line_widths,  i + len(data_cols))[0] + 1 if args.widths [0] != "all" else 1]) if indc(line_widths,  i + len(data_cols)) else 2.2
+
+        # check if there is a fit for the current line
+        if fitf:
+
+            # import the fitting libraries
+            import scipy as sc, sympy as sp
+
+            # scaling the function to bring the x values in between 0 and 1 to improve the fit stability
+            scalef = lambda x: (x - x.min()) / (x.max() - x.min())
+
+            # define the expression and the parameters for the fit
+            expr, x = sp.sympify(fitf.split(":")[0]), sp.symbols("x"); params = sorted(list(expr.free_symbols - {x}), key=lambda s: s.name)
+
+            # create the fitting function and fit the data
+            f, guess = sp.lambdify([x] + params, expr, modules="numpy"), fitf.split(":")[1].split(",") if ":" in fitf else [1] * len(params)
+
+            # fit the data and extract the optimal parameters and their covariance
+            popt, pcov = sc.optimize.curve_fit(f, scalef(data_i[:, xcol]), data_i[:, j + 1], p0=[float(g) for g in guess])
+
+            # extract the plot params for the fit
+            kwargs = {"alpha": alpha, "color": color, "label": legend, "linestyle": style, "linewidth": width, "marker": marker}
+
+            # plot the fit and append the plot to the list
+            plots.append(axes[args.subplots[len(plots) % len(args.subplots)]].plot(data_i[:, xcol], f(scalef(data_i[:, xcol]), *popt), **kwargs))
 
     # loop over the error bars and their columns
     for (data_errors_i, j) in dcit(data_errors, cols_errors):
 
         # get the top and bottom lines
-        top = plots[lind_errors[len(ebars)]][0].get_ydata() + data_errors_i[:, j + 1]
-        bot = plots[lind_errors[len(ebars)]][0].get_ydata() - data_errors_i[:, j + 1]
+        top = plots[line_errors[len(ebars)]][0].get_ydata() + data_errors_i[:, j + 1]
+        bot = plots[line_errors[len(ebars)]][0].get_ydata() - data_errors_i[:, j + 1]
 
         # extract the color
-        color = plots[lind_errors[len(ebars)]][0].get_color()
+        color = plots[line_errors[len(ebars)]][0].get_color()
 
         # fill the area between the top and bottom line and append the plot to the list
         ebars.append(axes[args.subplots[len(ebars) % len(args.subplots)]].fill_between(data_errors_i[:, 0], bot, top, color=color, alpha=0.2))
@@ -217,11 +264,11 @@ def plot():
         for i, (data_errors_i, j) in enumerate(dcit(data_errors, cols_errors)):
 
             # update the error bars
-            top = plots[lind_errors[i]][0].get_ydata() + data_errors_i[:, j + 1]
-            bot = plots[lind_errors[i]][0].get_ydata() - data_errors_i[:, j + 1]
+            top = plots[line_errors[i]][0].get_ydata() + data_errors_i[:, j + 1]
+            bot = plots[line_errors[i]][0].get_ydata() - data_errors_i[:, j + 1]
 
             # fill the area between the top and bottom line
-            ebars[i].remove(); ebars[i] = axes[args.subplots[i % len(args.subplots)]].fill_between(data_errors_i[:, 0], bot, top, color=cmap[lind_errors[i] % len(cmap)], alpha=0.2)
+            ebars[i].remove(); ebars[i] = axes[args.subplots[i % len(args.subplots)]].fill_between(data_errors_i[:, 0], bot, top, color=cmap[line_errors[i] % len(cmap)], alpha=0.2)
 
     # create the animation
     anim = anm.FuncAnimation(fig, update, frames=(data[0].shape[1] - 1) // args.animate, init_func=lambda: None, interval=1000 // args.fps) if args.animate else None
