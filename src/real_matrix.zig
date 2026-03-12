@@ -252,6 +252,15 @@ pub fn RealMatrix(comptime T: type) type {
             return &self.data[i * self.cols + j];
         }
 
+        /// Fill the matrix with random values using a given seed.
+        pub fn randomize(self: *@This(), seed: u64) void {
+            var split_mix = std.Random.SplitMix64.init(seed); var rng = std.Random.DefaultPrng.init(split_mix.next());
+
+            var random = rng.random();
+
+            for (self.data) |*e| e.* = random.float(T);
+        }
+
         /// Reshape the matrix.
         pub fn reshape(self: *@This(), m: usize, n: usize) !void {
             if (m * n != self.rows * self.cols) {

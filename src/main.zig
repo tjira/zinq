@@ -1,8 +1,9 @@
 //! Main file of the program.
 
 const builtin = @import("builtin");
-const config = @import("config");
 const std = @import("std");
+
+pub const config = @import("config");
 
 pub const abinitio_potential = @import("abinitio_potential.zig");
 pub const andersen_thermostat = @import("andersen_thermostat.zig");

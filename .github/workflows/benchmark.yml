@@ -1,0 +1,33 @@
+name: Benchmark
+
+on:
+  push:
+    branches:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Run the Benchmark
+        run: zig build --release=fast benchmark
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: results
+          path: *.mat
+
+      - name: Setup Tmate Session
+        if: failure()
+        uses: mxschmitt/action-tmate/detached@v3

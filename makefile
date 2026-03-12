@@ -35,6 +35,9 @@ all: zinq
 zinq: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
 	$(COMPILER) build $(ZIG_FLAGS)
 
+benchmark: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
+	$(COMPILER) build $(ZIG_FLAGS) benchmark
+
 cross: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
 	$(COMPILER) build $(ZIG_FLAGS) cross
 
