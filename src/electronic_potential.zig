@@ -228,5 +228,23 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .vibronic_coupling => |field| field.nstate()
             };
         }
+
+        /// Init function for potentials that require precomputation or data loading.
+        pub fn init(self: *@This(), allocator: std.mem.Allocator) !void {
+            return switch (self.*) {
+                .custom => |*field| try field.init(allocator),
+                .file => |*field| try field.init(allocator),
+                inline else => {}
+            };
+        }
+
+        /// Deinit function for potentials that require cleanup.
+        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
+            return switch (self.*) {
+                .custom => |*field| field.deinit(allocator),
+                .file => |*field| field.deinit(allocator),
+                inline else => {}
+            };
+        }
     };
 }

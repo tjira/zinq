@@ -13,28 +13,15 @@ const ReversePolishNotation = reverse_polish_notation.ReversePolishNotation;
 
 const shuntingYard = shunting_yard.shuntingYard;
 
-var custom_potential_data: ?CustomPotentialData(f64) = null;
-
-/// Global struct holding the data for the custom electronic potential.
-pub fn CustomPotentialData(comptime T: type) type {
-    return struct {
-        rpn_array: []ReversePolishNotation(T),
-        map: std.StringHashMap(T),
-
-        /// Free the resources.
-        pub fn deinit(self: *@This(), allocator: std.mem.Allocator) void {
-            for (self.rpn_array) |*rpn| rpn.deinit(allocator);
-            allocator.free(self.rpn_array);
-            self.map.deinit();
-        }
-    };
-}
-
 /// Struct holding parameters for the custom electronic potential that uses the Shunting Yard algorithm to parse mathematical expressions.
 pub fn CustomPotential(comptime T: type) type {
     return struct {
         variables: []const []const u8,
         matrix: []const []const []const u8,
+
+        data: ?struct {
+            rpn_array: []ReversePolishNotation(T),
+        } = null,
 
         /// Diabatic potential evaluator.
         pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
@@ -52,30 +39,24 @@ pub fn CustomPotential(comptime T: type) type {
                 return error.ProgrammingError;
             }
 
-            if (custom_potential_data) |*cpd| {
+            var buffer: [1024]u8 = undefined; var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
-                cpd.map.putAssumeCapacity("t", time);
+            var map = std.StringHashMap(T).init(fba.allocator()); defer map.deinit();
 
-                for (0..position.len) |q| {
-                    cpd.map.putAssumeCapacity(self.variables[q], position.at(q));
-                }
+            try map.put("t", time);
 
-                const value = try cpd.rpn_array[i * self.matrix.len + j].evaluate(custom_potential_data.?.map);
+            for (0..self.variables.len) |k| try map.put(self.variables[k], position.at(k));
 
-                return value;
+            if (self.data) |cpd| return try cpd.rpn_array[i * self.matrix.len + j].evaluate(map);
 
-            } else {
+            std.log.err("CUSTOM POTENTIAL DATA NOT INITIALIZED, CALL init() BEFORE EVALUATING THE POTENTIAL", .{});
 
-                std.log.err("CUSTOM POTENTIAL DATA NOT INITIALIZED, CALL init() BEFORE EVALUATING THE POTENTIAL", .{});
-
-                return error.ProgrammingError;
-            }
+            return error.ProgrammingError;
         }
 
         /// Parse and initialize the custom potential from the provided expression matrix.
-        pub fn init(self: @This(), allocator: std.mem.Allocator) !?CustomPotentialData(T) {
+        pub fn init(self: *@This(), allocator: std.mem.Allocator) !void {
             var rpn_array = try allocator.alloc(ReversePolishNotation(T), self.matrix.len * self.matrix.len);
-            var map = std.StringHashMap(T).init(allocator);
 
             for (0..self.matrix.len) |i| if (self.matrix[i].len != self.matrix.len) {
 
@@ -88,16 +69,44 @@ pub fn CustomPotential(comptime T: type) type {
                 rpn_array[i * self.matrix.len + j] = try shuntingYard(T, self.matrix[i][j], self.variables, allocator);
             };
 
-            try map.put("t", undefined);
-
-            for (0..self.variables.len) |k| try map.put(self.variables[k], undefined);
-
-            custom_potential_data = .{
+            self.data = .{
                 .rpn_array = rpn_array,
-                .map = map
             };
+        }
 
-            return custom_potential_data;
+        pub fn deinit(self: @This(), allocator: std.mem.Allocator) void {
+            if (self.data) |data| {
+
+                for (data.rpn_array) |*rpn| rpn.deinit(allocator);
+
+                allocator.free(data.rpn_array);
+            }
+        }
+
+        /// Custom potential JSON parser.
+        pub fn jsonParseFromValue(allocator: std.mem.Allocator, source: std.json.Value, options: std.json.ParseOptions) !@This() {
+            if (source != .object) return error.UnexpectedToken;
+
+            const variables_val = source.object.get("variables") orelse return error.MissingField;
+            const matrix_val = source.object.get("matrix") orelse return error.MissingField;
+
+            const parsed_variables = try std.json.innerParseFromValue([]const []const u8, allocator, variables_val, options);
+            const parsed_matrix = try std.json.innerParseFromValue([]const []const []const u8, allocator, matrix_val, options);
+
+            return .{.variables = parsed_variables, .matrix = parsed_matrix};
+        }
+
+        /// Custom potential JSON stringifier.
+        pub fn jsonStringify(self: *const @This(), jws: anytype) !void {
+            try jws.beginObject();
+            
+            try jws.objectField("variables");
+            try jws.write(self.variables);
+            
+            try jws.objectField("matrix");
+            try jws.write(self.matrix);
+            
+            try jws.endObject();
         }
     };
 }

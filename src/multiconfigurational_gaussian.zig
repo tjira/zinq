@@ -185,8 +185,10 @@ pub fn Custom(comptime T: type) type {
 }
 
 /// Perform the simulation.
-pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(opt);
+pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(raw_options);
+
+    var opt = raw_options; try opt.potential.init(allocator); defer opt.potential.deinit(allocator);
 
     if (opt.potential == .ab_initio) {
 
@@ -199,9 +201,6 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     const nstate = opt.potential.nstate();
     const ngauss = opt.method.vMCG.position.len;
     const nparams = 3 * ngauss * ndim + nstate * ngauss;
-
-    var custom_potential = if (opt.potential == .custom) try opt.potential.custom.init(allocator) else null; defer if (custom_potential) |*cp| cp.deinit(allocator);
-    var file_potential = if (opt.potential == .file) try opt.potential.file.init(allocator) else null; defer if (file_potential) |*fp| fp.deinit(allocator);
 
     var output = try Output(T).init(nstate, ndim, @intCast(opt.iterations), allocator);
     
