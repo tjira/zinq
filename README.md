@@ -1,9 +1,9 @@
 <h1 align="center">Zinq</h1>
 
 <h4 align="center">
-  <a href="https://github.com/tjira/zinq#features">Features</a>
+  <a href="#features">Features</a>
   ·
-  <a href="https://github.com/tjira/zinq#compilation">Compilation</a>
+  <a href="#compilation">Compilation</a>
   ·
   <a href="https://tjira.github.io/zinq/">Docs</a>
 </h4>
@@ -54,7 +54,7 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
   Perform restricted or generalized Hartree-Fock calculation with DIIS accelerator.
 
 * **Post-Hartree–Fock Methods**  
-  Use variety of selected perturbative or variational post-Hartree-Fock methods.
+  Use variety of selected perturbative or variational post-Hartree–Fock methods.
 
 * **Electronic Structure Analysis**  
   Compute energy derivatives and harmonic vibrational frequencies across supported methods.
@@ -78,7 +78,7 @@ You can download the latest binaries from the [releases](https://github.com/tjir
 
 ### Compilation
 
-Compiling Zinq is simple, running `make` will automatically download the Zig compiler to the project root and compile the Zinq binaries. The resulting executables are placed in the `zig-out/bin` directory. To verify the build, execute
+Compiling Zinq is easy. Running `make` detects if a Zig compiler is available. If not, it automatically downloads the compiler to the project root and builds the binaries. The resulting executables are placed in the `zig-out/bin` directory. To verify the build, execute
 
 ```bash
 ./zig-out/bin/zinq
