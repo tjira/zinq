@@ -7,6 +7,40 @@ pub fn binomialConfInt(p: anytype, n: usize) @TypeOf(p) {
     return 1.96 * std.math.sqrt(p * (1 - p) / @as(@TypeOf(p), @floatFromInt(n)));
 }
 
+/// Calculate the combination number.
+pub fn comb(n: anytype, k: @TypeOf(n)) @TypeOf(n, k) {
+    var nck: @TypeOf(n) = 1;
+
+    for (k + 1..n + 1) |i| nck *= i;
+    for (2..n - k + 1) |i| nck /= i;
+
+    return nck;
+}
+
+/// Generate all combinations of n elements from an array.
+pub fn combinations(comptime T: type, array: []const T, n: usize, allocator: std.mem.Allocator) !std.ArrayList([]T) {
+    var result = std.ArrayList([]T){}; var current = std.ArrayList(usize){}; defer current.deinit(allocator);
+
+    const Backtrack = struct { fn get(res: *std.ArrayList([]T), arr: []const T, m: usize, curr: *std.ArrayList(usize), start: usize, alloc: std.mem.Allocator) !void {
+        if (curr.items.len == m) {
+
+            var last = try alloc.alloc(T, m);
+
+            for (curr.items, 0..) |index, i| {
+                last[i] = arr[index];
+            }
+
+            try res.append(alloc, last); return;
+        }
+
+        for (start..arr.len) |i| {
+            try curr.append(alloc, i); try get(res, arr, m, curr, i + 1, alloc); _ = curr.pop();
+        }
+    }};
+
+    try Backtrack.get(&result, array, n, &current, 0, allocator); return result;
+}
+
 /// Calculate the double factorial of a number.
 pub fn dfact(n: anytype) @TypeOf(n) {
     if (n == -1 or n == 0 or n == 1) return 1;

@@ -1,0 +1,13 @@
+{
+    "zinq" : [
+        {
+            "name" : "configuration_interaction",
+            "options" : {
+                "hartree_fock" : {
+                    "system" : "molecule.xyz",
+                    "basis" : "sto-3g"
+                }
+            }
+        }
+    ]
+}

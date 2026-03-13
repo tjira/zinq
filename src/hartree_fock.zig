@@ -50,7 +50,6 @@ const printJson = device_write.printJson;
 const printRealMatrix = device_write.printRealMatrix;
 const twoAO2AS = integral_transform.twoAO2AS;
 
-const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// Hartree-Fock target options.
@@ -298,7 +297,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     const nbf = if (opt.generalized) 2 * basis.nbf() else basis.nbf();
     const nocc = if (opt.generalized) try system.noccSpin() else try system.noccSpatial();
 
-    if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{nbf});
+    if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{nbf, nocc});
 
     if (enable_printing) try print("\nONE-ELECTRON INTEGRALS: ", .{});
 

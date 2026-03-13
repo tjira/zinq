@@ -14,11 +14,13 @@ pub const berendsen_thermostat = @import("berendsen_thermostat.zig");
 pub const bias_potential = @import("bias_potential.zig");
 pub const classical_dynamics = @import("classical_dynamics.zig");
 pub const classical_particle = @import("classical_particle.zig");
+pub const complete_active_space = @import("complete_active_space.zig");
 pub const complex_absorbing_potential = @import("complex_absorbing_potential.zig");
 pub const complex_gaussian = @import("complex_gaussian.zig");
 pub const complex_matrix = @import("complex_matrix.zig");
 pub const complex_runge_kutta = @import("complex_runge_kutta.zig");
 pub const complex_vector = @import("complex_vector.zig");
+pub const configuration_interaction = @import("configuration_interaction.zig");
 pub const contracted_gaussian = @import("contracted_gaussian.zig");
 pub const custom_potential = @import("custom_potential.zig");
 pub const derivative_coupling = @import("derivative_coupling.zig");
@@ -106,6 +108,7 @@ pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 /// Available targets in the program.
 const Target = enum {
     classical_dynamics,
+    configuration_interaction,
     eigenproblem_solver,
     expression_evaluator,
     fractal_generator,
@@ -195,6 +198,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 
         switch (tag) {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
+            .configuration_interaction => try handle(f64, configuration_interaction, options, allocator),
             .eigenproblem_solver => try handle(f64, eigenproblem_solver, options, allocator),
             .expression_evaluator => try handle(f64, expression_evaluator, options, allocator),
             .fractal_generator => try handle(f64, fractal_generator, options, allocator),

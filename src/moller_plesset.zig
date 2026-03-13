@@ -2,9 +2,7 @@
 
 const std = @import("std");
 
-const basis_set = @import("basis_set.zig");
 const classical_particle = @import("classical_particle.zig");
-const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const energy_derivative = @import("energy_derivative.zig");
@@ -12,32 +10,18 @@ const hartree_fock = @import("hartree_fock.zig");
 const frequency_analysis = @import("frequency_analysis.zig");
 const global_variables = @import("global_variables.zig");
 const integral_transform = @import("integral_transform.zig");
-const linear_solve = @import("linear_solve.zig");
-const matrix_multiplication = @import("matrix_multiplication.zig");
 const molecular_integrals = @import("molecular_integrals.zig");
-const object_array = @import("object_array.zig");
 const particle_optimization = @import("particle_optimization.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
 const real_vector = @import("real_vector.zig");
 
-const BasisSet = basis_set.BasisSet;
 const ClassicalParticle = classical_particle.ClassicalParticle;
-const ContractedGaussian = contracted_gaussian.ContractedGaussian;
 const RealMatrix = real_matrix.RealMatrix;
-const RealMatrixArray = object_array.RealMatrixArray;
 const RealTensor4 = real_tensor_four.RealTensor4;
 const RealVector = real_vector.RealVector;
 
-const coulomb = molecular_integrals.coulomb;
-const eigensystemSymmetric = eigenproblem_solver.eigensystemSymmetric;
-const eigensystemSymmetricAlloc = eigenproblem_solver.eigensystemSymmetricAlloc;
-const exportRealMatrix = device_write.exportRealMatrix;
-const exportRealTensorFour = device_write.exportRealTensorFour;
 const kinetic = molecular_integrals.kinetic;
-const linearSolveSymmetric = linear_solve.linearSolveSymmetric;
-const mm = matrix_multiplication.mm;
-const mmAlloc = matrix_multiplication.mmAlloc;
 const scf = hartree_fock.scf;
 const nuclear = molecular_integrals.nuclear;
 const nuclearGradient = energy_derivative.nuclearGradient;
@@ -54,7 +38,6 @@ const printRealMatrix = device_write.printRealMatrix;
 const twoAO2MO = integral_transform.twoAO2MO;
 const twoAO2MS = integral_transform.twoAO2MS;
 
-const MAX_POOL_SIZE = global_variables.MAX_POOL_SIZE;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// The Moller-Plesset options
