@@ -10,7 +10,7 @@ def archos():
 
     ARCH, OS = platform.uname().machine.lower(), platform.uname().system.lower()
 
-    PLATFORM = os.environ.get("PLATFORM", f"{replacements.get(OS, OS)}_{replacements.get(ARCH, ARCH)}")
+    PLATFORM = os.environ.get("PLATFORM", f"{replacements.get(ARCH, ARCH)}-{replacements.get(OS, OS)}")
 
     return PLATFORM
 
@@ -27,7 +27,7 @@ def version(fallback="0.0.0"):
 
     except Exception: return fallback
 
-PLATFORM = archos(); OS, ARCH = PLATFORM.split("_", 1)
+PLATFORM = archos(); ARCH, OS = PLATFORM.split("-", 1)
 
 class Bdist(setuptools.command.bdist_wheel.bdist_wheel):
     def get_tag(self):
@@ -48,7 +48,7 @@ class Build(setuptools.command.build_py.build_py):
 
         environment = {**os.environ, **({"OS" : "Windows_NT"} if os.name == "nt" else {})}
 
-        subprocess.run(["make", "cross"], check=True, env=environment)
+        subprocess.run(["make", f"{ARCH}-{OS}"], check=True, env=environment)
 
         super().run()
 

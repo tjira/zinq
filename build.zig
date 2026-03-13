@@ -68,7 +68,9 @@ pub fn build(builder: *std.Build) !void {
 
     const main_executable_install = builder.addInstallArtifact(main_executable, .{});
 
-    builder.getInstallStep().dependOn(&main_executable_install.step);
+    if (target.query.isNative()) {builder.getInstallStep().dependOn(&main_executable_install.step);}
+
+    else try specificInstall(builder, main_executable, target);
 
     builder.step("benchmark", "Run the compiled executable").dependOn(&builder.addRunArtifact(benchmark_executable).step);
     builder.step("docs",      "Generate documentation"     ).dependOn(&docs_target                                 .step);
@@ -107,6 +109,18 @@ pub fn generateOptions(builder: *std.Build) *std.Build.Step.Options {
     options.addOption([]const u8, "zinq_version", getVersion(builder));
 
     return options;
+}
+
+pub fn specificInstall(builder: *std.Build, main_executable: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) !void {
+    const dest = try std.fmt.allocPrint(builder.allocator, "{s}-{s}", .{
+        @tagName(target.result.cpu.arch), @tagName(target.result.os.tag)
+    });
+
+    const main_executable_install = builder.addInstallArtifact(main_executable, .{
+        .dest_dir = .{.override = .{.custom = dest}}
+    });
+
+    builder.getInstallStep().dependOn(&main_executable_install.step);
 }
 
 fn getVersion(builder: *std.Build) []const u8 {

@@ -1,5 +1,7 @@
 .SHELLFLAGS := $(if $(filter $(OS),Windows_NT),-NoProfile -Command,-c)
 
+WHEEL_TARGETS := aarch64-linux x86_64-linux aarch64-macos x86_64-macos aarch64-windows x86_64-windows
+
 DEBUG       ?= 0
 INCREMENTAL ?= 0
 SUMMARY     ?= 0
@@ -28,7 +30,7 @@ COMPILER := $(if $(HAS_ZIG),zig,./.zig-bin/zig$(if $(filter $(OS),windows),.exe)
 
 all: zinq
 
-# ACORN BUILDING TARGETS ===============================================================================================================================================================================
+# ZINQ BUILDING TARGETS ================================================================================================================================================================================
 
 .PHONY: zinq cross run test docs
 
@@ -50,6 +52,11 @@ run: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
 test: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
 	$(COMPILER) build $(ZIG_FLAGS) test
 
+# SPECIFIC BUILDING TARGETS ============================================================================================================================================================================
+
+$(WHEEL_TARGETS): $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe))
+	$(COMPILER) build $(ZIG_FLAGS) -Dtarget=$@
+
 # CUSTOM TARGETS =======================================================================================================================================================================================
 
 linguist:
@@ -64,12 +71,7 @@ wheel:
 	@python -m build --wheel
 
 wheels:
-	@$(MAKE) wheel PLATFORM=linux_aarch64
-	@$(MAKE) wheel PLATFORM=linux_x86_64
-	@$(MAKE) wheel PLATFORM=macos_aarch64
-	@$(MAKE) wheel PLATFORM=macos_x86_64
-	@$(MAKE) wheel PLATFORM=windows_aarch64
-	@$(MAKE) wheel PLATFORM=windows_x86_64
+	@for PLAT in $(WHEEL_TARGETS); do $(MAKE) wheel PLATFORM=$$PLAT; done
 
 # EXTERNAL TARGETS =====================================================================================================================================================================================
 
