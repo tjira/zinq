@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const andersen_thermostat = @import("andersen_thermostat.zig");
+const baeck_an = @import("baeck_an.zig");
 const berendsen_thermostat = @import("berendsen_thermostat.zig");
 const bias_potential = @import("bias_potential.zig");
 const classical_particle = @import("classical_particle.zig");
@@ -34,6 +35,7 @@ const thermostat = @import("thermostat.zig");
 const trajectory_thermodynamics = @import("trajectory_thermodynamics.zig");
 const tully_potential = @import("tully_potential.zig");
 
+const BaeckAn = baeck_an.BaeckAn;
 const BiasPotential = bias_potential.BiasPotential;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const Complex = std.math.complex.Complex;
@@ -462,6 +464,11 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .ma_parameters = ma_parameters
     };
 
+    const baeck_an_parameters: baeck_an.Parameters(T) = .{
+        .energy_gaps = energy_gaps,
+        .time_step = opt.time_step
+    };
+
     const hst_parameters: hammes_schiffer_tully.Parameters(T) = .{
         .eigenvector_overlap = eigenvector_overlap,
         .time_step = opt.time_step
@@ -485,6 +492,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     };
 
     var derivative_coupling_parameters: derivative_coupling.Parameters(T) = .{
+        .baeck_an_parameters = baeck_an_parameters,
         .hst_parameters = hst_parameters,
         .nacv_parameters = nacv_parameters,
         .npi_parameters = npi_parameters
@@ -547,6 +555,10 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         for (0..nstate) |j| output.state_potential_energy.ptr(i, j).* = Wpp * adiabatic_potential.at(j, j);
 
+        if (!equilibrate) for (0..nstate) |j| for (j + 1..nstate) |k| {
+            energy_gaps.ptr(j * (2 * nstate - j - 1) / 2 + (k - j - 1)).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
+        };
+
         if (!equilibrate and i > 0) {
 
             if (opt.derivative_coupling) |time_derivative_coupling_algorithm| {
@@ -557,13 +569,11 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
                     try mm(T, &eigenvector_overlap, previous_eigenvectors, true, adiabatic_eigenvectors, false);
                 }
 
-                try time_derivative_coupling_algorithm.evaluate(&time_derivative_coupling, derivative_coupling_parameters);
+                if (time_derivative_coupling_algorithm != .baeck_an or i > 1) {
+                    try time_derivative_coupling_algorithm.evaluate(&time_derivative_coupling, derivative_coupling_parameters);
+                }
             }
         }
-
-        if (!equilibrate) for (0..nstate) |j| for (j + 1..nstate) |k| {
-            energy_gaps.ptr(j * (2 * nstate - j - 1) / 2 + (k - j - 1)).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
-        };
 
         if (opt.surface_hopping) |algorithm| if (!equilibrate and i > (if (algorithm == .landau_zener) @as(usize, 1) else @as(usize, 0))) {
 
