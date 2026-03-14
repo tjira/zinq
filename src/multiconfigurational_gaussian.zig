@@ -491,9 +491,9 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:8} ", .{"ITER"});
-    try writer.print("{s:12} {s:12} {s:12} ", .{"KINETIC", "POTENTIAL", "TOTAL"});
-    try writer.print("{[value]s:[width]} ", .{.value = "POSITION", .width = ndim_header_width});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOMENTUM", .width = ndim_header_width});
+    try writer.print("{s:12} {s:12} {s:12} ", .{"KIN (Eh)", "POT (Eh)", "TOT (Eh)"});
+    try writer.print("{[value]s:[width]} ", .{.value = "POS (a0)", .width = ndim_header_width});
+    try writer.print("{[value]s:[width]} ", .{.value = "MOM (hb/a0)", .width = ndim_header_width});
     try writer.print("{[value]s:[width]} ", .{.value = "POPULATION", .width = nstate_header_width});
     try writer.print("{s:4}", .{"TIME"});
 

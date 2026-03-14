@@ -758,7 +758,7 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
 
     try writer.print("{s:5} ", .{"STATE"});
     try writer.print("{[value]s:[width]} ", .{.value = "POS (a0)", .width = ndim_header_width});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOM (a0)", .width = ndim_header_width});
+    try writer.print("{[value]s:[width]} ", .{.value = "MOM (hb/a0)", .width = ndim_header_width});
 
     if (surface_hopping) |algorithm| switch (algorithm) {
         .fewest_switches => try writer.print("{[value]s:[width]} ", .{.value = "|COEFS|^2", .width = nstate_header_width}),
@@ -872,7 +872,7 @@ pub fn printFinalDetails(comptime T: type, opt: Options(T), output: Output(T)) !
 
         const print_payload = .{if (i == 0) "\n" else "", i, output.population_mean.at(opt.iterations, i), if (std.math.isNan(population_error)) 0 else population_error};
 
-        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} ± {:.6}\n", print_payload);
+        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} +- {:.6}\n", print_payload);
     }
 }
 
