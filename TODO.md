@@ -59,3 +59,4 @@
 - [x] Implement stop norm to CAP.
 - [x] Implement some printing when multiple IC are provided for QD.
 - [x] Fix the bound checking for Hermite node length.
+- [ ] The function for assigning filenames in QD is apparently unsafe.

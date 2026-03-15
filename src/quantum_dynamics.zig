@@ -385,11 +385,13 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 
         const result = try performDynamics(T, options, enable_printing, allocator);
 
-        for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 0 * ndim + l).* = q[l];
-        for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 1 * ndim + l).* = p[l];
-        for (0..ndim) |l| transition_probability.ptr(i * psteps + j, 2 * ndim + l).* = g[l];
+        const tp_index = (i * psteps + j) * gsteps + k;
 
-        for (0..nstate) |l| transition_probability.ptr(i * psteps + j, 3 * ndim + l).* = result.population.at(result.population.rows - 1, l);
+        for (0..ndim) |l| transition_probability.ptr(tp_index, 0 * ndim + l).* = q[l];
+        for (0..ndim) |l| transition_probability.ptr(tp_index, 1 * ndim + l).* = p[l];
+        for (0..ndim) |l| transition_probability.ptr(tp_index, 2 * ndim + l).* = g[l];
+
+        for (0..nstate) |l| transition_probability.ptr(tp_index, 3 * ndim + l).* = result.population.at(result.population.rows - 1, l);
 
         if (i == 0 and j == 0 and k == 0) output = result else result.deinit(allocator);
     };
