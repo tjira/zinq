@@ -369,7 +369,9 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 
     for (0..qsteps) |i| for (0..psteps) |j| for (0..gsteps) |k| {
 
-        if (enable_printing and (qsteps != 1 or psteps != 1)) try print("\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}: ", .{i * psteps + j + 1, qsteps * psteps});
+        const total_runs = qsteps * psteps * gsteps; const tp_index = (i * psteps + j) * gsteps + k;
+
+        if (enable_printing and (qsteps != 1 or psteps != 1 or gsteps != 1)) try print("\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}:\n", .{tp_index + 1, total_runs});
 
         var temp_i = i; var temp_j = j; var temp_k = k;
 
@@ -379,13 +381,11 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 
         var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p; options.initial_conditions.gamma = g;
 
-        if (qsteps != 1 or psteps != 1) {
-            try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma);
+        if (qsteps != 1 or psteps != 1 or gsteps != 1) {
+            try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma, allocator);
         }
 
         const result = try performDynamics(T, options, enable_printing, allocator);
-
-        const tp_index = (i * psteps + j) * gsteps + k;
 
         for (0..ndim) |l| transition_probability.ptr(tp_index, 0 * ndim + l).* = q[l];
         for (0..ndim) |l| transition_probability.ptr(tp_index, 1 * ndim + l).* = p[l];
@@ -394,6 +394,10 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         for (0..nstate) |l| transition_probability.ptr(tp_index, 3 * ndim + l).* = result.population.at(result.population.rows - 1, l);
 
         if (i == 0 and j == 0 and k == 0) output = result else result.deinit(allocator);
+
+        if (qsteps != 1 or psteps != 1 or gsteps != 1) inline for (std.meta.fields(@TypeOf(options.write))) |field| {
+            if (@as(field.type, @field(options.write, field.name))) |path| allocator.free(path);
+        };
     };
 
     if (opt.write.transition_probability) |path| try exportRealMatrix(T, path, transition_probability);
@@ -402,12 +406,14 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 }
 
 /// Appends the position and momentum to all output files.
-pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(T), q: []const T, p: []const T, g: []const T) !void {
+pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(T), q: []const T, p: []const T, g: []const T, allocator: std.mem.Allocator) !void {
     inline for (std.meta.fields(@TypeOf(opt.write))) |field| if (@as(field.type, @field(opt.write, field.name)) != null) {
 
-        const path = &@field(opt.write, field.name).?; var new_path: [4096]u8 = undefined;
+        const path = &@field(opt.write, field.name).?;
 
-        var fbs = std.io.fixedBufferStream(&new_path); const writer = fbs.writer();
+        var new_path = std.ArrayList(u8){}; errdefer new_path.deinit(allocator);
+
+        const writer = new_path.writer(allocator);
 
         try writer.print("{s}_Q=", .{path.*[0 .. path.len - 4]});
 
@@ -427,7 +433,7 @@ pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(
             if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
         }
 
-        try writer.writeAll(".mat"); path.* = fbs.getWritten();
+        try writer.writeAll(".mat"); path.* = try new_path.toOwnedSlice(allocator);
     };
 }
 
@@ -449,6 +455,12 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     var position = try RealVector(T).init(ndim, allocator); defer position.deinit(allocator);
     var momentum = try RealVector(T).init(ndim, allocator); defer momentum.deinit(allocator);
     var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit(allocator);
+
+    if (enable_printing) try print("\nINITIAL GAMMA: [", .{});
+
+    if (enable_printing) for (opt.initial_conditions.gamma, 0..) |gamma, i| {
+        if (i > 0) try print(", ", .{}); try print("{d:.6}", .{gamma}); if (i == opt.initial_conditions.gamma.len - 1) try print("]\n", .{});
+    };
 
     var timer = try std.time.Timer.start(); const n_dynamics = if (opt.imaginary) |f| f.states else 1;
 
