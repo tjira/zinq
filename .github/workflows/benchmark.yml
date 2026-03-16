@@ -20,8 +20,11 @@ jobs:
         with:
           version: 0.15.2
 
-      - name: Run the Benchmark
-        run: zig build --release=fast benchmark
+      - name: Build the Executables
+        run: zig build --release=fast
+
+      - name: Run the Benchmarks
+        run: ./zig-out/bin/zinq-benchmark
 
       - uses: actions/upload-artifact@v4
         with:

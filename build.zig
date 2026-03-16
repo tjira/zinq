@@ -40,18 +40,6 @@ pub fn build(builder: *std.Build) !void {
         .use_llvm = true // needed for valgrind for now
     });
 
-    const benchmark_executable = builder.addExecutable(.{
-        .name = "benchmark",
-        .root_module = builder.createModule(.{
-            .optimize = optimize,
-            .root_source_file = builder.path("tool/benchmark.zig"),
-            .strip = optimize != .Debug,
-            .single_threaded = true,
-            .target = target
-        }),
-        .use_llvm = true // needed for valgrind for now
-    });
-
     const test_executable = builder.addTest(.{
         .name = "test", .root_module = main_executable.root_module,
     });
@@ -64,18 +52,11 @@ pub fn build(builder: *std.Build) !void {
 
     main_executable.root_module.addOptions("config", options);
 
-    benchmark_executable.root_module.addImport("zinq", main_executable.root_module);
+    try install(builder, main_executable, builder.getInstallStep()); try addTools(builder, main_executable, builder.getInstallStep());
 
-    const main_executable_install = builder.addInstallArtifact(main_executable, .{});
-
-    if (target.query.isNative()) {builder.getInstallStep().dependOn(&main_executable_install.step);}
-
-    else try specificInstall(builder, main_executable, target);
-
-    builder.step("benchmark", "Run the compiled executable").dependOn(&builder.addRunArtifact(benchmark_executable).step);
-    builder.step("docs",      "Generate documentation"     ).dependOn(&docs_target                                 .step);
-    builder.step("run",       "Run the compiled executable").dependOn(&builder.addRunArtifact(main_executable     ).step);
-    builder.step("test",      "Run unit tests"             ).dependOn(&builder.addRunArtifact(test_executable     ).step);
+    builder.step("docs", "Generate documentation"     ).dependOn(&docs_target                            .step);
+    builder.step("run",  "Run the compiled executable").dependOn(&builder.addRunArtifact(main_executable).step);
+    builder.step("test", "Run unit tests"             ).dependOn(&builder.addRunArtifact(test_executable).step);
 
     const cross = builder.step("cross", "Cross-compile for all targets");
 
@@ -95,11 +76,36 @@ pub fn build(builder: *std.Build) !void {
 
         matrix_executable.root_module.addOptions("config", options);
 
-        const matrix_executable_install = builder.addInstallArtifact(matrix_executable, .{
-            .dest_dir = .{.override = .{.custom = try targets[i].zigTriple(builder.allocator)}}
+        try install(builder, matrix_executable, cross); try addTools(builder, matrix_executable, cross);
+    }
+}
+
+pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, step: *std.Build.Step) !void {
+    const optimize = main_executable.root_module.optimize;
+    const target = main_executable.root_module.resolved_target.?;
+
+    const tools: []const []const u8 = &.{
+        "benchmark",
+        "randmat"
+    };
+
+    inline for (tools) |tool| {
+
+        const tool_executable = builder.addExecutable(.{
+            .name = "zinq" ++ "-" ++ tool,
+            .root_module = builder.createModule(.{
+                .optimize = optimize,
+                .root_source_file = builder.path("tool/" ++ tool ++ ".zig"),
+                .strip = optimize != .Debug,
+                .single_threaded = true,
+                .target = target
+            }),
+            .use_llvm = true // needed for valgrind for now
         });
 
-        cross.dependOn(&matrix_executable_install.step);
+        tool_executable.root_module.addImport("zinq", main_executable.root_module);
+
+        try install(builder, tool_executable, step);
     }
 }
 
@@ -109,18 +115,6 @@ pub fn generateOptions(builder: *std.Build) *std.Build.Step.Options {
     options.addOption([]const u8, "zinq_version", getVersion(builder));
 
     return options;
-}
-
-pub fn specificInstall(builder: *std.Build, main_executable: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) !void {
-    const dest = try std.fmt.allocPrint(builder.allocator, "{s}-{s}", .{
-        @tagName(target.result.cpu.arch), @tagName(target.result.os.tag)
-    });
-
-    const main_executable_install = builder.addInstallArtifact(main_executable, .{
-        .dest_dir = .{.override = .{.custom = dest}}
-    });
-
-    builder.getInstallStep().dependOn(&main_executable_install.step);
 }
 
 fn getVersion(builder: *std.Build) []const u8 {
@@ -148,4 +142,25 @@ fn getVersion(builder: *std.Build) []const u8 {
     };
 
     return version;
+}
+
+pub fn install(builder: *std.Build, main_executable: *std.Build.Step.Compile, step: *std.Build.Step) !void {
+    const target = main_executable.root_module.resolved_target.?;
+
+    if (target.query.isNative()) {
+
+        const main_executable_install = builder.addInstallArtifact(main_executable, .{});
+
+        step.dependOn(&main_executable_install.step); return;
+    }
+
+    const dest = try std.fmt.allocPrint(builder.allocator, "{s}-{s}", .{
+        @tagName(target.result.cpu.arch), @tagName(target.result.os.tag)
+    });
+
+    const main_executable_install = builder.addInstallArtifact(main_executable, .{
+        .dest_dir = .{.override = .{.custom = dest}}
+    });
+
+    step.dependOn(&main_executable_install.step);
 }
