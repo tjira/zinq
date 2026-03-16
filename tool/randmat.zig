@@ -7,13 +7,15 @@ const exportRealMatrix = zinq.device_write.exportRealMatrix;
 const print = zinq.device_write.print;
 
 pub fn help() !void {
-    try print("USAGE: randmat [M] [N] [-s SEED] [-o OUTPUT]\n", .{});
+    try print("USAGE: zinq-randmat [M] [N] [-s SEED] [-o OUTPUT] [-h]\n", .{});
 }
 
-pub fn parse(m: *usize, n: *usize, seed: *usize, output: *[]const u8, symmetric: *bool, allocator: std.mem.Allocator) !void {
+pub fn parse(m: *usize, n: *usize, seed: *usize, output: *[]const u8, symmetric: *bool, allocator: std.mem.Allocator, h: *bool) !void {
     var argc: usize = 0; var argv = try std.process.argsWithAllocator(allocator); defer argv.deinit(); _ = argv.next();
 
     while (argv.next()) |arg| {
+
+        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {h.* = true; return help();}
 
         if (argc == 0) m.* = try std.fmt.parseInt(usize, arg, 10);
         if (argc == 1) n.* = try std.fmt.parseInt(usize, arg, 10);
@@ -28,11 +30,9 @@ pub fn parse(m: *usize, n: *usize, seed: *usize, output: *[]const u8, symmetric:
 }
 
 pub fn main() !void {
-    errdefer help() catch {};
-
     var m: usize = 0; var n: usize = 0; var seed: usize = @intCast(std.time.milliTimestamp()); var output: []const u8 = "A.mat"; var symmetric: bool = false;
 
-    var timer_total = try std.time.Timer.start();
+    var timer_total = try std.time.Timer.start(); var h = false;
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){}; const allocator = gpa.allocator();
 
@@ -40,9 +40,9 @@ pub fn main() !void {
         if (gpa.deinit() == .leak) std.log.err("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
-    try parse(&m, &n, &seed, &output, &symmetric, allocator);
+    try parse(&m, &n, &seed, &output, &symmetric, allocator, &h); if (h) return;
 
-    if (m == 0 or n == 0 or (m != n and symmetric)) return error.InvalidArgument;
+    if (m == 0 or n == 0) return error.InvalidArgument;
 
     {
         var timer_alloc = try std.time.Timer.start(); try print("ALLOCATING {d}x{d} REAL MATRIX: ", .{m, n});

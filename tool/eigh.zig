@@ -1,0 +1,75 @@
+const std = @import("std");
+const zinq = @import("zinq");
+
+const RealMatrix = zinq.real_matrix.RealMatrix;
+
+const exportRealMatrix = zinq.device_write.exportRealMatrix;
+const readRealMatrix = zinq.device_read.readRealMatrix;
+const eigensystemHermitian = zinq.eigenproblem_solver.eigensystemHermitian;
+const print = zinq.device_write.print;
+
+pub fn help() !void {
+    try print("USAGE: zinq-eigh [-i INPUT] [-o EIGENVALUE_OUTPUT EIGENVECTOR_OUTPUT] [-h]\n", .{});
+}
+
+pub fn parse(input: *[]const u8, eigenvalue_output: *[]const u8, eigenvector_output: *[]const u8, allocator: std.mem.Allocator, h: *bool) !void {
+    var argc: usize = 0; var argv = try std.process.argsWithAllocator(allocator); defer argv.deinit(); _ = argv.next();
+
+    while (argv.next()) |arg| {
+
+        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {h.* = true; return help();}
+
+        if (std.mem.eql(u8, arg, "-i") or std.mem.eql(u8, arg, "--input")) {input.* = argv.next() orelse return error.InvalidArgument; argc += 1;}
+
+        if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
+            eigenvalue_output.*  = argv.next() orelse return error.InvalidArgument; argc += 1;
+            eigenvector_output.* = argv.next() orelse return error.InvalidArgument; argc += 1;
+        }
+
+        argc += 1;
+    }
+}
+
+pub fn main() !void {
+    var input: []const u8 = "A.mat"; var eigenvalue_output: []const u8 = "J.mat"; var eigenvector_output: []const u8 = "C.mat";
+
+    var timer_total = try std.time.Timer.start(); var h = false;
+
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){}; const allocator = gpa.allocator();
+
+    defer {
+        if (gpa.deinit() == .leak) std.log.err("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
+    }
+
+    try parse(&input, &eigenvalue_output, &eigenvector_output, allocator, &h); if (h) return;
+
+    {
+        var timer_read = try std.time.Timer.start(); try print("READING REAL MATRIX FROM '{s}': ", .{input});
+
+        var A = try readRealMatrix(f64, input, allocator); defer A.deinit(allocator);
+
+        try print("{D}\n", .{timer_read.read()});
+
+        var timer_alloc = try std.time.Timer.start(); try print("ALLOCATING RESULTING {d}x{d} REAL MATRICES: ", .{A.rows, A.cols});
+
+        var J = try RealMatrix(f64).init(A.rows, A.cols, allocator); defer J.deinit(allocator);
+        var C = try RealMatrix(f64).init(A.rows, A.cols, allocator); defer C.deinit(allocator);
+
+        try print("{D}\n", .{timer_alloc.read()});
+
+        var timer_eigh = try std.time.Timer.start(); try print("SOLVING EIGENPROBLEM FOR THE REAL MATRIX: ", .{});
+
+        try eigensystemHermitian(f64, &J, &C, A);
+
+        try print("{D}\n", .{timer_eigh.read()});
+
+        var timer_export = try std.time.Timer.start(); try print("EXPORTING EIGENVALUES TO '{s}' AND EIGENVECTORS TO '{s}': ", .{eigenvalue_output, eigenvector_output});
+
+        try exportRealMatrix(f64, eigenvalue_output,  J);
+        try exportRealMatrix(f64, eigenvector_output, C);
+
+        try print("{D}\n", .{timer_export.read()});
+    }
+
+    try print("TOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
+}
