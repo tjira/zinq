@@ -55,6 +55,8 @@ class Build(setuptools.command.build_py.build_py):
 binaries = [f"zig-out/{ARCH}-{OS}/" + binary + (".exe" if OS == "windows" else "") for binary in [
     "zinq",
     "zinq-eigh",
+    "zinq-mm",
+    "zinq-mtrans",
     "zinq-randmat"
 ]]
 

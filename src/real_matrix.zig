@@ -167,6 +167,23 @@ pub fn RealMatrix(comptime T: type) type {
             return result;
         }
 
+        /// Transpose the matrix.
+        pub fn transpose(self: *@This()) !void {
+            if (!self.isSquare()) {
+
+                std.log.err("CANNOT TRANSPOSE A NON-SQUARE MATRIX IN PLACE, CURRENT DIMENSIONS {d}x{d}", .{self.rows, self.cols});
+
+                return error.ProgrammingError;
+            }
+
+            for (0..self.rows) |i| for (i + 1..self.cols) |j| {
+
+                const temp = self.at(i, j);
+
+                self.ptr(i, j).* = self.at(j, i); self.ptr(j, i).* = temp;
+            };
+        }
+
         /// Maximum absolute value of the diagonal elements of the matrix.
         pub fn maxAbsDiagonal(self: @This()) T {
             var max: T = 0;
