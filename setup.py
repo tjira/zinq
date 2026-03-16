@@ -52,7 +52,10 @@ class Build(setuptools.command.build_py.build_py):
 
         super().run()
 
-binaries = [f"zig-out/{ARCH}-{OS}/" + binary + (".exe" if OS == "windows" else "") for binary in ["zinq"]]
+binaries = [f"zig-out/{ARCH}-{OS}/" + binary + (".exe" if OS == "windows" else "") for binary in [
+    "zinq",
+    "zinq-randmat"
+]]
 
 setuptools.setup(
     version = version(),

@@ -32,7 +32,7 @@ pub fn main() !void {
 
     var m: usize = 0; var n: usize = 0; var seed: usize = @intCast(std.time.milliTimestamp()); var output: []const u8 = "A.mat"; var symmetric: bool = false;
 
-    var timer = try std.time.Timer.start();
+    var timer_total = try std.time.Timer.start();
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){}; const allocator = gpa.allocator();
 
@@ -44,13 +44,34 @@ pub fn main() !void {
 
     if (m == 0 or n == 0 or (m != n and symmetric)) return error.InvalidArgument;
 
-    try print("EXECUTING {d}x{d} RANDMAT WITH SEED: {d}, MATRIX EXPORTING TO: {s}\n", .{m, n, seed, output});
+    {
+        var timer_alloc = try std.time.Timer.start(); try print("ALLOCATING {d}x{d} REAL MATRIX: ", .{m, n});
 
-    var A = try RealMatrix(f64).init(m, n, allocator); defer A.deinit(allocator); A.randomize(seed);
+        var A = try RealMatrix(f64).init(m, n, allocator); defer A.deinit(allocator);
 
-    if (symmetric) try A.symmetrize();
+        try print("{D}\n", .{timer_alloc.read()});
 
-    try exportRealMatrix(f64, output, A);
+        var timer_randomize = try std.time.Timer.start(); try print("RANDOMIZING REAL MATRIX WITH SEED {d}: ", .{seed});
 
-    try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
+        A.randomize(seed);
+
+        try print("{D}\n", .{timer_randomize.read()});
+
+        if (symmetric) {
+
+            var timer_symmetrize = try std.time.Timer.start(); try print("SYMMETRIZING REAL MATRIX: ", .{});
+
+            try A.symmetrize();
+
+            try print("{D}\n", .{timer_symmetrize.read()});
+        }
+
+        var timer_export = try std.time.Timer.start(); try print("EXPORTING REAL MATRIX TO '{s}': ", .{output});
+
+        try exportRealMatrix(f64, output, A);
+
+        try print("{D}\n", .{timer_export.read()});
+    }
+
+    try print("TOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
 }

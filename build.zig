@@ -85,7 +85,6 @@ pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, s
     const target = main_executable.root_module.resolved_target.?;
 
     const tools: []const []const u8 = &.{
-        "benchmark",
         "randmat"
     };
 
