@@ -59,14 +59,6 @@ $(WHEEL_TARGETS): $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe
 
 # CUSTOM TARGETS =======================================================================================================================================================================================
 
-linguist:
-	@github-linguist
-
-profile: zinq
-	@valgrind --callgrind-out-file=callgrind.out --tool=callgrind ./zig-out/bin/zinq
-	@gprof2dot -e 1 -f callgrind -n 5 -o profile.dot -z main.main callgrind.out
-	@dot -T pdf profile.dot -o profile.pdf
-
 wheel:
 	@python -m build --wheel
 

@@ -40,7 +40,9 @@ pub fn main() !void {
 
     var argv = try parse(&input, &result, allocator, &h); defer argv.deinit(); if (h) return;
 
-    try print("STARTING MATRIX TRANSPOSE WITH INPUT '{s}' AND OUTPUT '{s}'\n", .{input, result});
+    try print("MATRIX TRANSPOSE - INPUT: {s}", .{input});
+
+    if (result.len > 0) try print(", OUTPUT: {s}", .{result}); try print("\n", .{});
 
     {
         var A = try readRealMatrix(f64, input, allocator); defer A.deinit(allocator);
@@ -51,7 +53,7 @@ pub fn main() !void {
 
         try print("{D}\n", .{timer_mtrans.read()});
 
-        try exportRealMatrix(f64, result, A);
+        if (result.len > 0) try exportRealMatrix(f64, result, A);
     }
 
     try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});

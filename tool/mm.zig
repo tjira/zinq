@@ -45,7 +45,9 @@ pub fn main() !void {
 
     var argv = try parse(&first, &second, &result, allocator, &h); defer argv.deinit(); if (h) return;
 
-    try print("STARTING MATRIX MULTIPLICATION WITH INPUTS '{s}' AND '{s}' AND OUTPUT '{s}'\n", .{first, second, result});
+    try print("MATRIX MULTIPLICATION - INPUTS: {s}/{s}", .{first, second});
+
+    if (result.len > 0) try print(", OUTPUT: {s}", .{result}); try print("\n", .{});
 
     {
         var A = try readRealMatrix(f64, first,  allocator); defer A.deinit(allocator);
@@ -59,7 +61,7 @@ pub fn main() !void {
 
         try print("{D}\n", .{timer_mm.read()});
 
-        try exportRealMatrix(f64, result, C);
+        if (result.len > 0) try exportRealMatrix(f64, result, C);
     }
 
     try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});

@@ -44,7 +44,9 @@ pub fn main() !void {
 
     var argv = try parse(&m, &n, &seed, &output, &symmetric, allocator, &h); defer argv.deinit(); if (h) return;
 
-    try print("STARTING RANDOM {s}MATRIX GENERATION WITH DIMENSIONS {d}x{d}, SEED {d} AND OUTPUT '{s}'\n", .{if (symmetric) "SYMMETRIC " else "", m, n, seed, output});
+    try print("RANDOM {s}MATRIX GENERATION - DIM: {d}x{d}, SEED: {d}", .{if (symmetric) "SYMMETRIC " else "", m, n, seed});
+
+    if (output.len > 0) try print(", OUTPUT: {s}", .{output}); try print("\n", .{});
 
     if (m == 0 or n == 0) {
 
@@ -62,7 +64,7 @@ pub fn main() !void {
 
         try print("{D}\n", .{timer_randomize.read()});
 
-        try exportRealMatrix(f64, output, A);
+        if (output.len > 0) try exportRealMatrix(f64, output, A);
     }
 
     try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});

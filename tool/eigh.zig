@@ -45,7 +45,12 @@ pub fn main() !void {
 
     var argv = try parse(&input, &eigenvalue_output, &eigenvector_output, allocator, &h); defer argv.deinit(); if (h) return;
 
-    try print("STARTING EIGENPROBLEM SOLVER WITH INPUT '{s}' and OUTPUTS '{s}' (EIGENVALUES) and '{s}' (EIGENVECTORS)\n", .{input, eigenvalue_output, eigenvector_output});
+    try print("EIGENPROBLEM SOLVER - INPUT: {s}", .{input});
+
+    if (eigenvalue_output.len  > 0) try print(", EIGENVALUE OUTPUT: {s}",  .{eigenvalue_output });
+    if (eigenvector_output.len > 0) try print(", EIGENVECTOR OUTPUT: {s}", .{eigenvector_output});
+
+    try print("\n", .{});
 
     {
         var A = try readRealMatrix(f64, input, allocator); defer A.deinit(allocator);
@@ -59,8 +64,8 @@ pub fn main() !void {
 
         try print("{D}\n", .{timer_eigh.read()});
 
-        try exportRealMatrix(f64, eigenvalue_output,  J);
-        try exportRealMatrix(f64, eigenvector_output, C);
+        if (eigenvalue_output.len > 0) try exportRealMatrix(f64, eigenvalue_output,  J);
+        if (eigenvalue_output.len > 0) try exportRealMatrix(f64, eigenvector_output, C);
     }
 
     try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
