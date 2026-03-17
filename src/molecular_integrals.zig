@@ -141,6 +141,8 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 pub fn coulomb(comptime T: type, basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealTensor4(T) {
     var J = try RealTensor4(T).init(.{basis.nbf(), basis.nbf(), basis.nbf(), basis.nbf()}, allocator);
 
+    if (nthread == 1) {for (0..J.shape[0]) |i| for (i..J.shape[1]) |j| for (i..J.shape[2]) |k| for ((if (i == k) j else k)..J.shape[3]) |l| {coulombAssign(T, &J, i, j, k, l, basis);}; return J;}
+
     var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
 
     for (0..J.shape[0]) |i| for (i..J.shape[1]) |j| for (i..J.shape[2]) |k| for ((if (i == k) j else k)..J.shape[3]) |l| {
@@ -169,6 +171,8 @@ pub fn coulombAssign(comptime T: type, J: *RealTensor4(T), i: usize, j: usize, k
 pub fn kinetic(comptime T: type, basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var K = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
+    if (nthread == 1) {for (0..K.rows) |i| for (i..K.cols) |j| {kineticAssign(T, &K, i, j, basis);}; return K;}
+
     var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
 
     for (0..K.rows) |i| for (i..K.cols) |j| {
@@ -187,6 +191,8 @@ pub fn kineticAssign(comptime T: type, K: *RealMatrix(T), i: usize, j: usize, ba
 pub fn nuclear(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var V = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
+    if (nthread == 1) {for (0..V.rows) |i| for (i..V.cols) |j| {nuclearAssign(T, &V, i, j, system, basis);}; return V;}
+
     var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
 
     for (0..V.rows) |i| for (i..V.cols) |j| {
@@ -204,6 +210,8 @@ pub fn nuclearAssign(comptime T: type, V: *RealMatrix(T), i: usize, j: usize, sy
 /// Compute the overlap matrix.
 pub fn overlap(comptime T: type, basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var S = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
+
+    if (nthread == 1) {for (0..S.rows) |i| for (i..S.cols) |j| {overlapAssign(T, &S, i, j, basis);}; return S;}
 
     var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
 
