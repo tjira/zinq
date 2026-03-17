@@ -45,33 +45,23 @@ pub fn main() !void {
 
     var argv = try parse(&input, &eigenvalue_output, &eigenvector_output, allocator, &h); defer argv.deinit(); if (h) return;
 
+    try print("STARTING EIGENPROBLEM SOLVER WITH INPUT '{s}' and OUTPUTS '{s}' (EIGENVALUES) and '{s}' (EIGENVECTORS)\n", .{input, eigenvalue_output, eigenvector_output});
+
     {
-        var timer_read = try std.time.Timer.start(); try print("READING REAL MATRIX FROM '{s}': ", .{input});
-
         var A = try readRealMatrix(f64, input, allocator); defer A.deinit(allocator);
-
-        try print("{D}\n", .{timer_read.read()});
-
-        var timer_alloc = try std.time.Timer.start(); try print("ALLOCATING RESULTING {d}x{d} REAL MATRICES: ", .{A.rows, A.cols});
 
         var J = try RealMatrix(f64).init(A.rows, A.cols, allocator); defer J.deinit(allocator);
         var C = try RealMatrix(f64).init(A.rows, A.cols, allocator); defer C.deinit(allocator);
 
-        try print("{D}\n", .{timer_alloc.read()});
-
-        var timer_eigh = try std.time.Timer.start(); try print("SOLVING EIGENPROBLEM FOR THE REAL MATRIX: ", .{});
+        var timer_eigh = try std.time.Timer.start(); try print("\nSOLVING THE EIGENPROBLEM: ", .{});
 
         try eigensystemHermitian(f64, &J, &C, A);
 
         try print("{D}\n", .{timer_eigh.read()});
 
-        var timer_export = try std.time.Timer.start(); try print("EXPORTING EIGENVALUES TO '{s}' AND EIGENVECTORS TO '{s}': ", .{eigenvalue_output, eigenvector_output});
-
         try exportRealMatrix(f64, eigenvalue_output,  J);
         try exportRealMatrix(f64, eigenvector_output, C);
-
-        try print("{D}\n", .{timer_export.read()});
     }
 
-    try print("TOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
+    try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
 }

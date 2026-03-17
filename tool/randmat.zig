@@ -44,6 +44,8 @@ pub fn main() !void {
 
     var argv = try parse(&m, &n, &seed, &output, &symmetric, allocator, &h); defer argv.deinit(); if (h) return;
 
+    try print("STARTING RANDOM {s}MATRIX GENERATION WITH DIMENSIONS {d}x{d}, SEED {d} AND OUTPUT '{s}'\n", .{if (symmetric) "SYMMETRIC " else "", m, n, seed, output});
+
     if (m == 0 or n == 0) {
 
         std.log.err("YOU NEED TO PROVIDE VALID DIMENSIONS FOR THE MATRIX\n", .{});
@@ -52,33 +54,16 @@ pub fn main() !void {
     }
 
     {
-        var timer_alloc = try std.time.Timer.start(); try print("ALLOCATING {d}x{d} REAL MATRIX: ", .{m, n});
-
         var A = try RealMatrix(f64).init(m, n, allocator); defer A.deinit(allocator);
 
-        try print("{D}\n", .{timer_alloc.read()});
+        var timer_randomize = try std.time.Timer.start(); try print("\nRANDOMIZING THE MATRIX: ", .{});
 
-        var timer_randomize = try std.time.Timer.start(); try print("RANDOMIZING REAL MATRIX WITH SEED {d}: ", .{seed});
-
-        A.randomize(seed);
+        A.randomize(seed); if (symmetric) try A.symmetrize();
 
         try print("{D}\n", .{timer_randomize.read()});
 
-        if (symmetric) {
-
-            var timer_symmetrize = try std.time.Timer.start(); try print("SYMMETRIZING REAL MATRIX: ", .{});
-
-            try A.symmetrize();
-
-            try print("{D}\n", .{timer_symmetrize.read()});
-        }
-
-        var timer_export = try std.time.Timer.start(); try print("EXPORTING REAL MATRIX TO '{s}': ", .{output});
-
         try exportRealMatrix(f64, output, A);
-
-        try print("{D}\n", .{timer_export.read()});
     }
 
-    try print("TOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
+    try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
 }

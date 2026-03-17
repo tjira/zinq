@@ -40,25 +40,19 @@ pub fn main() !void {
 
     var argv = try parse(&input, &result, allocator, &h); defer argv.deinit(); if (h) return;
 
-    {
-        var timer_read = try std.time.Timer.start(); try print("READING REAL MATRIX FROM '{s}': ", .{input});
+    try print("STARTING MATRIX TRANSPOSE WITH INPUT '{s}' AND OUTPUT '{s}'\n", .{input, result});
 
+    {
         var A = try readRealMatrix(f64, input, allocator); defer A.deinit(allocator);
 
-        try print("{D}\n", .{timer_read.read()});
-
-        var timer_mtrans = try std.time.Timer.start(); try print("TRANSPOSEING THE REAL MATRIX: ", .{});
+        var timer_mtrans = try std.time.Timer.start(); try print("\nTRANSPOSING THE MATRIX: ", .{});
 
         try A.transpose();
 
         try print("{D}\n", .{timer_mtrans.read()});
 
-        var timer_export = try std.time.Timer.start(); try print("EXPORTING RESULT TO '{s}': ", .{result});
-
         try exportRealMatrix(f64, result, A);
-
-        try print("{D}\n", .{timer_export.read()});
     }
 
-    try print("TOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
+    try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
 }

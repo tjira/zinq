@@ -45,32 +45,22 @@ pub fn main() !void {
 
     var argv = try parse(&first, &second, &result, allocator, &h); defer argv.deinit(); if (h) return;
 
-    {
-        var timer_read = try std.time.Timer.start(); try print("READING REAL MATRICES FROM '{s}' AND '{s}': ", .{first, second});
+    try print("STARTING MATRIX MULTIPLICATION WITH INPUTS '{s}' AND '{s}' AND OUTPUT '{s}'\n", .{first, second, result});
 
+    {
         var A = try readRealMatrix(f64, first,  allocator); defer A.deinit(allocator);
         var B = try readRealMatrix(f64, second, allocator); defer B.deinit(allocator);
 
-        try print("{D}\n", .{timer_read.read()});
-
-        var timer_alloc = try std.time.Timer.start(); try print("ALLOCATING RESULTING {d}x{d} REAL MATRIX: ", .{A.rows, B.cols});
-
         var C = try RealMatrix(f64).init(A.rows, B.cols, allocator); defer C.deinit(allocator);
 
-        try print("{D}\n", .{timer_alloc.read()});
-
-        var timer_mm = try std.time.Timer.start(); try print("MULTIPLYING THE REAL MATRICES: ", .{});
+        var timer_mm = try std.time.Timer.start(); try print("\nMULTIPLYING THE MATRICES: ", .{});
 
         try mm(f64, &C, A, false, B, false);
 
         try print("{D}\n", .{timer_mm.read()});
 
-        var timer_export = try std.time.Timer.start(); try print("EXPORTING RESULT TO '{s}': ", .{result});
-
         try exportRealMatrix(f64, result, C);
-
-        try print("{D}\n", .{timer_export.read()});
     }
 
-    try print("TOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
+    try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
 }
