@@ -10,6 +10,7 @@
 *.bcf*
 *.blg*
 *.csv*
+*.dat*
 *.gif*
 *.ist*
 *.log*
