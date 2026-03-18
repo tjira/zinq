@@ -7,9 +7,8 @@
                     "model" : {
                         "mass" : [1],
                         "momentum_mean" : [0],
-                        "momentum_std" : [1],
-                        "position_mean" : [0],
-                        "position_std" : [0.5]
+                        "gamma_mean" : [2],
+                        "position_mean" : [0]
                     }
                 },
                 "log_intervals" : {

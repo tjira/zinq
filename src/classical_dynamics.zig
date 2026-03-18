@@ -84,12 +84,27 @@ pub fn Options(comptime T: type) type {
     return struct {
         pub const InitialConditions = union(enum) {
             model: struct {
+                pub const Spread = struct {
+                    momentum_mean: ?struct {
+                        end: []const T,
+                        step: []const T
+                    } = null,
+                    position_mean: ?struct {
+                        end: []const T,
+                        step: []const T
+                    } = null,
+                    gamma_mean: ?struct {
+                        end: []const T,
+                        step: []const T
+                    } = null
+                };
+
                 mass: []const T,
                 momentum_mean: []const T,
-                momentum_std: []const T,
                 position_mean: []const T,
-                position_std: []const T,
-                state: u32 = 0
+                gamma_mean: []const T,
+                state: u32 = 0,
+                spread: ?Spread = null
             },
             molecule : struct {
                 position: []const u8,
@@ -119,8 +134,13 @@ pub fn Options(comptime T: type) type {
             time_derivative_coupling_mean: ?[]const u8 = null,
             temperature_mean: ?[]const u8 = null,
             total_energy_mean: ?[]const u8 = null,
+            transition_probability_mean: ?[]const u8 = null,
             schlitter_entropy: ?[]const u8 = null,
             sre_entropy: ?[]const u8 = null
+        };
+        pub const Cap = struct {
+            limits: []const []const T,
+            track_population: bool = true,
         };
 
         potential: ElectronicPotential(T),
@@ -130,6 +150,7 @@ pub fn Options(comptime T: type) type {
         time_step: T,
 
         bias: ?BiasPotential(T) = null,
+        cap: ?Cap = null,
         derivative_coupling: ?DerivativeCoupling(T) = null,
         log_intervals: LogIntervals = .{},
         surface_hopping: ?SurfaceHoppingAlgorithm(T) = null,
@@ -268,6 +289,21 @@ pub fn Custom(comptime T: type) type {
                 self.temperature.deinit(allocator);
                 self.total_energy.deinit(allocator);
             }
+
+            /// Shrink the output structure to the specified number of iterations.
+            pub fn shrink(self: *@This(), iterations: usize, allocator: std.mem.Allocator) !void {
+                try self.bloch_vector.shrinkRows(iterations + 1, allocator);
+                try self.coefficient.shrinkRows(iterations + 1, allocator);
+                try self.kinetic_energy.shrink(iterations + 1, allocator);
+                try self.momentum.shrinkRows(iterations + 1, allocator);
+                try self.population.shrinkRows(iterations + 1, allocator);
+                try self.position.shrinkRows(iterations + 1, allocator);
+                try self.potential_energy.shrink(iterations + 1, allocator);
+                try self.state_potential_energy.shrinkRows(iterations + 1, allocator);
+                try self.time_derivative_coupling.shrinkRows(iterations + 1, allocator);
+                try self.temperature.shrink(iterations + 1, allocator);
+                try self.total_energy.shrink(iterations + 1, allocator);
+            }
         };
     };
 }
@@ -310,7 +346,244 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         return error.InvalidInput;
     }
 
+    if (opt.potential == .ab_initio) return try performDynamics(T, opt, enable_printing, allocator);
+
+    if (opt.initial_conditions.model.spread) |ics| if (ics.position_mean) |qstruct| if (qstruct.end.len != ndim or qstruct.step.len != ndim) {
+
+        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, qstruct.end.len});
+
+        return error.InvalidInput;
+    };
+
+    if (opt.initial_conditions.model.spread) |ics| if (ics.momentum_mean) |pstruct| if (pstruct.end.len != ndim or pstruct.step.len != ndim) {
+
+        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, pstruct.end.len});
+
+        return error.InvalidInput;
+    };
+
+    if (opt.initial_conditions.model.spread) |ics| if (ics.gamma_mean) |gstruct| if (gstruct.end.len != ndim or gstruct.step.len != ndim) {
+
+        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, gstruct.end.len});
+
+        return error.InvalidInput;
+    };
+
+    var output: Output(T) = undefined;
+
+    const ics_pos = if (opt.initial_conditions.model.spread) |ics| ics.position_mean else null;
+    const ics_mom = if (opt.initial_conditions.model.spread) |ics| ics.momentum_mean else null;
+    const ics_gam = if (opt.initial_conditions.model.spread) |ics| ics.gamma_mean    else null;
+
+    const q0 = opt.initial_conditions.model.position_mean; var q1: []const T = undefined;
+    const p0 = opt.initial_conditions.model.momentum_mean; var p1: []const T = undefined;
+    const g0 = opt.initial_conditions.model.gamma_mean;    var g1: []const T = undefined;
+
+    if (q0.len != ndim) {
+
+        std.log.err("INVALID INITIAL POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, q0.len});
+
+        return error.InvalidInput;
+    }
+
+    if (p0.len != ndim) {
+
+        std.log.err("INVALID INITIAL MOMENTUM, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, p0.len});
+
+        return error.InvalidInput;
+    }
+
+    if (g0.len != ndim) {
+
+        std.log.err("INVALID INITIAL GAMMA, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, g0.len});
+
+        return error.InvalidInput;
+    }
+
+    if (ics_pos) |qstruct| q1 = qstruct.end else q1 = q0;
+    if (ics_mom) |pstruct| p1 = pstruct.end else p1 = p0;
+    if (ics_gam) |gstruct| g1 = gstruct.end else g1 = g0;
+
+    var qsteps_i = try allocator.alloc(usize, ndim); defer allocator.free(qsteps_i); var qsteps: usize = 1; @memset(qsteps_i, 1);
+    var psteps_i = try allocator.alloc(usize, ndim); defer allocator.free(psteps_i); var psteps: usize = 1; @memset(psteps_i, 1);
+    var gsteps_i = try allocator.alloc(usize, ndim); defer allocator.free(gsteps_i); var gsteps: usize = 1; @memset(gsteps_i, 1);
+
+    if (ics_pos) |qstruct| for (0..qstruct.step.len) |i| {
+
+        if (qstruct.step[i] == 0 and q1[i] != q0[i]) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, STEP CANNOT BE ZERO IF END VALUE IS DIFFERENT FROM START VALUE", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (qstruct.end[i] < q0[i] and qstruct.step[i] > 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, END VALUE MUST BE GREATER THAN START VALUE FOR POSITIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (qstruct.end[i] > q0[i] and qstruct.step[i] < 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, END VALUE MUST BE LESS THAN START VALUE FOR NEGATIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
+
+        qsteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((q1[i] - q0[i]) / qstruct.step[i]))) + 1;
+
+        qsteps *= qsteps_i[i];
+    };
+
+    if (ics_mom) |pstruct| for (0..pstruct.step.len) |i| {
+
+        if (pstruct.step[i] == 0 and p1[i] != p0[i]) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, STEP CANNOT BE ZERO IF END VALUE IS DIFFERENT FROM START VALUE", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (pstruct.end[i] < p0[i] and pstruct.step[i] > 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, END VALUE MUST BE GREATER THAN START VALUE FOR POSITIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (pstruct.end[i] > p0[i] and pstruct.step[i] < 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, END VALUE MUST BE LESS THAN START VALUE FOR NEGATIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
+
+        psteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((p1[i] - p0[i]) / pstruct.step[i]))) + 1;
+
+        psteps *= psteps_i[i];
+    };
+
+    if (ics_gam) |gstruct| for (0..gstruct.step.len) |i| {
+
+        if (gstruct.step[i] == 0 and g1[i] != g0[i]) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, STEP CANNOT BE ZERO IF END VALUE IS DIFFERENT FROM START VALUE", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (gstruct.end[i] < g0[i] and gstruct.step[i] > 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, END VALUE MUST BE GREATER THAN START VALUE FOR POSITIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (gstruct.end[i] > g0[i] and gstruct.step[i] < 0) {
+
+            std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, END VALUE MUST BE LESS THAN START VALUE FOR NEGATIVE STEP", .{});
+
+            return error.InvalidInput;
+        }
+
+        gsteps_i[i] = @as(usize, @intFromFloat(std.math.ceil((g1[i] - g0[i]) / gstruct.step[i]))) + 1;
+
+        gsteps *= gsteps_i[i];
+    };
+
+    var q = try allocator.alloc(T, ndim); defer allocator.free(q);
+    var p = try allocator.alloc(T, ndim); defer allocator.free(p);
+    var g = try allocator.alloc(T, ndim); defer allocator.free(g);
+
+    var transition_probability = try RealMatrix(T).initZero(qsteps * psteps * gsteps, 3 * ndim + nstate, allocator); defer transition_probability.deinit(allocator);
+
+    for (0..qsteps) |i| for (0..psteps) |j| for (0..gsteps) |k| {
+
+        const total_runs = qsteps * psteps * gsteps; const tp_index = (i * psteps + j) * gsteps + k;
+
+        if (enable_printing and (qsteps != 1 or psteps != 1 or gsteps != 1)) try print("\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}:\n", .{tp_index + 1, total_runs});
+
+        var temp_i = i; var temp_j = j; var temp_k = k;
+
+        for (0..ndim) |l| {q[l] = q0[l] + @as(T, @floatFromInt(temp_i % qsteps_i[l])) * if (ics_pos) |qstruct| qstruct.step[l] else 0; temp_i /= qsteps_i[l];}
+        for (0..ndim) |l| {p[l] = p0[l] + @as(T, @floatFromInt(temp_j % psteps_i[l])) * if (ics_mom) |pstruct| pstruct.step[l] else 0; temp_j /= psteps_i[l];}
+        for (0..ndim) |l| {g[l] = g0[l] + @as(T, @floatFromInt(temp_k % gsteps_i[l])) * if (ics_gam) |gstruct| gstruct.step[l] else 0; temp_k /= gsteps_i[l];}
+
+        var options = opt; options.initial_conditions.model.position_mean = q; options.initial_conditions.model.momentum_mean = p; options.initial_conditions.model.gamma_mean = g;
+
+        if (qsteps != 1 or psteps != 1 or gsteps != 1) {
+            try renameOutputFilesWithPositionAndMomentum(T, &options,
+                options.initial_conditions.model.position_mean,
+                options.initial_conditions.model.momentum_mean,
+                options.initial_conditions.model.gamma_mean,
+            allocator);
+        }
+
+        const result = try performDynamics(T, options, enable_printing, allocator);
+
+        for (0..ndim) |l| transition_probability.ptr(tp_index, 0 * ndim + l).* = q[l];
+        for (0..ndim) |l| transition_probability.ptr(tp_index, 1 * ndim + l).* = p[l];
+        for (0..ndim) |l| transition_probability.ptr(tp_index, 2 * ndim + l).* = g[l];
+
+        for (0..nstate) |l| transition_probability.ptr(tp_index, 3 * ndim + l).* = result.population_mean.at(result.population_mean.rows - 1, l);
+
+        if (i == 0 and j == 0 and k == 0) output = result else result.deinit(allocator);
+
+        if (qsteps != 1 or psteps != 1 or gsteps != 1) inline for (std.meta.fields(@TypeOf(options.write))) |field| {
+            if (@as(field.type, @field(options.write, field.name))) |path| allocator.free(path);
+        };
+    };
+
+    if (opt.write.transition_probability_mean) |path| try exportRealMatrix(T, path, transition_probability);
+
+    return output;
+}
+
+/// Appends the position and momentum to all output files.
+pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(T), q: []const T, p: []const T, g: []const T, allocator: std.mem.Allocator) !void {
+    inline for (std.meta.fields(@TypeOf(opt.write))) |field| if (@as(field.type, @field(opt.write, field.name)) != null) {
+
+        const path = &@field(opt.write, field.name).?;
+
+        var new_path = std.ArrayList(u8){}; errdefer new_path.deinit(allocator);
+
+        const writer = new_path.writer(allocator);
+
+        try writer.print("{s}_Q=", .{path.*[0 .. path.len - 4]});
+
+        for (q, 0..) |val, i| {
+            if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
+        }
+
+        try writer.writeAll("_P=");
+
+        for (p, 0..) |val, i| {
+            if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
+        }
+
+        try writer.writeAll("_G=");
+
+        for (g, 0..) |val, i| {
+            if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
+        }
+
+        try writer.writeAll(".mat"); path.* = try new_path.toOwnedSlice(allocator);
+    };
+}
+
+/// Perform the dynamical simulation.
+pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
+    const nstate = opt.potential.nstate();
+
     var output = try Output(T).init(nstate, ndim, opt.iterations, opt.trajectories, allocator); errdefer output.deinit(allocator);
+
+    if (enable_printing and opt.potential != .ab_initio) try print("\nINITIAL GAMMA: [", .{});
+
+    if (enable_printing) for (opt.initial_conditions.model.gamma_mean, 0..) |gamma, i| {
+        if (i > 0) try print(", ", .{}); try print("{d:.6}", .{gamma}); if (i == opt.initial_conditions.model.gamma_mean.len - 1) try print("]\n", .{});
+    };
 
     const parallel_results = .{
         .bloch_vector_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = 4}, allocator),
@@ -355,11 +628,9 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 
             const params = .{opt, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator};
 
-            if (opt.nthread == 1) {
-                runTrajectoryParallel(1, T, parallel_results, &trajectory_based_results, params, &error_ctx);
-            } else {
-                pool.spawnWgId(&wait, runTrajectoryParallel, .{T, parallel_results, &trajectory_based_results, params, &error_ctx});
-            }
+            if (opt.nthread == 1) {runTrajectoryParallel(1, T, parallel_results, &trajectory_based_results, params, &error_ctx);}
+
+            else pool.spawnWgId(&wait, runTrajectoryParallel, .{T, parallel_results, &trajectory_based_results, params, &error_ctx});
         }
 
         wait.wait();
@@ -633,6 +904,20 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             output.coefficient.ptr(i, 1).* = (1 + output.bloch_vector.at(i, 2)) / 2;
         }
 
+        if (opt.cap) |cap| if (!equilibrate) {
+
+            var end_simulation = false;
+
+            for (0..ndim) |j| {
+                if (system.position.at(j) < cap.limits[j][0]) end_simulation = true;
+                if (system.position.at(j) > cap.limits[j][1]) end_simulation = true;
+            }
+
+            if (end_simulation) {
+                try output.shrink(i, allocator); break;
+            }
+        };
+
         if (!enable_printing or (index > 0 and (index + 1) % opt.log_intervals.trajectory != 0) or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;
 
         const iteration_info = Custom(T).IterationInfo{
@@ -673,48 +958,46 @@ pub fn sampleFromBoltzmann(comptime T: type, system: *ClassicalParticle(T), temp
     return;
 }
 
-/// Parallel function to run a trajectory.
-pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, trajectory_based_results: anytype, params: anytype, error_ctx: *ErrorContext) void {
-    if (error_ctx.err != null) return;
+/// Initialize a system.
+pub fn initializeSystem(comptime T: type, opt: Options(T), geometry: usize, random: *std.Random, allocator: std.mem.Allocator) !ClassicalParticle(T) {
+    if (opt.potential == .ab_initio) {
 
-    var system: ClassicalParticle(T) = undefined; var rng = params[3]; var random = rng.random();
+        const position = opt.initial_conditions.molecule.position;
+        const velocity = opt.initial_conditions.molecule.velocity;
+        const charge = opt.initial_conditions.molecule.charge;
 
-    if (params[0].potential == .ab_initio) {
-
-        const position = params[0].initial_conditions.molecule.position;
-        const velocity = params[0].initial_conditions.molecule.velocity;
-        const charge = params[0].initial_conditions.molecule.charge;
-
-        system = classical_particle.read(T, position, charge, params[1], params[4]) catch |err| {
-            error_ctx.capture(err); return;
-        };
+        var system = try classical_particle.read(T, position, charge, geometry, allocator);
 
         if (velocity) |vel| {
 
-            const velocity_system = classical_particle.read(T, vel, charge, params[1], params[4]) catch |err| {
-                error_ctx.capture(err); return;
-            }; defer velocity_system.deinit(params[4]);
+            const velocity_system = try classical_particle.read(T, vel, charge, geometry, allocator); defer velocity_system.deinit(allocator);
 
             for (0..system.velocity.len) |i| system.velocity.ptr(i).* = velocity_system.position.at(i) / A2AU;
         }
 
-        if (params[0].initial_conditions.molecule.temperature) |temp| sampleFromBoltzmann(T, &system, temp, &random);
+        if (opt.initial_conditions.molecule.temperature) |temp| sampleFromBoltzmann(T, &system, temp, random);
+
+        return system;
     }
 
-    if (params[0].potential != .ab_initio) {
-        
-        const ndim = params[0].potential.ndim() catch |err| {
-            error_ctx.capture(err); return;
-        };
+    const ndim = try opt.potential.ndim();
 
-        system = ClassicalParticle(T).initZero(ndim, params[0].initial_conditions.model.mass, params[4]) catch |err| {
-            error_ctx.capture(err); return;
-        };
-    }
+    var system = try ClassicalParticle(T).initZero(ndim, opt.initial_conditions.model.mass, allocator);
 
-    if (params[0].potential != .ab_initio) sampleInitialConditions(T, &system, params[0].initial_conditions.model, &random) catch |err| {
+    try sampleInitialConditions(T, &system, opt.initial_conditions.model, random);
+
+    return system;
+}
+
+/// Parallel function to run a trajectory.
+pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, trajectory_based_results: anytype, params: anytype, error_ctx: *ErrorContext) void {
+    if (error_ctx.err != null) return;
+
+    var rng = params[3]; var random = rng.random();
+
+    var system = initializeSystem(T, params[0], params[1], &random, params[4]) catch |err| {
         error_ctx.capture(err); return;
-    };
+    }; defer system.deinit(params[4]);
 
     if (params[0].equilibration_iterations > 0) {
         const equilibration_output = runTrajectory(T, params[0], &system, params[1], true, params[2], params[4]) catch |err| {
@@ -734,12 +1017,23 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
 
         const result = @as(field.type, @field(results, field.name)).ptr(id - 1); const output = @field(trajectory_output, field.name[0..field.name.len - 5]);
 
-        result.add(output) catch |err| {
-            error_ctx.capture(err); return;
+        if (@TypeOf(output) == RealVector(T)) for (0..output.len) |i| {
+            result.ptr(i).* += output.at(i);
+        };
+
+        if (@TypeOf(output) == RealMatrix(T)) for (0..output.rows) |i| for (0..output.cols) |j| {
+            result.ptr(i, j).* += output.at(i, j);
         };
     }
 
-    system.deinit(params[4]);
+    if (params[0].cap) |cap| if (cap.track_population) {
+
+        const last_i = trajectory_output.population.rows - 1;
+
+        for (last_i + 1..results.population_mean.ptr(id - 1).rows) |i| for (0..results.population_mean.ptr(id - 1).cols) |j| {
+            results.population_mean.ptr(id - 1).ptr(i, j).* += trajectory_output.population.at(last_i, j);
+        };
+    };
 }
 
 /// Print header for iteration info.
@@ -939,8 +1233,8 @@ pub fn printThermodynamicProperties(comptime T: type, output: Custom(T).Trajecto
 
 /// Samples the initial conditions.
 pub fn sampleInitialConditions(comptime T: type, system: *ClassicalParticle(T), initial_conditions: anytype, random: *std.Random) !void {
-    try system.setPositionRandn(initial_conditions.position_mean, initial_conditions.position_std, random);
-    try system.setMomentumRandn(initial_conditions.momentum_mean, initial_conditions.momentum_std, random);
+    try system.setPositionRandn(initial_conditions.position_mean, initial_conditions.gamma_mean, random);
+    try system.setMomentumRandn(initial_conditions.momentum_mean, initial_conditions.gamma_mean, random);
 }
 
 test "Fewest Switches Surface Hopping on Tully's First Potential" {
@@ -952,9 +1246,8 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
             .model = .{
                 .mass = &.{2000},
                 .momentum_mean = &.{15},
-                .momentum_std = &.{1},
+                .gamma_mean = &.{2},
                 .position_mean = &.{-10},
-                .position_std = &.{0.5},
                 .state = 1
             }
         },
@@ -971,8 +1264,8 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.372);
-    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.628);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.372, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.628, TEST_TOLERANCE);
 }
 
 test "Landau-Lener Surface Hopping on Tully's First Potential" {
@@ -981,9 +1274,8 @@ test "Landau-Lener Surface Hopping on Tully's First Potential" {
             .model = .{
                 .mass = &.{2000},
                 .momentum_mean = &.{15},
-                .momentum_std = &.{1},
+                .gamma_mean = &.{2},
                 .position_mean = &.{-10},
-                .position_std = &.{0.5},
                 .state = 1
             }
         },
@@ -1000,8 +1292,8 @@ test "Landau-Lener Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 0), 0.498);
-    try std.testing.expectEqual(output.population_mean.at(opt.iterations, 1), 0.502);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.498, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.502, TEST_TOLERANCE);
 }
 
 test "Mapping Approach to Surface Hopping on Tully's First Potential" {
@@ -1013,9 +1305,8 @@ test "Mapping Approach to Surface Hopping on Tully's First Potential" {
             .model = .{
                 .mass = &.{2000},
                 .momentum_mean = &.{15},
-                .momentum_std = &.{1},
+                .gamma_mean = &.{2},
                 .position_mean = &.{-10},
-                .position_std = &.{0.5},
                 .state = 1
             }
         },

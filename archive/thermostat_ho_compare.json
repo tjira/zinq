@@ -7,9 +7,8 @@
                     "model" : {
                         "mass" : [1],
                         "momentum_mean" : [0],
-                        "momentum_std" : [1],
-                        "position_mean" : [1],
-                        "position_std" : [0.5]
+                        "gamma_mean" : [2],
+                        "position_mean" : [1]
                     }
                 },
                 "log_intervals" : {
@@ -37,9 +36,8 @@
                     "model" : {
                         "mass" : [1],
                         "momentum_mean" : [0],
-                        "momentum_std" : [1],
-                        "position_mean" : [1],
-                        "position_std" : [0.5]
+                        "gamma_mean" : [2],
+                        "position_mean" : [1]
                     }
                 },
                 "log_intervals" : {
@@ -67,9 +65,8 @@
                     "model" : {
                         "mass" : [1],
                         "momentum_mean" : [0],
-                        "momentum_std" : [1],
-                        "position_mean" : [1],
-                        "position_std" : [0.5]
+                        "gamma_mean" : [2],
+                        "position_mean" : [1]
                     }
                 },
                 "log_intervals" : {
@@ -97,9 +94,8 @@
                     "model" : {
                         "mass" : [1],
                         "momentum_mean" : [0],
-                        "momentum_std" : [1],
-                        "position_mean" : [1],
-                        "position_std" : [0.5]
+                        "gamma_mean" : [2],
+                        "position_mean" : [1]
                     }
                 },
                 "log_intervals" : {

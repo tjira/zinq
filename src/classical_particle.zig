@@ -202,8 +202,8 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Sets the position of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
-        pub fn setPositionRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) {
+        pub fn setPositionRandn(self: *@This(), mean: []const T, gamma: []const T, random: *std.Random) !void {
+            if (mean.len != self.ndim or gamma.len != self.ndim) {
 
                 std.log.err("MEAN AND STANDARD DEVIATION ARRAYS MUST MATCH NUMBER OF DIMENSIONS, NUMBER OF DIMENSIONS IS {d}", .{self.ndim});
 
@@ -211,13 +211,16 @@ pub fn ClassicalParticle(comptime T: type) type {
             }
 
             for (0..self.ndim) |i| {
-                self.position.ptr(i).* = mean[i] + stdev[i] * random.floatNorm(T);
+
+                const stdev = 1 / std.math.sqrt(2 * gamma[i]);
+
+                self.position.ptr(i).* = mean[i] + stdev * random.floatNorm(T);
             }
         }
 
         /// Sets the momentum of the particle from normal distribution with given mean and standard deviation using the provided random number generator state.
-        pub fn setMomentumRandn(self: *@This(), mean: []const T, stdev: []const T, random: *std.Random) !void {
-            if (mean.len != self.ndim or stdev.len != self.ndim) {
+        pub fn setMomentumRandn(self: *@This(), mean: []const T, gamma: []const T, random: *std.Random) !void {
+            if (mean.len != self.ndim or gamma.len != self.ndim) {
 
                 std.log.err("MEAN AND STANDARD DEVIATION ARRAYS MUST MATCH NUMBER OF DIMENSIONS, NUMBER OF DIMENSIONS IS {d}", .{self.ndim});
 
@@ -225,7 +228,10 @@ pub fn ClassicalParticle(comptime T: type) type {
             }
 
             for (0..self.ndim) |i| {
-                self.velocity.ptr(i).* = (mean[i] + stdev[i] * random.floatNorm(T)) / self.masses.at(i);
+                
+                const stdev = std.math.sqrt(gamma[i] / 2);
+
+                self.velocity.ptr(i).* = (mean[i] + stdev * random.floatNorm(T)) / self.masses.at(i);
             }
         }
 
