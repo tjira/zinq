@@ -17,21 +17,19 @@ pub fn help() !void {
     try print("USAGE: zinq-molint [-b BASIS] -m [MOLECULE] [-h]\n", .{});
 }
 
-pub fn parse(system: *[]const u8, basis: *[]const u8, do_overlap: *bool, do_kinetic: *bool, do_nuclear: *bool, do_coulomb: *bool, do_export: *bool, allocator: std.mem.Allocator, h: *bool) !std.process.ArgIterator {
+pub fn parse(system: *[]const u8, basis: *[]const u8, overlap_path: *?[]const u8, kinetic_path: *?[]const u8, nuclear_path: *?[]const u8, coulomb_path: *?[]const u8, allocator: std.mem.Allocator, h: *bool) !std.process.ArgIterator {
     var argc: usize = 0; var argv = try std.process.argsWithAllocator(allocator); _ = argv.next();
 
     while (argv.next()) |arg| {
 
         if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {h.* = true; try help(); return argv;}
 
-        if (std.mem.eql(u8, arg, "-b") or std.mem.eql(u8, arg, "--basis"   )) {basis.* = argv.next() orelse return error.InvalidArgument; argc += 1;}
-        if (std.mem.eql(u8, arg, "-m") or std.mem.eql(u8, arg, "--molecule")) {system.* = argv.next() orelse return error.InvalidArgument; argc += 1;}
-
-        if (std.mem.eql(u8, arg, "--overlap")) {do_overlap.* = true;}
-        if (std.mem.eql(u8, arg, "--kinetic")) {do_kinetic.* = true;}
-        if (std.mem.eql(u8, arg, "--nuclear")) {do_nuclear.* = true;}
-        if (std.mem.eql(u8, arg, "--coulomb")) {do_coulomb.* = true;}
-        if (std.mem.eql(u8, arg, "--export" )) {do_export.* = true;}
+        if (std.mem.eql(u8, arg, "-b") or std.mem.eql(u8, arg, "--basis"   )) {basis.*        = argv.next() orelse return error.InvalidArgument; argc += 1;}
+        if (std.mem.eql(u8, arg, "-j") or std.mem.eql(u8, arg, "--coulomb" )) {coulomb_path.* = argv.next() orelse return error.InvalidArgument; argc += 1;}
+        if (std.mem.eql(u8, arg, "-m") or std.mem.eql(u8, arg, "--molecule")) {system.*       = argv.next() orelse return error.InvalidArgument; argc += 1;}
+        if (std.mem.eql(u8, arg, "-s") or std.mem.eql(u8, arg, "--overlap" )) {overlap_path.* = argv.next() orelse return error.InvalidArgument; argc += 1;}
+        if (std.mem.eql(u8, arg, "-t") or std.mem.eql(u8, arg, "--kinetic" )) {kinetic_path.* = argv.next() orelse return error.InvalidArgument; argc += 1;}
+        if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--nuclear" )) {nuclear_path.* = argv.next() orelse return error.InvalidArgument; argc += 1;}
 
         argc += 1;
     }
@@ -40,9 +38,9 @@ pub fn parse(system: *[]const u8, basis: *[]const u8, do_overlap: *bool, do_kine
 }
 
 pub fn main() !void {
-    var system_path: []const u8 = "molecule.xyz"; var basis_name: []const u8 = "sto-3g"; var do_export = false;
+    var system_path: []const u8 = "molecule.xyz"; var basis_name: []const u8 = "sto-3g";
 
-    var do_overlap = false; var do_kinetic = false; var do_nuclear = false; var do_coulomb = false;
+    var overlap_path: ?[]const u8 = null; var kinetic_path: ?[]const u8 = null; var nuclear_path: ?[]const u8 = null; var coulomb_path: ?[]const u8 = null;
 
     var timer_total = try std.time.Timer.start(); var h = false;
 
@@ -52,7 +50,7 @@ pub fn main() !void {
         if (gpa.deinit() == .leak) std.log.err("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
-    var argv = try parse(&system_path, &basis_name, &do_overlap, &do_kinetic, &do_nuclear, &do_coulomb, &do_export, allocator, &h); defer argv.deinit(); if (h) return;
+    var argv = try parse(&system_path, &basis_name, &overlap_path, &kinetic_path, &nuclear_path, &coulomb_path, allocator, &h); defer argv.deinit(); if (h) return;
 
     try print("INTEGRAL OVER ATOMIC BASIS FUNCTIONS - SYSTEM: {s}, BASIS: {s}\n", .{system_path, basis_name});
 
@@ -64,19 +62,19 @@ pub fn main() !void {
 
         var S: ?RealMatrix(f64) = null; var T: ?RealMatrix(f64) = null; var V: ?RealMatrix(f64) = null; var J: ?RealTensor4(f64) = null;
 
-        if (do_overlap) S = try overlap(f64, basis, 1, allocator);
-        if (do_kinetic) T = try kinetic(f64, basis, 1, allocator);
-        if (do_coulomb) J = try coulomb(f64, basis, 1, allocator);
+        if (overlap_path) |_| S = try overlap(f64, basis, 1, allocator);
+        if (kinetic_path) |_| T = try kinetic(f64, basis, 1, allocator);
+        if (coulomb_path) |_| J = try coulomb(f64, basis, 1, allocator);
 
-        if (do_nuclear) V = try nuclear(f64, system, basis, 1, allocator);
+        if (nuclear_path) |_| V = try nuclear(f64, system, basis, 1, allocator);
 
         try print("{D}\n", .{timer_integrals.read()});
 
-        if (do_export) if (S) |s| try exportRealMatrix(f64, "S_AO.mat", s);
-        if (do_export) if (T) |t| try exportRealMatrix(f64, "T_AO.mat", t);
-        if (do_export) if (V) |v| try exportRealMatrix(f64, "V_AO.mat", v);
+        if (overlap_path) |path| if (path.len > 0) {try exportRealMatrix(f64, path, S.?);};
+        if (kinetic_path) |path| if (path.len > 0) {try exportRealMatrix(f64, path, T.?);};
+        if (nuclear_path) |path| if (path.len > 0) {try exportRealMatrix(f64, path, V.?);};
 
-        if (do_export) if (J) |j| try exportRealTensorFour(f64, "J_AO.mat", j);
+        if (coulomb_path) |path| if (path.len > 0) {try exportRealTensorFour(f64, path, J.?);};
 
         if (S) |s| s.deinit(allocator);
         if (T) |t| t.deinit(allocator);

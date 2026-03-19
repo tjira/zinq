@@ -84,21 +84,19 @@ pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, s
     const optimize = main_executable.root_module.optimize;
     const target = main_executable.root_module.resolved_target.?;
 
-    const tools: []const []const u8 = &.{
-        "eigh",
-        "mm",
-        "molint",
-        "mtrans",
-        "randmat"
-    };
+    var tool_dir = try std.fs.cwd().openDir("tool", .{.iterate = true}); defer tool_dir.close();
 
-    inline for (tools) |tool| {
+    var iterator = tool_dir.iterate();
+
+    while (try iterator.next()) |entry| {
+
+        const tool = entry.name[0..entry.name.len - 4];
 
         const tool_executable = builder.addExecutable(.{
-            .name = "zinq" ++ "-" ++ tool,
+            .name = builder.fmt("zinq-{s}", .{tool}),
             .root_module = builder.createModule(.{
                 .optimize = optimize,
-                .root_source_file = builder.path("tool/" ++ tool ++ ".zig"),
+                .root_source_file = builder.path(builder.fmt("tool/{s}.zig", .{tool})),
                 .strip = optimize != .Debug,
                 .single_threaded = true,
                 .target = target

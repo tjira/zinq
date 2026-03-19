@@ -886,7 +886,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         const time = @as(T, @floatFromInt(i)) * opt.time_step; derivative_coupling_parameters.nacv_parameters.time = time;
 
-        try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
+        if (i > 0) try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
         if (i > 0 and opt.thermostat != null) {
             try opt.thermostat.?.apply(&system.velocity, thermostat_parameters, .Before);
@@ -903,7 +903,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         var potential_energy = adiabatic_potential.at(current_state, current_state);
 
-        if (opt.write.state_potential_energy_mean) |_| {for (0..nstate) |j| output.state_potential_energy.ptr(i, j).* = Wpp * adiabatic_potential.at(j, j);}
+        if (opt.write.state_potential_energy_mean != null and !equilibrate) {for (0..nstate) |j| output.state_potential_energy.ptr(i, j).* = Wpp * adiabatic_potential.at(j, j);}
 
         if (!equilibrate) for (0..nstate) |j| for (j + 1..nstate) |k| {
             energy_gaps.ptr(j * (2 * nstate - j - 1) / 2 + (k - j - 1)).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
@@ -951,16 +951,18 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         const kinetic_energy = system.kineticEnergy(); const temperature = system.kineticTemperature();
 
-        if (opt.write.kinetic_energy_mean) |_| output.kinetic_energy.ptr(i).* = Wpp * kinetic_energy;
-        if (opt.write.potential_energy_mean) |_| output.potential_energy.ptr(i).* = Wpp * potential_energy;
-        if (opt.write.total_energy_mean) |_| output.total_energy.ptr(i).* = Wpp * (kinetic_energy + potential_energy);
-        if (opt.write.temperature_mean) |_| output.temperature.ptr(i).* = Wpp * temperature;
-        if (opt.write.population_mean) |_| output.population.ptr(i, current_state).* = Wpp;
+        if (opt.write.kinetic_energy_mean != null and !equilibrate) output.kinetic_energy.ptr(i).* = Wpp * kinetic_energy;
+        if (opt.write.potential_energy_mean != null and !equilibrate) output.potential_energy.ptr(i).* = Wpp * potential_energy;
+        if (opt.write.total_energy_mean != null and !equilibrate) output.total_energy.ptr(i).* = Wpp * (kinetic_energy + potential_energy);
+        if (opt.write.temperature_mean != null and !equilibrate) output.temperature.ptr(i).* = Wpp * temperature;
+        if (opt.write.population_mean != null and !equilibrate) output.population.ptr(i, current_state).* = Wpp;
 
-        if (opt.write.time_derivative_coupling_mean) |_| {for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = Wpp * time_derivative_coupling.at(j / nstate, j % nstate);}
+        if (opt.write.time_derivative_coupling_mean != null and !equilibrate) {
+            for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = Wpp * time_derivative_coupling.at(j / nstate, j % nstate);
+        }
 
-        if (opt.write.position_mean != null or entropy) {for (0..ndim) |j| output.position.ptr(i, j).* = Wpp * system.position.at(j);}
-        if (opt.write.momentum_mean != null or entropy) {for (0..ndim) |j| output.momentum.ptr(i, j).* = Wpp * system.velocity.at(j) * system.masses.at(j);}
+        if ((opt.write.position_mean != null or entropy) and !equilibrate) {for (0..ndim) |j| output.position.ptr(i, j).* = Wpp * system.position.at(j);}
+        if ((opt.write.momentum_mean != null or entropy) and !equilibrate) {for (0..ndim) |j| output.momentum.ptr(i, j).* = Wpp * system.velocity.at(j) * system.masses.at(j);}
 
         if (!equilibrate and opt.surface_hopping != null and (opt.surface_hopping.? == .fewest_switches or opt.surface_hopping.? == .landau_zener)) {
 
@@ -979,14 +981,14 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
             if (opt.write.bloch_vector_mean) |_| {
 
-                for (0..3) |j| output.bloch_vector.ptr(i, j).* = Wcp * bloch_vector.at(j);
+                for (0..2) |j| output.bloch_vector.ptr(i, j).* = Wcp * bloch_vector.at(j);
 
                 output.bloch_vector.ptr(i, 2).* = Wpp * std.math.sign(bloch_vector.at(2));
             }
 
             if (opt.write.coefficient_mean) |_| {
 
-                const Sz = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
+                const Sz = Wpp * std.math.sign(bloch_vector.at(2));
 
                 output.coefficient.ptr(i, 0).* = (1 - Sz) / 2;
                 output.coefficient.ptr(i, 1).* = (1 + Sz) / 2;

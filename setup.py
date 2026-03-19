@@ -1,4 +1,4 @@
-import os, platform, setuptools, setuptools.command.build_py, shutil, subprocess, setuptools.command.bdist_wheel
+import glob, os, platform, setuptools, setuptools.command.build_py, shutil, subprocess, setuptools.command.bdist_wheel
 
 def archos():
 
@@ -50,21 +50,17 @@ class Build(setuptools.command.build_py.build_py):
 
         subprocess.run(["make", f"{ARCH}-{OS}"], check=True, env=environment)
 
-        super().run()
+        binaries = glob.glob(f"zig-out/{ARCH}-{OS}/zinq*" + (".exe" if OS == "windows" else ""))
 
-binaries = [f"zig-out/{ARCH}-{OS}/" + binary + (".exe" if OS == "windows" else "") for binary in [
-    "zinq",
-    "zinq-eigh",
-    "zinq-molint",
-    "zinq-mm",
-    "zinq-mtrans",
-    "zinq-randmat"
-]]
+        if not self.distribution.data_files: self.distribution.data_files = []
+
+        self.distribution.data_files.append(("Scripts" if OS == "windows" else "bin", binaries))
+
+        super().run()
 
 setuptools.setup(
     version = version(),
     packages = setuptools.find_packages(),
     has_ext_modules=lambda: True,
-    data_files = [("Scripts" if OS == "windows" else "bin", binaries)],
     cmdclass = {"bdist_wheel": Bdist, "build_py": Build}
 )
