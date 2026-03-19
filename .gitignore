@@ -27,6 +27,9 @@
 *.gz
 *.md
 
+*.e[0-9]*
+*.o[0-9]*
+
 *bin*/
 *bui*/
 *cod*/
@@ -40,5 +43,6 @@ __*/
 *run.sh
 *sub.sh
 
+[A-Z]*/
+
 !index.md
-TRAJ_*
