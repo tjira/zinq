@@ -329,6 +329,8 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     var F = try RealMatrix(T).initZero(nbf, nbf, allocator);
     var P = try RealMatrix(T).initZero(nbf, nbf, allocator);
 
+    var P_prev = try RealMatrix(T).initZero(nbf, nbf, allocator); defer P_prev.deinit(allocator);
+
     var epsilon = try RealMatrix(T).initZero(nbf, nbf, allocator);
 
     var X = try getXMatrix(T, S, allocator); defer X.deinit(allocator);
@@ -338,40 +340,46 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     const VNN = system.nuclearRepulsionEnergy();
 
-    var energy: T = 0; var energy_prev: T = 1; var iter: usize = 0;
+    var energy: T = 0; var energy_prev: T = 1; var dp_max: T = 0;
 
-    if (enable_printing) try print("\nSELF CONSISTENT FIELD:\n{s:4} {s:20} {s:8} {s:4}\n", .{"ITER", "ENERGY", "|DELTA E|", "TIME"});
+    if (enable_printing) try print("\nSELF CONSISTENT FIELD:\n{s:4} {s:20} {s:9} {s:12} {s:4}\n", .{"ITER", "ENERGY", "|DELTA E|", "MAX(DELTA P)", "TIME"});
 
-    while (@abs(energy - energy_prev) > opt.threshold) : (iter += 1) {
-
-        if (iter >= opt.maxiter) {
-
-            std.log.err("SCF DID NOT CONVERGE IN {d} ITERATIONS", .{opt.maxiter});
-
-            return error.NumericalError;
-        }
+    for (0..opt.maxiter) |i| {
 
         timer.reset();
 
         try getFockMatrix(T, &F, K, V, P, J, basis);
 
+        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, opt.generalized);
+
+        if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {e:12.3} {D}\n", .{i + 1, energy + VNN, @abs(energy - energy_prev), dp_max, timer.read()});
+
+        if (i > 0 and @abs(energy - energy_prev) <= opt.threshold and dp_max <= opt.threshold) break;
+
         if (opt.diis != null) {
 
             const e = try errorVector(T, S, F, P, allocator); defer e.deinit(allocator);
 
-            try F.copyTo(DIIS_F.ptr(iter % DIIS_F.len));
-            try e.copyTo(DIIS_E.ptr(iter % DIIS_E.len));
+            try F.copyTo(DIIS_F.ptr(i % DIIS_F.len));
+            try e.copyTo(DIIS_E.ptr(i % DIIS_E.len));
 
-            if (iter >= opt.diis.?.start) try diisExtrapolate(T, &F, DIIS_F, DIIS_E, iter, allocator);
+            if (i >= opt.diis.?.start) try diisExtrapolate(T, &F, DIIS_F, DIIS_E, i, allocator);
         }
 
         try solveRoothaan(T, &epsilon, &C, F, X, allocator);
 
-        getDensityMatrix(T, &P, C, nocc);
+        try P.copyTo(&P_prev); getDensityMatrix(T, &P, C, nocc); dp_max = 0;
 
-        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, opt.generalized);
+        for (0..P.rows) |j| for (0..P.cols) |k| {
+            const diff = @abs(P.at(j, k) - P_prev.at(j, k)); if (diff > dp_max) dp_max = diff;
+        };
 
-        if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {D}\n", .{iter + 1, energy + VNN, @abs(energy - energy_prev), timer.read()});
+        if (i == opt.maxiter - 1) {
+
+            std.log.err("SCF LOOP DID NOT CONVERGE", .{});
+
+            return error.NumericalError;
+        }
     }
 
     if (enable_printing) try print("\nHF ENERGY: {d:.14}\n", .{energy + VNN});
