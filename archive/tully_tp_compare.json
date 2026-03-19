@@ -1,0 +1,173 @@
+{
+    "zinq" : [
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-12, 12]],
+                    "points" : 512
+                },
+                "initial_conditions" : {
+                    "adiabatic" : true,
+                    "mass" : 2000,
+                    "momentum" : [20],
+                    "position" : [-5],
+                    "state" : 0,
+                    "gamma" : [2],
+                    "spread" :  {
+                        "momentum" : {
+                            "end" : [50],
+                            "step" : [1]
+                        }
+                    }
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "cap" : {
+                    "limits" : [[-8, 8]],
+                    "strength" : 0.001,
+                    "track_population" : true
+                },
+                "write" : {
+                    "transition_probability" : "TP_1.mat"
+                },
+                "adiabatic" : true,
+                "iterations" : 1000000,
+                "time_step" : 1
+            }
+        },
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-12, 12]],
+                    "points" : 512
+                },
+                "initial_conditions" : {
+                    "adiabatic" : true,
+                    "mass" : 2000,
+                    "momentum" : [20],
+                    "position" : [-5],
+                    "state" : 0,
+                    "gamma" : [2],
+                    "spread" :  {
+                        "momentum" : {
+                            "end" : [50],
+                            "step" : [1]
+                        }
+                    }
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "tully_2" : {}
+                },
+                "cap" : {
+                    "limits" : [[-8, 8]],
+                    "strength" : 0.001,
+                    "track_population" : true
+                },
+                "write" : {
+                    "transition_probability" : "TP_2.mat"
+                },
+                "adiabatic" : true,
+                "iterations" : 1000000,
+                "time_step" : 1
+            }
+        },
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "model" : {
+                        "mass" : [2000],
+                        "momentum_mean" : [20],
+                        "gamma_mean" : [2],
+                        "position_mean" : [-5],
+                        "state" : 0,
+                        "spread" :  {
+                            "momentum_mean" : {
+                                "end" : [50],
+                                "step" : [1]
+                            }
+                        }
+                    }
+                },
+                "log_intervals" : {
+                    "iteration" : 1000,
+                    "trajectory" : 1000
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "surface_hopping" : {
+                    "fewest_switches" : {}
+                },
+                "derivative_coupling" : {
+                    "npi" : {}
+                },
+                "cap" : {
+                    "limits" : [[-8, 8]],
+                    "track_population" : true
+                },
+                "write" : {
+                    "transition_probability_mean" : "TP_MEAN_FSSH_1.mat"
+                },
+                "iterations" : 1000000,
+                "time_step" : 1,
+                "nthread" : 12,
+                "trajectories" : 1000
+            }
+        },
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "model" : {
+                        "mass" : [2000],
+                        "momentum_mean" : [20],
+                        "gamma_mean" : [2],
+                        "position_mean" : [-5],
+                        "state" : 0,
+                        "spread" :  {
+                            "momentum_mean" : {
+                                "end" : [50],
+                                "step" : [1]
+                            }
+                        }
+                    }
+                },
+                "log_intervals" : {
+                    "iteration" : 1000,
+                    "trajectory" : 1000
+                },
+                "potential" : {
+                    "tully_2" : {}
+                },
+                "surface_hopping" : {
+                    "fewest_switches" : {}
+                },
+                "derivative_coupling" : {
+                    "npi" : {}
+                },
+                "cap" : {
+                    "limits" : [[-8, 8]],
+                    "track_population" : true
+                },
+                "write" : {
+                    "transition_probability_mean" : "TP_MEAN_FSSH_2.mat"
+                },
+                "iterations" : 1000000,
+                "time_step" : 1,
+                "nthread" : 12,
+                "trajectories" : 1000
+            }
+        }
+    ],
+    "command" : "plot TP_1.mat:3 TP_MEAN_FSSH_1.mat:3 TP_2.mat:3 TP_MEAN_FSSH_2.mat:3 --figsize 3 8 --subplots 121 121 122 122 --title 'Single Avoided Crossing' 'Dual Avoided Crossing' --xcols all 1 --xlabel '$k$ (a.u.)' '$k$ (a.u.)' --xlim 4 50 4 50 --ylabel Probability --output TULLY_TP.pdf"
+}

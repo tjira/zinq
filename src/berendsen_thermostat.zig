@@ -24,7 +24,7 @@ pub fn Berendsen(comptime T: type) type {
         pub fn apply(self: @This(), velocities: *RealVector(T), parameters: Parameters(T)) !void {
             if (parameters.temperature < 1e-6) return;
 
-            const lambda = std.math.sqrt(1 + parameters.time_step / self.tau * (self.temperature / parameters.temperature - 1));
+            const lambda = std.math.sqrt(@max(0, 1 + parameters.time_step / self.tau * (self.temperature / parameters.temperature - 1)));
 
             for (0..velocities.len) |i| velocities.ptr(i).* *= lambda;
         }

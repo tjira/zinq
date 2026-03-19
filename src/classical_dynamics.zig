@@ -180,25 +180,49 @@ pub fn Output(comptime T: type) type {
         time_derivative_coupling_mean: RealMatrix(T),
         temperature_mean: RealVector(T),
         total_energy_mean: RealVector(T),
+        final_population_mean: RealVector(T),
         schlitter_entropy: RealVector(T),
         sre_entropy: RealVector(T),
 
         /// Allocate the output structure.
-        pub fn init(nstate: usize, ndim: usize, iterations: usize, trajectories: usize, allocator: std.mem.Allocator) !@This() {
+        pub fn init(nstate: usize, ndim: usize, iterations: usize, trajectories: usize, write: Options(T).Write, allocator: std.mem.Allocator) !@This() {
+
+            const bloch_vector_rows = if (write.bloch_vector_mean) |_| iterations + 1 else 0;
+            const bloch_vector_cols = if (write.bloch_vector_mean) |_| @as(usize, 4) else 0;
+            const coefficient_rows = if (write.coefficient_mean) |_| iterations + 1 else 0;
+            const coefficient_cols = if (write.coefficient_mean) |_| nstate else 0;
+            const kinetic_energy_rows = if (write.kinetic_energy_mean) |_| iterations + 1 else 0;
+            const momentum_rows = if (write.momentum_mean) |_| iterations + 1 else 0;
+            const momentum_cols = if (write.momentum_mean) |_| ndim else 0;
+            const population_rows = if (write.population_mean) |_| iterations + 1 else 0;
+            const population_cols = if (write.population_mean) |_| nstate else 0;
+            const position_rows = if (write.position_mean) |_| iterations + 1 else 0;
+            const position_cols = if (write.position_mean) |_| ndim else 0;
+            const potential_energy_rows = if (write.potential_energy_mean) |_| iterations + 1 else 0;
+            const state_potential_energy_rows = if (write.state_potential_energy_mean) |_| iterations + 1 else 0;
+            const state_potential_energy_cols = if (write.state_potential_energy_mean) |_| nstate else 0;
+            const time_derivative_coupling_rows = if (write.time_derivative_coupling_mean) |_| iterations + 1 else 0;
+            const time_derivative_coupling_cols = if (write.time_derivative_coupling_mean) |_| nstate * nstate else 0;
+            const temperature_rows = if (write.temperature_mean) |_| iterations + 1 else 0;
+            const total_energy_rows = if (write.total_energy_mean) |_| iterations + 1 else 0;
+            const schlitter_entropy_rows = if (write.schlitter_entropy) |_| trajectories else 0;
+            const sre_entropy_rows = if (write.sre_entropy) |_| trajectories else 0;
+
             return @This(){
-                .bloch_vector_mean = try RealMatrix(T).initZero(iterations + 1, 4, allocator),
-                .coefficient_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
-                .kinetic_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
-                .momentum_mean = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
-                .population_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
-                .position_mean = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
-                .potential_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
-                .state_potential_energy_mean = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
-                .time_derivative_coupling_mean = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
-                .temperature_mean = try RealVector(T).initZero(iterations + 1, allocator),
-                .total_energy_mean = try RealVector(T).initZero(iterations + 1, allocator),
-                .schlitter_entropy = try RealVector(T).initZero(trajectories, allocator),
-                .sre_entropy = try RealVector(T).initZero(trajectories, allocator)
+                .bloch_vector_mean = try RealMatrix(T).initZero(bloch_vector_rows, bloch_vector_cols, allocator),
+                .coefficient_mean = try RealMatrix(T).initZero(coefficient_rows, coefficient_cols, allocator),
+                .kinetic_energy_mean = try RealVector(T).initZero(kinetic_energy_rows, allocator),
+                .momentum_mean = try RealMatrix(T).initZero(momentum_rows, momentum_cols, allocator),
+                .population_mean = try RealMatrix(T).initZero(population_rows, population_cols, allocator),
+                .position_mean = try RealMatrix(T).initZero(position_rows, position_cols, allocator),
+                .potential_energy_mean = try RealVector(T).initZero(potential_energy_rows, allocator),
+                .state_potential_energy_mean = try RealMatrix(T).initZero(state_potential_energy_rows, state_potential_energy_cols, allocator),
+                .time_derivative_coupling_mean = try RealMatrix(T).initZero(time_derivative_coupling_rows, time_derivative_coupling_cols, allocator),
+                .temperature_mean = try RealVector(T).initZero(temperature_rows, allocator),
+                .total_energy_mean = try RealVector(T).initZero(total_energy_rows, allocator),
+                .final_population_mean = try RealVector(T).initZero(nstate, allocator),
+                .schlitter_entropy = try RealVector(T).initZero(schlitter_entropy_rows, allocator),
+                .sre_entropy = try RealVector(T).initZero(sre_entropy_rows, allocator)
             };
         }
 
@@ -217,6 +241,7 @@ pub fn Output(comptime T: type) type {
             self.total_energy_mean.deinit(allocator);
             self.schlitter_entropy.deinit(allocator);
             self.sre_entropy.deinit(allocator);
+            self.final_population_mean.deinit(allocator);
         }
     };
 }
@@ -256,22 +281,45 @@ pub fn Custom(comptime T: type) type {
             time_derivative_coupling: RealMatrix(T),
             temperature: RealVector(T),
             total_energy: RealVector(T),
+            final_population: RealVector(T),
             thermodynamics: Thermodynamics = .{},
 
             /// Allocate the trajectory output structure.
-            pub fn init(nstate: usize, ndim: usize, iterations: usize, allocator: std.mem.Allocator) !@This() {
+            pub fn init(nstate: usize, ndim: usize, iterations: usize, write: Options(T).Write, thermodynamics: Options(T).Thermodynamics, allocator: std.mem.Allocator) !@This() {
+                const entropy = thermodynamics.schlitter_entropy or thermodynamics.sre_entropy;
+
+                const bloch_vector_rows = if (write.bloch_vector_mean) |_| iterations + 1 else 0;
+                const bloch_vector_cols = if (write.bloch_vector_mean) |_| @as(usize, 4) else 0;
+                const coefficient_rows = if (write.coefficient_mean) |_| iterations + 1 else 0;
+                const coefficient_cols = if (write.coefficient_mean) |_| nstate else 0;
+                const kinetic_energy_rows = if (write.kinetic_energy_mean) |_| iterations + 1 else 0;
+                const momentum_rows = if (write.momentum_mean != null or entropy) iterations + 1 else 0;
+                const momentum_cols = if (write.momentum_mean != null or entropy) ndim else 0;
+                const population_rows = if (write.population_mean) |_| iterations + 1 else 0;
+                const population_cols = if (write.population_mean) |_| nstate else 0;
+                const position_rows = if (write.position_mean != null or entropy) iterations + 1 else 0;
+                const position_cols = if (write.position_mean != null or entropy) ndim else 0;
+                const potential_energy_rows = if (write.potential_energy_mean) |_| iterations + 1 else 0;
+                const state_potential_energy_rows = if (write.state_potential_energy_mean) |_| iterations + 1 else 0;
+                const state_potential_energy_cols = if (write.state_potential_energy_mean) |_| nstate else 0;
+                const time_derivative_coupling_rows = if (write.time_derivative_coupling_mean) |_| iterations + 1 else 0;
+                const time_derivative_coupling_cols = if (write.time_derivative_coupling_mean) |_| nstate * nstate else 0;
+                const temperature_rows = if (write.temperature_mean) |_| iterations + 1 else 0;
+                const total_energy_rows = if (write.total_energy_mean) |_| iterations + 1 else 0;
+
                 return @This(){
-                    .bloch_vector = try RealMatrix(T).initZero(iterations + 1, 4, allocator),
-                    .coefficient = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
-                    .kinetic_energy = try RealVector(T).initZero(iterations + 1, allocator),
-                    .momentum = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
-                    .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
-                    .position = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
-                    .potential_energy = try RealVector(T).initZero(iterations + 1, allocator),
-                    .state_potential_energy = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
-                    .time_derivative_coupling = try RealMatrix(T).initZero(iterations + 1, nstate * nstate, allocator),
-                    .temperature = try RealVector(T).initZero(iterations + 1, allocator),
-                    .total_energy = try RealVector(T).initZero(iterations + 1, allocator),
+                    .bloch_vector = try RealMatrix(T).initZero(bloch_vector_rows, bloch_vector_cols, allocator),
+                    .coefficient = try RealMatrix(T).initZero(coefficient_rows, coefficient_cols, allocator),
+                    .kinetic_energy = try RealVector(T).initZero(kinetic_energy_rows, allocator),
+                    .momentum = try RealMatrix(T).initZero(momentum_rows, momentum_cols, allocator),
+                    .population = try RealMatrix(T).initZero(population_rows, population_cols, allocator),
+                    .position = try RealMatrix(T).initZero(position_rows, position_cols, allocator),
+                    .potential_energy = try RealVector(T).initZero(potential_energy_rows, allocator),
+                    .state_potential_energy = try RealMatrix(T).initZero(state_potential_energy_rows, state_potential_energy_cols, allocator),
+                    .time_derivative_coupling = try RealMatrix(T).initZero(time_derivative_coupling_rows, time_derivative_coupling_cols, allocator),
+                    .temperature = try RealVector(T).initZero(temperature_rows, allocator),
+                    .total_energy = try RealVector(T).initZero(total_energy_rows, allocator),
+                    .final_population = try RealVector(T).initZero(nstate, allocator)
                 };
             }
 
@@ -288,21 +336,22 @@ pub fn Custom(comptime T: type) type {
                 self.time_derivative_coupling.deinit(allocator);
                 self.temperature.deinit(allocator);
                 self.total_energy.deinit(allocator);
+                self.final_population.deinit(allocator);
             }
 
             /// Shrink the output structure to the specified number of iterations.
             pub fn shrink(self: *@This(), iterations: usize, allocator: std.mem.Allocator) !void {
-                try self.bloch_vector.shrinkRows(iterations + 1, allocator);
-                try self.coefficient.shrinkRows(iterations + 1, allocator);
-                try self.kinetic_energy.shrink(iterations + 1, allocator);
-                try self.momentum.shrinkRows(iterations + 1, allocator);
-                try self.population.shrinkRows(iterations + 1, allocator);
-                try self.position.shrinkRows(iterations + 1, allocator);
-                try self.potential_energy.shrink(iterations + 1, allocator);
-                try self.state_potential_energy.shrinkRows(iterations + 1, allocator);
-                try self.time_derivative_coupling.shrinkRows(iterations + 1, allocator);
-                try self.temperature.shrink(iterations + 1, allocator);
-                try self.total_energy.shrink(iterations + 1, allocator);
+                if (self.bloch_vector.data.len > 0) try self.bloch_vector.shrinkRows(iterations + 1, allocator);
+                if (self.coefficient.data.len > 0) try self.coefficient.shrinkRows(iterations + 1, allocator);
+                if (self.kinetic_energy.data.len > 0) try self.kinetic_energy.shrink(iterations + 1, allocator);
+                if (self.momentum.data.len > 0) try self.momentum.shrinkRows(iterations + 1, allocator);
+                if (self.population.data.len > 0) try self.population.shrinkRows(iterations + 1, allocator);
+                if (self.position.data.len > 0) try self.position.shrinkRows(iterations + 1, allocator);
+                if (self.potential_energy.data.len > 0) try self.potential_energy.shrink(iterations + 1, allocator);
+                if (self.state_potential_energy.data.len > 0) try self.state_potential_energy.shrinkRows(iterations + 1, allocator);
+                if (self.time_derivative_coupling.data.len > 0) try self.time_derivative_coupling.shrinkRows(iterations + 1, allocator);
+                if (self.temperature.data.len > 0) try self.temperature.shrink(iterations + 1, allocator);
+                if (self.total_energy.data.len > 0) try self.total_energy.shrink(iterations + 1, allocator);
             }
         };
     };
@@ -345,6 +394,13 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 
         return error.InvalidInput;
     }
+
+    if (opt.cap) |cap| if (cap.limits.len != ndim) {
+
+        std.log.err("CAP LIMITS MUST MATCH NUMBER OF DIMENSIONS", .{});
+
+        return error.InvalidInput;
+    };
 
     if (opt.potential == .ab_initio) return try performDynamics(T, opt, enable_printing, allocator);
 
@@ -526,7 +582,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         for (0..ndim) |l| transition_probability.ptr(tp_index, 1 * ndim + l).* = p[l];
         for (0..ndim) |l| transition_probability.ptr(tp_index, 2 * ndim + l).* = g[l];
 
-        for (0..nstate) |l| transition_probability.ptr(tp_index, 3 * ndim + l).* = result.population_mean.at(result.population_mean.rows - 1, l);
+        for (0..nstate) |l| transition_probability.ptr(tp_index, 3 * ndim + l).* = result.final_population_mean.at(l);
 
         if (i == 0 and j == 0 and k == 0) output = result else result.deinit(allocator);
 
@@ -577,7 +633,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
-    var output = try Output(T).init(nstate, ndim, opt.iterations, opt.trajectories, allocator); errdefer output.deinit(allocator);
+    var output = try Output(T).init(nstate, ndim, opt.iterations, opt.trajectories, opt.write, allocator); errdefer output.deinit(allocator);
 
     if (enable_printing and opt.potential != .ab_initio) try print("\nINITIAL GAMMA: [", .{});
 
@@ -585,23 +641,45 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
         if (i > 0) try print(", ", .{}); try print("{d:.6}", .{gamma}); if (i == opt.initial_conditions.model.gamma_mean.len - 1) try print("]\n", .{});
     };
 
+    const bloch_vector_rows = if (opt.write.bloch_vector_mean) |_| opt.iterations + 1 else 0;
+    const bloch_vector_cols = if (opt.write.bloch_vector_mean) |_| @as(usize, 4) else 0;
+    const coefficient_rows = if (opt.write.coefficient_mean) |_| opt.iterations + 1 else 0;
+    const coefficient_cols = if (opt.write.coefficient_mean) |_| nstate else 0;
+    const kinetic_energy_rows = if (opt.write.kinetic_energy_mean) |_| opt.iterations + 1 else 0;
+    const momentum_rows = if (opt.write.momentum_mean) |_| opt.iterations + 1 else 0;
+    const momentum_cols = if (opt.write.momentum_mean) |_| ndim else 0;
+    const population_rows = if (opt.write.population_mean) |_| opt.iterations + 1 else 0;
+    const population_cols = if (opt.write.population_mean) |_| nstate else 0;
+    const position_rows = if (opt.write.position_mean) |_| opt.iterations + 1 else 0;
+    const position_cols = if (opt.write.position_mean) |_| ndim else 0;
+    const potential_energy_rows = if (opt.write.potential_energy_mean) |_| opt.iterations + 1 else 0;
+    const state_potential_energy_rows = if (opt.write.state_potential_energy_mean) |_| opt.iterations + 1 else 0;
+    const state_potential_energy_cols = if (opt.write.state_potential_energy_mean) |_| nstate else 0;
+    const time_derivative_coupling_rows = if (opt.write.time_derivative_coupling_mean) |_| opt.iterations + 1 else 0;
+    const time_derivative_coupling_cols = if (opt.write.time_derivative_coupling_mean) |_| nstate * nstate else 0;
+    const temperature_rows = if (opt.write.temperature_mean) |_| opt.iterations + 1 else 0;
+    const total_energy_rows = if (opt.write.total_energy_mean) |_| opt.iterations + 1 else 0;
+    const schlitter_entropy_rows = if (opt.write.schlitter_entropy) |_| opt.trajectories else 0;
+    const sre_entropy_rows = if (opt.write.sre_entropy) |_| opt.trajectories else 0;
+
     const parallel_results = .{
-        .bloch_vector_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = 4}, allocator),
-        .coefficient_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
-        .kinetic_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
-        .momentum_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
-        .population_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
-        .position_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = ndim}, allocator),
-        .potential_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
-        .state_potential_energy_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate}, allocator),
-        .time_derivative_coupling_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1, .cols = nstate * nstate}, allocator),
-        .temperature_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
-        .total_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = opt.iterations + 1}, allocator),
+        .bloch_vector_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = bloch_vector_rows, .cols = bloch_vector_cols}, allocator),
+        .coefficient_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = coefficient_rows, .cols = coefficient_cols}, allocator),
+        .kinetic_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = kinetic_energy_rows}, allocator),
+        .momentum_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = momentum_rows, .cols = momentum_cols}, allocator),
+        .population_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = population_rows, .cols = population_cols}, allocator),
+        .position_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = position_rows, .cols = position_cols}, allocator),
+        .potential_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = potential_energy_rows}, allocator),
+        .state_potential_energy_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = state_potential_energy_rows, .cols = state_potential_energy_cols}, allocator),
+        .time_derivative_coupling_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = time_derivative_coupling_rows, .cols = time_derivative_coupling_cols}, allocator),
+        .temperature_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = temperature_rows}, allocator),
+        .total_energy_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = total_energy_rows}, allocator),
+        .final_population_mean = try RealVectorArray(T).initZero(opt.nthread, .{.rows = nstate}, allocator)
     };
 
     var trajectory_based_results = .{
-        .schlitter_entropy = try RealVector(T).initZero(opt.trajectories, allocator),
-        .sre_entropy = try RealVector(T).initZero(opt.trajectories, allocator)
+        .schlitter_entropy = try RealVector(T).initZero(schlitter_entropy_rows, allocator),
+        .sre_entropy = try RealVector(T).initZero(sre_entropy_rows, allocator)
     };
 
     defer inline for (std.meta.fields(@TypeOf(parallel_results))) |field| @as(field.type, @field(parallel_results, field.name)).deinit(allocator);
@@ -651,6 +729,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     var dir = std.fs.cwd();
 
+    const entropy = opt.thermodynamics.schlitter_entropy or opt.thermodynamics.sre_entropy;
+
     if (opt.potential == .ab_initio) {
 
         const dir_name = try std.fmt.allocPrint(allocator, "TRAJ_{d}", .{index + 1}); defer allocator.free(dir_name);
@@ -662,7 +742,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
     var split_mix = std.Random.SplitMix64.init(opt.seed + index); var rng = std.Random.DefaultPrng.init(split_mix.next()); var random = rng.random();
 
-    var output = try Custom(T).TrajectoryOutput.init(nstate, ndim, opt.iterations, allocator);
+    var output = try Custom(T).TrajectoryOutput.init(nstate, ndim, opt.iterations, opt.write, opt.thermodynamics, allocator);
 
     var current_state: usize = switch (opt.initial_conditions) {
         .model => opt.initial_conditions.model.state,
@@ -824,7 +904,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         var potential_energy = adiabatic_potential.at(current_state, current_state);
 
-        for (0..nstate) |j| output.state_potential_energy.ptr(i, j).* = Wpp * adiabatic_potential.at(j, j);
+        if (opt.write.state_potential_energy_mean) |_| {for (0..nstate) |j| output.state_potential_energy.ptr(i, j).* = Wpp * adiabatic_potential.at(j, j);}
 
         if (!equilibrate) for (0..nstate) |j| for (j + 1..nstate) |k| {
             energy_gaps.ptr(j * (2 * nstate - j - 1) / 2 + (k - j - 1)).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
@@ -872,36 +952,46 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         const kinetic_energy = system.kineticEnergy(); const temperature = system.kineticTemperature();
 
-        output.kinetic_energy.ptr(i).* = Wpp * kinetic_energy;
-        output.population.ptr(i, current_state).* = Wpp;
-        output.potential_energy.ptr(i).* = Wpp * potential_energy;
-        output.total_energy.ptr(i).* = Wpp * (kinetic_energy + potential_energy);
-        output.temperature.ptr(i).* = Wpp * temperature;
+        if (opt.write.kinetic_energy_mean) |_| output.kinetic_energy.ptr(i).* = Wpp * kinetic_energy;
+        if (opt.write.potential_energy_mean) |_| output.potential_energy.ptr(i).* = Wpp * potential_energy;
+        if (opt.write.total_energy_mean) |_| output.total_energy.ptr(i).* = Wpp * (kinetic_energy + potential_energy);
+        if (opt.write.temperature_mean) |_| output.temperature.ptr(i).* = Wpp * temperature;
+        if (opt.write.population_mean) |_| output.population.ptr(i, current_state).* = Wpp;
 
-        for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = Wpp * time_derivative_coupling.at(j / nstate, j % nstate);
+        if (opt.write.time_derivative_coupling_mean) |_| {for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = Wpp * time_derivative_coupling.at(j / nstate, j % nstate);}
 
-        for (0..ndim) |j| {
-            output.position.ptr(i, j).* = Wpp * system.position.at(j); output.momentum.ptr(i, j).* = Wpp * system.velocity.at(j) * system.masses.at(j);
-        }
+        if (opt.write.position_mean != null or entropy) {for (0..ndim) |j| output.position.ptr(i, j).* = Wpp * system.position.at(j);}
+        if (opt.write.momentum_mean != null or entropy) {for (0..ndim) |j| output.momentum.ptr(i, j).* = Wpp * system.velocity.at(j) * system.masses.at(j);}
 
         if (!equilibrate and opt.surface_hopping != null and (opt.surface_hopping.? == .fewest_switches or opt.surface_hopping.? == .landau_zener)) {
 
-            for (0..nstate) |j| output.coefficient.ptr(i, j).* = coefficient.at(j).squaredMagnitude();
+            if (opt.write.coefficient_mean) |_| {for (0..nstate) |j| output.coefficient.ptr(i, j).* = coefficient.at(j).squaredMagnitude();}
 
-            output.bloch_vector.ptr(i, 0).* = 2 * coefficient.at(0).mul(coefficient.at(1).conjugate()).re;
-            output.bloch_vector.ptr(i, 1).* = 2 * coefficient.at(0).mul(coefficient.at(1).conjugate()).im;
+            if (opt.write.bloch_vector_mean) |_| {
 
-            output.bloch_vector.ptr(i, 2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
+                output.bloch_vector.ptr(i, 0).* = 2 * coefficient.at(0).mul(coefficient.at(1).conjugate()).re;
+                output.bloch_vector.ptr(i, 1).* = 2 * coefficient.at(0).mul(coefficient.at(1).conjugate()).im;
+
+                output.bloch_vector.ptr(i, 2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
+            }
         }
 
         if (!equilibrate and opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
 
-            for (0..3) |j| output.bloch_vector.ptr(i, j).* = Wcp * bloch_vector.at(j);
+            if (opt.write.bloch_vector_mean) |_| {
 
-            output.bloch_vector.ptr(i, 2).* = Wpp * std.math.sign(bloch_vector.at(2));
+                for (0..3) |j| output.bloch_vector.ptr(i, j).* = Wcp * bloch_vector.at(j);
 
-            output.coefficient.ptr(i, 0).* = (1 - output.bloch_vector.at(i, 2)) / 2;
-            output.coefficient.ptr(i, 1).* = (1 + output.bloch_vector.at(i, 2)) / 2;
+                output.bloch_vector.ptr(i, 2).* = Wpp * std.math.sign(bloch_vector.at(2));
+            }
+
+            if (opt.write.coefficient_mean) |_| {
+
+                const Sz = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
+
+                output.coefficient.ptr(i, 0).* = (1 - Sz) / 2;
+                output.coefficient.ptr(i, 1).* = (1 + Sz) / 2;
+            }
         }
 
         if (opt.cap) |cap| if (!equilibrate) {
@@ -914,9 +1004,11 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             }
 
             if (end_simulation) {
-                try output.shrink(i, allocator); break;
+                output.final_population.ptr(current_state).* = Wpp; try output.shrink(i, allocator); break;
             }
         };
+
+        if (i == opt.iterations) output.final_population.ptr(current_state).* = Wpp;
 
         if (!enable_printing or (index > 0 and (index + 1) % opt.log_intervals.trajectory != 0) or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;
 
@@ -1010,23 +1102,25 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
     }; defer trajectory_output.deinit(params[4]);
 
     inline for (std.meta.fields(@TypeOf(trajectory_output.thermodynamics))) |field| {
-        if (@field(trajectory_output.thermodynamics, field.name)) |val| @field(trajectory_based_results, field.name).ptr(params[1]).* = val;
+        if (@field(trajectory_output.thermodynamics, field.name)) |val| {
+            if (@field(trajectory_based_results, field.name).len > 0) @field(trajectory_based_results, field.name).ptr(params[1]).* = val;
+        }
     }
     
     inline for (std.meta.fields(@TypeOf(results))) |field| {
 
         const result = @as(field.type, @field(results, field.name)).ptr(id - 1); const output = @field(trajectory_output, field.name[0..field.name.len - 5]);
 
-        if (@TypeOf(output) == RealVector(T)) for (0..output.len) |i| {
+        if (@TypeOf(output) == RealVector(T)) if (result.len > 0) for (0..output.len) |i| {
             result.ptr(i).* += output.at(i);
         };
 
-        if (@TypeOf(output) == RealMatrix(T)) for (0..output.rows) |i| for (0..output.cols) |j| {
+        if (@TypeOf(output) == RealMatrix(T)) if (result.rows > 0) for (0..output.rows) |i| for (0..output.cols) |j| {
             result.ptr(i, j).* += output.at(i, j);
         };
     }
 
-    if (params[0].cap) |cap| if (cap.track_population) {
+    if (params[0].cap) |cap| if (cap.track_population and params[0].write.population_mean != null) {
 
         const last_i = trajectory_output.population.rows - 1;
 
@@ -1077,6 +1171,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     const output_time_derivative_coupling_mean = parallel_results.time_derivative_coupling_mean;
     const output_temperature_mean = parallel_results.temperature_mean;
     const output_total_energy_mean = parallel_results.total_energy_mean;
+    const output_final_population_mean = parallel_results.final_population_mean;
 
     for (0..opt.nthread) |i| {
         try output.bloch_vector_mean.add(output_bloch_vector_mean.at(i));
@@ -1090,6 +1185,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
         try output.time_derivative_coupling_mean.add(output_time_derivative_coupling_mean.at(i));
         try output.temperature_mean.add(output_temperature_mean.at(i));
         try output.total_energy_mean.add(output_total_energy_mean.at(i));
+        try output.final_population_mean.add(output_final_population_mean.at(i));
     }
 
     for (0..output.bloch_vector_mean.rows) |i| {
@@ -1107,6 +1203,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     output.time_derivative_coupling_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.temperature_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
     output.total_energy_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
+    output.final_population_mean.divs(@as(T, @floatFromInt(opt.trajectories)));
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
@@ -1158,13 +1255,11 @@ pub fn initRandomParallel(nthread: u32, seed: u32, allocator: std.mem.Allocator)
 
 /// Prints the fine details after simulation.
 pub fn printFinalDetails(comptime T: type, opt: Options(T), output: Output(T)) !void {
-    try print("\nFINAL AVERAGED TOTAL ENERGY: {d:.14}\n", .{output.total_energy_mean.at(opt.iterations)});
+    for (0..output.final_population_mean.len) |i| {
 
-    for (0..output.population_mean.cols) |i| {
+        const population_error = binomialConfInt(output.final_population_mean.at(i), opt.trajectories);
 
-        const population_error = binomialConfInt(output.population_mean.at(opt.iterations, i), opt.trajectories);
-
-        const print_payload = .{if (i == 0) "\n" else "", i, output.population_mean.at(opt.iterations, i), if (std.math.isNan(population_error)) 0 else population_error};
+        const print_payload = .{if (i == 0) "\n" else "", i, output.final_population_mean.at(i), if (std.math.isNan(population_error)) 0 else population_error};
 
         try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} +- {:.6}\n", print_payload);
     }
