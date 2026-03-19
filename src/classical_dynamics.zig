@@ -186,7 +186,6 @@ pub fn Output(comptime T: type) type {
 
         /// Allocate the output structure.
         pub fn init(nstate: usize, ndim: usize, iterations: usize, trajectories: usize, write: Options(T).Write, allocator: std.mem.Allocator) !@This() {
-
             const bloch_vector_rows = if (write.bloch_vector_mean) |_| iterations + 1 else 0;
             const bloch_vector_cols = if (write.bloch_vector_mean) |_| @as(usize, 4) else 0;
             const coefficient_rows = if (write.coefficient_mean) |_| iterations + 1 else 0;
@@ -286,7 +285,7 @@ pub fn Custom(comptime T: type) type {
 
             /// Allocate the trajectory output structure.
             pub fn init(nstate: usize, ndim: usize, iterations: usize, write: Options(T).Write, thermodynamics: Options(T).Thermodynamics, allocator: std.mem.Allocator) !@This() {
-                const entropy = thermodynamics.schlitter_entropy or thermodynamics.sre_entropy;
+                const entropy = thermodynamics.schlitter_entropy or thermodynamics.sre_entropy or write.schlitter_entropy != null or write.sre_entropy != null;
 
                 const bloch_vector_rows = if (write.bloch_vector_mean) |_| iterations + 1 else 0;
                 const bloch_vector_cols = if (write.bloch_vector_mean) |_| @as(usize, 4) else 0;
@@ -729,7 +728,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     var dir = std.fs.cwd();
 
-    const entropy = opt.thermodynamics.schlitter_entropy or opt.thermodynamics.sre_entropy;
+    const entropy = opt.thermodynamics.schlitter_entropy or opt.thermodynamics.sre_entropy or opt.write.schlitter_entropy != null or opt.write.sre_entropy != null;
 
     if (opt.potential == .ab_initio) {
 
