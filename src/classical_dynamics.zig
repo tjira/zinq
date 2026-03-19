@@ -1359,8 +1359,8 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.372, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.628, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.final_population_mean.at(0), 0.372, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.final_population_mean.at(1), 0.628, TEST_TOLERANCE);
 }
 
 test "Landau-Lener Surface Hopping on Tully's First Potential" {
@@ -1387,8 +1387,8 @@ test "Landau-Lener Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.498, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.502, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.final_population_mean.at(0), 0.498, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.final_population_mean.at(1), 0.502, TEST_TOLERANCE);
 }
 
 test "Mapping Approach to Surface Hopping on Tully's First Potential" {
@@ -1418,6 +1418,6 @@ test "Mapping Approach to Surface Hopping on Tully's First Potential" {
 
     const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 0), 0.40697437617713, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.population_mean.at(opt.iterations, 1), 0.58171004312212, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.final_population_mean.at(0), 0.40697437617713, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.final_population_mean.at(1), 0.58171004312212, TEST_TOLERANCE);
 }
