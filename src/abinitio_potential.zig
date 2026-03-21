@@ -26,11 +26,25 @@ pub fn AbInitioPotential(comptime T: type) type {
         states: usize = 1,
 
         /// Evaluate the adiabatic potential energy matrix at given system state and time.
-        pub fn evaluateAdiabatic(_: @This(), adiabatic_potential: *RealMatrix(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
+        pub fn evaluateAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
             const dirname = try dir.realpathAlloc(allocator, "."); defer allocator.free(dirname);
             const path = try std.mem.concat(allocator, u8, &.{dirname, "/ENERGY.mat"}); defer allocator.free(path);
 
             const ENERGY = try readRealMatrix(T, path, allocator); defer ENERGY.deinit(allocator);
+
+            if (ENERGY.cols != 1) {
+
+                std.log.err("THE ENERHY FILE 'ENERGY.mat' MUST BE A COLUMN VECTOR", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (ENERGY.rows != self.states) {
+
+                std.log.err("THE NUMBER OF ROWS IN THE ENERGY FILE 'ENERGY.mat' MUST BE EQUAL TO THE NUMBER OF STATES SPECIFIED IN THE AB INITIO POTENTIAL", .{});
+
+                return error.InvalidInput;
+            }
 
             adiabatic_potential.fill(0);
 
@@ -38,13 +52,34 @@ pub fn AbInitioPotential(comptime T: type) type {
         }
 
         /// Comptime adiabatic force evaluation. The evaluateAdiabatic function needs to be run first.
-        pub fn forceAdiabatic(_: @This(), i: usize, position: RealVector(T), _: T, state: usize, bias: ?BiasPotential(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !T {
+        pub fn forceAdiabatic(self: @This(), i: usize, position: RealVector(T), _: T, state: usize, bias: ?BiasPotential(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !T {
             const dirname = try dir.realpathAlloc(allocator, "."); defer allocator.free(dirname);
             const path_gradient = try std.mem.concat(allocator, u8, &.{dirname, "/GRADIENT.mat"}); defer allocator.free(path_gradient);
             const path_energy = try std.mem.concat(allocator, u8, &.{dirname, "/ENERGY.mat"}); defer allocator.free(path_energy);
 
             const ENERGY = try readRealMatrix(T, path_energy, allocator); defer ENERGY.deinit(allocator);
             const GRADIENT = try readRealMatrix(T, path_gradient, allocator); defer GRADIENT.deinit(allocator);
+
+            if (ENERGY.cols != 1) {
+
+                std.log.err("THE ENERHY FILE 'ENERGY.mat' MUST BE A COLUMN VECTOR", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (GRADIENT.cols != 1) {
+
+                std.log.err("THE GRADIENT FILE 'GRADIENT.mat' MUST BE A COLUMN VECTOR", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (ENERGY.rows != self.states) {
+
+                std.log.err("THE NUMBER OF ROWS IN THE ENERGY FILE 'ENERGY.mat' MUST BE EQUAL TO THE NUMBER OF STATES SPECIFIED IN THE AB INITIO POTENTIAL", .{});
+
+                return error.InvalidInput;
+            }
 
             var adiabatic = try RealMatrix(T).initZero(ENERGY.rows, ENERGY.rows, allocator); defer adiabatic.deinit(allocator);
 

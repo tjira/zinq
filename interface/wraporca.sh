@@ -45,11 +45,13 @@ cat << EOT > orca.inp
 *xyzfile $CHARGE $MULTIPLICITY $SYSTEM
 EOT
 
-sed -i 's/   /  /g ; s/  / /g' orca.inp && rm -f ENERGY.mat GRADIENT.mat NACV.mat
+sed -i 's/   /  /g ; s/  / /g' orca.inp
 
 orca orca.inp 2>&1 | tee orca.out
 
 if [ ${PIPESTATUS[0]} -ne 0 ]; then exit 1; fi
+
+rm -f ENERGY.mat GRADIENT.mat
 
 awk -v NATOM=$NATOM 'BEGIN {print 1, 1} NR == 8 {printf "%20.14f\n", $1}' orca.engrad > ENERGY.mat
 

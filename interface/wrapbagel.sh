@@ -97,11 +97,13 @@ cat << EOT >> bagel.json
 ]}
 EOT
 
-jq . bagel.json > bagel.json.tmp && mv bagel.json.tmp bagel.json && rm -f ENERGY.mat GRADIENT.mat NACV.mat
+jq . bagel.json > bagel.json.tmp && mv bagel.json.tmp bagel.json
 
 BAGEL bagel.json 2>&1 | tee bagel.out
 
 if [ ${PIPESTATUS[0]} -ne 0 ]; then exit 1; fi
+
+rm -f ENERGY.mat GRADIENT.mat NACV.mat
 
 awk -v NATOM=$NATOM -v NSTATE=$NSTATE 'BEGIN {print NSTATE, 1}'                                     >   ENERGY.mat
 awk -v NATOM=$NATOM -v NSTATE=$NSTATE 'BEGIN {print 3 * NATOM * NSTATE, 1}'                         > GRADIENT.mat
