@@ -84,6 +84,7 @@ pub const rgb = @import("rgb.zig");
 pub const ring_buffer = @import("ring_buffer.zig");
 pub const shunting_yard = @import("shunting_yard.zig");
 pub const single_set_of_mcg = @import("single_set_of_mcg.zig");
+pub const singular_value_decomposition = @import("singular_value_decomposition.zig");
 pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const strided_real_vector = @import("strided_real_vector.zig");
 pub const string_manipulation = @import("string_manipulation.zig");
@@ -258,6 +259,27 @@ pub fn main() !void {
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
+    //
+    // var A = try real_matrix.RealMatrix(f64).init(2, 2, allocator); defer A.deinit(allocator);
+    //
+    // A.ptr(0, 0).* = 1.0; A.ptr(0, 1).* = 2.0;
+    // A.ptr(1, 0).* = 3.0; A.ptr(1, 1).* = 4.0;
+    //
+    // var SVD = try singular_value_decomposition.svdAlloc(f64, A, allocator);
+    //
+    // defer {
+    //     SVD.U.deinit(allocator); SVD.S.deinit(allocator); SVD.VT.deinit(allocator);
+    // }
+    //
+    // try device_write.printRealMatrix(f64, A);
+    // try device_write.printRealMatrix(f64, SVD.U);
+    // try device_write.printRealMatrix(f64, SVD.S);
+    // try device_write.printRealMatrix(f64, SVD.VT);
+    //
+    // const US = try matrix_multiplication.mmAlloc(f64, SVD.U, false, SVD.S, false, allocator); defer US.deinit(allocator);
+    // const USVT = try matrix_multiplication.mmAlloc(f64, US, false, SVD.VT, false, allocator); defer USVT.deinit(allocator);
+    //
+    // try device_write.printRealMatrix(f64, USVT);
 }
 
 test {
