@@ -97,7 +97,6 @@ pub const tully_potential = @import("tully_potential.zig");
 pub const vibronic_coupling_potential = @import("vibronic_coupling_potential.zig");
 
 pub const ClassicalDynamicsOptions = classical_dynamics.Options;
-pub const EigenproblemSolverOptions = eigenproblem_solver.Options;
 pub const ExpressionEvaluatorOptions = expression_evaluator.Options;
 pub const FractalGeneratorOptions = fractal_generator.Options;
 pub const HartreeFockOptions = hartree_fock.Options;
@@ -112,7 +111,6 @@ pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 const Target = enum {
     classical_dynamics,
     configuration_interaction,
-    eigenproblem_solver,
     expression_evaluator,
     fractal_generator,
     hartree_fock,
@@ -202,7 +200,6 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
         switch (tag) {
             .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
             .configuration_interaction => try handle(f64, configuration_interaction, options, allocator),
-            .eigenproblem_solver => try handle(f64, eigenproblem_solver, options, allocator),
             .expression_evaluator => try handle(f64, expression_evaluator, options, allocator),
             .fractal_generator => try handle(f64, fractal_generator, options, allocator),
             .hartree_fock => try handle(f64, hartree_fock, options, allocator),
