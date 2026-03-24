@@ -304,10 +304,30 @@ pub fn read(comptime T: type, path: []const u8, charge: i32, geometry: usize, al
 
         var it = std.mem.tokenizeAny(u8, try reader_interface.takeDelimiterExclusive('\n'), " "); 
 
-        atoms[i] = SM2AN.get(it.next().?).?;
+        var next = it.next() orelse {
+
+            std.log.err("INCORRECTLY FORMATTED SYSTEM FILE", .{});
+
+            return error.InvalidInput;
+        };
+
+        atoms[i] = SM2AN.get(next) orelse {
+
+            std.log.err("UNKNOWN ATOMIC SYMBOL '{s}' IN SYSTEM FILE", .{next});
+
+            return error.InvalidInput;
+        };
 
         for (0..3) |j| {
-            position.ptr(3 * i + j).* = try std.fmt.parseFloat(T, uncr(it.next().?)) * A2AU;
+
+            next = it.next() orelse {
+
+                std.log.err("INCORRECTLY FORMATTED SYSTEM FILE", .{});
+
+                return error.InvalidInput;
+            };
+
+            position.ptr(3 * i + j).* = try std.fmt.parseFloat(T, uncr(next)) * A2AU;
         }
 
         reader_interface.toss(1);

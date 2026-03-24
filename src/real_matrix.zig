@@ -50,6 +50,11 @@ pub fn RealMatrix(comptime T: type) type {
             }
         }
 
+        /// Adds an empty row at the end of the matrix. The number of columns will be the same as the current number of columns.
+        pub fn addRow(self: *@This(), allocator: std.mem.Allocator) !void {
+            self.data = try allocator.realloc(self.data, (self.rows + 1) * self.cols); self.rows += 1;
+        }
+
         /// Returns the matrix as a view to a real vector.
         pub fn asVector(self: @This()) RealVector(T) {
             return RealVector(T){

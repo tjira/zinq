@@ -636,7 +636,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
 
     if (enable_printing and opt.potential != .ab_initio) try print("\nINITIAL GAMMA: [", .{});
 
-    if (enable_printing) for (opt.initial_conditions.model.gamma_mean, 0..) |gamma, i| {
+    if (enable_printing and opt.initial_conditions == .model) for (opt.initial_conditions.model.gamma_mean, 0..) |gamma, i| {
         if (i > 0) try print(", ", .{}); try print("{d:.6}", .{gamma}); if (i == opt.initial_conditions.model.gamma_mean.len - 1) try print("]\n", .{});
     };
 
@@ -1231,11 +1231,11 @@ pub fn getThermodynamicProperties(comptime T: type, output: *Custom(T).Trajector
     } else 0;
 
     if (opt.thermodynamics.schlitter_entropy or opt.write.schlitter_entropy != null) {
-        output.thermodynamics.schlitter_entropy = try schlitterEntropy(T, output.position, system.masses, temp, allocator);
+        output.thermodynamics.schlitter_entropy = try schlitterEntropy(T, output.position, system.masses, temp, opt.potential == .ab_initio, allocator);
     }
 
     if (opt.thermodynamics.sre_entropy or opt.write.sre_entropy != null) {
-        output.thermodynamics.sre_entropy = try sreEntropy(T, output.momentum, system.masses, temp, opt.time_step, system.ndof, allocator);
+        output.thermodynamics.sre_entropy = try sreEntropy(T, output.position, system.masses, temp, opt.time_step, system.ndof, opt.potential == .ab_initio, allocator);
     }
 }
 

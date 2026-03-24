@@ -89,6 +89,7 @@ pub const strided_complex_vector = @import("strided_complex_vector.zig");
 pub const strided_real_vector = @import("strided_real_vector.zig");
 pub const string_manipulation = @import("string_manipulation.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
+pub const system_alignment = @import("system_alignment.zig");
 pub const thermostat = @import("thermostat.zig");
 pub const time_linear_potential = @import("time_linear_potential.zig");
 pub const timestamp = @import("timestamp.zig");

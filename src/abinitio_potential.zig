@@ -93,6 +93,8 @@ pub fn AbInitioPotential(comptime T: type) type {
         pub fn runElectronicStructureCalculation(self: @This(), system: ClassicalParticle(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
             try system.writeCoordinatesToXYZ("molecule.xyz", dir);
 
+            try appendFileToAnother("molecule.xyz", "trajectory.xyz", dir);
+
             const path = try dir.realpathAlloc(allocator, "."); defer allocator.free(path);
             const states_str = try std.fmt.allocPrint(allocator, "{d}", .{self.states}); defer allocator.free(states_str);
             const command = try std.mem.concat(allocator, u8, &.{self.command, " -k ", states_str, " -s ", path, "/molecule.xyz"}); defer allocator.free(command);
@@ -105,4 +107,21 @@ pub fn AbInitioPotential(comptime T: type) type {
             return self.states;
         }
     };
+}
+
+pub fn appendFileToAnother(source_path: []const u8, target_path: []const u8, dir: std.fs.Dir) !void {
+    dir.access(target_path, .{}) catch {
+        const file = try dir.createFile(target_path, .{}); defer file.close();
+    };
+
+    const source_file = try dir.openFile(source_path, .{.mode = .read_only }); defer source_file.close();
+    const target_file = try dir.openFile(target_path, .{.mode = .write_only}); defer target_file.close();
+
+    try target_file.seekFromEnd(0);
+
+    var buffer: [4096]u8 = undefined;
+
+    while (true) {
+        const bytes_read = try source_file.read(&buffer); if (bytes_read == 0) break; try target_file.writeAll(buffer[0..bytes_read]);
+    }
 }

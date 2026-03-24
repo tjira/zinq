@@ -84,7 +84,10 @@ pub fn mm(comptime T: type, C: anytype, A: anytype, comptime at: bool, B: anytyp
 
 /// General matrix multiplication function that returns a new matrix.
 pub fn mmAlloc(comptime T: type, A: anytype, comptime at: bool, B: anytype, comptime bt: bool, allocator: std.mem.Allocator) !mmResultType(T, @TypeOf(A), @TypeOf(B)) {
-    var C = try mmResultType(T, @TypeOf(A), @TypeOf(B)).init(A.rows, B.cols, allocator);
+    const c_rows = if (comptime at) A.cols else A.rows;
+    const c_cols = if (comptime bt) B.rows else B.cols;
+
+    var C = try mmResultType(T, @TypeOf(A), @TypeOf(B)).init(c_rows, c_cols, allocator);
 
     try mm(T, &C, A, at, B, bt);
 
@@ -93,11 +96,11 @@ pub fn mmAlloc(comptime T: type, A: anytype, comptime at: bool, B: anytype, comp
 
 /// Matrix multiplication function between two complex matrices A and B, with options to transpose A and/or B. The result is stored in C.
 pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: anytype, comptime at: bool, B: anytype, comptime bt: bool) void {
-    for (0..A.rows) |i| for (0..B.cols) |j| {
+    for (0..C.rows) |i| for (0..C.cols) |j| {
 
         var sum = Complex(T).init(0, 0);
 
-        for (0..A.cols) |k| {
+        for (0..if (comptime at) A.rows else A.cols) |k| {
 
             var a = if (comptime at) A.at(k, i) else A.at(i, k);
             var b = if (comptime bt) B.at(j, k) else B.at(k, j);
@@ -117,11 +120,11 @@ pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: anytype, comptime at
 
 /// Matrix multiplication function between two real matrices A and B, with options to transpose A and/or B. The result is stored in C.
 pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), comptime at: bool, B: RealMatrix(T), comptime bt: bool) void {
-    for (0..A.rows) |i| for (0..B.cols) |j| {
+    for (0..C.rows) |i| for (0..C.cols) |j| {
 
         var sum: T = 0;
 
-        for (0..A.cols) |k| {
+        for (0..if (comptime at) A.rows else A.cols) |k| {
 
             const a = if (comptime at) A.at(k, i) else A.at(i, k);
             const b = if (comptime bt) B.at(j, k) else B.at(k, j);
