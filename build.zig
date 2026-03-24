@@ -36,8 +36,7 @@ pub fn build(builder: *std.Build) !void {
             .strip = optimize != .Debug,
             .single_threaded = false,
             .target = target
-        }),
-        .use_llvm = true // needed for valgrind for now
+        })
     });
 
     const test_executable = builder.addTest(.{
@@ -70,8 +69,7 @@ pub fn build(builder: *std.Build) !void {
                 .strip = optimize != .Debug,
                 .single_threaded = false,
                 .target = builder.resolveTargetQuery(targets[i])
-            }),
-            .use_llvm = true // needed for valgrind for now
+            })
         });
 
         matrix_executable.root_module.addOptions("config", options);
@@ -100,8 +98,7 @@ pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, s
                 .strip = optimize != .Debug,
                 .single_threaded = true,
                 .target = target
-            }),
-            .use_llvm = true // needed for valgrind for now
+            })
         });
 
         tool_executable.root_module.addImport("zinq", main_executable.root_module);
