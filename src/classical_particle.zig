@@ -212,7 +212,7 @@ pub fn ClassicalParticle(comptime T: type) type {
 
             for (0..self.ndim) |i| {
 
-                const stdev = 1 / std.math.sqrt(2 * gamma[i]);
+                const stdev = if (gamma[i] == 0) 0 else 1 / std.math.sqrt(2 * gamma[i]);
 
                 self.position.ptr(i).* = mean[i] + stdev * random.floatNorm(T);
             }
