@@ -183,6 +183,8 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             @constCast(&position).ptr(index).* = original_position;
 
+            try self.evaluateAdiabatic(adiabatic, position, time);
+
             const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step;
 
             return -gradient + if (bias) |bs| switch (bs.variable) {
