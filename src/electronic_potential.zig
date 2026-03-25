@@ -199,19 +199,11 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             try self.evaluateAdiabatic(adiabatic, position, time);
 
-            var dE_center_bias: T = 0; if (bias != null and bias.?.variable == .potential_energy_difference) {
-
-                const state1 = bias.?.variable.potential_energy_difference.states[0];
-                const state2 = bias.?.variable.potential_energy_difference.states[1];
-
-                dE_center_bias = adiabatic.at(state2, state2) - adiabatic.at(state1, state1);
-            }
-
             const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step; const bias_force = if (bias) |bs| bs.force(adiabatic.*, state, index) else 0;
 
             return -gradient + if (bias) |bs| switch (bs.variable) {
                 .potential_energy => bias_force * gradient,
-                .potential_energy_difference => bias_force * dE_center_bias * (dE_plus_bias - dE_minus_bias) / fdiff_step
+                .potential_energy_difference => 0.5 * bias_force * (dE_plus_bias - dE_minus_bias) / fdiff_step
             } else 0;
         }
 

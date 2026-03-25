@@ -57,25 +57,6 @@ pub fn BiasPotential(comptime T: type) type {
             };
         }
 
-        /// Apply the bias potential to the adiabatic potential energy matrix.
-        pub fn apply(self: @This(), adiabatic_potential: *RealMatrix(T)) void {
-            for (0..adiabatic_potential.rows) |i| {
-
-                const variable = switch (self.variable) {
-                    .potential_energy => adiabatic_potential.at(i, i),
-                    .potential_energy_difference => {
-
-                        const state1 = self.variable.potential_energy_difference.states[0];
-                        const state2 = self.variable.potential_energy_difference.states[1];
-
-                        std.math.pow(T, adiabatic_potential.at(state1, state1) - adiabatic_potential.at(state2, state2), 2);
-                    }
-                };
-
-                adiabatic_potential.ptr(i, i).* += self.evaluate(variable);
-            }
-        }
-
         /// Evaluate the force from the bias potential for the specified system state and coordinate index.
         pub fn force(self: @This(), adiabatic_potential: RealMatrix(T), state: usize, _: usize) T {
             const variable = switch (self.variable) {
@@ -85,7 +66,7 @@ pub fn BiasPotential(comptime T: type) type {
                     const state1 = field.states[0];
                     const state2 = field.states[1];
 
-                    break :blk std.math.pow(T, adiabatic_potential.at(state1, state1) - adiabatic_potential.at(state2, state2), 2);
+                    break :blk adiabatic_potential.at(state2, state2) - adiabatic_potential.at(state1, state1);
                 }
             };
 

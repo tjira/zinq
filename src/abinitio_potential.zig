@@ -94,7 +94,7 @@ pub fn AbInitioPotential(comptime T: type) type {
                     const s1 = value.states[0];
                     const s2 = value.states[1];
 
-                    break :blk bias_force * 2.0 * (adiabatic.at(s2, s2) - adiabatic.at(s1, s1)) * (GRADIENT.at(s2 * position.len + i, 0) - GRADIENT.at(s1 * position.len + i, 0));
+                    break :blk bias_force * (GRADIENT.at(s2 * position.len + i, 0) - GRADIENT.at(s1 * position.len + i, 0));
                 }
             } else 0;
         }
