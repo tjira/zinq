@@ -62,7 +62,7 @@ pub fn AbInitioPotential(comptime T: type) type {
 
             if (ENERGY.cols != 1) {
 
-                std.log.err("THE ENERHY FILE 'ENERGY.mat' MUST BE A COLUMN VECTOR", .{});
+                std.log.err("THE ENERGY FILE 'ENERGY.mat' MUST BE A COLUMN VECTOR", .{});
 
                 return error.InvalidInput;
             }
@@ -85,8 +85,17 @@ pub fn AbInitioPotential(comptime T: type) type {
 
             for (0..ENERGY.rows) |j| adiabatic.ptr(j, j).* = ENERGY.at(j, 0);
 
+            const bias_force = if (bias) |bs| bs.force(adiabatic, state, i) else 0;
+
             return -GRADIENT.at(state * position.len + i, 0) + if (bias) |bs| switch (bs.variable) {
-                .potential_energy => bs.force(adiabatic, state, i) * GRADIENT.at(state * position.len + i, 0)
+                .potential_energy => bias_force * GRADIENT.at(state * position.len + i, 0),
+                .potential_energy_difference => |value| blk: {
+
+                    const s1 = value.states[0];
+                    const s2 = value.states[1];
+
+                    break :blk bias_force * 2.0 * (adiabatic.at(s2, s2) - adiabatic.at(s1, s1)) * (GRADIENT.at(s2 * position.len + i, 0) - GRADIENT.at(s1 * position.len + i, 0));
+                }
             } else 0;
         }
 

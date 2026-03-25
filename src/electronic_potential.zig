@@ -165,8 +165,6 @@ pub fn ElectronicPotential(comptime T: type) type {
                 return error.ProgrammingError;
             }
 
-            const bias_force = if (bias) |bs| bs.force(adiabatic.*, state, index) else 0;
-
             const original_position = position.at(index);
 
             @constCast(&position).ptr(index).* = original_position - fdiff_step;
@@ -175,20 +173,45 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             const energy_minus = adiabatic.at(state, state);
 
+            var dE_minus_bias: T = 0; if (bias != null and bias.?.variable == .potential_energy_difference) {
+
+                const state1 = bias.?.variable.potential_energy_difference.states[0];
+                const state2 = bias.?.variable.potential_energy_difference.states[1];
+
+                dE_minus_bias = adiabatic.at(state2, state2) - adiabatic.at(state1, state1);
+            }
+
             @constCast(&position).ptr(index).* = original_position + fdiff_step;
 
             try self.evaluateAdiabatic(adiabatic, position, time);
 
             const energy_plus = adiabatic.at(state, state);
 
+            var dE_plus_bias: T = 0; if (bias != null and bias.?.variable == .potential_energy_difference) {
+
+                const state1 = bias.?.variable.potential_energy_difference.states[0];
+                const state2 = bias.?.variable.potential_energy_difference.states[1];
+
+                dE_plus_bias = adiabatic.at(state2, state2) - adiabatic.at(state1, state1);
+            }
+
             @constCast(&position).ptr(index).* = original_position;
 
             try self.evaluateAdiabatic(adiabatic, position, time);
 
-            const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step;
+            var dE_center_bias: T = 0; if (bias != null and bias.?.variable == .potential_energy_difference) {
+
+                const state1 = bias.?.variable.potential_energy_difference.states[0];
+                const state2 = bias.?.variable.potential_energy_difference.states[1];
+
+                dE_center_bias = adiabatic.at(state2, state2) - adiabatic.at(state1, state1);
+            }
+
+            const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step; const bias_force = if (bias) |bs| bs.force(adiabatic.*, state, index) else 0;
 
             return -gradient + if (bias) |bs| switch (bs.variable) {
-                .potential_energy => bias_force * gradient
+                .potential_energy => bias_force * gradient,
+                .potential_energy_difference => bias_force * dE_center_bias * (dE_plus_bias - dE_minus_bias) / fdiff_step
             } else 0;
         }
 
@@ -205,7 +228,17 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .custom => |field| field.variables.len,
                 .file => |field| field.ndim,
                 .harmonic => |field| field.k.len,
-                .jahn_teller => 2,
+                .jahn_teller => |field| {
+
+                    if (field.d < 2) {
+
+                        std.log.err("NUMBER OF DIMENSIONS FOR JAHN-TELLER POTENTIAL MUST BE AT LEAST 2, BUT {d} WAS PROVIDED", .{field.d});
+
+                        return error.ProgrammingError;
+                    }
+
+                    return field.d;
+                },
                 .morse => 1,
                 .time_linear => 1,
                 .tully_1 => 1,

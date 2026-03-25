@@ -11,7 +11,7 @@ const RealVector = real_vector.RealVector;
 /// Struct holding parameters for the Jahn-Teller potential.
 pub fn JahnTellerPotential(comptime T: type) type {
     return struct {
-        k: T = 1, g: T = 1,
+        k: T = 1, g: T = 1, d: usize = 2,
 
         /// Diabatic potential matrix evaluator.
         pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
@@ -39,9 +39,19 @@ pub fn JahnTellerPotential(comptime T: type) type {
         /// Comptime potential matrix element evaluator.
         pub fn evaluateDiabaticElementComptime(self: @This(), comptime i: usize, comptime j: usize, position: RealVector(T), _: T) T {
             return switch (i + j) {
-                0 => self.g * position.at(0) + 0.5 * self.k * (position.at(0) * position.at(0) + position.at(1) * position.at(1)),
+                0 => {
+
+                    var sumsq: T = 0; for (position.data) |q| sumsq += q * q;
+
+                    return self.g * position.at(0) + 0.5 * self.k * sumsq;
+                },
                 1 => self.g * position.at(1),
-                2 => 0.5 * self.k * (position.at(0) * position.at(0) + position.at(1) * position.at(1)) - self.g * position.at(0),
+                2 => {
+                    
+                    var sumsq: T = 0; for (position.data) |q| sumsq += q * q;
+
+                    return 0.5 * self.k * sumsq - self.g * position.at(0);
+                },
                 else => @compileError("INVALID INDEX WHEN EVALUATING DIABATIC MATRIX ELEMENT")
             };
         }

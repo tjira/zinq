@@ -1,5 +1,7 @@
 //! Bias potential module.
 
+const std = @import("std");
+
 const real_matrix = @import("real_matrix.zig");
 
 const RealMatrix = real_matrix.RealMatrix;
@@ -16,10 +18,15 @@ pub fn BiasPotential(comptime T: type) type {
             pub const PotentialEnergy = struct {
                 value: T
             };
+            pub const PotentialEnergyDifference = struct {
+                value: T,
+                states: [2]u32
+            };
         };
 
         variable: union(enum) {
             potential_energy: Variable.PotentialEnergy,
+            potential_energy_difference: Variable.PotentialEnergyDifference,
         },
 
         function: union(enum) {
@@ -30,6 +37,7 @@ pub fn BiasPotential(comptime T: type) type {
         pub fn evaluate(self: @This(), variable: T) T {
             const value = switch (self.variable) {
                 .potential_energy => self.variable.potential_energy.value,
+                .potential_energy_difference => self.variable.potential_energy_difference.value,
             };
 
             return switch (self.function) {
@@ -41,6 +49,7 @@ pub fn BiasPotential(comptime T: type) type {
         pub fn evaluateForce(self: @This(), variable: T) T {
             const value = switch (self.variable) {
                 .potential_energy => self.variable.potential_energy.value,
+                .potential_energy_difference => self.variable.potential_energy_difference.value,
             };
 
             return switch (self.function) {
@@ -53,7 +62,14 @@ pub fn BiasPotential(comptime T: type) type {
             for (0..adiabatic_potential.rows) |i| {
 
                 const variable = switch (self.variable) {
-                    .potential_energy => adiabatic_potential.at(i, i)
+                    .potential_energy => adiabatic_potential.at(i, i),
+                    .potential_energy_difference => {
+
+                        const state1 = self.variable.potential_energy_difference.states[0];
+                        const state2 = self.variable.potential_energy_difference.states[1];
+
+                        std.math.pow(T, adiabatic_potential.at(state1, state1) - adiabatic_potential.at(state2, state2), 2);
+                    }
                 };
 
                 adiabatic_potential.ptr(i, i).* += self.evaluate(variable);
@@ -63,7 +79,14 @@ pub fn BiasPotential(comptime T: type) type {
         /// Evaluate the force from the bias potential for the specified system state and coordinate index.
         pub fn force(self: @This(), adiabatic_potential: RealMatrix(T), state: usize, _: usize) T {
             const variable = switch (self.variable) {
-                .potential_energy => adiabatic_potential.at(state, state)
+                .potential_energy => adiabatic_potential.at(state, state),
+                .potential_energy_difference => |field| blk: {
+
+                    const state1 = field.states[0];
+                    const state2 = field.states[1];
+
+                    break :blk std.math.pow(T, adiabatic_potential.at(state1, state1) - adiabatic_potential.at(state2, state2), 2);
+                }
             };
 
             return self.evaluateForce(variable);
