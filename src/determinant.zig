@@ -33,6 +33,17 @@ pub fn determinantAbs(comptime T: type, A: RealMatrix(T), allocator: std.mem.All
     return det;
 }
 
+/// Calculate the natural logarithm of the determinant of a matrix using its singular value decomposition.
+pub fn determinantLog(comptime T: type, A: RealMatrix(T), allocator: std.mem.Allocator) !T {
+    const SVD = try svdAlloc(T, A, allocator); defer SVD.U.deinit(allocator); defer SVD.S.deinit(allocator); defer SVD.VT.deinit(allocator);
+
+    var det: T = 0;
+
+    for (0..SVD.S.rows) |i| det += std.math.log(T, std.math.e, SVD.S.at(i, i));
+
+    return det;
+}
+
 /// Calculate thedeterminant of a 3x3 matrix.
 pub fn determinant3x3(comptime T: type, A: RealMatrix(T)) !T {
     if (A.rows != 3 or A.cols != 3) {

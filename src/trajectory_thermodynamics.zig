@@ -19,6 +19,7 @@ const RealVector = real_vector.RealVector;
 const cfft1 = fourier_transform.cfft1;
 const determinantHermitian = determinant.determinantHermitian;
 const determinantAbs = determinant.determinantAbs;
+const determinantLog = determinant.determinantLog;
 const mmAlloc = matrix_multiplication.mmAlloc;
 const alignTrajectory = system_alignment.alignTrajectory;
 
@@ -42,9 +43,9 @@ pub fn schlitterEntropy(comptime T: type, positions: RealMatrix(T), masses: Real
         Ms.ptr(i, j).* = if (i == j) 1 + temp / AU2K * std.math.e * std.math.e * Ms.at(i, j) else temp / AU2K * std.math.e * std.math.e * Ms.at(i, j);
     };
 
-    const det = try determinantAbs(T, Ms, allocator);
+    const detlog = try determinantLog(T, Ms, allocator);
 
-    return 0.5 * kB * std.math.log(T, std.math.e, det) / Eh;
+    return 0.5 * kB * detlog / Eh;
 }
 
 /// Function to calculate the Spectral Resolved Estimate of the entropy of a trajectory given the momenta, masses, and temperature.
