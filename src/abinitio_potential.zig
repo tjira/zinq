@@ -85,7 +85,7 @@ pub fn AbInitioPotential(comptime T: type) type {
 
             for (0..ENERGY.rows) |j| adiabatic.ptr(j, j).* = ENERGY.at(j, 0);
 
-            const bias_force = if (bias) |bs| bs.force(adiabatic, state, i) else 0;
+            const bias_force = if (bias) |bs| try bs.force(adiabatic, state, i) else 0;
 
             return -GRADIENT.at(state * position.len + i, 0) + if (bias) |bs| switch (bs.variable) {
                 .potential_energy => bias_force * GRADIENT.at(state * position.len + i, 0),

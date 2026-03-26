@@ -199,7 +199,7 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             try self.evaluateAdiabatic(adiabatic, position, time);
 
-            const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step; const bias_force = if (bias) |bs| bs.force(adiabatic.*, state, index) else 0;
+            const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step; const bias_force = if (bias) |bs| try bs.force(adiabatic.*, state, index) else 0;
 
             return -gradient + if (bias) |bs| switch (bs.variable) {
                 .potential_energy => bias_force * gradient,

@@ -1,0 +1,53 @@
+{
+    "zinq" : [
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "model" : {
+                        "momentum_mean" : [0, 0],
+                        "position_mean" : [1e-5, 1e-5],
+                        "gamma_mean" : [0, 0],
+                        "mass" : [1, 1]
+                    }
+                },
+                "log_intervals" : {
+                    "iteration" : 1000
+                },
+                "potential" : {
+                    "jahn_teller" : {
+                        "d" : 2
+                    }
+                },
+                "bias" : {
+                    "function" : {
+                        "harmonic" : {
+                            "k" : 1000
+                        }
+                    },
+                    "variable" : {
+                        "potential_energy_difference" : {
+                            "value" : 0,
+                            "states" : [0, 1]
+                        }
+                    }
+                },
+                "thermostat" : {
+                    "langevin" : {
+                        "temperature" : 300
+                    }
+                },
+                "thermodynamics" : {
+                    "schlitter_entropy" : true
+                },
+                "write" : {
+                    "state_potential_energy_mean" : "PES.mat",
+                    "position_mean" : "POSITION.mat"
+                },
+                "equilibration_iterations" : 10000,
+                "iterations" : 100000,
+                "time_step" : 0.01
+            }
+        }
+    ]
+}

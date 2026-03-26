@@ -58,13 +58,20 @@ pub fn BiasPotential(comptime T: type) type {
         }
 
         /// Evaluate the force from the bias potential for the specified system state and coordinate index.
-        pub fn force(self: @This(), adiabatic_potential: RealMatrix(T), state: usize, _: usize) T {
+        pub fn force(self: @This(), adiabatic_potential: RealMatrix(T), state: usize, _: usize) !T {
             const variable = switch (self.variable) {
                 .potential_energy => adiabatic_potential.at(state, state),
                 .potential_energy_difference => |field| blk: {
 
                     const state1 = field.states[0];
                     const state2 = field.states[1];
+
+                    if (state1 >= adiabatic_potential.rows or state2 >= adiabatic_potential.rows) {
+
+                        std.log.err("STATE OUT OF BOUNDS IN BIAS POTENTIAL", .{});
+
+                        return error.InvalidInput;
+                    }
 
                     break :blk adiabatic_potential.at(state2, state2) - adiabatic_potential.at(state1, state1);
                 }
