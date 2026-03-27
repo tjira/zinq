@@ -42,7 +42,7 @@ pub fn inverseHermitianAlloc(comptime T: type, A: anytype, allocator: std.mem.Al
 
     const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
-    try pseudoInverseHermitianSpectral(T, &Ainv, AJC.J, AJC.C);
+    try inverseHermitian(T, &Ainv, AJC.J, AJC.C);
 
     return Ainv;
 }
