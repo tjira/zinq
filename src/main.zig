@@ -28,6 +28,7 @@ pub const derivative_coupling = @import("derivative_coupling.zig");
 pub const determinant = @import("determinant.zig");
 pub const device_read = @import("device_read.zig");
 pub const device_write = @import("device_write.zig");
+pub const dft_integrate = @import("dft_integrate.zig");
 pub const eigenproblem_solver = @import("eigenproblem_solver.zig");
 pub const electronic_potential = @import("electronic_potential.zig");
 pub const embedded_files = @import("embedded_files.zig");

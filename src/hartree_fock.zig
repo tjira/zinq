@@ -6,6 +6,7 @@ const basis_set = @import("basis_set.zig");
 const classical_particle = @import("classical_particle.zig");
 const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
+const dft_integrate = @import("dft_integrate.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const energy_derivative = @import("energy_derivative.zig");
 const frequency_analysis = @import("frequency_analysis.zig");
@@ -31,8 +32,10 @@ const RealVector = real_vector.RealVector;
 const coulomb = molecular_integrals.coulomb;
 const eigensystemHermitian = eigenproblem_solver.eigensystemHermitian;
 const eigensystemHermitianAlloc = eigenproblem_solver.eigensystemHermitianAlloc;
+const evaluateXC = dft_integrate.evaluateXC;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealTensorFour = device_write.exportRealTensorFour;
+const getGrid = dft_integrate.getGrid;
 const kinetic = molecular_integrals.kinetic;
 const linearSolveHermitian = linear_solve.linearSolveHermitian;
 const mm = matrix_multiplication.mm;
@@ -58,6 +61,10 @@ pub fn Options(comptime T: type) type {
         const Diis = struct {
             size: u32 = 5,
             start: u32 = 1,
+        };
+        const Functional = struct {
+            name: []const u8,
+            grid: []const u8,
         };
         const Gradient = union(enum) {
             numeric: struct {
@@ -94,6 +101,7 @@ pub fn Options(comptime T: type) type {
         threshold: T = 1e-12,
 
         diis: ?Diis = .{},
+        functional: ?Functional = null,
         gradient: ?Gradient = null,
         hessian: ?Hessian = null,
         optimize: ?Optimize = null,
@@ -139,7 +147,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var system = try classical_particle.read(T, opt.system, opt.charge, 0, allocator); defer system.deinit(allocator);
 
-    if (enable_printing) {try print("\nINPUT GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (enable_printing) {try print("\nINPUT GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
     if (opt.optimize != null) {
 
@@ -170,16 +178,14 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 }
 
 /// Calculates the energy from the density matrix, Fock matrix and core Hamiltonian.
-pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: RealMatrix(T), P: RealMatrix(T), generalized: bool) T {
-    var energy: T = 0;
-
-    const factor: T = if (generalized) 0.5 else 1;
+pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: RealMatrix(T), P: RealMatrix(T), Vxc: ?RealMatrix(T), Exc: T, generalized: bool) T {
+    var energy: T = 0; const factor: T = if (generalized) 0.5 else 1;
 
     for (0..P.rows) |i| for (0..P.cols) |j| {
-        energy += factor * P.at(i, j) * (K.at(i, j) + V.at(i, j) + F.at(i, j));
+        energy += factor * P.at(i, j) * (K.at(i, j) + V.at(i, j) + F.at(i, j) - if (Vxc) |xc| xc.at(i, j) else 0);
     };
 
-    return energy;
+    return energy + Exc;
 }
 
 /// Extrapolate the DIIS error to obtain a new Fock matrix. The error vector from the first iteration is ignored, since it is zero.
@@ -258,7 +264,7 @@ pub fn getDensityMatrix(comptime T: type, P: *RealMatrix(T), C: RealMatrix(T), n
 }
 
 /// Obtain the Fock matrix form core Hamiltonian and density matrix.
-pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: RealTensor4(T), basis: BasisSet(T)) !void {
+pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: RealMatrix(T), P: RealMatrix(T), J: RealTensor4(T), Vxc: ?RealMatrix(T), basis: BasisSet(T)) !void {
     for (0..F.rows) |i| for (0..F.cols) |j| {
         F.ptr(i, j).* = V.at(i, j) + K.at(i, j);
     };
@@ -266,8 +272,12 @@ pub fn getFockMatrix(comptime T: type, F: *RealMatrix(T), K: RealMatrix(T), V: R
     const factor: T = if (P.rows == 2 * basis.nbf()) 1 else 2;
 
     for (0..J.shape[0]) |i| for (0..J.shape[1]) |j| for (0..J.shape[2]) |k| for (0..J.shape[3]) |l| {
-        F.ptr(k, l).* += P.at(i, j) * (factor * J.at(i, j, k, l) - J.at(i, l, k, j));
+        F.ptr(k, l).* += factor * P.at(i, j) * J.at(i, j, k, l);
+
+        if (Vxc == null) F.ptr(k, l).* -= P.at(i, j) * J.at(i, l, k, j);
     };
+
+    if (Vxc) |xc| {for (0..F.rows) |i| for (0..F.cols) |j| {F.ptr(i, j).* += xc.at(i, j);};}
 
     try F.symmetrize();
 }
@@ -323,7 +333,13 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
         try twoAO2AS(T, &J, allocator);
     }
 
+    var Vxc = if (opt.functional) |_| try RealMatrix(T).initZero(nbf, nbf, allocator) else null; defer if (Vxc) |xc| xc.deinit(allocator);
+
     if (enable_printing) try print("{D}\n", .{timer.read()});
+
+    const dft_grid = if (opt.functional) |_| try getGrid(T, basis, opt.functional.?.grid, allocator) else null;
+
+    defer if (dft_grid) |grid| {grid.points.deinit(allocator); grid.weights.deinit(allocator);};
 
     var C = try RealMatrix(T).initZero(nbf, nbf, allocator);
     var F = try RealMatrix(T).initZero(nbf, nbf, allocator);
@@ -340,7 +356,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     const VNN = system.nuclearRepulsionEnergy();
 
-    var energy: T = 0; var energy_prev: T = 1; var dp_max: T = 0;
+    var energy: T = 0; var energy_prev: T = 1; var dp_max: T = 0; var Exc: T = 0;
 
     if (enable_printing) try print("\nSELF CONSISTENT FIELD:\n{s:4} {s:20} {s:9} {s:12} {s:4}\n", .{"ITER", "ENERGY", "|DELTA E|", "MAX(DELTA P)", "TIME"});
 
@@ -348,9 +364,11 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         timer.reset();
 
-        try getFockMatrix(T, &F, K, V, P, J, basis);
+        if (Vxc) |*xc| Exc = try evaluateXC(T, xc, P, basis, dft_grid.?.points, dft_grid.?.weights, opt.functional.?.name, allocator);
 
-        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, opt.generalized);
+        try getFockMatrix(T, &F, K, V, P, J, Vxc, basis);
+
+        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, Vxc, Exc, opt.generalized);
 
         if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {e:12.3} {D}\n", .{i + 1, energy + VNN, @abs(energy - energy_prev), dp_max, timer.read()});
 
