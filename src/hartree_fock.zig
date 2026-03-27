@@ -34,7 +34,7 @@ const eigensystemHermitianAlloc = eigenproblem_solver.eigensystemHermitianAlloc;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealTensorFour = device_write.exportRealTensorFour;
 const kinetic = molecular_integrals.kinetic;
-const linearSolveSymmetric = linear_solve.linearSolveSymmetric;
+const linearSolveHermitian = linear_solve.linearSolveHermitian;
 const mm = matrix_multiplication.mm;
 const mmAlloc = matrix_multiplication.mmAlloc;
 const nuclear = molecular_integrals.nuclear;
@@ -210,7 +210,7 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
 
     const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
-    linearSolveSymmetric(T, &c, AJC.J, AJC.C, b, &temporary) catch return;
+    linearSolveHermitian(T, &c, AJC.J, AJC.C, b, &temporary) catch return;
 
     F.zero();
 

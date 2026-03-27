@@ -3,33 +3,23 @@
 const std = @import("std");
 
 const complex_matrix = @import("complex_matrix.zig");
-const device_read = @import("device_read.zig");
-const device_write = @import("device_write.zig");
 const real_matrix = @import("real_matrix.zig");
 
 const Complex = std.math.complex.Complex;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const RealMatrix = real_matrix.RealMatrix;
 
-const exportComplexMatrix = device_write.exportComplexMatrix;
-const exportRealMatrix = device_write.exportRealMatrix;
-const printJson = device_write.printJson;
-const printComplexMatrix = device_write.printComplexMatrix;
-const printRealMatrix = device_write.printRealMatrix;
-const readComplexMatrix = device_read.readComplexMatrix;
-const readRealMatrix = device_read.readRealMatrix;
-
 /// Diagonalize a complex hermitian matrix A. The provided matrix is overwritten by the diagonal form.
 pub fn diagonalizeHermitian(comptime T: type, A: anytype) !void {
-    if (comptime @TypeOf(A.*) == RealMatrix(T)) {try eigensystemJacobi(RealMatrix, T, A, null, A.*);}
-    else if (comptime @TypeOf(A.*) == ComplexMatrix(T)) {try eigensystemJacobi(ComplexMatrix, T, A, null, A.*);}
+    if (comptime @TypeOf(A.*) == RealMatrix(T)) {try eigensystemHermitianJacobi(RealMatrix, T, A, null, A.*);}
+    else if (comptime @TypeOf(A.*) == ComplexMatrix(T)) {try eigensystemHermitianJacobi(ComplexMatrix, T, A, null, A.*);}
     else @compileError("UNSUPPORTED INPUT MATRIX TYPE IN HERMITIAN DIAGONALIZATION");
 }
 
 /// Solve the eigenproblem for a complex hermitian system.
 pub fn eigensystemHermitian(comptime T: type, J: anytype, C: anytype, A: anytype) !void {
-    if (comptime @TypeOf(A) == RealMatrix(T)) {try eigensystemJacobi(RealMatrix, T, J, C, A);}
-    else if (comptime @TypeOf(A) == ComplexMatrix(T)) {try eigensystemJacobi(ComplexMatrix, T, J, C, A);}
+    if (comptime @TypeOf(A) == RealMatrix(T)) {try eigensystemHermitianJacobi(RealMatrix, T, J, C, A);}
+    else if (comptime @TypeOf(A) == ComplexMatrix(T)) {try eigensystemHermitianJacobi(ComplexMatrix, T, J, C, A);}
     else @compileError("UNSUPPORTED INPUT MATRIX TYPE IN HERMITIAN EIGENSOLVER");
 }
 
@@ -44,7 +34,7 @@ pub fn eigensystemHermitianAlloc(comptime T: type, A: anytype, allocator: std.me
 }
 
 /// Solve the eigenproblem for a symmetric or Hermitian system using the Jacobi method.
-pub fn eigensystemJacobi(comptime M: fn (comptime type) type, comptime T: type, J: *M(T), C: ?*M(T), A: M(T)) !void {
+pub fn eigensystemHermitianJacobi(comptime M: fn (comptime type) type, comptime T: type, J: *M(T), C: ?*M(T), A: M(T)) !void {
     if (!A.isSquare()) {
 
         std.log.err("INPUT MATRIX TO EIGENPROBLEM SOLVER MUST BE SQUARE", .{});
@@ -90,12 +80,7 @@ pub fn eigensystemJacobi(comptime M: fn (comptime type) type, comptime T: type, 
 
     while (J.offDiagonalFrobeniusNorm() > tol) : (iter += 1) for (0..n - 1) |i| for (i + 1..n) |j| {
 
-        if (iter == 1000) {
-
-            std.log.err("JACOBI METHOD DID NOT CONVERGE", .{});
-
-            return error.NumericalError;
-        }
+        if (iter == 1000) return error.NumericalError;
 
         const a = if (comptime M == RealMatrix) J.at(i, i) else J.at(i, i).re;
         const b = if (comptime M == RealMatrix) J.at(j, j) else J.at(j, j).re;
@@ -166,16 +151,6 @@ pub fn eigensystemJacobi(comptime M: fn (comptime type) type, comptime T: type, 
             };
         }
     };
-}
-
-/// Solve the eigenproblem for a complex hermitian system.
-pub fn eigensystemJacobiAlloc(comptime M: fn (comptime type) type, comptime T: type, A: M(T), allocator: std.mem.Allocator) !struct {J: M(T), C: M(T)} {
-    var J = try M(T).init(A.rows, A.cols, allocator);
-    var C = try M(T).init(A.rows, A.cols, allocator);
-
-    try eigensystemJacobi(M, T, &J, &C, A);
-
-    return .{.J = J, .C = C};
 }
 
 /// Function to fix the gauge of eigenvectors.

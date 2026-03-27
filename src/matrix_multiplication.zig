@@ -74,12 +74,9 @@ pub fn mm(comptime T: type, C: anytype, A: anytype, comptime at: bool, B: anytyp
         return error.InvalidInput;
     };
 
-    if (comptime @TypeOf(C) == *RealMatrix(T)) return mmReal(T, C, A, at, B, bt);
-    if (comptime @TypeOf(C) == *ComplexMatrix(T)) return mmComplex(T, C, A, at, B, bt);
-
-    std.log.err("UNSUPPORTED MATRIX TYPE IN MATRIX MULTIPLICATION", .{});
-
-    return error.InvalidInput;
+    if (comptime @TypeOf(C.*) == RealMatrix(T)) {return mmReal(T, C, A, at, B, bt);}
+    else if (comptime @TypeOf(C.*) == ComplexMatrix(T)) {return mmComplex(T, C, A, at, B, bt);}
+    else @compileError("UNSUPPORTED MATRIX TYPE IN MATRIX MULTIPLICATION");
 }
 
 /// General matrix multiplication function that returns a new matrix.

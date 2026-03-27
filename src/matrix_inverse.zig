@@ -31,8 +31,8 @@ pub fn inverseHermitian(comptime T: type, Ainv: anytype, AJ: anytype, AC: anytyp
         return error.NumericalError;
     };
 
-    if (comptime @TypeOf(AJ, AC) == RealMatrix(T)) {return try pseudoInverseSpectral(RealMatrix, T, Ainv, AJ, AC, tolerance);} 
-    else if (comptime @TypeOf(AJ, AC) == ComplexMatrix(T)) {return try pseudoInverseSpectral(ComplexMatrix, T, Ainv, AJ, AC, tolerance);} 
+    if (comptime @TypeOf(AJ, AC) == RealMatrix(T)) {return try pseudoInverseHermitianSpectral(RealMatrix, T, Ainv, AJ, AC, tolerance);} 
+    else if (comptime @TypeOf(AJ, AC) == ComplexMatrix(T)) {return try pseudoInverseHermitianSpectral(ComplexMatrix, T, Ainv, AJ, AC, tolerance);} 
     else @compileError("UNSUPPORTED MATRIX TYPE IN PSEUDO INVERSE FUNCTION");
 }
 
@@ -42,20 +42,20 @@ pub fn inverseHermitianAlloc(comptime T: type, A: anytype, allocator: std.mem.Al
 
     const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
-    try inverseHermitian(T, &Ainv, AJC.J, AJC.C);
+    try pseudoInverseHermitianSpectral(T, &Ainv, AJC.J, AJC.C);
 
     return Ainv;
 }
 
 /// Form the pseudo inverse of a hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
 pub fn pseudoInverseHermitian(comptime T: type, Ainv: anytype, AJ: anytype, AC: anytype, thresh: T) !void {
-    if (comptime @TypeOf(AJ, AC) == RealMatrix(T)) {return try pseudoInverseSpectral(RealMatrix, T, Ainv, AJ, AC, thresh);} 
-    else if (comptime @TypeOf(AJ, AC) == ComplexMatrix(T)) {return try pseudoInverseSpectral(ComplexMatrix, T, Ainv, AJ, AC, thresh);} 
+    if (comptime @TypeOf(AJ, AC) == RealMatrix(T)) {return try pseudoInverseHermitianSpectral(RealMatrix, T, Ainv, AJ, AC, thresh);} 
+    else if (comptime @TypeOf(AJ, AC) == ComplexMatrix(T)) {return try pseudoInverseHermitianSpectral(ComplexMatrix, T, Ainv, AJ, AC, thresh);} 
     else @compileError("UNSUPPORTED MATRIX TYPE IN PSEUDO INVERSE FUNCTION");
 }
 
 /// Form the pseudo inverse of a symmetric or hermitian matrix A using its eigenvalue decomposition. Ainv = C * J_inv * C^T
-pub fn pseudoInverseSpectral(comptime M: fn (comptime type) type, comptime T: type, Ainv: *M(T), AJ: M(T), AC: M(T), thresh: T) !void {
+pub fn pseudoInverseHermitianSpectral(comptime M: fn (comptime type) type, comptime T: type, Ainv: *M(T), AJ: M(T), AC: M(T), thresh: T) !void {
     for (0..Ainv.rows) |i| {
 
         if ((if (comptime M == RealMatrix) @abs(AJ.at(i, i)) else std.math.complex.abs(AJ.at(i, i))) < thresh) {

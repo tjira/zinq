@@ -124,11 +124,7 @@ const Target = enum {
 };
 
 /// Find out if the input JSON file contains an unrecognized field and print the expected field.
-fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value, err: anyerror) !void {
-    inline for (std.meta.fields(Struct)) |field| if (@typeInfo(field.type) == .@"struct") {
-        try checkForUnrecognizedFields(field.type, options.object.get(field.name).?, err);
-    };
-
+pub fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value, err: anyerror) !void {
     for (options.object.keys()) |provided| {
 
         var found = false;
@@ -144,13 +140,47 @@ fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value, er
             return error.InvalidInput;
         }
     }
+
+    inline for (std.meta.fields(Struct)) |field| {
+        if (@typeInfo(field.type) == .@"struct") {
+            if (options.object.get(field.name)) |nested_value| {
+                if (nested_value == .object) {
+                    try checkForUnrecognizedFields(field.type, nested_value, err);
+                }
+            }
+        }
+    }
+}
+
+/// Find out if the input JSON file contains a missing field and print the expected field.
+pub fn checkForMissingFields(comptime Struct: type, options: std.json.Value, err: anyerror) !void {
+    inline for (std.meta.fields(Struct)) |field| {
+
+        if (!options.object.contains(field.name)) {
+
+            if (field.default_value_ptr == null) {
+
+                std.log.err("MISSING '{s}' FIELD IN INPUT", .{field.name});
+
+                return error.InvalidInput;
+            }
+        } else if (@typeInfo(field.type) == .@"struct") {
+
+            const nested_value = options.object.get(field.name).?;
+            
+            if (nested_value == .object) {
+                try checkForMissingFields(field.type, nested_value, err);
+            }
+        }
+    }
 }
 
 /// Handle a specific module by parsing its options and running it.
-fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
+pub fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
     var parsed = std.json.parseFromValue(Module.Options(T), allocator, options, .{}) catch |err| {
 
         try checkForUnrecognizedFields(Module.Options(T), options, err);
+        try checkForMissingFields(Module.Options(T), options, err);
 
         return err;
     };
@@ -257,27 +287,6 @@ pub fn main() !void {
     };
 
     try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
-    //
-    // var A = try real_matrix.RealMatrix(f64).init(2, 2, allocator); defer A.deinit(allocator);
-    //
-    // A.ptr(0, 0).* = 1.0; A.ptr(0, 1).* = 2.0;
-    // A.ptr(1, 0).* = 3.0; A.ptr(1, 1).* = 4.0;
-    //
-    // var SVD = try singular_value_decomposition.svdAlloc(f64, A, allocator);
-    //
-    // defer {
-    //     SVD.U.deinit(allocator); SVD.S.deinit(allocator); SVD.VT.deinit(allocator);
-    // }
-    //
-    // try device_write.printRealMatrix(f64, A);
-    // try device_write.printRealMatrix(f64, SVD.U);
-    // try device_write.printRealMatrix(f64, SVD.S);
-    // try device_write.printRealMatrix(f64, SVD.VT);
-    //
-    // const US = try matrix_multiplication.mmAlloc(f64, SVD.U, false, SVD.S, false, allocator); defer US.deinit(allocator);
-    // const USVT = try matrix_multiplication.mmAlloc(f64, US, false, SVD.VT, false, allocator); defer USVT.deinit(allocator);
-    //
-    // try device_write.printRealMatrix(f64, USVT);
 }
 
 test {
