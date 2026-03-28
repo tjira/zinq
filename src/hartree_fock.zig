@@ -68,7 +68,7 @@ pub fn Options(comptime T: type) type {
         };
         const DFT = struct {
             functional: DFTFunctional(T),
-            grid: DFTGrid(T) = .{.uniform = .{}},
+            grid: DFTGrid(T) = .{.becke = .{}},
         };
         const Gradient = union(enum) {
             numeric: struct {
@@ -99,6 +99,7 @@ pub fn Options(comptime T: type) type {
         basis: []const u8,
 
         charge: i32 = 0,
+        damp: T = 0.3,
         generalized: bool = false,
         maxiter: u32 = 100,
         nthread: u32 = 1,
@@ -200,7 +201,7 @@ pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: 
 }
 
 /// Extrapolate the DIIS error to obtain a new Fock matrix. The error vector from the first iteration is ignored, since it is zero.
-pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixArray(T), DIIS_E: RealMatrixArray(T), iter: usize, allocator: std.mem.Allocator) !void {
+pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixArray(T), DIIS_E: RealMatrixArray(T), iter: usize, allocator: std.mem.Allocator) !bool {
     const size = @min(DIIS_F.len, iter);
 
     var A = try RealMatrix(T).init(size + 1, size + 1, allocator); defer A.deinit(allocator);
@@ -227,7 +228,7 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
 
     const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
-    linearSolveHermitian(T, &c, AJC.J, AJC.C, b, &temporary) catch return;
+    linearSolveHermitian(T, &c, AJC.J, AJC.C, b, &temporary) catch return false;
 
     F.zero();
 
@@ -240,7 +241,7 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
         };
     }
 
-    try F.symmetrize();
+    try F.symmetrize(); return true;
 }
 
 /// Function to calculate the error vector.
@@ -373,7 +374,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     for (0..opt.maxiter) |i| {
 
-        timer.reset();
+        timer.reset(); var extrapolated = false;
 
         if (Vxc) |*xc| Exc = try evaluateXC(T, xc, P, basis, dft_intgrid.?.points, dft_intgrid.?.weights, opt.dft.?.functional, opt.generalized, allocator);
 
@@ -392,12 +393,16 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
             try F.copyTo(DIIS_F.ptr(i % DIIS_F.len));
             try e.copyTo(DIIS_E.ptr(i % DIIS_E.len));
 
-            if (i >= opt.diis.?.start) try diisExtrapolate(T, &F, DIIS_F, DIIS_E, i, allocator);
+            if (i >= opt.diis.?.start) extrapolated = try diisExtrapolate(T, &F, DIIS_F, DIIS_E, i, allocator);
         }
 
         try solveRoothaan(T, &epsilon, &C, F, X, allocator);
 
         try P.copyTo(&P_prev); getDensityMatrix(T, &P, C, nocc); dp_max = 0;
+
+        if (!extrapolated and i > 0) for (0..P.rows) |j| for (0..P.cols) |k| {
+            P.ptr(j, k).* = (1.0 - opt.damp) * P.at(j, k) + opt.damp * P_prev.at(j, k);
+        };
 
         for (0..P.rows) |j| for (0..P.cols) |k| {
             const diff = @abs(P.at(j, k) - P_prev.at(j, k)); if (diff > dp_max) dp_max = diff;
