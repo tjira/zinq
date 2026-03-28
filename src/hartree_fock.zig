@@ -6,6 +6,8 @@ const basis_set = @import("basis_set.zig");
 const classical_particle = @import("classical_particle.zig");
 const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
+const dft_functional = @import("dft_functional.zig");
+const dft_grid = @import("dft_grid.zig");
 const dft_integrate = @import("dft_integrate.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const energy_derivative = @import("energy_derivative.zig");
@@ -24,6 +26,8 @@ const real_vector = @import("real_vector.zig");
 const BasisSet = basis_set.BasisSet;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
+const DFTFunctional = dft_functional.DFTFunctional;
+const DFTGrid = dft_grid.DFTGrid;
 const RealMatrix = real_matrix.RealMatrix;
 const RealMatrixArray = object_array.RealMatrixArray;
 const RealTensor4 = real_tensor_four.RealTensor4;
@@ -35,7 +39,7 @@ const eigensystemHermitianAlloc = eigenproblem_solver.eigensystemHermitianAlloc;
 const evaluateXC = dft_integrate.evaluateXC;
 const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealTensorFour = device_write.exportRealTensorFour;
-const getGrid = dft_integrate.getGrid;
+const getGrid = dft_grid.getGrid;
 const kinetic = molecular_integrals.kinetic;
 const linearSolveHermitian = linear_solve.linearSolveHermitian;
 const mm = matrix_multiplication.mm;
@@ -62,9 +66,9 @@ pub fn Options(comptime T: type) type {
             size: u32 = 5,
             start: u32 = 1,
         };
-        const Functional = struct {
-            name: []const u8,
-            grid: []const u8,
+        const DFT = struct {
+            functional: DFTFunctional(T),
+            grid: DFTGrid(T) = .{.uniform = .{}},
         };
         const Gradient = union(enum) {
             numeric: struct {
@@ -101,7 +105,7 @@ pub fn Options(comptime T: type) type {
         threshold: T = 1e-12,
 
         diis: ?Diis = .{},
-        functional: ?Functional = null,
+        dft: ?DFT = null,
         gradient: ?Gradient = null,
         hessian: ?Hessian = null,
         optimize: ?Optimize = null,
@@ -333,13 +337,13 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
         try twoAO2AS(T, &J, allocator);
     }
 
-    var Vxc = if (opt.functional) |_| try RealMatrix(T).initZero(nbf, nbf, allocator) else null; defer if (Vxc) |xc| xc.deinit(allocator);
+    var Vxc = if (opt.dft) |_| try RealMatrix(T).initZero(nbf, nbf, allocator) else null; defer if (Vxc) |xc| xc.deinit(allocator);
 
     if (enable_printing) try print("{D}\n", .{timer.read()});
 
-    const dft_grid = if (opt.functional) |_| try getGrid(T, basis, opt.functional.?.grid, allocator) else null;
+    const dft_intgrid = if (opt.dft) |dft| try getGrid(T, dft.grid, basis, allocator) else null;
 
-    defer if (dft_grid) |grid| {grid.points.deinit(allocator); grid.weights.deinit(allocator);};
+    defer if (dft_intgrid) |grid| {grid.points.deinit(allocator); grid.weights.deinit(allocator);};
 
     var C = try RealMatrix(T).initZero(nbf, nbf, allocator);
     var F = try RealMatrix(T).initZero(nbf, nbf, allocator);
@@ -364,7 +368,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         timer.reset();
 
-        if (Vxc) |*xc| Exc = try evaluateXC(T, xc, P, basis, dft_grid.?.points, dft_grid.?.weights, opt.functional.?.name, allocator);
+        if (Vxc) |*xc| Exc = try evaluateXC(T, xc, P, basis, dft_intgrid.?.points, dft_intgrid.?.weights, opt.dft.?.functional, opt.generalized, allocator);
 
         try getFockMatrix(T, &F, K, V, P, J, Vxc, basis);
 

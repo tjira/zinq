@@ -61,6 +61,20 @@ pub fn ContractedGaussian(comptime T: type) type {
             allocator.free(self.coef); allocator.free(self.alpha);
         }
 
+        /// evaluate the contracted Gaussian at a given point in space.
+        pub fn evaluate(self: ContractedGaussian(T), x: T, y: T, z: T) T {
+            var value: T = 0;
+
+            for (self.coef, 0..) |ci, i| {
+
+                const pgi = PrimitiveGaussian(T){.center = self.center, .angular = self.angular, .alpha = self.alpha[i]};
+
+                value += ci * pgi.evaluate(x, y, z);
+            }
+
+            return value;
+        }
+
         /// Compute the Coulomb integral between four contracted Gaussians.
         pub fn coulomb(self: ContractedGaussian(T), other1: ContractedGaussian(T), other2: ContractedGaussian(T), other3: ContractedGaussian(T)) T {
             var e: T = 0;

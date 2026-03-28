@@ -19,6 +19,17 @@ pub fn PrimitiveGaussian(comptime T: type) type {
     return struct {
         center: [3]T, angular: [3]T, alpha: T,
 
+        /// Evaluate the value of the primitive Gaussian at a given point in space.
+        pub fn evaluate(self: PrimitiveGaussian(T), x: T, y: T, z: T) T {
+            const cx = self.center [0]; const cy = self.center [1]; const cz = self.center [2];
+            const ax = self.angular[0]; const ay = self.angular[1]; const az = self.angular[2];
+
+            const pre_factor = std.math.pow(T, x - cx, ax) * std.math.pow(T, y - cy, ay) * std.math.pow(T, z - cz, az);
+            const exp_factor = std.math.exp(-self.alpha * ((x - cx) * (x - cx) + (y - cy) * (y - cy) + (z - cz) * (z - cz)));
+
+            return pre_factor * exp_factor / self.norm();
+        }
+
         /// Compute the coulomb integral between four primitive Gaussians.
         pub fn coulomb(self: PrimitiveGaussian(T), other1: PrimitiveGaussian(T), other2: PrimitiveGaussian(T), other3: PrimitiveGaussian(T)) T {
             const p = self.alpha + other1.alpha; const q = other2.alpha + other3.alpha; const beta = p * q / (p + q); var e: T = 0;
