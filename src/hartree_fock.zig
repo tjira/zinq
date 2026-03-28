@@ -28,7 +28,7 @@ const ClassicalParticle = classical_particle.ClassicalParticle;
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
 const ExchangeFunctional = dft_functional.ExchangeFunctional;
 const CorrelationFunctional = dft_functional.CorrelationFunctional;
-const DFTGrid = dft_grid.DFTGrid;
+const FunctionalGrid = dft_grid.FunctionalGrid;
 const RealMatrix = real_matrix.RealMatrix;
 const RealMatrixArray = object_array.RealMatrixArray;
 const RealTensor4 = real_tensor_four.RealTensor4;
@@ -68,9 +68,9 @@ pub fn Options(comptime T: type) type {
             start: u32 = 1,
         };
         const DFT = struct {
-            exchange: ExchangeFunctional(T) = .{.slater = .{}},
-            correlation: CorrelationFunctional(T) = .{.chachiyo = .{}},
-            grid: DFTGrid(T) = .{.becke = .{}},
+            exchange: ?ExchangeFunctional(T) = .{.slater = .{}},
+            correlation: ?CorrelationFunctional(T) = .{.chachiyo = .{}},
+            grid: FunctionalGrid(T) = .{.becke = .{}},
         };
         const Gradient = union(enum) {
             numeric: struct {
@@ -351,9 +351,9 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     if (enable_printing) try print("{D}\n", .{timer.read()});
 
-    const dft_intgrid = if (opt.dft) |dft| try getGrid(T, dft.grid, basis, allocator) else null;
+    const dft_grid_points, const dft_grid_weights = if (opt.dft) |dft| try getGrid(T, dft.grid, basis, allocator) else .{null, null};
 
-    defer if (dft_intgrid) |grid| {grid.points.deinit(allocator); grid.weights.deinit(allocator);};
+    defer if (dft_grid_points) |points| points.deinit(allocator); defer if (dft_grid_weights) |weights| weights.deinit(allocator);
 
     var C = try RealMatrix(T).initZero(nbf, nbf, allocator);
     var F = try RealMatrix(T).initZero(nbf, nbf, allocator);
@@ -378,7 +378,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         timer.reset(); var extrapolated = false;
 
-        if (Vxc) |*xc| Exc = try evaluateXC(T, xc, P, basis, dft_intgrid.?.points, dft_intgrid.?.weights, opt.dft.?.exchange, opt.dft.?.correlation, opt.generalized, allocator);
+        if (Vxc) |*xc| Exc = try evaluateXC(T, xc, P, basis, .{dft_grid_points.?, dft_grid_weights.?}, .{opt.dft.?.exchange, opt.dft.?.correlation}, opt.generalized, allocator);
 
         try getFockMatrix(T, &F, K, V, P, J, Vxc, basis);
 

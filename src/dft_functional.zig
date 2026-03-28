@@ -17,19 +17,16 @@ pub fn ExchangeFunctional(comptime T: type) type {
 }
 
 /// Compute the exchange-correlation energy density and potential for a given electron density `rho` using the specified DFT functional.
-pub fn computeExchangeCorrelation(comptime T: type, exchange: ExchangeFunctional(T), correlation: CorrelationFunctional(T), rho: T) struct {eps_xc: T, v_xc: T} {
-    const res_exchange = switch (exchange) {
+pub fn computeExchangeCorrelation(comptime T: type, exchange: ?ExchangeFunctional(T), correlation: ?CorrelationFunctional(T), rho: T) struct {T, T} {
+    const eps_x, const v_x = if (exchange) |ex| switch (ex) {
         inline else => |x| x.evaluate(rho)
-    };
+    } else .{0, 0};
 
-    const res_correlation = switch (correlation) {
+    const eps_c, const v_c = if (correlation) |corr| switch (corr) {
         inline else => |c| c.evaluate(rho)
-    };
+    } else .{0, 0};
 
-    return .{
-        .eps_xc = res_exchange.eps_x + res_correlation.eps_c,
-        .v_xc = res_exchange.v_x + res_correlation.v_c
-    };
+    return .{eps_x + eps_c, v_x + v_c};
 }
 
 /// The Local Density Approximation (LDA) functional for exchange-correlation energy.
@@ -37,8 +34,8 @@ pub fn SlaterExchange(comptime T: type) type {
     return struct {
 
         /// Evaluate function.
-        pub fn evaluate(_: @This(), rho: T) struct {eps_x: T, v_x: T} {
-            if (rho <= 1e-12) return .{.eps_x = 0, .v_x = 0};
+        pub fn evaluate(_: @This(), rho: T) struct {T, T} {
+            if (rho <= 1e-12) return .{0, 0};
 
             const cx_energy = -0.75 * std.math.pow(T, 3.0 / std.math.pi, 1.0 / 3.0);
             const cx_potential = -std.math.pow(T, 3.0 / std.math.pi, 1.0 / 3.0);
@@ -46,8 +43,8 @@ pub fn SlaterExchange(comptime T: type) type {
             const rho_third = std.math.pow(T, rho, 1.0 / 3.0);
 
             return .{
-                .eps_x = cx_energy * rho_third,
-                .v_x = cx_potential * rho_third
+                cx_energy * rho_third,
+                cx_potential * rho_third
             };
         }
     };
@@ -58,20 +55,17 @@ pub fn ChachiyoCorrelation(comptime T: type) type {
     return struct {
 
         /// Evaluate function.
-        pub fn evaluate(_: @This(), rho: T) struct {eps_c: T, v_c: T} {
-            if (rho <= 1e-12) return .{.eps_c = 0, .v_c = 0};
+        pub fn evaluate(_: @This(), rho: T) struct {T, T} {
+            if (rho <= 1e-12) return .{0, 0};
 
             const a: T = (std.math.ln2 - 1) / (2 * std.math.pi * std.math.pi); const b: T = 20.4562557;
 
             const rs = std.math.pow(T, 3.0 / (4 * rho * std.math.pi), 1.0 / 3.0);
 
-            const eps_c = a * std.math.log(T, std.math.e, 1 + b / rs + b / (rs * rs));
-            const v_c = eps_c + a * b * (rs + 2) / (3 * (rs * rs + b * rs + b));
+            const eps = a * std.math.log(T, std.math.e, 1 + b / rs + b / (rs * rs));
+            const v = eps + a * b * (rs + 2) / (3 * (rs * rs + b * rs + b));
 
-            return .{
-                .eps_c = eps_c,
-                .v_c = v_c
-            };
+            return .{eps, v};
         }
     };
 }

@@ -11,20 +11,15 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
 /// Enumeration of available DFT functionals.
-pub fn DFTGrid(comptime T: type) type {
+pub fn FunctionalGrid(comptime T: type) type {
     return union(enum) {
         uniform: Uniform(T),
         becke: Becke(T),
     };
 }
 
-/// Return type of the DFT functional.
-pub fn DFTGridOutput(comptime T: type) type {
-    return struct {points: RealMatrix(T), weights: RealVector(T)};
-}
-
 /// Generate the integration grid points and weights for DFT calculations based on the provided basis set.
-pub fn getGrid(comptime T: type, grid: DFTGrid(T), basis: BasisSet(T), allocator: std.mem.Allocator) !DFTGridOutput(T) {
+pub fn getGrid(comptime T: type, grid: FunctionalGrid(T), basis: BasisSet(T), allocator: std.mem.Allocator) !struct {RealMatrix(T), RealVector(T)} {
     switch (grid) {
         inline else => |g| return g.get(basis, allocator)
     }
@@ -37,7 +32,7 @@ pub fn Uniform(comptime T: type) type {
         points: u32 = 64,
 
         /// Generate the integration grid points and weights for DFT calculations based on the provided basis set.
-        pub fn get(self: @This(), _: BasisSet(T), allocator: std.mem.Allocator) !DFTGridOutput(T) {
+        pub fn get(self: @This(), _: BasisSet(T), allocator: std.mem.Allocator) !struct {RealMatrix(T), RealVector(T)} {
             var points = try RealMatrix(T).init(self.points * self.points * self.points, 3, allocator); errdefer points.deinit(allocator);
             var weights = try RealVector(T).init(self.points * self.points * self.points, allocator); errdefer weights.deinit(allocator);
 
@@ -58,7 +53,7 @@ pub fn Uniform(comptime T: type) type {
                 }
             }
             
-            return .{.points = points, .weights = weights};
+            return .{points, weights};
         }
     };
 }
@@ -82,7 +77,7 @@ pub fn Becke(comptime T: type) type {
         }
 
         /// Generate the integration grid points and weights for DFT calculations based on the provided basis set.
-        pub fn get(self: @This(), basis: BasisSet(T), allocator: std.mem.Allocator) !DFTGridOutput(T) {
+        pub fn get(self: @This(), basis: BasisSet(T), allocator: std.mem.Allocator) !struct {RealMatrix(T), RealVector(T)} {
             var centers = std.ArrayList([3]T){}; defer centers.deinit(allocator);
 
             for (basis.contracted_gaussians) |cg| {
@@ -179,7 +174,7 @@ pub fn Becke(comptime T: type) type {
                 }
             };
 
-            return .{.points = points, .weights = weights};
+            return .{points, weights};
         }
     };
 }
