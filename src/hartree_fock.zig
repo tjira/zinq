@@ -149,6 +149,13 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         return error.InvalidInput;
     }
 
+    if (opt.generalized and opt.dft != null) {
+
+        std.log.err("DFT NOT IMPLEMENTED FOR GENERALIZED HARTREE-FOCK METHOD", .{});
+
+        return error.InvalidInput;
+    }
+
     var system = try classical_particle.read(T, opt.system, opt.charge, 0, allocator); defer system.deinit(allocator);
 
     if (enable_printing) {try print("\nINPUT GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
