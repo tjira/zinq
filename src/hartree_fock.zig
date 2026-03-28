@@ -26,7 +26,8 @@ const real_vector = @import("real_vector.zig");
 const BasisSet = basis_set.BasisSet;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
-const DFTFunctional = dft_functional.DFTFunctional;
+const ExchangeFunctional = dft_functional.ExchangeFunctional;
+const CorrelationFunctional = dft_functional.CorrelationFunctional;
 const DFTGrid = dft_grid.DFTGrid;
 const RealMatrix = real_matrix.RealMatrix;
 const RealMatrixArray = object_array.RealMatrixArray;
@@ -67,7 +68,8 @@ pub fn Options(comptime T: type) type {
             start: u32 = 1,
         };
         const DFT = struct {
-            functional: DFTFunctional(T),
+            exchange: ExchangeFunctional(T) = .{.slater = .{}},
+            correlation: CorrelationFunctional(T) = .{.chachiyo = .{}},
             grid: DFTGrid(T) = .{.becke = .{}},
         };
         const Gradient = union(enum) {
@@ -376,7 +378,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         timer.reset(); var extrapolated = false;
 
-        if (Vxc) |*xc| Exc = try evaluateXC(T, xc, P, basis, dft_intgrid.?.points, dft_intgrid.?.weights, opt.dft.?.functional, opt.generalized, allocator);
+        if (Vxc) |*xc| Exc = try evaluateXC(T, xc, P, basis, dft_intgrid.?.points, dft_intgrid.?.weights, opt.dft.?.exchange, opt.dft.?.correlation, opt.generalized, allocator);
 
         try getFockMatrix(T, &F, K, V, P, J, Vxc, basis);
 
