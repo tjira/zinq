@@ -15,7 +15,7 @@ jobs:
       - name: Push the Mirror to Codeberg
         env:
           CODEBERG_TOKEN: ${{secrets.CODEBERG_TOKEN}}
-        run: git push --force https://tjira:$CODEBERG_TOKEN@codeberg.org/tjira/zinq "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
+        run: git push --force --prune https://tjira:$CODEBERG_TOKEN@codeberg.org/tjira/zinq "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
 
       - name: Setup Tmate Session
         if: failure()
@@ -33,7 +33,7 @@ jobs:
       - name: Push the Mirror to Gitea
         env:
           GITEA_TOKEN: ${{secrets.GITEA_TOKEN}}
-        run: git push --force https://tjira:$GITEA_TOKEN@gitea.com/tjira/zinq "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
+        run: git push --force --prune https://tjira:$GITEA_TOKEN@gitea.com/tjira/zinq "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
 
       - name: Setup Tmate Session
         if: failure()
@@ -51,7 +51,7 @@ jobs:
       - name: Push the Mirror to GitLab
         env:
           GITLAB_TOKEN: ${{secrets.GITLAB_TOKEN}}
-        run: git push --force https://oauth2:$GITLAB_TOKEN@gitlab.com/tojira/zinq "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
+        run: git push --force --prune https://oauth2:$GITLAB_TOKEN@gitlab.com/tojira/zinq "refs/heads/*:refs/heads/*" "refs/tags/*:refs/tags/*"
 
       - name: Setup Tmate Session
         if: failure()
