@@ -71,7 +71,9 @@ pub fn BasisSet(comptime T: type) type {
 
                                 const center = .{system.position.data[3 * i], system.position.data[3 * i + 1], system.position.data[3 * i + 2]};
 
-                                try basis.append(allocator, try ContractedGaussian(T).init(center, .{a[0], a[1], a[2]}, c, alpha, allocator));
+                                const an = try std.fmt.parseInt(usize, atomic_number_string[0..atomic_number_length], 10);
+
+                                try basis.append(allocator, try ContractedGaussian(T).init(an, center, .{a[0], a[1], a[2]}, c, alpha, allocator));
                             }
                         }
                     }

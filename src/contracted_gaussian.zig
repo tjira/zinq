@@ -14,13 +14,14 @@ const sum = array_functions.sum;
 /// Contracted Gaussian type.
 pub fn ContractedGaussian(comptime T: type) type {
     return struct {
+        atomic_number: usize,
         angular: [3]T,
         center: [3]T,
         alpha: []T,
         coef: []T,
 
         /// Initialize a contracted Gaussian.
-        pub fn init(center: [3]T, angular: [3]T, coef: []const T, alpha: []const T, allocator: std.mem.Allocator) !ContractedGaussian(T) {
+        pub fn init(atomic_number: usize, center: [3]T, angular: [3]T, coef: []const T, alpha: []const T, allocator: std.mem.Allocator) !ContractedGaussian(T) {
             if (coef.len != alpha.len) {
 
                 std.log.err("COEFFICIENT AND EXPONENT ARRAYS MUST HAVE THE SAME LENGTH, COEFFICIENTS LENGTH {d}, EXPONENTS LENGTH {d}", .{coef.len, alpha.len});
@@ -29,6 +30,7 @@ pub fn ContractedGaussian(comptime T: type) type {
             }
 
             const cg = ContractedGaussian(T) {
+                .atomic_number = atomic_number,
                 .center = center,
                 .angular = angular,
                 .alpha = try allocator.alloc(T, alpha.len),

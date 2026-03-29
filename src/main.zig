@@ -56,6 +56,7 @@ pub const integral_transform = @import("integral_transform.zig");
 pub const jahn_teller_potential = @import("jahn_teller_potential.zig");
 pub const landau_zener = @import("landau_zener.zig");
 pub const langevin_thermostat = @import("langevin_thermostat.zig");
+pub const lebedev_quadrature_nodes = @import("lebedev_quadrature_nodes.zig");
 pub const linear_interpolation = @import("linear_interpolation.zig");
 pub const linear_solve = @import("linear_solve.zig");
 pub const mapping_approach = @import("mapping_approach.zig");
