@@ -1120,7 +1120,7 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
 
         if (@TypeOf(output) == RealMatrix(T)) if (result.rows > 0) {
 
-            if (std.mem.eql(u8, field.name, "bloch_vector_mean")) {
+            if (std.mem.eql(u8, field.name, "bloch_vector_mean") and params[0].surface_hopping != null and params[0].surface_hopping.? == .mapping_approach) {
 
                 if (result.rows > 0) for (0..output.rows) |i| {
 
@@ -1130,7 +1130,7 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
                 };
             }
 
-            else if (std.mem.eql(u8, field.name, "coefficient_mean")) {
+            else if (std.mem.eql(u8, field.name, "coefficient_mean") and params[0].surface_hopping != null and params[0].surface_hopping.? == .mapping_approach) {
 
                 if (result.rows > 0) for (0..output.rows) |i| for (0..output.cols) |j| {
                     result.ptr(i, j).* += ((output.at(i, j) * 2 - 1) * trajectory_output.Wpp + 1) / 2;
