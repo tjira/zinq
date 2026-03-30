@@ -17,8 +17,7 @@ const ElectronicPotential = electronic_potential.ElectronicPotential;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
-const getNodes = hermite_quadrature_nodes.getNodes;
-const getWeights = hermite_quadrature_nodes.getWeights;
+const getGaussHermiteGrid = hermite_quadrature_nodes.getGaussHermiteGrid;
 const powi = math_functions.powi;
 
 /// Complex Gaussian function implementation in Zig.
@@ -414,6 +413,8 @@ pub fn ComplexGaussian(comptime T: type) type {
         pub fn potential(self: @This(), other: @This(), V: *ComplexMatrix(T), pot: ElectronicPotential(T), n_nodes: usize, time: T, q: *RealVector(T)) !void {
             V.zero();
 
+            const hermite_grid = try getGaussHermiteGrid(n_nodes);
+
             for (0..powi(n_nodes, q.len)) |i| {
 
                 var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
@@ -426,7 +427,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     const sigma = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
 
-                    q.ptr(j).* = std.math.sqrt2 * sigma * (try getNodes(T, n_nodes))[temp % n_nodes] + mu; 
+                    q.ptr(j).* = std.math.sqrt2 * sigma * hermite_grid.nodes[temp % n_nodes] + mu; 
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * powi(self.position[j] - other.position[j], 2);
 
@@ -438,7 +439,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
-                    weight *= std.math.sqrt2 * sigma * (try getWeights(T, n_nodes))[temp % n_nodes]; temp /= n_nodes;
+                    weight *= std.math.sqrt2 * sigma * hermite_grid.weights[temp % n_nodes]; temp /= n_nodes;
                 }
 
                 for (0..V.rows) |j| for (j..V.cols) |k| {
@@ -456,6 +457,8 @@ pub fn ComplexGaussian(comptime T: type) type {
         pub fn potentialDerivative1(self: @This(), other: @This(), dV: *ComplexMatrix(T), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, q: *RealVector(T)) !void {
             dV.zero();
 
+            const hermite_grid = try getGaussHermiteGrid(n_nodes);
+
             for (0..powi(n_nodes, q.len)) |i| {
 
                 var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
@@ -468,7 +471,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     const sigma = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
 
-                    q.ptr(j).* = std.math.sqrt2 * sigma * (try getNodes(T, n_nodes))[temp % n_nodes] + mu; 
+                    q.ptr(j).* = std.math.sqrt2 * sigma * hermite_grid.nodes[temp % n_nodes] + mu; 
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * powi(self.position[j] - other.position[j], 2);
 
@@ -480,7 +483,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
-                    weight *= std.math.sqrt2 * sigma * (try getWeights(T, n_nodes))[temp % n_nodes]; temp /= n_nodes;
+                    weight *= std.math.sqrt2 * sigma * hermite_grid.weights[temp % n_nodes]; temp /= n_nodes;
                 }
 
                 for (0..dV.rows) |j| for (j..dV.cols) |k| {
@@ -498,6 +501,8 @@ pub fn ComplexGaussian(comptime T: type) type {
         pub fn potentialDerivative2(self: @This(), other: @This(), ddV: *ComplexMatrix(T), pot: ElectronicPotential(T), index: usize, n_nodes: usize, time: T, fdiff_step: T, q: *RealVector(T)) !void {
             ddV.zero();
 
+            const hermite_grid = try getGaussHermiteGrid(n_nodes);
+
             for (0..powi(n_nodes, q.len)) |i| {
 
                 var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
@@ -510,7 +515,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     const sigma = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
 
-                    q.ptr(j).* = std.math.sqrt2 * sigma * (try getNodes(T, n_nodes))[temp % n_nodes] + mu; 
+                    q.ptr(j).* = std.math.sqrt2 * sigma * hermite_grid.nodes[temp % n_nodes] + mu; 
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * powi(self.position[j] - other.position[j], 2);
 
@@ -522,7 +527,7 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
-                    weight *= std.math.sqrt2 * sigma * (try getWeights(T, n_nodes))[temp % n_nodes]; temp /= n_nodes;
+                    weight *= std.math.sqrt2 * sigma * hermite_grid.weights[temp % n_nodes]; temp /= n_nodes;
                 }
 
                 for (0..ddV.rows) |j| for (j..ddV.cols) |k| {

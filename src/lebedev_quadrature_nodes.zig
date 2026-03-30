@@ -1,9 +1,29 @@
-//! Auto-generated Lebedev-Laikov grids from PySCF
+//! Auto-generated Lebedev-Laikov grids from PySCF.
+
+const std = @import("std");
 
 pub const LebedevGrid = struct {
     nodes: []const [3]f64,
     weights: []const f64,
 };
+
+/// Return the Lebedev-Laikov grid points and weights for a given number of points. The supported numbers of points are 50, 74, 110, 302, 590, and 974. If an unsupported number of points is requested, an error is returned.
+pub fn getLebedevGrid(points: usize) !LebedevGrid {
+    return switch (points) {
+        50 => points_50,
+        74 => points_74,
+        110 => points_110,
+        302 => points_302,
+        590 => points_590,
+        974 => points_974,
+        else => {
+
+            std.log.err("UNSUPPORTED NUMBER OF LEBEDEV POINTS: {d}", .{points});
+
+            return error.InputError;
+        }
+    };
+}
 
 pub const points_50 = LebedevGrid{
     .nodes = &[_][3]f64{

@@ -446,15 +446,19 @@ test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
     try std.testing.expectApproxEqAbs(output.energy, -74.96590121728507, TEST_TOLERANCE);
 }
 
-test "Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
+test "DFT Calculation for a Water Molecule with Slater-Chachiyo LDA Functional and STO-3G Basis Set" {
     const opt = Options(f64){
-        .system = "example/molecule/methane.xyz",
-        .basis = "6-31g*"
+        .system = "example/molecule/water.xyz",
+        .basis = "sto-3g",
+        .dft = .{
+            .exchange = .{.slater = .{}},
+            .correlation = .{.chachiyo = .{}},
+        }
     };
 
     var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.energy, -40.19517074914403, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.energy, -74.72139955126922, TEST_TOLERANCE);
 }
 
 test "Generalized Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {

@@ -11,6 +11,8 @@ const BasisSet = basis_set.BasisSet;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
+const getLebedevGrid = lebedev_quadrature_nodes.getLebedevGrid;
+
 /// Enumeration of available DFT functionals.
 pub fn FunctionalGrid(comptime T: type) type {
     return union(enum) {
@@ -92,20 +94,7 @@ pub fn Becke(comptime T: type) type {
 
             var atomic_numbers = std.ArrayList(usize){}; defer atomic_numbers.deinit(allocator);
 
-            const lebedev_points = switch (self.n_lebedev) {
-                50 => &lebedev_quadrature_nodes.points_50,
-                74 => &lebedev_quadrature_nodes.points_74,
-                110 => &lebedev_quadrature_nodes.points_110,
-                302 => &lebedev_quadrature_nodes.points_302,
-                590 => &lebedev_quadrature_nodes.points_590,
-                974 => &lebedev_quadrature_nodes.points_974,
-                else => {
-
-                    std.log.err("UNSUPPORTED NUMBER OF LEBEDEV POINTS: {d}", .{self.n_lebedev});
-
-                    return error.InputError;
-                }
-            };
+            const lebedev_points = try getLebedevGrid(self.n_lebedev);
 
             for (basis.contracted_gaussians) |cg| {
 
