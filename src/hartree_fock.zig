@@ -101,7 +101,7 @@ pub fn Options(comptime T: type) type {
         basis: []const u8,
 
         charge: i32 = 0,
-        damp: T = 0.3,
+        damp: T = 0.5,
         generalized: bool = false,
         maxiter: u32 = 100,
         nthread: u32 = 1,

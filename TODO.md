@@ -50,7 +50,7 @@
 - [ ] Implement NACV interpolation during FSSH and MASH simulations.
 - [ ] Remove initial translations and rotations from the Boltzmann sampling of initial conditions for classical dynamics simulations.
 - [x] Fix gauge of the ab initio calculated NACV.
-- [ ] The weighing of the trajectory observables is probably not the best thing to do, since all thermodynamics is then calculated from the weighed trajectories, which may not be correct.
+- [x] The weighing of the trajectory observables is probably not the best thing to do, since all thermodynamics is then calculated from the weighed trajectories, which may not be correct.
 - [x] The TDC using NACV is maybe calculated with the wrong velocity.
 - [x] Add bias potential to ab initio potentials.
 - [ ] Rescale the velocities after jump in the direction of NACV.

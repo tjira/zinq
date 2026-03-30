@@ -283,6 +283,8 @@ pub fn Custom(comptime T: type) type {
             final_population: RealVector(T),
             thermodynamics: Thermodynamics = .{},
 
+            Wcp: T = 1, Wpp: T = 1,
+
             /// Allocate the trajectory output structure.
             pub fn init(nstate: usize, ndim: usize, iterations: usize, write: Options(T).Write, thermodynamics: Options(T).Thermodynamics, allocator: std.mem.Allocator) !@This() {
                 const entropy = thermodynamics.schlitter_entropy or thermodynamics.sre_entropy or write.schlitter_entropy != null or write.sre_entropy != null;
@@ -771,7 +773,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
     coefficient.ptr(current_state).* = Complex(T).init(1, 0); if (nstate == 2) bloch_vector.ptr(2).* = coefficient.at(1).squaredMagnitude() - coefficient.at(0).squaredMagnitude();
 
-    var Wcp: T = 1; var Wpp: T = 1; var Sz0: T = bloch_vector.at(2); var xi: T = 0;
+    var xi: T = 0;
 
     if (opt.surface_hopping != null and opt.surface_hopping.? == .mapping_approach) {
 
@@ -784,7 +786,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         bloch_vector.ptr(1).* = sin_theta * std.math.sin(phi);
         bloch_vector.ptr(2).* = cos_theta;
 
-        Sz0 = bloch_vector.at(2); Wcp = 2; Wpp = 2 * @abs(Sz0);
+        output.Wcp = 2; output.Wpp = 2 * @abs(bloch_vector.at(2));
     }
 
     const fs_parameters: fewest_switches.Parameters(T) = .{
@@ -903,7 +905,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         var potential_energy = adiabatic_potential.at(current_state, current_state);
 
-        if (opt.write.state_potential_energy_mean != null and !equilibrate) {for (0..nstate) |j| output.state_potential_energy.ptr(i, j).* = Wpp * adiabatic_potential.at(j, j);}
+        if (opt.write.state_potential_energy_mean != null and !equilibrate) {for (0..nstate) |j| output.state_potential_energy.ptr(i, j).* = adiabatic_potential.at(j, j);}
 
         if (!equilibrate) for (0..nstate) |j| for (j + 1..nstate) |k| {
             energy_gaps.ptr(j * (2 * nstate - j - 1) / 2 + (k - j - 1)).append(adiabatic_potential.at(k, k) - adiabatic_potential.at(j, j));
@@ -951,18 +953,18 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
         const kinetic_energy = system.kineticEnergy(); const temperature = system.kineticTemperature();
 
-        if (opt.write.kinetic_energy_mean != null and !equilibrate) output.kinetic_energy.ptr(i).* = Wpp * kinetic_energy;
-        if (opt.write.potential_energy_mean != null and !equilibrate) output.potential_energy.ptr(i).* = Wpp * potential_energy;
-        if (opt.write.total_energy_mean != null and !equilibrate) output.total_energy.ptr(i).* = Wpp * (kinetic_energy + potential_energy);
-        if (opt.write.temperature_mean != null and !equilibrate) output.temperature.ptr(i).* = Wpp * temperature;
-        if (opt.write.population_mean != null and !equilibrate) output.population.ptr(i, current_state).* = Wpp;
+        if (opt.write.kinetic_energy_mean != null and !equilibrate) output.kinetic_energy.ptr(i).* = kinetic_energy;
+        if (opt.write.potential_energy_mean != null and !equilibrate) output.potential_energy.ptr(i).* = potential_energy;
+        if (opt.write.total_energy_mean != null and !equilibrate) output.total_energy.ptr(i).* = kinetic_energy + potential_energy;
+        if (opt.write.temperature_mean != null and !equilibrate) output.temperature.ptr(i).* = temperature;
+        if (opt.write.population_mean != null and !equilibrate) output.population.ptr(i, current_state).* = 1;
 
         if (opt.write.time_derivative_coupling_mean != null and !equilibrate) {
-            for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = Wpp * time_derivative_coupling.at(j / nstate, j % nstate);
+            for (0..nstate * nstate) |j| output.time_derivative_coupling.ptr(i, j).* = time_derivative_coupling.at(j / nstate, j % nstate);
         }
 
-        if ((opt.write.position_mean != null or entropy) and !equilibrate) {for (0..ndim) |j| output.position.ptr(i, j).* = Wpp * system.position.at(j);}
-        if ((opt.write.momentum_mean != null or entropy) and !equilibrate) {for (0..ndim) |j| output.momentum.ptr(i, j).* = Wpp * system.velocity.at(j) * system.masses.at(j);}
+        if ((opt.write.position_mean != null or entropy) and !equilibrate) {for (0..ndim) |j| output.position.ptr(i, j).* = system.position.at(j);}
+        if ((opt.write.momentum_mean != null or entropy) and !equilibrate) {for (0..ndim) |j| output.momentum.ptr(i, j).* = system.velocity.at(j) * system.masses.at(j);}
 
         if (!equilibrate and opt.surface_hopping != null and (opt.surface_hopping.? == .fewest_switches or opt.surface_hopping.? == .landau_zener)) {
 
@@ -981,14 +983,14 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
 
             if (opt.write.bloch_vector_mean) |_| {
 
-                for (0..2) |j| output.bloch_vector.ptr(i, j).* = Wcp * bloch_vector.at(j);
+                for (0..2) |j| output.bloch_vector.ptr(i, j).* = bloch_vector.at(j);
 
-                output.bloch_vector.ptr(i, 2).* = Wpp * std.math.sign(bloch_vector.at(2));
+                output.bloch_vector.ptr(i, 2).* = bloch_vector.at(2);
             }
 
             if (opt.write.coefficient_mean) |_| {
 
-                const Sz = Wpp * std.math.sign(bloch_vector.at(2));
+                const Sz = std.math.sign(bloch_vector.at(2));
 
                 output.coefficient.ptr(i, 0).* = (1 - Sz) / 2;
                 output.coefficient.ptr(i, 1).* = (1 + Sz) / 2;
@@ -1005,11 +1007,11 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             }
 
             if (end_simulation) {
-                output.final_population.ptr(current_state).* = Wpp; try output.shrink(i, allocator); break;
+                output.final_population.ptr(current_state).* = 1; try output.shrink(i, allocator); break;
             }
         };
 
-        if (i == opt.iterations) output.final_population.ptr(current_state).* = Wpp;
+        if (i == opt.iterations) output.final_population.ptr(current_state).* = 1;
 
         if (!enable_printing or (index > 0 and (index + 1) % opt.log_intervals.trajectory != 0) or (i > 0 and i % opt.log_intervals.iteration != 0)) continue;
 
@@ -1098,7 +1100,7 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
         }; defer equilibration_output.deinit(params[4]);
     }
 
-    const trajectory_output = runTrajectory(T, params[0], &system, params[1], false, params[2], params[4]) catch |err| {
+    var trajectory_output = runTrajectory(T, params[0], &system, params[1], false, params[2], params[4]) catch |err| {
         error_ctx.capture(err); return;
     }; defer trajectory_output.deinit(params[4]);
 
@@ -1113,11 +1115,34 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
         const result = @as(field.type, @field(results, field.name)).ptr(id - 1); const output = @field(trajectory_output, field.name[0..field.name.len - 5]);
 
         if (@TypeOf(output) == RealVector(T)) if (result.len > 0) for (0..output.len) |i| {
-            result.ptr(i).* += output.at(i);
+            result.ptr(i).* += trajectory_output.Wpp * output.at(i);
         };
 
-        if (@TypeOf(output) == RealMatrix(T)) if (result.rows > 0) for (0..output.rows) |i| for (0..output.cols) |j| {
-            result.ptr(i, j).* += output.at(i, j);
+        if (@TypeOf(output) == RealMatrix(T)) if (result.rows > 0) {
+
+            if (std.mem.eql(u8, field.name, "bloch_vector_mean")) {
+
+                if (result.rows > 0) for (0..output.rows) |i| {
+
+                    for (0..2) |j| result.ptr(i, j).* += trajectory_output.Wcp * output.at(i, j);
+
+                    result.ptr(i, 2).* += trajectory_output.Wpp * std.math.sign(output.at(i, 2));
+                };
+            }
+
+            else if (std.mem.eql(u8, field.name, "coefficient_mean")) {
+
+                if (result.rows > 0) for (0..output.rows) |i| for (0..output.cols) |j| {
+                    result.ptr(i, j).* += ((output.at(i, j) * 2 - 1) * trajectory_output.Wpp + 1) / 2;
+                };
+            }
+
+            else {
+
+                for (0..output.rows) |i| for (0..output.cols) |j| {
+                    result.ptr(i, j).* += trajectory_output.Wpp * output.at(i, j);
+                };
+            }
         };
     }
 
