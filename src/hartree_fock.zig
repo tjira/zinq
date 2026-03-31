@@ -192,14 +192,17 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 }
 
 /// Calculates the energy from the density matrix, Fock matrix and core Hamiltonian.
-pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: RealMatrix(T), P: RealMatrix(T), Vxc: ?RealMatrix(T), Exc: T, generalized: bool) T {
-    var energy: T = 0; const factor: T = if (generalized) 0.5 else 1;
+pub fn calculateEnergy(comptime T: type, K: RealMatrix(T), V: RealMatrix(T), F: RealMatrix(T), P: RealMatrix(T), Vxc: ?RealMatrix(T), Exc: T, generalized: bool) struct{T, T} {
+    var Eone: T = 0; var Etwo: T = 0; const factor: T = if (generalized) 0.5 else 1;
 
     for (0..P.rows) |i| for (0..P.cols) |j| {
-        energy += factor * P.at(i, j) * (K.at(i, j) + V.at(i, j) + F.at(i, j) - if (Vxc) |xc| xc.at(i, j) else 0);
+
+        Eone += 2 * factor * P.at(i, j) * (K.at(i, j) + V.at(i, j));
+
+        Etwo += factor * P.at(i, j) * (F.at(i, j) - (K.at(i, j) + V.at(i, j)) - if (Vxc) |xc| xc.at(i, j) else 0);
     };
 
-    return energy + Exc;
+    return .{Eone, Etwo + Exc};
 }
 
 /// Extrapolate the DIIS error to obtain a new Fock matrix. The error vector from the first iteration is ignored, since it is zero.
@@ -368,9 +371,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     var DIIS_F = try RealMatrixArray(T).initZero(if (opt.diis != null) opt.diis.?.size else 0, .{.rows = nbf, .cols = nbf}, allocator); defer DIIS_F.deinit(allocator);
     var DIIS_E = try RealMatrixArray(T).initZero(if (opt.diis != null) opt.diis.?.size else 0, .{.rows = nbf, .cols = nbf}, allocator); defer DIIS_E.deinit(allocator);
 
-    const VNN = system.nuclearRepulsionEnergy();
-
-    var energy: T = 0; var energy_prev: T = 1; var dp_max: T = 0; var Exc: T = 0;
+    const En = system.nuclearRepulsionEnergy(); var Eone: T = 0; var Etwo: T = 0; var Exc: T = 0; var Eel: T = 0; var Eelp: T = 1; var dp_max: T = 0;
 
     if (enable_printing) try print("\nSELF CONSISTENT FIELD:\n{s:4} {s:20} {s:9} {s:12} {s:4}\n", .{"ITER", "ENERGY", "|DELTA E|", "MAX(DELTA P)", "TIME"});
 
@@ -382,11 +383,11 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         try getFockMatrix(T, &F, K, V, P, J, Vxc, basis);
 
-        energy_prev = energy; energy = calculateEnergy(T, K, V, F, P, Vxc, Exc, opt.generalized);
+        Eone, Etwo = calculateEnergy(T, K, V, F, P, Vxc, Exc, opt.generalized); Eelp = Eel; Eel = Eone + Etwo;
 
-        if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {e:12.3} {D}\n", .{i + 1, energy + VNN, @abs(energy - energy_prev), dp_max, timer.read()});
+        if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {e:12.3} {D}\n", .{i + 1, Eel + En, @abs(Eel - Eelp), dp_max, timer.read()});
 
-        if (i > 0 and @abs(energy - energy_prev) <= opt.threshold and dp_max <= opt.threshold) break;
+        if (i > 0 and @abs(Eel - Eelp) <= opt.threshold and dp_max <= opt.threshold) break;
 
         if (opt.diis != null) {
 
@@ -418,9 +419,18 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
         }
     }
 
-    if (enable_printing) try print("\nHF ENERGY: {d:.14}\n", .{energy + VNN});
+    if (enable_printing) {
+        try print("\n", .{});
+        try print("ONE ELECTRON ENERGY:         {d:22.14}\n", .{Eone});
+        try print("TWO ELECTRON ENERGY:         {d:22.14}\n", .{Etwo});
+        try print("EXCHANGE CORRELATION ENERGY: {d:22.14}\n", .{Exc});
+        try print("ELECTRONIC ENERGY:           {d:22.14}\n", .{Eel});
+        try print("NUCLEAR REPULSION ENERGY:    {d:22.14}\n", .{En});
+        try print("\n", .{});
+        try print("FINAL HF ENERGY:             {d:22.14}\n", .{Eel + En});
+    }
 
-    return .{.C = C, .F = F, .J = J, .K = K, .P = P, .S = S, .V = V, .energy = energy + VNN, .epsilon = epsilon};
+    return .{.C = C, .F = F, .J = J, .K = K, .P = P, .S = S, .V = V, .energy = Eel + En, .epsilon = epsilon};
 }
 
 /// Solver for the Roothaan equations.
