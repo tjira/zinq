@@ -69,7 +69,7 @@ pub fn Options(comptime T: type) type {
         };
         const DFT = struct {
             exchange: ?ExchangeFunctional(T) = .{.slater = .{}},
-            correlation: ?CorrelationFunctional(T) = .{.chachiyo = .{}},
+            correlation: ?CorrelationFunctional(T) = .{.VWN5 = .{}},
             grid: FunctionalGrid(T) = .{.becke = .{}},
         };
         const Gradient = union(enum) {

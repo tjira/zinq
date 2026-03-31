@@ -5,7 +5,8 @@ const std = @import("std");
 /// Enumeration of available correlation functionals.
 pub fn CorrelationFunctional(comptime T: type) type {
     return union(enum) {
-        chachiyo: ChachiyoCorrelation(T), Chachiyo: ChachiyoCorrelation(T)
+        chachiyo: ChachiyoCorrelation(T), Chachiyo: ChachiyoCorrelation(T),
+        vwn5: VWN5Correlation(T), VWN5: VWN5Correlation(T)
     };
 }
 
@@ -60,10 +61,39 @@ pub fn ChachiyoCorrelation(comptime T: type) type {
 
             const a: T = (std.math.ln2 - 1) / (2 * std.math.pi * std.math.pi); const b: T = 20.4562557;
 
-            const rs = std.math.pow(T, 3.0 / (4 * rho * std.math.pi), 1.0 / 3.0);
+            const rs = std.math.pow(T, 3 / (4 * rho * std.math.pi), 1.0 / 3.0);
 
             const eps = a * std.math.log(T, std.math.e, 1 + b / rs + b / (rs * rs));
             const v = eps + a * b * (rs + 2) / (3 * (rs * rs + b * rs + b));
+
+            return .{eps, v};
+        }
+    };
+}
+
+/// The VWN5 Local Density Approximation (LDA) functional for correlation energy. https://doi.org/10.1139/p80-159
+pub fn VWN5Correlation(comptime T: type) type {
+    return struct {
+        /// Evaluate function.
+        pub fn evaluate(_: @This(), rho: T) struct {T, T} {
+            if (rho <= 1e-12) return .{0, 0};
+
+            const A: T = 0.0310907; const x0: T = -0.10498; const b: T = 3.72744; const c: T = 12.9352;
+
+            const rs = std.math.pow(T, 3 / (4 * std.math.pi * rho), 1.0 / 3.0);
+
+            const x = std.math.sqrt(rs); const Q = std.math.sqrt(4 * c - b * b);
+
+            const Xx = x * x + b * x + c; const Xx0 = x0 * x0 + b * x0 + c;
+
+            const term1 = std.math.log(T, std.math.e, x * x / Xx);
+            const term2 = 2 * b / Q * std.math.atan(Q / (2 * x + b));
+            const term3 = std.math.log(T, std.math.e, (x - x0) * (x - x0) / Xx);
+            const term4 = 2 * (b + 2 * x0) / Q * std.math.atan(Q / (2 * x + b));
+            
+            const eps = A * (term1 + term2 - b * x0 / Xx0 * (term3 + term4));
+
+            const v = eps - A * x * (2 / x - 2 * (x + b) / Xx - b * x0 / Xx0 * (2 / (x - x0) - 2 * (x + b + x0) / Xx)) / 6;
 
             return .{eps, v};
         }
