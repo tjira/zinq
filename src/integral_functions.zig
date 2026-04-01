@@ -4,7 +4,7 @@ const std = @import("std");
 
 /// Boys function.
 pub fn boys(n: usize, t: anytype) @TypeOf(t) {
-    const cutoff = if (@TypeOf(t) == f32) 1e-4 else 1e-8;
+    const cutoff = if (@TypeOf(t) == f32) 1e-6 else 1e-12;
 
     if (t < cutoff) {
         return 1 / @as(@TypeOf(t), @floatFromInt(2 * n + 1)) - t / @as(@TypeOf(t), @floatFromInt(2 * n + 3));
