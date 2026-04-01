@@ -22,7 +22,7 @@
                 "bias" : {
                     "function" : {
                         "harmonic" : {
-                            "k" : 1000
+                            "k" : 100
                         }
                     },
                     "variable" : {
