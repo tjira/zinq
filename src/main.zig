@@ -94,6 +94,7 @@ pub const strided_real_vector = @import("strided_real_vector.zig");
 pub const string_manipulation = @import("string_manipulation.zig");
 pub const surface_hopping_algorithm = @import("surface_hopping_algorithm.zig");
 pub const system_alignment = @import("system_alignment.zig");
+pub const tddft = @import("tddft.zig");
 pub const thermostat = @import("thermostat.zig");
 pub const time_linear_potential = @import("time_linear_potential.zig");
 pub const timestamp = @import("timestamp.zig");
@@ -110,6 +111,7 @@ pub const MollerPlessetOptions = moller_plesset.Options;
 pub const MulticonfigurationalGaussianOptions = multiconfigurational_gaussian.Options;
 pub const PotentialPlotOptions = potential_plot.Options;
 pub const PrimeNumbersOptions = prime_numbers.Options;
+pub const TimeDependentDensityFunctionalTheoryOptions = tddft.Options;
 pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 
 /// Available targets in the program.
@@ -124,6 +126,7 @@ const Target = enum {
     multiconfigurational_gaussian,
     potential_plot,
     prime_numbers,
+    time_dependent_density_functional_theory,
     quantum_dynamics
 };
 
@@ -243,6 +246,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
             .multiconfigurational_gaussian => try handle(f64, multiconfigurational_gaussian, options, allocator),
             .potential_plot => try handle(f64, potential_plot, options, allocator),
             .prime_numbers => try handle(f64, prime_numbers, options, allocator),
+            .time_dependent_density_functional_theory => try handle(f64, tddft, options, allocator),
             .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator)
         }
     }
