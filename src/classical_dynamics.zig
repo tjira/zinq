@@ -69,7 +69,7 @@ const mm = matrix_multiplication.mm;
 const print = device_write.print;
 const printJson = device_write.printJson;
 const schlitterEntropy = trajectory_thermodynamics.schlitterEntropy;
-const sreEntropy = trajectory_thermodynamics.sreEntropy;
+const qhaEntropy = trajectory_thermodynamics.qhaEntropy;
 
 const Eh = global_variables.Eh;
 const Na = global_variables.Na;
@@ -120,7 +120,7 @@ pub fn Options(comptime T: type) type {
         };
         pub const Thermodynamics = struct {
             schlitter_entropy: bool = false,
-            sre_entropy: bool = false
+            qha_entropy: bool = false
         };
         pub const Write = struct {
             bloch_vector_mean: ?[]const u8 = null,
@@ -136,7 +136,7 @@ pub fn Options(comptime T: type) type {
             total_energy_mean: ?[]const u8 = null,
             transition_probability_mean: ?[]const u8 = null,
             schlitter_entropy: ?[]const u8 = null,
-            sre_entropy: ?[]const u8 = null
+            qha_entropy: ?[]const u8 = null
         };
         pub const Cap = struct {
             limits: []const []const T,
@@ -182,7 +182,7 @@ pub fn Output(comptime T: type) type {
         total_energy_mean: RealVector(T),
         final_population_mean: RealVector(T),
         schlitter_entropy: RealVector(T),
-        sre_entropy: RealVector(T),
+        qha_entropy: RealVector(T),
 
         /// Allocate the output structure.
         pub fn init(nstate: usize, ndim: usize, iterations: usize, trajectories: usize, write: Options(T).Write, allocator: std.mem.Allocator) !@This() {
@@ -205,7 +205,7 @@ pub fn Output(comptime T: type) type {
             const temperature_rows = if (write.temperature_mean) |_| iterations + 1 else 0;
             const total_energy_rows = if (write.total_energy_mean) |_| iterations + 1 else 0;
             const schlitter_entropy_rows = if (write.schlitter_entropy) |_| trajectories else 0;
-            const sre_entropy_rows = if (write.sre_entropy) |_| trajectories else 0;
+            const qha_entropy_rows = if (write.qha_entropy) |_| trajectories else 0;
 
             return @This(){
                 .bloch_vector_mean = try RealMatrix(T).initZero(bloch_vector_rows, bloch_vector_cols, allocator),
@@ -221,7 +221,7 @@ pub fn Output(comptime T: type) type {
                 .total_energy_mean = try RealVector(T).initZero(total_energy_rows, allocator),
                 .final_population_mean = try RealVector(T).initZero(nstate, allocator),
                 .schlitter_entropy = try RealVector(T).initZero(schlitter_entropy_rows, allocator),
-                .sre_entropy = try RealVector(T).initZero(sre_entropy_rows, allocator)
+                .qha_entropy = try RealVector(T).initZero(qha_entropy_rows, allocator)
             };
         }
 
@@ -239,7 +239,7 @@ pub fn Output(comptime T: type) type {
             self.temperature_mean.deinit(allocator);
             self.total_energy_mean.deinit(allocator);
             self.schlitter_entropy.deinit(allocator);
-            self.sre_entropy.deinit(allocator);
+            self.qha_entropy.deinit(allocator);
             self.final_population_mean.deinit(allocator);
         }
     };
@@ -266,7 +266,7 @@ pub fn Custom(comptime T: type) type {
         pub const TrajectoryOutput = struct {
             pub const Thermodynamics = struct {
                 schlitter_entropy: ?T = null,
-                sre_entropy: ?T = null
+                qha_entropy: ?T = null
             };
 
             bloch_vector: RealMatrix(T),
@@ -287,7 +287,7 @@ pub fn Custom(comptime T: type) type {
 
             /// Allocate the trajectory output structure.
             pub fn init(nstate: usize, ndim: usize, iterations: usize, write: Options(T).Write, thermodynamics: Options(T).Thermodynamics, allocator: std.mem.Allocator) !@This() {
-                const entropy = thermodynamics.schlitter_entropy or thermodynamics.sre_entropy or write.schlitter_entropy != null or write.sre_entropy != null;
+                const entropy = thermodynamics.schlitter_entropy or thermodynamics.qha_entropy or write.schlitter_entropy != null or write.qha_entropy != null;
 
                 const bloch_vector_rows = if (write.bloch_vector_mean) |_| iterations + 1 else 0;
                 const bloch_vector_cols = if (write.bloch_vector_mean) |_| @as(usize, 4) else 0;
@@ -661,7 +661,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     const temperature_rows = if (opt.write.temperature_mean) |_| opt.iterations + 1 else 0;
     const total_energy_rows = if (opt.write.total_energy_mean) |_| opt.iterations + 1 else 0;
     const schlitter_entropy_rows = if (opt.write.schlitter_entropy) |_| opt.trajectories else 0;
-    const sre_entropy_rows = if (opt.write.sre_entropy) |_| opt.trajectories else 0;
+    const qha_entropy_rows = if (opt.write.qha_entropy) |_| opt.trajectories else 0;
 
     const parallel_results = .{
         .bloch_vector_mean = try RealMatrixArray(T).initZero(opt.nthread, .{.rows = bloch_vector_rows, .cols = bloch_vector_cols}, allocator),
@@ -680,7 +680,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
 
     var trajectory_based_results = .{
         .schlitter_entropy = try RealVector(T).initZero(schlitter_entropy_rows, allocator),
-        .sre_entropy = try RealVector(T).initZero(sre_entropy_rows, allocator)
+        .qha_entropy = try RealVector(T).initZero(qha_entropy_rows, allocator)
     };
 
     defer inline for (std.meta.fields(@TypeOf(parallel_results))) |field| @as(field.type, @field(parallel_results, field.name)).deinit(allocator);
@@ -730,7 +730,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     var dir = std.fs.cwd();
 
-    const entropy = opt.thermodynamics.schlitter_entropy or opt.thermodynamics.sre_entropy or opt.write.schlitter_entropy != null or opt.write.sre_entropy != null;
+    const entropy = opt.thermodynamics.schlitter_entropy or opt.thermodynamics.qha_entropy or opt.write.schlitter_entropy != null or opt.write.qha_entropy != null;
 
     if (opt.potential == .ab_initio) {
 
@@ -1246,7 +1246,7 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
     if (opt.write.total_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy_mean.asMatrix(), 0, end_time);
 
     if (opt.write.schlitter_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, trajectory_based_results.schlitter_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
-    if (opt.write.sre_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, trajectory_based_results.sre_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
+    if (opt.write.qha_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, trajectory_based_results.qha_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
 }
 
 /// Calculate thermodynamic properties from the trajectory output.
@@ -1259,8 +1259,8 @@ pub fn getThermodynamicProperties(comptime T: type, output: *Custom(T).Trajector
         output.thermodynamics.schlitter_entropy = try schlitterEntropy(T, output.position, system.masses, temp, opt.potential == .ab_initio, allocator);
     }
 
-    if (opt.thermodynamics.sre_entropy or opt.write.sre_entropy != null) {
-        output.thermodynamics.sre_entropy = try sreEntropy(T, output.position, system.masses, temp, opt.time_step, system.ndof, opt.potential == .ab_initio, allocator);
+    if (opt.thermodynamics.qha_entropy or opt.write.qha_entropy != null) {
+        output.thermodynamics.qha_entropy = try qhaEntropy(T, output.position, system.masses, temp, opt.potential == .ab_initio, allocator);
     }
 }
 
@@ -1349,7 +1349,7 @@ pub fn printThermodynamicProperties(comptime T: type, output: Custom(T).Trajecto
     };
 
     if (output.schlitter_entropy) |out| try print("SCHLITTER ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{out, out * Na * Eh});
-    if (output.sre_entropy) |out| try print("SRE ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{out, out * Na * Eh});
+    if (output.qha_entropy) |out| try print("QHA ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{out, out * Na * Eh});
 }
 
 /// Samples the initial conditions.

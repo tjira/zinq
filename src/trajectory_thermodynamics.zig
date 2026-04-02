@@ -48,50 +48,23 @@ pub fn schlitterEntropy(comptime T: type, positions: RealMatrix(T), masses: Real
     return 0.5 * kB * detlog / Eh;
 }
 
-/// Function to calculate the Spectral Resolved Estimate of the entropy of a trajectory given the momenta, masses, and temperature.
-pub fn sreEntropy(comptime T: type, positions: RealMatrix(T), masses: RealVector(T), temp: T, time_step: T, dof: usize, ab_initio: bool, allocator: std.mem.Allocator) !T {
+/// Function to calculate the QHA entropy of a trajectory given the positions, masses, and temperature.
+pub fn qhaEntropy(comptime T: type, positions: RealMatrix(T), masses: RealVector(T), temp: T, ab_initio: bool, allocator: std.mem.Allocator) !T {
     const aligned = if (ab_initio) try alignTrajectory(T, positions, allocator) else positions; defer if (ab_initio) aligned.deinit(allocator);
 
-    var q = try ComplexMatrix(T).initZero(try std.math.powi(usize, 2, std.math.log2_int_ceil(usize, aligned.rows)), aligned.cols, allocator); defer q.deinit(allocator);
+    var M = try RealMatrix(T).initZero(masses.len, masses.len, allocator); defer M.deinit(allocator);
 
-    for (0..aligned.rows) |i| for (0..aligned.cols) |j| {q.ptr(i, j).*.re = aligned.at(i, j);};
+    for (0..masses.len) |i| M.ptr(i, i).* = masses.at(i);
 
-    for (0..aligned.cols) |j| {
+    const sigma = try aligned.cov(allocator); defer sigma.deinit(allocator);
 
-        const mean = aligned.column(j).mean();
+    var Ms = try mmAlloc(T, M, false, sigma, false, allocator); defer Ms.deinit(allocator);
 
-        for (0..aligned.rows) |i| q.ptr(i, j).*.re = (aligned.at(i, j) - mean) * std.math.sqrt(masses.at(j));
-    }
+    for (0..Ms.rows) |i| for (0..Ms.cols) |j| {
+        Ms.ptr(i, j).* = if (i == j) temp / AU2K * std.math.e * std.math.e * Ms.at(i, j) else temp / AU2K * std.math.e * std.math.e * Ms.at(i, j);
+    };
 
-    var omega = try RealVector(T).initZero(q.rows, allocator); defer omega.deinit(allocator);
+    const detlog = try determinantLog(T, Ms, allocator);
 
-    for (0..omega.len) |i| {
-
-        const k = @as(T, @floatFromInt(i)) - if (i < (omega.len + 1) / 2) 0 else @as(T, @floatFromInt(omega.len));
-
-        omega.ptr(i).* = k * (2.0 * std.math.pi) / (@as(T, @floatFromInt(omega.len)) * time_step);
-    }
-
-    for (0..q.cols) |j| {
-        var column = q.column(j); try cfft1(T, &column, -1);
-    }
-
-    var D = try RealVector(T).initZero(q.rows, allocator); defer D.deinit(allocator);
-
-    for (0..q.cols) |j| for (0..q.rows) |i| {D.ptr(i).* += q.at(i, j).squaredMagnitude() * omega.at(i) * omega.at(i);};
-
-    var S: T = 0; var norm: T = 0;
-
-    for (0..D.len) |i| {
-
-        const x = omega.at(i) / (kB * temp / Eh);
-
-        if (x < 1e-6 or x > 1e3) continue;
-
-        S += D.at(i) * kB / Eh * (x / (std.math.exp(x) - 1) - std.math.log(T, std.math.e, 1 - std.math.exp(-x)));
-
-        norm += D.at(i);
-    }
-
-    return if (norm > 0) @as(T, @floatFromInt(dof)) * S / norm else 0;
+    return 0.5 * kB * detlog / Eh;
 }

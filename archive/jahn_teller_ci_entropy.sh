@@ -41,4 +41,4 @@ done
 
 rm input.json
 
-plot JAHN_TELLER_CI_ENTROPY.mat --legends every "8D Seam" "7D Seam" "6D Seam" "5D Seam" "4D Seam" "3D Seam" "2D Seam" "1D Seam" --title "Seam Entropy as a Function of $\Delta E$ on a ${D}D Potential" --xlabel "$\Delta E$ (Hartree)" --ylabel "Schlitter Entropy of CI (J/K/Mol)" --output JAHN_TELLER_CI.png
+plot JAHN_TELLER_CI_ENTROPY.mat --legends every "8D Seam" "7D Seam" "6D Seam" "5D Seam" "4D Seam" "3D Seam" "2D Seam" "1D Seam" --title "Seam Entropy as a Function of $\Delta E$ on a ${D}D Potential" --xlabel "$\Delta E$ (Hartree)" --ylabel "Entropy of CI (J/K/Mol)" --output JAHN_TELLER_CI.png

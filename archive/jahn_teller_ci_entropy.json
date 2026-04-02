@@ -38,7 +38,7 @@
                     }
                 },
                 "thermodynamics" : {
-                    "schlitter_entropy" : true
+                    "qha_entropy" : true
                 },
                 "write" : {
                     "state_potential_energy_mean" : "PES.mat",
