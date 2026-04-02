@@ -1,0 +1,21 @@
+{
+    "zinq" : [
+        {
+            "name" : "time_dependent_density_functional_theory",
+            "options" : {
+                "hartree_fock" : {
+                    "system" : "molecule.xyz",
+                    "basis" : "sto-3g",
+                    "dft" : {
+                        "exchange" : {
+                            "slater" : {}
+                        },
+                        "correlation" : {
+                            "vwn5" : {}
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}
