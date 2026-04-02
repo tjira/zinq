@@ -1,32 +1,44 @@
 #!/bin/bash
 
-D=20; MAX_CID=19
+D=10; MAX_CS=8; MAX_DE=0.2; DE_STEP=0.01; LEGEND=""
 
-echo "$MAX_CID 2" > JAHN_TELLER_CI_ENTROPY.mat
+echo "$MAX_CS $((MAX_CID + 2))" > JAHN_TELLER_CI_ENTROPY.mat
 
-for CS in $(seq 0 $MAX_CID); do
+for DE in $(seq 0 $DE_STEP $MAX_DE); do
 
-    CID=$(($D-$CS-1)); cp jahn_teller_ci_entropy.json input.json
+    ROW=$(printf "%.2f" "$DE")
 
-    jq --argjson d "$D" '.zinq[0].options.initial_conditions.model.momentum_mean = [range($d) | 0   ]' input.json > tmp.json && mv tmp.json input.json
-    jq --argjson d "$D" '.zinq[0].options.initial_conditions.model.position_mean = [range($d) | 1e-5]' input.json > tmp.json && mv tmp.json input.json
-    jq --argjson d "$D" '.zinq[0].options.initial_conditions.model.gamma_mean    = [range($d) | 0   ]' input.json > tmp.json && mv tmp.json input.json
-    jq --argjson d "$D" '.zinq[0].options.initial_conditions.model.mass          = [range($d) | 1   ]' input.json > tmp.json && mv tmp.json input.json
-    jq --argjson d "$D" '.zinq[0].options.potential.jahn_teller.d                = $d                ' input.json > tmp.json && mv tmp.json input.json
-    jq --argjson d "$D" '.zinq[0].options.potential.jahn_teller.abs_coupling     = true              ' input.json > tmp.json && mv tmp.json input.json
+    for CS in $(seq 1 $MAX_CS); do
 
-    jq --argjson cs "$CS" '.zinq[0].options.potential.jahn_teller.coupling_sum = $cs' input.json > tmp.json && mv tmp.json input.json
+        CID=$(($D-$CS-1)); ITER=$(($CID*100000))
 
-    jq --argjson cid "$CID" '.zinq[0].options.write.position_mean                = "POSITION_\($cid)D.mat"' input.json > tmp.json && mv tmp.json input.json
-    jq --argjson cid "$CID" '.zinq[0].options.write.state_potential_energy_mean  = "PES_\($cid)D.mat"     ' input.json > tmp.json && mv tmp.json input.json
+        cp jahn_teller_ci_entropy.json input.json
 
-    ENTROPY=$(zinq | grep SCHLITTER | awk '{print $6}')
+        jq --argjson d "$D" '.zinq[0].options.initial_conditions.model.momentum_mean = [range($d) | 0   ]' input.json > tmp.json && mv tmp.json input.json
+        jq --argjson d "$D" '.zinq[0].options.initial_conditions.model.position_mean = [range($d) | 1e-5]' input.json > tmp.json && mv tmp.json input.json
+        jq --argjson d "$D" '.zinq[0].options.initial_conditions.model.gamma_mean    = [range($d) | 0   ]' input.json > tmp.json && mv tmp.json input.json
+        jq --argjson d "$D" '.zinq[0].options.initial_conditions.model.mass          = [range($d) | 1   ]' input.json > tmp.json && mv tmp.json input.json
+        jq --argjson d "$D" '.zinq[0].options.potential.jahn_teller.d                = $d                ' input.json > tmp.json && mv tmp.json input.json
+        jq --argjson d "$D" '.zinq[0].options.potential.jahn_teller.abs_coupling     = true              ' input.json > tmp.json && mv tmp.json input.json
 
-    printf "%03d %12.8f\n" "$CID" "$ENTROPY" >> JAHN_TELLER_CI_ENTROPY.mat
+        jq --argjson de "$DE" '.zinq[0].options.bias.variable.potential_energy_difference.value = $de' input.json > tmp.json && mv tmp.json input.json
+        jq --argjson cs "$CS" '.zinq[0].options.potential.jahn_teller.coupling_sum              = $cs' input.json > tmp.json && mv tmp.json input.json
 
-    tail -n 1 JAHN_TELLER_CI_ENTROPY.mat
+        jq --argjson cid "$CID" --argjson de "$DE" '.zinq[0].options.write.position_mean               = "POSITION_\($cid)D_DE=\($de).mat"' input.json > tmp.json && mv tmp.json input.json
+        jq --argjson cid "$CID" --argjson de "$DE" '.zinq[0].options.write.state_potential_energy_mean = "PES_\($cid)D_DE=\($de).mat"     ' input.json > tmp.json && mv tmp.json input.json
+
+        jq --argjson iter "$ITER" '.zinq[0].options.iterations = $iter' input.json > tmp.json && mv tmp.json input.json
+
+        ENTROPY=$(zinq | grep ENTROPY | awk '{print $6}')
+
+        ROW=$(printf "%s %12.8f" "$ROW" "$ENTROPY")
+
+        printf "%03d %.2f %12.8f\n" "$CID" "$DE" "$ENTROPY"
+    done
+
+    echo "$ROW" >> JAHN_TELLER_CI_ENTROPY.mat
 done
 
 rm input.json
 
-plot JAHN_TELLER_CI_ENTROPY.mat --title "Seam Entropy as a Function of Dimension on a ${D}D Potential" --xlabel "Seam Dimension" --ylabel "Schlitter Entropy of CI (J/K/Mol)" --output JAHN_TELLER_CI.png
+plot JAHN_TELLER_CI_ENTROPY.mat --legends every "8D Seam" "7D Seam" "6D Seam" "5D Seam" "4D Seam" "3D Seam" "2D Seam" "1D Seam" --title "Seam Entropy as a Function of $\Delta E$ on a ${D}D Potential" --xlabel "$\Delta E$ (Hartree)" --ylabel "Schlitter Entropy of CI (J/K/Mol)" --output JAHN_TELLER_CI.png
