@@ -69,6 +69,7 @@ pub fn Options(comptime T: type) type {
         };
 
         active_space: ?[2]u32 = null,
+        states: u32 = 5,
 
         hartree_fock: hartree_fock.Options(T),
 
@@ -212,7 +213,11 @@ pub fn ci(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
     
     try eigensystemHermitian(T, &E, &C, H); const energy = E.at(0, 0) + system.nuclearRepulsionEnergy();
 
-    if (enable_printing) try print("\nCI ENERGY: {d:.14}\n", .{energy});
+    if (enable_printing) try print("\n", .{});
+
+    if (enable_printing) {
+        for (0..@min(opt.states, E.rows) + 1) |i| try print("CASCI STATE {d:2}: {d:20.14} Eh\n", .{i, E.at(i, i) + system.nuclearRepulsionEnergy()});
+    }
 
     return .{
         .hf_output = hf_output, .energy = energy, .G = null, .H = null, .frequencies = null,

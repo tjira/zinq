@@ -163,7 +163,7 @@ pub fn mp(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
         return error.InvalidInput;
     }
 
-    if (enable_printing) try print("\nMP{d} ENERGY: {d:.14}\n", .{opt.order, hf_output.energy + energy});
+    if (enable_printing) try print("\nMP{d} ENERGY: {d:.14} Eh\n", .{opt.order, hf_output.energy + energy});
 
     return .{
         .hf_output = hf_output, .energy = hf_output.energy + energy, .G = null, .H = null, .frequencies = null,

@@ -32,7 +32,7 @@ pub fn generateAllDeterminants(nbf: usize, nel: usize, allocator: std.mem.Alloca
 
 /// Generates CAS determinants for the CI calculations.
 pub fn generateCasDeterminants(nel: usize, nbf: usize, nocc: usize, spin: bool, allocator: std.mem.Allocator) !RealMatrix(usize) {
-    const CASD = if (spin) try generateAllDeterminants(nbf, nel, allocator) else try generateAllSingletDeterminants(nbf, nel, allocator); defer CASD.deinit(allocator);
+    const CASD = if (spin) try generateAllDeterminants(nbf, nel, allocator) else try generateClosedShellDeterminants(nbf, nel, allocator); defer CASD.deinit(allocator);
 
     var D = try RealMatrix(usize).init(CASD.rows, nocc, allocator);
 
@@ -44,7 +44,7 @@ pub fn generateCasDeterminants(nel: usize, nbf: usize, nocc: usize, spin: bool, 
 }
 
 /// Generates the determinants for the CI calculations including only singlet excitations.
-pub fn generateAllSingletDeterminants(nbf: usize, nel: usize, allocator: std.mem.Allocator) !RealMatrix(usize) {
+pub fn generateClosedShellDeterminants(nbf: usize, nel: usize, allocator: std.mem.Allocator) !RealMatrix(usize) {
     const data_alpha = try allocator.alloc(usize, nbf / 2); defer allocator.free(data_alpha);
     const data_beta  = try allocator.alloc(usize, nbf / 2); defer allocator.free(data_beta );
     

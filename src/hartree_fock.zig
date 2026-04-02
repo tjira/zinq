@@ -421,13 +421,13 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     if (enable_printing) {
         try print("\n", .{});
-        try print("ONE ELECTRON ENERGY:         {d:22.14}\n", .{Eone});
-        try print("TWO ELECTRON ENERGY:         {d:22.14}\n", .{Etwo});
-        try print("EXCHANGE CORRELATION ENERGY: {d:22.14}\n", .{Exc});
-        try print("ELECTRONIC ENERGY:           {d:22.14}\n", .{Eel});
-        try print("NUCLEAR REPULSION ENERGY:    {d:22.14}\n", .{En});
+        try print("ONE ELECTRON ENERGY:         {d:22.14} Eh\n", .{Eone});
+        try print("TWO ELECTRON ENERGY:         {d:22.14} Eh\n", .{Etwo});
+        try print("EXCHANGE CORRELATION ENERGY: {d:22.14} Eh\n", .{Exc});
+        try print("ELECTRONIC ENERGY:           {d:22.14} Eh\n", .{Eel});
+        try print("NUCLEAR REPULSION ENERGY:    {d:22.14} Eh\n", .{En});
         try print("\n", .{});
-        try print("FINAL HF ENERGY:             {d:22.14}\n", .{Eel + En});
+        try print("FINAL HF ENERGY:             {d:22.14} Eh\n", .{Eel + En});
     }
 
     return .{.C = C, .F = F, .J = J, .K = K, .P = P, .S = S, .V = V, .energy = Eel + En, .epsilon = epsilon};

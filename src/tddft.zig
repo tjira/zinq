@@ -64,6 +64,7 @@ pub fn Options(comptime T: type) type {
         };
 
         hartree_fock: hartree_fock.Options(T),
+        states: u32 = 5,
 
         gradient: ?Gradient = null,
         hessian: ?Hessian = null,
@@ -143,12 +144,38 @@ pub fn tddft(comptime T: type, opt: Options(T), system: ClassicalParticle(T), en
 
     const hf_output = try scf(T, opt.hartree_fock, system, enable_printing, allocator);
 
-    try print("\nTDDFT CALCULATION NOT FULLY IMPLEMENTED, RETURNING HARTREE-FOCK ENERGY\n", .{});
+    const nbf = if (opt.hartree_fock.generalized) hf_output.S.rows else 2 * hf_output.S.rows; const nocc = try system.noccSpin();
 
-    const energy: T = 0;
+    var F_MS = try RealMatrix (T).init(nbf, nbf,                     allocator); defer F_MS.deinit(allocator);
+    var J_MS = try RealTensor4(T).init([_]usize{nbf, nbf, nbf, nbf}, allocator); defer J_MS.deinit(allocator);
+
+    try transform(T, &F_MS, &J_MS, hf_output.F, hf_output.J, hf_output.C);
+
+    const nvir = nbf - nocc; const next = nocc * nvir;
+
+    var A = try RealMatrix(T).initZero(next, next, allocator); defer A.deinit(allocator);
+
+    for (0..nocc) |i| for (0..nvir) |a| for (0..nocc) |j| for (0..nvir) |b| {
+
+        if (i == j and a == b) {
+            A.ptr(i * nvir + a, j * nvir + b).* += F_MS.at(a + nocc, a + nocc) - F_MS.at(i, i);
+        }
+
+        A.ptr(i * nvir + a, j * nvir + b).* += J_MS.at(i, a + nocc, j, b + nocc) - J_MS.at(i, b + nocc, j, a + nocc);
+    };
+
+    try A.symmetrize();
+
+    const AJC = try eigenproblem_solver.eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
+
+    if (enable_printing) try print("\nTDDFT STATE {d:2}: {d:20.14} Eh\n", .{0, hf_output.energy});
+
+    if (enable_printing) {
+        for (0..@min(opt.states, AJC.J.rows)) |i| try print("TDDFT STATE {d:2}: {d:20.14} Eh\n", .{i + 1, hf_output.energy + AJC.J.at(i, i)});
+    }
 
     return .{
-        .hf_output = hf_output, .energy = hf_output.energy + energy, .G = null, .H = null, .frequencies = null,
+        .hf_output = hf_output, .energy = hf_output.energy + AJC.J.at(0, 0), .G = null, .H = null, .frequencies = null,
     };
 }
 
