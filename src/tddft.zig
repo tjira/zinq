@@ -2,13 +2,16 @@
 
 const std = @import("std");
 
+const basis_set = @import("basis_set.zig");
 const classical_particle = @import("classical_particle.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const energy_derivative = @import("energy_derivative.zig");
 const hartree_fock = @import("hartree_fock.zig");
+const dft_integrate = @import("dft_integrate.zig");
 const frequency_analysis = @import("frequency_analysis.zig");
 const global_variables = @import("global_variables.zig");
+const dft_grid = @import("dft_grid.zig");
 const integral_transform = @import("integral_transform.zig");
 const molecular_integrals = @import("molecular_integrals.zig");
 const particle_optimization = @import("particle_optimization.zig");
@@ -16,6 +19,7 @@ const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
 const real_vector = @import("real_vector.zig");
 
+const BasisSet = basis_set.BasisSet;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const RealMatrix = real_matrix.RealMatrix;
 const RealTensor4 = real_tensor_four.RealTensor4;
@@ -24,6 +28,8 @@ const RealVector = real_vector.RealVector;
 const kinetic = molecular_integrals.kinetic;
 const scf = hartree_fock.scf;
 const nuclear = molecular_integrals.nuclear;
+const getGrid = dft_grid.getGrid;
+const evaluateXCKernel = dft_integrate.evaluateXCKernel;
 const nuclearGradient = energy_derivative.nuclearGradient;
 const nuclearHessian = energy_derivative.nuclearHessian;
 const oneAO2MO = integral_transform.oneAO2MO;
@@ -65,6 +71,7 @@ pub fn Options(comptime T: type) type {
 
         hartree_fock: hartree_fock.Options(T),
         states: u32 = 5,
+        tamm_dancoff: bool = true,
 
         gradient: ?Gradient = null,
         hessian: ?Hessian = null,
@@ -142,29 +149,55 @@ pub fn tddft(comptime T: type, opt: Options(T), system: ClassicalParticle(T), en
         return error.InvalidInput;
     }
 
+    if (opt.hartree_fock.generalized == true) {
+
+        std.log.err("TDDFT CALCULATION DOES NOT CURRENTLY SUPPORT GENERALIZED KOHN-SHAM CALCULATIONS", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.tamm_dancoff == false) {
+
+        std.log.err("FULL TDDFT CALCULATION NOT CURRENTLY IMPLEMENTED, ONLY TDA", .{});
+
+        return error.InvalidInput;
+    }
+
+    var basis = try BasisSet(T).init(system, opt.hartree_fock.basis, allocator); defer basis.deinit(allocator);
+
     const hf_output = try scf(T, opt.hartree_fock, system, enable_printing, allocator);
 
-    const nbf = if (opt.hartree_fock.generalized) hf_output.S.rows else 2 * hf_output.S.rows; const nocc = try system.noccSpin();
+    const nbf = hf_output.S.rows; const nocc = try system.noccSpatial();
 
-    var F_MS = try RealMatrix (T).init(nbf, nbf,                     allocator); defer F_MS.deinit(allocator);
-    var J_MS = try RealTensor4(T).init([_]usize{nbf, nbf, nbf, nbf}, allocator); defer J_MS.deinit(allocator);
+    var F_MO = try RealMatrix (T).init(nbf, nbf,                     allocator); defer F_MO.deinit(allocator);
+    var J_MO = try RealTensor4(T).init([_]usize{nbf, nbf, nbf, nbf}, allocator); defer J_MO.deinit(allocator);
 
-    try transform(T, &F_MS, &J_MS, hf_output.F, hf_output.J, hf_output.C);
+    try transform(T, &F_MO, &J_MO, hf_output.F, hf_output.J, hf_output.C);
 
     const nvir = nbf - nocc; const next = nocc * nvir;
 
     var A = try RealMatrix(T).initZero(next, next, allocator); defer A.deinit(allocator);
+    var K = try RealMatrix(T).initZero(next, next, allocator); defer K.deinit(allocator);
+
+    const grid = try getGrid(T, opt.hartree_fock.dft.?.grid, basis, allocator); defer grid[0].deinit(allocator); defer grid[1].deinit(allocator);
+
+    try evaluateXCKernel(T, &K, hf_output.P, hf_output.C, basis, grid, .{opt.hartree_fock.dft.?.exchange, opt.hartree_fock.dft.?.correlation}, nocc, nvir, opt.hartree_fock.generalized, allocator);
 
     for (0..nocc) |i| for (0..nvir) |a| for (0..nocc) |j| for (0..nvir) |b| {
 
+        const ia = i * nvir + a;
+        const jb = j * nvir + b;
+
+        if (jb < ia) continue;
+
         if (i == j and a == b) {
-            A.ptr(i * nvir + a, j * nvir + b).* += F_MS.at(a + nocc, a + nocc) - F_MS.at(i, i);
+            A.ptr(i * nvir + a, j * nvir + b).* += F_MO.at(a + nocc, a + nocc) - F_MO.at(i, i);
         }
 
-        A.ptr(i * nvir + a, j * nvir + b).* += J_MS.at(i, a + nocc, j, b + nocc) - J_MS.at(i, b + nocc, j, a + nocc);
-    };
+        const coulomb = J_MO.at(i, a + nocc, j, b + nocc); const exchange = J_MO.at(i, b + nocc, j, a + nocc); const fxc = K.at(ia, jb);
 
-    try A.symmetrize();
+        A.ptr(ia, jb).* += 2 * coulomb + 2 * fxc; if (ia != jb) A.ptr(jb, ia).* += 2 * coulomb + 2 * fxc; _ = exchange;
+    };
 
     const AJC = try eigenproblem_solver.eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
@@ -179,8 +212,7 @@ pub fn tddft(comptime T: type, opt: Options(T), system: ClassicalParticle(T), en
     };
 }
 
-/// Function to perform all integrals transformations used in the Moller-Plesset calculations.
-pub fn transform(comptime T: type, F_MS: *RealMatrix(T), J_MS: *RealTensor4(T), F: RealMatrix(T), J: RealTensor4(T), C: RealMatrix(T)) !void {
-    if (F.rows != F_MS.rows) {oneAO2MS(T, F_MS, F, C);} else {oneAO2MO(T, F_MS, F, C);}
-    if (F.rows != F_MS.rows) {twoAO2MS(T, J_MS, J, C);} else {twoAO2MO(T, J_MS, J, C);}
+/// Function to perform all integrals transformations used in the TDDFT method calculation.
+pub fn transform(comptime T: type, F_MO: *RealMatrix(T), J_MO: *RealTensor4(T), F: RealMatrix(T), J: RealTensor4(T), C: RealMatrix(T)) !void {
+    oneAO2MO(T, F_MO, F, C); twoAO2MO(T, J_MO, J, C);
 }

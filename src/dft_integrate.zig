@@ -49,7 +49,9 @@ pub fn evaluateXC(comptime T: type, Vxc: *RealMatrix(T), P: RealMatrix(T), basis
 
         if (rho <= 1e-12) continue;
 
-        const eps_xc, const v_xc = computeExchangeCorrelation(T, exchange, correlation, rho);
+        const eps_xc, const v_xc, const f_xc = computeExchangeCorrelation(T, exchange, correlation, rho);
+
+        _ = f_xc; // Currently not used, but could be used for GGA functionals in the future.
 
         Exc += rho * eps_xc * weights.at(i);
 
@@ -63,3 +65,52 @@ pub fn evaluateXC(comptime T: type, Vxc: *RealMatrix(T), P: RealMatrix(T), basis
     return Exc;
 }
 
+/// Evaluate the spatial exchange-correlation kernel matrix (ia|f_xc|jb) for TDDFT.
+pub fn evaluateXCKernel(comptime T: type, K: *RealMatrix(T), P: RealMatrix(T), C: RealMatrix(T), basis: BasisSet(T), grid: DFTGrid(T), functional: DFTFunctional(T), nocc: usize, nvir: usize, generalized: bool, allocator: std.mem.Allocator) !void {
+    K.zero(); const factor: T = if (generalized) 1.0 else 2.0;
+
+    const exchange, const correlation = functional; const points, const weights = grid;
+    
+    var chi = try RealVector(T).initZero(basis.nbf(), allocator); defer chi.deinit(allocator);
+    var phi = try RealVector(T).initZero(C.cols, allocator); defer phi.deinit(allocator);
+
+    for (0..points.rows) |g| {
+
+        var rho: T = 0; phi.zero();
+
+        for (0..basis.nbf()) |mu| {
+            chi.ptr(mu).* = basis.contracted_gaussians[mu].evaluate(points.at(g, 0), points.at(g, 1), points.at(g, 2));
+        }
+
+        for (0..P.rows) |mu| {
+            for (0..P.cols) |nu| {
+                rho += P.at(mu, nu) * chi.at(mu) * chi.at(nu);
+            }
+        }
+
+        rho *= factor;
+
+        if (rho <= 1e-12) continue;
+
+        const eps_xc, const v_xc, const f_xc = computeExchangeCorrelation(T, exchange, correlation, rho); _ = eps_xc; _ = v_xc;
+        
+        for (0..phi.len) |p| for (0..C.rows) |mu| {
+            phi.ptr(p).* += C.at(mu, p) * chi.at(mu);
+        };
+
+        for (0..nocc) |i| for (0..nvir) |a| for (0..nocc) |j| for (0..nvir) |b| {
+
+            const ia = i * nvir + a;
+            const jb = j * nvir + b;
+            
+            if (jb < ia) continue;
+
+            const phi_ia = phi.at(i) * phi.at(nocc + a);
+            const phi_jb = phi.at(j) * phi.at(nocc + b);
+
+            const val = weights.at(g) * f_xc * phi_ia * phi_jb;
+            
+            K.ptr(ia, jb).* += val; if (ia != jb) K.ptr(jb, ia).* += val;
+        };
+    }
+}

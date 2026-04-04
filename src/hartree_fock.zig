@@ -471,6 +471,21 @@ test "DFT Calculation for a Water Molecule with Slater-Chachiyo LDA Functional a
     try std.testing.expectApproxEqAbs(output.energy, -74.72139955126922, TEST_TOLERANCE);
 }
 
+test "DFT Calculation for a Water Molecule with Slater-VWN5 LDA Functional and STO-3G Basis Set" {
+    const opt = Options(f64){
+        .system = "example/molecule/water.xyz",
+        .basis = "sto-3g",
+        .dft = .{
+            .exchange = .{.slater = .{}},
+            .correlation = .{.vwn5 = .{}},
+        }
+    };
+
+    var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+
+    try std.testing.expectApproxEqAbs(output.energy, -74.73993721536317, TEST_TOLERANCE);
+}
+
 test "Generalized Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
     const opt = Options(f64){
         .system = "example/molecule/water.xyz",
