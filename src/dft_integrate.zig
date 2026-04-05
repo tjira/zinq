@@ -11,92 +11,97 @@ const BasisSet = basis_set.BasisSet;
 const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
-const computeExchangeCorrelation = dft_functional.computeExchangeCorrelation;
+const computeExchangeCorrelationArray = dft_functional.computeExchangeCorrelationArray;
 
-/// Pair of exchange and correlation functionals for DFT calculations.
-pub fn DFTFunctional(comptime T: type) type {
-    return struct {?dft_functional.ExchangeFunctional(T), ?dft_functional.CorrelationFunctional(T)};
-}
-
-/// Pair of points and weights for DFT integration.
-pub fn DFTGrid(comptime T: type) type {
-    return struct {RealMatrix(T), RealVector(T)};
+/// Density functional theory context with necessary arguments.
+pub fn DensityContext(comptime T: type) type {
+    return struct {
+        basis: BasisSet(T), points: RealMatrix(T), weights: RealVector(T), exchange: ?dft_functional.ExchangeFunctional(T), correlation: ?dft_functional.CorrelationFunctional(T), generalized: bool
+    };
 }
 
 /// Evaluate the exchange-correlation energy for a given set of points and weights, using the provided density matrix and basis set. The specific functional to use is determined by the `dft` parameter, which can be used to specify different functionals (e.g., LDA, GGA, etc.). The function returns the computed exchange-correlation energy.
-pub fn evaluateXC(comptime T: type, Vxc: *RealMatrix(T), P: RealMatrix(T), basis: BasisSet(T), grid: DFTGrid(T), functional: DFTFunctional(T), generalized: bool, allocator: std.mem.Allocator) !T {
-    Vxc.zero(); var Exc: T = 0; const factor: T = if (generalized) 1.0 else 2.0;
+pub fn evaluateXC(comptime T: type, Vxc: *RealMatrix(T), P: RealMatrix(T), context: DensityContext(T), allocator: std.mem.Allocator) !T {
+    Vxc.zero(); var Exc: T = 0; const factor: T = if (context.generalized) 1.0 else 2.0;
 
-    const exchange, const correlation = functional; const points, const weights = grid;
+    const basis = context.basis;
+    const points = context.points; const weights = context.weights;
+    const exchange = context.exchange; const correlation = context.correlation;
     
-    var phi = try RealVector(T).init(basis.nbf(), allocator); defer phi.deinit(allocator);
+    var phi = try RealMatrix(T).initZero(points.rows, basis.nbf(), allocator); defer phi.deinit(allocator);
 
-    for (0..points.rows) |i| {
+    var rho = try RealVector(T).initZero(points.rows, allocator); defer rho.deinit(allocator);
+    var eps = try RealVector(T).initZero(points.rows, allocator); defer eps.deinit(allocator);
+    var vxc = try RealVector(T).initZero(points.rows, allocator); defer vxc.deinit(allocator);
 
-        var rho: T = 0;
+    for (0..rho.len) |i| {
 
         for (0..basis.nbf()) |j| {
-            phi.ptr(j).* = basis.contracted_gaussians[j].evaluate(points.at(i, 0), points.at(i, 1), points.at(i, 2));
+            phi.ptr(i, j).* = basis.contracted_gaussians[j].evaluate(points.at(i, 0), points.at(i, 1), points.at(i, 2));
         }
 
         for (0..P.rows) |mu| {
             for (0..P.cols) |nu| {
-                rho += P.at(mu, nu) * phi.at(mu) * phi.at(nu);
+                rho.ptr(i).* += P.at(mu, nu) * phi.at(i, mu) * phi.at(i, nu);
             }
         }
 
-        rho *= factor;
+        rho.ptr(i).* *= factor;
+    }
 
-        if (rho <= 1e-12) continue;
+    computeExchangeCorrelationArray(T, &eps, exchange, correlation, rho, 0);
+    computeExchangeCorrelationArray(T, &vxc, exchange, correlation, rho, 1);
 
-        const eps_xc, const v_xc, const f_xc = computeExchangeCorrelation(T, exchange, correlation, rho);
+    for (0..points.rows) |i| {
 
-        _ = f_xc; // Currently not used, but could be used for GGA functionals in the future.
+        Exc += rho.at(i) * eps.at(i) * weights.at(i);
 
-        Exc += rho * eps_xc * weights.at(i);
-
-        for (0..Vxc.rows) |mu| {
-            for (0..Vxc.cols) |nu| {
-                Vxc.ptr(mu, nu).* += v_xc * phi.at(mu) * phi.at(nu) * weights.at(i);
-            }
-        }
+        for (0..Vxc.rows) |mu| for (0..Vxc.cols) |nu| {
+            Vxc.ptr(mu, nu).* += vxc.at(i) * phi.at(i, mu) * phi.at(i, nu) * weights.at(i);
+        };
     }
 
     return Exc;
 }
 
-/// Evaluate the spatial exchange-correlation kernel matrix (ia|f_xc|jb) for TDDFT.
-pub fn evaluateXCKernel(comptime T: type, K: *RealMatrix(T), P: RealMatrix(T), C: RealMatrix(T), basis: BasisSet(T), grid: DFTGrid(T), functional: DFTFunctional(T), nocc: usize, nvir: usize, generalized: bool, allocator: std.mem.Allocator) !void {
-    K.zero(); const factor: T = if (generalized) 1.0 else 2.0;
+/// Evaluate the spatial exchange-correlation kernel matrix (ia|fxc|jb) for TDDFT.
+pub fn evaluateXCKernel(comptime T: type, K: *RealMatrix(T), P: RealMatrix(T), C: RealMatrix(T), context: DensityContext(T), nocc: usize, allocator: std.mem.Allocator) !void {
+    K.zero(); const factor: T = if (context.generalized) 1.0 else 2.0; const nvir = context.basis.nbf() - nocc;
 
-    const exchange, const correlation = functional; const points, const weights = grid;
+    const basis = context.basis;
+    const points = context.points; const weights = context.weights;
+    const exchange = context.exchange; const correlation = context.correlation;
+
+    var chi = try RealMatrix(T).initZero(points.rows, basis.nbf(), allocator); defer chi.deinit(allocator);
+    var phi = try RealMatrix(T).initZero(points.rows, basis.nbf(), allocator); defer phi.deinit(allocator);
     
-    var chi = try RealVector(T).initZero(basis.nbf(), allocator); defer chi.deinit(allocator);
-    var phi = try RealVector(T).initZero(C.cols, allocator); defer phi.deinit(allocator);
+    var rho = try RealVector(T).initZero(points.rows, allocator); defer rho.deinit(allocator);
+    var fxc = try RealVector(T).initZero(points.rows, allocator); defer fxc.deinit(allocator);
 
-    for (0..points.rows) |g| {
-
-        var rho: T = 0; phi.zero();
+    for (0..rho.len) |i| {
 
         for (0..basis.nbf()) |mu| {
-            chi.ptr(mu).* = basis.contracted_gaussians[mu].evaluate(points.at(g, 0), points.at(g, 1), points.at(g, 2));
+            chi.ptr(i, mu).* = basis.contracted_gaussians[mu].evaluate(points.at(i, 0), points.at(i, 1), points.at(i, 2));
         }
 
         for (0..P.rows) |mu| {
             for (0..P.cols) |nu| {
-                rho += P.at(mu, nu) * chi.at(mu) * chi.at(nu);
+                rho.ptr(i).* += P.at(mu, nu) * chi.at(i, mu) * chi.at(i, nu);
             }
         }
 
-        rho *= factor;
+        rho.ptr(i).* *= factor;
 
-        if (rho <= 1e-12) continue;
-
-        const eps_xc, const v_xc, const f_xc = computeExchangeCorrelation(T, exchange, correlation, rho); _ = eps_xc; _ = v_xc;
-        
-        for (0..phi.len) |p| for (0..C.rows) |mu| {
-            phi.ptr(p).* += C.at(mu, p) * chi.at(mu);
+        for (0..basis.nbf()) |p| for (0..basis.nbf()) |mu| {
+            phi.ptr(i, p).* += C.at(mu, p) * chi.at(i, mu);
         };
+    }
+
+    computeExchangeCorrelationArray(T, &fxc, exchange, correlation, rho, 2);
+
+    for (0..points.rows) |g| {
+
+        if (fxc.at(g) == 0) continue;
 
         for (0..nocc) |i| for (0..nvir) |a| for (0..nocc) |j| for (0..nvir) |b| {
 
@@ -105,10 +110,10 @@ pub fn evaluateXCKernel(comptime T: type, K: *RealMatrix(T), P: RealMatrix(T), C
             
             if (jb < ia) continue;
 
-            const phi_ia = phi.at(i) * phi.at(nocc + a);
-            const phi_jb = phi.at(j) * phi.at(nocc + b);
+            const phi_ia = phi.at(g, i) * phi.at(g, nocc + a);
+            const phi_jb = phi.at(g, j) * phi.at(g, nocc + b);
 
-            const val = weights.at(g) * f_xc * phi_ia * phi_jb;
+            const val = weights.at(g) * fxc.at(g) * phi_ia * phi_jb;
             
             K.ptr(ia, jb).* += val; if (ia != jb) K.ptr(jb, ia).* += val;
         };

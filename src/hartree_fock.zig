@@ -26,6 +26,7 @@ const real_vector = @import("real_vector.zig");
 const BasisSet = basis_set.BasisSet;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
+const DensityContext = dft_integrate.DensityContext;
 const ExchangeFunctional = dft_functional.ExchangeFunctional;
 const CorrelationFunctional = dft_functional.CorrelationFunctional;
 const FunctionalGrid = dft_grid.FunctionalGrid;
@@ -379,7 +380,14 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         timer.reset(); var extrapolated = false;
 
-        if (Vxc) |*xc| Exc = try evaluateXC(T, xc, P, basis, .{dft_grid_points.?, dft_grid_weights.?}, .{opt.dft.?.exchange, opt.dft.?.correlation}, opt.generalized, allocator);
+        if (Vxc) |*xc| {
+
+            const dft_context: DensityContext(T) = .{
+                .basis = basis, .points = dft_grid_points.?, .weights = dft_grid_weights.?, .exchange = opt.dft.?.exchange, .correlation = opt.dft.?.correlation, .generalized = opt.generalized
+            };
+
+            Exc = try evaluateXC(T, xc, P, dft_context, allocator);
+        }
 
         try getFockMatrix(T, &F, K, V, P, J, Vxc, basis);
 
