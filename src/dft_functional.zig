@@ -38,45 +38,25 @@ pub fn ExchangeFunctional(comptime T: type) type {
 pub fn evaluateLibxc(comptime T: type, result: *RealVector(T), name: ?[:0]const u8, rho: RealVector(T), comptime derivative: u32) !void {
     if (name == null) return result.zero();
 
-    const func_id = xc.xc_functional_get_number(name.?.ptr);
-
-    var func: xc.xc_func_type = undefined;
+    const func_id = xc.xc_functional_get_number(name.?.ptr); var func: xc.xc_func_type = undefined;
 
     if (xc.xc_func_init(&func, func_id, xc.XC_UNPOLARIZED) != 0) {
-
-        std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC\n", .{name.?});
-
-        return error.InputError;
+        std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC\n", .{name.?}); return error.InputError;
     }
 
     if (derivative == 0) switch (func.info.*.family) {
         xc.XC_FAMILY_LDA => xc.xc_lda_exc(&func, rho.len, rho.data.ptr, result.data.ptr),
-        else => {
-
-            std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{});
-
-            return error.InputError;
-        }
+        else => {std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{}); return error.InputError;}
     };
 
     if (derivative == 1) switch (func.info.*.family) {
         xc.XC_FAMILY_LDA => xc.xc_lda_vxc(&func, rho.len, rho.data.ptr, result.data.ptr),
-        else => {
-
-            std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{});
-
-            return error.InputError;
-        }
+        else => {std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{}); return error.InputError;}
     };
 
     if (derivative == 2) switch (func.info.*.family) {
         xc.XC_FAMILY_LDA => xc.xc_lda_fxc(&func, rho.len, rho.data.ptr, result.data.ptr),
-        else => {
-
-            std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{});
-
-            return error.InputError;
-        }
+        else => {std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{}); return error.InputError;}
     };
 
     xc.xc_func_end(&func);
@@ -94,29 +74,25 @@ pub fn computeExchangeCorrelationArray(comptime T: type, exc: *RealVector(T), co
 
     var exchange: ?ExchangeFunctional(T) = null; var correlation: ?CorrelationFunctional(T) = null;
 
+    const exchange_map = [_]struct {name: []const u8, val: ExchangeFunctional(T)}{
+        .{.name = "LDA_X", .val = .{.slater = .{}}}
+    };
+
+    const correlation_map = [_]struct {name: []const u8, val: CorrelationFunctional(T)}{
+        .{.name = "LDA_C_CHACHIYO", .val = .{.chachiyo = .{}}},
+        .{.name = "LDA_C_VWN",      .val = .{.vwn5     = .{}}},
+    };
+
     if (functional.exchange) |x| {
-
-        if (std.ascii.eqlIgnoreCase(x, "LDA_X")) {exchange = .{.slater = .{}};}
-
-        else {
-
-            std.log.err("EXCHANGE FUNCTIONAL '{s}' NOT FOUND", .{x});
-
-            return error.InputError;
-        }
+        for (exchange_map) |entry| {
+            if (std.ascii.eqlIgnoreCase(x, entry.name)) {exchange = entry.val; break;}
+        } else {std.log.err("EXCHANGE FUNCTIONAL '{s}' NOT FOUND", .{x}); return error.InputError;}
     }
 
     if (functional.correlation) |c| {
-
-        if (std.ascii.eqlIgnoreCase(c, "LDA_C_CHACHIYO")) {correlation = .{.chachiyo = .{}};}
-        else if (std.ascii.eqlIgnoreCase(c, "LDA_C_VWN")) {correlation = .{.vwn5 = .{}};}
-
-        else {
-
-            std.log.err("CORRELATION FUNCTIONAL '{s}' NOT FOUND", .{c});
-
-            return error.InputError;
-        }
+        for (correlation_map) |entry| {
+            if (std.ascii.eqlIgnoreCase(c, entry.name)) {correlation = entry.val; break;}
+        } else {std.log.err("CORRELATION FUNCTIONAL '{s}' NOT FOUND", .{c}); return error.InputError;}
     }
 
     for (0..rho.len) |i| exc.ptr(i).*, cor.ptr(i).* = computeExchangeCorrelation(T, exchange, correlation, rho.at(i), derivative);
