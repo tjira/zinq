@@ -5,6 +5,8 @@ const std = @import("std");
 
 pub const config = @import("config");
 
+const xc = if (config.use_xc) @cImport(@cInclude("xc.h")) else struct {};
+
 pub const abinitio_potential = @import("abinitio_potential.zig");
 pub const andersen_thermostat = @import("andersen_thermostat.zig");
 pub const array_functions = @import("array_functions.zig");

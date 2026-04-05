@@ -2,33 +2,129 @@
 
 const std = @import("std");
 
+const config = @import("config");
+
+const xc = if (config.use_xc) @cImport(@cInclude("xc.h")) else struct {};
+
 const real_vector = @import("real_vector.zig");
 
 const RealVector = real_vector.RealVector;
 
+/// Density funcitional input.
+pub fn DensityFunctional(comptime T: type) type {
+    return struct {
+        exchange: ?[:0]const u8 = "LDA_X",
+        correlation: ?[:0]const u8 = "LDA_C_VWN",
+        params: ?[]const T = null
+    };
+}
+
 /// Enumeration of available correlation functionals.
 pub fn CorrelationFunctional(comptime T: type) type {
     return union(enum) {
-        chachiyo: ChachiyoCorrelation(T), Chachiyo: ChachiyoCorrelation(T),
-        vwn5: VWN5Correlation(T), VWN5: VWN5Correlation(T)
+        chachiyo: ChachiyoCorrelation(T),
+        vwn5: VWN5Correlation(T),
     };
 }
 
 /// Enumeration of available exchange functionals.
 pub fn ExchangeFunctional(comptime T: type) type {
     return union(enum) {
-        slater: SlaterExchange(T), Slater: SlaterExchange(T)
+        slater: SlaterExchange(T),
     };
 }
 
-/// Compute the exchange-correlation energy per particle for a given electron density `rho` using the specified DFT functional.
-pub fn computeExchangeCorrelationArray(comptime T: type, result: *RealVector(T), exchange: ?ExchangeFunctional(T), correlation: ?CorrelationFunctional(T), rho: RealVector(T), comptime derivative: u32) void {
-    for (0..rho.len) |i| result.ptr(i).* = computeExchangeCorrelation(T, exchange, correlation, rho.at(i), derivative);
+/// Evaluate functional using libxc.
+pub fn evaluateLibxc(comptime T: type, result: *RealVector(T), name: ?[:0]const u8, rho: RealVector(T), comptime derivative: u32) !void {
+    if (name == null) return result.zero();
+
+    const func_id = xc.xc_functional_get_number(name.?.ptr);
+
+    var func: xc.xc_func_type = undefined;
+
+    if (xc.xc_func_init(&func, func_id, xc.XC_UNPOLARIZED) != 0) {
+
+        std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC\n", .{name.?});
+
+        return error.InputError;
+    }
+
+    if (derivative == 0) switch (func.info.*.family) {
+        xc.XC_FAMILY_LDA => xc.xc_lda_exc(&func, rho.len, rho.data.ptr, result.data.ptr),
+        else => {
+
+            std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{});
+
+            return error.InputError;
+        }
+    };
+
+    if (derivative == 1) switch (func.info.*.family) {
+        xc.XC_FAMILY_LDA => xc.xc_lda_vxc(&func, rho.len, rho.data.ptr, result.data.ptr),
+        else => {
+
+            std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{});
+
+            return error.InputError;
+        }
+    };
+
+    if (derivative == 2) switch (func.info.*.family) {
+        xc.XC_FAMILY_LDA => xc.xc_lda_fxc(&func, rho.len, rho.data.ptr, result.data.ptr),
+        else => {
+
+            std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{});
+
+            return error.InputError;
+        }
+    };
+
+    xc.xc_func_end(&func);
 }
 
 /// Compute the exchange-correlation energy per particle for a given electron density `rho` using the specified DFT functional.
-pub fn computeExchangeCorrelation(comptime T: type, exchange: ?ExchangeFunctional(T), correlation: ?CorrelationFunctional(T), rho: T, comptime derivative: u32) T {
-    if (rho <= 1e-12) return 0;
+pub fn computeExchangeCorrelationArray(comptime T: type, exc: *RealVector(T), cor: *RealVector(T), functional: DensityFunctional(T), rho: RealVector(T), comptime derivative: u32) !void {
+    if (comptime config.use_xc) {
+
+        try evaluateLibxc(T, exc, functional.exchange,    rho, derivative);
+        try evaluateLibxc(T, cor, functional.correlation, rho, derivative);
+
+        return;
+    }
+
+    var exchange: ?ExchangeFunctional(T) = null; var correlation: ?CorrelationFunctional(T) = null;
+
+    if (functional.exchange) |x| {
+
+        if (std.ascii.eqlIgnoreCase(x, "LDA_X")) {exchange = .{.slater = .{}};}
+
+        else {
+
+            std.log.err("EXCHANGE FUNCTIONAL '{s}' NOT FOUND", .{x});
+
+            return error.InputError;
+        }
+    }
+
+    if (functional.correlation) |c| {
+
+        if (std.ascii.eqlIgnoreCase(c, "LDA_C_CHACHIYO")) {correlation = .{.chachiyo = .{}};}
+        else if (std.ascii.eqlIgnoreCase(c, "LDA_C_VWN")) {correlation = .{.vwn5 = .{}};}
+
+        else {
+
+            std.log.err("CORRELATION FUNCTIONAL '{s}' NOT FOUND", .{c});
+
+            return error.InputError;
+        }
+    }
+
+    for (0..rho.len) |i| exc.ptr(i).*, cor.ptr(i).* = computeExchangeCorrelation(T, exchange, correlation, rho.at(i), derivative);
+}
+
+/// Compute the exchange-correlation energy per particle for a given electron density `rho` using the specified DFT functional.
+pub fn computeExchangeCorrelation(comptime T: type, exchange: ?ExchangeFunctional(T), correlation: ?CorrelationFunctional(T), rho: T, comptime derivative: u32) struct{T, T} {
+    if (rho <= 1e-12) return .{0, 0};
 
     const x = if (exchange) |ex| switch (ex) {
         inline else => |x| switch (derivative) {
@@ -48,7 +144,7 @@ pub fn computeExchangeCorrelation(comptime T: type, exchange: ?ExchangeFunctiona
         }
     } else 0;
 
-    return x + c;
+    return .{x, c};
 }
 
 /// The Local Density Approximation (LDA) functional for exchange-correlation energy.

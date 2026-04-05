@@ -21,7 +21,7 @@ const real_vector = @import("real_vector.zig");
 
 const BasisSet = basis_set.BasisSet;
 const ClassicalParticle = classical_particle.ClassicalParticle;
-const DensityContext = dft_integrate.DensityContext;
+const DensityIntegrateContext = dft_integrate.DensityIntegrateContext;
 const RealMatrix = real_matrix.RealMatrix;
 const RealTensor4 = real_tensor_four.RealTensor4;
 const RealVector = real_vector.RealVector;
@@ -182,8 +182,8 @@ pub fn tddft(comptime T: type, opt: Options(T), system: ClassicalParticle(T), en
 
     const grid = try getGrid(T, opt.hartree_fock.dft.?.grid, basis, allocator); defer grid[0].deinit(allocator); defer grid[1].deinit(allocator);
 
-    const dft_context: DensityContext(T) = .{
-        .basis = basis, .points = grid[0], .weights = grid[1], .exchange = opt.hartree_fock.dft.?.exchange, .correlation = opt.hartree_fock.dft.?.correlation, .generalized = opt.hartree_fock.generalized
+    const dft_context: DensityIntegrateContext(T) = .{
+        .basis = basis, .points = grid[0], .weights = grid[1], .functional = opt.hartree_fock.dft.?.functional, .generalized = opt.hartree_fock.generalized
     };
 
     try evaluateXCKernel(T, &K, hf_output.P, hf_output.C, dft_context, nocc, allocator);

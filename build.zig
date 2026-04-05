@@ -28,7 +28,7 @@ pub fn build(builder: *std.Build) !void {
 
     const use_xc = builder.option(bool, "use-xc", "Link libxc (library with various XC functionals)") orelse false;
 
-    const options = generateOptions(builder);
+    const options = generateOptions(builder, use_xc);
 
     const main_executable = builder.addExecutable(.{
         .name = "zinq",
@@ -41,8 +41,10 @@ pub fn build(builder: *std.Build) !void {
         })
     });
 
-    main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"});
-    main_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"    });
+    if (use_xc) {
+        main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"});
+        main_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"    });
+    }
 
     if (use_xc) {
         main_executable.linkLibC(); main_executable.linkSystemLibrary("xc");
@@ -116,10 +118,12 @@ pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, s
     }
 }
 
-pub fn generateOptions(builder: *std.Build) *std.Build.Step.Options {
+pub fn generateOptions(builder: *std.Build, use_xc: bool) *std.Build.Step.Options {
     const options = builder.addOptions();
 
     options.addOption([]const u8, "zinq_version", getVersion(builder));
+
+    options.addOption(bool, "use_xc", use_xc);
 
     return options;
 }

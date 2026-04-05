@@ -6,11 +6,9 @@
                 "system" : "molecule.xyz",
                 "basis" : "sto-3g",
                 "dft" : {
-                    "exchange" : {
-                        "slater" : {}
-                    },
-                    "correlation" : {
-                        "vwn5" : {}
+                    "functional" : {
+                        "exchange" : "LDA_X",
+                        "correlation" : "LDA_C_VWN"
                     }
                 }
             }

@@ -26,9 +26,8 @@ const real_vector = @import("real_vector.zig");
 const BasisSet = basis_set.BasisSet;
 const ClassicalParticle = classical_particle.ClassicalParticle;
 const ContractedGaussian = contracted_gaussian.ContractedGaussian;
-const DensityContext = dft_integrate.DensityContext;
-const ExchangeFunctional = dft_functional.ExchangeFunctional;
-const CorrelationFunctional = dft_functional.CorrelationFunctional;
+const DensityIntegrateContext = dft_integrate.DensityIntegrateContext;
+const DensityFunctional = dft_functional.DensityFunctional;
 const FunctionalGrid = dft_grid.FunctionalGrid;
 const RealMatrix = real_matrix.RealMatrix;
 const RealMatrixArray = object_array.RealMatrixArray;
@@ -69,8 +68,7 @@ pub fn Options(comptime T: type) type {
             start: u32 = 1,
         };
         const DFT = struct {
-            exchange: ?ExchangeFunctional(T) = .{.slater = .{}},
-            correlation: ?CorrelationFunctional(T) = .{.VWN5 = .{}},
+            functional: DensityFunctional(T) = .{},
             grid: FunctionalGrid(T) = .{.becke = .{}},
         };
         const Gradient = union(enum) {
@@ -382,8 +380,8 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
         if (Vxc) |*xc| {
 
-            const dft_context: DensityContext(T) = .{
-                .basis = basis, .points = dft_grid_points.?, .weights = dft_grid_weights.?, .exchange = opt.dft.?.exchange, .correlation = opt.dft.?.correlation, .generalized = opt.generalized
+            const dft_context: DensityIntegrateContext(T) = .{
+                .basis = basis, .points = dft_grid_points.?, .weights = dft_grid_weights.?, .functional = opt.dft.?.functional, .generalized = opt.generalized
             };
 
             Exc = try evaluateXC(T, xc, P, dft_context, allocator);
@@ -469,8 +467,10 @@ test "DFT Calculation for a Water Molecule with Slater-Chachiyo LDA Functional a
         .system = "example/molecule/water.xyz",
         .basis = "sto-3g",
         .dft = .{
-            .exchange = .{.slater = .{}},
-            .correlation = .{.chachiyo = .{}},
+            .functional = .{
+                .exchange = "LDA_X",
+                .correlation = "LDA_C_CHACHIYO"
+            }
         }
     };
 
@@ -484,8 +484,10 @@ test "DFT Calculation for a Water Molecule with Slater-VWN5 LDA Functional and S
         .system = "example/molecule/water.xyz",
         .basis = "sto-3g",
         .dft = .{
-            .exchange = .{.slater = .{}},
-            .correlation = .{.vwn5 = .{}},
+            .functional = .{
+                .exchange = "LDA_X",
+                .correlation = "LDA_C_VWN"
+            }
         }
     };
 
