@@ -19,6 +19,13 @@ pub fn DensityFunctional(comptime T: type) type {
     };
 }
 
+/// Enumeration of available exchange functionals.
+pub fn ExchangeFunctional(comptime T: type) type {
+    return union(enum) {
+        slater: SlaterExchange(T),
+    };
+}
+
 /// Enumeration of available correlation functionals.
 pub fn CorrelationFunctional(comptime T: type) type {
     return union(enum) {
@@ -27,11 +34,33 @@ pub fn CorrelationFunctional(comptime T: type) type {
     };
 }
 
-/// Enumeration of available exchange functionals.
-pub fn ExchangeFunctional(comptime T: type) type {
-    return union(enum) {
-        slater: SlaterExchange(T),
+/// Get the functional kind.
+pub fn getFunctionalKind(name: [:0]const u8) !enum{lda, gga, mgga} {
+    if (comptime config.use_xc) {
+
+        const func_id = xc.xc_functional_get_number(name.ptr); var func: xc.xc_func_type = undefined;
+
+        if (xc.xc_func_init(&func, func_id, xc.XC_UNPOLARIZED) != 0) {
+            std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC\n", .{name}); return error.InputError;
+        }
+
+        switch (func.info.*.family) {
+            xc.XC_FAMILY_LDA => return .lda,
+            xc.XC_FAMILY_GGA, xc.XC_FAMILY_HYB_GGA => return .gga,
+            xc.XC_FAMILY_MGGA, xc.XC_FAMILY_HYB_MGGA => return .mgga,
+            else => {std.log.err("CANNOT IDENTIFY FUNCTIONAL TYPE", .{}); return error.InputError;}
+        }
+    }
+
+    const kind_map = [_]struct {name: []const u8, val: enum{lda, gga, mgga}}{
+        .{.name = "LDA_X",          .val = .lda},
+        .{.name = "LDA_C_CHACHIYO", .val = .lda},
+        .{.name = "LDA_C_VWN",      .val = .lda}
     };
+
+    for (kind_map) |entry| {
+        if (std.ascii.eqlIgnoreCase(name, entry.name)) {return entry.val;}
+    } else {std.log.err("CANNOT DETERMINA '{s}' FUNCTIONAL KIND", .{name}); return error.InputError;}
 }
 
 /// Evaluate functional using libxc.

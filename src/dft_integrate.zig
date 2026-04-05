@@ -28,6 +28,14 @@ pub fn evaluateXC(comptime T: type, Vxc: *RealMatrix(T), P: RealMatrix(T), conte
 
     const basis = context.basis; const points = context.points; const weights = context.weights; const functional = context.functional;
 
+    if (functional.exchange) |x| if (try getFunctionalKind(x) != .lda) {
+        std.log.err("CURRENTLY ONLY LDA FUNCTIONALS ARE IMPLEMENTED", .{}); return error.InputError;
+    };
+
+    if (functional.correlation) |c| if (try getFunctionalKind(c) != .lda) {
+        std.log.err("CURRENTLY ONLY LDA FUNCTIONALS ARE IMPLEMENTED", .{}); return error.InputError;
+    };
+
     var phi = try RealMatrix(T).initZero(points.rows, basis.nbf(), allocator); defer phi.deinit(allocator);
 
     var rho = try RealVector(T).initZero(points.rows, allocator); defer rho.deinit(allocator);
@@ -75,6 +83,14 @@ pub fn evaluateXCKernel(comptime T: type, K: *RealMatrix(T), P: RealMatrix(T), C
     K.zero(); const factor: T = if (context.generalized) 1.0 else 2.0; const nvir = context.basis.nbf() - nocc;
 
     const basis = context.basis; const points = context.points; const weights = context.weights; const functional = context.functional;
+
+    if (functional.exchange) |x| if (try getFunctionalKind(x) != .lda) {
+        std.log.err("CURRENTLY ONLY LDA FUNCTIONALS ARE IMPLEMENTED", .{}); return error.InputError;
+    };
+
+    if (functional.correlation) |c| if (try getFunctionalKind(c) != .lda) {
+        std.log.err("CURRENTLY ONLY LDA FUNCTIONALS ARE IMPLEMENTED", .{}); return error.InputError;
+    };
 
     var chi = try RealMatrix(T).initZero(points.rows, basis.nbf(), allocator); defer chi.deinit(allocator);
     var phi = try RealMatrix(T).initZero(points.rows, basis.nbf(), allocator); defer phi.deinit(allocator);
