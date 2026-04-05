@@ -52,14 +52,14 @@ pub fn getFunctionalKind(name: [:0]const u8) !enum{lda, gga, mgga} {
         }
     }
 
-    const kind_map = [_]struct {name: []const u8, val: enum{lda, gga, mgga}}{
-        .{.name = "LDA_X",          .val = .lda},
-        .{.name = "LDA_C_CHACHIYO", .val = .lda},
-        .{.name = "LDA_C_VWN",      .val = .lda}
+    const kind_map = .{
+        .{"LDA_X",          .lda},
+        .{"LDA_C_CHACHIYO", .lda},
+        .{"LDA_C_VWN",      .lda}
     };
 
-    for (kind_map) |entry| {
-        if (std.ascii.eqlIgnoreCase(name, entry.name)) {return entry.val;}
+    inline for (kind_map) |entry| {
+        if (std.ascii.eqlIgnoreCase(name, entry[0])) {return entry[1];}
     } else {std.log.err("CANNOT DETERMINA '{s}' FUNCTIONAL KIND", .{name}); return error.InputError;}
 }
 
