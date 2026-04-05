@@ -26,6 +26,8 @@ pub fn build(builder: *std.Build) !void {
     const optimize = builder.standardOptimizeOption(.{});
     const target = builder.standardTargetOptions(.{});
 
+    const use_xc = builder.option(bool, "use-xc", "Link libxc (library with various XC functionals)") orelse false;
+
     const options = generateOptions(builder);
 
     const main_executable = builder.addExecutable(.{
@@ -39,8 +41,15 @@ pub fn build(builder: *std.Build) !void {
         })
     });
 
+    main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"});
+    main_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"    });
+
+    if (use_xc) {
+        main_executable.linkLibC(); main_executable.linkSystemLibrary("xc");
+    }
+
     const test_executable = builder.addTest(.{
-        .name = "test", .root_module = main_executable.root_module,
+        .name = "test", .root_module = main_executable.root_module
     });
 
     const docs_target = builder.addInstallDirectory(.{
