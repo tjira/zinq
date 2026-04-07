@@ -59,6 +59,9 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 * **Density Functional Theory**  
   Use variety of exchange-correlation functionals for density functional theory calculations.
 
+* **Time-Dependent Density Functional Theory**  
+  Calculate excitation energies and transition properties with time-dependent density functional theory.
+
 * **Electronic Structure Analysis**  
   Compute energy derivatives and harmonic vibrational frequencies across supported methods.
 

@@ -5,7 +5,7 @@ const std = @import("std");
 
 pub const config = @import("config");
 
-const xc = if (config.use_xc) @cImport(@cInclude("xc.h")) else struct {};
+pub const xc = if (config.use_xc) @cImport(@cInclude("xc.h")) else struct {};
 
 pub const abinitio_potential = @import("abinitio_potential.zig");
 pub const andersen_thermostat = @import("andersen_thermostat.zig");
@@ -278,7 +278,9 @@ pub fn main() !void {
         if (gpa.deinit() == .leak) std.log.err("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
-    try device_write.print("ZIG VERSION: {d}.{d}.{d}, ZINQ VERSION: {s}", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.zinq_version});
+    try device_write.print("ZIG: v{d}.{d}.{d}, ZINQ: {s}", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.zinq_version});
+
+    if (comptime config.use_xc) try device_write.print(", LIBXC: v{s}", .{xc.xc_version_string()});
 
     {
         const ts = try timestamp.timestamp(allocator); defer allocator.free(ts);
