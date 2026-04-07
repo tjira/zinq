@@ -20,14 +20,17 @@ jobs:
         with:
           version: 0.15.2
 
+      - name: Compile Libraries
+        run: ./script/compile_libs.sh
+
       - name: Compile Project
-        run: zig build --release=fast cross
+        run: zig build -Duse-xc=true --release=fast cross
 
       - name: Move Binaries
         run: |
-          mkdir -p bin && cd zig-out && for FOLDER in *64*linux*;  do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
-          mkdir -p bin && cd zig-out && for FOLDER in *64*macos;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
-          mkdir -p bin && cd zig-out && for FOLDER in *64*windows; do mv $FOLDER/zinq.exe ../bin/zinq-$FOLDER.exe; done && cd -
+          mkdir -p bin && cd zig-out && for FOLDER in *64*linux*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
+          mkdir -p bin && cd zig-out && for FOLDER in *64*macos*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
+          mkdir -p bin && cd zig-out && for FOLDER in *64*windows*; do mv $FOLDER/zinq.exe ../bin/zinq-$FOLDER.exe; done && cd -
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
