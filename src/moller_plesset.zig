@@ -108,7 +108,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator); defer system.deinit(allocator);
 
-    if (enable_printing) {try print("\nINPUT GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (enable_printing) {try print("\nINPUT GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
     if (opt.optimize != null) {
 
@@ -117,7 +117,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         system.deinit(allocator); system = optimized_system;
     }
 
-    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
     var output = try mp(T, opt, system, enable_printing, allocator); errdefer output.deinit(allocator);
 

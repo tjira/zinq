@@ -45,6 +45,7 @@ const printRealMatrix = device_write.printRealMatrix;
 const twoAO2MO = integral_transform.twoAO2MO;
 const twoAO2MS = integral_transform.twoAO2MS;
 
+const AU2EV = global_variables.AU2EV;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// The TDDFT target options struct.
@@ -115,7 +116,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator); defer system.deinit(allocator);
 
-    if (enable_printing) {try print("\nINPUT GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (enable_printing) {try print("\nINPUT GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
     if (opt.optimize != null) {
 
@@ -124,7 +125,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         system.deinit(allocator); system = optimized_system;
     }
 
-    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
     var output = try tddft(T, opt, system, enable_printing, allocator); errdefer output.deinit(allocator);
 
@@ -206,10 +207,13 @@ pub fn tddft(comptime T: type, opt: Options(T), system: ClassicalParticle(T), en
 
     const AJC = try eigenproblem_solver.eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
 
-    if (enable_printing) try print("\nTDDFT STATE {d:2}: {d:20.14} Eh\n", .{0, hf_output.energy});
+    if (enable_printing) try print("\nTDDFT STATE {d:2}: {d:20.14} Eh (DELTA E = {d:7.4} Eh = {d:7.4} eV)\n", .{0, hf_output.energy, 0.0, 0.0});
 
     if (enable_printing) {
-        for (0..@min(opt.states, AJC.J.rows)) |i| try print("TDDFT STATE {d:2}: {d:20.14} Eh\n", .{i + 1, hf_output.energy + AJC.J.at(i, i)});
+
+        for (0..@min(opt.states, AJC.J.rows)) |i| {
+            try print("TDDFT STATE {d:2}: {d:20.14} Eh (DELTA E = {d:7.4} Eh = {d:7.4} eV)\n", .{i + 1, hf_output.energy + AJC.J.at(i, i), AJC.J.at(i, i), AJC.J.at(i, i) * AU2EV});
+        }
     }
 
     return .{

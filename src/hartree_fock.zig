@@ -169,7 +169,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         system.deinit(allocator); system = optimized_system;
     }
 
-    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
     var output = try scf(T, opt, system, enable_printing, allocator); errdefer output.deinit(allocator);
 

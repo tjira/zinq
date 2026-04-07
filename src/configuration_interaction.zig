@@ -43,6 +43,7 @@ const printRealMatrix = device_write.printRealMatrix;
 const twoAO2MO = integral_transform.twoAO2MO;
 const twoAO2MS = integral_transform.twoAO2MS;
 
+const AU2EV = global_variables.AU2EV;
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// The Configuration Interaction (CI) method for electronic structure calculations.
@@ -114,7 +115,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator); defer system.deinit(allocator);
 
-    if (enable_printing) {try print("\nINPUT GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (enable_printing) {try print("\nINPUT GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
     if (opt.optimize != null) {
 
@@ -123,7 +124,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         system.deinit(allocator); system = optimized_system;
     }
 
-    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (Å):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
 
     var output = try ci(T, opt, system, enable_printing, allocator); errdefer output.deinit(allocator);
 
@@ -216,7 +217,13 @@ pub fn ci(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
     if (enable_printing) try print("\n", .{});
 
     if (enable_printing) {
-        for (0..@min(opt.states, E.rows) + 1) |i| try print("CASCI STATE {d:2}: {d:20.14} Eh\n", .{i, E.at(i, i) + system.nuclearRepulsionEnergy()});
+
+        for (0..@min(opt.states, E.rows) + 1) |i| {
+
+            const deltaE = E.at(i, i) - E.at(0, 0);
+
+            try print("CASCI STATE {d:2}: {d:20.14} Eh (DELTA E = {d:7.4} Eh = {d:7.4} eV)\n", .{i, E.at(i, i) + system.nuclearRepulsionEnergy(), deltaE, deltaE * AU2EV});
+        }
     }
 
     return .{
