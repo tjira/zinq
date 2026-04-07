@@ -28,7 +28,9 @@ pub fn build(builder: *std.Build) !void {
 
     const use_xc = builder.option(bool, "use-xc", "Link libxc (library with various XC functionals)") orelse false;
 
-    const options = generateOptions(builder, use_xc);
+    const link_c = use_xc;
+
+    const main_options = generateOptions(builder, use_xc);
 
     const main_executable = builder.addExecutable(.{
         .name = "zinq",
@@ -41,13 +43,14 @@ pub fn build(builder: *std.Build) !void {
         })
     });
 
-    if (use_xc) {
+    if (link_c) {
+
         main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"});
         main_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"    });
-    }
 
-    if (use_xc) {
-        main_executable.linkLibC(); main_executable.linkSystemLibrary("xc");
+        main_executable.linkLibC();
+
+        if (use_xc) main_executable.linkSystemLibrary("xc");
     }
 
     const test_executable = builder.addTest(.{
@@ -60,9 +63,9 @@ pub fn build(builder: *std.Build) !void {
         }).getEmittedDocs(), .install_dir = .prefix, .install_subdir = "../docs/code"
     });
 
-    main_executable.root_module.addOptions("config", options);
+    main_executable.root_module.addOptions("config", main_options);
 
-    try install(builder, main_executable, builder.getInstallStep()); try addTools(builder, main_executable, builder.getInstallStep());
+    try install(builder, main_executable, builder.getInstallStep(), link_c); try addTools(builder, main_executable, builder.getInstallStep(), link_c);
 
     builder.step("docs", "Generate documentation"     ).dependOn(&docs_target                            .step);
     builder.step("run",  "Run the compiled executable").dependOn(&builder.addRunArtifact(main_executable).step);
@@ -72,6 +75,8 @@ pub fn build(builder: *std.Build) !void {
 
     for (0..targets.len) |i| {
 
+        const resolved = builder.resolveTargetQuery(targets[i]);
+
         const matrix_executable = builder.addExecutable(.{
             .name = "zinq",
             .root_module = builder.createModule(.{
@@ -79,17 +84,45 @@ pub fn build(builder: *std.Build) !void {
                 .root_source_file = builder.path("src/main.zig"),
                 .strip = optimize != .Debug,
                 .single_threaded = false,
-                .target = builder.resolveTargetQuery(targets[i])
+                .target = resolved
             })
         });
 
-        matrix_executable.root_module.addOptions("config", options);
+        matrix_executable.root_module.addOptions("config", generateOptions(builder, false));
 
-        try install(builder, matrix_executable, cross); try addTools(builder, matrix_executable, cross);
+        try install(builder, matrix_executable, cross, false); try addTools(builder, matrix_executable, cross, false);
+
+        const matches_host = resolved.result.os.tag == builtin.os.tag and resolved.result.cpu.arch == builtin.cpu.arch;
+
+        if (link_c and matches_host) try addLibcLinkedExecutables(builder, optimize, targets[i], cross, use_xc);
     }
 }
 
-pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, step: *std.Build.Step) !void {
+pub fn addLibcLinkedExecutables(builder: *std.Build, optimize: std.builtin.OptimizeMode, target_query: std.Target.Query, step: *std.Build.Step, use_xc: bool) !void {
+    const libc_linked_executable = builder.addExecutable(.{
+        .name = "zinq",
+        .root_module = builder.createModule(.{
+            .optimize = optimize,
+            .root_source_file = builder.path("src/main.zig"),
+            .strip = optimize != .Debug,
+            .single_threaded = false,
+            .target = builder.resolveTargetQuery(target_query)
+        })
+    });
+
+    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"});
+    libc_linked_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"    });
+
+    libc_linked_executable.linkLibC();
+
+    if (use_xc) libc_linked_executable.linkSystemLibrary("xc");
+
+    libc_linked_executable.root_module.addOptions("config", generateOptions(builder, use_xc));
+
+    try install(builder, libc_linked_executable, step, true); try addTools(builder, libc_linked_executable, step, true);
+}
+
+pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, step: *std.Build.Step, libc: bool) !void {
     const optimize = main_executable.root_module.optimize;
     const target = main_executable.root_module.resolved_target.?;
 
@@ -114,7 +147,7 @@ pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, s
 
         tool_executable.root_module.addImport("zinq", main_executable.root_module);
 
-        try install(builder, tool_executable, step);
+        try install(builder, tool_executable, step, libc);
     }
 }
 
@@ -155,7 +188,7 @@ fn getVersion(builder: *std.Build) []const u8 {
     return version;
 }
 
-pub fn install(builder: *std.Build, main_executable: *std.Build.Step.Compile, step: *std.Build.Step) !void {
+pub fn install(builder: *std.Build, main_executable: *std.Build.Step.Compile, step: *std.Build.Step, libc: bool) !void {
     const target = main_executable.root_module.resolved_target.?;
 
     if (target.query.isNative()) {
@@ -165,8 +198,8 @@ pub fn install(builder: *std.Build, main_executable: *std.Build.Step.Compile, st
         step.dependOn(&main_executable_install.step); return;
     }
 
-    const dest = try std.fmt.allocPrint(builder.allocator, "{s}-{s}", .{
-        @tagName(target.result.cpu.arch), @tagName(target.result.os.tag)
+    const dest = try std.fmt.allocPrint(builder.allocator, "{s}-{s}{s}", .{
+        @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), if (libc) "-libc" else ""
     });
 
     const main_executable_install = builder.addInstallArtifact(main_executable, .{

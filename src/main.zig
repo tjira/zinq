@@ -151,13 +151,14 @@ pub fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value
     }
 
     inline for (std.meta.fields(Struct)) |field| {
-        if (@typeInfo(field.type) == .@"struct") {
-            if (options.object.get(field.name)) |nested_value| {
-                if (nested_value == .object) {
-                    try checkForUnrecognizedFields(field.type, nested_value, err);
-                }
-            }
-        }
+
+        const BaseType = switch (@typeInfo(field.type)) {
+            .optional => |opt| opt.child, else => field.type
+        };
+
+        if (@typeInfo(BaseType) == .@"struct") if (options.object.get(field.name)) |nested_value| if (nested_value == .object) {
+            try checkForUnrecognizedFields(BaseType, nested_value, err);
+        };
     }
 }
 
@@ -173,7 +174,9 @@ pub fn checkForMissingFields(comptime Struct: type, options: std.json.Value, err
 
                 return error.InvalidInput;
             }
-        } else if (@typeInfo(field.type) == .@"struct") {
+        }
+
+        else if (@typeInfo(field.type) == .@"struct") {
 
             const nested_value = options.object.get(field.name).?;
             

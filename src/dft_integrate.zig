@@ -13,7 +13,7 @@ const RealMatrix = real_matrix.RealMatrix;
 const RealVector = real_vector.RealVector;
 
 const computeExchangeCorrelationArray = dft_functional.computeExchangeCorrelationArray;
-const getFunctionalKind = dft_functional.getFunctionalKind;
+const getFunctionalFamily = dft_functional.getFunctionalFamily;
 
 /// Density functional theory context with necessary arguments.
 pub fn DensityIntegrateContext(comptime T: type) type {
@@ -28,11 +28,11 @@ pub fn evaluateXC(comptime T: type, Vxc: *RealMatrix(T), P: RealMatrix(T), conte
 
     const basis = context.basis; const points = context.points; const weights = context.weights; const functional = context.functional;
 
-    if (functional.exchange) |x| if (try getFunctionalKind(x) != .lda) {
+    if (functional.exchange) |x| if (try getFunctionalFamily(x) != .lda) {
         std.log.err("CURRENTLY ONLY LDA FUNCTIONALS ARE IMPLEMENTED", .{}); return error.InputError;
     };
 
-    if (functional.correlation) |c| if (try getFunctionalKind(c) != .lda) {
+    if (functional.correlation) |c| if (try getFunctionalFamily(c) != .lda) {
         std.log.err("CURRENTLY ONLY LDA FUNCTIONALS ARE IMPLEMENTED", .{}); return error.InputError;
     };
 
@@ -84,11 +84,11 @@ pub fn evaluateXCKernel(comptime T: type, K: *RealMatrix(T), P: RealMatrix(T), C
 
     const basis = context.basis; const points = context.points; const weights = context.weights; const functional = context.functional;
 
-    if (functional.exchange) |x| if (try getFunctionalKind(x) != .lda) {
+    if (functional.exchange) |x| if (try getFunctionalFamily(x) != .lda) {
         std.log.err("CURRENTLY ONLY LDA FUNCTIONALS ARE IMPLEMENTED", .{}); return error.InputError;
     };
 
-    if (functional.correlation) |c| if (try getFunctionalKind(c) != .lda) {
+    if (functional.correlation) |c| if (try getFunctionalFamily(c) != .lda) {
         std.log.err("CURRENTLY ONLY LDA FUNCTIONALS ARE IMPLEMENTED", .{}); return error.InputError;
     };
 

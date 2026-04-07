@@ -15,6 +15,7 @@ pub fn DensityFunctional(comptime T: type) type {
     return struct {
         exchange: ?[:0]const u8 = "LDA_X",
         correlation: ?[:0]const u8 = "LDA_C_VWN",
+        exchange_correlation: ?[:0]const u8 = null,
         params: ?[]const T = null
     };
 }
@@ -34,23 +35,23 @@ pub fn CorrelationFunctional(comptime T: type) type {
     };
 }
 
-/// Get the functional kind.
-pub fn getFunctionalKind(name: [:0]const u8) !enum{lda, gga, mgga} {
+/// Get the functional family.
+pub fn getFunctionalFamily(name: [:0]const u8) !enum{lda, gga, mgga} {
     if (comptime config.use_xc) {
 
         const func_id = xc.xc_functional_get_number(name.ptr); var func: xc.xc_func_type = undefined;
 
         if (xc.xc_func_init(&func, func_id, xc.XC_UNPOLARIZED) != 0) {
-            std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC\n", .{name}); return error.InputError;
+            std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC", .{name}); return error.InputError;
         }
 
         defer xc.xc_func_end(&func);
 
         switch (func.info.*.family) {
-            xc.XC_FAMILY_LDA => return .lda,
+            xc.XC_FAMILY_LDA, xc.XC_FAMILY_HYB_LDA => return .lda,
             xc.XC_FAMILY_GGA, xc.XC_FAMILY_HYB_GGA => return .gga,
             xc.XC_FAMILY_MGGA, xc.XC_FAMILY_HYB_MGGA => return .mgga,
-            else => {std.log.err("CANNOT IDENTIFY FUNCTIONAL TYPE", .{}); return error.InputError;}
+            else => {std.log.err("CANNOT IDENTIFY FUNCTIONAL FAMILY", .{}); return error.InputError;}
         }
     }
 
@@ -62,7 +63,39 @@ pub fn getFunctionalKind(name: [:0]const u8) !enum{lda, gga, mgga} {
 
     inline for (kind_map) |entry| {
         if (std.ascii.eqlIgnoreCase(name, entry[0])) {return entry[1];}
-    } else {std.log.err("CANNOT DETERMINE '{s}' FUNCTIONAL KIND", .{name}); return error.InputError;}
+    } else {std.log.err("FUNCTIONAL '{s}' NOT FOUND", .{name}); return error.InputError;}
+}
+
+/// Get the functional kind.
+pub fn getFunctionalKind(name: [:0]const u8) !enum{exchange, correlation, exchange_correlation, kinetic} {
+    if (comptime config.use_xc) {
+
+        const func_id = xc.xc_functional_get_number(name.ptr); var func: xc.xc_func_type = undefined;
+
+        if (xc.xc_func_init(&func, func_id, xc.XC_UNPOLARIZED) != 0) {
+            std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC", .{name}); return error.InputError;
+        }
+
+        defer xc.xc_func_end(&func);
+
+        switch (func.info.*.kind) {
+            xc.XC_EXCHANGE => return .exchange,
+            xc.XC_CORRELATION => return .correlation,
+            xc.XC_EXCHANGE_CORRELATION => return .exchange_correlation,
+            xc.XC_KINETIC => return .kinetic,
+            else => {std.log.err("CANNOT IDENTIFY FUNCTIONAL KIND", .{}); return error.InputError;}
+        }
+    }
+
+    const kind_map = .{
+        .{"LDA_X",          .exchange   },
+        .{"LDA_C_CHACHIYO", .correlation},
+        .{"LDA_C_VWN",      .correlation}
+    };
+
+    inline for (kind_map) |entry| {
+        if (std.ascii.eqlIgnoreCase(name, entry[0])) {return entry[1];}
+    } else {std.log.err("FUNCTIONAL '{s}' NOT FOUND", .{name}); return error.InputError;}
 }
 
 /// Evaluate functional using libxc.
@@ -95,10 +128,28 @@ pub fn evaluateLibxc(comptime T: type, result: *RealVector(T), name: ?[:0]const 
 
 /// Compute the exchange-correlation energy per particle for a given electron density `rho` using the specified DFT functional.
 pub fn computeExchangeCorrelationArray(comptime T: type, exc: *RealVector(T), cor: *RealVector(T), functional: DensityFunctional(T), rho: RealVector(T), comptime derivative: u32) !void {
+    if (functional.exchange_correlation != null and (functional.exchange != null or functional.correlation != null)) {
+        std.log.err("CANNOT SPECIFY BOTH EXCHANGE-CORRELATION AND SEPARATE EXCHANGE/CORRELATION FUNCTIONALS", .{}); return error.InputError;
+    }
+
+    if (functional.exchange) |name| if (try getFunctionalKind(name) != .exchange) {
+        std.log.err("FUNCTIONAL '{s}' IS NOT AN EXCHANGE FUNCTIONAL", .{name}); return error.InputError;
+    };
+
+    if (functional.correlation) |name| if (try getFunctionalKind(name) != .correlation) {
+        std.log.err("FUNCTIONAL '{s}' IS NOT A CORRELATION FUNCTIONAL", .{name}); return error.InputError;
+    };
+
+    if (functional.exchange_correlation) |name| if (try getFunctionalKind(name) != .exchange_correlation) {
+        std.log.err("FUNCTIONAL '{s}' IS NOT AN EXCHANGE-CORRELATION FUNCTIONAL", .{name}); return error.InputError;
+    };
+
     if (comptime config.use_xc) {
 
         try evaluateLibxc(T, exc, functional.exchange,    rho, derivative);
         try evaluateLibxc(T, cor, functional.correlation, rho, derivative);
+
+        if (functional.exchange_correlation != null) try evaluateLibxc(T, cor, functional.exchange_correlation, rho, derivative);
 
         return;
     }
@@ -124,6 +175,12 @@ pub fn computeExchangeCorrelationArray(comptime T: type, exc: *RealVector(T), co
         for (correlation_map) |entry| {
             if (std.ascii.eqlIgnoreCase(c, entry.name)) {correlation = entry.val; break;}
         } else {std.log.err("CORRELATION FUNCTIONAL '{s}' NOT FOUND", .{c}); return error.InputError;}
+    }
+
+    if (functional.exchange_correlation) |c| {
+        for (correlation_map) |entry| {
+            if (std.ascii.eqlIgnoreCase(c, entry.name)) {correlation = entry.val; break;}
+        } else {std.log.err("EXCHANGE-CORRELATION FUNCTIONAL '{s}' NOT FOUND", .{c}); return error.InputError;}
     }
 
     for (0..rho.len) |i| exc.ptr(i).*, cor.ptr(i).* = computeExchangeCorrelation(T, exchange, correlation, rho.at(i), derivative);
