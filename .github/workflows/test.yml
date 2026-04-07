@@ -75,7 +75,7 @@ jobs:
           version: 0.15.2
 
       - name: Compile libxc
-        if: contains(matrix.build_flags, "use-xc")
+        if: contains(matrix.build_flags, use-xc)
         run: ./script/compile_libs.sh
 
       - name: Run Tests in ${{matrix.mode_name}} Mode
