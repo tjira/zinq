@@ -53,6 +53,18 @@ jobs:
           - os: windows-latest
             mode_name: ReleaseSmall
             build_flags: "--release=small"
+          - os: ubuntu-latest
+            mode_name: Debug Libc
+            build_flags: "-Duse-xc=true"
+          - os: ubuntu-latest
+            mode_name: ReleaseFast Libc
+            build_flags: "-Duse-xc=true --release=fast"
+          - os: ubuntu-latest
+            mode_name: ReleaseSafe Libc
+            build_flags: "-Duse-xc=true --release=safe"
+          - os: ubuntu-latest
+            mode_name: ReleaseSmall Libc
+            build_flags: "-Duse-xc=true --release=small"
 
     steps:
       - uses: actions/checkout@v6
@@ -61,6 +73,10 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
+
+      - name: Compile libxc
+        if: contains(matrix.build_flags, "use-xc")
+        run: ./script/compile_libs.sh
 
       - name: Run Tests in ${{matrix.mode_name}} Mode
         run: zig build ${{matrix.build_flags}} test

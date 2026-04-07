@@ -476,7 +476,7 @@ test "DFT Calculation for a Water Molecule with Slater-Chachiyo LDA Functional a
 
     var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.energy, -74.72139955126922, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.energy, -74.72139974284826, TEST_TOLERANCE);
 }
 
 test "DFT Calculation for a Water Molecule with Slater-VWN5 LDA Functional and STO-3G Basis Set" {

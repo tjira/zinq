@@ -250,7 +250,7 @@ pub fn ChachiyoCorrelation(comptime T: type) type {
 
         /// Evaluate function.
         pub fn evaluateD0(_: @This(), rho: T) T {
-            const a: T = (std.math.ln2 - 1) / (2 * std.math.pi * std.math.pi); const b: T = 20.4562557;
+            const a: T = -0.01554535; const b: T = 20.4562557;
 
             const rs = std.math.pow(T, 3 / (4 * rho * std.math.pi), 1.0 / 3.0);
 
@@ -261,7 +261,7 @@ pub fn ChachiyoCorrelation(comptime T: type) type {
 
         /// First derivative of the correlation energy density with respect to the electron density `rho`.
         pub fn evaluateD1(self: @This(), rho: T) T {
-            const a: T = (std.math.ln2 - 1) / (2 * std.math.pi * std.math.pi); const b: T = 20.4562557;
+            const a: T = -0.01554535; const b: T = 20.4562557;
 
             const rs = std.math.pow(T, 3 / (4 * rho * std.math.pi), 1.0 / 3.0);
 
@@ -272,7 +272,7 @@ pub fn ChachiyoCorrelation(comptime T: type) type {
 
         /// Second derivative of the correlation energy density with respect to the electron density `rho`.
         pub fn evaluateD2(_: @This(), rho: T) T {
-            const a: T = (std.math.ln2 - 1) / (2 * std.math.pi * std.math.pi); const b: T = 20.4562557;
+            const a: T = -0.01554535; const b: T = 20.4562557;
 
             const rs = std.math.pow(T, 3 / (4 * rho * std.math.pi), 1.0 / 3.0);
 
