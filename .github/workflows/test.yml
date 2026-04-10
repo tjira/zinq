@@ -74,6 +74,10 @@ jobs:
         with:
           version: 0.15.2
 
+      - name: Install Dependencies
+        if: contains(matrix.build_flags, 'use-xc')
+        run: sudo apt update && sudo apt install libboost-all-dev
+
       - name: Compile Libraries
         if: contains(matrix.build_flags, 'use-xc')
         run: ./script/compile_libs.sh

@@ -20,6 +20,9 @@ jobs:
         with:
           version: 0.15.2
 
+      - name: Install Dependencies
+        run: sudo apt update && sudo apt install libboost-all-dev
+
       - name: Compile Libraries
         run: ./script/compile_libs.sh
 
