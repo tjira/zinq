@@ -5,18 +5,13 @@ const std = @import("std");
 const complex_matrix = @import("complex_matrix.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const global_variables = @import("global_variables.zig");
-const matrix_multiplication = @import("matrix_multiplication.zig");
 const real_matrix = @import("real_matrix.zig");
-const real_vector = @import("real_vector.zig");
 
 const Complex = std.math.complex.Complex;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
 const RealMatrix = real_matrix.RealMatrix;
-const RealVector = real_vector.RealVector;
 
 const eigensystemHermitianAlloc = eigenproblem_solver.eigensystemHermitianAlloc;
-const mm = matrix_multiplication.mm;
-const mmAlloc = matrix_multiplication.mmAlloc;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 

@@ -2,9 +2,15 @@
 
 const std = @import("std");
 
+const config = @import("config");
+
 const real_matrix = @import("real_matrix.zig");
 const complex_matrix = @import("complex_matrix.zig");
 const global_variables = @import("global_variables.zig");
+const openblas = @import("openblas.zig");
+
+const dgemm = openblas.dgemm;
+const zgemm = openblas.zgemm;
 
 const RealMatrix = real_matrix.RealMatrix;
 const ComplexMatrix = complex_matrix.ComplexMatrix;
@@ -74,7 +80,7 @@ pub fn mm(comptime T: type, C: anytype, A: anytype, comptime at: bool, B: anytyp
         return error.InvalidInput;
     };
 
-    if (comptime @TypeOf(C.*) == RealMatrix(T)) {return mmReal(T, C, A, at, B, bt);}
+    if (comptime @TypeOf(C.*) == RealMatrix(T)) {return try mmReal(T, C, A, at, B, bt);}
     else if (comptime @TypeOf(C.*) == ComplexMatrix(T)) {return mmComplex(T, C, A, at, B, bt);}
     else @compileError("UNSUPPORTED MATRIX TYPE IN MATRIX MULTIPLICATION");
 }
@@ -93,6 +99,8 @@ pub fn mmAlloc(comptime T: type, A: anytype, comptime at: bool, B: anytype, comp
 
 /// Matrix multiplication function between two complex matrices A and B, with options to transpose A and/or B. The result is stored in C.
 pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: anytype, comptime at: bool, B: anytype, comptime bt: bool) void {
+    if (comptime config.use_openblas and @TypeOf(A) == ComplexMatrix(T) and @TypeOf(B) == ComplexMatrix(T)) {if (A.rows > 32 and A.cols > 32) return try zgemm(T, C, A, at, B, bt);}
+
     for (0..C.rows) |i| for (0..C.cols) |j| {
 
         var sum = Complex(T).init(0, 0);
@@ -116,7 +124,9 @@ pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: anytype, comptime at
 }
 
 /// Matrix multiplication function between two real matrices A and B, with options to transpose A and/or B. The result is stored in C.
-pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), comptime at: bool, B: RealMatrix(T), comptime bt: bool) void {
+pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), comptime at: bool, B: RealMatrix(T), comptime bt: bool) !void {
+    if (comptime config.use_openblas) {if (A.rows > 32 and A.cols > 32) return try dgemm(T, C, A, at, B, bt);}
+
     for (0..C.rows) |i| for (0..C.cols) |j| {
 
         var sum: T = 0;

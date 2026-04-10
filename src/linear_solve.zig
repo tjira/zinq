@@ -17,7 +17,6 @@ const RealVector = real_vector.RealVector;
 
 const eigensystemHermitianAlloc = eigenproblem_solver.eigensystemHermitianAlloc;
 const mm = matrix_multiplication.mm;
-const mmAlloc = matrix_multiplication.mmAlloc;
 
 const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
