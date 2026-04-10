@@ -9,7 +9,9 @@ TIME_REPORT ?= 0
 WATCH       ?= 0
 WEBUI	    ?= 0
 
-XC ?= 0
+LIBINT   ?= 0
+OPENBLAS ?= 0
+XC       ?= 0
 
 SHELL := $(if $(filter $(OS),Windows_NT),powershell.exe,sh)
 
@@ -25,6 +27,9 @@ ZIG_FLAGS := $(if $(filter 1,$(SUMMARY)),$(ZIG_FLAGS) --summary all,$(ZIG_FLAGS)
 ZIG_FLAGS := $(if $(filter 1,$(TIME_REPORT)),$(ZIG_FLAGS) --time-report,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(WATCH)),$(ZIG_FLAGS) --watch,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(WEBUI)),$(ZIG_FLAGS) --webui=[::1]:12345,$(ZIG_FLAGS))
+
+ZIG_FLAGS := $(if $(filter 1,$(LIBINT)),$(ZIG_FLAGS) -Duse-libint=true,$(ZIG_FLAGS))
+ZIG_FLAGS := $(if $(filter 1,$(OPENBLAS)),$(ZIG_FLAGS) -Duse-openblas=true,$(ZIG_FLAGS))
 ZIG_FLAGS := $(if $(filter 1,$(XC)),$(ZIG_FLAGS) -Duse-xc=true,$(ZIG_FLAGS))
 
 HAS_ZIG := $(shell $(if $(filter windows,$(OS)),(Get-Command zig -ErrorAction SilentlyContinue).Path,command -v zig 2> /dev/null))

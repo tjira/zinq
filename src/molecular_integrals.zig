@@ -2,10 +2,13 @@
 
 const std = @import("std");
 
+const config = @import("config");
+
 const basis_set = @import("basis_set.zig");
 const classical_particle = @import("classical_particle.zig");
 const contracted_gaussian = @import("contracted_gaussian.zig");
 const device_write = @import("device_write.zig");
+const libint = @import("libint.zig");
 const real_matrix = @import("real_matrix.zig");
 const real_tensor_four = @import("real_tensor_four.zig");
 
@@ -88,7 +91,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         if (enable_printing) try print("OVERLAP INTEGRALS: ", .{});
 
-        output.S = try overlap(T, basis, opt.nthread, allocator);
+        output.S = try overlap(T, system, basis, opt.nthread, allocator);
 
         if (enable_printing) try print("{D}\n", .{timer.read()});
 
@@ -101,7 +104,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         if (enable_printing) try print("KINETIC INTEGRALS: ", .{});
 
-        output.K = try kinetic(T, basis, opt.nthread, allocator);
+        output.K = try kinetic(T, system, basis, opt.nthread, allocator);
 
         if (enable_printing) try print("{D}\n", .{timer.read()});
 
@@ -127,7 +130,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
         if (enable_printing) try print("COULOMB INTEGRALS: ", .{});
 
-        output.J = try coulomb(T, basis, opt.nthread, allocator);
+        output.J = try coulomb(T, system, basis, opt.nthread, allocator);
 
         if (enable_printing) try print("{D}\n", .{timer.read()});
 
@@ -138,8 +141,10 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 }
 
 /// Compute the coulomb tensor.
-pub fn coulomb(comptime T: type, basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealTensor4(T) {
-    var J = try RealTensor4(T).init(.{basis.nbf(), basis.nbf(), basis.nbf(), basis.nbf()}, allocator);
+pub fn coulomb(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealTensor4(T) {
+    var J = try RealTensor4(T).init(.{basis.nbf(), basis.nbf(), basis.nbf(), basis.nbf()}, allocator); errdefer J.deinit(allocator);
+
+    if (comptime config.use_libint) {try libint.coulomb(T, &J, system, basis); return J;}
 
     if (nthread == 1) {for (0..J.shape[0]) |i| for (i..J.shape[1]) |j| for (i..J.shape[2]) |k| for ((if (i == k) j else k)..J.shape[3]) |l| {coulombAssign(T, &J, i, j, k, l, basis);}; return J;}
 
@@ -168,8 +173,10 @@ pub fn coulombAssign(comptime T: type, J: *RealTensor4(T), i: usize, j: usize, k
 }
 
 /// Compute the kinetic matrix.
-pub fn kinetic(comptime T: type, basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
+pub fn kinetic(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var K = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
+
+    if (comptime config.use_libint) {try libint.kinetic(T, &K, system, basis); return K;}
 
     if (nthread == 1) {for (0..K.rows) |i| for (i..K.cols) |j| {kineticAssign(T, &K, i, j, basis);}; return K;}
 
@@ -191,6 +198,8 @@ pub fn kineticAssign(comptime T: type, K: *RealMatrix(T), i: usize, j: usize, ba
 pub fn nuclear(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var V = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
+    if (comptime config.use_libint) {try libint.nuclear(T, &V, system, basis); return V;}
+
     if (nthread == 1) {for (0..V.rows) |i| for (i..V.cols) |j| {nuclearAssign(T, &V, i, j, system, basis);}; return V;}
 
     var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
@@ -208,8 +217,10 @@ pub fn nuclearAssign(comptime T: type, V: *RealMatrix(T), i: usize, j: usize, sy
 }
 
 /// Compute the overlap matrix.
-pub fn overlap(comptime T: type, basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
+pub fn overlap(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var S = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
+
+    if (comptime config.use_libint) {try libint.overlap(T, &S, system, basis); return S;}
 
     if (nthread == 1) {for (0..S.rows) |i| for (i..S.cols) |j| {overlapAssign(T, &S, i, j, basis);}; return S;}
 

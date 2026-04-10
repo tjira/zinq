@@ -4,9 +4,12 @@ const std = @import("std");
 
 const config = @import("config");
 
-const xc = if (config.use_xc) @cImport(@cInclude("xc.h")) else struct {};
-
+const libxc = @import("libxc.zig");
 const real_vector = @import("real_vector.zig");
+
+const computeExchangeCorrelationArrayLibxc = libxc.computeExchangeCorrelationArrayLibxc;
+const getFunctionalFamilyLibxc = libxc.getFunctionalFamilyLibxc;
+const getFunctionalKindLibxc = libxc.getFunctionalKindLibxc;
 
 const RealVector = real_vector.RealVector;
 
@@ -37,23 +40,9 @@ pub fn CorrelationFunctional(comptime T: type) type {
 
 /// Get the functional family.
 pub fn getFunctionalFamily(name: [:0]const u8) !enum{lda, gga, mgga} {
-    if (comptime config.use_xc) {
-
-        const func_id = xc.xc_functional_get_number(name.ptr); var func: xc.xc_func_type = undefined;
-
-        if (xc.xc_func_init(&func, func_id, xc.XC_UNPOLARIZED) != 0) {
-            std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC", .{name}); return error.InputError;
-        }
-
-        defer xc.xc_func_end(&func);
-
-        switch (func.info.*.family) {
-            xc.XC_FAMILY_LDA, xc.XC_FAMILY_HYB_LDA => return .lda,
-            xc.XC_FAMILY_GGA, xc.XC_FAMILY_HYB_GGA => return .gga,
-            xc.XC_FAMILY_MGGA, xc.XC_FAMILY_HYB_MGGA => return .mgga,
-            else => {std.log.err("CANNOT IDENTIFY FUNCTIONAL FAMILY", .{}); return error.InputError;}
-        }
-    }
+    if (comptime config.use_xc) return switch(try getFunctionalFamilyLibxc(name)) {
+        .lda => .lda, .gga => .gga, .mgga => .mgga
+    };
 
     const kind_map = .{
         .{"LDA_X",          .lda},
@@ -68,24 +57,9 @@ pub fn getFunctionalFamily(name: [:0]const u8) !enum{lda, gga, mgga} {
 
 /// Get the functional kind.
 pub fn getFunctionalKind(name: [:0]const u8) !enum{exchange, correlation, exchange_correlation, kinetic} {
-    if (comptime config.use_xc) {
-
-        const func_id = xc.xc_functional_get_number(name.ptr); var func: xc.xc_func_type = undefined;
-
-        if (xc.xc_func_init(&func, func_id, xc.XC_UNPOLARIZED) != 0) {
-            std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC", .{name}); return error.InputError;
-        }
-
-        defer xc.xc_func_end(&func);
-
-        switch (func.info.*.kind) {
-            xc.XC_EXCHANGE => return .exchange,
-            xc.XC_CORRELATION => return .correlation,
-            xc.XC_EXCHANGE_CORRELATION => return .exchange_correlation,
-            xc.XC_KINETIC => return .kinetic,
-            else => {std.log.err("CANNOT IDENTIFY FUNCTIONAL KIND", .{}); return error.InputError;}
-        }
-    }
+    if (comptime config.use_xc) return switch(try getFunctionalKindLibxc(name)) {
+        .exchange => .exchange, .correlation => .correlation, .exchange_correlation => .exchange_correlation, .kinetic => .kinetic
+    };
 
     const kind_map = .{
         .{"LDA_X",          .exchange   },
@@ -98,33 +72,6 @@ pub fn getFunctionalKind(name: [:0]const u8) !enum{exchange, correlation, exchan
     } else {std.log.err("FUNCTIONAL '{s}' NOT FOUND", .{name}); return error.InputError;}
 }
 
-/// Evaluate functional using libxc.
-pub fn evaluateLibxc(comptime T: type, result: *RealVector(T), name: ?[:0]const u8, rho: RealVector(T), comptime derivative: u32) !void {
-    if (name == null) return result.zero();
-
-    const func_id = xc.xc_functional_get_number(name.?.ptr); var func: xc.xc_func_type = undefined;
-
-    if (xc.xc_func_init(&func, func_id, xc.XC_UNPOLARIZED) != 0) {
-        std.log.err("FUNCTIONAL '{s}' NOT FOUND IN LIBXC\n", .{name.?}); return error.InputError;
-    }
-
-    defer xc.xc_func_end(&func);
-
-    if (derivative == 0) switch (func.info.*.family) {
-        xc.XC_FAMILY_LDA => xc.xc_lda_exc(&func, rho.len, rho.data.ptr, result.data.ptr),
-        else => {std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{}); return error.InputError;}
-    };
-
-    if (derivative == 1) switch (func.info.*.family) {
-        xc.XC_FAMILY_LDA => xc.xc_lda_vxc(&func, rho.len, rho.data.ptr, result.data.ptr),
-        else => {std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{}); return error.InputError;}
-    };
-
-    if (derivative == 2) switch (func.info.*.family) {
-        xc.XC_FAMILY_LDA => xc.xc_lda_fxc(&func, rho.len, rho.data.ptr, result.data.ptr),
-        else => {std.log.err("THIS FUNCTIONAL FAMILY IS NOT YET IMPLEMENTED", .{}); return error.InputError;}
-    };
-}
 
 /// Compute the exchange-correlation energy per particle for a given electron density `rho` using the specified DFT functional.
 pub fn computeExchangeCorrelationArray(comptime T: type, exc: *RealVector(T), cor: *RealVector(T), functional: DensityFunctional(T), rho: RealVector(T), comptime derivative: u32) !void {
@@ -146,10 +93,10 @@ pub fn computeExchangeCorrelationArray(comptime T: type, exc: *RealVector(T), co
 
     if (comptime config.use_xc) {
 
-        try evaluateLibxc(T, exc, functional.exchange,    rho, derivative);
-        try evaluateLibxc(T, cor, functional.correlation, rho, derivative);
+        try computeExchangeCorrelationArrayLibxc(T, exc, functional.exchange,    rho, derivative);
+        try computeExchangeCorrelationArrayLibxc(T, cor, functional.correlation, rho, derivative);
 
-        if (functional.exchange_correlation != null) try evaluateLibxc(T, cor, functional.exchange_correlation, rho, derivative);
+        if (functional.exchange_correlation != null) try computeExchangeCorrelationArrayLibxc(T, cor, functional.exchange_correlation, rho, derivative);
 
         return;
     }

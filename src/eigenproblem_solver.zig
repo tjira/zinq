@@ -2,7 +2,10 @@
 
 const std = @import("std");
 
+const config = @import("config");
+
 const complex_matrix = @import("complex_matrix.zig");
+const openblas = @import("openblas.zig");
 const real_matrix = @import("real_matrix.zig");
 
 const Complex = std.math.complex.Complex;
@@ -11,15 +14,17 @@ const RealMatrix = real_matrix.RealMatrix;
 
 /// Diagonalize a complex hermitian matrix A. The provided matrix is overwritten by the diagonal form.
 pub fn diagonalizeHermitian(comptime T: type, A: anytype) !void {
-    if (comptime @TypeOf(A.*) == RealMatrix(T)) {try eigensystemHermitianJacobi(RealMatrix, T, A, null, A.*);}
-    else if (comptime @TypeOf(A.*) == ComplexMatrix(T)) {try eigensystemHermitianJacobi(ComplexMatrix, T, A, null, A.*);}
+    if (comptime @TypeOf(A.*) == RealMatrix(T)) {return try eigensystemHermitianJacobi(RealMatrix, T, A, null, A.*);}
+    else if (comptime @TypeOf(A.*) == ComplexMatrix(T)) {return try eigensystemHermitianJacobi(ComplexMatrix, T, A, null, A.*);}
     else @compileError("UNSUPPORTED INPUT MATRIX TYPE IN HERMITIAN DIAGONALIZATION");
 }
 
 /// Solve the eigenproblem for a complex hermitian system.
 pub fn eigensystemHermitian(comptime T: type, J: anytype, C: anytype, A: anytype) !void {
-    if (comptime @TypeOf(A) == RealMatrix(T)) {try eigensystemHermitianJacobi(RealMatrix, T, J, C, A);}
-    else if (comptime @TypeOf(A) == ComplexMatrix(T)) {try eigensystemHermitianJacobi(ComplexMatrix, T, J, C, A);}
+    if (comptime @TypeOf(A) == RealMatrix(T) and config.use_openblas) if (A.rows > 32) {return try openblas.dsyevd(T, J, C, A);};
+
+    if (comptime @TypeOf(A) == RealMatrix(T)) {return try eigensystemHermitianJacobi(RealMatrix, T, J, C, A);}
+    else if (comptime @TypeOf(A) == ComplexMatrix(T)) {return try eigensystemHermitianJacobi(ComplexMatrix, T, J, C, A);}
     else @compileError("UNSUPPORTED INPUT MATRIX TYPE IN HERMITIAN EIGENSOLVER");
 }
 

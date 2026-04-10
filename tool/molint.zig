@@ -62,11 +62,10 @@ pub fn main() !void {
 
         var S: ?RealMatrix(f64) = null; var T: ?RealMatrix(f64) = null; var V: ?RealMatrix(f64) = null; var J: ?RealTensor4(f64) = null;
 
-        if (overlap_path) |_| S = try overlap(f64, basis, 1, allocator);
-        if (kinetic_path) |_| T = try kinetic(f64, basis, 1, allocator);
-        if (coulomb_path) |_| J = try coulomb(f64, basis, 1, allocator);
-
+        if (coulomb_path) |_| J = try coulomb(f64, system, basis, 1, allocator);
+        if (kinetic_path) |_| T = try kinetic(f64, system, basis, 1, allocator);
         if (nuclear_path) |_| V = try nuclear(f64, system, basis, 1, allocator);
+        if (overlap_path) |_| S = try overlap(f64, system, basis, 1, allocator);
 
         try print("{D}\n", .{timer_integrals.read()});
 

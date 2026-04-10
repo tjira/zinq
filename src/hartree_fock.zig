@@ -2,6 +2,8 @@
 
 const std = @import("std");
 
+const config = @import("config");
+
 const basis_set = @import("basis_set.zig");
 const classical_particle = @import("classical_particle.zig");
 const contracted_gaussian = @import("contracted_gaussian.zig");
@@ -42,7 +44,7 @@ const exportRealMatrix = device_write.exportRealMatrix;
 const exportRealTensorFour = device_write.exportRealTensorFour;
 const getGrid = dft_grid.getGrid;
 const kinetic = molecular_integrals.kinetic;
-const linearSolveHermitian = linear_solve.linearSolveHermitian;
+const linearSolveHermitianAlloc = linear_solve.linearSolveHermitianAlloc;
 const mm = matrix_multiplication.mm;
 const mmAlloc = matrix_multiplication.mmAlloc;
 const nuclear = molecular_integrals.nuclear;
@@ -210,9 +212,6 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
 
     var A = try RealMatrix(T).init(size + 1, size + 1, allocator); defer A.deinit(allocator);
     var b = try RealVector(T).init(size + 1,           allocator); defer b.deinit(allocator);
-    var c = try RealVector(T).init(size + 1,           allocator); defer c.deinit(allocator);
-
-    var temporary = try RealVector(T).init(c.len, allocator); defer temporary.deinit(allocator);
 
     A.fill(1); b.fill(0); A.ptr(A.rows - 1, A.cols - 1).* = 0; b.ptr(b.len - 1).* = 1;
 
@@ -230,9 +229,7 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
         A.ptr(j, i).* = A.at(i, j);
     };
 
-    const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
-
-    linearSolveHermitian(T, &c, AJC.J, AJC.C, b, &temporary) catch return false;
+    const c = linearSolveHermitianAlloc(T, A, b, allocator) catch return false; defer c.deinit(allocator);
 
     F.zero();
 
@@ -329,8 +326,8 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     var timer = try std.time.Timer.start();
 
-    var S = try overlap(T, basis, opt.nthread, allocator);
-    var K = try kinetic(T, basis, opt.nthread, allocator);
+    var S = try overlap(T, system, basis, opt.nthread, allocator);
+    var K = try kinetic(T, system, basis, opt.nthread, allocator);
     var V = try nuclear(T, system, basis, opt.nthread, allocator);
 
     if (opt.generalized) {
@@ -343,7 +340,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
 
     if (enable_printing) try print("TWO-ELECTRON INTEGRALS: ", .{});
 
-    var J = try coulomb(T, basis, opt.nthread, allocator);
+    var J = try coulomb(T, system, basis, opt.nthread, allocator);
 
     if (opt.generalized) {
         try twoAO2AS(T, &J, allocator);
@@ -517,5 +514,6 @@ test "Generalized Hartree-Fock Calculation for a Methane Molecule with 6-31G* Ba
 
     var output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(output.energy, -40.19517074914403, TEST_TOLERANCE);
+    if (comptime !config.use_libint) try std.testing.expectApproxEqAbs(output.energy, -40.19517074914403, TEST_TOLERANCE);
+    if (comptime  config.use_libint) try std.testing.expectApproxEqAbs(output.energy, -40.19517074970759, TEST_TOLERANCE);
 }
