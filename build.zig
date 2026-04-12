@@ -47,10 +47,11 @@ pub fn build(builder: *std.Build) !void {
 
     if (link_c) {
 
-        main_executable.root_module.addIncludePath(.{.cwd_relative = "include"                });
-        main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"       });
-        main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/eigen3"});
-        main_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"           });
+        main_executable.root_module.addIncludePath(.{.cwd_relative = "include"                 });
+        main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"        });
+        main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/eigen3" });
+        main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/libint2"});
+        main_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"            });
 
         main_executable.linkLibC(); if (use_libint) main_executable.linkLibCpp();
 
@@ -118,10 +119,11 @@ pub fn addLibcLinkedExecutables(builder: *std.Build, optimize: std.builtin.Optim
         })
     });
 
-    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "include"                });
-    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"       });
-    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/eigen3"});
-    libc_linked_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"           });
+    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "include"                 });
+    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"        });
+    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/eigen3" });
+    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/libint2"});
+    libc_linked_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"            });
 
     libc_linked_executable.linkLibC(); if (use_libint) libc_linked_executable.linkLibCpp();
 
