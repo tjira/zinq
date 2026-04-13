@@ -1,6 +1,7 @@
 #!/bin/bash
 
-TARGETS=(x86_64-linux-musl)
+# TARGETS AND HOST
+TARGETS=(aarch64-linux-musl x86_64-linux-musl) && HOST="x86_64-linux-musl"
 
 # CLEAN PREVIOUS LIBRARIES
 rm -rf lib && mkdir lib
@@ -16,6 +17,7 @@ for TARGET in "${TARGETS[@]}"; do
     # CLEAN PREVIOUS INSTALLATIONS
     rm -rf external-$(echo $TARGET | cut -d- -f1-2) && rm -rf lib/clibint
 
+    # CLEAN LIBRARIES
     for DIR in lib/*; do cd $DIR && git clean -dffx && cd -; done
 
     # CORES AND PREFIX
@@ -46,6 +48,8 @@ for TARGET in "${TARGETS[@]}"; do
 
     # LIBXC COMPILATION OPTIONS
     MAKE_LIBXC=(
+        --disable-fortran
+        --host=$HOST
         --prefix=$PREFIX
     )
 
@@ -56,7 +60,11 @@ for TARGET in "${TARGETS[@]}"; do
         NO_SHARED=1
         NUM_THREADS=128
         PREFIX=$PREFIX
+        TARGET=GENERIC
     )
+
+    # UNSET COMPILERS
+    unset CC CXX AR RANLIB
 
     # COMPILE LIBINT COMPILER
     cd lib/libint && cmake "${MAKE_LIBINT_COMPILER[@]}" && cmake --build build --parallel $CORES --target build_libint --verbose && cmake --build build --target export && cd ../..

@@ -97,10 +97,17 @@ pub fn build(builder: *std.Build) !void {
 
         try install(builder, matrix_executable, cross, false); try addTools(builder, matrix_executable, cross, false);
 
-        const matches_host = resolved.result.os.tag == builtin.os.tag and resolved.result.cpu.arch == builtin.cpu.arch;
-
-        if (link_c and matches_host) try addLibcLinkedExecutables(builder, optimize, targets[i], cross, use_libint, use_openblas, use_xc);
+        if (link_c and checkLibcLinkAvailability(resolved)) try addLibcLinkedExecutables(builder, optimize, targets[i], cross, use_libint, use_openblas, use_xc);
     }
+}
+
+pub fn checkLibcLinkAvailability(target: std.Build.ResolvedTarget) bool {
+    const os = target.result.os.tag; const arch = target.result.cpu.arch;
+
+    if (os == .linux and arch == .x86_64 ) return true;
+    if (os == .linux and arch == .aarch64) return true;
+
+    return false;
 }
 
 pub fn addLibcLinkedExecutables(builder: *std.Build, optimize: std.builtin.OptimizeMode, target_query: std.Target.Query, step: *std.Build.Step, use_libint: bool, use_openblas: bool, use_xc: bool) !void {
