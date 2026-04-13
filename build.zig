@@ -193,7 +193,7 @@ pub fn generateOptions(builder: *std.Build, use_libint: bool, use_openblas: bool
 }
 
 fn getVersion(builder: *std.Build, dir: ?[]const u8) ![]const u8 {
-    const cwd = if (dir) |d| try std.fs.cwd().openDir(d, .{}) else std.fs.cwd();
+    const cwd = if (dir) |d| std.fs.cwd().openDir(d, .{}) catch return "UNKNOWN" else std.fs.cwd();
 
     const result = std.process.Child.run(.{.allocator = builder.allocator, .argv = &.{"git", "describe", "--tags"}, .cwd_dir = cwd}) catch {
         return "UNKNOWN";
