@@ -283,12 +283,29 @@ pub fn main() !void {
 
     try device_write.print("ZIG: v{d}.{d}.{d}, ZINQ: {s}", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.zinq_version});
 
-    if (comptime config.use_xc) try device_write.print(", LIBXC: v{s}", .{xc.xc_version_string()});
-
     {
         const ts = try timestamp.timestamp(allocator); defer allocator.free(ts);
 
         try device_write.print(", TIMESTAMP: {s}\n", .{ts});
+    }
+
+    if (comptime config.use_libint or config.use_openblas or config.use_xc) {
+
+        try device_write.print("\nLIBRARIES: ", .{}); var needs_comma = false;
+
+        if (comptime config.use_libint) {
+            try device_write.print("LIBINT {s}", .{config.libint_version}); needs_comma = true;
+        }
+        
+        if (comptime config.use_openblas) {
+            if (needs_comma) try device_write.print(", ", .{}); try device_write.print("OPENBLAS {s}", .{config.openblas_version}); needs_comma = true;
+        }
+        
+        if (comptime config.use_xc) {
+            if (needs_comma) try device_write.print(", ", .{}); try device_write.print("LIBXC v{s}", .{config.libxc_version});
+        }
+
+        try device_write.print("\n", .{});
     }
 
     var argc: usize = 0; var argv = try std.process.argsWithAllocator(allocator); defer argv.deinit(); _ = argv.next();

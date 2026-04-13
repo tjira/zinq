@@ -32,7 +32,7 @@ pub fn build(builder: *std.Build) !void {
 
     const link_c = use_xc or use_openblas or use_libint;
 
-    const main_options = generateOptions(builder, use_libint, use_openblas, use_xc);
+    const main_options = try generateOptions(builder, use_libint, use_openblas, use_xc);
 
     const main_executable = builder.addExecutable(.{
         .name = "zinq",
@@ -47,11 +47,7 @@ pub fn build(builder: *std.Build) !void {
 
     if (link_c) {
 
-        main_executable.root_module.addIncludePath(.{.cwd_relative = "include"                 });
-        main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"        });
-        main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/eigen3" });
-        main_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/libint2"});
-        main_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"            });
+        try addPaths(builder, main_executable, target);
 
         main_executable.linkLibC(); if (use_libint) main_executable.linkLibCpp();
 
@@ -97,7 +93,7 @@ pub fn build(builder: *std.Build) !void {
             })
         });
 
-        matrix_executable.root_module.addOptions("config", generateOptions(builder, false, false, false));
+        matrix_executable.root_module.addOptions("config", try generateOptions(builder, false, false, false));
 
         try install(builder, matrix_executable, cross, false); try addTools(builder, matrix_executable, cross, false);
 
@@ -108,6 +104,8 @@ pub fn build(builder: *std.Build) !void {
 }
 
 pub fn addLibcLinkedExecutables(builder: *std.Build, optimize: std.builtin.OptimizeMode, target_query: std.Target.Query, step: *std.Build.Step, use_libint: bool, use_openblas: bool, use_xc: bool) !void {
+    const target = builder.resolveTargetQuery(target_query);
+
     const libc_linked_executable = builder.addExecutable(.{
         .name = "zinq",
         .root_module = builder.createModule(.{
@@ -115,15 +113,11 @@ pub fn addLibcLinkedExecutables(builder: *std.Build, optimize: std.builtin.Optim
             .root_source_file = builder.path("src/main.zig"),
             .strip = optimize != .Debug,
             .single_threaded = false,
-            .target = builder.resolveTargetQuery(target_query)
+            .target = target
         })
     });
 
-    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "include"                 });
-    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "external/include"        });
-    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/eigen3" });
-    libc_linked_executable.root_module.addIncludePath(.{.cwd_relative = "external/include/libint2"});
-    libc_linked_executable.root_module.addLibraryPath(.{.cwd_relative = "external/lib"            });
+    try addPaths(builder, libc_linked_executable, target);
 
     libc_linked_executable.linkLibC(); if (use_libint) libc_linked_executable.linkLibCpp();
 
@@ -133,9 +127,25 @@ pub fn addLibcLinkedExecutables(builder: *std.Build, optimize: std.builtin.Optim
     if (use_openblas) libc_linked_executable.linkSystemLibrary("openblas");
     if (use_xc      ) libc_linked_executable.linkSystemLibrary("xc"      );
 
-    libc_linked_executable.root_module.addOptions("config", generateOptions(builder, use_libint, use_openblas, use_xc));
+    libc_linked_executable.root_module.addOptions("config", try generateOptions(builder, use_libint, use_openblas, use_xc));
 
     try install(builder, libc_linked_executable, step, true); try addTools(builder, libc_linked_executable, step, true);
+}
+
+pub fn addPaths(builder: *std.Build, executable: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) !void {
+    const arch_name = @tagName(target.result.cpu.arch);
+    const os_name   = @tagName(target.result.os.tag  );
+
+    const include        = try std.mem.concat(builder.allocator, u8, &[_][]const u8{"external-", arch_name, "-", os_name, "/include"        });
+    const include_eigen  = try std.mem.concat(builder.allocator, u8, &[_][]const u8{"external-", arch_name, "-", os_name, "/include/eigen3" });
+    const include_libint = try std.mem.concat(builder.allocator, u8, &[_][]const u8{"external-", arch_name, "-", os_name, "/include/libint2"});
+    const lib            = try std.mem.concat(builder.allocator, u8, &[_][]const u8{"external-", arch_name, "-", os_name, "/lib"            });
+
+    executable.root_module.addIncludePath(.{.cwd_relative = "include"     });
+    executable.root_module.addIncludePath(.{.cwd_relative = include       });
+    executable.root_module.addIncludePath(.{.cwd_relative = include_eigen });
+    executable.root_module.addIncludePath(.{.cwd_relative = include_libint});
+    executable.root_module.addLibraryPath(.{.cwd_relative = lib           });
 }
 
 pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, step: *std.Build.Step, libc: bool) !void {
@@ -167,10 +177,13 @@ pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, s
     }
 }
 
-pub fn generateOptions(builder: *std.Build, use_libint: bool, use_openblas: bool, use_xc: bool) *std.Build.Step.Options {
+pub fn generateOptions(builder: *std.Build, use_libint: bool, use_openblas: bool, use_xc: bool) !*std.Build.Step.Options {
     const options = builder.addOptions();
 
-    options.addOption([]const u8, "zinq_version", getVersion(builder));
+    options.addOption([]const u8, "libint_version",   try getVersion(builder, "lib/libint"  ));
+    options.addOption([]const u8, "openblas_version", try getVersion(builder, "lib/openblas"));
+    options.addOption([]const u8, "libxc_version",    try getVersion(builder, "lib/libxc"   ));
+    options.addOption([]const u8, "zinq_version",     try getVersion(builder, null          ));
 
     options.addOption(bool, "use_libint",   use_libint  );
     options.addOption(bool, "use_openblas", use_openblas);
@@ -179,8 +192,10 @@ pub fn generateOptions(builder: *std.Build, use_libint: bool, use_openblas: bool
     return options;
 }
 
-fn getVersion(builder: *std.Build) []const u8 {
-    const result = std.process.Child.run(.{.allocator = builder.allocator, .argv = &.{"git", "describe", "--tags"}}) catch {
+fn getVersion(builder: *std.Build, dir: ?[]const u8) ![]const u8 {
+    const cwd = if (dir) |d| try std.fs.cwd().openDir(d, .{}) else std.fs.cwd();
+
+    const result = std.process.Child.run(.{.allocator = builder.allocator, .argv = &.{"git", "describe", "--tags"}, .cwd_dir = cwd}) catch {
         return "UNKNOWN";
     };
 
