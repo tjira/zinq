@@ -27,7 +27,7 @@ jobs:
         run: ./script/compile_libs.sh
 
       - name: Compile Project
-        run: zig build -Duse-xc=true --release=fast cross
+        run: zig build -Duse-libint=true -Duse-openblas=true -Duse-xc=true --release=fast cross
 
       - name: Move Binaries
         run: |
