@@ -14,12 +14,8 @@ pub fn sum(comptime T: type, arr: []const T) T {
 }
 
 pub fn mean(comptime T: type, arr: []const T) T {
-    var result: T = 0;
-    const len = @as(T, @floatFromInt(arr.len));
-
-    for (arr) |value| result += value / len;
-
-    return result;
+    if (arr.len == 0) return 0;
+    return sum(T, arr) / @as(T, @floatFromInt(arr.len));
 }
 
 /// Product of elements in an array.
@@ -46,4 +42,16 @@ pub fn sd(comptime T: type, arr: []const T) T {
     }
 
     return std.math.sqrt(variance / (len - 1));
+}
+
+test "array functions" {
+    const testing = std.testing;
+
+    const data = [_]f64{ 1.0, 2.0, 3.0, 4.0, 5.0 };
+
+    try testing.expectEqual(@as(f64, 15.0), sum(f64, &data));
+    try testing.expectEqual(@as(f64, 3.0), mean(f64, &data));
+    try testing.expectEqual(@as(f64, 120.0), prod(f64, &data));
+
+    try testing.expectApproxEqAbs(@as(f64, 1.5811388300841898), sd(f64, &data), 1e-10);
 }

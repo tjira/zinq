@@ -75,7 +75,7 @@ pub fn mm(comptime T: type, C: anytype, A: anytype, comptime at: bool, B: anytyp
     if (comptime @TypeOf(C.*) == RealMatrix(T)) {
         return try mmReal(T, C, A, at, B, bt);
     } else if (comptime @TypeOf(C.*) == ComplexMatrix(T)) {
-        return mmComplex(T, C, A, at, B, bt);
+        return try mmComplex(T, C, A, at, B, bt);
     } else @compileError("UNSUPPORTED MATRIX TYPE IN MATRIX MULTIPLICATION");
 }
 
@@ -92,7 +92,7 @@ pub fn mmAlloc(comptime T: type, A: anytype, comptime at: bool, B: anytype, comp
 }
 
 /// Matrix multiplication function between two complex matrices A and B, with options to transpose A and/or B. The result is stored in C.
-pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: anytype, comptime at: bool, B: anytype, comptime bt: bool) void {
+pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: anytype, comptime at: bool, B: anytype, comptime bt: bool) !void {
     if (comptime config.use_openblas and @TypeOf(A) == ComplexMatrix(T) and @TypeOf(B) == ComplexMatrix(T)) {
         if (A.rows > 32 and A.cols > 32) return try zgemm(T, C, A, at, B, bt);
     }

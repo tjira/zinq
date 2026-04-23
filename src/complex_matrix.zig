@@ -39,7 +39,7 @@ pub fn ComplexMatrix(comptime T: type) type {
             if (self.rows != other.rows or self.cols != other.cols) {
                 std.log.err("CANNOT ADD MATRICES OF DIFFERENT SIZES, FIRST WITH SIZE {d}x{d}, SECOND WITH SIZE {d}x{d}", .{ self.rows, self.cols, other.rows, other.cols });
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             for (self.data, 0..) |*element, index| {
@@ -67,7 +67,7 @@ pub fn ComplexMatrix(comptime T: type) type {
             if (self.rows != other.rows or self.cols != other.cols) {
                 std.log.err("CANNOT COPY MATRICES OF DIFFERENT SIZES, FIRST WITH SIZE {d}x{d}, SECOND WITH SIZE {d}x{d}", .{ self.rows, self.cols, other.rows, other.cols });
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             for (self.data, 0..) |element, index| {

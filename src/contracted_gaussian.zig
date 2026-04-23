@@ -25,7 +25,7 @@ pub fn ContractedGaussian(comptime T: type) type {
             if (coef.len != alpha.len) {
                 std.log.err("COEFFICIENT AND EXPONENT ARRAYS MUST HAVE THE SAME LENGTH, COEFFICIENTS LENGTH {d}, EXPONENTS LENGTH {d}", .{ coef.len, alpha.len });
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             const cg = ContractedGaussian(T){

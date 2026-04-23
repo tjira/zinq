@@ -249,7 +249,10 @@ pub fn diisExtrapolate(comptime T: type, F: *RealMatrix(T), DIIS_F: RealMatrixAr
         A.ptr(j, i).* = A.at(i, j);
     };
 
-    const c = linearSolveHermitianAlloc(T, A, b, allocator) catch return false;
+    const c = linearSolveHermitianAlloc(T, A, b, allocator) catch |err| switch (err) {
+        error.NumericalError => return false,
+        else => return err,
+    };
     defer c.deinit(allocator);
 
     F.zero();

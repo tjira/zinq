@@ -50,7 +50,7 @@ pub fn combinations(comptime T: type, array: []const T, n: usize, allocator: std
 
 /// Calculate the double factorial of a number.
 pub fn dfact(n: anytype) @TypeOf(n) {
-    if (n == -1 or n == 0 or n == 1) return 1;
+    if (n <= 1) return 1;
 
     if (n == 2) return 2;
 

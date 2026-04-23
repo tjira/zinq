@@ -136,7 +136,7 @@ const Target = enum {
 };
 
 /// Find out if the input JSON file contains an unrecognized field and print the expected field.
-pub fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value, err: anyerror) !void {
+pub fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value) !void {
     for (options.object.keys()) |provided| {
         var found = false;
 
@@ -159,13 +159,13 @@ pub fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value
         };
 
         if (@typeInfo(BaseType) == .@"struct") if (options.object.get(field.name)) |nested_value| if (nested_value == .object) {
-            try checkForUnrecognizedFields(BaseType, nested_value, err);
+            try checkForUnrecognizedFields(BaseType, nested_value);
         };
     }
 }
 
 /// Find out if the input JSON file contains a missing field and print the expected field.
-pub fn checkForMissingFields(comptime Struct: type, options: std.json.Value, err: anyerror) !void {
+pub fn checkForMissingFields(comptime Struct: type, options: std.json.Value) !void {
     inline for (std.meta.fields(Struct)) |field| {
         if (!options.object.contains(field.name)) {
             if (field.default_value_ptr == null) {
@@ -177,7 +177,7 @@ pub fn checkForMissingFields(comptime Struct: type, options: std.json.Value, err
             const nested_value = options.object.get(field.name).?;
 
             if (nested_value == .object) {
-                try checkForMissingFields(field.type, nested_value, err);
+                try checkForMissingFields(field.type, nested_value);
             }
         }
     }
@@ -186,8 +186,8 @@ pub fn checkForMissingFields(comptime Struct: type, options: std.json.Value, err
 /// Handle a specific module by parsing its options and running it.
 pub fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
     var parsed = std.json.parseFromValue(Module.Options(T), allocator, options, .{}) catch |err| {
-        try checkForUnrecognizedFields(Module.Options(T), options, err);
-        try checkForMissingFields(Module.Options(T), options, err);
+        try checkForUnrecognizedFields(Module.Options(T), options);
+        try checkForMissingFields(Module.Options(T), options);
 
         return err;
     };

@@ -35,7 +35,7 @@ pub fn RealVector(comptime T: type) type {
             if (self.len != other.len) {
                 std.log.err("CANNOT ADD VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             for (self.data, 0..) |*element, index| {
@@ -67,7 +67,7 @@ pub fn RealVector(comptime T: type) type {
             if (self.len != other.len) {
                 std.log.err("CANNOT COPY VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             for (self.data, 0..) |element, index| {
@@ -80,13 +80,13 @@ pub fn RealVector(comptime T: type) type {
             if (self.len != other.len) {
                 std.log.err("CANNOT CALCULATE COVARIANCE OF VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             if (self.len < 2) {
                 std.log.err("CANNOT CALCULATE COVARIANCE OF VECTORS WITH LESS THAN 2 ELEMENTS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             var total: T = 0;
@@ -155,7 +155,7 @@ pub fn RealVector(comptime T: type) type {
             if (new_len > self.len) {
                 std.log.err("CANNOT SHRINK VECTOR TO A LENGTH GREATER THAN THE CURRENT LENGTH, CURRENT LENGTH {d}, NEW LENGTH {d}", .{ self.len, new_len });
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             self.data = try allocator.realloc(self.data, new_len);
@@ -172,7 +172,7 @@ pub fn RealVector(comptime T: type) type {
             if (self.len != other.len) {
                 std.log.err("CANNOT SUBTRACT VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
-                return error.ProgrammigError;
+                return error.ProgrammingError;
             }
 
             for (self.data, 0..) |*element, index| {
@@ -194,4 +194,66 @@ pub fn RealVector(comptime T: type) type {
             self.fill(0);
         }
     };
+}
+
+test "RealVector basic operations" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    var v1 = try RealVector(f64).init(3, allocator);
+    defer v1.deinit(allocator);
+    v1.fill(1.0);
+
+    try testing.expectEqual(@as(usize, 3), v1.len);
+    try testing.expectEqual(@as(f64, 1.0), v1.at(0));
+    try testing.expectEqual(@as(f64, 1.0), v1.last());
+
+    var v2 = try RealVector(f64).initZero(3, allocator);
+    defer v2.deinit(allocator);
+    try testing.expectEqual(@as(f64, 0.0), v2.at(0));
+
+    try v2.add(v1);
+    try testing.expectEqual(@as(f64, 1.0), v2.at(0));
+
+    v2.muls(2.0);
+    try testing.expectEqual(@as(f64, 2.0), v2.at(0));
+
+    v2.divs(2.0);
+    try testing.expectEqual(@as(f64, 1.0), v2.at(0));
+
+    try testing.expect(v1.eq(v2, 1e-10));
+
+    try v2.sub(v1);
+    try testing.expectEqual(@as(f64, 0.0), v2.sum());
+
+    v1.ptr(0).* = 3.0;
+    v1.ptr(1).* = 4.0;
+    v1.ptr(2).* = 0.0;
+    try testing.expectEqual(@as(f64, 5.0), v1.norm());
+
+    try v1.shrink(2, allocator);
+    try testing.expectEqual(@as(usize, 2), v1.len);
+    try testing.expectEqual(@as(f64, 7.0), v1.sum());
+}
+
+test "RealVector stats" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    var v1 = try RealVector(f64).init(3, allocator);
+    defer v1.deinit(allocator);
+
+    v1.data[0] = 1.0;
+    v1.data[1] = 2.0;
+    v1.data[2] = 3.0;
+
+    try testing.expectEqual(@as(f64, 2.0), v1.mean());
+
+    var v2 = try RealVector(f64).init(3, allocator);
+    defer v2.deinit(allocator);
+    v2.data[0] = 2.0;
+    v2.data[1] = 4.0;
+    v2.data[2] = 6.0;
+
+    try testing.expectEqual(@as(f64, 2.0), try v1.covariance(v2));
 }

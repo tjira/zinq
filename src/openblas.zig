@@ -46,18 +46,18 @@ pub fn dsyevd(comptime T: type, J: *RealMatrix(T), C: *RealMatrix(T), A: RealMat
 }
 
 /// Calculate the matrix-matrix product C = A * B and store the result in C. The AH and BH flags control whether the matrices A and B are Hermitian transposed or not.
-pub fn zgemm(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), ah: bool, B: ComplexMatrix(T), bh: bool) !void {
+pub fn zgemm(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), comptime ah: bool, B: ComplexMatrix(T), comptime bh: bool) !void {
     if (comptime !config.use_openblas) @compileError("OPENBLAS SUPPORT IS DISABLED IN CONFIG");
 
     const m: i32 = @intCast(C.rows);
     const n: i32 = @intCast(C.cols);
-    const k: i32 = @intCast(if (!ah) A.cols else A.rows);
+    const k: i32 = @intCast(if (comptime !ah) A.cols else A.rows);
 
-    const AH: c_uint = if (ah) cblas.CblasConjTrans else cblas.CblasNoTrans;
-    const BH: c_uint = if (bh) cblas.CblasConjTrans else cblas.CblasNoTrans;
+    const AH: c_uint = if (comptime ah) cblas.CblasConjTrans else cblas.CblasNoTrans;
+    const BH: c_uint = if (comptime bh) cblas.CblasConjTrans else cblas.CblasNoTrans;
 
-    const LDA = if (!ah) k else m;
-    const LDB = if (!bh) n else k;
+    const LDA = if (comptime !ah) k else m;
+    const LDB = if (comptime !bh) n else k;
 
     cblas.cblas_zgemm(cblas.CblasRowMajor, AH, BH, m, n, k, &std.math.Complex(T).init(1.0, 0.0), &A.data[0], LDA, &B.data[0], LDB, &std.math.Complex(T).init(0.0, 0.0), &C.data[0], n);
 }

@@ -55,9 +55,6 @@ pub fn BasisSet(comptime T: type) type {
                     const exponents = shell.object.get("exponents").?.array.items;
                     const coefs = shell.object.get("coefficients").?.array.items;
 
-                    var a = try allocator.alloc(T, 3);
-                    defer allocator.free(a);
-
                     var c = try allocator.alloc(T, exponents.len);
                     defer allocator.free(c);
 
@@ -65,8 +62,10 @@ pub fn BasisSet(comptime T: type) type {
                     defer allocator.free(alpha);
 
                     for (coefs) |coef| {
-                        for (0..alpha.len) |k| c[k] = try std.fmt.parseFloat(T, coef.array.items[k].string);
-                        for (0..alpha.len) |k| alpha[k] = try std.fmt.parseFloat(T, exponents[k].string);
+                        for (0..alpha.len) |k| {
+                            c[k] = try std.fmt.parseFloat(T, coef.array.items[k].string);
+                            alpha[k] = try std.fmt.parseFloat(T, exponents[k].string);
+                        }
 
                         try array.append(allocator, @as(T, @floatFromInt(alpha.len)));
                         try array.append(allocator, @as(T, @floatFromInt(am)));
@@ -83,17 +82,15 @@ pub fn BasisSet(comptime T: type) type {
 
                             for (0..@as(usize, @intCast(am + 1)) - lx) |k| {
                                 const ly = @as(usize, @intCast(am)) - lx - k;
+                                const lz = @as(usize, @intCast(am)) - lx - ly;
 
-                                a[0] = @as(T, @floatFromInt(lx));
-                                a[1] = @as(T, @floatFromInt(ly));
+                                const angular = [3]T{ @as(T, @floatFromInt(lx)), @as(T, @floatFromInt(ly)), @as(T, @floatFromInt(lz)) };
 
-                                a[2] = @as(T, @floatFromInt(am)) - @as(T, @floatFromInt(lx + ly));
-
-                                const center = .{ system.position.data[3 * i], system.position.data[3 * i + 1], system.position.data[3 * i + 2] };
+                                const center = [3]T{ system.position.data[3 * i], system.position.data[3 * i + 1], system.position.data[3 * i + 2] };
 
                                 const an = try std.fmt.parseInt(usize, atomic_number_string[0..atomic_number_length], 10);
 
-                                try basis.append(allocator, try ContractedGaussian(T).init(an, center, .{ a[0], a[1], a[2] }, c, alpha, allocator));
+                                try basis.append(allocator, try ContractedGaussian(T).init(an, center, angular, c, alpha, allocator));
                             }
                         }
                     }
