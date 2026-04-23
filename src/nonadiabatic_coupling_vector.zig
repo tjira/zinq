@@ -21,7 +21,7 @@ pub fn Parameters(comptime T: type) type {
         adiabatic_potential: RealMatrix(T),
         adiabatic_eigenvectors: RealMatrix(T),
         electronic_potential: ElectronicPotential(T),
-        previous_nacv: RealVector(T),
+        previous_nacv: *RealVector(T),
         position: RealVector(T),
         velocity: RealVector(T),
         time: T,
@@ -67,16 +67,17 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
 
             for (0..position.len) |i| {
                 const original_position = position.at(i);
+                var position_ptr = position;
 
-                @constCast(&position).ptr(i).* = original_position + self.finite_differences_step;
+                position_ptr.ptr(i).* = original_position + self.finite_differences_step;
 
-                try parameters.electronic_potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &eigenvectors_plus, position, time);
+                try parameters.electronic_potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &eigenvectors_plus, position_ptr, time);
 
-                @constCast(&position).ptr(i).* = original_position - self.finite_differences_step;
+                position_ptr.ptr(i).* = original_position - self.finite_differences_step;
 
-                try parameters.electronic_potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &eigenvectors_minus, position, time);
+                try parameters.electronic_potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &eigenvectors_minus, position_ptr, time);
 
-                @constCast(&position).ptr(i).* = original_position;
+                position_ptr.ptr(i).* = original_position;
 
                 try fixGauge(T, &eigenvectors_plus, adiabatic_eigenvectors);
                 try fixGauge(T, &eigenvectors_minus, adiabatic_eigenvectors);
@@ -132,7 +133,7 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
                 derivative_coupling.ptr(j, i).* = -derivative_coupling.at(i, j);
             };
 
-            for (0..NACV.rows) |i| @constCast(&params.previous_nacv).ptr(i).* = NACV.at(i, 0);
+            for (0..NACV.rows) |i| params.previous_nacv.ptr(i).* = NACV.at(i, 0);
         }
     };
 }

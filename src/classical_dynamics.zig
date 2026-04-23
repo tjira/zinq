@@ -825,7 +825,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .adiabatic_potential = adiabatic_potential,
         .coefficient = &coefficient,
         .derivative_coupling = time_derivative_coupling,
-        .runge_kutta = runge_kutta_solver,
+        .runge_kutta = &runge_kutta_solver,
         .time_step = opt.time_step,
     };
 
@@ -862,7 +862,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .adiabatic_potential = adiabatic_potential,
         .adiabatic_eigenvectors = adiabatic_eigenvectors,
         .electronic_potential = opt.potential,
-        .previous_nacv = previous_nacv,
+        .previous_nacv = &previous_nacv,
         .position = system.position,
         .velocity = system.velocity,
         .time = undefined,

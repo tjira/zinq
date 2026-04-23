@@ -96,16 +96,17 @@ pub fn ElectronicPotential(comptime T: type) type {
             }
 
             const original_position = position.at(index);
+            var position_ptr = position;
 
-            @constCast(&position).ptr(index).* = original_position - fdiff_step;
+            position_ptr.ptr(index).* = original_position - fdiff_step;
 
-            const energy_minus = try self.evaluateDiabaticElement(i, j, position, time);
+            const energy_minus = try self.evaluateDiabaticElement(i, j, position_ptr, time);
 
-            @constCast(&position).ptr(index).* = original_position + fdiff_step;
+            position_ptr.ptr(index).* = original_position + fdiff_step;
 
-            const energy_plus = try self.evaluateDiabaticElement(i, j, position, time);
+            const energy_plus = try self.evaluateDiabaticElement(i, j, position_ptr, time);
 
-            @constCast(&position).ptr(index).* = original_position;
+            position_ptr.ptr(index).* = original_position;
 
             return 0.5 * (energy_plus - energy_minus) / fdiff_step;
         }
@@ -119,20 +120,21 @@ pub fn ElectronicPotential(comptime T: type) type {
             }
 
             const original_position = position.at(index);
+            var position_ptr = position;
 
-            @constCast(&position).ptr(index).* = original_position - fdiff_step;
+            position_ptr.ptr(index).* = original_position - fdiff_step;
 
-            const energy_minus = try self.evaluateDiabaticElement(i, j, position, time);
+            const energy_minus = try self.evaluateDiabaticElement(i, j, position_ptr, time);
 
-            @constCast(&position).ptr(index).* = original_position;
+            position_ptr.ptr(index).* = original_position;
 
-            const energy = try self.evaluateDiabaticElement(i, j, position, time);
+            const energy = try self.evaluateDiabaticElement(i, j, position_ptr, time);
 
-            @constCast(&position).ptr(index).* = original_position + fdiff_step;
+            position_ptr.ptr(index).* = original_position + fdiff_step;
 
-            const energy_plus = try self.evaluateDiabaticElement(i, j, position, time);
+            const energy_plus = try self.evaluateDiabaticElement(i, j, position_ptr, time);
 
-            @constCast(&position).ptr(index).* = original_position;
+            position_ptr.ptr(index).* = original_position;
 
             return (energy_plus - 2 * energy + energy_minus) / (fdiff_step * fdiff_step);
         }
@@ -159,10 +161,11 @@ pub fn ElectronicPotential(comptime T: type) type {
             }
 
             const original_position = position.at(index);
+            var position_ptr = position;
 
-            @constCast(&position).ptr(index).* = original_position - fdiff_step;
+            position_ptr.ptr(index).* = original_position - fdiff_step;
 
-            try self.evaluateAdiabatic(adiabatic, position, time);
+            try self.evaluateAdiabatic(adiabatic, position_ptr, time);
 
             const energy_minus = adiabatic.at(state, state);
 
@@ -174,9 +177,9 @@ pub fn ElectronicPotential(comptime T: type) type {
                 dE_minus_bias = adiabatic.at(state2, state2) - adiabatic.at(state1, state1);
             }
 
-            @constCast(&position).ptr(index).* = original_position + fdiff_step;
+            position_ptr.ptr(index).* = original_position + fdiff_step;
 
-            try self.evaluateAdiabatic(adiabatic, position, time);
+            try self.evaluateAdiabatic(adiabatic, position_ptr, time);
 
             const energy_plus = adiabatic.at(state, state);
 
@@ -188,9 +191,9 @@ pub fn ElectronicPotential(comptime T: type) type {
                 dE_plus_bias = adiabatic.at(state2, state2) - adiabatic.at(state1, state1);
             }
 
-            @constCast(&position).ptr(index).* = original_position;
+            position_ptr.ptr(index).* = original_position;
 
-            try self.evaluateAdiabatic(adiabatic, position, time);
+            try self.evaluateAdiabatic(adiabatic, position_ptr, time);
 
             const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step;
             const bias_force = if (bias) |bs| try bs.force(adiabatic.*, state, index) else 0;
