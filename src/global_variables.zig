@@ -9,75 +9,210 @@ pub const MAX_POOL_SIZE = 10000;
 pub const WRITE_BUFFER_SIZE = 1048576;
 pub const MAX_HERMITE_QUADRATURE_POINTS = 64;
 
-pub const Eh  = 4.359744722206e-18; // J
-pub const a0  = 5.29177210544e-11;  // m
-pub const c   = 299792458.0;        // m/s
-pub const amu = 1.66053906892e-27;  // kg
-pub const e   = 1.602176634e-19;    // C
-pub const h   = 6.62607015e-34;     // J.s
-pub const kB  = 1.380649e-23;       // J/K
-pub const me  = 9.109383701528e-31; // kg
-pub const Na  = 6.02214076e23;      // mol^-1
+pub const Eh = 4.359744722206e-18; // J
+pub const a0 = 5.29177210544e-11; // m
+pub const c = 299792458.0; // m/s
+pub const amu = 1.66053906892e-27; // kg
+pub const e = 1.602176634e-19; // C
+pub const h = 6.62607015e-34; // J.s
+pub const kB = 1.380649e-23; // J/K
+pub const me = 9.109383701528e-31; // kg
+pub const Na = 6.02214076e23; // mol^-1
 
-pub const A2AU = 1e-10 / a0;         // Å to a.u. of length
-pub const AU2EV = Eh / e;            // a.u. of energy to eV
+pub const A2AU = 1e-10 / a0; // Å to a.u. of length
+pub const AU2EV = Eh / e; // a.u. of energy to eV
 pub const EV2RCM = 1e-2 * e / h / c; // eV of a photon to its wavenumber in cm^-1
-pub const J2AU = 1.0 / Eh;           // J to a.u. of energy
-pub const U2AU = amu / me;           // g/mol to a.u
-pub const AU2K = Eh / kB;            // a.u. of energy to Kelvin
+pub const J2AU = 1.0 / Eh; // J to a.u. of energy
+pub const U2AU = amu / me; // g/mol to a.u
+pub const AU2K = Eh / kB; // a.u. of energy to Kelvin
 
 // Function name to function pointer map.
-pub const STR2F = std.StaticStringMap(*const fn(f64) f64).initComptime(.{
-    .{"sqrt", struct {fn f(x: f64) f64 {return std.math.sqrt(x);}}.f},
-    .{"sin", struct {fn f(x: f64) f64 {return std.math.sin(x);}}.f},
-    .{"cos", struct {fn f(x: f64) f64 {return std.math.cos(x);}}.f},
-    .{"tan", struct {fn f(x: f64) f64 {return std.math.tan(x);}}.f},
-    .{"exp", struct {fn f(x: f64) f64 {return std.math.exp(x);}}.f},
-    .{"log", struct {fn f(x: f64) f64 {return std.math.log(f64, 10, x);}}.f},
-    .{"ln", struct {fn f(x: f64) f64 {return std.math.log(f64, std.math.e, x);}}.f},
-    .{"abs", struct {fn f(x: f64) f64 {return @abs(x);}}.f},
-    .{"atan", struct {fn f(x: f64) f64 {return std.math.atan(x);}}.f},
-    .{"asin", struct {fn f(x: f64) f64 {return std.math.asin(x);}}.f},
-    .{"acos", struct {fn f(x: f64) f64 {return std.math.acos(x);}}.f},
-    .{"sinh", struct {fn f(x: f64) f64 {return std.math.sinh(x);}}.f},
-    .{"cosh", struct {fn f(x: f64) f64 {return std.math.cosh(x);}}.f},
-    .{"tanh", struct {fn f(x: f64) f64 {return std.math.tanh(x);}}.f},
-    .{"floor", struct {fn f(x: f64) f64 {return std.math.floor(x);}}.f},
-    .{"ceil", struct {fn f(x: f64) f64 {return std.math.ceil(x);}}.f},
-    .{"sgn", struct {fn f(x: f64) f64 {return std.math.sign(x);}}.f},
-    .{"acosh", struct {fn f(x: f64) f64 {return std.math.acosh(x);}}.f},
-    .{"asinh", struct {fn f(x: f64) f64 {return std.math.asinh(x);}}.f},
-    .{"atanh", struct {fn f(x: f64) f64 {return std.math.atanh(x);}}.f},
-    .{"gamma", struct {fn f(x: f64) f64 {return std.math.gamma(f64, x);}}.f},
-    .{"lgamma", struct {fn f(x: f64) f64 {return std.math.lgamma(f64, x);}}.f},
+pub const STR2F = std.StaticStringMap(*const fn (f64) f64).initComptime(.{
+    .{ "sqrt", struct {
+        fn f(x: f64) f64 {
+            return std.math.sqrt(x);
+        }
+    }.f },
+    .{ "sin", struct {
+        fn f(x: f64) f64 {
+            return std.math.sin(x);
+        }
+    }.f },
+    .{ "cos", struct {
+        fn f(x: f64) f64 {
+            return std.math.cos(x);
+        }
+    }.f },
+    .{ "tan", struct {
+        fn f(x: f64) f64 {
+            return std.math.tan(x);
+        }
+    }.f },
+    .{ "exp", struct {
+        fn f(x: f64) f64 {
+            return std.math.exp(x);
+        }
+    }.f },
+    .{ "log", struct {
+        fn f(x: f64) f64 {
+            return std.math.log(f64, 10, x);
+        }
+    }.f },
+    .{ "ln", struct {
+        fn f(x: f64) f64 {
+            return std.math.log(f64, std.math.e, x);
+        }
+    }.f },
+    .{ "abs", struct {
+        fn f(x: f64) f64 {
+            return @abs(x);
+        }
+    }.f },
+    .{ "atan", struct {
+        fn f(x: f64) f64 {
+            return std.math.atan(x);
+        }
+    }.f },
+    .{ "asin", struct {
+        fn f(x: f64) f64 {
+            return std.math.asin(x);
+        }
+    }.f },
+    .{ "acos", struct {
+        fn f(x: f64) f64 {
+            return std.math.acos(x);
+        }
+    }.f },
+    .{ "sinh", struct {
+        fn f(x: f64) f64 {
+            return std.math.sinh(x);
+        }
+    }.f },
+    .{ "cosh", struct {
+        fn f(x: f64) f64 {
+            return std.math.cosh(x);
+        }
+    }.f },
+    .{ "tanh", struct {
+        fn f(x: f64) f64 {
+            return std.math.tanh(x);
+        }
+    }.f },
+    .{ "floor", struct {
+        fn f(x: f64) f64 {
+            return std.math.floor(x);
+        }
+    }.f },
+    .{ "ceil", struct {
+        fn f(x: f64) f64 {
+            return std.math.ceil(x);
+        }
+    }.f },
+    .{ "sgn", struct {
+        fn f(x: f64) f64 {
+            return std.math.sign(x);
+        }
+    }.f },
+    .{ "acosh", struct {
+        fn f(x: f64) f64 {
+            return std.math.acosh(x);
+        }
+    }.f },
+    .{ "asinh", struct {
+        fn f(x: f64) f64 {
+            return std.math.asinh(x);
+        }
+    }.f },
+    .{ "atanh", struct {
+        fn f(x: f64) f64 {
+            return std.math.atanh(x);
+        }
+    }.f },
+    .{ "gamma", struct {
+        fn f(x: f64) f64 {
+            return std.math.gamma(f64, x);
+        }
+    }.f },
+    .{ "lgamma", struct {
+        fn f(x: f64) f64 {
+            return std.math.lgamma(f64, x);
+        }
+    }.f },
 });
 
 /// Constant symbol to value map.
-pub const C2V = std.StaticStringMap(f64).initComptime(.{
-    .{"e", std.math.e},
-    .{"pi", std.math.pi}
-});
+pub const C2V = std.StaticStringMap(f64).initComptime(.{ .{ "e", std.math.e }, .{ "pi", std.math.pi } });
 
 /// Atomic symbol to atomic number map.
 pub const SM2AN = std.StaticStringMap(usize).initComptime(.{
-    .{ "H",   1},                                                                                                                                                                                                                                 .{"He",   2},
-    .{"Li",   3},                                                                                                                                             .{"Be",   4}, .{ "B",   5}, .{ "C",   6}, .{ "N",   7}, .{ "O",   8}, .{ "F",   9}, .{"Ne",  10},
-    .{"Na",  11},                                                                                                                                             .{"Mg",  12}, .{"Al",  13}, .{"Si",  14}, .{ "P",  15}, .{ "S",  16}, .{"Cl",  17}, .{"Ar",  18},
-    .{ "K",  19}, .{"Ca",  20}, .{"Sc",  21}, .{"Ti",  22}, .{ "V",  23}, .{"Cr",  24}, .{"Mn",  25}, .{"Fe",  26}, .{"Co",  27}, .{"Ni",  28}, .{"Cu",  29}, .{"Zn",  30}, .{"Ga",  31}, .{"Ge",  32}, .{"As",  33}, .{"Se",  34}, .{"Br",  35}, .{"Kr",  36},
-    .{"Rb",  37}, .{"Sr",  38}, .{"Y",   39}, .{"Zr",  40}, .{"Nb",  41}, .{"Mo",  42}, .{"Tc",  43}, .{"Ru",  44}, .{"Rh",  45}, .{"Pd",  46}, .{"Ag",  47}, .{"Cd",  48}, .{"In",  49}, .{"Sn",  50}, .{"Sb",  51}, .{"Te",  52}, .{"I",   53}, .{"Xe",  54},
-    .{"Cs",  55}, .{"Ba",  56}, .{"La",  57}, .{"Hf",  72}, .{"Ta",  73}, .{"W",   74}, .{"Re",  75}, .{"Os",  76}, .{"Ir",  77}, .{"Pt",  78}, .{"Au",  79}, .{"Hg",  80}, .{"Tl",  81}, .{"Pb",  82}, .{"Bi",  83}, .{"Po",  84}, .{"At",  85}, .{"Rn",  86},
-    .{"Fr",  87}, .{"Ra",  88}, .{"Ac",  89}, .{"Rf", 104}, .{"Db", 105}, .{"Sg", 106}, .{"Bh", 107}, .{"Hs", 108}, .{"Mt", 109}, .{"Ds", 110}, .{"Rg", 111}, .{"Cn", 112}, .{"Nh", 113}, .{"Fl", 114}, .{"Mc", 115}, .{"Lv", 116}, .{"Ts", 117}, .{"Og", 118},
-
-                                              .{"Ce",  58}, .{"Pr",  59}, .{"Nd",  60}, .{"Pm",  61}, .{"Sm",  62}, .{"Eu",  63}, .{"Gd",  64}, .{"Tb",  65}, .{"Dy",  66}, .{"Ho",  67}, .{"Er",  68}, .{"Tm",  69}, .{"Yb",  70}, .{"Lu",  71},
-                                              .{"Th",  90}, .{"Pa",  91}, .{"U",   92}, .{"Np",  93}, .{"Pu",  94}, .{"Am",  95}, .{"Cm",  96}, .{"Bk",  97}, .{"Cf",  98}, .{"Es",  99}, .{"Fm", 100}, .{"Md", 101}, .{"No", 102}, .{"Lr", 103},
+    .{ "H", 1 },    .{ "He", 2 },
+    .{ "Li", 3 },   .{ "Be", 4 },
+    .{ "B", 5 },    .{ "C", 6 },
+    .{ "N", 7 },    .{ "O", 8 },
+    .{ "F", 9 },    .{ "Ne", 10 },
+    .{ "Na", 11 },  .{ "Mg", 12 },
+    .{ "Al", 13 },  .{ "Si", 14 },
+    .{ "P", 15 },   .{ "S", 16 },
+    .{ "Cl", 17 },  .{ "Ar", 18 },
+    .{ "K", 19 },   .{ "Ca", 20 },
+    .{ "Sc", 21 },  .{ "Ti", 22 },
+    .{ "V", 23 },   .{ "Cr", 24 },
+    .{ "Mn", 25 },  .{ "Fe", 26 },
+    .{ "Co", 27 },  .{ "Ni", 28 },
+    .{ "Cu", 29 },  .{ "Zn", 30 },
+    .{ "Ga", 31 },  .{ "Ge", 32 },
+    .{ "As", 33 },  .{ "Se", 34 },
+    .{ "Br", 35 },  .{ "Kr", 36 },
+    .{ "Rb", 37 },  .{ "Sr", 38 },
+    .{ "Y", 39 },   .{ "Zr", 40 },
+    .{ "Nb", 41 },  .{ "Mo", 42 },
+    .{ "Tc", 43 },  .{ "Ru", 44 },
+    .{ "Rh", 45 },  .{ "Pd", 46 },
+    .{ "Ag", 47 },  .{ "Cd", 48 },
+    .{ "In", 49 },  .{ "Sn", 50 },
+    .{ "Sb", 51 },  .{ "Te", 52 },
+    .{ "I", 53 },   .{ "Xe", 54 },
+    .{ "Cs", 55 },  .{ "Ba", 56 },
+    .{ "La", 57 },  .{ "Hf", 72 },
+    .{ "Ta", 73 },  .{ "W", 74 },
+    .{ "Re", 75 },  .{ "Os", 76 },
+    .{ "Ir", 77 },  .{ "Pt", 78 },
+    .{ "Au", 79 },  .{ "Hg", 80 },
+    .{ "Tl", 81 },  .{ "Pb", 82 },
+    .{ "Bi", 83 },  .{ "Po", 84 },
+    .{ "At", 85 },  .{ "Rn", 86 },
+    .{ "Fr", 87 },  .{ "Ra", 88 },
+    .{ "Ac", 89 },  .{ "Rf", 104 },
+    .{ "Db", 105 }, .{ "Sg", 106 },
+    .{ "Bh", 107 }, .{ "Hs", 108 },
+    .{ "Mt", 109 }, .{ "Ds", 110 },
+    .{ "Rg", 111 }, .{ "Cn", 112 },
+    .{ "Nh", 113 }, .{ "Fl", 114 },
+    .{ "Mc", 115 }, .{ "Lv", 116 },
+    .{ "Ts", 117 }, .{ "Og", 118 },
+    .{ "Ce", 58 },  .{ "Pr", 59 },
+    .{ "Nd", 60 },  .{ "Pm", 61 },
+    .{ "Sm", 62 },  .{ "Eu", 63 },
+    .{ "Gd", 64 },  .{ "Tb", 65 },
+    .{ "Dy", 66 },  .{ "Ho", 67 },
+    .{ "Er", 68 },  .{ "Tm", 69 },
+    .{ "Yb", 70 },  .{ "Lu", 71 },
+    .{ "Th", 90 },  .{ "Pa", 91 },
+    .{ "U", 92 },   .{ "Np", 93 },
+    .{ "Pu", 94 },  .{ "Am", 95 },
+    .{ "Cm", 96 },  .{ "Bk", 97 },
+    .{ "Cf", 98 },  .{ "Es", 99 },
+    .{ "Fm", 100 }, .{ "Md", 101 },
+    .{ "No", 102 }, .{ "Lr", 103 },
 });
 
 /// Atomic number to mass array.
-pub const AN2M = [_]f64{std.math.nan(f64),
-     1.007840000, // H
-     4.002602000, // He
-     6.938000000, // Li
-     9.012183100, // Be
+pub const AN2M = [_]f64{
+    std.math.nan(f64),
+    1.007840000, // H
+    4.002602000, // He
+    6.938000000, // Li
+    9.012183100, // Be
     10.806000000, // B
     12.009600000, // C
     14.006430000, // N

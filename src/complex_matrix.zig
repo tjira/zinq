@@ -18,16 +18,13 @@ pub fn ComplexMatrix(comptime T: type) type {
 
         /// Initialize a matrix with a given number of rows and columns and specify an allocator. The function returns an error if the allocation fails.
         pub fn init(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
-            return @This(){
-                .data = try allocator.alloc(Complex(T), rows * cols),
-                .rows = rows,
-                .cols = cols
-            };
+            return @This(){ .data = try allocator.alloc(Complex(T), rows * cols), .rows = rows, .cols = cols };
         }
 
         /// Initialize a matrix and fills it with zeros.
         pub fn initZero(rows: usize, cols: usize, allocator: std.mem.Allocator) !@This() {
-            var A = try @This().init(rows, cols, allocator); A.zero();
+            var A = try @This().init(rows, cols, allocator);
+            A.zero();
 
             return A;
         }
@@ -40,8 +37,7 @@ pub fn ComplexMatrix(comptime T: type) type {
         /// Add another matrix to this matrix.
         pub fn add(self: *@This(), other: @This()) !void {
             if (self.rows != other.rows or self.cols != other.cols) {
-
-                std.log.err("CANNOT ADD MATRICES OF DIFFERENT SIZES, FIRST WITH SIZE {d}x{d}, SECOND WITH SIZE {d}x{d}", .{self.rows, self.cols, other.rows, other.cols});
+                std.log.err("CANNOT ADD MATRICES OF DIFFERENT SIZES, FIRST WITH SIZE {d}x{d}, SECOND WITH SIZE {d}x{d}", .{ self.rows, self.cols, other.rows, other.cols });
 
                 return error.ProgrammigError;
             }
@@ -53,10 +49,7 @@ pub fn ComplexMatrix(comptime T: type) type {
 
         /// Returns the matrix as a view to a complex vector.
         pub fn asVector(self: @This()) ComplexVector(T) {
-            return ComplexVector(T){
-                .data = self.data,
-                .len = self.rows * self.cols
-            };
+            return ComplexVector(T){ .data = self.data, .len = self.rows * self.cols };
         }
 
         /// Get the element at (i, j).
@@ -66,19 +59,13 @@ pub fn ComplexMatrix(comptime T: type) type {
 
         /// Returns the column as a view to a strided real vector.
         pub fn column(self: @This(), j: usize) StridedComplexVector(T) {
-            return StridedComplexVector(T){
-                .data = self.data,
-                .len = self.rows,
-                .stride = self.cols,
-                .zero = j
-            };
+            return StridedComplexVector(T){ .data = self.data, .len = self.rows, .stride = self.cols, .zero = j };
         }
 
         /// Copy the contents of this matrix to another matrix.
         pub fn copyTo(self: @This(), other: *@This()) !void {
             if (self.rows != other.rows or self.cols != other.cols) {
-
-                std.log.err("CANNOT COPY MATRICES OF DIFFERENT SIZES, FIRST WITH SIZE {d}x{d}, SECOND WITH SIZE {d}x{d}", .{self.rows, self.cols, other.rows, other.cols});
+                std.log.err("CANNOT COPY MATRICES OF DIFFERENT SIZES, FIRST WITH SIZE {d}x{d}, SECOND WITH SIZE {d}x{d}", .{ self.rows, self.cols, other.rows, other.cols });
 
                 return error.ProgrammigError;
             }
@@ -128,7 +115,6 @@ pub fn ComplexMatrix(comptime T: type) type {
             var max: T = 0;
 
             for (0..@min(self.rows, self.cols)) |i| {
-
                 const abs_value = self.at(i, i).magnitude();
 
                 if (abs_value > max) max = abs_value;
@@ -142,7 +128,6 @@ pub fn ComplexMatrix(comptime T: type) type {
             var min: T = std.math.inf(T);
 
             for (0..@min(self.rows, self.cols)) |i| {
-
                 const abs_value = self.at(i, i).magnitude();
 
                 if (abs_value < min) min = abs_value;
@@ -202,10 +187,7 @@ pub fn ComplexMatrix(comptime T: type) type {
 
         /// Returns the row of the matrix as a complex vector.
         pub fn row(self: @This(), i: usize) ComplexVector(T) {
-            return ComplexVector(T){
-                .data = self.data[i * self.cols .. (i + 1) * self.cols],
-                .len = self.cols
-            };
+            return ComplexVector(T){ .data = self.data[i * self.cols .. (i + 1) * self.cols], .len = self.cols };
         }
 
         /// Returns the trace of the matrix.
@@ -227,7 +209,8 @@ pub fn ComplexMatrix(comptime T: type) type {
 }
 
 test "init, deinit" {
-    var A = try ComplexMatrix(f64).init(345, 753, std.testing.allocator); defer A.deinit(std.testing.allocator);
+    var A = try ComplexMatrix(f64).init(345, 753, std.testing.allocator);
+    defer A.deinit(std.testing.allocator);
 
     try std.testing.expectEqual(A.rows, 345);
     try std.testing.expectEqual(A.cols, 753);

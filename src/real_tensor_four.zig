@@ -14,15 +14,13 @@ pub fn RealTensor4(comptime T: type) type {
 
         /// Initialize a 4th order tensor with a given shape and specify an allocator. The function returns an error if the allocation fails.
         pub fn init(shape: [4]usize, allocator: std.mem.Allocator) !@This() {
-            return @This(){
-                .data = try allocator.alloc(T, shape[0] * shape[1] * shape[2] * shape[3]),
-                .shape = shape
-            };
+            return @This(){ .data = try allocator.alloc(T, shape[0] * shape[1] * shape[2] * shape[3]), .shape = shape };
         }
 
         /// Initialize a 4th order tensor and fills it with zeros.
         pub fn initZero(shape: [4]usize, allocator: std.mem.Allocator) !@This() {
-            var A = try @This().init(shape, allocator); A.zero();
+            var A = try @This().init(shape, allocator);
+            A.zero();
 
             return A;
         }
@@ -40,7 +38,6 @@ pub fn RealTensor4(comptime T: type) type {
         /// Expands the tensor, keeping the correct indices.
         pub fn expand(self: *@This(), new_shape: [4]usize, allocator: std.mem.Allocator) !void {
             if (new_shape[0] < self.shape[0] or new_shape[1] < self.shape[1] or new_shape[2] < self.shape[2] or new_shape[3] < self.shape[3]) {
-
                 std.log.err("NEW SHAPE MUST BE LARGER THAN OR EQUAL TO THE CURRENT SHAPE", .{});
 
                 return error.InvalidInput;
@@ -51,15 +48,16 @@ pub fn RealTensor4(comptime T: type) type {
             var cursor = prod(usize, &new_shape);
 
             for (0..self.shape[0]) |i| for (0..self.shape[1]) |j| for (0..self.shape[2]) |k| {
+                const ii = self.shape[0] - i - 1;
+                const jj = self.shape[1] - j - 1;
+                const kk = self.shape[2] - k - 1;
 
-                const ii = self.shape[0] - i - 1; const jj = self.shape[1] - j - 1; const kk = self.shape[2] - k - 1;
-
-                const src_idx  = ((ii * self.shape[1] + jj) * self.shape[2] + kk) * self.shape[3];
+                const src_idx = ((ii * self.shape[1] + jj) * self.shape[2] + kk) * self.shape[3];
                 const dest_idx = ((ii * new_shape[1] + jj) * new_shape[2] + kk) * new_shape[3];
 
-                @memmove(self.data[dest_idx..dest_idx + self.shape[3]], self.data[src_idx..src_idx + self.shape[3]]);
+                @memmove(self.data[dest_idx .. dest_idx + self.shape[3]], self.data[src_idx .. src_idx + self.shape[3]]);
 
-                @memset(self.data[dest_idx + self.shape[3]..cursor], 0);
+                @memset(self.data[dest_idx + self.shape[3] .. cursor], 0);
 
                 cursor = dest_idx;
             };

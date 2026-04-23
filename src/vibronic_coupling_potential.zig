@@ -15,14 +15,10 @@ const EV2RCM = global_variables.EV2RCM;
 /// Struct holding parameters for the vibronic coupling potential.
 pub fn VibronicCouplingPotential(comptime T: type) type {
     return struct {
-        const MorsePotential = struct {
-            d: []const []const T,
-            a: []const []const T,
-            q: []const []const T,
-            e: []const []const T
-        };
+        const MorsePotential = struct { d: []const []const T, a: []const []const T, q: []const []const T, e: []const []const T };
 
-        energy: []const T, omega: []const T,
+        energy: []const T,
+        omega: []const T,
 
         morse_potential: MorsePotential,
         diagonal_linear: []const []const T,
@@ -33,15 +29,15 @@ pub fn VibronicCouplingPotential(comptime T: type) type {
         /// Diabatic potential matrix evaluator.
         pub fn evaluateDiabatic(self: @This(), U: *RealMatrix(T), position: RealVector(T), time: T) !void {
             for (0..self.nstate()) |i| for (i..self.nstate()) |j| {
-                U.ptr(i, j).* = try self.evaluateDiabaticElement(i, j, position, time); U.ptr(j, i).* = U.at(i, j);
+                U.ptr(i, j).* = try self.evaluateDiabaticElement(i, j, position, time);
+                U.ptr(j, i).* = U.at(i, j);
             };
         }
 
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
             if (i >= self.nstate() or j >= self.nstate()) {
-
-                std.log.err("INVALID INDEX ({d}, {d}) WHEN EVALUATING DIABATIC MATRIX ELEMENT, THE POTENTIAL MATRIX IS {d}X{d}", .{i, j, 2, 2});
+                std.log.err("INVALID INDEX ({d}, {d}) WHEN EVALUATING DIABATIC MATRIX ELEMENT, THE POTENTIAL MATRIX IS {d}X{d}", .{ i, j, 2, 2 });
 
                 return error.ProgrammingError;
             }
@@ -49,11 +45,9 @@ pub fn VibronicCouplingPotential(comptime T: type) type {
             var value = if (i == j) self.energy[i] else 0;
 
             for (0..position.len) |k| {
-
                 const qi = position.at(k) * std.math.sqrt(self.omega[k] / EV2RCM / AU2EV);
 
                 if (i == j) {
-
                     const d = self.morse_potential.d[i][k];
                     const a = self.morse_potential.a[i][k];
                     const q = self.morse_potential.q[i][k];

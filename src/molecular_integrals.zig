@@ -38,7 +38,7 @@ pub fn Options(comptime _: type) type {
 
         nthread: u32 = 1,
 
-        write: Write = .{}
+        write: Write = .{},
     };
 }
 
@@ -52,12 +52,7 @@ pub fn Output(comptime T: type) type {
 
         /// Initialize the output struct.
         pub fn init() @This() {
-            return @This(){
-                .S = null,
-                .K = null,
-                .V = null,
-                .J = null
-            };
+            return @This(){ .S = null, .K = null, .V = null, .J = null };
         }
 
         /// Deinitialize the output struct.
@@ -74,10 +69,14 @@ pub fn Output(comptime T: type) type {
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(opt);
 
-    const system = try classical_particle.read(T, opt.system, 0, 0, allocator); defer system.deinit(allocator);
-    var basis = try BasisSet(T).init(system, opt.basis, allocator); defer basis.deinit(allocator);
+    const system = try classical_particle.read(T, opt.system, 0, 0, allocator);
+    defer system.deinit(allocator);
 
-    var output = Output(T).init(); errdefer output.deinit(allocator);
+    var basis = try BasisSet(T).init(system, opt.basis, allocator);
+    defer basis.deinit(allocator);
+
+    var output = Output(T).init();
+    errdefer output.deinit(allocator);
 
     if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{basis.nbf()});
 
@@ -86,7 +85,6 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     }
 
     if (opt.write.overlap) |path| {
-
         var timer = try std.time.Timer.start();
 
         if (enable_printing) try print("OVERLAP INTEGRALS: ", .{});
@@ -99,7 +97,6 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     }
 
     if (opt.write.kinetic) |path| {
-
         var timer = try std.time.Timer.start();
 
         if (enable_printing) try print("KINETIC INTEGRALS: ", .{});
@@ -112,7 +109,6 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     }
 
     if (opt.write.nuclear) |path| {
-
         var timer = try std.time.Timer.start();
 
         if (enable_printing) try print("NUCLEAR INTEGRALS: ", .{});
@@ -125,7 +121,6 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     }
 
     if (opt.write.coulomb) |path| {
-
         var timer = try std.time.Timer.start();
 
         if (enable_printing) try print("COULOMB INTEGRALS: ", .{});
@@ -142,16 +137,27 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
 /// Compute the coulomb tensor.
 pub fn coulomb(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealTensor4(T) {
-    var J = try RealTensor4(T).init(.{basis.nbf(), basis.nbf(), basis.nbf(), basis.nbf()}, allocator); errdefer J.deinit(allocator);
+    var J = try RealTensor4(T).init(.{ basis.nbf(), basis.nbf(), basis.nbf(), basis.nbf() }, allocator);
+    errdefer J.deinit(allocator);
 
-    if (comptime config.use_libint) {try libint.coulomb(T, &J, system, basis); return J;}
+    if (comptime config.use_libint) {
+        try libint.coulomb(T, &J, system, basis);
+        return J;
+    }
 
-    if (nthread == 1) {for (0..J.shape[0]) |i| for (i..J.shape[1]) |j| for (i..J.shape[2]) |k| for ((if (i == k) j else k)..J.shape[3]) |l| {coulombAssign(T, &J, i, j, k, l, basis);}; return J;}
+    if (nthread == 1) {
+        for (0..J.shape[0]) |i| for (i..J.shape[1]) |j| for (i..J.shape[2]) |k| for ((if (i == k) j else k)..J.shape[3]) |l| {
+            coulombAssign(T, &J, i, j, k, l, basis);
+        };
+        return J;
+    }
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
+    var pool: std.Thread.Pool = undefined;
+    try pool.init(.{ .n_jobs = nthread, .allocator = allocator });
+    defer pool.deinit();
 
     for (0..J.shape[0]) |i| for (i..J.shape[1]) |j| for (i..J.shape[2]) |k| for ((if (i == k) j else k)..J.shape[3]) |l| {
-        try pool.spawn(coulombAssign, .{T, &J, i, j, k, l, basis});
+        try pool.spawn(coulombAssign, .{ T, &J, i, j, k, l, basis });
     };
 
     return J;
@@ -176,14 +182,24 @@ pub fn coulombAssign(comptime T: type, J: *RealTensor4(T), i: usize, j: usize, k
 pub fn kinetic(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var K = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
-    if (comptime config.use_libint) {try libint.kinetic(T, &K, system, basis); return K;}
+    if (comptime config.use_libint) {
+        try libint.kinetic(T, &K, system, basis);
+        return K;
+    }
 
-    if (nthread == 1) {for (0..K.rows) |i| for (i..K.cols) |j| {kineticAssign(T, &K, i, j, basis);}; return K;}
+    if (nthread == 1) {
+        for (0..K.rows) |i| for (i..K.cols) |j| {
+            kineticAssign(T, &K, i, j, basis);
+        };
+        return K;
+    }
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
+    var pool: std.Thread.Pool = undefined;
+    try pool.init(.{ .n_jobs = nthread, .allocator = allocator });
+    defer pool.deinit();
 
     for (0..K.rows) |i| for (i..K.cols) |j| {
-        try pool.spawn(kineticAssign, .{T, &K, i, j, basis});
+        try pool.spawn(kineticAssign, .{ T, &K, i, j, basis });
     };
 
     return K;
@@ -191,21 +207,32 @@ pub fn kinetic(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T
 
 /// Assigns values to the kinetic matrix based on indices.
 pub fn kineticAssign(comptime T: type, K: *RealMatrix(T), i: usize, j: usize, basis: BasisSet(T)) void {
-    K.ptr(i, j).* = basis.contracted_gaussians[i].kinetic(basis.contracted_gaussians[j]); K.ptr(j, i).* = K.at(i, j);
+    K.ptr(i, j).* = basis.contracted_gaussians[i].kinetic(basis.contracted_gaussians[j]);
+    K.ptr(j, i).* = K.at(i, j);
 }
 
 /// Compute the nuclear matrix.
 pub fn nuclear(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var V = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
-    if (comptime config.use_libint) {try libint.nuclear(T, &V, system, basis); return V;}
+    if (comptime config.use_libint) {
+        try libint.nuclear(T, &V, system, basis);
+        return V;
+    }
 
-    if (nthread == 1) {for (0..V.rows) |i| for (i..V.cols) |j| {nuclearAssign(T, &V, i, j, system, basis);}; return V;}
+    if (nthread == 1) {
+        for (0..V.rows) |i| for (i..V.cols) |j| {
+            nuclearAssign(T, &V, i, j, system, basis);
+        };
+        return V;
+    }
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
+    var pool: std.Thread.Pool = undefined;
+    try pool.init(.{ .n_jobs = nthread, .allocator = allocator });
+    defer pool.deinit();
 
     for (0..V.rows) |i| for (i..V.cols) |j| {
-        try pool.spawn(nuclearAssign, .{T, &V, i, j, system, basis});
+        try pool.spawn(nuclearAssign, .{ T, &V, i, j, system, basis });
     };
 
     return V;
@@ -213,21 +240,32 @@ pub fn nuclear(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T
 
 /// Assigns values to the nuclear matrix based on indices.
 pub fn nuclearAssign(comptime T: type, V: *RealMatrix(T), i: usize, j: usize, system: ClassicalParticle(T), basis: BasisSet(T)) void {
-    V.ptr(i, j).* = basis.contracted_gaussians[i].nuclear(basis.contracted_gaussians[j], system); V.ptr(j, i).* = V.at(i, j);
+    V.ptr(i, j).* = basis.contracted_gaussians[i].nuclear(basis.contracted_gaussians[j], system);
+    V.ptr(j, i).* = V.at(i, j);
 }
 
 /// Compute the overlap matrix.
 pub fn overlap(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T), nthread: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var S = try RealMatrix(T).init(basis.nbf(), basis.nbf(), allocator);
 
-    if (comptime config.use_libint) {try libint.overlap(T, &S, system, basis); return S;}
+    if (comptime config.use_libint) {
+        try libint.overlap(T, &S, system, basis);
+        return S;
+    }
 
-    if (nthread == 1) {for (0..S.rows) |i| for (i..S.cols) |j| {overlapAssign(T, &S, i, j, basis);}; return S;}
+    if (nthread == 1) {
+        for (0..S.rows) |i| for (i..S.cols) |j| {
+            overlapAssign(T, &S, i, j, basis);
+        };
+        return S;
+    }
 
-    var pool: std.Thread.Pool = undefined; try pool.init(.{.n_jobs = nthread, .allocator = allocator}); defer pool.deinit();
+    var pool: std.Thread.Pool = undefined;
+    try pool.init(.{ .n_jobs = nthread, .allocator = allocator });
+    defer pool.deinit();
 
     for (0..S.rows) |i| for (i..S.cols) |j| {
-        try pool.spawn(overlapAssign, .{T, &S, i, j, basis});
+        try pool.spawn(overlapAssign, .{ T, &S, i, j, basis });
     };
 
     return S;
@@ -235,5 +273,6 @@ pub fn overlap(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T
 
 /// Assigns values to the overlap matrix based on indices.
 pub fn overlapAssign(comptime T: type, S: *RealMatrix(T), i: usize, j: usize, basis: BasisSet(T)) void {
-    S.ptr(i, j).* = basis.contracted_gaussians[i].overlap(basis.contracted_gaussians[j]); S.ptr(j, i).* = S.at(i, j);
+    S.ptr(i, j).* = basis.contracted_gaussians[i].overlap(basis.contracted_gaussians[j]);
+    S.ptr(j, i).* = S.at(i, j);
 }

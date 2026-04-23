@@ -14,21 +14,24 @@ pub fn timestamp(allocator: std.mem.Allocator) ![]const u8 {
     const second = getSecond(mts);
     const milli = getMilli(mts);
 
-    return try std.fmt.allocPrint(allocator, "{d:04}-{d:02}-{d:02}T{d:02}:{d:02}:{d:02}.{d:03}Z", .{year, month, day, hour, minute, second, milli});
+    return try std.fmt.allocPrint(allocator, "{d:04}-{d:02}-{d:02}T{d:02}:{d:02}:{d:02}.{d:03}Z", .{ year, month, day, hour, minute, second, milli });
 }
 
 /// Get the day (1-31) from milliseconds timestamp since epoch.
 pub fn getDay(mts: u64) u5 {
-    var days = @divTrunc(mts, std.time.ms_per_day); var year: std.time.epoch.Year = 1970;
+    var days = @divTrunc(mts, std.time.ms_per_day);
+    var year: std.time.epoch.Year = 1970;
 
     while (days >= std.time.epoch.getDaysInYear(year)) {
-        days -= std.time.epoch.getDaysInYear(year); year += 1;
+        days -= std.time.epoch.getDaysInYear(year);
+        year += 1;
     }
 
     var month: std.time.epoch.Month = .jan;
 
     while (days >= std.time.epoch.getDaysInMonth(year, month)) {
-        days -= std.time.epoch.getDaysInMonth(year, month); month = @enumFromInt(@intFromEnum(month) + 1);
+        days -= std.time.epoch.getDaysInMonth(year, month);
+        month = @enumFromInt(@intFromEnum(month) + 1);
     }
 
     return @intCast(days + 1);
@@ -51,16 +54,19 @@ pub fn getMinute(mts: u64) u6 {
 
 /// Get the month (1-12) from milliseconds timestamp since epoch.
 pub fn getMonth(mts: u64) u4 {
-    var days = @divTrunc(mts, std.time.ms_per_day); var year: std.time.epoch.Year = 1970;
+    var days = @divTrunc(mts, std.time.ms_per_day);
+    var year: std.time.epoch.Year = 1970;
 
     while (days >= std.time.epoch.getDaysInYear(year)) {
-        days -= std.time.epoch.getDaysInYear(year); year += 1;
+        days -= std.time.epoch.getDaysInYear(year);
+        year += 1;
     }
 
     var month: std.time.epoch.Month = .jan;
 
     while (days >= std.time.epoch.getDaysInMonth(year, month)) {
-        days -= std.time.epoch.getDaysInMonth(year, month); month = @enumFromInt(@intFromEnum(month) + 1);
+        days -= std.time.epoch.getDaysInMonth(year, month);
+        month = @enumFromInt(@intFromEnum(month) + 1);
     }
 
     return month.numeric();
@@ -73,10 +79,12 @@ pub fn getSecond(mts: u64) u6 {
 
 /// Get the year from milliseconds timestamp since epoch.
 pub fn getYear(mts: u64) std.time.epoch.Year {
-    var days = @divTrunc(mts, std.time.ms_per_day); var year: std.time.epoch.Year = 1970;
+    var days = @divTrunc(mts, std.time.ms_per_day);
+    var year: std.time.epoch.Year = 1970;
 
     while (days >= std.time.epoch.getDaysInYear(year)) {
-        days -= std.time.epoch.getDaysInYear(year); year += 1;
+        days -= std.time.epoch.getDaysInYear(year);
+        year += 1;
     }
 
     return year;

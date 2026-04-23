@@ -50,7 +50,7 @@ pub fn GridWavefunction(comptime T: type) type {
             previous_eigenvectors: RealMatrix(T),
             propagator: ComplexMatrix(T),
             vector: ComplexVector(T),
-            wavefunction_row: ComplexMatrix(T)
+            wavefunction_row: ComplexMatrix(T),
         };
 
         data: ComplexMatrix(T),
@@ -66,21 +66,18 @@ pub fn GridWavefunction(comptime T: type) type {
         /// Allocate a wavefunction on a grid.
         pub fn init(npoint: usize, nstate: usize, ndim: usize, limits: []const []const T, mass: T, allocator: std.mem.Allocator) !@This() {
             if (limits.len != ndim) {
-
-                std.log.err("THE LENGTH OF THE LIMITS ARRAY MUST BE EQUAL TO THE NUMBER OF DIMENSIONS, EXPECTED {d} BUT GOT {d}", .{ndim, limits.len});
+                std.log.err("THE LENGTH OF THE LIMITS ARRAY MUST BE EQUAL TO THE NUMBER OF DIMENSIONS, EXPECTED {d} BUT GOT {d}", .{ ndim, limits.len });
 
                 return error.InvalidInput;
             }
 
             for (0..ndim) |i| if (limits[i].len != 2) {
-
-                std.log.err("EACH ELEMENT OF THE LIMITS ARRAY MUST BE AN ARRAY OF LENGTH 2, BUT THE {d}-TH ELEMENT HAS LENGTH {d}", .{i, limits[i].len});
+                std.log.err("EACH ELEMENT OF THE LIMITS ARRAY MUST BE AN ARRAY OF LENGTH 2, BUT THE {d}-TH ELEMENT HAS LENGTH {d}", .{ i, limits[i].len });
 
                 return error.InvalidInput;
             };
 
             if (npoint < 2) {
-
                 std.log.err("THE NUMBER OF POINTS IN EACH DIMENSION MUST BE AT LEAST 2, BUT GOT {d}", .{npoint});
 
                 return error.InvalidInput;
@@ -104,7 +101,7 @@ pub fn GridWavefunction(comptime T: type) type {
                 .previous_eigenvectors = try RealMatrix(T).init(nstate, nstate, allocator),
                 .propagator = try ComplexMatrix(T).init(nstate, nstate, allocator),
                 .vector = try ComplexVector(T).init(nstate, allocator),
-                .wavefunction_row = try ComplexMatrix(T).init(nstate, 1, allocator)
+                .wavefunction_row = try ComplexMatrix(T).init(nstate, 1, allocator),
             };
 
             return @This(){
@@ -116,7 +113,7 @@ pub fn GridWavefunction(comptime T: type) type {
                 .nstate = nstate,
                 .ndim = ndim,
                 .mass = mass,
-                .workspace = workspace
+                .workspace = workspace,
             };
         }
 
@@ -157,7 +154,6 @@ pub fn GridWavefunction(comptime T: type) type {
             density_matrix.zero();
 
             for (0..self.data.rows) |i| {
-
                 try self.densityAtRow(&self.workspace.density_at_row, i, potential, time, adiabatic, fix_gauge);
 
                 for (0..self.nstate) |j| for (0..self.nstate) |k| {
@@ -173,7 +169,6 @@ pub fn GridWavefunction(comptime T: type) type {
             for (0..self.nstate) |j| self.workspace.wavefunction_row.ptr(j, 0).* = self.data.at(i, j);
 
             if (adiabatic) {
-
                 try self.workspace.adiabatic_eigenvectors.copyTo(&self.workspace.previous_eigenvectors);
 
                 positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
@@ -204,22 +199,18 @@ pub fn GridWavefunction(comptime T: type) type {
         /// Initialize the position of the wavefunction as a Gaussian wavepacket.
         pub fn initialGaussian(self: *@This(), position: []const T, momentum: []const T, state: usize, gamma: []const T) !void {
             if (state >= self.nstate) {
-
-                std.log.err("INITIAL STATE INDEX OUT OF BOUNDS, EXPECTED LESS THAN {d} BUT GOT {d}", .{self.nstate, state});
+                std.log.err("INITIAL STATE INDEX OUT OF BOUNDS, EXPECTED LESS THAN {d} BUT GOT {d}", .{ self.nstate, state });
 
                 return error.InvalidInput;
             }
 
             for (0..self.data.rows) |i| {
-
                 positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
 
                 for (0..self.nstate) |j| if (j == state) {
-
                     var exp = Complex(T).init(0, 0);
 
                     for (0..self.ndim) |k| {
-
                         exp.re -= 0.5 * gamma[k] * (self.workspace.position_at_row.at(k) - position[k]) * (self.workspace.position_at_row.at(k) - position[k]);
 
                         exp.im += momentum[k] * (self.workspace.position_at_row.at(k) - position[k]);
@@ -237,19 +228,16 @@ pub fn GridWavefunction(comptime T: type) type {
             var kinetic_energy: T = 0;
 
             for (0..self.nstate) |i| {
-
                 for (0..self.data.rows) |j| self.workspace.column.ptr(j).* = self.data.at(j, i);
 
                 try cfftn(T, &self.workspace.column, self.shape, -1);
 
                 for (0..self.data.rows) |j| {
-
                     momentumAtRow(T, &self.workspace.momentum_at_row, j, self.ndim, self.npoint, self.limits);
 
                     var psq: T = 0;
 
                     for (0..self.ndim) |k| {
-
                         psq += self.workspace.momentum_at_row.at(k) * self.workspace.momentum_at_row.at(k);
 
                         momentum.ptr(k).* += self.workspace.momentum_at_row.at(k) * self.workspace.column.at(j).squaredMagnitude();
@@ -297,7 +285,6 @@ pub fn GridWavefunction(comptime T: type) type {
             position.zero();
 
             for (0..self.data.rows) |i| {
-
                 positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
 
                 for (0..self.ndim) |j| for (0..self.nstate) |k| {
@@ -313,7 +300,6 @@ pub fn GridWavefunction(comptime T: type) type {
             var potential_energy: T = 0;
 
             for (0..self.data.rows) |i| {
-
                 positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
                 try potential.evaluateDiabatic(&self.workspace.diabatic_potential, self.workspace.position_at_row, time);
 
@@ -327,13 +313,11 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Propagate the wavefunction in time using the split-operator method.
         pub fn propagate(self: *@This(), potential: ElectronicPotential(T), cap: ?ComplexAbsorbingPotential(T), time: T, time_step: T, adiabatic: bool, imaginary: bool, fix_gauge: bool) !void {
-
             const unit = Complex(T).init(if (imaginary) 1 else 0, if (imaginary) 0 else 1);
 
             try propagateHalfPosition(self, potential, time, time_step, unit);
 
             if (cap) |pot| {
-
                 if (pot.track_population) try self.density(&self.workspace.density_before, potential, time, adiabatic, fix_gauge);
 
                 try propagateHalfCap(self, pot, time_step, unit);
@@ -350,7 +334,6 @@ pub fn GridWavefunction(comptime T: type) type {
             try propagateHalfPosition(self, potential, time + time_step, time_step, unit);
 
             if (cap) |pot| {
-
                 if (pot.track_population) try self.density(&self.workspace.density_before, potential, time, adiabatic, fix_gauge);
 
                 try propagateHalfCap(self, pot, time_step, unit);
@@ -368,16 +351,14 @@ pub fn GridWavefunction(comptime T: type) type {
         /// Propagate the wavefunction full time step in momentum space.
         pub fn propagateFullMomentum(self: *@This(), time_step: T, unit: Complex(T)) !void {
             for (0..self.nstate) |j| {
-
                 for (0..self.data.rows) |i| self.workspace.column.ptr(i).* = self.data.at(i, j);
 
-                try cfftn(f64, &self.workspace.column,self.shape, -1);
+                try cfftn(f64, &self.workspace.column, self.shape, -1);
 
                 for (0..self.data.rows) |i| self.data.ptr(i, j).* = self.workspace.column.at(i);
             }
 
             for (0..self.data.rows) |i| {
-
                 momentumAtRow(T, &self.workspace.momentum_at_row, i, self.ndim, self.npoint, self.limits);
                 getMomentumPropagator(T, &self.workspace.propagator, self.workspace.momentum_at_row, self.mass, self.nstate, time_step, unit);
 
@@ -391,7 +372,6 @@ pub fn GridWavefunction(comptime T: type) type {
             }
 
             for (0..self.nstate) |j| {
-
                 for (0..self.data.rows) |i| self.workspace.column.ptr(i).* = self.data.at(i, j);
 
                 try cfftn(f64, &self.workspace.column, self.shape, 1);
@@ -403,7 +383,6 @@ pub fn GridWavefunction(comptime T: type) type {
         /// Propagate the wavefunction half a time step in position space.
         pub fn propagateHalfPosition(self: *@This(), potential: ElectronicPotential(T), time: T, time_step: T, unit: Complex(T)) !void {
             for (0..self.data.rows) |i| {
-
                 positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
 
                 try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time);
@@ -411,7 +390,6 @@ pub fn GridWavefunction(comptime T: type) type {
                 try getPositionPropagator(T, &self.workspace.propagator, self.workspace.adiabatic_potential, self.workspace.adiabatic_eigenvectors, time_step, unit);
 
                 for (0..self.nstate) |j| {
-
                     self.workspace.column.ptr(j).* = Complex(T).init(0, 0);
 
                     for (0..self.nstate) |k| {
@@ -426,13 +404,11 @@ pub fn GridWavefunction(comptime T: type) type {
         /// Propagate the wavefunction half a time step in position space using the CAP propagator.
         pub fn propagateHalfCap(self: *@This(), cap: ComplexAbsorbingPotential(T), time_step: T, unit: Complex(T)) !void {
             for (0..self.data.rows) |i| {
-
                 positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
 
                 getCapPropagator(T, &self.workspace.propagator, cap.apply(self.workspace.position_at_row), time_step, unit);
 
                 for (0..self.nstate) |j| {
-
                     self.workspace.column.ptr(j).* = Complex(T).init(0, 0);
 
                     for (0..self.nstate) |k| {
@@ -447,7 +423,6 @@ pub fn GridWavefunction(comptime T: type) type {
         /// Perform the transformation from diabatic to adiabatic representation or vice versa.
         pub fn transformRepresentation(self: *@This(), potential: ElectronicPotential(T), time: T, to_adiabatic: bool) !void {
             for (0..self.data.rows) |i| {
-
                 positionAtRow(T, &self.workspace.position_at_row, i, self.ndim, self.npoint, self.limits);
 
                 try potential.evaluateEigensystem(&self.workspace.diabatic_potential, &self.workspace.adiabatic_potential, &self.workspace.adiabatic_eigenvectors, self.workspace.position_at_row, time);
@@ -466,26 +441,28 @@ pub fn GridWavefunction(comptime T: type) type {
 
         /// Export the wavefunction to a specified path.
         pub fn write(self: @This(), path: []const u8, allocator: std.mem.Allocator) !void {
-            var file = try std.fs.cwd().createFile(path, .{}); defer file.close();
+            var file = try std.fs.cwd().createFile(path, .{});
+            defer file.close();
 
             var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-            var position_at_row = try RealVector(T).init(self.ndim, allocator); defer position_at_row.deinit(allocator);
+            var position_at_row = try RealVector(T).init(self.ndim, allocator);
+            defer position_at_row.deinit(allocator);
 
-            var writer = file.writer(&buffer); var writer_interface = &writer.interface;
+            var writer = file.writer(&buffer);
+            var writer_interface = &writer.interface;
 
-            try writer_interface.print("{d} {d}\n", .{self.data.rows, self.data.cols + self.ndim});
+            try writer_interface.print("{d} {d}\n", .{ self.data.rows, self.data.cols + self.ndim });
 
             for (0..self.data.rows) |i| {
-
                 positionAtRow(T, &position_at_row, i, self.ndim, self.npoint, self.limits);
 
                 for (0..self.ndim) |j| {
-                    try writer_interface.print("{d:20.14}{s}", .{position_at_row.at(j), if (j == self.ndim - 1) " " else ""});
+                    try writer_interface.print("{d:20.14}{s}", .{ position_at_row.at(j), if (j == self.ndim - 1) " " else "" });
                 }
 
                 for (0..self.nstate) |j| {
-                    try writer_interface.print(" {d:20.14} {d:20.14}{s}", .{self.data.at(i, j).re, self.data.at(i, j).im, if (j == self.nstate - 1) "\n" else ""});
+                    try writer_interface.print(" {d:20.14} {d:20.14}{s}", .{ self.data.at(i, j).re, self.data.at(i, j).im, if (j == self.nstate - 1) "\n" else "" });
                 }
             }
 
@@ -508,7 +485,6 @@ pub fn getMomentumPropagator(comptime T: type, K: *ComplexMatrix(T), momentum: R
     K.zero();
 
     for (0..nstate) |j| {
-
         for (0..momentum.len) |k| {
             K.ptr(j, j).* = K.at(j, j).add(Complex(T).init(momentum.at(k) * momentum.at(k), 0));
         }
@@ -522,11 +498,9 @@ pub fn getPositionPropagator(comptime T: type, R: *ComplexMatrix(T), adiabatic: 
     R.zero();
 
     for (0..R.rows) |k| {
-
         const phase = std.math.complex.exp(Complex(T).init(adiabatic.at(k, k), 0).mul(Complex(T).init(-0.5 * time_step, 0)).mul(unit));
-        
-        for (0..R.rows) |i| {
 
+        for (0..R.rows) |i| {
             const scaled_phase = phase.mul(Complex(T).init(eigenvectors.at(i, k), 0));
 
             for (0..R.rows) |j| {

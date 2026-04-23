@@ -53,7 +53,6 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Evaluate the adabatic potential energy matrix at given system state and time.
         pub fn evaluateAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) !void {
             if (self == .ab_initio) {
-
                 std.log.err("ADIABATIC POTENTIAL EVALUATION FROM DIABATIC POTENTIAL IS NOT SUPPORTED FOR AB INITIO MODE", .{});
 
                 return error.ProgrammingError;
@@ -68,12 +67,11 @@ pub fn ElectronicPotential(comptime T: type) type {
         pub fn evaluateDiabatic(self: @This(), diabatic_potential: *RealMatrix(T), position: RealVector(T), time: T) !void {
             switch (self) {
                 .ab_initio => {
-
                     std.log.err("DIABATIC POTENTIAL EVALUATION IS NOT SUPPORTED FOR AB INITIO MODE", .{});
 
                     return error.ProgrammingError;
                 },
-                inline else => |field| try field.evaluateDiabatic(diabatic_potential, position, time)
+                inline else => |field| try field.evaluateDiabatic(diabatic_potential, position, time),
             }
         }
 
@@ -81,19 +79,17 @@ pub fn ElectronicPotential(comptime T: type) type {
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), time: T) !T {
             return switch (self) {
                 .ab_initio => {
-
                     std.log.err("DIABATIC POTENTIAL ELEMENT EVALUATION IS NOT SUPPORTED FOR AB INITIO MODE", .{});
 
                     return error.ProgrammingError;
                 },
-                inline else => |field| field.evaluateDiabaticElement(i, j, position, time)
+                inline else => |field| field.evaluateDiabaticElement(i, j, position, time),
             };
         }
 
         /// Evaluate the matrix element of potential derivative.
         pub fn evaluateDiabaticElementDerivative1(self: @This(), i: usize, j: usize, position: RealVector(T), time: T, index: usize, fdiff_step: T) !T {
             if (self == .ab_initio) {
-
                 std.log.err("DIABATIC POTENTIAL DERIVATIVE EVALUATION IS NOT SUPPORTED FOR AB INITIO MODE", .{});
 
                 return error.ProgrammingError;
@@ -117,7 +113,6 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Evaluate the matrix element of potential second derivative.
         pub fn evaluateDiabaticElementDerivative2(self: @This(), i: usize, j: usize, position: RealVector(T), time: T, index: usize, fdiff_step: T) !T {
             if (self == .ab_initio) {
-
                 std.log.err("DIABATIC POTENTIAL SECOND DERIVATIVE EVALUATION IS NOT SUPPORTED FOR AB INITIO MODE", .{});
 
                 return error.ProgrammingError;
@@ -145,7 +140,6 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Evaluate adiabatic eigensystem at given system state and time.
         pub fn evaluateEigensystem(self: @This(), diabatic: *RealMatrix(T), adiabatic: *RealMatrix(T), eigenvectors: *RealMatrix(T), position: RealVector(T), time: T) !void {
             if (self == .ab_initio) {
-
                 std.log.err("ADIABATIC EIGENSYSTEM EVALUATION FROM DIABATIC POTENTIAL IS NOT SUPPORTED FOR AB INITIO MODE", .{});
 
                 return error.ProgrammingError;
@@ -159,7 +153,6 @@ pub fn ElectronicPotential(comptime T: type) type {
         /// Evaluate the adabatic potential energy gradient for a specific coordinate index. The adiabatic potential matrix will hold the potential at the r + dr point.
         pub fn forceAdiabatic(self: @This(), adiabatic: *RealMatrix(T), position: RealVector(T), time: T, state: usize, index: usize, fdiff_step: T, bias: ?BiasPotential(T)) !T {
             if (self == .ab_initio) {
-
                 std.log.err("ADIABATIC FORCE EVALUATION FROM DIABATIC POTENTIAL IS NOT SUPPORTED FOR AB INITIO MODE", .{});
 
                 return error.ProgrammingError;
@@ -173,8 +166,8 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             const energy_minus = adiabatic.at(state, state);
 
-            var dE_minus_bias: T = 0; if (bias != null and bias.?.variable == .potential_energy_difference) {
-
+            var dE_minus_bias: T = 0;
+            if (bias != null and bias.?.variable == .potential_energy_difference) {
                 const state1 = bias.?.variable.potential_energy_difference.states[0];
                 const state2 = bias.?.variable.potential_energy_difference.states[1];
 
@@ -187,8 +180,8 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             const energy_plus = adiabatic.at(state, state);
 
-            var dE_plus_bias: T = 0; if (bias != null and bias.?.variable == .potential_energy_difference) {
-
+            var dE_plus_bias: T = 0;
+            if (bias != null and bias.?.variable == .potential_energy_difference) {
                 const state1 = bias.?.variable.potential_energy_difference.states[0];
                 const state2 = bias.?.variable.potential_energy_difference.states[1];
 
@@ -199,11 +192,12 @@ pub fn ElectronicPotential(comptime T: type) type {
 
             try self.evaluateAdiabatic(adiabatic, position, time);
 
-            const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step; const bias_force = if (bias) |bs| try bs.force(adiabatic.*, state, index) else 0;
+            const gradient = 0.5 * (energy_plus - energy_minus) / fdiff_step;
+            const bias_force = if (bias) |bs| try bs.force(adiabatic.*, state, index) else 0;
 
             return -gradient + if (bias) |bs| switch (bs.variable) {
                 .potential_energy => bias_force * gradient,
-                .potential_energy_difference => 0.5 * bias_force * (dE_plus_bias - dE_minus_bias) / fdiff_step
+                .potential_energy_difference => 0.5 * bias_force * (dE_plus_bias - dE_minus_bias) / fdiff_step,
             } else 0;
         }
 
@@ -211,7 +205,6 @@ pub fn ElectronicPotential(comptime T: type) type {
         pub fn ndim(self: @This()) !usize {
             return switch (self) {
                 .ab_initio => {
-
                     std.log.err("NUMBER OF DIMENSIONS GETTER IN ELECTRONIC POTENTIAL STRUCT CANNOT BE USED FOR AB INITIO MODE", .{});
 
                     return error.ProgrammingError;
@@ -221,9 +214,7 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .file => |field| field.ndim,
                 .harmonic => |field| field.k.len,
                 .jahn_teller => |field| {
-
                     if (field.d < 2) {
-
                         std.log.err("NUMBER OF DIMENSIONS FOR JAHN-TELLER POTENTIAL MUST BE AT LEAST 2, BUT {d} WAS PROVIDED", .{field.d});
 
                         return error.ProgrammingError;
@@ -235,7 +226,7 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .time_linear => 1,
                 .tully_1 => 1,
                 .tully_2 => 1,
-                .vibronic_coupling => |field| field.ndim()
+                .vibronic_coupling => |field| field.ndim(),
             };
         }
 
@@ -252,7 +243,7 @@ pub fn ElectronicPotential(comptime T: type) type {
                 .time_linear => 2,
                 .tully_1 => 2,
                 .tully_2 => 2,
-                .vibronic_coupling => |field| field.nstate()
+                .vibronic_coupling => |field| field.nstate(),
             };
         }
 
@@ -261,7 +252,7 @@ pub fn ElectronicPotential(comptime T: type) type {
             return switch (self.*) {
                 .custom => |*field| try field.init(allocator),
                 .file => |*field| try field.init(allocator),
-                inline else => {}
+                inline else => {},
             };
         }
 
@@ -270,7 +261,7 @@ pub fn ElectronicPotential(comptime T: type) type {
             return switch (self.*) {
                 .custom => |*field| field.deinit(allocator),
                 .file => |*field| field.deinit(allocator),
-                inline else => {}
+                inline else => {},
             };
         }
     };

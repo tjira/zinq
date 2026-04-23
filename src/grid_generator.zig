@@ -11,7 +11,6 @@ const RealVector = real_vector.RealVector;
 /// Get the momentum point given the row index.
 pub fn momentumAtRow(comptime T: type, point: *RealVector(T), index: usize, ndim: usize, npoint: usize, limits: []const []const T) void {
     for (0..ndim) |i| {
-
         const axis = ndim - i - 1;
 
         const grid_index = @as(T, @floatFromInt(index / std.math.pow(usize, npoint, axis) % npoint));
@@ -27,7 +26,6 @@ pub fn momentumGridAlloc(comptime T: type, limits: []const []const T, npoint: us
     var momentum_grid = try RealMatrix(T).init(std.math.pow(usize, npoint, limits.len), limits.len, allocator);
 
     for (0..momentum_grid.rows) |i| {
-
         var row = momentum_grid.row(i);
 
         momentumAtRow(T, &row, i, limits.len, npoint, limits);
@@ -39,7 +37,6 @@ pub fn momentumGridAlloc(comptime T: type, limits: []const []const T, npoint: us
 /// Get the position point given the row index.
 pub fn positionAtRow(comptime T: type, point: *RealVector(T), index: usize, ndim: usize, npoint: usize, limits: []const []const T) void {
     for (0..ndim) |i| {
-
         const axis = ndim - i - 1;
 
         const grid_index = @as(T, @floatFromInt(index / std.math.pow(usize, npoint, axis) % npoint));
@@ -53,7 +50,6 @@ pub fn positionGridAlloc(comptime T: type, limits: []const []const T, npoint: us
     var position_grid = try RealMatrix(T).init(std.math.pow(usize, npoint, limits.len), limits.len, allocator);
 
     for (0..position_grid.rows) |i| {
-
         var row = position_grid.row(i);
 
         positionAtRow(T, &row, i, limits.len, npoint, limits);

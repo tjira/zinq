@@ -22,7 +22,7 @@ pub fn Parameters(comptime T: type) type {
         baeck_an_parameters: baeck_an.Parameters(T),
         hst_parameters: hammes_schiffer_tully.Parameters(T),
         nacv_parameters: nonadiabatic_coupling_vector.Parameters(T),
-        npi_parameters: norm_preserving_interpolation.Parameters(T)
+        npi_parameters: norm_preserving_interpolation.Parameters(T),
     };
 }
 

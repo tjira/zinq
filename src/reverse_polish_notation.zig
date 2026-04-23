@@ -8,32 +8,15 @@ const STR2F = global_variables.STR2F;
 const C2V = global_variables.C2V;
 
 /// Associativity types.
-pub const Associativity = enum {
-    Left,
-    Right
-};
+pub const Associativity = enum { Left, Right };
 
 /// Available operators.
-pub const Operator = enum {
-    Affirm,
-    Plus,
-    Minus,
-    Negate,
-    Multiply,
-    Divide,
-    Power
-};
+pub const Operator = enum { Affirm, Plus, Minus, Negate, Multiply, Divide, Power };
 
 /// Reverse Polish Notation (RPN) structure.
 pub fn ReversePolishNotation(comptime T: type) type {
     return struct {
-        const Element = union(enum) {
-            number: T,
-            func: *const fn(T) T,
-            op: Operator,
-            variable: []const u8,
-            constant: []const u8
-        };
+        const Element = union(enum) { number: T, func: *const fn (T) T, op: Operator, variable: []const u8, constant: []const u8 };
 
         data: std.ArrayList(Element),
 
@@ -52,22 +35,21 @@ pub fn ReversePolishNotation(comptime T: type) type {
         /// Appends a number to the RPN output.
         pub fn append(self: *@This(), element: anytype, allocator: std.mem.Allocator) !void {
             if (@TypeOf(element) == T) {
-                try self.data.append(allocator, Element{.number = element});
-            } else if (@TypeOf(element) == *const fn(T) T) {
-                try self.data.append(allocator, Element{.func = element});
+                try self.data.append(allocator, Element{ .number = element });
+            } else if (@TypeOf(element) == *const fn (T) T) {
+                try self.data.append(allocator, Element{ .func = element });
             } else if (@TypeOf(element) == Operator) {
-                try self.data.append(allocator, Element{.op = element});
+                try self.data.append(allocator, Element{ .op = element });
             } else if (@TypeOf(element) == []const u8) {
-
                 for (C2V.keys()) |constant| {
                     if (std.mem.eql(u8, element, constant)) {
-                        try self.data.append(allocator, Element{.constant = element}); return;
+                        try self.data.append(allocator, Element{ .constant = element });
+                        return;
                     }
                 }
 
-                try self.data.append(allocator, Element{.variable = element});
+                try self.data.append(allocator, Element{ .variable = element });
             } else {
-
                 std.log.err("UNSUPPORTED ELEMENT TYPE '{s}' IN RPN APPEND, EXPECTED A NUMBER, FUNCTION POINTER, OPERATOR OR VARIABLE/CONSTANT NAME", .{std.meta.typeName(@TypeOf(element))});
 
                 return error.InvalidInput;
@@ -76,22 +58,22 @@ pub fn ReversePolishNotation(comptime T: type) type {
 
         /// Evaluates the RPN expression and returns the result.
         pub fn evaluate(self: @This(), map: std.StringHashMap(T)) !T {
-            var stack: [2048]T = undefined; var length: usize = 0;
+            var stack: [2048]T = undefined;
+            var length: usize = 0;
 
             for (self.data.items) |element| {
                 switch (element) {
                     .number => |num| {
                         if (length >= stack.len) {
-
                             std.log.err("RPN STACK OVERFLOW, MAX STACK SIZE IS {d}, MAXIMUM STACK SIZE CAN BE CHANGED IN THE SOURCE CODE", .{stack.len});
 
                             return error.ProgrammingError;
                         }
-                        stack[length] = num; length += 1;
+                        stack[length] = num;
+                        length += 1;
                     },
                     .func => |func| {
                         if (length < 1) {
-
                             std.log.err("RPN STACK UNDERFLOW WHEN APPLYING FUNCTION, NOT ENOUGH OPERANDS IN THE STACK", .{});
 
                             return error.ProgrammingError;
@@ -101,7 +83,6 @@ pub fn ReversePolishNotation(comptime T: type) type {
                     .op => |op| switch (operatorArity(op)) {
                         1 => {
                             if (length < 1) {
-
                                 std.log.err("RPN STACK UNDERFLOW WHEN APPLYING UNARY OPERATOR, NOT ENOUGH OPERANDS IN THE STACK", .{});
 
                                 return error.ProgrammingError;
@@ -110,60 +91,57 @@ pub fn ReversePolishNotation(comptime T: type) type {
                         },
                         2 => {
                             if (length < 2) {
-
                                 std.log.err("RPN STACK UNDERFLOW WHEN APPLYING BINARY OPERATOR, NOT ENOUGH OPERANDS IN THE STACK", .{});
 
                                 return error.ProgrammingError;
                             }
-                            const n1 = stack[length - 1]; const n2 = stack[length - 2];
-                            stack[length - 2] = applyBinaryOperator(op, n1, n2); length -= 1;
+                            const n1 = stack[length - 1];
+                            const n2 = stack[length - 2];
+                            stack[length - 2] = applyBinaryOperator(op, n1, n2);
+                            length -= 1;
                         },
                         else => {
-
                             std.log.err("UNKNOWN OPERATOR ARITY {d} FOR OPERATOR", .{operatorArity(op)});
 
                             return error.ProgrammingError;
-                        }
+                        },
                     },
                     .variable => |variable| {
                         if (map.get(variable) == null) {
-
                             std.log.err("UNDEFINED VARIABLE '{s}' IN RPN EVALUATION", .{variable});
 
                             return error.InvalidInput;
                         }
 
                         if (length >= stack.len) {
-
                             std.log.err("RPN STACK OVERFLOW, MAX STACK SIZE IS {d}", .{stack.len});
 
                             return error.ProgrammingError;
                         }
 
-                        stack[length] = map.get(variable).?; length += 1;
+                        stack[length] = map.get(variable).?;
+                        length += 1;
                     },
                     .constant => |constant| {
                         if (C2V.get(constant) == null) {
-
                             std.log.err("UNDEFINED CONSTANT '{s}' IN RPN EVALUATION", .{constant});
 
                             return error.InvalidInput;
                         }
 
                         if (length >= stack.len) {
-
                             std.log.err("RPN STACK OVERFLOW, MAX STACK SIZE IS {d}", .{stack.len});
 
                             return error.ProgrammingError;
                         }
 
-                        stack[length] = C2V.get(constant).?; length += 1;
-                    }
+                        stack[length] = C2V.get(constant).?;
+                        length += 1;
+                    },
                 }
             }
 
             if (length != 1) {
-
                 std.log.err("ERROR IN EVALUATION OF RPN EXPRESSION, EXPECTED A SINGLE RESULT BUT GOT {d} ELEMENTS IN THE STACK", .{length});
 
                 return error.ProgrammingError;
@@ -177,17 +155,15 @@ pub fn ReversePolishNotation(comptime T: type) type {
             var buffer = std.ArrayList(u8){};
 
             outer: for (self.data.items, 0..) |element, i| {
-
                 if (i > 0 and i < self.data.items.len) try buffer.print(allocator, " ", .{});
 
                 switch (element) {
-
                     .number => |num| try buffer.print(allocator, "{d}", .{num}),
 
                     .func => |func| {
-
                         for (STR2F.keys(), STR2F.values()) |key, value| if (func == value) {
-                            for (key) |c| try buffer.print(allocator, "{c}", .{std.ascii.toUpper(c)}); continue :outer;
+                            for (key) |c| try buffer.print(allocator, "{c}", .{std.ascii.toUpper(c)});
+                            continue :outer;
                         };
 
                         std.log.err("UNKNOWN FUNCTION PASSED TO RPN TO STRING", .{});
@@ -204,7 +180,7 @@ pub fn ReversePolishNotation(comptime T: type) type {
                         .Divide => "/",
                         .Power => "^",
                     }}),
-                    
+
                     .variable => |variable| try buffer.print(allocator, "{s}", .{variable}),
                     .constant => |constant| try buffer.print(allocator, "{s}", .{constant}),
                 }
@@ -220,7 +196,7 @@ pub fn applyUnaryOperator(op: Operator, n: anytype) @TypeOf(n) {
     return switch (op) {
         .Affirm => n,
         .Negate => -n,
-        else => unreachable
+        else => unreachable,
     };
 }
 
@@ -232,7 +208,7 @@ pub fn applyBinaryOperator(op: Operator, n1: anytype, n2: @TypeOf(n1)) @TypeOf(n
         .Multiply => n2 * n1,
         .Divide => n2 / n1,
         .Power => std.math.pow(@TypeOf(n1, n2), n2, n1),
-        else => unreachable
+        else => unreachable,
     };
 }
 
@@ -240,7 +216,7 @@ pub fn applyBinaryOperator(op: Operator, n1: anytype, n2: @TypeOf(n1)) @TypeOf(n
 pub fn operatorAssociativity(op: Operator) Associativity {
     return switch (op) {
         .Plus, .Minus, .Multiply, .Divide => .Left,
-        .Power, .Negate, .Affirm => .Right
+        .Power, .Negate, .Affirm => .Right,
     };
 }
 
@@ -252,7 +228,7 @@ pub fn operatorFromChar(char: u8) !Operator {
         '*' => Operator.Multiply,
         '/' => Operator.Divide,
         '^' => Operator.Power,
-        else => return error.InvalidInput
+        else => return error.InvalidInput,
     };
 }
 

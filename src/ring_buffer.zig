@@ -11,11 +11,7 @@ pub fn RingBuffer(comptime T: type) type {
 
         /// Initialize the ring buffer.
         pub fn init(max_len: usize, allocator: std.mem.Allocator) !@This() {
-            return @This(){
-                .data = try allocator.alloc(T, max_len),
-                .len = 0,
-                .head = 0
-            };
+            return @This(){ .data = try allocator.alloc(T, max_len), .len = 0, .head = 0 };
         }
 
         /// Deinitialize the ring buffer.

@@ -21,13 +21,14 @@ pub fn OrbitFractal(comptime T: type) type {
 /// Buffalo fractal structure.
 pub fn Buffalo(comptime T: type) type {
     return struct {
-        z: ?Complex(T) = Complex(T).init(0, 0), zp: ?Complex(T) = Complex(T).init(0, 0),
+        z: ?Complex(T) = Complex(T).init(0, 0),
+        zp: ?Complex(T) = Complex(T).init(0, 0),
 
         /// Initialize function that returns the initial z and zp values.
-        pub fn init(_: @This(), _: Complex(T)) struct{Complex(T), Complex(T)} {
-            return .{Complex(T).init(0, 0), Complex(T).init(0, 0)};
+        pub fn init(_: @This(), _: Complex(T)) struct { Complex(T), Complex(T) } {
+            return .{ Complex(T).init(0, 0), Complex(T).init(0, 0) };
         }
-        
+
         /// Burningship iteration function.
         pub fn iterate(_: @This(), p: Complex(T), z: Complex(T), _: Complex(T)) Complex(T) {
             const zabs = Complex(T).init(@abs(z.re), @abs(z.im));
@@ -40,13 +41,14 @@ pub fn Buffalo(comptime T: type) type {
 /// Burning ship fractal structure.
 pub fn BurningShip(comptime T: type) type {
     return struct {
-        z: ?Complex(T) = Complex(T).init(0, 0), zp: ?Complex(T) = Complex(T).init(0, 0),
+        z: ?Complex(T) = Complex(T).init(0, 0),
+        zp: ?Complex(T) = Complex(T).init(0, 0),
 
         /// Initialize function that returns the initial z and zp values.
-        pub fn init(_: @This(), _: Complex(T)) struct{Complex(T), Complex(T)} {
-            return .{Complex(T).init(0, 0), Complex(T).init(0, 0)};
+        pub fn init(_: @This(), _: Complex(T)) struct { Complex(T), Complex(T) } {
+            return .{ Complex(T).init(0, 0), Complex(T).init(0, 0) };
         }
-        
+
         /// Burningship iteration function.
         pub fn iterate(_: @This(), p: Complex(T), z: Complex(T), _: Complex(T)) Complex(T) {
             const zabs = Complex(T).init(@abs(z.re), @abs(z.im));
@@ -59,13 +61,14 @@ pub fn BurningShip(comptime T: type) type {
 /// Julia fractal structure.
 pub fn Julia(comptime T: type) type {
     return struct {
-        z: ?Complex(T) = null, zp: ?Complex(T) = Complex(T).init(0, 0),
+        z: ?Complex(T) = null,
+        zp: ?Complex(T) = Complex(T).init(0, 0),
 
         c: Complex(T),
 
         /// Init function that returns the initial z and zp values.
-        pub fn init(_: @This(), p: Complex(T)) struct{Complex(T), Complex(T)} {
-            return .{p, Complex(T).init(0, 0)};
+        pub fn init(_: @This(), p: Complex(T)) struct { Complex(T), Complex(T) } {
+            return .{ p, Complex(T).init(0, 0) };
         }
 
         /// Julia iteration function.
@@ -78,13 +81,14 @@ pub fn Julia(comptime T: type) type {
 /// Mandelbrot fractal structure.
 pub fn Mandelbrot(comptime T: type) type {
     return struct {
-        z: ?Complex(T) = Complex(T).init(0, 0), zp: ?Complex(T) = Complex(T).init(0, 0),
+        z: ?Complex(T) = Complex(T).init(0, 0),
+        zp: ?Complex(T) = Complex(T).init(0, 0),
 
         /// Init function that returns the initial z and zp values.
-        pub fn init(_: @This(), _: Complex(T)) struct{Complex(T), Complex(T)} {
-            return .{Complex(T).init(0, 0), Complex(T).init(0, 0)};
+        pub fn init(_: @This(), _: Complex(T)) struct { Complex(T), Complex(T) } {
+            return .{ Complex(T).init(0, 0), Complex(T).init(0, 0) };
         }
-        
+
         /// Mandelbrot iteration function.
         pub fn iterate(_: @This(), p: Complex(T), z: Complex(T), _: Complex(T)) Complex(T) {
             return z.mul(z).add(p);
@@ -95,13 +99,14 @@ pub fn Mandelbrot(comptime T: type) type {
 /// Manowar fractal structure.
 pub fn Manowar(comptime T: type) type {
     return struct {
-        z: ?Complex(T) = null, zp: ?Complex(T) = null,
+        z: ?Complex(T) = null,
+        zp: ?Complex(T) = null,
 
         /// Initialize function that returns the initial z and zp values.
-        pub fn init(_: @This(), p: Complex(T)) struct{Complex(T), Complex(T)} {
-            return .{p, p};
+        pub fn init(_: @This(), p: Complex(T)) struct { Complex(T), Complex(T) } {
+            return .{ p, p };
         }
-        
+
         /// Manowar iteration function.
         pub fn iterate(_: @This(), p: Complex(T), z: Complex(T), zp: Complex(T)) Complex(T) {
             return z.mul(z).add(zp).add(p);
@@ -112,15 +117,16 @@ pub fn Manowar(comptime T: type) type {
 /// Phoenix fractal structure.
 pub fn Phoenix(comptime T: type) type {
     return struct {
-        z: ?Complex(T) = null, zp: ?Complex(T) = Complex(T).init(0, 0),
+        z: ?Complex(T) = null,
+        zp: ?Complex(T) = Complex(T).init(0, 0),
 
         c: Complex(T),
 
         /// Init function that returns the initial z and zp values.
-        pub fn init(self: @This(), p: Complex(T)) struct{Complex(T), Complex(T)} {
-            return .{p, self.c};
+        pub fn init(self: @This(), p: Complex(T)) struct { Complex(T), Complex(T) } {
+            return .{ p, self.c };
         }
-        
+
         /// Phoenix iteration function.
         pub fn iterate(_: @This(), _: Complex(T), z: Complex(T), zp: Complex(T)) Complex(T) {
             return z.mul(z).sub(zp.mul(Complex(T).init(0.5, 0))).add(Complex(T).init(0.5667, 0));

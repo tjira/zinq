@@ -11,11 +11,7 @@ const shuntingYard = shunting_yard.shuntingYard;
 
 /// Options for the expression evaluator target.
 pub fn Options(comptime _: type) type {
-    return struct {
-        expression: []const u8,
-        variables: []const []const u8,
-        values: []const f64
-    };
+    return struct { expression: []const u8, variables: []const []const u8, values: []const f64 };
 }
 
 /// Output structure for the expression evaluator target.
@@ -37,21 +33,24 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     if (enable_printing) try print("\nEXPRESSION: '{s}'", .{opt.expression});
 
     if (enable_printing and opt.variables.len > 0) {
-
         try print(", VARIABLES: ", .{});
 
-        for (0..opt.variables.len) |i| try print("{s}={d}{s}", .{opt.variables[i], opt.values[i], if (i == opt.variables.len - 1) "" else ", "});
+        for (0..opt.variables.len) |i| try print("{s}={d}{s}", .{ opt.variables[i], opt.values[i], if (i == opt.variables.len - 1) "" else ", " });
     }
 
-    var rpn = try shuntingYard(T, opt.expression, opt.variables, allocator); defer rpn.deinit(allocator);
+    var rpn = try shuntingYard(T, opt.expression, opt.variables, allocator);
+    defer rpn.deinit(allocator);
 
-    var map = std.StringHashMap(T).init(allocator); defer map.deinit();
+    var map = std.StringHashMap(T).init(allocator);
+    defer map.deinit();
 
     for (opt.variables, opt.values) |variable, value| try map.put(variable, value);
 
-    const rpnstr = try rpn.toString(allocator); defer allocator.free(rpnstr); const value = try rpn.evaluate(map);
+    const rpnstr = try rpn.toString(allocator);
+    defer allocator.free(rpnstr);
+    const value = try rpn.evaluate(map);
 
-    if (enable_printing) try print("\n\nRPN: {s}\n\nVALUE: {d:.8}\n", .{rpnstr, value});
+    if (enable_printing) try print("\n\nRPN: {s}\n\nVALUE: {d:.8}\n", .{ rpnstr, value });
 
-    return Output(T){.value = value};
+    return Output(T){ .value = value };
 }

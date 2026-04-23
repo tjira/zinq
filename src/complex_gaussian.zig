@@ -30,8 +30,11 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Initialize a new complex Gaussian with given parameters.
         pub fn init(position: []const T, gamma: []const T, momentum: []const T, allocator: std.mem.Allocator) !@This() {
             if (position.len != gamma.len or position.len != momentum.len or gamma.len != momentum.len) {
-
-                std.log.err("INVALID DIMENSION OF COMPLEX GAUSSIAN PARAMETERS, ALL PARAMETERS MUST HAVE THE SAME LENGTH, GOT position: {d}, gamma: {d}, momentum: {d}", .{position.len, gamma.len, momentum.len});
+                std.log.err("INVALID DIMENSION OF COMPLEX GAUSSIAN PARAMETERS, ALL PARAMETERS MUST HAVE THE SAME LENGTH, GOT position: {d}, gamma: {d}, momentum: {d}", .{
+                    position.len,
+                    gamma.len,
+                    momentum.len,
+                });
 
                 return error.InvalidInput;
             }
@@ -66,21 +69,15 @@ pub fn ComplexGaussian(comptime T: type) type {
             for (self.momentum, 0..) |p, i| momentum[i] = p;
             for (self.position, 0..) |q, i| position[i] = q;
 
-            return @This(){
-                .position = position,
-                .gamma = gamma,
-                .momentum = momentum
-            };
+            return @This(){ .position = position, .gamma = gamma, .momentum = momentum };
         }
 
         /// Returns the derivative of the electronic coefficients where this gaussian is shared between them.
         pub fn coefficientDerivative(_: @This(), dc: *ComplexVector(T), coefs: ComplexVector(T), matrix_eom: anytype) !void {
             for (0..coefs.len) |i| {
-
                 dc.ptr(i).* = Complex(T).init(0, 0);
 
                 for (0..coefs.len) |j| {
-
                     var Vc_j = Complex(T).init(0, 0);
 
                     for (0..coefs.len) |k| {
@@ -110,8 +107,8 @@ pub fn ComplexGaussian(comptime T: type) type {
             var result = Complex(T).init(1, 0);
 
             for (self.position, 0..) |c, i| {
-
-                const dq_c = Complex(T).init(q[i] - c, 0); const p_c = Complex(T).init(0, self.momentum[i]);
+                const dq_c = Complex(T).init(q[i] - c, 0);
+                const p_c = Complex(T).init(0, self.momentum[i]);
 
                 const exponent = Complex(T).init(0.5, 0).neg().mul(self.gamma[i].mul(dq_c.mul(dq_c))).add(p_c.mul(dq_c));
 
@@ -145,8 +142,11 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Calculate the kinetic matrix element between this complex Gaussian and another.
         pub fn kinetic(self: @This(), other: @This(), mass: []const T) !Complex(T) {
             if (self.position.len != other.position.len or self.position.len != mass.len or other.position.len != mass.len) {
-
-                std.log.err("INVALID DIMENSION IN KINETIC MATRIX ELEMENT, ALL PARAMETERS MUST HAVE THE SAME LENGTH, GOT SELF POSITION: {d}, OTHER POSITION: {d}, MASS: {d}", .{self.position.len, other.position.len, mass.len});
+                std.log.err("INVALID DIMENSION IN KINETIC MATRIX ELEMENT, ALL PARAMETERS MUST HAVE THE SAME LENGTH, GOT SELF POSITION: {d}, OTHER POSITION: {d}, MASS: {d}", .{
+                    self.position.len,
+                    other.position.len,
+                    mass.len,
+                });
 
                 return error.InvalidInput;
             }
@@ -154,10 +154,10 @@ pub fn ComplexGaussian(comptime T: type) type {
             var result = Complex(T).init(0, 0);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, mass) |q1, q2, g1, g2, p1, p2, m| {
-
                 const g1_c = g1.conjugate();
 
-                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
+                const p1_c = Complex(T).init(p1, 0);
+                const p2_c = Complex(T).init(p2, 0);
 
                 const dq_c = Complex(T).init(q1 - q2, 0);
 
@@ -195,8 +195,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Calculates the matrix element of the momentum operator between this complex Gaussian and another.
         pub fn momentumMatrixElementIndex(self: @This(), other: @This(), i: usize) !Complex(T) {
             if (self.position.len != other.position.len) {
-
-                std.log.err("INVALID DIMENSION IN MOMENTUM MATRIX ELEMENT, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+                std.log.err("INVALID DIMENSION IN MOMENTUM MATRIX ELEMENT, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{
+                    self.position.len,
+                    other.position.len,
+                });
 
                 return error.InvalidInput;
             }
@@ -204,7 +206,6 @@ pub fn ComplexGaussian(comptime T: type) type {
             var result = Complex(T).init(0, 0);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, i..i + 1) |q1, q2, g1, g2, p1, p2, _| {
-
                 const g1_c = g1.conjugate();
 
                 const dq_c = Complex(T).init(q1 - q2, 0);
@@ -218,8 +219,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Calculates the matrix element of the position operator between this complex Gaussian and another.
         pub fn positionMatrixElementIndex(self: @This(), other: @This(), i: usize) !Complex(T) {
             if (self.position.len != other.position.len) {
-
-                std.log.err("INVALID DIMENSION IN POSITION MATRIX ELEMENT, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+                std.log.err("INVALID DIMENSION IN POSITION MATRIX ELEMENT, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{
+                    self.position.len,
+                    other.position.len,
+                });
 
                 return error.InvalidInput;
             }
@@ -227,12 +230,11 @@ pub fn ComplexGaussian(comptime T: type) type {
             var result = Complex(T).init(0, 0);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, i..i + 1) |q1, q2, g1, g2, p1, p2, _| {
-
                 const g1_c = g1.conjugate();
 
                 const dq_c = Complex(T).init(q1 - q2, 0);
                 const dp_c = Complex(T).init(p2 - p1, 0);
-                
+
                 result = Complex(T).init(q2, 0).add(g1_c.div(g1_c.add(g2)).mul(dq_c)).add(dp_c.div(g1_c.add(g2)).mulbyi());
             }
 
@@ -241,7 +243,8 @@ pub fn ComplexGaussian(comptime T: type) type {
 
         /// Returns the norm of the gaussian.
         pub fn norm(self: @This()) T {
-            var gamma_prod: T = 1; for (self.gamma) |g| gamma_prod *= g.re;
+            var gamma_prod: T = 1;
+            for (self.gamma) |g| gamma_prod *= g.re;
 
             return std.math.pow(T, std.math.pi, @as(T, @floatFromInt(self.position.len)) / 4) / std.math.pow(T, gamma_prod, 0.25);
         }
@@ -249,8 +252,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Compute the overlap integral between this complex Gaussian and another.
         pub fn overlap(self: @This(), other: @This()) !Complex(T) {
             if (self.position.len != other.position.len) {
-
-                std.log.err("INVALID DIMENSION IN OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+                std.log.err("INVALID DIMENSION IN OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{
+                    self.position.len,
+                    other.position.len,
+                });
 
                 return error.InvalidInput;
             }
@@ -258,10 +263,11 @@ pub fn ComplexGaussian(comptime T: type) type {
             var result = Complex(T).init(1, 0);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum) |q1, q2, g1, g2, p1, p2| {
+                const p1_c = Complex(T).init(p1, 0);
+                const p2_c = Complex(T).init(p2, 0);
 
-                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
-
-                const dq_c = Complex(T).init(q1 - q2, 0); const dp_c = Complex(T).init(p1 - p2, 0);
+                const dq_c = Complex(T).init(q1 - q2, 0);
+                const dp_c = Complex(T).init(p1 - p2, 0);
 
                 const factor = std.math.complex.sqrt(Complex(T).init(2 * std.math.pi, 0).div(g1.conjugate().add(g2)));
 
@@ -279,8 +285,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to its width (gamma).
         pub fn overlapDiffGamma(self: @This(), other: @This()) !Complex(T) {
             if (self.position.len != other.position.len) {
-
-                std.log.err("INVALID DIMENSION IN GAMMA DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+                std.log.err("INVALID DIMENSION IN GAMMA DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{
+                    self.position.len,
+                    other.position.len,
+                });
 
                 return error.InvalidInput;
             }
@@ -288,16 +296,17 @@ pub fn ComplexGaussian(comptime T: type) type {
             var result = Complex(T).init(0, 0);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum) |q1, q2, g1, g2, p1, p2| {
+                const g1_c = g1.conjugate();
+                const g2_c = g2.conjugate();
 
-                const g1_c = g1.conjugate(); const g2_c = g2.conjugate();
-
-                const dq = q1 - q2; const dp = p1 - p2;
+                const dq = q1 - q2;
+                const dp = p1 - p2;
 
                 const term1 = Complex(T).init(2, 0).neg().mul(g2).mul(g2_c).sub(g2.mul(g2)).add(Complex(T).init(4 * g2.re * dp * dp, 0));
                 const term2 = Complex(T).init(2, 0).neg().mul(g2_c).add(g1_c.mul(Complex(T).init(1 - 4 * g2.re * dq * dq, 0))).add(Complex(T).init(0, 8 * g2.re * dq * dp));
 
                 const denom = g1_c.add(g2).mul(g1_c.add(g2)).mul(Complex(T).init(8 * g2.re, 0));
-                
+
                 result = result.add(term1.add(term2.mul(g1_c)).div(denom));
             }
 
@@ -307,8 +316,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to momentum.
         pub fn overlapDiffMomentum(self: @This(), other: @This()) !Complex(T) {
             if (self.position.len != other.position.len) {
-
-                std.log.err("INVALID DIMENSION IN MOMENTUM DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+                std.log.err("INVALID DIMENSION IN MOMENTUM DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{
+                    self.position.len,
+                    other.position.len,
+                });
 
                 return error.InvalidInput;
             }
@@ -316,10 +327,10 @@ pub fn ComplexGaussian(comptime T: type) type {
             var result = Complex(T).init(0, 0);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum) |q1, q2, g1, g2, p1, p2| {
-
                 const g1_c = g1.conjugate();
 
-                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
+                const p1_c = Complex(T).init(p1, 0);
+                const p2_c = Complex(T).init(p2, 0);
 
                 const dq_c = Complex(T).init(q1 - q2, 0);
 
@@ -332,8 +343,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to position.
         pub fn overlapDiffPosition(self: @This(), other: @This()) !Complex(T) {
             if (self.position.len != other.position.len) {
-
-                std.log.err("INVALID DIMENSION IN POSITION DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+                std.log.err("INVALID DIMENSION IN POSITION DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{
+                    self.position.len,
+                    other.position.len,
+                });
 
                 return error.InvalidInput;
             }
@@ -341,10 +354,10 @@ pub fn ComplexGaussian(comptime T: type) type {
             var result = Complex(T).init(0, 0);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum) |q1, q2, g1, g2, p1, p2| {
-
                 const g1_c = g1.conjugate();
 
-                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
+                const p1_c = Complex(T).init(p1, 0);
+                const p2_c = Complex(T).init(p2, 0);
 
                 const dq_c = Complex(T).init(q1 - q2, 0);
 
@@ -357,8 +370,10 @@ pub fn ComplexGaussian(comptime T: type) type {
         /// Compute the overlap integral between this complex Gaussian and another which is differentiated with respect to time.
         pub fn overlapDiffTime(self: @This(), other: @This(), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T)) !Complex(T) {
             if (self.position.len != other.position.len) {
-
-                std.log.err("INVALID DIMENSION IN TIME DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{self.position.len, other.position.len});
+                std.log.err("INVALID DIMENSION IN TIME DIFFERENTIATED OVERLAP INTEGRAL, BOTH COMPLEX GAUSSIANS MUST HAVE THE SAME DIMENSION, GOT SELF POSITION: {d}, OTHER POSITION: {d}", .{
+                    self.position.len,
+                    other.position.len,
+                });
 
                 return error.InvalidInput;
             }
@@ -366,10 +381,10 @@ pub fn ComplexGaussian(comptime T: type) type {
             var result = Complex(T).init(0, 0);
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
-
                 const g1_c = g1.conjugate();
 
-                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
+                const p1_c = Complex(T).init(p1, 0);
+                const p2_c = Complex(T).init(p2, 0);
 
                 const dq_c = Complex(T).init(q1 - q2, 0);
 
@@ -377,10 +392,10 @@ pub fn ComplexGaussian(comptime T: type) type {
             }
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
-
                 const g1_c = g1.conjugate();
 
-                const p1_c = Complex(T).init(p1, 0); const p2_c = Complex(T).init(p2, 0);
+                const p1_c = Complex(T).init(p1, 0);
+                const p2_c = Complex(T).init(p2, 0);
 
                 const dq_c = Complex(T).init(q1 - q2, 0);
 
@@ -388,16 +403,17 @@ pub fn ComplexGaussian(comptime T: type) type {
             }
 
             for (self.position, other.position, self.gamma, other.gamma, self.momentum, other.momentum, 0..) |q1, q2, g1, g2, p1, p2, i| {
+                const g1_c = g1.conjugate();
+                const g2_c = g2.conjugate();
 
-                const g1_c = g1.conjugate(); const g2_c = g2.conjugate();
-
-                const dq_i = q1 - q2; const dp_i = p1 - p2;
+                const dq_i = q1 - q2;
+                const dp_i = p1 - p2;
 
                 const term1 = Complex(T).init(2, 0).neg().mul(g2).mul(g2_c).sub(g2.mul(g2)).add(Complex(T).init(4 * g2.re * dp_i * dp_i, 0));
                 const term2 = Complex(T).init(2, 0).neg().mul(g2_c).add(g1_c.mul(Complex(T).init(1 - 4 * g2.re * dq_i * dq_i, 0))).add(Complex(T).init(0, 8 * g2.re * dq_i * dp_i));
 
                 const denom = g1_c.add(g2).mul(g1_c.add(g2)).mul(Complex(T).init(8 * g2.re, 0));
-                
+
                 result = result.add(term1.add(term2.mul(g1_c)).div(denom).mul(dg.at(i)));
             }
 
@@ -416,18 +432,19 @@ pub fn ComplexGaussian(comptime T: type) type {
             const hermite_grid = try getGaussHermiteGrid(n_nodes);
 
             for (0..powi(n_nodes, q.len)) |i| {
-
-                var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
+                var temp = i;
+                var weight: T = 1;
+                var complex_exponent = Complex(T).init(0, 0);
 
                 for (0..q.len) |j| {
-
-                    const s1 = 1 / std.math.sqrt(self.gamma[j].re); const s2 = 1 / std.math.sqrt(other.gamma[j].re);
+                    const s1 = 1 / std.math.sqrt(self.gamma[j].re);
+                    const s2 = 1 / std.math.sqrt(other.gamma[j].re);
 
                     const mu = (self.position[j] * s2 * s2 + other.position[j] * s1 * s1) / (s1 * s1 + s2 * s2);
 
                     const sigma = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
 
-                    q.ptr(j).* = std.math.sqrt2 * sigma * hermite_grid.nodes[temp % n_nodes] + mu; 
+                    q.ptr(j).* = std.math.sqrt2 * sigma * hermite_grid.nodes[temp % n_nodes] + mu;
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * powi(self.position[j] - other.position[j], 2);
 
@@ -439,14 +456,15 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
-                    weight *= std.math.sqrt2 * sigma * hermite_grid.weights[temp % n_nodes]; temp /= n_nodes;
+                    weight *= std.math.sqrt2 * sigma * hermite_grid.weights[temp % n_nodes];
+                    temp /= n_nodes;
                 }
 
                 for (0..V.rows) |j| for (j..V.cols) |k| {
-
                     const value = try pot.evaluateDiabaticElement(j, k, q.*, time);
 
-                    V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); V.ptr(k, j).* = V.at(j, k);
+                    V.ptr(j, k).* = V.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent)));
+                    V.ptr(k, j).* = V.at(j, k);
                 };
             }
 
@@ -460,18 +478,19 @@ pub fn ComplexGaussian(comptime T: type) type {
             const hermite_grid = try getGaussHermiteGrid(n_nodes);
 
             for (0..powi(n_nodes, q.len)) |i| {
-
-                var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
+                var temp = i;
+                var weight: T = 1;
+                var complex_exponent = Complex(T).init(0, 0);
 
                 for (0..q.len) |j| {
-
-                    const s1 = 1 / std.math.sqrt(self.gamma[j].re); const s2 = 1 / std.math.sqrt(other.gamma[j].re);
+                    const s1 = 1 / std.math.sqrt(self.gamma[j].re);
+                    const s2 = 1 / std.math.sqrt(other.gamma[j].re);
 
                     const mu = (self.position[j] * s2 * s2 + other.position[j] * s1 * s1) / (s1 * s1 + s2 * s2);
 
                     const sigma = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
 
-                    q.ptr(j).* = std.math.sqrt2 * sigma * hermite_grid.nodes[temp % n_nodes] + mu; 
+                    q.ptr(j).* = std.math.sqrt2 * sigma * hermite_grid.nodes[temp % n_nodes] + mu;
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * powi(self.position[j] - other.position[j], 2);
 
@@ -483,14 +502,15 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
-                    weight *= std.math.sqrt2 * sigma * hermite_grid.weights[temp % n_nodes]; temp /= n_nodes;
+                    weight *= std.math.sqrt2 * sigma * hermite_grid.weights[temp % n_nodes];
+                    temp /= n_nodes;
                 }
 
                 for (0..dV.rows) |j| for (j..dV.cols) |k| {
-
                     const value = try pot.evaluateDiabaticElementDerivative1(j, k, q.*, time, index, fdiff_step);
 
-                    dV.ptr(j, k).* = dV.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); dV.ptr(k, j).* = dV.at(j, k);
+                    dV.ptr(j, k).* = dV.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent)));
+                    dV.ptr(k, j).* = dV.at(j, k);
                 };
             }
 
@@ -504,18 +524,19 @@ pub fn ComplexGaussian(comptime T: type) type {
             const hermite_grid = try getGaussHermiteGrid(n_nodes);
 
             for (0..powi(n_nodes, q.len)) |i| {
-
-                var temp = i; var weight: T = 1; var complex_exponent = Complex(T).init(0, 0);
+                var temp = i;
+                var weight: T = 1;
+                var complex_exponent = Complex(T).init(0, 0);
 
                 for (0..q.len) |j| {
-
-                    const s1 = 1 / std.math.sqrt(self.gamma[j].re); const s2 = 1 / std.math.sqrt(other.gamma[j].re);
+                    const s1 = 1 / std.math.sqrt(self.gamma[j].re);
+                    const s2 = 1 / std.math.sqrt(other.gamma[j].re);
 
                     const mu = (self.position[j] * s2 * s2 + other.position[j] * s1 * s1) / (s1 * s1 + s2 * s2);
 
                     const sigma = (s1 * s2) / std.math.sqrt(s1 * s1 + s2 * s2);
 
-                    q.ptr(j).* = std.math.sqrt2 * sigma * hermite_grid.nodes[temp % n_nodes] + mu; 
+                    q.ptr(j).* = std.math.sqrt2 * sigma * hermite_grid.nodes[temp % n_nodes] + mu;
 
                     const real_exponent = -0.5 * self.gamma[j].re * other.gamma[j].re / (self.gamma[j].re + other.gamma[j].re) * powi(self.position[j] - other.position[j], 2);
 
@@ -527,14 +548,15 @@ pub fn ComplexGaussian(comptime T: type) type {
 
                     complex_exponent = complex_exponent.add(Complex(T).init(real_exponent, imag_exponent_self + imag_exponent_other + imag_gamma_self + imag_gamma_other));
 
-                    weight *= std.math.sqrt2 * sigma * hermite_grid.weights[temp % n_nodes]; temp /= n_nodes;
+                    weight *= std.math.sqrt2 * sigma * hermite_grid.weights[temp % n_nodes];
+                    temp /= n_nodes;
                 }
 
                 for (0..ddV.rows) |j| for (j..ddV.cols) |k| {
-
                     const value = try pot.evaluateDiabaticElementDerivative2(j, k, q.*, time, index, fdiff_step);
 
-                    ddV.ptr(j, k).* = ddV.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent))); ddV.ptr(k, j).* = ddV.at(j, k);
+                    ddV.ptr(j, k).* = ddV.at(j, k).add(Complex(T).init(weight * value, 0).mul(std.math.complex.exp(complex_exponent)));
+                    ddV.ptr(k, j).* = ddV.at(j, k);
                 };
             }
 

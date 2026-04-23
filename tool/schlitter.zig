@@ -24,14 +24,25 @@ pub fn help() !void {
 }
 
 pub fn parse(trajectory: *[]const u8, temperature: *f64, allocator: std.mem.Allocator, h: *bool) !std.process.ArgIterator {
-    var argc: usize = 0; var argv = try std.process.argsWithAllocator(allocator); _ = argv.next();
+    var argc: usize = 0;
+    var argv = try std.process.argsWithAllocator(allocator);
+    _ = argv.next();
 
     while (argv.next()) |arg| {
+        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+            h.* = true;
+            try help();
+            return argv;
+        }
 
-        if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {h.* = true; try help(); return argv;}
-
-        if (std.mem.eql(u8, arg, "-s") or std.mem.eql(u8, arg, "--trajectory" )) {trajectory.* = argv.next() orelse return error.InvalidArgument; argc += 1;}
-        if (std.mem.eql(u8, arg, "-t") or std.mem.eql(u8, arg, "--temperature")) {temperature.* = try std.fmt.parseFloat(f64, argv.next() orelse return error.InvalidArgument); argc += 1;}
+        if (std.mem.eql(u8, arg, "-s") or std.mem.eql(u8, arg, "--trajectory")) {
+            trajectory.* = argv.next() orelse return error.InvalidArgument;
+            argc += 1;
+        }
+        if (std.mem.eql(u8, arg, "-t") or std.mem.eql(u8, arg, "--temperature")) {
+            temperature.* = try std.fmt.parseFloat(f64, argv.next() orelse return error.InvalidArgument);
+            argc += 1;
+        }
 
         argc += 1;
     }
@@ -40,30 +51,38 @@ pub fn parse(trajectory: *[]const u8, temperature: *f64, allocator: std.mem.Allo
 }
 
 pub fn main() !void {
-    var trajectory_path: []const u8 = "trajectory.xyz"; var temperature: f64 = 300;
+    var trajectory_path: []const u8 = "trajectory.xyz";
+    var temperature: f64 = 300;
 
-    var timer_total = try std.time.Timer.start(); var h = false;
+    var timer_total = try std.time.Timer.start();
+    var h = false;
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){}; const allocator = gpa.allocator();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
 
     defer {
         if (gpa.deinit() == .leak) std.log.err("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
-    var argv = try parse(&trajectory_path, &temperature, allocator, &h); defer argv.deinit(); if (h) return;
+    var argv = try parse(&trajectory_path, &temperature, allocator, &h);
+    defer argv.deinit();
+    if (h) return;
 
-    try print("CALCULATING THE SCHLITTER ENTROPY OF A TRAJECTORY - TRAJECTORY: {s}, TEMPERATURE: {d:.3}\n", .{trajectory_path, temperature});
+    try print("CALCULATING THE SCHLITTER ENTROPY OF A TRAJECTORY - TRAJECTORY: {s}, TEMPERATURE: {d:.3}\n", .{ trajectory_path, temperature });
 
     {
-        const traj = try readTrajectoryFromXYZ(f64, trajectory_path, allocator); defer traj.positions.deinit(allocator); defer traj.masses.deinit(allocator);
+        const traj = try readTrajectoryFromXYZ(f64, trajectory_path, allocator);
+        defer traj.positions.deinit(allocator);
+        defer traj.masses.deinit(allocator);
 
-        var timer_entropy = try std.time.Timer.start(); try print("\nCALCULATING THE SCHLITTER ENTROPY: ", .{});
+        var timer_entropy = try std.time.Timer.start();
+        try print("\nCALCULATING THE SCHLITTER ENTROPY: ", .{});
 
         const entropy = try schlitterEntropy(f64, traj.positions, traj.masses, temperature, true, allocator);
 
         try print("{D}\n", .{timer_entropy.read()});
 
-        try print("\nSCHLITTER ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{entropy, entropy * Na * Eh});
+        try print("\nSCHLITTER ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{ entropy, entropy * Na * Eh });
     }
 
     try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});

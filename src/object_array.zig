@@ -32,17 +32,13 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
                 RealMatrix(T) => |object| element.* = try object.init(params.rows, params.cols, allocator),
                 RealVector(T) => |object| element.* = try object.init(params.rows, allocator),
                 else => {
-
                     std.log.err("UNSUPPORTED OBJECT TYPE FOR OBJECT ARRAY", .{});
 
                     return error.InvalidInput;
-                }
+                },
             };
 
-            return @This(){
-                .data = data,
-                .len = len
-            };
+            return @This(){ .data = data, .len = len };
         }
 
         /// Initialize the object array to zero.
@@ -57,17 +53,13 @@ pub fn ObjectArray(comptime O: fn (comptime type) type, comptime T: type) type {
                 RealMatrix(T) => |object| element.* = try object.initZero(params.rows, params.cols, allocator),
                 RealVector(T) => |object| element.* = try object.initZero(params.rows, allocator),
                 else => {
-
                     std.log.err("UNSUPPORTED OBJECT TYPE FOR OBJECT ARRAY", .{});
 
                     return error.InvalidInput;
-                }
+                },
             };
 
-            return @This(){
-                .data = data,
-                .len = len
-            };
+            return @This(){ .data = data, .len = len };
         }
 
         /// Deinitialize the array array.

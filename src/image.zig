@@ -8,11 +8,13 @@ const RGB = rgb.RGB;
 
 /// Image class
 pub const Image = struct {
-    data: []u8, height: usize, width: usize,
+    data: []u8,
+    height: usize,
+    width: usize,
 
     /// Initialize the image.
     pub fn init(height: usize, width: usize, allocator: std.mem.Allocator) !@This() {
-        return @This(){.data = try allocator.alloc(u8, height * width * 3), .height = height, .width = width};
+        return @This(){ .data = try allocator.alloc(u8, height * width * 3), .height = height, .width = width };
     }
 
     /// Deinitialize the image.

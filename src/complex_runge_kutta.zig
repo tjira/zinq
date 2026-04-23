@@ -26,7 +26,7 @@ pub fn ComplexRungeKutta(comptime T: type) type {
                 .k4 = try ComplexVector(T).initZero(size, allocator),
                 .y1 = try ComplexVector(T).initZero(size, allocator),
                 .y2 = try ComplexVector(T).initZero(size, allocator),
-                .y3 = try ComplexVector(T).initZero(size, allocator)
+                .y3 = try ComplexVector(T).initZero(size, allocator),
             };
         }
 
@@ -43,7 +43,10 @@ pub fn ComplexRungeKutta(comptime T: type) type {
 
         /// Propagate the variables using the 4th order Runge-Kutta method.
         pub fn rk4(self: *@This(), vars: *ComplexVector(T), function: anytype, parameters: anytype, time_step: T) !void {
-            self.k1.zero(); self.k2.zero(); self.k3.zero(); self.k4.zero();
+            self.k1.zero();
+            self.k2.zero();
+            self.k3.zero();
+            self.k4.zero();
 
             try function(&self.k1, vars.*, parameters);
 
@@ -66,7 +69,6 @@ pub fn ComplexRungeKutta(comptime T: type) type {
             try function(&self.k4, self.y3, parameters);
 
             for (0..vars.len) |j| {
-
                 const ksum = self.k1.at(j).add(self.k2.at(j).mul(Complex(T).init(2, 0))).add(self.k3.at(j).mul(Complex(T).init(2, 0))).add(self.k4.at(j));
 
                 vars.ptr(j).* = vars.at(j).add(ksum.mul(Complex(T).init(time_step / 6, 0)));

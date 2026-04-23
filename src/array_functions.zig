@@ -14,7 +14,8 @@ pub fn sum(comptime T: type, arr: []const T) T {
 }
 
 pub fn mean(comptime T: type, arr: []const T) T {
-    var result: T = 0; const len = @as(T, @floatFromInt(arr.len));
+    var result: T = 0;
+    const len = @as(T, @floatFromInt(arr.len));
 
     for (arr) |value| result += value / len;
 
@@ -40,7 +41,8 @@ pub fn sd(comptime T: type, arr: []const T) T {
     var variance: T = 0;
 
     for (arr) |value| {
-        const diff = value - mean_value; variance += diff * diff;
+        const diff = value - mean_value;
+        variance += diff * diff;
     }
 
     return std.math.sqrt(variance / (len - 1));

@@ -29,15 +29,19 @@ const Eh = global_variables.Eh;
 
 /// Function to calculate the Schlitter entropy of a trajectory given the positions, masses, and temperature.
 pub fn schlitterEntropy(comptime T: type, positions: RealMatrix(T), masses: RealVector(T), temp: T, ab_initio: bool, allocator: std.mem.Allocator) !T {
-    const aligned = if (ab_initio) try alignTrajectory(T, positions, allocator) else positions; defer if (ab_initio) aligned.deinit(allocator);
+    const aligned = if (ab_initio) try alignTrajectory(T, positions, allocator) else positions;
+    defer if (ab_initio) aligned.deinit(allocator);
 
-    var M = try RealMatrix(T).initZero(masses.len, masses.len, allocator); defer M.deinit(allocator);
+    var M = try RealMatrix(T).initZero(masses.len, masses.len, allocator);
+    defer M.deinit(allocator);
 
     for (0..masses.len) |i| M.ptr(i, i).* = masses.at(i);
 
-    const sigma = try aligned.cov(allocator); defer sigma.deinit(allocator);
+    const sigma = try aligned.cov(allocator);
+    defer sigma.deinit(allocator);
 
-    var Ms = try mmAlloc(T, M, false, sigma, false, allocator); defer Ms.deinit(allocator);
+    var Ms = try mmAlloc(T, M, false, sigma, false, allocator);
+    defer Ms.deinit(allocator);
 
     for (0..Ms.rows) |i| for (0..Ms.cols) |j| {
         Ms.ptr(i, j).* = if (i == j) 1 + temp / AU2K * std.math.e * std.math.e * Ms.at(i, j) else temp / AU2K * std.math.e * std.math.e * Ms.at(i, j);
@@ -50,15 +54,19 @@ pub fn schlitterEntropy(comptime T: type, positions: RealMatrix(T), masses: Real
 
 /// Function to calculate the QHA entropy of a trajectory given the positions, masses, and temperature.
 pub fn qhaEntropy(comptime T: type, positions: RealMatrix(T), masses: RealVector(T), temp: T, ab_initio: bool, allocator: std.mem.Allocator) !T {
-    const aligned = if (ab_initio) try alignTrajectory(T, positions, allocator) else positions; defer if (ab_initio) aligned.deinit(allocator);
+    const aligned = if (ab_initio) try alignTrajectory(T, positions, allocator) else positions;
+    defer if (ab_initio) aligned.deinit(allocator);
 
-    var M = try RealMatrix(T).initZero(masses.len, masses.len, allocator); defer M.deinit(allocator);
+    var M = try RealMatrix(T).initZero(masses.len, masses.len, allocator);
+    defer M.deinit(allocator);
 
     for (0..masses.len) |i| M.ptr(i, i).* = masses.at(i);
 
-    const sigma = try aligned.cov(allocator); defer sigma.deinit(allocator);
+    const sigma = try aligned.cov(allocator);
+    defer sigma.deinit(allocator);
 
-    var Ms = try mmAlloc(T, M, false, sigma, false, allocator); defer Ms.deinit(allocator);
+    var Ms = try mmAlloc(T, M, false, sigma, false, allocator);
+    defer Ms.deinit(allocator);
 
     for (0..Ms.rows) |i| for (0..Ms.cols) |j| {
         Ms.ptr(i, j).* = if (i == j) temp / AU2K * std.math.e * std.math.e * Ms.at(i, j) else temp / AU2K * std.math.e * std.math.e * Ms.at(i, j);

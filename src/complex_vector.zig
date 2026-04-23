@@ -17,15 +17,13 @@ pub fn ComplexVector(comptime T: type) type {
 
         /// Initialize a vector with a given length and specify an allocator. The function returns an error if the allocation fails.
         pub fn init(len: usize, allocator: std.mem.Allocator) !@This() {
-            return @This(){
-                .data = try allocator.alloc(Complex(T), len),
-                .len = len
-            };
+            return @This(){ .data = try allocator.alloc(Complex(T), len), .len = len };
         }
 
         /// Initialize a vector and fills it with zeros.
         pub fn initZero(len: usize, allocator: std.mem.Allocator) !@This() {
-            var v = try @This().init(len, allocator); v.zero();
+            var v = try @This().init(len, allocator);
+            v.zero();
 
             return v;
         }
@@ -37,11 +35,7 @@ pub fn ComplexVector(comptime T: type) type {
 
         /// Create a matrix view of the vector with one column.
         pub fn asMatrix(self: @This()) ComplexMatrix(T) {
-            return ComplexMatrix(T){
-                .data = self.data,
-                .rows = self.len,
-                .cols = 1
-            };
+            return ComplexMatrix(T){ .data = self.data, .rows = self.len, .cols = 1 };
         }
 
         /// Create a strided view of the vector.
@@ -53,7 +47,7 @@ pub fn ComplexVector(comptime T: type) type {
                 .zero = 0,
             };
         }
-        
+
         /// Get the element at the specified index as a value.
         pub fn at(self: @This(), i: usize) Complex(T) {
             return self.data[i];
@@ -73,8 +67,7 @@ pub fn ComplexVector(comptime T: type) type {
         /// Copy the contents of this matrix to another matrix.
         pub fn copyTo(self: @This(), other: *@This()) !void {
             if (self.len != other.len) {
-
-                std.log.err("CANNOT COPY VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+                std.log.err("CANNOT COPY VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
                 return error.ProgrammigError;
             }
@@ -118,10 +111,7 @@ pub fn ComplexVector(comptime T: type) type {
 
         /// Get a slice of the internal data in the form of a vector.
         pub fn slice(self: @This(), start: usize, end: usize) @This() {
-            return @This(){
-                .data = self.data[start..end],
-                .len = end - start
-            };
+            return @This(){ .data = self.data[start..end], .len = end - start };
         }
 
         /// Fills the vector with zeros.

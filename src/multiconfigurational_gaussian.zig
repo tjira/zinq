@@ -55,24 +55,10 @@ const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 /// The vMCG dynamics opt struct.
 pub fn Options(comptime T: type) type {
     return struct {
-        pub const InitialConditions = struct {
-            adiabatic: bool = false,
-            mass: []const T,
-            bf_spread: []const u32,
-            state: u32
-        };
-        pub const LogIntervals = struct {
-            iteration: u32 = 1
-        };
-        pub const Spectrum = struct {
-            window: enum {gaussian} = .gaussian,
-            padding_order: u32 = 1
-        };
-        pub const Write = struct {
-            population: ?[]const u8 = null,
-            spectrum: ?[]const u8 = null,
-            autocorrelation_function: ?[]const u8 = null
-        };
+        pub const InitialConditions = struct { adiabatic: bool = false, mass: []const T, bf_spread: []const u32, state: u32 };
+        pub const LogIntervals = struct { iteration: u32 = 1 };
+        pub const Spectrum = struct { window: enum { gaussian } = .gaussian, padding_order: u32 = 1 };
+        pub const Write = struct { population: ?[]const u8 = null, spectrum: ?[]const u8 = null, autocorrelation_function: ?[]const u8 = null };
         pub const Wavefunction = struct {
             pub const Write = struct {
                 wavefunction: ?[]const u8 = null,
@@ -80,16 +66,9 @@ pub fn Options(comptime T: type) type {
 
             limits: []const []const T,
             points: u32,
-            write: @This().Write = .{}
+            write: @This().Write = .{},
         };
-        pub const Method = union(enum) {
-            vMCG: struct {
-                position: []const []const T,
-                gamma: []const []const T,
-                momentum: []const []const T,
-                frozen: bool = true
-            }
-        };
+        pub const Method = union(enum) { vMCG: struct { position: []const []const T, gamma: []const []const T, momentum: []const []const T, frozen: bool = true } };
 
         initial_conditions: InitialConditions,
         method: Method,
@@ -108,7 +87,7 @@ pub fn Options(comptime T: type) type {
         imaginary: bool = false,
         integration_nodes: u32 = 16,
         renormalize: bool = true,
-        singularity_tolerance: T = 1e-8
+        singularity_tolerance: T = 1e-8,
     };
 }
 
@@ -126,7 +105,7 @@ pub fn Output(comptime T: type) type {
             return @This(){
                 .population = try RealMatrix(T).init(iterations + 1, nstate, allocator),
                 .position = try RealVector(T).initZero(ndim, allocator),
-                .momentum = try RealVector(T).initZero(ndim, allocator)
+                .momentum = try RealVector(T).initZero(ndim, allocator),
             };
         }
 
@@ -142,7 +121,6 @@ pub fn Output(comptime T: type) type {
 /// Container for custom structs related to the vMCG.
 pub fn Custom(comptime T: type) type {
     return struct {
-
         /// Structure to hold information about each iteration used for logging.
         pub const IterationInfo = struct {
             iteration: usize,
@@ -151,7 +129,7 @@ pub fn Custom(comptime T: type) type {
             momentum: RealVector(T),
             position: RealVector(T),
             potential_energy: T,
-            time: T
+            time: T,
         };
 
         /// Matrices needed for the vMCG equations of motion.
@@ -162,7 +140,7 @@ pub fn Custom(comptime T: type) type {
             tau: ComplexMatrix(T),
             Sinv: ComplexMatrix(T),
             dVg: ComplexMatrixArray2(T),
-            ddVg: ComplexMatrixArray2(T)
+            ddVg: ComplexMatrixArray2(T),
         };
 
         /// Structure to hold the variables used in the equations of motion.
@@ -171,7 +149,7 @@ pub fn Custom(comptime T: type) type {
             q: RealVector(T),
             p: RealVector(T),
             g: ComplexVector(T),
-            c: ComplexVector(T)
+            c: ComplexVector(T),
         };
 
         /// Temporary matrices and vectors used in the propagation.
@@ -188,10 +166,11 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(raw_options);
 
-    var opt = raw_options; try opt.potential.init(allocator); defer opt.potential.deinit(allocator);
+    var opt = raw_options;
+    try opt.potential.init(allocator);
+    defer opt.potential.deinit(allocator);
 
     if (opt.potential == .ab_initio) {
-
         std.log.err("AB INITIO POTENTIALS ARE NOT IMPLEMENTED FOR VMCG DYNAMICS", .{});
 
         return error.InvalidInput;
@@ -203,18 +182,12 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
     const nparams = 3 * ngauss * ndim + nstate * ngauss;
 
     var output = try Output(T).init(nstate, ndim, @intCast(opt.iterations), allocator);
-    
-    var mcg = try SingleSetOfMCG(T).init(
-        opt.method.vMCG.position,
-        opt.method.vMCG.gamma,
-        opt.method.vMCG.momentum,
-        opt.initial_conditions.state,
-        opt.initial_conditions.bf_spread,
-        nstate,
-        allocator
-    ); defer mcg.deinit(allocator);
 
-    const mcg_init = try mcg.clone(allocator); defer mcg_init.deinit(allocator);
+    var mcg = try SingleSetOfMCG(T).init(opt.method.vMCG.position, opt.method.vMCG.gamma, opt.method.vMCG.momentum, opt.initial_conditions.state, opt.initial_conditions.bf_spread, nstate, allocator);
+    defer mcg.deinit(allocator);
+
+    const mcg_init = try mcg.clone(allocator);
+    defer mcg_init.deinit(allocator);
 
     var matrix_eom = Custom(T).MatrixEOM{
         .S = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator),
@@ -222,8 +195,8 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         .V = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator),
         .tau = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator),
         .Sinv = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator),
-        .dVg = try ComplexMatrixArray2(T).initZero(ngauss, .{.len = ndim, .matrix = .{.rows = nstate, .cols = nstate}}, allocator),
-        .ddVg = try ComplexMatrixArray2(T).initZero(ngauss, .{.len = ndim, .matrix = .{.rows = nstate, .cols = nstate}}, allocator)
+        .dVg = try ComplexMatrixArray2(T).initZero(ngauss, .{ .len = ndim, .matrix = .{ .rows = nstate, .cols = nstate } }, allocator),
+        .ddVg = try ComplexMatrixArray2(T).initZero(ngauss, .{ .len = ndim, .matrix = .{ .rows = nstate, .cols = nstate } }, allocator),
     };
 
     defer inline for (std.meta.fields(@TypeOf(matrix_eom))) |field| @as(field.type, @field(matrix_eom, field.name)).deinit(allocator);
@@ -233,7 +206,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         .q = try RealVector(T).initZero(ngauss * ndim, allocator),
         .p = try RealVector(T).initZero(ngauss * ndim, allocator),
         .g = try ComplexVector(T).initZero(ngauss * ndim, allocator),
-        .c = try ComplexVector(T).initZero(nstate * ngauss, allocator)
+        .c = try ComplexVector(T).initZero(nstate * ngauss, allocator),
     };
 
     defer inline for (std.meta.fields(@TypeOf(vars))) |field| @as(field.type, @field(vars, field.name)).deinit(allocator);
@@ -242,25 +215,27 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         .M_ngauss_nstate_1 = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator),
         .M_ngauss_nstate_2 = try ComplexMatrix(T).initZero(ngauss * nstate, ngauss * nstate, allocator),
         .M_nstate = try ComplexMatrix(T).initZero(nstate, nstate, allocator),
-        .V_ndim = try RealVector(T).initZero(ndim, allocator)
+        .V_ndim = try RealVector(T).initZero(ndim, allocator),
     };
 
     defer inline for (std.meta.fields(@TypeOf(temps))) |field| @as(field.type, @field(temps, field.name)).deinit(allocator);
 
-    var propagator = try ComplexRungeKutta(T).init(nparams, allocator); defer propagator.deinit(allocator);
+    var propagator = try ComplexRungeKutta(T).init(nparams, allocator);
+    defer propagator.deinit(allocator);
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.wavefunction) |wfn_opt|
         try initializeWavefunctionDynamicsContainer(T, wfn_opt, nstate, opt.iterations, allocator)
-    else null;
+    else
+        null;
 
-    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit(allocator);
+    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator);
+    defer acf.deinit(allocator);
 
     if (enable_printing) try printIterationHeader(ndim, mcg.coefs.len);
 
     var timer = try std.time.Timer.start();
 
     for (0..opt.iterations + 1) |i| {
-
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
 
         if (i > 0) try propagate(T, &mcg, opt, &propagator, time, &vars, &matrix_eom, &temps);
@@ -273,14 +248,17 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 
         acf.ptr(i).* = try mcg_init.selfOverlap(mcg, allocator);
 
-        var coefs_adia: ?ComplexVector(T) = null; defer if (coefs_adia) |c| c.deinit(allocator);
+        var coefs_adia: ?ComplexVector(T) = null;
+        defer if (coefs_adia) |c| c.deinit(allocator);
 
         if (i == 0 and opt.initial_conditions.adiabatic) {
-            coefs_adia = try mcg.transformedCoefs(opt.potential, time, false, allocator); try coefs_adia.?.copyTo(&mcg.coefs);
+            coefs_adia = try mcg.transformedCoefs(opt.potential, time, false, allocator);
+            try coefs_adia.?.copyTo(&mcg.coefs);
         }
 
         if (opt.adiabatic) {
-            if (coefs_adia) |c| c.deinit(allocator); coefs_adia = try mcg.transformedCoefs(opt.potential, time, true, allocator);
+            if (coefs_adia) |c| c.deinit(allocator);
+            coefs_adia = try mcg.transformedCoefs(opt.potential, time, true, allocator);
         }
 
         try mcg.coordinateExpectation(&output.position, .position, matrix_eom.S);
@@ -311,20 +289,19 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
             .momentum = output.momentum,
             .position = output.position,
             .potential_energy = potential_energy,
-            .time = time
+            .time = time,
         };
 
         try printIterationInfo(T, info, &timer);
     }
 
     if (enable_printing) for (0..nstate) |i| {
-        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i)});
+        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{ if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i) });
     };
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
     if (opt.write.spectrum) |path| {
-
         if (enable_printing) try print("\nCALCULATING ENERGY SPECTRUM: ", .{});
 
         const spectrum = try energySpectrum(T, acf, opt.spectrum, allocator);
@@ -335,7 +312,6 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 
         try exportRealMatrixWithLinspacedLeftColumn(T, path, spectrum.asMatrix(), 0, nyquist_frequency);
     }
-
 
     if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, path, acf.asMatrix(), 0, end_time);
     if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
@@ -349,9 +325,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 /// Assigns the single gaussian to the wavefunction dynamics container.
 pub fn assignWavefunction(comptime T: type, wfn_container: *RealMatrix(T), gaussians: []const ComplexGaussian(T), coefs: ComplexVector(T), iteration: usize) !void {
     for (0..wfn_container.rows) |i| {
-
         for (0..coefs.len / gaussians.len) |j| {
-
             var value = Complex(T).init(0, 0);
 
             for (gaussians, 0..) |gaussian, k| {
@@ -367,7 +341,6 @@ pub fn assignWavefunction(comptime T: type, wfn_container: *RealMatrix(T), gauss
 /// Initialize the container for the wavefunction dynamics.
 pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(T).Wavefunction, nstate: usize, iterations: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     if (grid == null) {
-
         std.log.err("WAVEFUNCTION DYNAMICS CONTAINER CANNOT BE INITIALIZED WITHOUT GRID INFORMATION, PLEASE PROVIDE THE GRID LIMITS AND NUMBER OF POINTS", .{});
 
         return error.InvalidInput;
@@ -377,10 +350,10 @@ pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(
 
     var wavefunction_dynamics: RealMatrix(T) = try RealMatrix(T).init(grid_points, grid.?.limits.len + 2 * nstate * (iterations + 1), allocator);
 
-    var position_at_row = try RealVector(T).init(grid.?.limits.len, allocator); defer position_at_row.deinit(allocator);
+    var position_at_row = try RealVector(T).init(grid.?.limits.len, allocator);
+    defer position_at_row.deinit(allocator);
 
     for (0..grid_points) |i| {
-
         positionAtRow(T, &position_at_row, i, grid.?.limits.len, grid.?.points, grid.?.limits);
 
         for (0..grid.?.limits.len) |j| {
@@ -392,7 +365,16 @@ pub fn initializeWavefunctionDynamicsContainer(comptime T: type, grid: ?Options(
 }
 
 /// Propagates the MCG object using the 4th order Runge-Kutta method.
-pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk: *ComplexRungeKutta(T), time: T, vars: *Custom(T).Variables, matrix_eom: *Custom(T).MatrixEOM, temps: *Custom(T).Temporaries) !void {
+pub fn propagate(
+    comptime T: type,
+    mcg: *SingleSetOfMCG(T),
+    opt: Options(T),
+    rk: *ComplexRungeKutta(T),
+    time: T,
+    vars: *Custom(T).Variables,
+    matrix_eom: *Custom(T).MatrixEOM,
+    temps: *Custom(T).Temporaries,
+) !void {
     mcg.exportParameterVector(&vars.all);
 
     const derivative = struct {
@@ -422,7 +404,6 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
             }
 
             if (params.opt.imaginary) {
-
                 try params.mcg.positionDerivativeImaginaryEhrenfest(&kq, params.matrix_eom.dVg);
                 try params.mcg.momentumDerivativeImaginaryEhrenfest(&kp, mass);
 
@@ -434,11 +415,9 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
 
                 switch (params.mcg.gaussians.len) {
                     1 => try params.mcg.gaussians[0].coefficientDerivativeImaginary(&kc, params.mcg.coefs, params.matrix_eom),
-                    else => try params.mcg.coefficientDerivativeImaginary(&kc, params.matrix_eom)
+                    else => try params.mcg.coefficientDerivativeImaginary(&kc, params.matrix_eom),
                 }
-
             } else {
-
                 try params.mcg.positionDerivativeEhrenfest(&kq, mass);
                 try params.mcg.momentumDerivativeEhrenfest(&kp, params.matrix_eom.dVg);
 
@@ -450,16 +429,15 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
 
                 switch (params.mcg.gaussians.len) {
                     1 => try params.mcg.gaussians[0].coefficientDerivative(&kc, params.mcg.coefs, params.matrix_eom),
-                    else => try params.mcg.coefficientDerivative(&kc, params.matrix_eom)
+                    else => try params.mcg.coefficientDerivative(&kc, params.matrix_eom),
                 }
             }
 
             for (0..kq.len / params.mcg.gaussians[0].position.len) |i| for (0..params.mcg.gaussians[0].position.len) |j| {
+                k.ptr(3 * params.mcg.gaussians[0].position.len * i + j + 0 * params.mcg.gaussians[0].position.len).* = Complex(T).init(kq.at(params.mcg.gaussians[0].position.len * i + j), 0);
+                k.ptr(3 * params.mcg.gaussians[0].momentum.len * i + j + 1 * params.mcg.gaussians[0].momentum.len).* = Complex(T).init(kp.at(params.mcg.gaussians[0].momentum.len * i + j), 0);
 
-                    k.ptr(3 * params.mcg.gaussians[0].position.len * i + j + 0 * params.mcg.gaussians[0].position.len).* = Complex(T).init(kq.at(params.mcg.gaussians[0].position.len * i + j), 0);
-                    k.ptr(3 * params.mcg.gaussians[0].momentum.len * i + j + 1 * params.mcg.gaussians[0].momentum.len).* = Complex(T).init(kp.at(params.mcg.gaussians[0].momentum.len * i + j), 0);
-
-                    k.ptr(3 * params.mcg.gaussians[0].gamma.len * i + j + 2 * params.mcg.gaussians[0].gamma.len).* = kg.at(params.mcg.gaussians[0].gamma.len * i + j);
+                k.ptr(3 * params.mcg.gaussians[0].gamma.len * i + j + 2 * params.mcg.gaussians[0].gamma.len).* = kg.at(params.mcg.gaussians[0].gamma.len * i + j);
             };
 
             for (0..params.mcg.coefs.len) |i| k.ptr(v.data.len - params.mcg.coefs.len + i).* = kc.at(i);
@@ -475,7 +453,7 @@ pub fn propagate(comptime T: type, mcg: *SingleSetOfMCG(T), opt: Options(T), rk:
         .kg = vars.g,
         .kc = vars.c,
         .temps = temps,
-        .matrix_eom = matrix_eom
+        .matrix_eom = matrix_eom,
     }, opt.time_step);
 
     try mcg.loadParameterVector(vars.all);
@@ -491,10 +469,10 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:8} ", .{"ITER"});
-    try writer.print("{s:12} {s:12} {s:12} ", .{"KIN (Eh)", "POT (Eh)", "TOT (Eh)"});
-    try writer.print("{[value]s:[width]} ", .{.value = "POS (a0)", .width = ndim_header_width});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOM (hb/a0)", .width = ndim_header_width});
-    try writer.print("{[value]s:[width]} ", .{.value = "POPULATION", .width = nstate_header_width});
+    try writer.print("{s:12} {s:12} {s:12} ", .{ "KIN (Eh)", "POT (Eh)", "TOT (Eh)" });
+    try writer.print("{[value]s:[width]} ", .{ .value = "POS (a0)", .width = ndim_header_width });
+    try writer.print("{[value]s:[width]} ", .{ .value = "MOM (hb/a0)", .width = ndim_header_width });
+    try writer.print("{[value]s:[width]} ", .{ .value = "POPULATION", .width = nstate_header_width });
     try writer.print("{s:4}", .{"TIME"});
 
     try print("{s}\n", .{writer.buffered()});
@@ -507,12 +485,12 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("{d:8} ", .{info.iteration});
-    try writer.print("{d:12.6} {d:12.6} {d:12.6} ", .{info.kinetic_energy, info.potential_energy, info.kinetic_energy + info.potential_energy});
+    try writer.print("{d:12.6} {d:12.6} {d:12.6} ", .{ info.kinetic_energy, info.potential_energy, info.kinetic_energy + info.potential_energy });
 
     try writer.print("[", .{});
 
     for (0..@min(3, info.position.len)) |i| {
-        try writer.print("{d:9.4}{s}", .{info.position.at(i), if (i == info.position.len - 1) "" else ", "});
+        try writer.print("{d:9.4}{s}", .{ info.position.at(i), if (i == info.position.len - 1) "" else ", " });
     }
 
     if (info.position.len > 3) try writer.print("...", .{});
@@ -520,7 +498,7 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
     try writer.print("] [", .{});
 
     for (0..@min(3, info.momentum.len)) |i| {
-        try writer.print("{d:9.4}{s}", .{info.momentum.at(i), if (i == info.momentum.len - 1) "" else ", "});
+        try writer.print("{d:9.4}{s}", .{ info.momentum.at(i), if (i == info.momentum.len - 1) "" else ", " });
     }
 
     if (info.momentum.len > 3) try writer.print("...", .{});
@@ -528,41 +506,30 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
     try writer.print("] [", .{});
 
     for (0..@min(4, info.coefs.len)) |i| {
-        try writer.print("{d:7.4}{s}", .{info.coefs.at(i).magnitude() * info.coefs.at(i).magnitude(), if (i == info.coefs.len - 1) "" else ", "});
+        try writer.print("{d:7.4}{s}", .{ info.coefs.at(i).magnitude() * info.coefs.at(i).magnitude(), if (i == info.coefs.len - 1) "" else ", " });
     }
 
     if (info.coefs.len > 4) try writer.print("...", .{});
 
-    try writer.print("] {D}", .{timer.read()}); timer.reset();
+    try writer.print("] {D}", .{timer.read()});
+    timer.reset();
 
     try print("{s}\n", .{writer.buffered()});
 }
 
 test "frozen real-time vMCG on Tully's First Potential" {
     const opt = Options(f64){
-        .initial_conditions = .{
-            .bf_spread = &.{1},
-            .mass = &.{2000},
-            .state = 1
-        },
-        .method = .{
-            .vMCG = .{
-                .position = &.{&.{-10}},
-                .gamma = &.{&.{2}},
-                .momentum = &.{&.{15}},
-                .frozen = true
-            }
-        },
-        .potential = .{
-            .tully_1 = TullyPotential1(f64){}
-        },
+        .initial_conditions = .{ .bf_spread = &.{1}, .mass = &.{2000}, .state = 1 },
+        .method = .{ .vMCG = .{ .position = &.{&.{-10}}, .gamma = &.{&.{2}}, .momentum = &.{&.{15}}, .frozen = true } },
+        .potential = .{ .tully_1 = TullyPotential1(f64){} },
         .finite_differences_step = 1e-8,
         .integration_nodes = 32,
         .iterations = 3500,
-        .time_step = 1
+        .time_step = 1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+    const output = try run(f64, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06574685612813, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.53765759177167, TEST_TOLERANCE);
@@ -572,29 +539,17 @@ test "frozen real-time vMCG on Tully's First Potential" {
 
 test "thawed real-time vMCG on Tully's First Potential" {
     const opt = Options(f64){
-        .initial_conditions = .{
-            .bf_spread = &.{1},
-            .mass = &.{2000},
-            .state = 1
-        },
-        .method = .{
-            .vMCG = .{
-                .position = &.{&.{-10}},
-                .gamma = &.{&.{2}},
-                .momentum = &.{&.{15}},
-                .frozen = false
-            }
-        },
-        .potential = .{
-            .tully_1 = TullyPotential1(f64){}
-        },
+        .initial_conditions = .{ .bf_spread = &.{1}, .mass = &.{2000}, .state = 1 },
+        .method = .{ .vMCG = .{ .position = &.{&.{-10}}, .gamma = &.{&.{2}}, .momentum = &.{&.{15}}, .frozen = false } },
+        .potential = .{ .tully_1 = TullyPotential1(f64){} },
         .finite_differences_step = 1e-3,
         .integration_nodes = 32,
         .iterations = 3500,
-        .time_step = 1
+        .time_step = 1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+    const output = try run(f64, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06763705056010, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.44325081289219, TEST_TOLERANCE);
@@ -604,29 +559,17 @@ test "thawed real-time vMCG on Tully's First Potential" {
 
 test "thawed real-time ss-vMCG on Tully's First Potential" {
     const opt = Options(f64){
-        .initial_conditions = .{
-            .bf_spread = &.{1, 0},
-            .mass = &.{2000},
-            .state = 1
-        },
-        .method = .{
-            .vMCG = .{
-                .position = &.{&.{-10.5}, &.{-9.5}},
-                .gamma = &.{&.{2}, &.{2}},
-                .momentum = &.{&.{15}, &.{15}},
-                .frozen = false
-            }
-        },
-        .potential = .{
-            .tully_1 = TullyPotential1(f64){}
-        },
+        .initial_conditions = .{ .bf_spread = &.{ 1, 0 }, .mass = &.{2000}, .state = 1 },
+        .method = .{ .vMCG = .{ .position = &.{ &.{-10.5}, &.{-9.5} }, .gamma = &.{ &.{2}, &.{2} }, .momentum = &.{ &.{15}, &.{15} }, .frozen = false } },
+        .potential = .{ .tully_1 = TullyPotential1(f64){} },
         .finite_differences_step = 1e-3,
         .integration_nodes = 32,
         .iterations = 3500,
-        .time_step = 1
+        .time_step = 1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+    const output = try run(f64, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06706660848155, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.44575305875514, TEST_TOLERANCE);
@@ -636,29 +579,17 @@ test "thawed real-time ss-vMCG on Tully's First Potential" {
 
 test "frozen real-time ss-vMCG on Tully's First Potential" {
     const opt = Options(f64){
-        .initial_conditions = .{
-            .bf_spread = &.{1, 0},
-            .mass = &.{2000},
-            .state = 1
-        },
-        .method = .{
-            .vMCG = .{
-                .position = &.{&.{-10.5}, &.{-9.5}},
-                .gamma = &.{&.{2}, &.{2}},
-                .momentum = &.{&.{15}, &.{15}},
-                .frozen = true
-            }
-        },
-        .potential = .{
-            .tully_1 = TullyPotential1(f64){}
-        },
+        .initial_conditions = .{ .bf_spread = &.{ 1, 0 }, .mass = &.{2000}, .state = 1 },
+        .method = .{ .vMCG = .{ .position = &.{ &.{-10.5}, &.{-9.5} }, .gamma = &.{ &.{2}, &.{2} }, .momentum = &.{ &.{15}, &.{15} }, .frozen = true } },
+        .potential = .{ .tully_1 = TullyPotential1(f64){} },
         .finite_differences_step = 1e-8,
         .integration_nodes = 32,
         .iterations = 3500,
-        .time_step = 1
+        .time_step = 1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+    const output = try run(f64, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.07135428435411, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.55681879770101, TEST_TOLERANCE);

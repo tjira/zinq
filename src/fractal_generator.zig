@@ -20,68 +20,60 @@ const RGB = rgb.RGB;
 /// The options for the fractal generator.
 pub fn Options(comptime T: type) type {
     return struct {
-        pub const Category = union(enum) {
-            orbit: struct {
-                pub const Algorithm = union(enum) {
-                    density: struct {
-                        bailout: T = 16,
-                        maxiter: u32 = 64,
-                        samples: u32 = 10000000,
-                        seed: u32 = 0
-                    },
-                    escape: struct {
-                        bailout: T = 8,
-                        maxiter: u32 = 64,
-                        smooth: bool = true
-                    },
-                    orbitrap: struct {
-                        bailout: T = 128,
-                        maxiter: u32 = 64,
-                        fill: bool = false,
-                        trap: enum {
-                            circle,
-                            disk,
-                            linear,
-                            minabs,
-                            mindc
-                        } = .linear
-                    }
-                };
-                pub const Coloring = union(enum) {
-                    solid: struct {
-                        rgb: RGB = .{.r = 255, .g = 255, .b = 255},
-                        seed: ?u32 = null
-                    },
-                    gradient: struct {
-                        start: RGB = .{.r =   0, .g =   0, .b =   0},
-                        end:   RGB = .{.r = 255, .g = 255, .b = 255},
-                        seed: ?u32 = null
-                    },
-                    periodic: struct {
-                        amplitude: [3]T = .{31.93, 30.38, 11.08},
-                        frequency: [3]T = .{ 6.26,  5.86,  0.80},
-                        seed: ?u32 = null
-                    },
-                };
-
-                fractal: union(enum) {
-                    buffalo: struct{},
-                    burningship: struct{},
-                    julia: struct {c: Complex(T) = Complex(T).init(0, 1)},
-                    mandelbrot: struct{},
-                    manowar: struct{},
-                    phoenix: struct{c: Complex(T) = Complex(T).init(0, 0)}
+        pub const Category = union(enum) { orbit: struct {
+            pub const Algorithm = union(enum) {
+                density: struct {
+                    bailout: T = 16,
+                    maxiter: u32 = 64,
+                    samples: u32 = 10000000,
+                    seed: u32 = 0,
                 },
+                escape: struct {
+                    bailout: T = 8,
+                    maxiter: u32 = 64,
+                    smooth: bool = true,
+                },
+                orbitrap: struct {
+                    bailout: T = 128,
+                    maxiter: u32 = 64,
+                    fill: bool = false,
+                    trap: enum { circle, disk, linear, minabs, mindc } = .linear,
+                },
+            };
+            pub const Coloring = union(enum) {
+                solid: struct {
+                    rgb: RGB = .{ .r = 255, .g = 255, .b = 255 },
+                    seed: ?u32 = null,
+                },
+                gradient: struct {
+                    start: RGB = .{ .r = 0, .g = 0, .b = 0 },
+                    end: RGB = .{ .r = 255, .g = 255, .b = 255 },
+                    seed: ?u32 = null,
+                },
+                periodic: struct {
+                    amplitude: [3]T = .{ 31.93, 30.38, 11.08 },
+                    frequency: [3]T = .{ 6.26, 5.86, 0.80 },
+                    seed: ?u32 = null,
+                },
+            };
 
-                algorithm: Algorithm = .{.escape = .{}},
-                coloring: Coloring = .{.periodic = .{}},
-                center: Complex(T) = Complex(T).init(0, 0),
-                zoom: T = 1,
-            }
-        };
+            fractal: union(enum) {
+                buffalo: struct {},
+                burningship: struct {},
+                julia: struct { c: Complex(T) = Complex(T).init(0, 1) },
+                mandelbrot: struct {},
+                manowar: struct {},
+                phoenix: struct { c: Complex(T) = Complex(T).init(0, 0) },
+            },
 
-        background: RGB = .{.r = 0, .g = 0, .b = 0},
-        resolution: [2]u32 = .{1920, 1080},
+            algorithm: Algorithm = .{ .escape = .{} },
+            coloring: Coloring = .{ .periodic = .{} },
+            center: Complex(T) = Complex(T).init(0, 0),
+            zoom: T = 1,
+        } };
+
+        background: RGB = .{ .r = 0, .g = 0, .b = 0 },
+        resolution: [2]u32 = .{ 1920, 1080 },
         output: []const u8 = "fractal.ppm",
         category: Category,
     };
@@ -118,15 +110,17 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 
     output.canvas.fill(opt.background);
 
-    if (enable_printing) try print(" {D}\nGENERATING FRACTALS:", .{timer.read()}); timer.reset();
+    if (enable_printing) try print(" {D}\nGENERATING FRACTALS:", .{timer.read()});
+    timer.reset();
 
     switch (opt.category) {
         .orbit => |orbit| {
             try OrbitFractalGenerator(T).init(orbit).paint(&output.canvas, allocator);
-        }
+        },
     }
 
-    if (enable_printing) try print(" {D}\nWRITING IMG TO DISK:", .{timer.read()}); timer.reset();
+    if (enable_printing) try print(" {D}\nWRITING IMG TO DISK:", .{timer.read()});
+    timer.reset();
 
     try exportImageAsPPM(opt.output, output.canvas);
 

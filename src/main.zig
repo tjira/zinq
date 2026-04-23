@@ -132,21 +132,20 @@ const Target = enum {
     potential_plot,
     prime_numbers,
     time_dependent_density_functional_theory,
-    quantum_dynamics
+    quantum_dynamics,
 };
 
 /// Find out if the input JSON file contains an unrecognized field and print the expected field.
 pub fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value, err: anyerror) !void {
     for (options.object.keys()) |provided| {
-
         var found = false;
 
         for (std.meta.fieldNames(Struct)) |expected| if (std.mem.eql(u8, provided, expected)) {
-            found = true; break;
+            found = true;
+            break;
         };
 
         if (!found) {
-
             std.log.err("UNRECOGNIZED '{s}' FIELD IN INPUT", .{provided});
 
             return error.InvalidInput;
@@ -154,9 +153,9 @@ pub fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value
     }
 
     inline for (std.meta.fields(Struct)) |field| {
-
         const BaseType = switch (@typeInfo(field.type)) {
-            .optional => |opt| opt.child, else => field.type
+            .optional => |opt| opt.child,
+            else => field.type,
         };
 
         if (@typeInfo(BaseType) == .@"struct") if (options.object.get(field.name)) |nested_value| if (nested_value == .object) {
@@ -168,21 +167,15 @@ pub fn checkForUnrecognizedFields(comptime Struct: type, options: std.json.Value
 /// Find out if the input JSON file contains a missing field and print the expected field.
 pub fn checkForMissingFields(comptime Struct: type, options: std.json.Value, err: anyerror) !void {
     inline for (std.meta.fields(Struct)) |field| {
-
         if (!options.object.contains(field.name)) {
-
             if (field.default_value_ptr == null) {
-
                 std.log.err("MISSING '{s}' FIELD IN INPUT", .{field.name});
 
                 return error.InvalidInput;
             }
-        }
-
-        else if (@typeInfo(field.type) == .@"struct") {
-
+        } else if (@typeInfo(field.type) == .@"struct") {
             const nested_value = options.object.get(field.name).?;
-            
+
             if (nested_value == .object) {
                 try checkForMissingFields(field.type, nested_value, err);
             }
@@ -193,14 +186,14 @@ pub fn checkForMissingFields(comptime Struct: type, options: std.json.Value, err
 /// Handle a specific module by parsing its options and running it.
 pub fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
     var parsed = std.json.parseFromValue(Module.Options(T), allocator, options, .{}) catch |err| {
-
         try checkForUnrecognizedFields(Module.Options(T), options, err);
         try checkForMissingFields(Module.Options(T), options, err);
 
         return err;
     };
 
-    var output = try Module.run(T, parsed.value, true, allocator); defer output.deinit(allocator);
+    var output = try Module.run(T, parsed.value, true, allocator);
+    defer output.deinit(allocator);
 
     parsed.deinit();
 }
@@ -211,33 +204,33 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 
     try device_write.print("\nPROCESSED FILE: {s}\n", .{path});
 
-    var scanner = std.json.Scanner.initCompleteInput(allocator, file_contents); defer scanner.deinit();
-    var diagnostics = std.json.Diagnostics{}; scanner.enableDiagnostics(&diagnostics);
+    var scanner = std.json.Scanner.initCompleteInput(allocator, file_contents);
+    defer scanner.deinit();
+
+    var diagnostics = std.json.Diagnostics{};
+    scanner.enableDiagnostics(&diagnostics);
 
     const input_json = std.json.parseFromTokenSource(std.json.Value, allocator, &scanner, .{}) catch |err| {
-        std.log.err("ERROR ON INPUT LINE {d}\n", .{diagnostics.line_number}); return err;
+        std.log.err("ERROR ON INPUT LINE {d}\n", .{diagnostics.line_number});
+        return err;
     };
 
     for (input_json.value.object.get("zinq").?.array.items, 1..) |object, i| {
-
         try device_write.print("\nINPUT #{d}:\n", .{i});
 
         const name = object.object.get("name") orelse {
-
             std.log.err("MISSING 'name' FIELD IN INPUT, EACH SPECIFIED TARGET MUST HAVE A 'name' FIELD", .{});
 
             return error.InvalidInput;
         };
 
         const options = object.object.get("options") orelse {
-
             std.log.err("MISSING 'options' FIELD IN INPUT, EACH SPECIFIED TARGET MUST HAVE AN 'options' FIELD WITH THE CORRESPONDING OPTIONS FOR THE TARGET", .{});
 
             return error.InvalidInput;
         };
 
         const tag = std.meta.stringToEnum(Target, name.string) orelse return {
-
             std.log.err("UNRECOGNIZED '{s}' TARGET IN INPUT", .{name.string});
 
             return error.InvalidInput;
@@ -255,67 +248,76 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
             .potential_plot => try handle(f64, potential_plot, options, allocator),
             .prime_numbers => try handle(f64, prime_numbers, options, allocator),
             .time_dependent_density_functional_theory => try handle(f64, tddft, options, allocator),
-            .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator)
+            .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator),
         }
     }
 
     if (input_json.value.object.get("command")) |command| {
-
         try device_write.print("\nRUNNING COMMAND: {s}\n", .{command.string});
 
-        const output = try process.executeCommand(command.string, allocator); defer allocator.free(output);
+        const output = try process.executeCommand(command.string, allocator);
+        defer allocator.free(output);
 
         if (output.len > 0) try device_write.print("COMMAND OUTPUTS:\n{s}", .{output});
     }
 
-    allocator.free(file_contents); input_json.deinit();
+    allocator.free(file_contents);
+    input_json.deinit();
 }
 
 /// Main function of the program.
 pub fn main() !void {
     var timer = try std.time.Timer.start();
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){}; const allocator = gpa.allocator();
-
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    const allocator = gpa.allocator();
     defer {
         if (gpa.deinit() == .leak) std.log.err("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
     }
 
-    try device_write.print("ZIG: v{d}.{d}.{d}, ZINQ: {s}", .{builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.zinq_version});
+    try device_write.print("ZIG: v{d}.{d}.{d}, ZINQ: {s}", .{ builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.zinq_version });
 
     {
-        const ts = try timestamp.timestamp(allocator); defer allocator.free(ts);
+        const ts = try timestamp.timestamp(allocator);
+        defer allocator.free(ts);
 
         try device_write.print(", TIMESTAMP: {s}\n", .{ts});
     }
 
     if (comptime config.use_libint or config.use_openblas or config.use_xc) {
-
-        try device_write.print("\nLIBRARIES: ", .{}); var needs_comma = false;
+        try device_write.print("\nLIBRARIES: ", .{});
+        var needs_comma = false;
 
         if (comptime config.use_libint) {
-            try device_write.print("LIBINT {s}", .{config.libint_version}); needs_comma = true;
+            try device_write.print("LIBINT {s}", .{config.libint_version});
+            needs_comma = true;
         }
-        
+
         if (comptime config.use_openblas) {
-            if (needs_comma) try device_write.print(", ", .{}); try device_write.print("OPENBLAS {s}", .{config.openblas_version}); needs_comma = true;
+            if (needs_comma) try device_write.print(", ", .{});
+            try device_write.print("OPENBLAS {s}", .{config.openblas_version});
+            needs_comma = true;
         }
-        
+
         if (comptime config.use_xc) {
-            if (needs_comma) try device_write.print(", ", .{}); try device_write.print("LIBXC v{s}", .{config.libxc_version});
+            if (needs_comma) try device_write.print(", ", .{});
+            try device_write.print("LIBXC v{s}", .{config.libxc_version});
         }
 
         try device_write.print("\n", .{});
     }
 
-    var argc: usize = 0; var argv = try std.process.argsWithAllocator(allocator); defer argv.deinit(); _ = argv.next();
+    var argc: usize = 0;
+    var argv = try std.process.argsWithAllocator(allocator);
+    defer argv.deinit();
+    _ = argv.next();
 
     while (argv.next()) |arg| {
-        try parse(arg, allocator); argc += 1;
+        try parse(arg, allocator);
+        argc += 1;
     }
 
     if (argc == 0) parse("input.json", allocator) catch |err| {
-
         if (err != error.InputFileNotFound) return err;
 
         try device_write.print("\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND\n", .{});

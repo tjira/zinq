@@ -17,7 +17,9 @@ const RealMatrix = real_matrix.RealMatrix;
 pub fn dgemm(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), comptime at: bool, B: RealMatrix(T), comptime bt: bool) !void {
     if (comptime !config.use_openblas) @compileError("OPENBLAS SUPPORT IS DISABLED IN CONFIG");
 
-    const m: i32 = @intCast(C.rows); const n: i32 = @intCast(C.cols); const k: i32 = @intCast(if (!at) A.cols else A.rows);
+    const m: i32 = @intCast(C.rows);
+    const n: i32 = @intCast(C.cols);
+    const k: i32 = @intCast(if (!at) A.cols else A.rows);
 
     const AT: c_uint = if (at) cblas.CblasTrans else cblas.CblasNoTrans;
     const BT: c_uint = if (bt) cblas.CblasTrans else cblas.CblasNoTrans;
@@ -32,7 +34,9 @@ pub fn dgemm(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), comptime at:
 pub fn dsyevd(comptime T: type, J: *RealMatrix(T), C: *RealMatrix(T), A: RealMatrix(T)) !void {
     if (comptime !config.use_openblas) @compileError("OPENBLAS SUPPORT IS DISABLED IN CONFIG");
 
-    const n: i32 = @intCast(A.rows); try A.copyTo(C); J.fill(0);
+    const n: i32 = @intCast(A.rows);
+    try A.copyTo(C);
+    J.fill(0);
 
     const info = lapacke.LAPACKE_dsyevd(lapacke.LAPACK_ROW_MAJOR, 'V', 'U', n, &C.data[0], n, &J.data[0]);
 
@@ -45,7 +49,9 @@ pub fn dsyevd(comptime T: type, J: *RealMatrix(T), C: *RealMatrix(T), A: RealMat
 pub fn zgemm(comptime T: type, C: *ComplexMatrix(T), A: ComplexMatrix(T), ah: bool, B: ComplexMatrix(T), bh: bool) !void {
     if (comptime !config.use_openblas) @compileError("OPENBLAS SUPPORT IS DISABLED IN CONFIG");
 
-    const m: i32 = @intCast(C.rows); const n: i32 = @intCast(C.cols); const k: i32 = @intCast(if (!ah) A.cols else A.rows);
+    const m: i32 = @intCast(C.rows);
+    const n: i32 = @intCast(C.cols);
+    const k: i32 = @intCast(if (!ah) A.cols else A.rows);
 
     const AH: c_uint = if (ah) cblas.CblasConjTrans else cblas.CblasNoTrans;
     const BH: c_uint = if (bh) cblas.CblasConjTrans else cblas.CblasNoTrans;

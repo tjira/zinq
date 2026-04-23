@@ -43,20 +43,8 @@ const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 /// The Moller-Plesset options
 pub fn Options(comptime T: type) type {
     return struct {
-        const Gradient = union(enum) {
-            numeric: struct {
-                step: T = 1e-3,
-                nthread: u32 = 1
-            },
-            analytic: struct {}
-        };
-        const Hessian = union(enum) {
-            numeric: struct {
-                step: T = 1e-3,
-                nthread: u32 = 1
-            },
-            analytic: struct {}
-        };
+        const Gradient = union(enum) { numeric: struct { step: T = 1e-3, nthread: u32 = 1 }, analytic: struct {} };
+        const Hessian = union(enum) { numeric: struct { step: T = 1e-3, nthread: u32 = 1 }, analytic: struct {} };
         const Optimize = struct {
             maxiter: u32 = 100,
             step: T = 1,
@@ -69,15 +57,17 @@ pub fn Options(comptime T: type) type {
 
         gradient: ?Gradient = null,
         hessian: ?Hessian = null,
-        optimize: ?Optimize = null
+        optimize: ?Optimize = null,
     };
 }
 
 /// MollerPlesset target output.
 pub fn Output(comptime T: type) type {
     return struct {
-        G: ?RealMatrix(T) = null, H: ?RealMatrix(T) = null,
-        energy: T, frequencies: ?RealVector(T) = null,
+        G: ?RealMatrix(T) = null,
+        H: ?RealMatrix(T) = null,
+        energy: T,
+        frequencies: ?RealVector(T) = null,
         hf_output: hartree_fock.Output(T),
 
         /// Deinitialize the output struct.
@@ -93,43 +83,55 @@ pub fn Output(comptime T: type) type {
 /// Run the Moller-Plesset calculation with the given options.
 pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (opt.gradient != null and opt.gradient.? == .analytic) {
-
         std.log.err("ANALYTIC GRADIENT NOT IMPLEMENTED FOR MOLLER-PLESSET METHOD", .{});
 
         return error.InvalidInput;
     }
 
     if (opt.hessian != null and opt.hessian.? == .analytic) {
-
         std.log.err("ANALYTIC HESSIAN NOT IMPLEMENTED FOR MOLLER-PLESSET METHOD", .{});
 
         return error.InvalidInput;
     }
 
-    var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator); defer system.deinit(allocator);
+    var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator);
+    defer system.deinit(allocator);
 
-    if (enable_printing) {try print("\nINPUT GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
-
-    if (opt.optimize != null) {
-
-        const optimized_system = try particleSteepestDescent(T, opt, system, mp, "MOLLER PLESSET", enable_printing, allocator);
-
-        system.deinit(allocator); system = optimized_system;
+    if (enable_printing) {
+        try print("\nINPUT GEOMETRY (A):\n", .{});
+        try printClassicalParticleAsMolecule(T, system, null);
     }
 
-    if (enable_printing and opt.optimize != null) {try print("\nOPTIMIZED GEOMETRY (A):\n", .{}); try printClassicalParticleAsMolecule(T, system, null);}
+    if (opt.optimize != null) {
+        const optimized_system = try particleSteepestDescent(T, opt, system, mp, "MOLLER PLESSET", enable_printing, allocator);
 
-    var output = try mp(T, opt, system, enable_printing, allocator); errdefer output.deinit(allocator);
+        system.deinit(allocator);
+        system = optimized_system;
+    }
+
+    if (enable_printing and opt.optimize != null) {
+        try print("\nOPTIMIZED GEOMETRY (A):\n", .{});
+        try printClassicalParticleAsMolecule(T, system, null);
+    }
+
+    var output = try mp(T, opt, system, enable_printing, allocator);
+    errdefer output.deinit(allocator);
 
     output.G = if (opt.gradient != null) try nuclearGradient(T, opt, system, mp, "MOLLER-PLESSET", enable_printing, allocator) else null;
 
-    if (output.G) |G| {try print("\nMOLLER-PLESSET NUCLEAR GRADIENT (Eh/Bohr):\n", .{}); try printRealMatrix(T, G);}
+    if (output.G) |G| {
+        try print("\nMOLLER-PLESSET NUCLEAR GRADIENT (Eh/Bohr):\n", .{});
+        try printRealMatrix(T, G);
+    }
 
     output.H = if (opt.hessian != null) try nuclearHessian(T, opt, system, mp, "MOLLER-PLESSET", enable_printing, allocator) else null;
 
     if (output.H) |H| output.frequencies = try particleHarmonicFrequencies(T, system, H, allocator);
 
-    if (output.frequencies) |freqs| {try print("\nMOLLER-PLESSET VIBRATIONAL FREQUENCIES (CM^-1):\n", .{}); try printRealMatrix(T, freqs.asMatrix());}
+    if (output.frequencies) |freqs| {
+        try print("\nMOLLER-PLESSET VIBRATIONAL FREQUENCIES (CM^-1):\n", .{});
+        try printRealMatrix(T, freqs.asMatrix());
+    }
 
     return output;
 }
@@ -138,17 +140,20 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
 pub fn mp(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     const hf_output = try scf(T, opt.hartree_fock, system, enable_printing, allocator);
 
-    const nbf = if (opt.hartree_fock.generalized) hf_output.S.rows else 2 * hf_output.S.rows; const nocc = try system.noccSpin();
+    const nbf = if (opt.hartree_fock.generalized) hf_output.S.rows else 2 * hf_output.S.rows;
+    const nocc = try system.noccSpin();
 
-    var F_MS = try RealMatrix (T).init(nbf, nbf,                     allocator); defer F_MS.deinit(allocator);
-    var J_MS = try RealTensor4(T).init([_]usize{nbf, nbf, nbf, nbf}, allocator); defer J_MS.deinit(allocator);
+    var F_MS = try RealMatrix(T).init(nbf, nbf, allocator);
+    defer F_MS.deinit(allocator);
+
+    var J_MS = try RealTensor4(T).init([_]usize{ nbf, nbf, nbf, nbf }, allocator);
+    defer J_MS.deinit(allocator);
 
     try transform(T, &F_MS, &J_MS, hf_output.F, hf_output.J, hf_output.C);
 
     var energy: T = 0;
 
     if (opt.order < 2) {
-
         std.log.err("MOLLER-PLESSET ORDER MUST BE GREATER THAN OR EQUAL TO 2, GOT {d}", .{opt.order});
 
         return error.InvalidInput;
@@ -157,16 +162,19 @@ pub fn mp(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
     if (opt.order >= 2) energy += mp2(T, F_MS, J_MS, nocc);
 
     if (opt.order > 2) {
-
         std.log.err("MOLLER-PLESSET ORDER {d} NOT IMPLEMENTED, ONLY MP2 IS AVAILABLE", .{opt.order});
 
         return error.InvalidInput;
     }
 
-    if (enable_printing) try print("\nMP{d} ENERGY: {d:.14} Eh\n", .{opt.order, hf_output.energy + energy});
+    if (enable_printing) try print("\nMP{d} ENERGY: {d:.14} Eh\n", .{ opt.order, hf_output.energy + energy });
 
     return .{
-        .hf_output = hf_output, .energy = hf_output.energy + energy, .G = null, .H = null, .frequencies = null,
+        .hf_output = hf_output,
+        .energy = hf_output.energy + energy,
+        .G = null,
+        .H = null,
+        .frequencies = null,
     };
 }
 
@@ -175,7 +183,6 @@ pub fn mp2(comptime T: type, F_MS: RealMatrix(T), J_MS: RealTensor4(T), nocc: us
     var energy: T = 0;
 
     for (0..nocc) |i| for (0..nocc) |j| for (nocc..J_MS.shape[0]) |a| for (nocc..J_MS.shape[0]) |b| {
-
         const J_MS_A_ijab = J_MS.at(i, a, j, b) - J_MS.at(i, b, j, a);
 
         energy += 0.25 * J_MS_A_ijab * J_MS_A_ijab / (F_MS.at(i, i) + F_MS.at(j, j) - F_MS.at(a, a) - F_MS.at(b, b));
@@ -186,6 +193,14 @@ pub fn mp2(comptime T: type, F_MS: RealMatrix(T), J_MS: RealTensor4(T), nocc: us
 
 /// Function to perform all integrals transformations used in the Moller-Plesset calculations.
 pub fn transform(comptime T: type, F_MS: *RealMatrix(T), J_MS: *RealTensor4(T), F: RealMatrix(T), J: RealTensor4(T), C: RealMatrix(T)) !void {
-    if (F.rows != F_MS.rows) {oneAO2MS(T, F_MS, F, C);} else {oneAO2MO(T, F_MS, F, C);}
-    if (F.rows != F_MS.rows) {twoAO2MS(T, J_MS, J, C);} else {twoAO2MO(T, J_MS, J, C);}
+    if (F.rows != F_MS.rows) {
+        oneAO2MS(T, F_MS, F, C);
+    } else {
+        oneAO2MO(T, F_MS, F, C);
+    }
+    if (F.rows != F_MS.rows) {
+        twoAO2MS(T, J_MS, J, C);
+    } else {
+        twoAO2MO(T, J_MS, J, C);
+    }
 }

@@ -16,12 +16,7 @@ const RealVector = real_vector.RealVector;
 
 /// Parameters struct for all the thermostats.
 pub fn Parameters(comptime T: type) type {
-    return struct {
-        andersen_params: andersen_thermostat.Parameters(T),
-        berendsen_params: berendsen_thermostat.Parameters(T),
-        langevin_params: langevin_thermostat.Parameters(T),
-        nose_hoover_params: nose_hoover_thermostat.Parameters(T)
-    };
+    return struct { andersen_params: andersen_thermostat.Parameters(T), berendsen_params: berendsen_thermostat.Parameters(T), langevin_params: langevin_thermostat.Parameters(T), nose_hoover_params: nose_hoover_thermostat.Parameters(T) };
 }
 
 /// Electronic potential mode union.
@@ -33,7 +28,7 @@ pub fn Thermostat(comptime T: type) type {
         nose_hoover: NoseHoover(T),
 
         /// Apply the thermostat.
-        pub fn apply(self: @This(), velocities: *RealVector(T), parameters: Parameters(T), stage: enum{Before, After}) !void {
+        pub fn apply(self: @This(), velocities: *RealVector(T), parameters: Parameters(T), stage: enum { Before, After }) !void {
             switch (self) {
                 .andersen => |field| if (stage == .After) try field.apply(velocities, parameters.andersen_params),
                 .berendsen => |field| if (stage == .After) try field.apply(velocities, parameters.berendsen_params),
@@ -41,7 +36,7 @@ pub fn Thermostat(comptime T: type) type {
                 .nose_hoover => |field| {
                     if (stage == .Before) try field.applyBefore(velocities, parameters.nose_hoover_params);
                     if (stage == .After) try field.applyAfter(velocities, parameters.nose_hoover_params);
-                }
+                },
             }
         }
     };

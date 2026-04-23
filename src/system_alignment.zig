@@ -27,10 +27,10 @@ const U2AU = global_variables.U2AU;
 
 /// Align trajectory.
 pub fn alignTrajectory(comptime T: type, positions: RealMatrix(T), allocator: std.mem.Allocator) !RealMatrix(T) {
-    var aligned = try positions.clone(allocator); errdefer aligned.deinit(allocator);
+    var aligned = try positions.clone(allocator);
+    errdefer aligned.deinit(allocator);
 
     for (0..aligned.rows) |i| {
-
         var means: [3]T = .{0} ** 3;
 
         for (0..aligned.cols / 3) |j| {
@@ -50,27 +50,37 @@ pub fn alignTrajectory(comptime T: type, positions: RealMatrix(T), allocator: st
         }
     }
 
-    var reference = aligned.row(0).asMatrix(); try reference.reshape(reference.rows / 3, 3);
+    var reference = aligned.row(0).asMatrix();
+    try reference.reshape(reference.rows / 3, 3);
 
     for (1..aligned.rows) |i| {
+        var row = aligned.row(i).asMatrix();
+        try row.reshape(row.rows / 3, 3);
 
-        var row = aligned.row(i).asMatrix(); try row.reshape(row.rows / 3, 3);
+        const H = try mmAlloc(T, reference, true, row, false, allocator);
+        defer H.deinit(allocator);
 
-        const H = try mmAlloc(T, reference, true, row, false, allocator); defer H.deinit(allocator);
+        const SVD = try svdAlloc(T, H, allocator);
+        defer SVD.U.deinit(allocator);
+        defer SVD.S.deinit(allocator);
+        defer SVD.VT.deinit(allocator);
 
-        const SVD = try svdAlloc(T, H, allocator); defer SVD.U.deinit(allocator); defer SVD.S.deinit(allocator); defer SVD.VT.deinit(allocator);
+        var R = try mmAlloc(T, SVD.VT, true, SVD.U, true, allocator);
+        defer R.deinit(allocator);
 
-        var R = try mmAlloc(T, SVD.VT, true, SVD.U, true, allocator); defer R.deinit(allocator);
-
-        var CORR = try RealMatrix(T).initZero(3, 3, allocator); defer CORR.deinit(allocator); CORR.identity();
+        var CORR = try RealMatrix(T).initZero(3, 3, allocator);
+        defer CORR.deinit(allocator);
+        CORR.identity();
 
         CORR.ptr(0, 0).* = std.math.sign(try determinant3x3(T, R));
 
-        const CORRU = try mmAlloc(T, CORR, false, SVD.U, true, allocator); defer CORRU.deinit(allocator);
+        const CORRU = try mmAlloc(T, CORR, false, SVD.U, true, allocator);
+        defer CORRU.deinit(allocator);
 
         try mm(T, &R, SVD.VT, true, CORRU, false);
 
-        const row_aligned = try mmAlloc(T, row, false, R, false, allocator); defer row_aligned.deinit(allocator);
+        const row_aligned = try mmAlloc(T, row, false, R, false, allocator);
+        defer row_aligned.deinit(allocator);
 
         try row_aligned.copyTo(&row);
     }
@@ -79,9 +89,8 @@ pub fn alignTrajectory(comptime T: type, positions: RealMatrix(T), allocator: st
 }
 
 /// Function to read a trajectory from an XYZ file and return it as a RealMatrix.
-pub fn readTrajectoryFromXYZ(comptime T: type, path: []const u8, allocator: std.mem.Allocator) !struct{positions: RealMatrix(T), masses: RealVector(T)} {
+pub fn readTrajectoryFromXYZ(comptime T: type, path: []const u8, allocator: std.mem.Allocator) !struct { positions: RealMatrix(T), masses: RealVector(T) } {
     const file = std.fs.cwd().openFile(path, .{}) catch |err| {
-
         std.log.err("FILE '{s}' NOT FOUND", .{path});
 
         return err;
@@ -89,51 +98,49 @@ pub fn readTrajectoryFromXYZ(comptime T: type, path: []const u8, allocator: std.
 
     defer file.close();
 
-    var buffer: [1024]u8 = undefined; var reader = file.reader(&buffer); var reader_interface = &reader.interface;
+    var buffer: [1024]u8 = undefined;
+    var reader = file.reader(&buffer);
+    var reader_interface = &reader.interface;
 
     const natom = try std.fmt.parseInt(u32, uncr(try reader_interface.peekDelimiterExclusive('\n')), 10);
 
-    var atoms = try allocator.alloc(usize, natom); defer allocator.free(atoms);
+    var atoms = try allocator.alloc(usize, natom);
+    defer allocator.free(atoms);
 
-    var positions = try RealMatrix(T).init(0, 3 * natom, allocator); errdefer positions.deinit(allocator);
+    var positions = try RealMatrix(T).init(0, 3 * natom, allocator);
+    errdefer positions.deinit(allocator);
 
     while (true) {
-
         const peek = reader_interface.takeDelimiterExclusive('\n') catch |err| if (err == error.EndOfStream) break else return err;
 
         if (natom != try std.fmt.parseInt(u32, uncr(peek), 10)) {
-
             std.log.err("INCORRECTLY FORMATTED TRAJECTORY FILE", .{});
 
             return error.InvalidInput;
         }
 
-        reader_interface.toss(1); _ = try reader_interface.discardDelimiterInclusive('\n');
+        reader_interface.toss(1);
+        _ = try reader_interface.discardDelimiterInclusive('\n');
 
         try positions.addRow(allocator);
 
         for (0..natom) |i| {
-
-            var it = std.mem.tokenizeAny(u8, try reader_interface.takeDelimiterExclusive('\n'), " "); 
+            var it = std.mem.tokenizeAny(u8, try reader_interface.takeDelimiterExclusive('\n'), " ");
 
             var next = it.next() orelse {
-
                 std.log.err("INCORRECTLY FORMATTED TRAJECTORY FILE", .{});
 
                 return error.InvalidInput;
             };
 
             if (positions.rows == 1) atoms[i] = SM2AN.get(next) orelse {
-
                 std.log.err("UNKNOWN ATOMIC SYMBOL '{s}' IN TRAJECTORY FILE", .{next});
 
                 return error.InvalidInput;
             };
 
             for (0..3) |j| {
-
                 next = it.next() orelse {
-
                     std.log.err("INCORRECTLY FORMATTED TRAJECTORY FILE", .{});
 
                     return error.InvalidInput;
@@ -146,9 +153,10 @@ pub fn readTrajectoryFromXYZ(comptime T: type, path: []const u8, allocator: std.
         }
     }
 
-    var masses = try RealVector(T).init(3 * natom, allocator); errdefer masses.deinit(allocator);
+    var masses = try RealVector(T).init(3 * natom, allocator);
+    errdefer masses.deinit(allocator);
 
     for (0..3 * natom) |i| masses.ptr(i).* = AN2M[atoms[i / 3]] * U2AU;
 
-    return .{.positions = positions, .masses = masses};
+    return .{ .positions = positions, .masses = masses };
 }

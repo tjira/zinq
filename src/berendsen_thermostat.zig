@@ -8,10 +8,7 @@ const RealVector = real_vector.RealVector;
 
 /// Parameters for the Berendsen thermostat.
 pub fn Parameters(comptime T: type) type {
-    return struct {
-        time_step: T,
-        temperature: T
-    };
+    return struct { time_step: T, temperature: T };
 }
 
 /// Berendsen thermostat implementation.

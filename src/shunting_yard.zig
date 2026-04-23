@@ -19,13 +19,16 @@ const STR2F = global_variables.STR2F;
 pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []const u8, allocator: std.mem.Allocator) !ReversePolishNotation(T) {
     var rpn = try ReversePolishNotation(T).init();
 
-    var stack = std.ArrayList(union(enum) {op: Operator, bracket: u8, func: *const fn(T) T}){}; defer stack.deinit(allocator);
+    var stack = std.ArrayList(union(enum) { op: Operator, bracket: u8, func: *const fn (T) T }){};
+    defer stack.deinit(allocator);
 
-    var i: usize = 0; var j: usize = 0; var buffer: [64]u8 = undefined; var expect_operand: bool = true;
+    var i: usize = 0;
+    var j: usize = 0;
+    var buffer: [64]u8 = undefined;
+    var expect_operand: bool = true;
 
     for (variables) |variable| for (C2V.keys()) |constant| {
         if (std.mem.eql(u8, variable, constant)) {
-
             std.log.err("VARIABLE NAME CONFLICT WITH CONSTANT NAME '{s}'", .{variable});
 
             return error.InvalidInput;
@@ -33,39 +36,33 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
     };
 
     parser: while (i < input.len) : (i += 1) {
-
         if (std.ascii.isWhitespace(input[i])) continue;
 
         if (std.ascii.isDigit(input[i])) {
-
             if (!expect_operand) {
-
                 std.log.err("UNEXPECTED NUMBER WITHOUT OPERATOR", .{});
 
                 return error.InvalidInput;
             }
 
             while (i < input.len and (std.ascii.isDigit(input[i]) or input[i] == '.')) : (i += 1) {
-                buffer[j] = input[i]; j += 1;
+                buffer[j] = input[i];
+                j += 1;
             }
 
             const number = try std.fmt.parseFloat(T, buffer[0..j]);
 
-            try rpn.append(number, allocator); i -= 1; j = 0;
+            try rpn.append(number, allocator);
+            i -= 1;
+            j = 0;
 
-            expect_operand = false; continue;
-        }
-
-        else if (input[i] == '+' or input[i] == '-' or input[i] == '*' or input[i] == '/' or input[i] == '^') {
-
+            expect_operand = false;
+            continue;
+        } else if (input[i] == '+' or input[i] == '-' or input[i] == '*' or input[i] == '/' or input[i] == '^') {
             var op: Operator = undefined;
 
-            if (input[i] == '-' and expect_operand) op = .Negate
-            else if (input[i] == '+' and expect_operand) op = .Affirm
-            else {
-
+            if (input[i] == '-' and expect_operand) op = .Negate else if (input[i] == '+' and expect_operand) op = .Affirm else {
                 if (expect_operand) {
-
                     std.log.err("UNEXPECTED OPERATOR '{c}' WITHOUT OPERAND", .{input[i]});
 
                     return error.InvalidInput;
@@ -74,35 +71,38 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
                 op = try operatorFromChar(input[i]);
             }
 
-            const opp = operatorPrecedence(op); const opa = operatorAssociativity(op);
+            const opp = operatorPrecedence(op);
+            const opa = operatorAssociativity(op);
 
-            while (stack.items.len > 0 and switch(stack.getLast()) {.op => true, .func => false, .bracket => |bracket| bracket != '('}) {
+            while (stack.items.len > 0 and switch (stack.getLast()) {
+                .op => true,
+                .func => false,
+                .bracket => |bracket| bracket != '(',
+            }) {
                 if (operatorPrecedence(stack.getLast().op) > opp or (operatorPrecedence(stack.getLast().op) == opp and opa == .Left)) try rpn.append(stack.pop().?.op, allocator) else break;
             }
 
-            try stack.append(allocator, .{.op = op}); expect_operand = true;
-        }
-
-        else if (input[i] == '(') {
-
+            try stack.append(allocator, .{ .op = op });
+            expect_operand = true;
+        } else if (input[i] == '(') {
             if (!expect_operand) {
-
                 std.log.err("UNEXPECTED '(' WITHOUT OPERATOR", .{});
 
                 return error.InvalidInput;
             }
 
-            try stack.append(allocator, .{.bracket = input[i]}); expect_operand = true;
-        }
-
-        else if (input[i] == ')') {
-
-            while (stack.items.len > 0 and switch(stack.getLast()) {.op => true, .func => false, .bracket => |bracket| bracket != '('}) {
+            try stack.append(allocator, .{ .bracket = input[i] });
+            expect_operand = true;
+        } else if (input[i] == ')') {
+            while (stack.items.len > 0 and switch (stack.getLast()) {
+                .op => true,
+                .func => false,
+                .bracket => |bracket| bracket != '(',
+            }) {
                 try rpn.append(stack.pop().?.op, allocator);
             }
 
             if (stack.items.len == 0) {
-
                 std.log.err("MISMATCHED PARENTHESES", .{});
 
                 return error.InvalidInput;
@@ -113,37 +113,41 @@ pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []co
             if (stack.items.len > 0) {
                 switch (stack.getLast()) {
                     .func => try rpn.append(stack.pop().?.func, allocator),
-                    else => {}
+                    else => {},
                 }
             }
 
             expect_operand = false;
-        }
-
-        else {
-
+        } else {
             if (!expect_operand) {
-
                 std.log.err("UNEXPECTED TOKEN '{c}' WITHOUT OPERATOR", .{input[i]});
 
                 return error.InvalidInput;
             }
 
             for (STR2F.keys()) |func| {
-                if (i + func.len - 1 < input.len and std.mem.eql(u8, input[i..i + func.len], func)) {
-                    try stack.append(allocator, .{.func = STR2F.get(func).?}); i += func.len - 1; continue :parser;
+                if (i + func.len - 1 < input.len and std.mem.eql(u8, input[i .. i + func.len], func)) {
+                    try stack.append(allocator, .{ .func = STR2F.get(func).? });
+                    i += func.len - 1;
+                    continue :parser;
                 }
             }
 
             for (C2V.keys()) |constant| {
-                if (i + constant.len - 1 < input.len and std.mem.eql(u8, constant, input[i..i + constant.len])) {
-                    try rpn.append(constant, allocator); i += constant.len - 1; expect_operand = false; continue :parser;
+                if (i + constant.len - 1 < input.len and std.mem.eql(u8, constant, input[i .. i + constant.len])) {
+                    try rpn.append(constant, allocator);
+                    i += constant.len - 1;
+                    expect_operand = false;
+                    continue :parser;
                 }
             }
 
             for (variables) |variable| {
-                if (std.mem.eql(u8, variable, input[i..i + variable.len])) {
-                    try rpn.append(variable, allocator); i += variable.len - 1; expect_operand = false; continue :parser;
+                if (std.mem.eql(u8, variable, input[i .. i + variable.len])) {
+                    try rpn.append(variable, allocator);
+                    i += variable.len - 1;
+                    expect_operand = false;
+                    continue :parser;
                 }
             }
 

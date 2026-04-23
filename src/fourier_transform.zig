@@ -23,17 +23,16 @@ const TEST_TOLERANCE = global_variables.TEST_TOLERANCE;
 
 /// Fast Fourier transform for a one-dimensional array. The factor argument is the value in the exponent of the Fourier transform. Factor -1 corresponds to the forward Fourier transform, while factor 1 corresponds to the inverse Fourier transform.
 pub fn cfft1(comptime T: type, vector: *StridedComplexVector(T), factor: i32) !void {
-    const n = vector.len; const bit_count: u6 = @intCast(std.math.log2(n));
+    const n = vector.len;
+    const bit_count: u6 = @intCast(std.math.log2(n));
 
     if (std.math.pow(usize, 2, @intCast(bit_count)) != n) {
-
         std.log.err("DATA SIZE IN THE FOURIER TRANSFORM MUST BE A POWER OF 2, BUT GOT {d}", .{n});
 
         return error.NumericalError;
     }
 
     for (0..n) |i| {
-
         const j = revk(i, bit_count);
 
         if (i < j) {
@@ -42,22 +41,19 @@ pub fn cfft1(comptime T: type, vector: *StridedComplexVector(T), factor: i32) !v
     }
 
     for (0..bit_count) |stage| {
-
         const block_size = std.math.pow(usize, 2, stage + 1);
         const angle = 2 * std.math.pi * @as(T, @floatFromInt(factor)) / @as(T, @floatFromInt(block_size));
         const twiddle_base = std.math.complex.exp(Complex(T).init(0, angle));
 
         for (0..n / block_size) |j| {
-
             var omega = Complex(T).init(1, 0);
 
             for (0..block_size / 2) |k| {
-
                 const t = omega.mul(vector.at(j * block_size + k + block_size / 2));
 
                 const u = vector.at(j * block_size + k);
 
-                vector.ptr(j * block_size + k                 ).* = u.add(t);
+                vector.ptr(j * block_size + k).* = u.add(t);
                 vector.ptr(j * block_size + k + block_size / 2).* = u.sub(t);
 
                 omega = omega.mul(twiddle_base);
@@ -75,23 +71,19 @@ pub fn cfftn(comptime T: type, vector: *ComplexVector(T), shape: []const usize, 
     const N = prod(usize, shape);
 
     if (std.math.pow(usize, shape[0], shape.len) != N) {
-
         std.log.err("DATA SIZE IN THE FOURIER TRANSFORM MUST BE A POWER OF 2, BUT GOT {d}", .{N});
 
         return error.NumericalError;
     }
 
     for (0..shape.len) |i| {
-
         const stride = prod(usize, shape[0..i]);
 
-        for (0..prod(usize, shape[i + 1..])) |outer| {
-
+        for (0..prod(usize, shape[i + 1 ..])) |outer| {
             const block_start = outer * (shape[i] * stride);
-            
-            for (0..stride) |inner| {
 
-                var axis_slice = StridedComplexVector(T){.data = vector.data, .len = shape[i], .stride = stride, .zero = block_start + inner};
+            for (0..stride) |inner| {
+                var axis_slice = StridedComplexVector(T){ .data = vector.data, .len = shape[i], .stride = stride, .zero = block_start + inner };
 
                 try cfft1(T, &axis_slice, factor);
             }
@@ -100,7 +92,8 @@ pub fn cfftn(comptime T: type, vector: *ComplexVector(T), shape: []const usize, 
 }
 
 test "cfft1" {
-    var v = try ComplexVector(f64).init(8, std.testing.allocator); defer v.deinit(std.testing.allocator);
+    var v = try ComplexVector(f64).init(8, std.testing.allocator);
+    defer v.deinit(std.testing.allocator);
 
     v.ptr(0).* = Complex(f64).init(0, 0);
     v.ptr(1).* = Complex(f64).init(1, 0);
@@ -111,13 +104,14 @@ test "cfft1" {
     v.ptr(6).* = Complex(f64).init(6, 0);
     v.ptr(7).* = Complex(f64).init(7, 0);
 
-    const v_fft = try ComplexVector(f64).init(8, std.testing.allocator); defer v_fft.deinit(std.testing.allocator);
+    const v_fft = try ComplexVector(f64).init(8, std.testing.allocator);
+    defer v_fft.deinit(std.testing.allocator);
 
-    v_fft.ptr(0).* = Complex(f64).init(28.00000000000000,  0.00000000000000);
-    v_fft.ptr(1).* = Complex(f64).init(-4.00000000000000,  9.65685424949238);
-    v_fft.ptr(2).* = Complex(f64).init(-4.00000000000000,  4.00000000000000);
-    v_fft.ptr(3).* = Complex(f64).init(-4.00000000000000,  1.65685424949238);
-    v_fft.ptr(4).* = Complex(f64).init(-4.00000000000000,  0.00000000000000);
+    v_fft.ptr(0).* = Complex(f64).init(28.00000000000000, 0.00000000000000);
+    v_fft.ptr(1).* = Complex(f64).init(-4.00000000000000, 9.65685424949238);
+    v_fft.ptr(2).* = Complex(f64).init(-4.00000000000000, 4.00000000000000);
+    v_fft.ptr(3).* = Complex(f64).init(-4.00000000000000, 1.65685424949238);
+    v_fft.ptr(4).* = Complex(f64).init(-4.00000000000000, 0.00000000000000);
     v_fft.ptr(5).* = Complex(f64).init(-4.00000000000000, -1.65685424949238);
     v_fft.ptr(6).* = Complex(f64).init(-4.00000000000000, -4.00000000000000);
     v_fft.ptr(7).* = Complex(f64).init(-4.00000000000000, -9.65685424949238);

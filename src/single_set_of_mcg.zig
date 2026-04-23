@@ -36,21 +36,19 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Initialize a new complex Gaussian with given parameters.
         pub fn init(position: []const []const T, gamma: []const []const T, momentum: []const []const T, state: usize, bf_spread: []const u32, nstate: usize, allocator: std.mem.Allocator) !@This() {
             if (position.len != gamma.len or position.len != momentum.len or gamma.len != momentum.len) {
-
-                std.log.err("PARAMETER LENGTH MISMATCH WHEN INITIALIZING SINGLE SET OF MCG, POSITION LENGTH: {d}, GAMMA LENGTH: {d}, MOMENTUM LENGTH: {d}", .{position.len, gamma.len, momentum.len});
+                std.log.err("PARAMETER LENGTH MISMATCH WHEN INITIALIZING SINGLE SET OF MCG, POSITION LENGTH: {d}, GAMMA LENGTH: {d}, MOMENTUM LENGTH: {d}", .{ position.len, gamma.len, momentum.len });
 
                 return error.InvalidInput;
             }
-
 
             if (position.len != bf_spread.len) {
-
-                std.log.err("PARAMETER LENGTH MISMATCH WHEN INITIALIZING SINGLE SET OF MCG, POSITION LENGTH: {d}, BASIS FUNCTION SPREAD LENGTH: {d}", .{position.len, bf_spread.len});
+                std.log.err("PARAMETER LENGTH MISMATCH WHEN INITIALIZING SINGLE SET OF MCG, POSITION LENGTH: {d}, BASIS FUNCTION SPREAD LENGTH: {d}", .{ position.len, bf_spread.len });
 
                 return error.InvalidInput;
             }
 
-            var gaussians = try allocator.alloc(ComplexGaussian(T), position.len); var coefs = try ComplexVector(T).initZero(nstate * gaussians.len, allocator);
+            var gaussians = try allocator.alloc(ComplexGaussian(T), position.len);
+            var coefs = try ComplexVector(T).initZero(nstate * gaussians.len, allocator);
 
             for (0..gaussians.len) |i| {
                 gaussians[i] = try ComplexGaussian(T).init(position[i], gamma[i], momentum[i], allocator);
@@ -60,12 +58,10 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                 coefs.ptr(state * gaussians.len + i).* = Complex(T).init(@as(T, @floatFromInt(contr)), 0);
             }
 
-            var mcg = @This(){
-                .gaussians = gaussians,
-                .coefs = coefs
-            };
+            var mcg = @This(){ .gaussians = gaussians, .coefs = coefs };
 
-            var S = try ComplexMatrix(T).init(mcg.coefs.len, mcg.coefs.len, allocator); defer S.deinit(allocator);
+            var S = try ComplexMatrix(T).init(mcg.coefs.len, mcg.coefs.len, allocator);
+            defer S.deinit(allocator);
 
             try mcg.overlap(&S);
 
@@ -95,10 +91,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                 coefs.ptr(i).* = self.coefs.at(i);
             }
 
-            return @This(){
-                .gaussians = gaussians,
-                .coefs = coefs
-            };
+            return @This(){ .gaussians = gaussians, .coefs = coefs };
         }
 
         /// Calculates the derivative of the coefficients with respect to time.
@@ -106,11 +99,9 @@ pub fn SingleSetOfMCG(comptime T: type) type {
             dc.zero();
 
             for (0..self.coefs.len) |i| {
-
                 var sum = Complex(T).init(0, 0);
 
                 for (0..self.coefs.len) |j| {
-
                     const Heff_ij = matrix_eom.T.at(i, j).add(matrix_eom.V.at(i, j)).sub(matrix_eom.tau.at(i, j).mulbyi());
 
                     sum = sum.add(Heff_ij.mul(self.coefs.at(j)));
@@ -129,11 +120,9 @@ pub fn SingleSetOfMCG(comptime T: type) type {
             dc.zero();
 
             for (0..self.coefs.len) |i| {
-
                 var sum = Complex(T).init(0, 0);
 
                 for (0..self.coefs.len) |j| {
-
                     const Heff_ij = matrix_eom.T.at(i, j).add(matrix_eom.V.at(i, j)).add(matrix_eom.tau.at(i, j));
 
                     sum = sum.add(Heff_ij.mul(self.coefs.at(j)));
@@ -148,17 +137,15 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the expectation value of position or momentum.
-        pub fn coordinateExpectation(self: @This(), coordinate: *RealVector(T), coord: enum {momentum, position}, S: ComplexMatrix(T)) !void {
-            var total_norm: T = 0; coordinate.zero();
+        pub fn coordinateExpectation(self: @This(), coordinate: *RealVector(T), coord: enum { momentum, position }, S: ComplexMatrix(T)) !void {
+            var total_norm: T = 0;
+            coordinate.zero();
 
             for (0..self.coefs.len / self.gaussians.len) |i| {
-
                 for (0..self.gaussians.len) |j| {
-
                     const index_1 = i * self.gaussians.len + j;
 
                     for (0..self.gaussians.len) |k| {
-
                         const index_2 = i * self.gaussians.len + k;
 
                         const c_1 = self.coefs.at(index_1);
@@ -167,7 +154,6 @@ pub fn SingleSetOfMCG(comptime T: type) type {
                         total_norm += c_1.conjugate().mul(c_2).mul(S.at(index_1, index_2)).re;
 
                         for (0..coordinate.len) |l| {
-
                             const element = switch (coord) {
                                 .momentum => try self.gaussians[j].momentumMatrixElementIndex(self.gaussians[k], l),
                                 .position => try self.gaussians[j].positionMatrixElementIndex(self.gaussians[k], l),
@@ -185,7 +171,6 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Exports the parameters of the Gaussians and coefficients into a single complex vector.
         pub fn exportParameterVector(self: @This(), params: *ComplexVector(T)) void {
             for (self.gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
-
                 const index = 3 * i * gaussian.position.len + j;
 
                 params.ptr(index).* = Complex(T).init(gaussian.position[j], 0);
@@ -201,13 +186,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Calculates the Ehrenfest-like gamma derivative.
         pub fn gammaDerivativeEhrenfest(self: @This(), dg: *ComplexVector(T), ddV: ComplexMatrixArray2(T), mass: []const T) !void {
             for (self.gaussians, 0..) |gaussian, i| {
-
-                const c_i = StridedComplexVector(T){
-                    .data = self.coefs.data,
-                    .len = self.coefs.len / self.gaussians.len,
-                    .stride = self.gaussians.len,
-                    .zero = i
-                };
+                const c_i = StridedComplexVector(T){ .data = self.coefs.data, .len = self.coefs.len / self.gaussians.len, .stride = self.gaussians.len, .zero = i };
 
                 for (0..gaussian.gamma.len) |j| {
                     dg.ptr(gaussian.gamma.len * i + j).* = gaussian.gammaDerivativeIndex(mass[j], ddV.at(i).at(j), c_i, j);
@@ -241,9 +220,10 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Calculates the kinetic matrix.
         pub fn kinetic(self: @This(), K: *ComplexMatrix(T), mass: []const T) !void {
             for (0..K.rows) |i| for (0..K.cols) |j| {
-
-                const ig = i % self.gaussians.len; const is = i / self.gaussians.len;
-                const jg = j % self.gaussians.len; const js = j / self.gaussians.len;
+                const ig = i % self.gaussians.len;
+                const is = i / self.gaussians.len;
+                const jg = j % self.gaussians.len;
+                const js = j / self.gaussians.len;
 
                 if (is == js) {
                     K.ptr(i, j).* = try self.gaussians[ig].kinetic(self.gaussians[jg], mass);
@@ -259,14 +239,15 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Loads the structure from a complex vector with parameters. The parameters are in order: positions, momentas, gammas for each Gaussian followed by the coefficients for each state and Gaussian.
         pub fn loadParameterVector(self: *@This(), params: ComplexVector(T)) !void {
             if (params.len != 3 * self.gaussians[0].position.len * self.gaussians.len + self.coefs.len) {
-
-                std.log.err("PARAMETER VECTOR LENGTH MISMATCH WHEN LOADING SINGLE SET OF MCG, EXPECTED {d} BUT GOT {d}", .{3 * self.gaussians[0].position.len * self.gaussians.len + self.coefs.len, params.len});
+                std.log.err("PARAMETER VECTOR LENGTH MISMATCH WHEN LOADING SINGLE SET OF MCG, EXPECTED {d} BUT GOT {d}", .{
+                    3 * self.gaussians[0].position.len * self.gaussians.len + self.coefs.len,
+                    params.len,
+                });
 
                 return error.InvalidInput;
             }
 
             for (self.gaussians, 0..) |gaussian, i| for (0..gaussian.position.len) |j| {
-
                 const index = 3 * i * gaussian.position.len + j;
 
                 gaussian.position[j] = params.at(index).re;
@@ -282,13 +263,7 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Calculates the Ehrenfest-like momentum derivative.
         pub fn momentumDerivativeEhrenfest(self: @This(), dp: *RealVector(T), dVg: ComplexMatrixArray2(T)) !void {
             for (self.gaussians, 0..) |gaussian, i| {
-
-                const c_i = StridedComplexVector(T){
-                    .data = self.coefs.data,
-                    .len = self.coefs.len / self.gaussians.len,
-                    .stride = self.gaussians.len,
-                    .zero = i
-                };
+                const c_i = StridedComplexVector(T){ .data = self.coefs.data, .len = self.coefs.len / self.gaussians.len, .stride = self.gaussians.len, .zero = i };
 
                 for (0..gaussian.momentum.len) |j| {
                     dp.ptr(gaussian.momentum.len * i + j).* = try gaussian.momentumDerivativeIndex(dVg.at(i).at(j), c_i, j);
@@ -298,7 +273,8 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
         /// Calculates the Ehrenfest-like momentum derivative in imaginary time.
         pub fn momentumDerivativeImaginaryEhrenfest(self: @This(), dp: *RealVector(T), mass: []const T) !void {
-            try self.positionDerivativeEhrenfest(dp, mass); dp.muls(-1);
+            try self.positionDerivativeEhrenfest(dp, mass);
+            dp.muls(-1);
         }
 
         /// Normalizes the coefficient vector in place such that <Psi|Psi> = 1.
@@ -306,9 +282,8 @@ pub fn SingleSetOfMCG(comptime T: type) type {
             var norm_sq: T = 0;
 
             for (0..self.coefs.len) |i| {
-
                 var S_psi_i = Complex(T).init(0, 0);
-                
+
                 for (0..self.coefs.len) |j| {
                     S_psi_i = S_psi_i.add(S.at(i, j).mul(self.coefs.at(j)));
                 }
@@ -321,11 +296,11 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
         /// Calculate the expectation value of an operator given its matrix representation.
         pub fn operatorExpectation(self: @This(), M: ComplexMatrix(T), S: ComplexMatrix(T)) !T {
-            var Mexp: T = 0; var norm: T = 0;
+            var Mexp: T = 0;
+            var norm: T = 0;
 
             for (0..self.coefs.len) |i| {
-
-                var row_acc_M = Complex(T).init(0, 0); 
+                var row_acc_M = Complex(T).init(0, 0);
                 var row_acc_S = Complex(T).init(0, 0);
 
                 for (0..self.coefs.len) |j| {
@@ -343,9 +318,10 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Calculates the overlap matrix.
         pub fn overlap(self: @This(), S: *ComplexMatrix(T)) !void {
             for (0..S.rows) |i| for (0..S.cols) |j| {
-
-                const ig = i % self.gaussians.len; const is = i / self.gaussians.len;
-                const jg = j % self.gaussians.len; const js = j / self.gaussians.len;
+                const ig = i % self.gaussians.len;
+                const is = i / self.gaussians.len;
+                const jg = j % self.gaussians.len;
+                const js = j / self.gaussians.len;
 
                 if (is == js) {
                     S.ptr(i, j).* = try self.gaussians[ig].overlap(self.gaussians[jg]);
@@ -356,12 +332,12 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         /// Compute the overlap integral matrix where the ket vector is differentiated in time.
         pub fn overlapDiffTime(self: @This(), tau: *ComplexMatrix(T), S: ComplexMatrix(T), dq: RealVector(T), dp: RealVector(T), dg: ComplexVector(T)) !void {
             for (0..tau.rows) |i| for (0..tau.cols) |j| {
-
-                const ig = i % self.gaussians.len; const is = i / self.gaussians.len;
-                const jg = j % self.gaussians.len; const js = j / self.gaussians.len;
+                const ig = i % self.gaussians.len;
+                const is = i / self.gaussians.len;
+                const jg = j % self.gaussians.len;
+                const js = j / self.gaussians.len;
 
                 if (is == js) {
-
                     const dq_j = dq.slice(jg * self.gaussians[0].position.len, (jg + 1) * self.gaussians[0].position.len);
                     const dp_j = dp.slice(jg * self.gaussians[0].position.len, (jg + 1) * self.gaussians[0].position.len);
                     const dg_j = dg.slice(jg * self.gaussians[0].position.len, (jg + 1) * self.gaussians[0].position.len);
@@ -371,7 +347,6 @@ pub fn SingleSetOfMCG(comptime T: type) type {
             };
 
             for (0..tau.rows) |j| {
-
                 const norm_rate = tau.at(j, j).re;
 
                 for (0..tau.cols) |i| {
@@ -381,17 +356,15 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         }
 
         /// Calculates the population of a given state. If the coefficients are passed, those are used instead of the internal ones.
-        pub fn population(self : @This(), S: ComplexMatrix(T), state: usize, coefs_to_use: ?ComplexVector(T)) !T {
+        pub fn population(self: @This(), S: ComplexMatrix(T), state: usize, coefs_to_use: ?ComplexVector(T)) !T {
             var pop: T = 0;
 
             const coefs = coefs_to_use orelse self.coefs;
 
             for (0..self.gaussians.len) |i| {
-
                 const index1 = state * self.gaussians.len + i;
 
                 for (0..self.gaussians.len) |j| {
-
                     const index2 = state * self.gaussians.len + j;
 
                     const c1 = coefs.at(index1);
@@ -421,11 +394,9 @@ pub fn SingleSetOfMCG(comptime T: type) type {
             V.zero();
 
             for (0..self.gaussians.len) |i| for (0..self.gaussians.len) |j| {
-
                 try self.gaussians[i].potential(self.gaussians[j], Vij, pot, n_nodes, time, q);
 
                 for (0..Vij.rows) |k| for (0..Vij.cols) |l| {
-
                     const row = k * self.gaussians.len + i;
                     const col = l * self.gaussians.len + j;
 
@@ -444,13 +415,16 @@ pub fn SingleSetOfMCG(comptime T: type) type {
             const n_states_self = self.coefs.len / self.gaussians.len;
 
             if (self.coefs.len / self.gaussians.len != other.coefs.len / other.gaussians.len) {
-
-                std.log.err("STATE NUMBER MISMATCH WHEN CALCULATING OVERLAP BETWEEN TWO SINGLE SETS OF MCG, FIRST HAS {d} STATES AND SECOND HAS {d} STATES", .{self.coefs.len / self.gaussians.len, other.coefs.len / other.gaussians.len});
+                std.log.err("STATE NUMBER MISMATCH WHEN CALCULATING OVERLAP BETWEEN TWO SINGLE SETS OF MCG, FIRST HAS {d} STATES AND SECOND HAS {d} STATES", .{
+                    self.coefs.len / self.gaussians.len,
+                    other.coefs.len / other.gaussians.len,
+                });
 
                 return error.InvalidInput;
             }
 
-            var S = try ComplexMatrix(T).initZero(self.gaussians.len, other.gaussians.len, allocator); defer S.deinit(allocator);
+            var S = try ComplexMatrix(T).initZero(self.gaussians.len, other.gaussians.len, allocator);
+            defer S.deinit(allocator);
 
             for (0..self.gaussians.len) |i| {
                 for (0..other.gaussians.len) |j| {
@@ -462,13 +436,11 @@ pub fn SingleSetOfMCG(comptime T: type) type {
 
             for (0..n_states_self) |state| {
                 for (0..self.gaussians.len) |i| {
-
                     const c1 = self.coefs.at(state * self.gaussians.len + i);
 
                     if (c1.re == 0 and c1.im == 0) continue;
 
                     for (0..other.gaussians.len) |j| {
-
                         const c2 = other.coefs.at(state * other.gaussians.len + j);
 
                         total_overlap = total_overlap.add(c1.conjugate().mul(c2).mul(S.at(i, j)));
@@ -483,20 +455,29 @@ pub fn SingleSetOfMCG(comptime T: type) type {
         pub fn transformedCoefs(self: @This(), pot: ElectronicPotential(T), time: T, to_adiabatic: bool, allocator: std.mem.Allocator) !ComplexVector(T) {
             const coefs_after = try ComplexVector(T).initZero(self.coefs.len, allocator);
 
-            var diabatic_potential = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator); defer diabatic_potential.deinit(allocator);
-            var adiabatic_potential = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator); defer adiabatic_potential.deinit(allocator);
-            var adiabatic_eigenvectors = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator); defer adiabatic_eigenvectors.deinit(allocator);
-            var previous_eigenvectors = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator); defer previous_eigenvectors.deinit(allocator);
+            var diabatic_potential = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator);
+            defer diabatic_potential.deinit(allocator);
+
+            var adiabatic_potential = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator);
+            defer adiabatic_potential.deinit(allocator);
+
+            var adiabatic_eigenvectors = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator);
+            defer adiabatic_eigenvectors.deinit(allocator);
+
+            var previous_eigenvectors = try RealMatrix(T).init(self.coefs.len / self.gaussians.len, self.coefs.len / self.gaussians.len, allocator);
+            defer previous_eigenvectors.deinit(allocator);
 
             for (self.gaussians, 0..) |gaussian, i| {
+                const position = RealVector(T){ .data = gaussian.position, .len = gaussian.position.len };
 
-                const position = RealVector(T){.data = gaussian.position, .len = gaussian.position.len};
+                const coefs_before_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, allocator);
+                defer coefs_before_i.deinit(allocator);
 
-                const coefs_before_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, allocator); defer coefs_before_i.deinit(allocator);
-                const coefs_after_i  = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, allocator); defer  coefs_after_i.deinit(allocator);
+                const coefs_after_i = try ComplexVector(T).initZero(self.coefs.len / self.gaussians.len, allocator);
+                defer coefs_after_i.deinit(allocator);
 
                 const coefs_before_i_matrix = coefs_before_i.asMatrix();
-                var    coefs_after_i_matrix =  coefs_after_i.asMatrix();
+                var coefs_after_i_matrix = coefs_after_i.asMatrix();
 
                 for (0..self.coefs.len / self.gaussians.len) |j| {
                     coefs_before_i.ptr(j).* = self.coefs.at(j * self.gaussians.len + i);

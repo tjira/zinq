@@ -15,13 +15,7 @@ const RealVector = real_vector.RealVector;
 
 /// Parameters for the Fewest Switches method.
 pub fn Parameters(comptime T: type) type {
-    return struct {
-        adiabatic_potential: RealMatrix(T),
-        coefficient: *ComplexVector(T),
-        derivative_coupling: RealMatrix(T),
-        runge_kutta: ComplexRungeKutta(T),
-        time_step: T
-    };
+    return struct { adiabatic_potential: RealMatrix(T), coefficient: *ComplexVector(T), derivative_coupling: RealMatrix(T), runge_kutta: ComplexRungeKutta(T), time_step: T };
 }
 
 /// FSSH struct.
@@ -59,13 +53,12 @@ pub fn FewestSwitches(comptime T: type) type {
 
             const coefficient_derivative_parameters = .{
                 .adiabatic_potential = parameters.adiabatic_potential,
-                .derivative_coupling = parameters.derivative_coupling
+                .derivative_coupling = parameters.derivative_coupling,
             };
 
             try @constCast(&parameters.runge_kutta).rk4(parameters.coefficient, coefficient_derivative.get, coefficient_derivative_parameters, quantum_step);
 
             for (0..parameters.coefficient.len) |j| if (j != current_state) {
-
                 const re = parameters.coefficient.at(j).mul(parameters.coefficient.at(current_state).conjugate()).re;
 
                 const denominator = std.math.pow(T, parameters.coefficient.at(current_state).magnitude(), 2) + 1e-14;

@@ -25,17 +25,23 @@ pub fn linearSolveHermitian(comptime T: type, x: anytype, AJ: anytype, AC: anyty
     var x_matrix = x.asMatrix();
     var y_matrix = y.asMatrix();
 
-    if (comptime @TypeOf(AJ, AC) == RealMatrix(T) and @TypeOf(x.*, b, y.*) == RealVector(T)) {return try linearSolveHermitianSpectral(RealMatrix, T, &x_matrix, AJ, AC, b.asMatrix(), &y_matrix);}
-    else if (comptime @TypeOf(AJ, AC) == ComplexMatrix(T) and @TypeOf(x.*, b, y.*) == ComplexVector(T)) {return try linearSolveHermitianSpectral(ComplexMatrix, T, &x_matrix, AJ, AC, b.asMatrix(), &y_matrix);}
-    else @compileError("UNSUPPORTED MATRIX OR VECTOR TYPE IN HERMITIAN LINEAR SOLVER");
+    if (comptime @TypeOf(AJ, AC) == RealMatrix(T) and @TypeOf(x.*, b, y.*) == RealVector(T)) {
+        return try linearSolveHermitianSpectral(RealMatrix, T, &x_matrix, AJ, AC, b.asMatrix(), &y_matrix);
+    } else if (comptime @TypeOf(AJ, AC) == ComplexMatrix(T) and @TypeOf(x.*, b, y.*) == ComplexVector(T)) {
+        return try linearSolveHermitianSpectral(ComplexMatrix, T, &x_matrix, AJ, AC, b.asMatrix(), &y_matrix);
+    } else @compileError("UNSUPPORTED MATRIX OR VECTOR TYPE IN HERMITIAN LINEAR SOLVER");
 }
 
 /// Solve the linear system Ax = b using the eigenvalue decomposition of A. the result is returned as a new vector.
 pub fn linearSolveHermitianAlloc(comptime T: type, A: anytype, b: anytype, allocator: std.mem.Allocator) !@TypeOf(b) {
-    const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
+    const AJC = try eigensystemHermitianAlloc(T, A, allocator);
+    defer AJC.J.deinit(allocator);
+    defer AJC.C.deinit(allocator);
 
-    var x = try @TypeOf(b).init(b.len, allocator); errdefer x.deinit(allocator);
-    var y = try @TypeOf(b).init(b.len, allocator);    defer y.deinit(allocator);
+    var x = try @TypeOf(b).init(b.len, allocator);
+    errdefer x.deinit(allocator);
+    var y = try @TypeOf(b).init(b.len, allocator);
+    defer y.deinit(allocator);
 
     try linearSolveHermitian(T, &x, AJC.J, AJC.C, b, &y);
 
@@ -49,13 +55,12 @@ pub fn linearSolveHermitianSpectral(comptime M: fn (comptime type) type, comptim
     for (0..AJ.rows) |i| if ((if (comptime M == ComplexMatrix) AJ.at(i, i).magnitude() else @abs(AJ.at(i, i))) <= tolerance) {
         return error.NumericalError;
     };
-    
+
     try mm(T, y, AC, true, b, false);
 
     if (comptime M == RealMatrix) {
         for (0..y.rows) |i| y.ptr(i, 0).* /= AJ.at(i, i);
-    }
-    else {
+    } else {
         for (0..y.rows) |i| y.ptr(i, 0).* = y.at(i, 0).div(AJ.at(i, i));
     }
 
@@ -63,20 +68,34 @@ pub fn linearSolveHermitianSpectral(comptime M: fn (comptime type) type, comptim
 }
 
 test "Symmetric 3x3 Linear System" {
-    var A = try real_matrix.RealMatrix(f64).init(3, 3, std.testing.allocator); defer A.deinit(std.testing.allocator);
-    var b = try real_vector.RealVector(f64).init(3, std.testing.allocator); defer b.deinit(std.testing.allocator);
+    var A = try real_matrix.RealMatrix(f64).init(3, 3, std.testing.allocator);
+    defer A.deinit(std.testing.allocator);
+    var b = try real_vector.RealVector(f64).init(3, std.testing.allocator);
+    defer b.deinit(std.testing.allocator);
 
-    var x_expected = try real_vector.RealVector(f64).init(3, std.testing.allocator); defer x_expected.deinit(std.testing.allocator);
+    var x_expected = try real_vector.RealVector(f64).init(3, std.testing.allocator);
+    defer x_expected.deinit(std.testing.allocator);
 
-    A.ptr(0, 0).* = 4; A.ptr(0, 1).* = 1; A.ptr(0, 2).* = 2;
-    A.ptr(1, 0).* = 1; A.ptr(1, 1).* = 3; A.ptr(1, 2).* = 0;
-    A.ptr(2, 0).* = 2; A.ptr(2, 1).* = 0; A.ptr(2, 2).* = 5;
+    A.ptr(0, 0).* = 4;
+    A.ptr(0, 1).* = 1;
+    A.ptr(0, 2).* = 2;
+    A.ptr(1, 0).* = 1;
+    A.ptr(1, 1).* = 3;
+    A.ptr(1, 2).* = 0;
+    A.ptr(2, 0).* = 2;
+    A.ptr(2, 1).* = 0;
+    A.ptr(2, 2).* = 5;
 
-    b.ptr(0).* = 4; b.ptr(1).* = 5; b.ptr(2).* = 6;
+    b.ptr(0).* = 4;
+    b.ptr(1).* = 5;
+    b.ptr(2).* = 6;
 
-    x_expected.ptr(0).* = -0.02325581395349; x_expected.ptr(1).* = 1.67441860465116; x_expected.ptr(2).* = 1.20930232558139;
+    x_expected.ptr(0).* = -0.02325581395349;
+    x_expected.ptr(1).* = 1.67441860465116;
+    x_expected.ptr(2).* = 1.20930232558139;
 
-    const x = try linearSolveHermitianAlloc(f64, A, b, std.testing.allocator); defer x.deinit(std.testing.allocator);
+    const x = try linearSolveHermitianAlloc(f64, A, b, std.testing.allocator);
+    defer x.deinit(std.testing.allocator);
 
     try std.testing.expect(x.eq(x_expected, TEST_TOLERANCE));
 }

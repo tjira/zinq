@@ -21,34 +21,31 @@ const FSSH_DENOMINATOR_OFFSET = global_variables.FSSH_DENOMINATOR_OFFSET;
 
 /// Parameters for the Mapping Approach method.
 pub fn Parameters(comptime T: type) type {
-    return struct {
-        adiabatic_potential: RealMatrix(T),
-        bloch_vector: *RealVector(T),
-        derivative_coupling: RealMatrix(T),
-        time_step: T
-    };
+    return struct { adiabatic_potential: RealMatrix(T), bloch_vector: *RealVector(T), derivative_coupling: RealMatrix(T), time_step: T };
 }
 
 /// MASH struct.
 pub fn MappingApproach(comptime T: type) type {
     return struct {
-
         /// Get the jump probabilities for the current state.
         pub fn getJumpProbabilities(_: @This(), jump_probabilities: *RealVector(T), parameters: Parameters(T), current_state: usize) !void {
             if (jump_probabilities.len != 2) {
-
                 std.log.err("MAPPING APPROACH IS DEFINED FOR 2 STATES, BUT GOT {d}", .{jump_probabilities.len});
 
                 return error.InvalidInput;
             }
 
-            jump_probabilities.zero(); var omega_data: [9]T = undefined; var new_bloch_data: [3]T = undefined;
+            jump_probabilities.zero();
+            var omega_data: [9]T = undefined;
+            var new_bloch_data: [3]T = undefined;
 
             const V = (parameters.adiabatic_potential.at(1, 1) - parameters.adiabatic_potential.at(0, 0)) * parameters.time_step;
             const C = parameters.derivative_coupling.at(1, 0) * parameters.time_step;
 
-            const a = V * V + 4 * C * C; const b = Complex(T).init(0, std.math.sqrt(a));
-            const sinhb = std.math.complex.sinh(b); const coshb = std.math.complex.cosh(b);
+            const a = V * V + 4 * C * C;
+            const b = Complex(T).init(0, std.math.sqrt(a));
+            const sinhb = std.math.complex.sinh(b);
+            const coshb = std.math.complex.cosh(b);
 
             omega_data[0] = coshb.re;
             omega_data[1] = -V * sinhb.div(b).re;
@@ -60,10 +57,11 @@ pub fn MappingApproach(comptime T: type) type {
             omega_data[7] = omega_data[5];
             omega_data[8] = (V * V + 4 * C * C * coshb.re) / a;
 
-            const omega = RealMatrix(T){.rows = 3, .cols = 3, .data = &omega_data};
-            var new_bloch = RealMatrix(T){.rows = 3, .cols = 1, .data = &new_bloch_data};
+            const omega = RealMatrix(T){ .rows = 3, .cols = 3, .data = &omega_data };
+            var new_bloch = RealMatrix(T){ .rows = 3, .cols = 1, .data = &new_bloch_data };
 
-            try mm(T, &new_bloch, omega, false, parameters.bloch_vector.*.asMatrix(), false); try new_bloch.asVector().copyTo(parameters.bloch_vector);
+            try mm(T, &new_bloch, omega, false, parameters.bloch_vector.*.asMatrix(), false);
+            try new_bloch.asVector().copyTo(parameters.bloch_vector);
 
             if (current_state == 1 and parameters.bloch_vector.at(2) < 0) jump_probabilities.ptr(0).* = 1;
             if (current_state == 0 and parameters.bloch_vector.at(2) > 0) jump_probabilities.ptr(1).* = 1;

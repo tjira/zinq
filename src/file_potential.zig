@@ -35,15 +35,13 @@ pub fn FilePotential(comptime T: type) type {
         /// Diabatic potential matrix element evaluator.
         pub fn evaluateDiabaticElement(self: @This(), i: usize, j: usize, position: RealVector(T), _: T) !T {
             if (self.data == null) {
-
                 std.log.err("FILE POTENTIAL DATA IS NOT INITIALIZED, MAKE SURE TO CALL init() BEFORE EVALUATING THE FILE POTENTIAL", .{});
 
                 return error.ProgrammingError;
             }
 
             if (i >= self.nstate or j >= self.nstate) {
-
-                std.log.err("INVALID INDEX ({d}, {d}) WHEN EVALUATING DIABATIC MATRIX ELEMENT, THE POTENTIAL MATRIX IS {d}X{d}", .{i, j, self.nstate, self.nstate});
+                std.log.err("INVALID INDEX ({d}, {d}) WHEN EVALUATING DIABATIC MATRIX ELEMENT, THE POTENTIAL MATRIX IS {d}X{d}", .{ i, j, self.nstate, self.nstate });
 
                 return error.ProgrammingError;
             }
@@ -56,15 +54,12 @@ pub fn FilePotential(comptime T: type) type {
             const U = try readRealMatrix(T, self.path, allocator);
 
             if (self.ndim + self.nstate * self.nstate != U.cols) {
-
-                std.log.err("INVALID NUMBER OF COLUMNS IN THE FILE, EXPECTED {d} BUT GOT {d}", .{self.ndim + self.nstate * self.nstate, U.cols});
+                std.log.err("INVALID NUMBER OF COLUMNS IN THE FILE, EXPECTED {d} BUT GOT {d}", .{ self.ndim + self.nstate * self.nstate, U.cols });
 
                 return error.InputError;
             }
 
-            self.data = .{
-                .matrix = U
-            };
+            self.data = .{ .matrix = U };
         }
 
         /// Free the resources.
@@ -84,7 +79,7 @@ pub fn FilePotential(comptime T: type) type {
             const parsed_nstate = try std.json.innerParseFromValue(u32, allocator, nstate_val, options);
             const parsed_path = try std.json.innerParseFromValue([]const u8, allocator, path_val, options);
 
-            return .{.ndim = parsed_ndim, .nstate = parsed_nstate, .path = parsed_path};
+            return .{ .ndim = parsed_ndim, .nstate = parsed_nstate, .path = parsed_path };
         }
 
         /// Custom potential JSON stringifier.
@@ -99,7 +94,7 @@ pub fn FilePotential(comptime T: type) type {
 
             try jws.objectField("path");
             try jws.write(self.path);
-            
+
             try jws.endObject();
         }
     };

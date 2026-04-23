@@ -13,7 +13,9 @@ const svdAlloc = singular_value_decomposition.svdAlloc;
 
 /// Calculate the determinant of a symmetric matrix using its eigenvalue decomposition. The matrix must be hermitian (symmetric in the real case).
 pub fn determinantHermitian(comptime T: type, A: RealMatrix(T), allocator: std.mem.Allocator) !T {
-    const AJC = try eigensystemHermitianAlloc(T, A, allocator); defer AJC.J.deinit(allocator); defer AJC.C.deinit(allocator);
+    const AJC = try eigensystemHermitianAlloc(T, A, allocator);
+    defer AJC.J.deinit(allocator);
+    defer AJC.C.deinit(allocator);
 
     var det: T = 1;
 
@@ -24,7 +26,10 @@ pub fn determinantHermitian(comptime T: type, A: RealMatrix(T), allocator: std.m
 
 /// Calculate the determinant of a matrix using its singular value decomposition.
 pub fn determinantAbs(comptime T: type, A: RealMatrix(T), allocator: std.mem.Allocator) !T {
-    const SVD = try svdAlloc(T, A, allocator); defer SVD.U.deinit(allocator); defer SVD.S.deinit(allocator); defer SVD.VT.deinit(allocator);
+    const SVD = try svdAlloc(T, A, allocator);
+    defer SVD.U.deinit(allocator);
+    defer SVD.S.deinit(allocator);
+    defer SVD.VT.deinit(allocator);
 
     var det: T = 1;
 
@@ -35,7 +40,10 @@ pub fn determinantAbs(comptime T: type, A: RealMatrix(T), allocator: std.mem.All
 
 /// Calculate the natural logarithm of the determinant of a matrix using its singular value decomposition.
 pub fn determinantLog(comptime T: type, A: RealMatrix(T), allocator: std.mem.Allocator) !T {
-    const SVD = try svdAlloc(T, A, allocator); defer SVD.U.deinit(allocator); defer SVD.S.deinit(allocator); defer SVD.VT.deinit(allocator);
+    const SVD = try svdAlloc(T, A, allocator);
+    defer SVD.U.deinit(allocator);
+    defer SVD.S.deinit(allocator);
+    defer SVD.VT.deinit(allocator);
 
     var det: T = 0;
 
@@ -47,8 +55,7 @@ pub fn determinantLog(comptime T: type, A: RealMatrix(T), allocator: std.mem.All
 /// Calculate thedeterminant of a 3x3 matrix.
 pub fn determinant3x3(comptime T: type, A: RealMatrix(T)) !T {
     if (A.rows != 3 or A.cols != 3) {
-
-        std.log.err("DETERMINANT3X3 IS ONLY DEFINED FOR 3x3 MATRICES, BUT GOT {d}x{d}", .{A.rows, A.cols});
+        std.log.err("DETERMINANT3X3 IS ONLY DEFINED FOR 3x3 MATRICES, BUT GOT {d}x{d}", .{ A.rows, A.cols });
 
         return error.InvalidInput;
     }

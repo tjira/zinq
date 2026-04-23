@@ -17,7 +17,9 @@ pub fn StridedRealVector(comptime T: type) type {
 
         /// Binary search for a value in the strided array. If non found, return the index where it can be inserted so that the array remains sorted.
         pub fn bisectRight(self: @This(), value: T) usize {
-            var low: usize = 0; var high = self.len; var mid = (low + high) / 2;
+            var low: usize = 0;
+            var high = self.len;
+            var mid = (low + high) / 2;
 
             while (low < high) : (mid = (low + high) / 2) {
                 if (self.at(mid) < value) low = mid + 1 else high = mid;
@@ -29,20 +31,20 @@ pub fn StridedRealVector(comptime T: type) type {
         /// Covariance of the strided array elements with another strided array.
         pub fn covariance(self: @This(), other: @This()) !T {
             if (self.len != other.len) {
-
-                std.log.err("COVARIANCE CAN ONLY BE CALCULATED FOR STRIDED VECTORS OF THE SAME LENGTH, BUT GOT {d} AND {d}", .{self.len, other.len});
+                std.log.err("COVARIANCE CAN ONLY BE CALCULATED FOR STRIDED VECTORS OF THE SAME LENGTH, BUT GOT {d} AND {d}", .{ self.len, other.len });
 
                 return error.InvalidInput;
             }
 
             if (self.len < 2) {
-
                 std.log.err("COVARIANCE CAN ONLY BE CALCULATED FOR STRIDED VECTORS OF LENGTH AT LEAST 2, BUT GOT {d}", .{self.len});
 
                 return error.InvalidInput;
             }
 
-            var total: T = 0; const mean1 = self.mean(); const mean2 = other.mean();
+            var total: T = 0;
+            const mean1 = self.mean();
+            const mean2 = other.mean();
 
             for (0..self.len) |i| {
                 total += (self.at(i) - mean1) * (other.at(i) - mean2);

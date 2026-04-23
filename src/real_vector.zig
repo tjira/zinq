@@ -14,15 +14,13 @@ pub fn RealVector(comptime T: type) type {
 
         /// Initialize a vector with a given length and specify an allocator. The function returns an error if the allocation fails.
         pub fn init(len: usize, allocator: std.mem.Allocator) !@This() {
-            return @This(){
-                .data = try allocator.alloc(T, len),
-                .len = len
-            };
+            return @This(){ .data = try allocator.alloc(T, len), .len = len };
         }
 
         /// Initialize a vector and fills it with zeros.
         pub fn initZero(len: usize, allocator: std.mem.Allocator) !@This() {
-            var v = try @This().init(len, allocator); v.zero();
+            var v = try @This().init(len, allocator);
+            v.zero();
 
             return v;
         }
@@ -35,8 +33,7 @@ pub fn RealVector(comptime T: type) type {
         /// Add another vector to this vector.
         pub fn add(self: *@This(), other: @This()) !void {
             if (self.len != other.len) {
-
-                std.log.err("CANNOT ADD VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+                std.log.err("CANNOT ADD VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
                 return error.ProgrammigError;
             }
@@ -48,11 +45,7 @@ pub fn RealVector(comptime T: type) type {
 
         /// Return a view of the internal data as a column matrix.
         pub fn asMatrix(self: @This()) RealMatrix(T) {
-            return RealMatrix(T){
-                .data = self.data,
-                .rows = self.len,
-                .cols = if (self.len > 0) 1 else 0
-            };
+            return RealMatrix(T){ .data = self.data, .rows = self.len, .cols = if (self.len > 0) 1 else 0 };
         }
 
         /// Get the element at index i.
@@ -72,8 +65,7 @@ pub fn RealVector(comptime T: type) type {
         /// Copy the contents of this vector to another vector.
         pub fn copyTo(self: @This(), other: *@This()) !void {
             if (self.len != other.len) {
-
-                std.log.err("CANNOT COPY VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+                std.log.err("CANNOT COPY VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
                 return error.ProgrammigError;
             }
@@ -86,20 +78,20 @@ pub fn RealVector(comptime T: type) type {
         /// Calculate the covariance between this vector and another vector.
         pub fn covariance(self: @This(), other: @This()) !T {
             if (self.len != other.len) {
-
-                std.log.err("CANNOT CALCULATE COVARIANCE OF VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+                std.log.err("CANNOT CALCULATE COVARIANCE OF VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
                 return error.ProgrammigError;
             }
 
             if (self.len < 2) {
-
-                std.log.err("CANNOT CALCULATE COVARIANCE OF VECTORS WITH LESS THAN 2 ELEMENTS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+                std.log.err("CANNOT CALCULATE COVARIANCE OF VECTORS WITH LESS THAN 2 ELEMENTS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
                 return error.ProgrammigError;
             }
 
-            var total: T = 0; const mean1 = self.mean(); const mean2 = other.mean();
+            var total: T = 0;
+            const mean1 = self.mean();
+            const mean2 = other.mean();
 
             for (self.data, 0..) |element, index| {
                 total += (element - mean1) * (other.data[index] - mean2);
@@ -161,28 +153,24 @@ pub fn RealVector(comptime T: type) type {
         /// Shrinks the vector to the specified length. The function returns an error if the new length is greater than the current length.
         pub fn shrink(self: *@This(), new_len: usize, allocator: std.mem.Allocator) !void {
             if (new_len > self.len) {
-
-                std.log.err("CANNOT SHRINK VECTOR TO A LENGTH GREATER THAN THE CURRENT LENGTH, CURRENT LENGTH {d}, NEW LENGTH {d}", .{self.len, new_len});
+                std.log.err("CANNOT SHRINK VECTOR TO A LENGTH GREATER THAN THE CURRENT LENGTH, CURRENT LENGTH {d}, NEW LENGTH {d}", .{ self.len, new_len });
 
                 return error.ProgrammigError;
             }
 
-            self.data = try allocator.realloc(self.data, new_len); self.len = new_len;
+            self.data = try allocator.realloc(self.data, new_len);
+            self.len = new_len;
         }
 
         /// Get a slice of the internal data in the form of a vector.
         pub fn slice(self: @This(), start: usize, end: usize) @This() {
-            return @This(){
-                .data = self.data[start..end],
-                .len = end - start
-            };
+            return @This(){ .data = self.data[start..end], .len = end - start };
         }
 
         /// Subtract another vector from this vector.
         pub fn sub(self: *@This(), other: @This()) !void {
             if (self.len != other.len) {
-
-                std.log.err("CANNOT SUBTRACT VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{self.len, other.len});
+                std.log.err("CANNOT SUBTRACT VECTORS OF DIFFERENT LENGTHS, FIRST WITH LENGTH {d}, SECOND WITH LENGTH {d}", .{ self.len, other.len });
 
                 return error.ProgrammigError;
             }

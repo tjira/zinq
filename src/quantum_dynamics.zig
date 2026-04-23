@@ -49,27 +49,13 @@ const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 /// The quantum dynamics options struct.
 pub fn Options(comptime T: type) type {
     return struct {
-        pub const Grid = struct {
-            limits: []const []const T,
-            points: u32
-        };
-        pub const Imaginary = struct {
-            states: u32 = 1
-        };
+        pub const Grid = struct { limits: []const []const T, points: u32 };
+        pub const Imaginary = struct { states: u32 = 1 };
         pub const InitialConditions = struct {
             pub const Spread = struct {
-                momentum: ?struct {
-                    end: []const T,
-                    step: []const T
-                } = null,
-                position: ?struct {
-                    end: []const T,
-                    step: []const T
-                } = null,
-                gamma: ?struct {
-                    end: []const T,
-                    step: []const T
-                } = null
+                momentum: ?struct { end: []const T, step: []const T } = null,
+                position: ?struct { end: []const T, step: []const T } = null,
+                gamma: ?struct { end: []const T, step: []const T } = null,
             };
 
             adiabatic: bool = false,
@@ -78,15 +64,10 @@ pub fn Options(comptime T: type) type {
             momentum: []const T,
             position: []const T,
             state: u32,
-            spread: ?Spread = null
+            spread: ?Spread = null,
         };
-        pub const LogIntervals = struct {
-            iteration: u32 = 1
-        };
-        pub const Spectrum = struct {
-            window: enum {gaussian} = .gaussian,
-            padding_order: u32 = 1
-        };
+        pub const LogIntervals = struct { iteration: u32 = 1 };
+        pub const Spectrum = struct { window: enum { gaussian } = .gaussian, padding_order: u32 = 1 };
         pub const Write = struct {
             spatial_bloch_vector: ?[]const u8 = null,
             bloch_vector: ?[]const u8 = null,
@@ -100,7 +81,7 @@ pub fn Options(comptime T: type) type {
             spectrum: ?[]const u8 = null,
             total_energy: ?[]const u8 = null,
             autocorrelation_function: ?[]const u8 = null,
-            transition_probability: ?[]const u8 = null
+            transition_probability: ?[]const u8 = null,
         };
 
         potential: ElectronicPotential(T),
@@ -117,7 +98,7 @@ pub fn Options(comptime T: type) type {
         write: Write = .{},
 
         adiabatic: bool = false,
-        fix_gauge: bool = true
+        fix_gauge: bool = true,
     };
 }
 
@@ -141,7 +122,7 @@ pub fn Output(comptime T: type) type {
                 .population = try RealMatrix(T).initZero(iterations + 1, nstate, allocator),
                 .position = try RealMatrix(T).initZero(iterations + 1, ndim, allocator),
                 .potential_energy = try RealVector(T).initZero(iterations + 1, allocator),
-                .total_energy = try RealVector(T).initZero(iterations + 1, allocator)
+                .total_energy = try RealVector(T).initZero(iterations + 1, allocator),
             };
         }
 
@@ -172,7 +153,6 @@ pub fn Output(comptime T: type) type {
 /// Container for custom structs related to the quantum dynamics.
 pub fn Custom(comptime T: type) type {
     return struct {
-
         /// Structure to hold information about each iteration used for logging.
         pub const IterationInfo = struct {
             density_matrix: ComplexMatrix(T),
@@ -182,7 +162,7 @@ pub fn Custom(comptime T: type) type {
             momentum: RealVector(T),
             position: RealVector(T),
             potential_energy: T,
-            time: T
+            time: T,
         };
     };
 }
@@ -191,10 +171,11 @@ pub fn Custom(comptime T: type) type {
 pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) try printJson(raw_options);
 
-    var opt = raw_options; try opt.potential.init(allocator); defer opt.potential.deinit(allocator);
+    var opt = raw_options;
+    try opt.potential.init(allocator);
+    defer opt.potential.deinit(allocator);
 
     if (opt.potential == .ab_initio) {
-
         std.log.err("AB INITIO POTENTIAL NOT SUPPORTED FOR QUANTUM DYNAMICS SIMULATIONS", .{});
 
         return error.InvalidInput;
@@ -204,36 +185,31 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
     const ndim = try opt.potential.ndim();
 
     if (nstate != 2 and (opt.write.bloch_vector != null or opt.write.spatial_bloch_vector != null)) {
-
         std.log.err("BLOCH VECTOR CAN ONLY BE CALCULATED FOR TWO-STATE SYSTEMS", .{});
 
         return error.InvalidInput;
     }
 
     if (opt.write.spectrum != null and opt.spectrum.padding_order == 0) {
-
         std.log.err("SPECTRUM PADDING ORDER MUST BE GREATER THAN ZERO, 1 MEANS PADDING TO THE FIRST POWER OF TWO GREATER THAN OR EQUAL TO THE NUMBER OF ITERATIONS", .{});
 
         return error.InvalidInput;
     }
 
     if (opt.initial_conditions.spread) |ics| if (ics.position) |qstruct| if (qstruct.end.len != ndim or qstruct.step.len != ndim) {
-
-        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, qstruct.end.len});
+        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ ndim, qstruct.end.len });
 
         return error.InvalidInput;
     };
 
     if (opt.initial_conditions.spread) |ics| if (ics.momentum) |pstruct| if (pstruct.end.len != ndim or pstruct.step.len != ndim) {
-
-        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, pstruct.end.len});
+        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, EXPECTED LENGTH {d} BUT GOT {d}", .{ ndim, pstruct.end.len });
 
         return error.InvalidInput;
     };
 
     if (opt.initial_conditions.spread) |ics| if (ics.gamma) |gstruct| if (gstruct.end.len != ndim or gstruct.step.len != ndim) {
-
-        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, gstruct.end.len});
+        std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, EXPECTED LENGTH {d} BUT GOT {d}", .{ ndim, gstruct.end.len });
 
         return error.InvalidInput;
     };
@@ -242,29 +218,29 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 
     const ics_pos = if (opt.initial_conditions.spread) |ics| ics.position else null;
     const ics_mom = if (opt.initial_conditions.spread) |ics| ics.momentum else null;
-    const ics_gam = if (opt.initial_conditions.spread) |ics| ics.gamma    else null;
+    const ics_gam = if (opt.initial_conditions.spread) |ics| ics.gamma else null;
 
-    const q0 = opt.initial_conditions.position; var q1: []const T = undefined;
-    const p0 = opt.initial_conditions.momentum; var p1: []const T = undefined;
-    const g0 = opt.initial_conditions.gamma;    var g1: []const T = undefined;
+    const q0 = opt.initial_conditions.position;
+    var q1: []const T = undefined;
+    const p0 = opt.initial_conditions.momentum;
+    var p1: []const T = undefined;
+    const g0 = opt.initial_conditions.gamma;
+    var g1: []const T = undefined;
 
     if (q0.len != ndim) {
-
-        std.log.err("INVALID INITIAL POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, q0.len});
+        std.log.err("INVALID INITIAL POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ ndim, q0.len });
 
         return error.InvalidInput;
     }
 
     if (p0.len != ndim) {
-
-        std.log.err("INVALID INITIAL MOMENTUM, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, p0.len});
+        std.log.err("INVALID INITIAL MOMENTUM, EXPECTED LENGTH {d} BUT GOT {d}", .{ ndim, p0.len });
 
         return error.InvalidInput;
     }
 
     if (g0.len != ndim) {
-
-        std.log.err("INVALID INITIAL GAMMA, EXPECTED LENGTH {d} BUT GOT {d}", .{ndim, g0.len});
+        std.log.err("INVALID INITIAL GAMMA, EXPECTED LENGTH {d} BUT GOT {d}", .{ ndim, g0.len });
 
         return error.InvalidInput;
     }
@@ -273,28 +249,35 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
     if (ics_mom) |pstruct| p1 = pstruct.end else p1 = p0;
     if (ics_gam) |gstruct| g1 = gstruct.end else g1 = g0;
 
-    var qsteps_i = try allocator.alloc(usize, ndim); defer allocator.free(qsteps_i); var qsteps: usize = 1; @memset(qsteps_i, 1);
-    var psteps_i = try allocator.alloc(usize, ndim); defer allocator.free(psteps_i); var psteps: usize = 1; @memset(psteps_i, 1);
-    var gsteps_i = try allocator.alloc(usize, ndim); defer allocator.free(gsteps_i); var gsteps: usize = 1; @memset(gsteps_i, 1);
+    var qsteps_i = try allocator.alloc(usize, ndim);
+    defer allocator.free(qsteps_i);
+    var qsteps: usize = 1;
+    @memset(qsteps_i, 1);
+
+    var psteps_i = try allocator.alloc(usize, ndim);
+    defer allocator.free(psteps_i);
+    var psteps: usize = 1;
+    @memset(psteps_i, 1);
+
+    var gsteps_i = try allocator.alloc(usize, ndim);
+    defer allocator.free(gsteps_i);
+    var gsteps: usize = 1;
+    @memset(gsteps_i, 1);
 
     if (ics_pos) |qstruct| for (0..qstruct.step.len) |i| {
-
         if (qstruct.step[i] == 0 and q1[i] != q0[i]) {
-
             std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, STEP CANNOT BE ZERO IF END VALUE IS DIFFERENT FROM START VALUE", .{});
 
             return error.InvalidInput;
         }
 
         if (qstruct.end[i] < q0[i] and qstruct.step[i] > 0) {
-
             std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, END VALUE MUST BE GREATER THAN START VALUE FOR POSITIVE STEP", .{});
 
             return error.InvalidInput;
         }
 
         if (qstruct.end[i] > q0[i] and qstruct.step[i] < 0) {
-
             std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, END VALUE MUST BE LESS THAN START VALUE FOR NEGATIVE STEP", .{});
 
             return error.InvalidInput;
@@ -306,23 +289,19 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
     };
 
     if (ics_mom) |pstruct| for (0..pstruct.step.len) |i| {
-
         if (pstruct.step[i] == 0 and p1[i] != p0[i]) {
-
             std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, STEP CANNOT BE ZERO IF END VALUE IS DIFFERENT FROM START VALUE", .{});
 
             return error.InvalidInput;
         }
 
         if (pstruct.end[i] < p0[i] and pstruct.step[i] > 0) {
-
             std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, END VALUE MUST BE GREATER THAN START VALUE FOR POSITIVE STEP", .{});
 
             return error.InvalidInput;
         }
 
         if (pstruct.end[i] > p0[i] and pstruct.step[i] < 0) {
-
             std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR MOMENTUM, END VALUE MUST BE LESS THAN START VALUE FOR NEGATIVE STEP", .{});
 
             return error.InvalidInput;
@@ -334,23 +313,19 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
     };
 
     if (ics_gam) |gstruct| for (0..gstruct.step.len) |i| {
-
         if (gstruct.step[i] == 0 and g1[i] != g0[i]) {
-
             std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, STEP CANNOT BE ZERO IF END VALUE IS DIFFERENT FROM START VALUE", .{});
 
             return error.InvalidInput;
         }
 
         if (gstruct.end[i] < g0[i] and gstruct.step[i] > 0) {
-
             std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, END VALUE MUST BE GREATER THAN START VALUE FOR POSITIVE STEP", .{});
 
             return error.InvalidInput;
         }
 
         if (gstruct.end[i] > g0[i] and gstruct.step[i] < 0) {
-
             std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR GAMMA, END VALUE MUST BE LESS THAN START VALUE FOR NEGATIVE STEP", .{});
 
             return error.InvalidInput;
@@ -361,25 +336,45 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         gsteps *= gsteps_i[i];
     };
 
-    var q = try allocator.alloc(T, ndim); defer allocator.free(q);
-    var p = try allocator.alloc(T, ndim); defer allocator.free(p);
-    var g = try allocator.alloc(T, ndim); defer allocator.free(g);
+    var q = try allocator.alloc(T, ndim);
+    defer allocator.free(q);
 
-    var transition_probability = try RealMatrix(T).initZero(qsteps * psteps * gsteps, 3 * ndim + nstate, allocator); defer transition_probability.deinit(allocator);
+    var p = try allocator.alloc(T, ndim);
+    defer allocator.free(p);
+
+    var g = try allocator.alloc(T, ndim);
+    defer allocator.free(g);
+
+    var transition_probability = try RealMatrix(T).initZero(qsteps * psteps * gsteps, 3 * ndim + nstate, allocator);
+    defer transition_probability.deinit(allocator);
 
     for (0..qsteps) |i| for (0..psteps) |j| for (0..gsteps) |k| {
+        const total_runs = qsteps * psteps * gsteps;
+        const tp_index = (i * psteps + j) * gsteps + k;
 
-        const total_runs = qsteps * psteps * gsteps; const tp_index = (i * psteps + j) * gsteps + k;
+        if (enable_printing and (qsteps != 1 or psteps != 1 or gsteps != 1)) try print("\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}:\n", .{ tp_index + 1, total_runs });
 
-        if (enable_printing and (qsteps != 1 or psteps != 1 or gsteps != 1)) try print("\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}:\n", .{tp_index + 1, total_runs});
+        var temp_i = i;
+        var temp_j = j;
+        var temp_k = k;
 
-        var temp_i = i; var temp_j = j; var temp_k = k;
+        for (0..ndim) |l| {
+            q[l] = q0[l] + @as(T, @floatFromInt(temp_i % qsteps_i[l])) * if (ics_pos) |qstruct| qstruct.step[l] else 0;
+            temp_i /= qsteps_i[l];
+        }
+        for (0..ndim) |l| {
+            p[l] = p0[l] + @as(T, @floatFromInt(temp_j % psteps_i[l])) * if (ics_mom) |pstruct| pstruct.step[l] else 0;
+            temp_j /= psteps_i[l];
+        }
+        for (0..ndim) |l| {
+            g[l] = g0[l] + @as(T, @floatFromInt(temp_k % gsteps_i[l])) * if (ics_gam) |gstruct| gstruct.step[l] else 0;
+            temp_k /= gsteps_i[l];
+        }
 
-        for (0..ndim) |l| {q[l] = q0[l] + @as(T, @floatFromInt(temp_i % qsteps_i[l])) * if (ics_pos) |qstruct| qstruct.step[l] else 0; temp_i /= qsteps_i[l];}
-        for (0..ndim) |l| {p[l] = p0[l] + @as(T, @floatFromInt(temp_j % psteps_i[l])) * if (ics_mom) |pstruct| pstruct.step[l] else 0; temp_j /= psteps_i[l];}
-        for (0..ndim) |l| {g[l] = g0[l] + @as(T, @floatFromInt(temp_k % gsteps_i[l])) * if (ics_gam) |gstruct| gstruct.step[l] else 0; temp_k /= gsteps_i[l];}
-
-        var options = opt; options.initial_conditions.position = q; options.initial_conditions.momentum = p; options.initial_conditions.gamma = g;
+        var options = opt;
+        options.initial_conditions.position = q;
+        options.initial_conditions.momentum = p;
+        options.initial_conditions.gamma = g;
 
         if (qsteps != 1 or psteps != 1 or gsteps != 1) {
             try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma, allocator);
@@ -408,32 +403,36 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
 /// Appends the position and momentum to all output files.
 pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(T), q: []const T, p: []const T, g: []const T, allocator: std.mem.Allocator) !void {
     inline for (std.meta.fields(@TypeOf(opt.write))) |field| if (@as(field.type, @field(opt.write, field.name)) != null) {
-
         const path = &@field(opt.write, field.name).?;
 
-        var new_path = std.ArrayList(u8){}; errdefer new_path.deinit(allocator);
+        var new_path = std.ArrayList(u8){};
+        errdefer new_path.deinit(allocator);
 
         const writer = new_path.writer(allocator);
 
         try writer.print("{s}_Q=", .{path.*[0 .. path.len - 4]});
 
         for (q, 0..) |val, i| {
-            if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
+            if (i > 0) try writer.writeAll(",");
+            try writer.print("{d:.4}", .{val});
         }
 
         try writer.writeAll("_P=");
 
         for (p, 0..) |val, i| {
-            if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
+            if (i > 0) try writer.writeAll(",");
+            try writer.print("{d:.4}", .{val});
         }
 
         try writer.writeAll("_G=");
 
         for (g, 0..) |val, i| {
-            if (i > 0) try writer.writeAll(","); try writer.print("{d:.4}", .{val});
+            if (i > 0) try writer.writeAll(",");
+            try writer.print("{d:.4}", .{val});
         }
 
-        try writer.writeAll(".mat"); path.* = try new_path.toOwnedSlice(allocator);
+        try writer.writeAll(".mat");
+        path.* = try new_path.toOwnedSlice(allocator);
     };
 }
 
@@ -442,49 +441,60 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
-    var output = try Output(T).init(nstate, ndim, @intCast(opt.iterations), allocator); errdefer output.deinit(allocator);
+    var output = try Output(T).init(nstate, ndim, @intCast(opt.iterations), allocator);
+    errdefer output.deinit(allocator);
 
-    var wavefunction = try GridWavefunction(T).init(@intCast(opt.grid.points), nstate, ndim, opt.grid.limits, opt.initial_conditions.mass, allocator); defer wavefunction.deinit(allocator);
+    var wavefunction = try GridWavefunction(T).init(@intCast(opt.grid.points), nstate, ndim, opt.grid.limits, opt.initial_conditions.mass, allocator);
+    defer wavefunction.deinit(allocator);
 
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeTemporalGridContainer(T, wavefunction, opt.iterations, 2 * wavefunction.nstate, allocator) else null;
     var spatial_bloch: ?RealMatrix(T) = if (opt.write.spatial_bloch_vector) |_| try initializeTemporalGridContainer(T, wavefunction, opt.iterations, 3, allocator) else null;
 
-    var optimized_wavefunctions = std.ArrayList(GridWavefunction(T)){}; defer optimized_wavefunctions.deinit(allocator);
+    var optimized_wavefunctions = std.ArrayList(GridWavefunction(T)){};
+    defer optimized_wavefunctions.deinit(allocator);
 
-    var density_matrix = try ComplexMatrix(T).init(nstate, nstate, allocator); defer density_matrix.deinit(allocator);
-    var position = try RealVector(T).init(ndim, allocator); defer position.deinit(allocator);
-    var momentum = try RealVector(T).init(ndim, allocator); defer momentum.deinit(allocator);
-    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator); defer acf.deinit(allocator);
+    var density_matrix = try ComplexMatrix(T).init(nstate, nstate, allocator);
+    defer density_matrix.deinit(allocator);
+
+    var position = try RealVector(T).init(ndim, allocator);
+    defer position.deinit(allocator);
+
+    var momentum = try RealVector(T).init(ndim, allocator);
+    defer momentum.deinit(allocator);
+
+    var acf = try ComplexVector(T).init(opt.iterations + 1, allocator);
+    defer acf.deinit(allocator);
 
     if (enable_printing) try print("\nINITIAL GAMMA: [", .{});
 
     if (enable_printing) for (opt.initial_conditions.gamma, 0..) |gamma, i| {
-        if (i > 0) try print(", ", .{}); try print("{d:.6}", .{gamma}); if (i == opt.initial_conditions.gamma.len - 1) try print("]\n", .{});
+        if (i > 0) try print(", ", .{});
+        try print("{d:.6}", .{gamma});
+        if (i == opt.initial_conditions.gamma.len - 1) try print("]\n", .{});
     };
 
-    var timer = try std.time.Timer.start(); const n_dynamics = if (opt.imaginary) |f| f.states else 1;
+    var timer = try std.time.Timer.start();
+    const n_dynamics = if (opt.imaginary) |f| f.states else 1;
 
     for (0..n_dynamics) |i| {
-
         try wavefunction.initialGaussian(opt.initial_conditions.position, opt.initial_conditions.momentum, opt.initial_conditions.state, opt.initial_conditions.gamma);
 
         if (opt.initial_conditions.adiabatic) try wavefunction.transformRepresentation(opt.potential, 0, false);
 
         const save_iwf = (opt.write.spectrum != null or opt.write.autocorrelation_function != null) and i == n_dynamics - 1;
 
-        const initial_wavefunction: ?GridWavefunction(T) = if (save_iwf) try wavefunction.clone(allocator) else null; defer if (initial_wavefunction) |iwf| iwf.deinit(allocator);
+        const initial_wavefunction: ?GridWavefunction(T) = if (save_iwf) try wavefunction.clone(allocator) else null;
+        defer if (initial_wavefunction) |iwf| iwf.deinit(allocator);
 
         if (opt.imaginary != null) for (optimized_wavefunctions.items) |owf| wavefunction.orthogonalize(owf);
 
         if (enable_printing) {
-
-            if (opt.imaginary != null) try print("\nIMAGINARY TIME PROPAGATION - STATE {d}/{d}", .{i + 1, n_dynamics});
+            if (opt.imaginary != null) try print("\nIMAGINARY TIME PROPAGATION - STATE {d}/{d}", .{ i + 1, n_dynamics });
 
             try printIterationHeader(ndim, nstate);
         }
 
         for (0..opt.iterations + 1) |j| {
-
             const time = @as(T, @floatFromInt(j)) * opt.time_step;
 
             if (j > 0) try wavefunction.propagate(opt.potential, opt.cap, time, opt.time_step, opt.adiabatic, opt.imaginary != null, opt.fix_gauge);
@@ -500,8 +510,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
             const potential_energy = try wavefunction.potentialEnergy(opt.potential, time);
 
             if (j == 0) for (0..momentum.len) |k| if (@abs(momentum.at(k) - opt.initial_conditions.momentum[k]) > 1e-8) {
-
-                std.log.err("INITIAL MOMENTUM DOES NOT MATCH MEAN MOMENTUM OF INITIAL WAVEFUNCTION, EXPECTED {e:.8} BUT GOT {e:.8}", .{opt.initial_conditions.momentum[k], momentum.at(k)});
+                std.log.err("INITIAL MOMENTUM DOES NOT MATCH MEAN MOMENTUM OF INITIAL WAVEFUNCTION, EXPECTED {e:.8} BUT GOT {e:.8}", .{ opt.initial_conditions.momentum[k], momentum.at(k) });
 
                 return error.NumericalError;
             };
@@ -519,11 +528,31 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
                 if (nstate == 2) output.bloch_vector.ptr(j, 3).* = std.math.sqrt(std.math.pow(T, output.bloch_vector.at(j, 0), 2) + std.math.pow(T, output.bloch_vector.at(j, 1), 2));
             }
 
-            if (nstate == 2 and opt.write.spatial_bloch_vector != null) try assignSpatialBlochStep(T, &spatial_bloch.?, &wavefunction, opt.potential, j, time, opt.adiabatic, opt.fix_gauge, allocator);
-            if (opt.write.wavefunction != null and i == n_dynamics - 1) try assignWavefunctionStep(T, &wavefunction_dynamics.?, wavefunction, opt.potential, j, time, opt.adiabatic, opt.fix_gauge, allocator);
+            if (nstate == 2 and opt.write.spatial_bloch_vector != null) try assignSpatialBlochStep(
+                T,
+                &spatial_bloch.?,
+                &wavefunction,
+                opt.potential,
+                j,
+                time,
+                opt.adiabatic,
+                opt.fix_gauge,
+                allocator,
+            );
+
+            if (opt.write.wavefunction != null and i == n_dynamics - 1) try assignWavefunctionStep(
+                T,
+                &wavefunction_dynamics.?,
+                wavefunction,
+                opt.potential,
+                j,
+                time,
+                opt.adiabatic,
+                opt.fix_gauge,
+                allocator,
+            );
 
             if (opt.cap) |cap| if (density_matrix.trace().re < cap.stop_norm) {
-
                 if (enable_printing) try print("\nWAVEFUNCTION NORM BELOW CAP STOP NORM, STOPPING SIMULATION\n", .{});
 
                 try output.shrink(j, allocator);
@@ -544,7 +573,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
                 .momentum = momentum,
                 .position = position,
                 .potential_energy = potential_energy,
-                .time = time
+                .time = time,
             };
 
             try printIterationInfo(T, iteration_info, &timer);
@@ -558,19 +587,18 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     for (optimized_wavefunctions.items) |wf| wf.deinit(allocator);
 
     if (enable_printing and nstate > 1) for (0..nstate) |i| {
-
         const tag = if (opt.adiabatic) "ADIABATIC" else "DIABATIC";
 
-        try print("{s}FINAL {s} POPULATION OF STATE {d}: {d:.6}\n", .{if (i == 0) "\n" else "", tag, i, output.population.at(output.population.rows - 1, i)});
+        try print("{s}FINAL {s} POPULATION OF STATE {d}: {d:.6}\n", .{ if (i == 0) "\n" else "", tag, i, output.population.at(output.population.rows - 1, i) });
     };
 
     const end_time = @as(T, @floatFromInt(output.population.rows - 1)) * opt.time_step;
 
     if (opt.write.spectrum) |path| {
-
         if (enable_printing) try print("\nCALCULATING ENERGY SPECTRUM: ", .{});
 
-        const spectrum = try energySpectrum(T, acf, opt.spectrum, allocator); defer spectrum.deinit(allocator);
+        const spectrum = try energySpectrum(T, acf, opt.spectrum, allocator);
+        defer spectrum.deinit(allocator);
 
         if (enable_printing) try print("DONE\n", .{});
 
@@ -598,11 +626,21 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
 }
 
 /// Assign current spatial Bloch vector to the spatial Bloch dynamics matrix.
-pub fn assignSpatialBlochStep(comptime T: type, spatial_bloch: *RealMatrix(T), wavefunction: *GridWavefunction(T), potential: ElectronicPotential(T), iter: usize, time: T, adiabatic: bool, fix_gauge: bool, allocator: std.mem.Allocator) !void {
-    var density_matrix_row = try ComplexMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer density_matrix_row.deinit(allocator);
+pub fn assignSpatialBlochStep(
+    comptime T: type,
+    spatial_bloch: *RealMatrix(T),
+    wavefunction: *GridWavefunction(T),
+    potential: ElectronicPotential(T),
+    iter: usize,
+    time: T,
+    adiabatic: bool,
+    fix_gauge: bool,
+    allocator: std.mem.Allocator,
+) !void {
+    var density_matrix_row = try ComplexMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator);
+    defer density_matrix_row.deinit(allocator);
 
     for (0..wavefunction.data.rows) |i| {
-
         try wavefunction.densityAtRow(&density_matrix_row, i, potential, time, adiabatic, fix_gauge);
 
         spatial_bloch.ptr(i, wavefunction.ndim + 3 * iter + 0).* = 2 * density_matrix_row.at(0, 1).re;
@@ -612,22 +650,39 @@ pub fn assignSpatialBlochStep(comptime T: type, spatial_bloch: *RealMatrix(T), w
 }
 
 /// Assign current wavefunction to the wavefunction dynamics matrix.
-pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatrix(T), wavefunction: GridWavefunction(T), potential: ElectronicPotential(T), iter: usize, time: T, adiabatic: bool, fix_gauge: bool, allocator: std.mem.Allocator) !void {
-    var diabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer diabatic_potential.deinit(allocator);
-    var adiabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer adiabatic_potential.deinit(allocator);
-    var adiabatic_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer adiabatic_eigenvectors.deinit(allocator);
-    var previous_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator); defer previous_eigenvectors.deinit(allocator);
+pub fn assignWavefunctionStep(
+    comptime T: type,
+    wavefunction_dynamics: *RealMatrix(T),
+    wavefunction: GridWavefunction(T),
+    potential: ElectronicPotential(T),
+    iter: usize,
+    time: T,
+    adiabatic: bool,
+    fix_gauge: bool,
+    allocator: std.mem.Allocator,
+) !void {
+    var diabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator);
+    defer diabatic_potential.deinit(allocator);
 
-    var position_at_row = try RealVector(T).init(wavefunction.ndim, allocator); defer position_at_row.deinit(allocator);
+    var adiabatic_potential = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator);
+    defer adiabatic_potential.deinit(allocator);
 
-    var wavefunction_row = try ComplexMatrix(T).init(wavefunction.nstate, 1, allocator); defer wavefunction_row.deinit(allocator);
+    var adiabatic_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator);
+    defer adiabatic_eigenvectors.deinit(allocator);
+
+    var previous_eigenvectors = try RealMatrix(T).init(wavefunction.nstate, wavefunction.nstate, allocator);
+    defer previous_eigenvectors.deinit(allocator);
+
+    var position_at_row = try RealVector(T).init(wavefunction.ndim, allocator);
+    defer position_at_row.deinit(allocator);
+
+    var wavefunction_row = try ComplexMatrix(T).init(wavefunction.nstate, 1, allocator);
+    defer wavefunction_row.deinit(allocator);
 
     for (0..wavefunction.data.rows) |i| {
-
         for (0..wavefunction.nstate) |j| wavefunction_row.ptr(j, 0).* = wavefunction.data.at(i, j);
 
         if (adiabatic) {
-
             try adiabatic_eigenvectors.copyTo(&previous_eigenvectors);
 
             positionAtRow(T, &position_at_row, i, wavefunction.ndim, wavefunction.npoint, wavefunction.limits);
@@ -650,7 +705,8 @@ pub fn assignWavefunctionStep(comptime T: type, wavefunction_dynamics: *RealMatr
 pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options: anytype, allocator: std.mem.Allocator) !RealVector(T) {
     const spectrum_len = try std.math.powi(usize, 2, std.math.log2_int_ceil(usize, acf.len) + spectrum_options.padding_order);
 
-    var spectrum_complex = try ComplexVector(T).initZero(spectrum_len, allocator); defer spectrum_complex.deinit(allocator);
+    var spectrum_complex = try ComplexVector(T).initZero(spectrum_len, allocator);
+    defer spectrum_complex.deinit(allocator);
 
     for (0..acf.len) |i| {
         spectrum_complex.ptr(spectrum_complex.len / 2 + i).* = acf.at(i);
@@ -660,7 +716,6 @@ pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options:
     const sigma = @as(T, @floatFromInt(acf.len)) / 4;
 
     if (spectrum_options.window == .gaussian) for (0..spectrum_complex.len) |i| {
-
         const dist = @as(T, @floatFromInt(i)) - @as(T, @floatFromInt(spectrum_complex.len / 2));
 
         const exponent = dist * dist / (2 * sigma * sigma);
@@ -699,10 +754,10 @@ pub fn energySpectrum(comptime T: type, acf: ComplexVector(T), spectrum_options:
 pub fn initializeTemporalGridContainer(comptime T: type, wavefunction: GridWavefunction(T), iterations: usize, elements: usize, allocator: std.mem.Allocator) !RealMatrix(T) {
     var container: RealMatrix(T) = try RealMatrix(T).init(wavefunction.data.rows, wavefunction.ndim + elements * (iterations + 1), allocator);
 
-    var position_at_row = try RealVector(T).init(wavefunction.ndim, allocator); defer position_at_row.deinit(allocator);
+    var position_at_row = try RealVector(T).init(wavefunction.ndim, allocator);
+    defer position_at_row.deinit(allocator);
 
     for (0..wavefunction.data.rows) |i| {
-
         positionAtRow(T, &position_at_row, i, wavefunction.ndim, wavefunction.npoint, wavefunction.limits);
 
         for (0..wavefunction.ndim) |j| {
@@ -720,11 +775,11 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:8} ", .{"ITER"});
-    try writer.print("{s:12} {s:12} {s:12} ", .{"KIN (Eh)", "POT (Eh)", "TOT (Eh)"});
-    try writer.print("{[value]s:[width]} ", .{.value = "POS (a0)", .width = 10 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]} ", .{.value = "MOM (hb/a0)", .width = 10 * ndim + 2 * (ndim - 1) + 2});
-    try writer.print("{[value]s:[width]} ", .{.value = "POPULATION", .width = 9 * nstate + 2 * (nstate - 1) + 2});
-    try writer.print("{s:10} {s:4}", .{"NORM", "TIME"});
+    try writer.print("{s:12} {s:12} {s:12} ", .{ "KIN (Eh)", "POT (Eh)", "TOT (Eh)" });
+    try writer.print("{[value]s:[width]} ", .{ .value = "POS (a0)", .width = 10 * ndim + 2 * (ndim - 1) + 2 });
+    try writer.print("{[value]s:[width]} ", .{ .value = "MOM (hb/a0)", .width = 10 * ndim + 2 * (ndim - 1) + 2 });
+    try writer.print("{[value]s:[width]} ", .{ .value = "POPULATION", .width = 9 * nstate + 2 * (nstate - 1) + 2 });
+    try writer.print("{s:10} {s:4}", .{ "NORM", "TIME" });
 
     try print("{s}\n", .{writer.buffered()});
 }
@@ -736,52 +791,43 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
     var writer = std.io.Writer.fixed(&buffer);
 
     try writer.print("{d:8} ", .{info.iteration});
-    try writer.print("{d:12.6} {d:12.6} {d:12.6} ", .{info.kinetic_energy, info.potential_energy, info.kinetic_energy + info.potential_energy});
+    try writer.print("{d:12.6} {d:12.6} {d:12.6} ", .{ info.kinetic_energy, info.potential_energy, info.kinetic_energy + info.potential_energy });
 
     try writer.print("[", .{});
 
     for (0..info.position.len) |i| {
-        try writer.print("{d:10.4}{s}", .{info.position.at(i), if (i == info.position.len - 1) "" else ", "});
+        try writer.print("{d:10.4}{s}", .{ info.position.at(i), if (i == info.position.len - 1) "" else ", " });
     }
 
     try writer.print("] [", .{});
 
     for (0..info.momentum.len) |i| {
-        try writer.print("{d:10.4}{s}", .{info.momentum.at(i), if (i == info.momentum.len - 1) "" else ", "});
+        try writer.print("{d:10.4}{s}", .{ info.momentum.at(i), if (i == info.momentum.len - 1) "" else ", " });
     }
 
     try writer.print("] [", .{});
 
     for (0..info.density_matrix.rows) |i| {
-        try writer.print("{d:9.4}{s}", .{info.density_matrix.at(i, i).re + info.population_loss.at(i), if (i == info.density_matrix.rows - 1) "" else ", "});
+        try writer.print("{d:9.4}{s}", .{ info.density_matrix.at(i, i).re + info.population_loss.at(i), if (i == info.density_matrix.rows - 1) "" else ", " });
     }
 
-    try writer.print("] {e:10.3} {D}", .{info.density_matrix.trace().re, timer.read()}); timer.reset();
+    try writer.print("] {e:10.3} {D}", .{ info.density_matrix.trace().re, timer.read() });
+    timer.reset();
 
     try print("{s}\n", .{writer.buffered()});
 }
 
 test "Exact Dynamics on 1D Harmonic Potential" {
     const opt = Options(f64){
-        .grid = .{
-            .limits = &.{&.{-8, 8}},
-            .points = 64
-        },
-        .initial_conditions = .{
-            .mass = 1,
-            .momentum = &.{0},
-            .position = &.{1},
-            .state = 0,
-            .gamma = &.{2}
-        },
-        .potential = .{
-            .harmonic = HarmonicPotential(f64){}
-        },
+        .grid = .{ .limits = &.{&.{ -8, 8 }}, .points = 64 },
+        .initial_conditions = .{ .mass = 1, .momentum = &.{0}, .position = &.{1}, .state = 0, .gamma = &.{2} },
+        .potential = .{ .harmonic = HarmonicPotential(f64){} },
         .iterations = 1000,
-        .time_step = 0.1
+        .time_step = 0.1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+    const output = try run(f64, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.52726330098766, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.potential_energy.last(), 0.59766836993815, TEST_TOLERANCE);
@@ -789,27 +835,15 @@ test "Exact Dynamics on 1D Harmonic Potential" {
 
 test "Exact Dynamics on 2D Harmonic Potential" {
     const opt = Options(f64){
-        .grid = .{
-            .limits = &.{&.{-8, 8}, &.{-8, 8}},
-            .points = 64
-        },
-        .initial_conditions = .{
-            .mass = 1,
-            .momentum = &.{0, 0},
-            .position = &.{1, 1},
-            .state = 0,
-            .gamma = &.{2, 2}
-        },
-        .potential = .{
-            .harmonic = HarmonicPotential(f64){
-                .k = &.{1, 1}
-            }
-        },
+        .grid = .{ .limits = &.{ &.{ -8, 8 }, &.{ -8, 8 } }, .points = 64 },
+        .initial_conditions = .{ .mass = 1, .momentum = &.{ 0, 0 }, .position = &.{ 1, 1 }, .state = 0, .gamma = &.{ 2, 2 } },
+        .potential = .{ .harmonic = HarmonicPotential(f64){ .k = &.{ 1, 1 } } },
         .iterations = 1000,
-        .time_step = 0.1
+        .time_step = 0.1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+    const output = try run(f64, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 1.05452660197613, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.potential_energy.last(), 1.19533673987723, TEST_TOLERANCE);
@@ -817,25 +851,15 @@ test "Exact Dynamics on 2D Harmonic Potential" {
 
 test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
     const opt = Options(f64){
-        .grid = .{
-            .limits = &.{&.{-24, 32}},
-            .points = 2048
-        },
-        .initial_conditions = .{
-            .mass = 2000,
-            .momentum = &.{15},
-            .position = &.{-10},
-            .state = 1,
-            .gamma = &.{2}
-        },
-        .potential = .{
-            .tully_1 = TullyPotential1(f64){}
-        },
+        .grid = .{ .limits = &.{&.{ -24, 32 }}, .points = 2048 },
+        .initial_conditions = .{ .mass = 2000, .momentum = &.{15}, .position = &.{-10}, .state = 1, .gamma = &.{2} },
+        .potential = .{ .tully_1 = TullyPotential1(f64){} },
         .iterations = 350,
-        .time_step = 10
+        .time_step = 10,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+    const output = try run(f64, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.06471011654226, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.population.at(opt.iterations, 0), 0.58949426578088, TEST_TOLERANCE);
@@ -845,26 +869,16 @@ test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
 
 test "Imaginary Time Propagation on 1D Harmonic Potential" {
     const opt = Options(f64){
-        .grid = .{
-            .limits = &.{&.{-8, 8}},
-            .points = 64
-        },
-        .initial_conditions = .{
-            .mass = 1,
-            .momentum = &.{0},
-            .position = &.{1},
-            .state = 0,
-            .gamma = &.{2}
-        },
-        .potential = .{
-            .harmonic = HarmonicPotential(f64){}
-        },
+        .grid = .{ .limits = &.{&.{ -8, 8 }}, .points = 64 },
+        .initial_conditions = .{ .mass = 1, .momentum = &.{0}, .position = &.{1}, .state = 0, .gamma = &.{2} },
+        .potential = .{ .harmonic = HarmonicPotential(f64){} },
         .iterations = 1000,
         .time_step = 0.1,
-        .imaginary = .{}
+        .imaginary = .{},
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+    const output = try run(f64, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.25031230493126, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.potential_energy.last(), 0.24968808471946, TEST_TOLERANCE);
@@ -872,28 +886,16 @@ test "Imaginary Time Propagation on 1D Harmonic Potential" {
 
 test "Imaginary Time Propagation on 2D Harmonic Potential" {
     const opt = Options(f64){
-        .grid = .{
-            .limits = &.{&.{-8, 8}, &.{-8, 8}},
-            .points = 64
-        },
-        .initial_conditions = .{
-            .mass = 1,
-            .momentum = &.{0, 0},
-            .position = &.{1, 0},
-            .state = 0,
-            .gamma = &.{2, 2}
-        },
-        .potential = .{
-            .harmonic = HarmonicPotential(f64){
-                .k = &.{1, 1}
-            }
-        },
+        .grid = .{ .limits = &.{ &.{ -8, 8 }, &.{ -8, 8 } }, .points = 64 },
+        .initial_conditions = .{ .mass = 1, .momentum = &.{ 0, 0 }, .position = &.{ 1, 0 }, .state = 0, .gamma = &.{ 2, 2 } },
+        .potential = .{ .harmonic = HarmonicPotential(f64){ .k = &.{ 1, 1 } } },
         .iterations = 1000,
         .time_step = 0.1,
-        .imaginary = .{}
+        .imaginary = .{},
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator); defer output.deinit(std.testing.allocator);
+    const output = try run(f64, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.50062460986252, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.potential_energy.last(), 0.49937616943892, TEST_TOLERANCE);

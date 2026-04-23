@@ -25,64 +25,58 @@ pub fn mm(comptime T: type, C: anytype, A: anytype, comptime at: bool, B: anytyp
     }
 
     if (comptime !at and !bt) if (A.cols != B.rows) {
-
         std.log.err("INPUT MATRIX DIMENSIONS DON'T MATCH THE REQUIREMENTS FOR MULTIPLICATION", .{});
 
         return error.InvalidInput;
     };
 
     if (comptime at and !bt) if (A.rows != B.rows) {
-
         std.log.err("INPUT MATRIX DIMENSIONS DON'T MATCH THE REQUIREMENTS FOR MULTIPLICATION", .{});
 
         return error.InvalidInput;
     };
 
     if (comptime !at and bt) if (A.cols != B.cols) {
-
         std.log.err("INPUT MATRIX DIMENSIONS DON'T MATCH THE REQUIREMENTS FOR MULTIPLICATION", .{});
 
         return error.InvalidInput;
     };
 
     if (comptime at and bt) if (A.rows != B.cols) {
-
         std.log.err("INPUT MATRIX DIMENSIONS DON'T MATCH THE REQUIREMENTS FOR MULTIPLICATION", .{});
 
         return error.InvalidInput;
     };
 
     if (comptime !at and !bt) if (C.rows != A.rows or C.cols != B.cols) {
-
         std.log.err("OUTPUT MATRIX DIMENSIONS DON'T MATCH THE EXPECTED DIMENSIONS FROM MULTIPLYING THE INPUT MATRICES", .{});
 
         return error.InvalidInput;
     };
 
     if (comptime at and !bt) if (C.rows != A.cols or C.cols != B.cols) {
-
         std.log.err("OUTPUT MATRIX DIMENSIONS DON'T MATCH THE EXPECTED DIMENSIONS FROM MULTIPLYING THE INPUT MATRICES", .{});
 
         return error.InvalidInput;
     };
 
     if (comptime !at and bt) if (C.rows != A.rows or C.cols != B.rows) {
-
         std.log.err("OUTPUT MATRIX DIMENSIONS DON'T MATCH THE EXPECTED DIMENSIONS FROM MULTIPLYING THE INPUT MATRICES", .{});
 
         return error.InvalidInput;
     };
 
     if (comptime at and bt) if (C.rows != A.cols or C.cols != B.rows) {
-
         std.log.err("OUTPUT MATRIX DIMENSIONS DON'T MATCH THE EXPECTED DIMENSIONS FROM MULTIPLYING THE INPUT MATRICES", .{});
 
         return error.InvalidInput;
     };
 
-    if (comptime @TypeOf(C.*) == RealMatrix(T)) {return try mmReal(T, C, A, at, B, bt);}
-    else if (comptime @TypeOf(C.*) == ComplexMatrix(T)) {return mmComplex(T, C, A, at, B, bt);}
-    else @compileError("UNSUPPORTED MATRIX TYPE IN MATRIX MULTIPLICATION");
+    if (comptime @TypeOf(C.*) == RealMatrix(T)) {
+        return try mmReal(T, C, A, at, B, bt);
+    } else if (comptime @TypeOf(C.*) == ComplexMatrix(T)) {
+        return mmComplex(T, C, A, at, B, bt);
+    } else @compileError("UNSUPPORTED MATRIX TYPE IN MATRIX MULTIPLICATION");
 }
 
 /// General matrix multiplication function that returns a new matrix.
@@ -99,14 +93,14 @@ pub fn mmAlloc(comptime T: type, A: anytype, comptime at: bool, B: anytype, comp
 
 /// Matrix multiplication function between two complex matrices A and B, with options to transpose A and/or B. The result is stored in C.
 pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: anytype, comptime at: bool, B: anytype, comptime bt: bool) void {
-    if (comptime config.use_openblas and @TypeOf(A) == ComplexMatrix(T) and @TypeOf(B) == ComplexMatrix(T)) {if (A.rows > 32 and A.cols > 32) return try zgemm(T, C, A, at, B, bt);}
+    if (comptime config.use_openblas and @TypeOf(A) == ComplexMatrix(T) and @TypeOf(B) == ComplexMatrix(T)) {
+        if (A.rows > 32 and A.cols > 32) return try zgemm(T, C, A, at, B, bt);
+    }
 
     for (0..C.rows) |i| for (0..C.cols) |j| {
-
         var sum = Complex(T).init(0, 0);
 
         for (0..if (comptime at) A.rows else A.cols) |k| {
-
             var a = if (comptime at) A.at(k, i) else A.at(i, k);
             var b = if (comptime bt) B.at(j, k) else B.at(k, j);
 
@@ -125,14 +119,14 @@ pub fn mmComplex(comptime T: type, C: *ComplexMatrix(T), A: anytype, comptime at
 
 /// Matrix multiplication function between two real matrices A and B, with options to transpose A and/or B. The result is stored in C.
 pub fn mmReal(comptime T: type, C: *RealMatrix(T), A: RealMatrix(T), comptime at: bool, B: RealMatrix(T), comptime bt: bool) !void {
-    if (comptime config.use_openblas) {if (A.rows > 32 and A.cols > 32) return try dgemm(T, C, A, at, B, bt);}
+    if (comptime config.use_openblas) {
+        if (A.rows > 32 and A.cols > 32) return try dgemm(T, C, A, at, B, bt);
+    }
 
     for (0..C.rows) |i| for (0..C.cols) |j| {
-
         var sum: T = 0;
 
         for (0..if (comptime at) A.rows else A.cols) |k| {
-
             const a = if (comptime at) A.at(k, i) else A.at(i, k);
             const b = if (comptime bt) B.at(j, k) else B.at(k, j);
 
@@ -153,24 +147,47 @@ pub fn mmResultType(comptime T: type, comptime A_type: type, comptime B_type: ty
 }
 
 test "3x3 Real Matrix Multiplication" {
-    var A = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer A.deinit(std.testing.allocator);
-    var B = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer B.deinit(std.testing.allocator);
+    var A = try RealMatrix(f64).init(3, 3, std.testing.allocator);
+    defer A.deinit(std.testing.allocator);
 
-    var C_expected = try RealMatrix(f64).init(3, 3, std.testing.allocator); defer C_expected.deinit(std.testing.allocator);
+    var B = try RealMatrix(f64).init(3, 3, std.testing.allocator);
+    defer B.deinit(std.testing.allocator);
 
-    A.ptr(0, 0).* = 1; A.ptr(0, 1).* = 2; A.ptr(0, 2).* = 3;
-    A.ptr(1, 0).* = 4; A.ptr(1, 1).* = 5; A.ptr(1, 2).* = 6;
-    A.ptr(2, 0).* = 7; A.ptr(2, 1).* = 8; A.ptr(2, 2).* = 9;
+    var C_expected = try RealMatrix(f64).init(3, 3, std.testing.allocator);
+    defer C_expected.deinit(std.testing.allocator);
 
-    B.ptr(0, 0).* = 9; B.ptr(0, 1).* = 8; B.ptr(0, 2).* = 7;
-    B.ptr(1, 0).* = 6; B.ptr(1, 1).* = 5; B.ptr(1, 2).* = 4;
-    B.ptr(2, 0).* = 3; B.ptr(2, 1).* = 2; B.ptr(2, 2).* = 1;
+    A.ptr(0, 0).* = 1;
+    A.ptr(0, 1).* = 2;
+    A.ptr(0, 2).* = 3;
+    A.ptr(1, 0).* = 4;
+    A.ptr(1, 1).* = 5;
+    A.ptr(1, 2).* = 6;
+    A.ptr(2, 0).* = 7;
+    A.ptr(2, 1).* = 8;
+    A.ptr(2, 2).* = 9;
 
-    C_expected.ptr(0, 0).* =  30; C_expected.ptr(0, 1).* =  24; C_expected.ptr(0, 2).* = 18;
-    C_expected.ptr(1, 0).* =  84; C_expected.ptr(1, 1).* =  69; C_expected.ptr(1, 2).* = 54;
-    C_expected.ptr(2, 0).* = 138; C_expected.ptr(2, 1).* = 114; C_expected.ptr(2, 2).* = 90;
+    B.ptr(0, 0).* = 9;
+    B.ptr(0, 1).* = 8;
+    B.ptr(0, 2).* = 7;
+    B.ptr(1, 0).* = 6;
+    B.ptr(1, 1).* = 5;
+    B.ptr(1, 2).* = 4;
+    B.ptr(2, 0).* = 3;
+    B.ptr(2, 1).* = 2;
+    B.ptr(2, 2).* = 1;
 
-    const C = try mmAlloc(f64, A, false, B, false, std.testing.allocator); defer C.deinit(std.testing.allocator);
+    C_expected.ptr(0, 0).* = 30;
+    C_expected.ptr(0, 1).* = 24;
+    C_expected.ptr(0, 2).* = 18;
+    C_expected.ptr(1, 0).* = 84;
+    C_expected.ptr(1, 1).* = 69;
+    C_expected.ptr(1, 2).* = 54;
+    C_expected.ptr(2, 0).* = 138;
+    C_expected.ptr(2, 1).* = 114;
+    C_expected.ptr(2, 2).* = 90;
+
+    const C = try mmAlloc(f64, A, false, B, false, std.testing.allocator);
+    defer C.deinit(std.testing.allocator);
 
     try std.testing.expect(C.eq(C_expected, TEST_TOLERANCE));
 }

@@ -23,11 +23,7 @@ const RingBufferArray = object_array.RingBufferArray;
 
 /// Parameters struct for all the surface hopping algorithms.
 pub fn Parameters(comptime T: type) type {
-    return struct {
-        fs_parameters: fewest_switches.Parameters(T),
-        lz_parameters: landau_zener.Parameters(T),
-        ma_parameters: mapping_approach.Parameters(T)
-    };
+    return struct { fs_parameters: fewest_switches.Parameters(T), lz_parameters: landau_zener.Parameters(T), ma_parameters: mapping_approach.Parameters(T) };
 }
 
 /// Surface hopping algorithm union type.
@@ -42,18 +38,25 @@ pub fn SurfaceHoppingAlgorithm(comptime T: type) type {
             switch (self) {
                 .fewest_switches => |field| field.getJumpProbabilities(jump_probabilities, parameters.fs_parameters, current_state),
                 .landau_zener => |field| field.getJumpProbabilities(jump_probabilities, parameters.lz_parameters, current_state),
-                .mapping_approach => |field| try field.getJumpProbabilities(jump_probabilities, parameters.ma_parameters, current_state)
+                .mapping_approach => |field| try field.getJumpProbabilities(jump_probabilities, parameters.ma_parameters, current_state),
             }
         }
 
         /// Perform the jump based on the probabilities and adjust the momentum accordingly.
-        pub fn jump(self: @This(), system: *ClassicalParticle(T), jump_probabilities: *RealVector(T), parameters: Parameters(T), adiabatic_potential: RealMatrix(T), state: usize, random: *std.Random) !usize {
+        pub fn jump(
+            self: @This(),
+            system: *ClassicalParticle(T),
+            jump_probabilities: *RealVector(T),
+            parameters: Parameters(T),
+            adiabatic_potential: RealMatrix(T),
+            state: usize,
+            random: *std.Random,
+        ) !usize {
             const substeps = if (self == .fewest_switches) self.fewest_switches.substeps else 1;
 
             var new_state: usize = state;
 
             for (0..substeps) |_| {
-
                 try getJumpProbabilities(self, jump_probabilities, parameters, new_state);
 
                 const random_number = random.float(T);
@@ -63,19 +66,18 @@ pub fn SurfaceHoppingAlgorithm(comptime T: type) type {
                 var cumulative_probability: T = 0;
 
                 if (new_state == state) for (0..jump_probabilities.len) |i| {
-
                     if (i == state) continue;
 
                     cumulative_probability += jump_probabilities.at(i);
 
                     if (random_number < cumulative_probability) {
-                        new_state = @intCast(i); break;
+                        new_state = @intCast(i);
+                        break;
                     }
                 };
             }
 
             if (new_state != state) {
-
                 const kinetic_energy = system.kineticEnergy();
                 const current_energy = adiabatic_potential.at(state, state);
                 const new_energy = adiabatic_potential.at(new_state, new_state);
@@ -96,19 +98,19 @@ pub fn SurfaceHoppingAlgorithm(comptime T: type) type {
 /// Function to apply decoherence correction to the coefficients after a jump.
 pub fn applyDecoherenceCorrection(comptime T: type, coefficients: *ComplexVector(T), adiabatic_potential: RealMatrix(T), kinetic_energy: T, current_state: usize, time_step: T, alpha: T) void {
     for (0..coefficients.len) |j| if (j != current_state) {
-
         const tau = (1 + alpha / kinetic_energy) / @abs(adiabatic_potential.at(j, j) - adiabatic_potential.at(current_state, current_state));
 
         coefficients.ptr(j).* = coefficients.at(j).mul(Complex(T).init(std.math.exp(-0.5 * time_step / tau), 0));
     };
 
-    var sumc: T = 0; for (0..coefficients.len) |j| if (j != current_state) {
+    var sumc: T = 0;
+    for (0..coefficients.len) |j| if (j != current_state) {
         sumc += coefficients.at(j).magnitude() * coefficients.at(j).magnitude();
     };
 
     if (coefficients.at(current_state).magnitude() > 0) {
-
-        const num = 1 - sumc; const denom = coefficients.at(current_state).magnitude() * coefficients.at(current_state).magnitude();
+        const num = 1 - sumc;
+        const denom = coefficients.at(current_state).magnitude() * coefficients.at(current_state).magnitude();
 
         coefficients.ptr(current_state).* = coefficients.at(current_state).mul(Complex(T).init(std.math.sqrt(num / denom), 0));
     }

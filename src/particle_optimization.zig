@@ -14,9 +14,16 @@ const nuclearGradient = energy_derivative.nuclearGradient;
 const print = device_write.print;
 
 /// Optimizes the positions of a set of classical particles using the steepest descent method and a gradient.
-pub fn particleSteepestDescent(comptime T: type, opt: anytype, system: ClassicalParticle(T), efunc: anytype, method: []const u8, enable_printing: bool, allocator: std.mem.Allocator) !ClassicalParticle(T) {
+pub fn particleSteepestDescent(
+    comptime T: type,
+    opt: anytype,
+    system: ClassicalParticle(T),
+    efunc: anytype,
+    method: []const u8,
+    enable_printing: bool,
+    allocator: std.mem.Allocator,
+) !ClassicalParticle(T) {
     if (opt.gradient == null) {
-
         std.log.err("GRADIENT FUNCTION NOT PROVIDED FOR OPTIMIZATION", .{});
 
         return error.InvalidInput;
@@ -24,12 +31,10 @@ pub fn particleSteepestDescent(comptime T: type, opt: anytype, system: Classical
 
     var optimized_system = try system.clone(allocator);
 
-    if (enable_printing) try print("\n{s} GEOMETRY OPTIMIZATION:\n{s:4} {s:20} {s:4}\n", .{method, "ITER", "GRADIENT NORM", "TIME"});
+    if (enable_printing) try print("\n{s} GEOMETRY OPTIMIZATION:\n{s:4} {s:20} {s:4}\n", .{ method, "ITER", "GRADIENT NORM", "TIME" });
 
     for (0..opt.optimize.?.maxiter + 1) |i| {
-
         if (i == opt.optimize.?.maxiter) {
-
             std.log.err("MAXIMUM NUMBER OF ITERATIONS REACHED WITHOUT CONVERGENCE", .{});
 
             return error.NumericalError;
@@ -41,7 +46,7 @@ pub fn particleSteepestDescent(comptime T: type, opt: anytype, system: Classical
 
         var G = try nuclearGradient(T, opt, optimized_system, efunc, method, false, allocator);
 
-        if (enable_printing) try print(" {d:20.14} {D}\n", .{G.asVector().norm(), timer.read()});
+        if (enable_printing) try print(" {d:20.14} {D}\n", .{ G.asVector().norm(), timer.read() });
 
         if (G.asVector().norm() < opt.optimize.?.threshold) break;
 

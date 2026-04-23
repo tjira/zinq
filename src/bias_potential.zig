@@ -10,17 +10,13 @@ const RealMatrix = real_matrix.RealMatrix;
 pub fn BiasPotential(comptime T: type) type {
     return struct {
         pub const Function = struct {
-            pub const Harmonic = struct {
-                k: T
-            };
+            pub const Harmonic = struct { k: T };
         };
         pub const Variable = struct {
-            pub const PotentialEnergy = struct {
-                value: T
-            };
+            pub const PotentialEnergy = struct { value: T };
             pub const PotentialEnergyDifference = struct {
                 value: T,
-                states: [2]u32
+                states: [2]u32,
             };
         };
 
@@ -62,22 +58,20 @@ pub fn BiasPotential(comptime T: type) type {
             const variable = switch (self.variable) {
                 .potential_energy => adiabatic_potential.at(state, state),
                 .potential_energy_difference => |field| blk: {
-
                     const state1 = field.states[0];
                     const state2 = field.states[1];
 
                     if (state1 >= adiabatic_potential.rows or state2 >= adiabatic_potential.rows) {
-
                         std.log.err("STATE OUT OF BOUNDS IN BIAS POTENTIAL", .{});
 
                         return error.InvalidInput;
                     }
 
                     break :blk adiabatic_potential.at(state2, state2) - adiabatic_potential.at(state1, state1);
-                }
+                },
             };
 
             return self.evaluateForce(variable);
-         }
+        }
     };
 }
