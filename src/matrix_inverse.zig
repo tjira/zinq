@@ -84,7 +84,7 @@ pub fn pseudoInverseHermitianSpectral(comptime M: fn (comptime type) type, compt
     };
 }
 
-test "Symmetric 3x3 Inverse" {
+test "inverseHermitianAlloc" {
     var A = try RealMatrix(f64).init(3, 3, std.testing.allocator);
     defer A.deinit(std.testing.allocator);
 

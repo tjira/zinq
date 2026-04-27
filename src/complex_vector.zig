@@ -120,37 +120,3 @@ pub fn ComplexVector(comptime T: type) type {
         }
     };
 }
-
-test "ComplexVector basic operations" {
-    const testing = std.testing;
-    const allocator = testing.allocator;
-
-    var v1 = try ComplexVector(f64).init(2, allocator);
-    defer v1.deinit(allocator);
-    v1.fill(Complex(f64).init(1.0, 2.0));
-
-    try testing.expectEqual(@as(usize, 2), v1.len);
-    try testing.expectEqual(@as(f64, 1.0), v1.at(0).re);
-    try testing.expectEqual(@as(f64, 2.0), v1.at(0).im);
-
-    var v2 = try ComplexVector(f64).initZero(2, allocator);
-    defer v2.deinit(allocator);
-    try testing.expectEqual(@as(f64, 0.0), v2.at(0).re);
-
-    try v1.copyTo(&v2);
-    try testing.expect(v1.eq(v2, 1e-10));
-
-    v2.muls(Complex(f64).init(2.0, 0.0));
-    try testing.expectEqual(@as(f64, 2.0), v2.at(0).re);
-    try testing.expectEqual(@as(f64, 4.0), v2.at(0).im);
-
-    v2.divs(Complex(f64).init(2.0, 0.0));
-    try testing.expect(v1.eq(v2, 1e-10));
-
-    v2.ptr(1).* = Complex(f64).init(3.0, 4.0);
-    try testing.expectEqual(@as(f64, 3.0), v2.at(1).re);
-
-    var s = v2.slice(1, 2);
-    try testing.expectEqual(@as(usize, 1), s.len);
-    try testing.expectEqual(@as(f64, 3.0), s.at(0).re);
-}

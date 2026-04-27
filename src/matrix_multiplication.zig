@@ -146,7 +146,7 @@ pub fn mmResultType(comptime T: type, comptime A_type: type, comptime B_type: ty
     return if (comptime A_type == RealMatrix(T) and B_type == RealMatrix(T)) RealMatrix(T) else ComplexMatrix(T);
 }
 
-test "3x3 Real Matrix Multiplication" {
+test "mmAlloc" {
     var A = try RealMatrix(f64).init(3, 3, std.testing.allocator);
     defer A.deinit(std.testing.allocator);
 

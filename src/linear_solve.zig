@@ -67,9 +67,10 @@ pub fn linearSolveHermitianSpectral(comptime M: fn (comptime type) type, comptim
     try mm(T, x, AC, false, y.*, false);
 }
 
-test "Symmetric 3x3 Linear System" {
+test "linearSolveHermitianAlloc" {
     var A = try real_matrix.RealMatrix(f64).init(3, 3, std.testing.allocator);
     defer A.deinit(std.testing.allocator);
+
     var b = try real_vector.RealVector(f64).init(3, std.testing.allocator);
     defer b.deinit(std.testing.allocator);
 
