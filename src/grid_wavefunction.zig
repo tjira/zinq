@@ -440,16 +440,16 @@ pub fn GridWavefunction(comptime T: type) type {
         }
 
         /// Export the wavefunction to a specified path.
-        pub fn write(self: @This(), path: []const u8, allocator: std.mem.Allocator) !void {
-            var file = try std.fs.cwd().createFile(path, .{});
-            defer file.close();
+        pub fn write(self: @This(), io: std.Io, path: []const u8, allocator: std.mem.Allocator) !void {
+            var file = try std.Io.Dir.cwd().createFile(io, path, .{});
+            defer file.close(io);
 
             var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
             var position_at_row = try RealVector(T).init(self.ndim, allocator);
             defer position_at_row.deinit(allocator);
 
-            var writer = file.writer(&buffer);
+            var writer = file.writer(io, &buffer);
             var writer_interface = &writer.interface;
 
             try writer_interface.print("{d} {d}\n", .{ self.data.rows, self.data.cols + self.ndim });

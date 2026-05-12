@@ -168,11 +168,11 @@ pub fn Custom(comptime T: type) type {
 }
 
 /// Run quantum dynamics simulations.
-pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(raw_options);
+pub fn run(comptime T: type, io: std.Io, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(io, raw_options);
 
     var opt = raw_options;
-    try opt.potential.init(allocator);
+    try opt.potential.init(io, allocator);
     defer opt.potential.deinit(allocator);
 
     if (opt.potential == .ab_initio) {
@@ -352,7 +352,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         const total_runs = qsteps * psteps * gsteps;
         const tp_index = (i * psteps + j) * gsteps + k;
 
-        if (enable_printing and (qsteps != 1 or psteps != 1 or gsteps != 1)) try print("\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}:\n", .{ tp_index + 1, total_runs });
+        if (enable_printing and (qsteps != 1 or psteps != 1 or gsteps != 1)) try print(io, "\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}:\n", .{ tp_index + 1, total_runs });
 
         var temp_i = i;
         var temp_j = j;
@@ -380,7 +380,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
             try renameOutputFilesWithPositionAndMomentum(T, &options, options.initial_conditions.position, options.initial_conditions.momentum, options.initial_conditions.gamma, allocator);
         }
 
-        const result = try performDynamics(T, options, enable_printing, allocator);
+        const result = try performDynamics(T, io, options, enable_printing, allocator);
 
         for (0..ndim) |l| transition_probability.ptr(tp_index, 0 * ndim + l).* = q[l];
         for (0..ndim) |l| transition_probability.ptr(tp_index, 1 * ndim + l).* = p[l];
@@ -395,7 +395,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         };
     };
 
-    if (opt.write.transition_probability) |path| try exportRealMatrix(T, path, transition_probability);
+    if (opt.write.transition_probability) |path| try exportRealMatrix(T, io, path, transition_probability);
 
     return output;
 }
@@ -405,39 +405,38 @@ pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(
     inline for (std.meta.fields(@TypeOf(opt.write))) |field| if (@as(field.type, @field(opt.write, field.name)) != null) {
         const path = &@field(opt.write, field.name).?;
 
-        var new_path = std.ArrayList(u8){};
-        errdefer new_path.deinit(allocator);
+        var builder: std.Io.Writer.Allocating = .init(allocator);
+        errdefer builder.deinit();
 
-        const writer = new_path.writer(allocator);
-
-        try writer.print("{s}_Q=", .{path.*[0 .. path.len - 4]});
+        try builder.writer.print("{s}_Q=", .{path.*[0 .. path.len - 4]});
 
         for (q, 0..) |val, i| {
-            if (i > 0) try writer.writeAll(",");
-            try writer.print("{d:.4}", .{val});
+            if (i > 0) try builder.writer.writeAll(",");
+            try builder.writer.print("{d:.4}", .{val});
         }
 
-        try writer.writeAll("_P=");
+        try builder.writer.writeAll("_P=");
 
         for (p, 0..) |val, i| {
-            if (i > 0) try writer.writeAll(",");
-            try writer.print("{d:.4}", .{val});
+            if (i > 0) try builder.writer.writeAll(",");
+            try builder.writer.print("{d:.4}", .{val});
         }
 
-        try writer.writeAll("_G=");
+        try builder.writer.writeAll("_G=");
 
         for (g, 0..) |val, i| {
-            if (i > 0) try writer.writeAll(",");
-            try writer.print("{d:.4}", .{val});
+            if (i > 0) try builder.writer.writeAll(",");
+            try builder.writer.print("{d:.4}", .{val});
         }
 
-        try writer.writeAll(".mat");
-        path.* = try new_path.toOwnedSlice(allocator);
+        try builder.writer.writeAll(".mat");
+
+        path.* = try builder.toOwnedSlice();
     };
 }
 
 /// Perform the quantum dynamics simulation.
-pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+pub fn performDynamics(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     const ndim = try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
@@ -450,7 +449,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     var wavefunction_dynamics: ?RealMatrix(T) = if (opt.write.wavefunction) |_| try initializeTemporalGridContainer(T, wavefunction, opt.iterations, 2 * wavefunction.nstate, allocator) else null;
     var spatial_bloch: ?RealMatrix(T) = if (opt.write.spatial_bloch_vector) |_| try initializeTemporalGridContainer(T, wavefunction, opt.iterations, 3, allocator) else null;
 
-    var optimized_wavefunctions = std.ArrayList(GridWavefunction(T)){};
+    var optimized_wavefunctions: std.ArrayList(GridWavefunction(T)) = .empty;
     defer optimized_wavefunctions.deinit(allocator);
 
     var density_matrix = try ComplexMatrix(T).init(nstate, nstate, allocator);
@@ -465,15 +464,15 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     var acf = try ComplexVector(T).init(opt.iterations + 1, allocator);
     defer acf.deinit(allocator);
 
-    if (enable_printing) try print("\nINITIAL GAMMA: [", .{});
+    if (enable_printing) try print(io, "\nINITIAL GAMMA: [", .{});
 
     if (enable_printing) for (opt.initial_conditions.gamma, 0..) |gamma, i| {
-        if (i > 0) try print(", ", .{});
-        try print("{d:.6}", .{gamma});
-        if (i == opt.initial_conditions.gamma.len - 1) try print("]\n", .{});
+        if (i > 0) try print(io, ", ", .{});
+        try print(io, "{d:.6}", .{gamma});
+        if (i == opt.initial_conditions.gamma.len - 1) try print(io, "]\n", .{});
     };
 
-    var timer = try std.time.Timer.start();
+    var timer = std.Io.Timestamp.now(io, .real);
     const n_dynamics = if (opt.imaginary) |f| f.states else 1;
 
     for (0..n_dynamics) |i| {
@@ -489,9 +488,9 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
         if (opt.imaginary != null) for (optimized_wavefunctions.items) |owf| wavefunction.orthogonalize(owf);
 
         if (enable_printing) {
-            if (opt.imaginary != null) try print("\nIMAGINARY TIME PROPAGATION - STATE {d}/{d}", .{ i + 1, n_dynamics });
+            if (opt.imaginary != null) try print(io, "\nIMAGINARY TIME PROPAGATION - STATE {d}/{d}", .{ i + 1, n_dynamics });
 
-            try printIterationHeader(ndim, nstate);
+            try printIterationHeader(io, ndim, nstate);
         }
 
         for (0..opt.iterations + 1) |j| {
@@ -553,7 +552,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
             );
 
             if (opt.cap) |cap| if (density_matrix.trace().re < cap.stop_norm) {
-                if (enable_printing) try print("\nWAVEFUNCTION NORM BELOW CAP STOP NORM, STOPPING SIMULATION\n", .{});
+                if (enable_printing) try print(io, "\nWAVEFUNCTION NORM BELOW CAP STOP NORM, STOPPING SIMULATION\n", .{});
 
                 try output.shrink(j, allocator);
 
@@ -576,7 +575,7 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
                 .time = time,
             };
 
-            try printIterationInfo(T, iteration_info, &timer);
+            try printIterationInfo(T, io, iteration_info, &timer);
         }
 
         if (opt.imaginary) |f| if (i < f.states - 1) {
@@ -589,35 +588,35 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
     if (enable_printing and nstate > 1) for (0..nstate) |i| {
         const tag = if (opt.adiabatic) "ADIABATIC" else "DIABATIC";
 
-        try print("{s}FINAL {s} POPULATION OF STATE {d}: {d:.6}\n", .{ if (i == 0) "\n" else "", tag, i, output.population.at(output.population.rows - 1, i) });
+        try print(io, "{s}FINAL {s} POPULATION OF STATE {d}: {d:.6}\n", .{ if (i == 0) "\n" else "", tag, i, output.population.at(output.population.rows - 1, i) });
     };
 
     const end_time = @as(T, @floatFromInt(output.population.rows - 1)) * opt.time_step;
 
     if (opt.write.spectrum) |path| {
-        if (enable_printing) try print("\nCALCULATING ENERGY SPECTRUM: ", .{});
+        if (enable_printing) try print(io, "\nCALCULATING ENERGY SPECTRUM: ", .{});
 
         const spectrum = try energySpectrum(T, acf, opt.spectrum, allocator);
         defer spectrum.deinit(allocator);
 
-        if (enable_printing) try print("DONE\n", .{});
+        if (enable_printing) try print(io, "DONE\n", .{});
 
         const nyquist_frequency = std.math.pi / opt.time_step;
 
-        try exportRealMatrixWithLinspacedLeftColumn(T, path, spectrum.asMatrix(), 0, nyquist_frequency);
+        try exportRealMatrixWithLinspacedLeftColumn(T, io, path, spectrum.asMatrix(), 0, nyquist_frequency);
     }
 
-    if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, path, acf.asMatrix(), 0, end_time);
-    if (opt.write.bloch_vector) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.bloch_vector, 0, end_time);
-    if (opt.write.final_wavefunction) |path| try wavefunction.write(path, allocator);
-    if (opt.write.kinetic_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.kinetic_energy.asMatrix(), 0, end_time);
-    if (opt.write.momentum) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.momentum, 0, end_time);
-    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
-    if (opt.write.position) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.position, 0, end_time);
-    if (opt.write.potential_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.potential_energy.asMatrix(), 0, end_time);
-    if (opt.write.total_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy.asMatrix(), 0, end_time);
-    if (opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
-    if (opt.write.spatial_bloch_vector) |path| try exportRealMatrix(T, path, spatial_bloch.?);
+    if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, io, path, acf.asMatrix(), 0, end_time);
+    if (opt.write.bloch_vector) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.bloch_vector, 0, end_time);
+    if (opt.write.final_wavefunction) |path| try wavefunction.write(io, path, allocator);
+    if (opt.write.kinetic_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.kinetic_energy.asMatrix(), 0, end_time);
+    if (opt.write.momentum) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.momentum, 0, end_time);
+    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.population, 0, end_time);
+    if (opt.write.position) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.position, 0, end_time);
+    if (opt.write.potential_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.potential_energy.asMatrix(), 0, end_time);
+    if (opt.write.total_energy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.total_energy.asMatrix(), 0, end_time);
+    if (opt.write.wavefunction) |path| try exportRealMatrix(T, io, path, wavefunction_dynamics.?);
+    if (opt.write.spatial_bloch_vector) |path| try exportRealMatrix(T, io, path, spatial_bloch.?);
 
     if (spatial_bloch != null) spatial_bloch.?.deinit(allocator);
     if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit(allocator);
@@ -769,10 +768,10 @@ pub fn initializeTemporalGridContainer(comptime T: type, wavefunction: GridWavef
 }
 
 /// Print header for iteration info.
-pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
+pub fn printIterationHeader(io: std.Io, ndim: usize, nstate: usize) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = std.io.Writer.fixed(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:8} ", .{"ITER"});
     try writer.print("{s:12} {s:12} {s:12} ", .{ "KIN (Eh)", "POT (Eh)", "TOT (Eh)" });
@@ -781,14 +780,14 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
     try writer.print("{[value]s:[width]} ", .{ .value = "POPULATION", .width = 9 * nstate + 2 * (nstate - 1) + 2 });
     try writer.print("{s:10} {s:4}", .{ "NORM", "TIME" });
 
-    try print("{s}\n", .{writer.buffered()});
+    try print(io, "{s}\n", .{writer.buffered()});
 }
 
 /// Prints the iteration info to standard output.
-pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer: *std.time.Timer) !void {
+pub fn printIterationInfo(comptime T: type, io: std.Io, info: Custom(T).IterationInfo, timer: *std.Io.Timestamp) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = std.io.Writer.fixed(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
 
     try writer.print("{d:8} ", .{info.iteration});
     try writer.print("{d:12.6} {d:12.6} {d:12.6} ", .{ info.kinetic_energy, info.potential_energy, info.kinetic_energy + info.potential_energy });
@@ -811,10 +810,11 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
         try writer.print("{d:9.4}{s}", .{ info.density_matrix.at(i, i).re + info.population_loss.at(i), if (i == info.density_matrix.rows - 1) "" else ", " });
     }
 
-    try writer.print("] {e:10.3} {D}", .{ info.density_matrix.trace().re, timer.read() });
-    timer.reset();
+    try writer.print("] {e:10.3} {f}", .{ info.density_matrix.trace().re, timer.untilNow(io, .real)});
 
-    try print("{s}\n", .{writer.buffered()});
+    timer.* = std.Io.Timestamp.now(io, .real);
+
+    try print(io, "{s}\n", .{writer.buffered()});
 }
 
 test "Exact Dynamics on 1D Harmonic Potential" {

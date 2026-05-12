@@ -132,7 +132,7 @@ const Target = enum {
     potential_plot,
     prime_numbers,
     // time_dependent_density_functional_theory,
-    // quantum_dynamics,
+    quantum_dynamics,
 };
 
 /// Find out if the input JSON file contains an unrecognized field and print the expected field.
@@ -248,7 +248,7 @@ pub fn parse(io: std.Io, path: []const u8, allocator: std.mem.Allocator) !void {
             .potential_plot => try handle(f64, potential_plot, io, options, allocator),
             .prime_numbers => try handle(f64, prime_numbers, io, options, allocator),
             // .time_dependent_density_functional_theory => try handle(f64, tddft, io, options, allocator),
-            // .quantum_dynamics => try handle(f64, quantum_dynamics, io, options, allocator),
+            .quantum_dynamics => try handle(f64, quantum_dynamics, io, options, allocator),
         }
     }
 
