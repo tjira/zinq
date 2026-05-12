@@ -163,11 +163,11 @@ pub fn Custom(comptime T: type) type {
 }
 
 /// Perform the simulation.
-pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(raw_options);
+pub fn run(comptime T: type, io: std.Io, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(io, raw_options);
 
     var opt = raw_options;
-    try opt.potential.init(allocator);
+    try opt.potential.init(io, allocator);
     defer opt.potential.deinit(allocator);
 
     if (opt.potential == .ab_initio) {
@@ -231,9 +231,9 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
     var acf = try ComplexVector(T).init(opt.iterations + 1, allocator);
     defer acf.deinit(allocator);
 
-    if (enable_printing) try printIterationHeader(ndim, mcg.coefs.len);
+    if (enable_printing) try printIterationHeader(io, ndim, mcg.coefs.len);
 
-    var timer = try std.time.Timer.start();
+    var timer = std.Io.Timestamp.now(io, .real);
 
     for (0..opt.iterations + 1) |i| {
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
@@ -292,30 +292,30 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
             .time = time,
         };
 
-        try printIterationInfo(T, info, &timer);
+        try printIterationInfo(T, io, info, &timer);
     }
 
     if (enable_printing) for (0..nstate) |i| {
-        try print("{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{ if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i) });
+        try print(io, "{s}FINAL POPULATION OF STATE {d}: {d:.6}\n", .{ if (i == 0) "\n" else "", i, output.population.at(opt.iterations, i) });
     };
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
     if (opt.write.spectrum) |path| {
-        if (enable_printing) try print("\nCALCULATING ENERGY SPECTRUM: ", .{});
+        if (enable_printing) try print(io, "\nCALCULATING ENERGY SPECTRUM: ", .{});
 
         const spectrum = try energySpectrum(T, acf, opt.spectrum, allocator);
 
-        if (enable_printing) try print("DONE\n", .{});
+        if (enable_printing) try print(io, "DONE\n", .{});
 
         const nyquist_frequency = std.math.pi / opt.time_step;
 
-        try exportRealMatrixWithLinspacedLeftColumn(T, path, spectrum.asMatrix(), 0, nyquist_frequency);
+        try exportRealMatrixWithLinspacedLeftColumn(T, io, path, spectrum.asMatrix(), 0, nyquist_frequency);
     }
 
-    if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, path, acf.asMatrix(), 0, end_time);
-    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population, 0, end_time);
-    if (opt.wavefunction) |wfn_opt| if (wfn_opt.write.wavefunction) |path| try exportRealMatrix(T, path, wavefunction_dynamics.?);
+    if (opt.write.autocorrelation_function) |path| try exportComplexMatrixWithLinspacedLeftColumn(T, io, path, acf.asMatrix(), 0, end_time);
+    if (opt.write.population) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.population, 0, end_time);
+    if (opt.wavefunction) |wfn_opt| if (wfn_opt.write.wavefunction) |path| try exportRealMatrix(T, io, path, wavefunction_dynamics.?);
 
     if (wavefunction_dynamics != null) wavefunction_dynamics.?.deinit(allocator);
 
@@ -460,13 +460,13 @@ pub fn propagate(
 }
 
 /// Print header for iteration info.
-pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
+pub fn printIterationHeader(io: std.Io, ndim: usize, nstate: usize) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     const ndim_header_width = 9 * @as(usize, @min(ndim, 3)) + 2 * (@as(usize, @min(ndim, 3)) - 1) + @as(usize, if (ndim > 3) 7 else 2);
     const nstate_header_width = 7 * @as(usize, @min(4, nstate)) + 2 * (@as(usize, @min(4, nstate)) - 1) + @as(usize, if (nstate > 4) 7 else 2);
 
-    var writer = std.io.Writer.fixed(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:8} ", .{"ITER"});
     try writer.print("{s:12} {s:12} {s:12} ", .{ "KIN (Eh)", "POT (Eh)", "TOT (Eh)" });
@@ -475,14 +475,14 @@ pub fn printIterationHeader(ndim: usize, nstate: usize) !void {
     try writer.print("{[value]s:[width]} ", .{ .value = "POPULATION", .width = nstate_header_width });
     try writer.print("{s:4}", .{"TIME"});
 
-    try print("{s}\n", .{writer.buffered()});
+    try print(io, "{s}\n", .{writer.buffered()});
 }
 
 /// Prints the iteration info to standard output.
-pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer: *std.time.Timer) !void {
+pub fn printIterationInfo(comptime T: type, io: std.Io, info: Custom(T).IterationInfo, timer: *std.Io.Timestamp) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = std.io.Writer.fixed(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
 
     try writer.print("{d:8} ", .{info.iteration});
     try writer.print("{d:12.6} {d:12.6} {d:12.6} ", .{ info.kinetic_energy, info.potential_energy, info.kinetic_energy + info.potential_energy });
@@ -511,10 +511,11 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, timer
 
     if (info.coefs.len > 4) try writer.print("...", .{});
 
-    try writer.print("] {D}", .{timer.read()});
-    timer.reset();
+    try writer.print("] {f}", .{timer.untilNow(io, .real)});
 
-    try print("{s}\n", .{writer.buffered()});
+    timer.* = std.Io.Timestamp.now(io, .real);
+
+    try print(io, "{s}\n", .{writer.buffered()});
 }
 
 test "frozen real-time vMCG on Tully's First Potential" {

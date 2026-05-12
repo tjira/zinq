@@ -99,32 +99,34 @@ pub fn Output(comptime _: type) type {
 }
 
 /// Run the fractal generator with the given options.
-pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(opt);
+pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(io, opt);
 
-    var timer = try std.time.Timer.start();
+    var timer = std.Io.Timestamp.now(io, .real);
 
-    if (enable_printing) try print("\nINITIALIZING CANVAS:", .{});
+    if (enable_printing) try print(io, "\nINITIALIZING CANVAS:", .{});
 
     var output = try Output(T).init(opt.resolution[1], opt.resolution[0], allocator);
 
     output.canvas.fill(opt.background);
 
-    if (enable_printing) try print(" {D}\nGENERATING FRACTALS:", .{timer.read()});
-    timer.reset();
+    if (enable_printing) try print(io, " {f}\nGENERATING FRACTALS:", .{timer.untilNow(io, .real)});
+
+    timer = std.Io.Timestamp.now(io, .real);
 
     switch (opt.category) {
         .orbit => |orbit| {
-            try OrbitFractalGenerator(T).init(orbit).paint(&output.canvas, allocator);
+            try OrbitFractalGenerator(T).init(io, orbit).paint(&output.canvas, allocator);
         },
     }
 
-    if (enable_printing) try print(" {D}\nWRITING IMG TO DISK:", .{timer.read()});
-    timer.reset();
+    if (enable_printing) try print(io, " {f}\nWRITING IMG TO DISK:", .{timer.untilNow(io, .real)});
 
-    try exportImageAsPPM(opt.output, output.canvas);
+    timer = std.Io.Timestamp.now(io, .real);
 
-    if (enable_printing) try print(" {D}\n", .{timer.read()});
+    try exportImageAsPPM(io, opt.output, output.canvas);
+
+    if (enable_printing) try print(io, " {f}\n", .{timer.untilNow(io, .real)});
 
     return output;
 }

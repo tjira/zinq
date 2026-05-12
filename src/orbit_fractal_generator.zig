@@ -20,12 +20,12 @@ const RGB = rgb.RGB;
 
 /// Algorithm type from the fractal generator options.
 pub fn Algorithm(comptime T: type) type {
-    return std.meta.TagPayload(fractal_generator.Options(T).Category, .orbit).Algorithm;
+    return @TypeOf(@field(@as(fractal_generator.Options(T).Category, undefined), "orbit")).Algorithm;
 }
 
 /// Coloring type from the fractal generator options.
 pub fn Coloring(comptime T: type) type {
-    return std.meta.TagPayload(fractal_generator.Options(T).Category, .orbit).Coloring;
+    return @TypeOf(@field(@as(fractal_generator.Options(T).Category, undefined), "orbit")).Coloring;
 }
 
 /// Orbit fractal generator.
@@ -38,7 +38,7 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
         zoom: T,
 
         /// Initialize the orbit fractal generator.
-        pub fn init(opt: anytype) @This() {
+        pub fn init(io: std.Io, opt: anytype) @This() {
             const fractal = switch (opt.fractal) {
                 .buffalo => OrbitFractal(T){ .buffalo = Buffalo(T){} },
                 .burningship => OrbitFractal(T){ .burningship = BurningShip(T){} },
@@ -53,7 +53,7 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
             if (opt.coloring == .gradient and opt.coloring.gradient.seed != null) {
                 var seed: usize = @as(usize, opt.coloring.gradient.seed.?);
 
-                if (seed == 0) seed = @intCast(std.time.milliTimestamp());
+                if (seed == 0) seed = @intCast(std.Io.Timestamp.now(io, .real).nanoseconds);
 
                 var split_mix = std.Random.SplitMix64.init(seed);
                 var rng = std.Random.DefaultPrng.init(split_mix.next());
@@ -67,7 +67,7 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
             if (opt.coloring == .periodic and opt.coloring.periodic.seed != null) {
                 var seed: usize = @as(usize, opt.coloring.periodic.seed.?);
 
-                if (seed == 0) seed = @intCast(std.time.milliTimestamp());
+                if (seed == 0) seed = @intCast(std.Io.Timestamp.now(io, .real).nanoseconds);
 
                 var split_mix = std.Random.SplitMix64.init(seed);
                 var rng = std.Random.DefaultPrng.init(split_mix.next());
@@ -83,7 +83,7 @@ pub fn OrbitFractalGenerator(comptime T: type) type {
             if (opt.coloring == .solid and opt.coloring.solid.seed != null) {
                 var seed: usize = @as(usize, opt.coloring.solid.seed.?);
 
-                if (seed == 0) seed = @intCast(std.time.milliTimestamp());
+                if (seed == 0) seed = @intCast(std.Io.Timestamp.now(io, .real).nanoseconds);
 
                 var split_mix = std.Random.SplitMix64.init(seed);
                 var rng = std.Random.DefaultPrng.init(split_mix.next());

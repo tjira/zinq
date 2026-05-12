@@ -124,11 +124,11 @@ const Target = enum {
     // classical_dynamics,
     // configuration_interaction,
     expression_evaluator,
-    // fractal_generator,
+    fractal_generator,
     // hartree_fock,
     molecular_integrals,
     // moller_plesset,
-    // multiconfigurational_gaussian,
+    multiconfigurational_gaussian,
     potential_plot,
     prime_numbers,
     // time_dependent_density_functional_theory,
@@ -240,11 +240,11 @@ pub fn parse(io: std.Io, path: []const u8, allocator: std.mem.Allocator) !void {
             // .classical_dynamics => try handle(f64, classical_dynamics, io, options, allocator),
             // .configuration_interaction => try handle(f64, configuration_interaction, io, options, allocator),
             .expression_evaluator => try handle(f64, expression_evaluator, io, options, allocator),
-            // .fractal_generator => try handle(f64, fractal_generator, io, options, allocator),
+            .fractal_generator => try handle(f64, fractal_generator, io, options, allocator),
             // .hartree_fock => try handle(f64, hartree_fock, io, options, allocator),
             .molecular_integrals => try handle(f64, molecular_integrals, io, options, allocator),
             // .moller_plesset => try handle(f64, moller_plesset, io, options, allocator),
-            // .multiconfigurational_gaussian => try handle(f64, multiconfigurational_gaussian, io, options, allocator),
+            .multiconfigurational_gaussian => try handle(f64, multiconfigurational_gaussian, io, options, allocator),
             .potential_plot => try handle(f64, potential_plot, io, options, allocator),
             .prime_numbers => try handle(f64, prime_numbers, io, options, allocator),
             // .time_dependent_density_functional_theory => try handle(f64, tddft, io, options, allocator),
@@ -314,7 +314,7 @@ pub fn main(init: std.process.Init) !void {
         try device_write.print(io, "\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND\n", .{});
     };
 
-    try device_write.print(io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
+    try device_write.print(io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.untilNow(io, .real)});
 }
 
 test {

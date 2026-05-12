@@ -91,7 +91,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool,
 
         output.S = try overlap(T, system, basis, opt.nthread, allocator);
 
-        if (enable_printing) try print(io, "{f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
+        if (enable_printing) try print(io, "{f}\n", .{timer.untilNow(io, .real)});
 
         try exportRealMatrix(T, io, path, output.S.?);
     }
@@ -103,7 +103,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool,
 
         output.K = try kinetic(T, system, basis, opt.nthread, allocator);
 
-        if (enable_printing) try print(io, "{f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
+        if (enable_printing) try print(io, "{f}\n", .{timer.untilNow(io, .real)});
 
         try exportRealMatrix(T, io, path, output.K.?);
     }
@@ -115,7 +115,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool,
 
         output.V = try nuclear(T, system, basis, opt.nthread, allocator);
 
-        if (enable_printing) try print(io, "{f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
+        if (enable_printing) try print(io, "{f}\n", .{timer.untilNow(io, .real)});
 
         try exportRealMatrix(T, io, path, output.V.?);
     }
@@ -127,7 +127,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool,
 
         output.J = try coulomb(T, system, basis, opt.nthread, allocator);
 
-        if (enable_printing) try print(io, "{f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
+        if (enable_printing) try print(io, "{f}\n", .{timer.untilNow(io, .real)});
 
         try exportRealTensorFour(T, io, path, output.J.?);
     }
