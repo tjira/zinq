@@ -3,8 +3,8 @@
 const std = @import("std");
 
 /// Get the current timestamp in the ISO 8601 format.
-pub fn timestamp(allocator: std.mem.Allocator) ![]const u8 {
-    const mts: u64 = @intCast(std.time.milliTimestamp());
+pub fn timestamp(io: std.Io, allocator: std.mem.Allocator) ![]const u8 {
+    const mts: u64 = @intCast(std.Io.Timestamp.now(io, .real).toMilliseconds());
 
     const year = getYear(mts);
     const month = getMonth(mts);

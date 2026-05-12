@@ -88,8 +88,8 @@ pub fn exportRealTensorThreeAsPPM(comptime T: type, path: []const u8, A: RealTen
 }
 
 /// Print the formatted line to the standard output.
-pub fn print(comptime format: []const u8, args: anytype) !void {
-    try write(std.fs.File.stdout(), format, args);
+pub fn print(io: std.Io, comptime format: []const u8, args: anytype) !void {
+    try write(io, std.Io.File.stdout(), format, args);
 }
 
 /// Print a classical particle into a terminal.
@@ -103,8 +103,8 @@ pub fn printComplexMatrix(comptime T: type, A: ComplexMatrix(T)) !void {
 }
 
 /// Print the formatted json to the standard output.
-pub fn printJson(object: anytype) !void {
-    try writeJson(std.fs.File.stdout(), object);
+pub fn printJson(io: std.Io, object: anytype) !void {
+    try writeJson(io, std.Io.File.stdout(), object);
 }
 
 /// Print the formatted real matrix to the standard output.
@@ -113,10 +113,10 @@ pub fn printRealMatrix(comptime T: type, A: RealMatrix(T)) !void {
 }
 
 /// Print a formatted line into the specified device.
-pub fn write(device: std.fs.File, comptime format: []const u8, args: anytype) !void {
+pub fn write(io: std.Io, device: std.Io.File, comptime format: []const u8, args: anytype) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = device.writer(&buffer);
+    var writer = device.writer(io, &buffer);
     var writer_interface = &writer.interface;
 
     try writer_interface.print(format, args);
@@ -185,10 +185,10 @@ pub fn writeComplexMatrixWithLinspacedLeftColumn(comptime T: type, device: std.f
 }
 
 /// Print a formatted json into the specified device.
-pub fn writeJson(device: std.fs.File, object: anytype) !void {
+pub fn writeJson(io: std.Io, device: std.Io.File, object: anytype) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = device.writer(&buffer);
+    var writer = device.writer(io, &buffer);
     var writer_interface = &writer.interface;
 
     try std.json.Stringify.value(object, .{ .whitespace = .indent_2 }, writer_interface);

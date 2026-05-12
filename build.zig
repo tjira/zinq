@@ -30,7 +30,8 @@ pub fn build(builder: *std.Build) !void {
     const use_openblas = builder.option(bool, "use-openblas", "Link openblas (library with optimized BLAS and LAPACK implementations)") orelse false;
     const use_xc = builder.option(bool, "use-xc", "Link libxc (library with various XC functionals)") orelse false;
 
-    const link_c = use_xc or use_openblas or use_libint;
+    const link_c = use_xc or use_openblas;
+    const link_cpp = use_libint;
 
     const main_options = try generateOptions(builder, use_libint, use_openblas, use_xc);
 
@@ -42,21 +43,18 @@ pub fn build(builder: *std.Build) !void {
             .strip = optimize != .Debug,
             .single_threaded = false,
             .target = target,
+            .link_libc = link_c,
+            .link_libcpp = link_cpp,
         }),
     });
 
-    if (link_c) {
-        try addPaths(builder, main_executable, target);
+    if (link_c or link_cpp) try addPaths(builder, main_executable, target);
 
-        main_executable.linkLibC();
-        if (use_libint) main_executable.linkLibCpp();
+    if (use_libint) main_executable.root_module.addCSourceFile(.{ .file = builder.path("src/libint.cpp"), .flags = &[_][]const u8{}, .language = .cpp });
 
-        if (use_libint) main_executable.root_module.addCSourceFile(.{ .file = builder.path("src/libint.cpp"), .flags = &[_][]const u8{}, .language = .cpp });
-
-        if (use_libint) main_executable.linkSystemLibrary("int2");
-        if (use_openblas) main_executable.linkSystemLibrary("openblas");
-        if (use_xc) main_executable.linkSystemLibrary("xc");
-    }
+    if (use_libint) main_executable.root_module.linkSystemLibrary("int2", .{});
+    if (use_openblas) main_executable.root_module.linkSystemLibrary("openblas", .{});
+    if (use_xc) main_executable.root_module.linkSystemLibrary("xc", .{});
 
     const test_executable = builder.addTest(.{ .name = "test", .root_module = main_executable.root_module });
 
@@ -112,6 +110,9 @@ pub fn checkLibcLinkAvailability(target: std.Build.ResolvedTarget) bool {
 pub fn addLibcLinkedExecutables(builder: *std.Build, optimize: std.builtin.OptimizeMode, target_query: std.Target.Query, step: *std.Build.Step, use_libint: bool, use_openblas: bool, use_xc: bool) !void {
     const target = builder.resolveTargetQuery(target_query);
 
+    const link_c = use_xc or use_openblas;
+    const link_cpp = use_libint;
+
     const libc_linked_executable = builder.addExecutable(.{
         .name = "zinq",
         .root_module = builder.createModule(.{
@@ -120,19 +121,18 @@ pub fn addLibcLinkedExecutables(builder: *std.Build, optimize: std.builtin.Optim
             .strip = optimize != .Debug,
             .single_threaded = false,
             .target = target,
+            .link_libc = link_c,
+            .link_libcpp = link_cpp,
         }),
     });
 
     try addPaths(builder, libc_linked_executable, target);
 
-    libc_linked_executable.linkLibC();
-    if (use_libint) libc_linked_executable.linkLibCpp();
-
     if (use_libint) libc_linked_executable.root_module.addCSourceFile(.{ .file = builder.path("src/libint.cpp"), .flags = &[_][]const u8{}, .language = .cpp });
 
-    if (use_libint) libc_linked_executable.linkSystemLibrary("int2");
-    if (use_openblas) libc_linked_executable.linkSystemLibrary("openblas");
-    if (use_xc) libc_linked_executable.linkSystemLibrary("xc");
+    if (use_libint) libc_linked_executable.root_module.linkSystemLibrary("int2", .{});
+    if (use_openblas) libc_linked_executable.root_module.linkSystemLibrary("openblas", .{});
+    if (use_xc) libc_linked_executable.root_module.linkSystemLibrary("xc", .{});
 
     libc_linked_executable.root_module.addOptions("config", try generateOptions(builder, use_libint, use_openblas, use_xc));
 
@@ -160,12 +160,12 @@ pub fn addTools(builder: *std.Build, main_executable: *std.Build.Step.Compile, s
     const optimize = main_executable.root_module.optimize;
     const target = main_executable.root_module.resolved_target.?;
 
-    var tool_dir = try std.fs.cwd().openDir("tool", .{ .iterate = true });
-    defer tool_dir.close();
+    var tool_dir = try std.Io.Dir.cwd().openDir(builder.graph.io, "tool", .{ .iterate = true });
+    defer tool_dir.close(builder.graph.io);
 
     var iterator = tool_dir.iterate();
 
-    while (try iterator.next()) |entry| {
+    while (try iterator.next(builder.graph.io)) |entry| {
         const tool = entry.name[0 .. entry.name.len - 4];
 
         const tool_executable = builder.addExecutable(.{
@@ -201,9 +201,9 @@ pub fn generateOptions(builder: *std.Build, use_libint: bool, use_openblas: bool
 }
 
 fn getVersion(builder: *std.Build, dir: ?[]const u8) ![]const u8 {
-    const cwd = if (dir) |d| std.fs.cwd().openDir(d, .{}) catch return "UNKNOWN" else std.fs.cwd();
+    const cwd = if (dir) |d| std.Io.Dir.cwd().openDir(builder.graph.io, d, .{}) catch return "UNKNOWN" else std.Io.Dir.cwd();
 
-    const result = std.process.Child.run(.{ .allocator = builder.allocator, .argv = &.{ "git", "describe", "--tags" }, .cwd_dir = cwd }) catch {
+    const result = std.process.run(builder.allocator, builder.graph.io, .{.argv = &.{ "git", "describe", "--tags" }, .cwd = .{ .dir = cwd } }) catch {
         return "UNKNOWN";
     };
 
@@ -212,7 +212,7 @@ fn getVersion(builder: *std.Build, dir: ?[]const u8) ![]const u8 {
         builder.allocator.free(result.stderr);
     }
 
-    if (result.term.Exited != 0) {
+    if (result.term.exited != 0) {
         return "UNKNOWN";
     }
 

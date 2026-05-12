@@ -3,22 +3,22 @@
 const std = @import("std");
 
 /// Executes a provided string as a command in the terminal and returns its output.
-pub fn executeCommand(command: []const u8, allocator: std.mem.Allocator) ![]u8 {
+pub fn executeCommand(io: std.Io, command: []const u8, allocator: std.mem.Allocator) ![]u8 {
     if (std.mem.containsAtLeast(u8, command, 1, "&&")) {
-        var outputs = std.ArrayList(u8){};
+        var outputs: std.ArrayList(u8) = .empty;
         errdefer outputs.deinit(allocator);
 
         var iterator = std.mem.tokenizeAny(u8, command, "&&");
 
         while (iterator.next()) |cmd| {
-            const output = try executeCommand(cmd, allocator);
+            const output = try executeCommand(io, cmd, allocator);
             try outputs.appendSlice(allocator, output);
         }
 
         return try outputs.toOwnedSlice(allocator);
     }
 
-    var args = std.ArrayList([]u8){};
+    var args: std.ArrayList([]u8) = .empty;
     defer args.deinit(allocator);
 
     var iterator = std.mem.tokenizeAny(u8, command, " ");
@@ -53,24 +53,13 @@ pub fn executeCommand(command: []const u8, allocator: std.mem.Allocator) ![]u8 {
         if (token[token.len - 1] == '\'') string = false;
     }
 
-    var stdout = std.ArrayList(u8){};
-    var stderr = std.ArrayList(u8){};
-    errdefer stdout.deinit(allocator);
-    defer stderr.deinit(allocator);
-
-    var child = std.process.Child.init(args.items, allocator);
-
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
-
-    try child.spawn();
-    try child.collectOutput(allocator, &stdout, &stderr, 16 * 1024 * 1024);
-
-    const term = try child.wait();
+    const result = try std.process.run(allocator, io, .{.argv = args.items});
 
     for (args.items) |arg| allocator.free(arg);
 
-    if (term.Exited == 0) return stdout.toOwnedSlice(allocator);
+    allocator.free(result.stderr);
+
+    if (result.term.exited == 0) return result.stdout;
 
     return error.CommandExecutionFailed;
 }

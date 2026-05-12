@@ -121,18 +121,18 @@ pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 
 /// Available targets in the program.
 const Target = enum {
-    classical_dynamics,
-    configuration_interaction,
-    expression_evaluator,
-    fractal_generator,
-    hartree_fock,
-    molecular_integrals,
-    moller_plesset,
-    multiconfigurational_gaussian,
-    potential_plot,
+    // classical_dynamics,
+    // configuration_interaction,
+    // expression_evaluator,
+    // fractal_generator,
+    // hartree_fock,
+    // molecular_integrals,
+    // moller_plesset,
+    // multiconfigurational_gaussian,
+    // potential_plot,
     prime_numbers,
-    time_dependent_density_functional_theory,
-    quantum_dynamics,
+    // time_dependent_density_functional_theory,
+    // quantum_dynamics,
 };
 
 /// Find out if the input JSON file contains an unrecognized field and print the expected field.
@@ -184,7 +184,7 @@ pub fn checkForMissingFields(comptime Struct: type, options: std.json.Value) !vo
 }
 
 /// Handle a specific module by parsing its options and running it.
-pub fn handle(comptime T: type, comptime Module: type, options: std.json.Value, allocator: std.mem.Allocator) !void {
+pub fn handle(comptime T: type, comptime Module: type, io: std.Io, options: std.json.Value, allocator: std.mem.Allocator) !void {
     var parsed = std.json.parseFromValue(Module.Options(T), allocator, options, .{}) catch |err| {
         try checkForUnrecognizedFields(Module.Options(T), options);
         try checkForMissingFields(Module.Options(T), options);
@@ -192,17 +192,17 @@ pub fn handle(comptime T: type, comptime Module: type, options: std.json.Value, 
         return err;
     };
 
-    var output = try Module.run(T, parsed.value, true, allocator);
+    var output = try Module.run(T, io, parsed.value, true, allocator);
     defer output.deinit(allocator);
 
     parsed.deinit();
 }
 
 /// Parse the input JSON file and run the corresponding target.
-pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
-    const file_contents = std.fs.cwd().readFileAlloc(allocator, path, 1024 * 1024 * 1024) catch return error.InputFileNotFound;
+pub fn parse(io: std.Io, path: []const u8, allocator: std.mem.Allocator) !void {
+    const file_contents = std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited) catch return error.InputFileNotFound;
 
-    try device_write.print("\nPROCESSED FILE: {s}\n", .{path});
+    try device_write.print(io, "\nPROCESSED FILE: {s}\n", .{path});
 
     var scanner = std.json.Scanner.initCompleteInput(allocator, file_contents);
     defer scanner.deinit();
@@ -216,7 +216,7 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
     };
 
     for (input_json.value.object.get("zinq").?.array.items, 1..) |object, i| {
-        try device_write.print("\nINPUT #{d}:\n", .{i});
+        try device_write.print(io, "\nINPUT #{d}:\n", .{i});
 
         const name = object.object.get("name") orelse {
             std.log.err("MISSING 'name' FIELD IN INPUT, EACH SPECIFIED TARGET MUST HAVE A 'name' FIELD", .{});
@@ -237,28 +237,28 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
         };
 
         switch (tag) {
-            .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
-            .configuration_interaction => try handle(f64, configuration_interaction, options, allocator),
-            .expression_evaluator => try handle(f64, expression_evaluator, options, allocator),
-            .fractal_generator => try handle(f64, fractal_generator, options, allocator),
-            .hartree_fock => try handle(f64, hartree_fock, options, allocator),
-            .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
-            .moller_plesset => try handle(f64, moller_plesset, options, allocator),
-            .multiconfigurational_gaussian => try handle(f64, multiconfigurational_gaussian, options, allocator),
-            .potential_plot => try handle(f64, potential_plot, options, allocator),
-            .prime_numbers => try handle(f64, prime_numbers, options, allocator),
-            .time_dependent_density_functional_theory => try handle(f64, tddft, options, allocator),
-            .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator),
+            // .classical_dynamics => try handle(f64, classical_dynamics, options, allocator),
+            // .configuration_interaction => try handle(f64, configuration_interaction, options, allocator),
+            // .expression_evaluator => try handle(f64, expression_evaluator, options, allocator),
+            // .fractal_generator => try handle(f64, fractal_generator, options, allocator),
+            // .hartree_fock => try handle(f64, hartree_fock, options, allocator),
+            // .molecular_integrals => try handle(f64, molecular_integrals, options, allocator),
+            // .moller_plesset => try handle(f64, moller_plesset, options, allocator),
+            // .multiconfigurational_gaussian => try handle(f64, multiconfigurational_gaussian, options, allocator),
+            // .potential_plot => try handle(f64, potential_plot, options, allocator),
+            .prime_numbers => try handle(f64, prime_numbers, io, options, allocator),
+            // .time_dependent_density_functional_theory => try handle(f64, tddft, options, allocator),
+            // .quantum_dynamics => try handle(f64, quantum_dynamics, options, allocator),
         }
     }
 
     if (input_json.value.object.get("command")) |command| {
-        try device_write.print("\nRUNNING COMMAND: {s}\n", .{command.string});
+        try device_write.print(io, "\nRUNNING COMMAND: {s}\n", .{command.string});
 
-        const output = try process.executeCommand(command.string, allocator);
+        const output = try process.executeCommand(io, command.string, allocator);
         defer allocator.free(output);
 
-        if (output.len > 0) try device_write.print("COMMAND OUTPUTS:\n{s}", .{output});
+        if (output.len > 0) try device_write.print(io, "COMMAND OUTPUTS:\n{s}", .{output});
     }
 
     allocator.free(file_contents);
@@ -266,22 +266,19 @@ pub fn parse(path: []const u8, allocator: std.mem.Allocator) !void {
 }
 
 /// Main function of the program.
-pub fn main() !void {
-    var timer = try std.time.Timer.start();
+pub fn main(init: std.process.Init) !void {
+    const gpa = init.gpa;
+    const io = init.io;
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer {
-        if (gpa.deinit() == .leak) std.log.err("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
-    }
+    var timer = std.Io.Timestamp.now(io, .real);
 
-    try device_write.print("ZIG: v{d}.{d}.{d}, ZINQ: {s}", .{ builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.zinq_version });
+    try device_write.print(io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}", .{ builtin.zig_version.major, builtin.zig_version.minor, builtin.zig_version.patch, config.zinq_version });
 
     {
-        const ts = try timestamp.timestamp(allocator);
-        defer allocator.free(ts);
+        const ts = try timestamp.timestamp(io, gpa);
+        defer gpa.free(ts);
 
-        try device_write.print(", TIMESTAMP: {s}\n", .{ts});
+        try device_write.print(io, ", TIMESTAMP: {s}\n", .{ts});
     }
 
     if (comptime config.use_libint or config.use_openblas or config.use_xc) {
@@ -307,23 +304,17 @@ pub fn main() !void {
         try device_write.print("\n", .{});
     }
 
-    var argc: usize = 0;
-    var argv = try std.process.argsWithAllocator(allocator);
-    defer argv.deinit();
-    _ = argv.next();
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
-    while (argv.next()) |arg| {
-        try parse(arg, allocator);
-        argc += 1;
-    }
+    for (args[1..]) |arg| try parse(io, arg, gpa);
 
-    if (argc == 0) parse("input.json", allocator) catch |err| {
+    if (args.len == 1) parse(io, "input.json", gpa) catch |err| {
         if (err != error.InputFileNotFound) return err;
 
-        try device_write.print("\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND\n", .{});
+        try device_write.print(io, "\nNO INPUT FILE PROVIDED AND THE DEFAULT \"input.json\" NOT FOUND\n", .{});
     };
 
-    try device_write.print("\nTOTAL EXECUTION TIME: {D}\n", .{timer.read()});
+    try device_write.print(io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
 }
 
 test {

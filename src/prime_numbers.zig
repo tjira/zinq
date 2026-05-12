@@ -52,44 +52,44 @@ pub fn Output(comptime _: type) type {
 }
 
 /// Run the prime number generation target.
-pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(opt);
+pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(io, opt);
 
     const bits: i32 = if (opt.bits != null) @intCast(opt.bits.?) else -1;
 
     return switch (bits) {
-        8 => try dispatch(u8, opt, enable_printing, allocator),
-        16 => try dispatch(u16, opt, enable_printing, allocator),
-        32 => try dispatch(u32, opt, enable_printing, allocator),
-        64 => try dispatch(u64, opt, enable_printing, allocator),
-        128 => try dispatch(u128, opt, enable_printing, allocator),
-        256 => try dispatch(u256, opt, enable_printing, allocator),
-        512 => try dispatch(u512, opt, enable_printing, allocator),
-        1024 => try dispatch(u1024, opt, enable_printing, allocator),
-        -1 => try dispatch(std.math.big.int.Managed, opt, enable_printing, allocator),
+        8 => try dispatch(u8, io, opt, enable_printing, allocator),
+        16 => try dispatch(u16, io, opt, enable_printing, allocator),
+        32 => try dispatch(u32, io, opt, enable_printing, allocator),
+        64 => try dispatch(u64, io, opt, enable_printing, allocator),
+        128 => try dispatch(u128, io, opt, enable_printing, allocator),
+        256 => try dispatch(u256, io, opt, enable_printing, allocator),
+        512 => try dispatch(u512, io, opt, enable_printing, allocator),
+        1024 => try dispatch(u1024, io, opt, enable_printing, allocator),
+        -1 => try dispatch(std.math.big.int.Managed, io, opt, enable_printing, allocator),
         else => return error.InvalidBitSize,
     };
 }
 
 /// Helper function to avoid repeating the mode switch logic
-pub fn dispatch(comptime T: type, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+pub fn dispatch(comptime T: type, io: std.Io, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (enable_printing) {
         const type_name = if (comptime T == std.math.big.int.Managed) "BIG" else @typeName(T);
 
         const max_value = if (comptime T == std.math.big.int.Managed) std.math.inf(f128) else @as(f128, @floatFromInt(std.math.maxInt(T)));
 
-        try print("\nUSING TYPE: {s}, MAX VALUE: {e:.3}\n", .{ type_name, max_value });
+        try print(io, "\nUSING TYPE: {s}, MAX VALUE: {e:.3}\n", .{ type_name, max_value });
     }
 
     return switch (opt.mode) {
-        .check => try checkMode(T, opt.mode.check, enable_printing, allocator),
-        .factorize => try factorizeMode(T, opt.mode.factorize, enable_printing, allocator),
-        .generate => try generateMode(T, opt.mode.generate, enable_printing, allocator),
+        .check => try checkMode(T, io, opt.mode.check, enable_printing, allocator),
+        .factorize => try factorizeMode(T, io, opt.mode.factorize, enable_printing, allocator),
+        .generate => try generateMode(T, io, opt.mode.generate, enable_printing, allocator),
     };
 }
 
 /// Check mode.
-pub fn checkMode(comptime T: type, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+pub fn checkMode(comptime T: type, io: std.Io, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     var number_big = try std.math.big.int.Managed.init(allocator);
     defer number_big.deinit();
 
@@ -104,14 +104,14 @@ pub fn checkMode(comptime T: type, opt: anytype, enable_printing: bool, allocato
     if (enable_printing) {
         const s = if (opt.filter == .mersenne) " MERSENNE" else "";
 
-        try print("\n{s} IS{s} A{s} PRIME NUMBER\n", .{ opt.number, if (is_prime) "" else " NOT", s });
+        try print(io, "\n{s} IS{s} A{s} PRIME NUMBER\n", .{ opt.number, if (is_prime) "" else " NOT", s });
     }
 
     return Output(T){};
 }
 
 /// Factorize mode.
-pub fn factorizeMode(comptime T: type, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+pub fn factorizeMode(comptime T: type, io: std.Io, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     var number_big = try std.math.big.int.Managed.init(allocator);
     defer number_big.deinit();
 
@@ -130,17 +130,17 @@ pub fn factorizeMode(comptime T: type, opt: anytype, enable_printing: bool, allo
 
     if (enable_printing) {
         if (factors.len == 0) {
-            try print("\n{s} HAS NO PRIME FACTORS\n", .{opt.number});
+            try print(io, "\n{s} HAS NO PRIME FACTORS\n", .{opt.number});
             return Output(T){};
         }
 
-        try print("\n", .{});
+        try print(io, "\n", .{});
 
         for (prime_numbers, 1..) |factor, i| {
             const factor_str = try factor.toString(allocator, 10, std.fmt.Case.lower);
             defer allocator.free(factor_str);
 
-            try print("FACTOR {[index]d:[width]}: {[string]s}\n", .{ .index = i, .width = std.math.log10_int(factors.len) + 1, .string = factor_str });
+            try print(io, "FACTOR {[index]d:[width]}: {[string]s}\n", .{ .index = i, .width = std.math.log10_int(factors.len) + 1, .string = factor_str });
         }
     }
 
@@ -148,8 +148,8 @@ pub fn factorizeMode(comptime T: type, opt: anytype, enable_printing: bool, allo
 }
 
 /// Generate mode.
-pub fn generateMode(comptime T: type, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try print("\n{s:9} {s:20} {s:4}\n", .{ "INDEX", "PRIME NUMBER", "TIME" });
+pub fn generateMode(comptime T: type, io: std.Io, opt: anytype, enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try print(io, "\n{s:9} {s:20} {s:4}\n", .{ "INDEX", "PRIME NUMBER", "TIME" });
 
     var start_big = try std.math.big.int.Managed.init(allocator);
     defer start_big.deinit();
@@ -169,7 +169,7 @@ pub fn generateMode(comptime T: type, opt: anytype, enable_printing: bool, alloc
         .mersenne => try nextMersenne(start, allocator),
     };
 
-    var timer = try std.time.Timer.start();
+    var timer = std.Io.Timestamp.now(io, .real);
 
     for (0..opt.count) |i| {
         if (comptime T == std.math.big.int.Managed) if (i >= max_output) prime_numbers[i % max_output].deinit();
@@ -182,9 +182,9 @@ pub fn generateMode(comptime T: type, opt: anytype, enable_printing: bool, alloc
         if (enable_printing and (i == 0 or (i + 1) % opt.log_interval == 0)) {
             const prime_string = if (comptime T == std.math.big.int.Managed) try prime_numbers[i % max_output].toString(allocator, 10, std.fmt.Case.lower) else "";
 
-            const format_string = "{d:9} " ++ (if (comptime T == std.math.big.int.Managed) "{s:20}" else "{d:20}") ++ " {D}\n";
+            const format_string = "{d:9} " ++ (if (comptime T == std.math.big.int.Managed) "{s:20}" else "{d:20}") ++ " {f}\n";
 
-            try print(format_string, .{ i + 1, if (comptime T == std.math.big.int.Managed) prime_string else prime_numbers[i % max_output], timer.read() });
+            try print(io, format_string, .{ i + 1, if (comptime T == std.math.big.int.Managed) prime_string else prime_numbers[i % max_output], timer.durationTo(std.Io.Timestamp.now(io, .real)) });
 
             if (comptime T == std.math.big.int.Managed) allocator.free(prime_string);
         }
@@ -198,7 +198,7 @@ pub fn generateMode(comptime T: type, opt: anytype, enable_printing: bool, alloc
 
             const path = if (opt.output.?.interval != null) try std.mem.concat(allocator, u8, &.{ opt.output.?.path, "_", start_i_str, "-", end_i_str }) else opt.output.?.path;
 
-            try exportPrimeNumbersAsRealMatrix(path, prime_numbers, allocator);
+            try exportPrimeNumbersAsRealMatrix(io, path, prime_numbers, allocator);
 
             if (opt.output.?.interval != null) allocator.free(path);
         };
@@ -389,15 +389,15 @@ pub fn trialDivision(p: anytype, allocator: std.mem.Allocator) !bool {
 }
 
 /// Writes the array of prime numbers as a real matrix to a file path.
-pub fn exportPrimeNumbersAsRealMatrix(path: []const u8, prime_numbers: anytype, allocator: std.mem.Allocator) !void {
+pub fn exportPrimeNumbersAsRealMatrix(io: std.Io, path: []const u8, prime_numbers: anytype, allocator: std.mem.Allocator) !void {
     const ap = @TypeOf(prime_numbers[0]) == std.math.big.int.Managed;
 
-    var file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
+    var file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
 
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = file.writer(&buffer);
+    var writer = file.writer(io, &buffer);
     var writer_interface = &writer.interface;
 
     try writer_interface.print("{d} {d}\n", .{ prime_numbers.len, 2 });
