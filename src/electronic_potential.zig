@@ -251,10 +251,10 @@ pub fn ElectronicPotential(comptime T: type) type {
         }
 
         /// Init function for potentials that require precomputation or data loading.
-        pub fn init(self: *@This(), allocator: std.mem.Allocator) !void {
+        pub fn init(self: *@This(), io: std.Io, allocator: std.mem.Allocator) !void {
             return switch (self.*) {
                 .custom => |*field| try field.init(allocator),
-                .file => |*field| try field.init(allocator),
+                .file => |*field| try field.init(io, allocator),
                 inline else => {},
             };
         }

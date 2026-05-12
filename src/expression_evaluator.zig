@@ -25,17 +25,17 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the expression evaluator target with the provided options and allocator, returning the output structure.
-pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(opt);
+pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(io, opt);
 
     if (opt.variables.len != opt.values.len) return error.InvalidInput;
 
-    if (enable_printing) try print("\nEXPRESSION: '{s}'", .{opt.expression});
+    if (enable_printing) try print(io, "\nEXPRESSION: '{s}'", .{opt.expression});
 
     if (enable_printing and opt.variables.len > 0) {
-        try print(", VARIABLES: ", .{});
+        try print(io, ", VARIABLES: ", .{});
 
-        for (0..opt.variables.len) |i| try print("{s}={d}{s}", .{ opt.variables[i], opt.values[i], if (i == opt.variables.len - 1) "" else ", " });
+        for (0..opt.variables.len) |i| try print(io, "{s}={d}{s}", .{ opt.variables[i], opt.values[i], if (i == opt.variables.len - 1) "" else ", " });
     }
 
     var rpn = try shuntingYard(T, opt.expression, opt.variables, allocator);
@@ -50,7 +50,7 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     defer allocator.free(rpnstr);
     const value = try rpn.evaluate(map);
 
-    if (enable_printing) try print("\n\nRPN: {s}\n\nVALUE: {d:.8}\n", .{ rpnstr, value });
+    if (enable_printing) try print(io, "\n\nRPN: {s}\n\nVALUE: {d:.8}\n", .{ rpnstr, value });
 
     return Output(T){ .value = value };
 }

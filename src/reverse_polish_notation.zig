@@ -23,7 +23,7 @@ pub fn ReversePolishNotation(comptime T: type) type {
         /// Initializes the RPN structure.
         pub fn init() !@This() {
             return @This(){
-                .data = std.ArrayList(Element){},
+                .data = .empty,
             };
         }
 
@@ -152,7 +152,7 @@ pub fn ReversePolishNotation(comptime T: type) type {
 
         /// Rerutns the RPN as a string.
         pub fn toString(self: @This(), allocator: std.mem.Allocator) ![]u8 {
-            var buffer = std.ArrayList(u8){};
+            var buffer: std.ArrayList(u8) = .empty;
 
             outer: for (self.data.items, 0..) |element, i| {
                 if (i > 0 and i < self.data.items.len) try buffer.print(allocator, " ", .{});

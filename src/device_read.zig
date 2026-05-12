@@ -52,12 +52,12 @@ pub fn readComplexMatrix(comptime T: type, path: []const u8, allocator: std.mem.
 }
 
 /// Reads the real matrix from a file.
-pub fn readRealMatrix(comptime T: type, path: []const u8, allocator: std.mem.Allocator) !RealMatrix(T) {
-    var file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+pub fn readRealMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !RealMatrix(T) {
+    var file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
 
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
-    var reader = file.reader(&buffer);
+    var reader = file.reader(io, &buffer);
     var reader_interface = &reader.interface;
 
     const rowstr = try reader_interface.takeDelimiterExclusive(' ');

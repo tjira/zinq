@@ -50,8 +50,8 @@ pub fn FilePotential(comptime T: type) type {
         }
 
         /// Read the potential data from file, if the file path is specified. Otherwise, just return the matrix from the data pointer.
-        pub fn init(self: *@This(), allocator: std.mem.Allocator) !void {
-            const U = try readRealMatrix(T, self.path, allocator);
+        pub fn init(self: *@This(), io: std.Io, allocator: std.mem.Allocator) !void {
+            const U = try readRealMatrix(T, io, self.path, allocator);
 
             if (self.ndim + self.nstate * self.nstate != U.cols) {
                 std.log.err("INVALID NUMBER OF COLUMNS IN THE FILE, EXPECTED {d} BUT GOT {d}", .{ self.ndim + self.nstate * self.nstate, U.cols });

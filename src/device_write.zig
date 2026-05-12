@@ -25,29 +25,29 @@ const A2AU = global_variables.A2AU;
 const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
 
 /// Exports the complex matrix to a file.
-pub fn exportComplexMatrix(comptime T: type, path: []const u8, A: ComplexMatrix(T)) !void {
-    var file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
+pub fn exportComplexMatrix(comptime T: type, io: std.Io, path: []const u8, A: ComplexMatrix(T)) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
 
     try writeComplexMatrix(T, file, A);
 }
 
 /// Exports the complex matrix to a file with the leftmost column being linspaced values from start to end.
-pub fn exportComplexMatrixWithLinspacedLeftColumn(comptime T: type, path: []const u8, A: ComplexMatrix(T), start: T, end: T) !void {
-    var file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
+pub fn exportComplexMatrixWithLinspacedLeftColumn(comptime T: type, io: std.Io, path: []const u8, A: ComplexMatrix(T), start: T, end: T) !void {
+    var file = try std.Io.Dor.cwd().createFile(io, path, .{});
+    defer file.close(io);
 
-    try writeComplexMatrixWithLinspacedLeftColumn(T, file, A, start, end);
+    try writeComplexMatrixWithLinspacedLeftColumn(T, io, file, A, start, end);
 }
 
 /// Exports the image as PPM.
-pub fn exportImageAsPPM(path: []const u8, img: Image) !void {
+pub fn exportImageAsPPM(io: std.Io, path: []const u8, img: Image) !void {
     var file = try std.fs.cwd().createFile(path, .{});
     defer file.close();
 
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = file.writer(&buffer);
+    var writer = file.writer(io, &buffer);
     var writer_interface = &writer.interface;
 
     try writer_interface.print("P6 {d} {d} 255\n", .{ img.width, img.height });
@@ -56,11 +56,11 @@ pub fn exportImageAsPPM(path: []const u8, img: Image) !void {
 }
 
 /// Exports the real matrix to a file.
-pub fn exportRealMatrix(comptime T: type, path: []const u8, A: RealMatrix(T)) !void {
-    var file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
+pub fn exportRealMatrix(comptime T: type, io: std.Io, path: []const u8, A: RealMatrix(T)) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
 
-    try writeRealMatrix(T, file, A);
+    try writeRealMatrix(T, io, file, A);
 }
 
 /// Exports the real matrix to a file with the leftmost column being linspaced values from start to end.
@@ -72,11 +72,11 @@ pub fn exportRealMatrixWithLinspacedLeftColumn(comptime T: type, path: []const u
 }
 
 /// Exports the real 4th order tensor to a file.
-pub fn exportRealTensorFour(comptime T: type, path: []const u8, A: RealTensor4(T)) !void {
-    var file = try std.fs.cwd().createFile(path, .{});
-    defer file.close();
+pub fn exportRealTensorFour(comptime T: type, io: std.Io, path: []const u8, A: RealTensor4(T)) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, path, .{});
+    defer file.close(io);
 
-    try writeRealTensorFour(T, file, A);
+    try writeRealTensorFour(T, io, file, A);
 }
 
 /// Exports the real 3rd order tensor to a file as a PPM image.
@@ -108,8 +108,8 @@ pub fn printJson(io: std.Io, object: anytype) !void {
 }
 
 /// Print the formatted real matrix to the standard output.
-pub fn printRealMatrix(comptime T: type, A: RealMatrix(T)) !void {
-    try writeRealMatrix(T, std.fs.File.stdout(), A);
+pub fn printRealMatrix(comptime T: type, io: std.Io, A: RealMatrix(T)) !void {
+    try writeRealMatrix(T, io, std.fs.File.stdout(), A);
 }
 
 /// Print a formatted line into the specified device.
@@ -199,10 +199,10 @@ pub fn writeJson(io: std.Io, device: std.Io.File, object: anytype) !void {
 }
 
 /// Print the formatted real matrix to the specified device.
-pub fn writeRealMatrix(comptime T: type, device: std.fs.File, A: RealMatrix(T)) !void {
+pub fn writeRealMatrix(comptime T: type, io: std.Io, device: std.Io.File, A: RealMatrix(T)) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = device.writer(&buffer);
+    var writer = device.writer(io, &buffer);
     var writer_interface = &writer.interface;
 
     try writer_interface.print("{d} {d}\n", .{ A.rows, A.cols });
@@ -237,10 +237,10 @@ pub fn writeRealMatrixWithLinspacedLeftColumn(comptime T: type, device: std.fs.F
 }
 
 /// Print the formatted real 4th order tensor to the specified device.
-pub fn writeRealTensorFour(comptime T: type, device: std.fs.File, A: RealTensor4(T)) !void {
+pub fn writeRealTensorFour(comptime T: type, io: std.Io, device: std.Io.File, A: RealTensor4(T)) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = device.writer(&buffer);
+    var writer = device.writer(io, &buffer);
     var writer_interface = &writer.interface;
 
     try writer_interface.print("{d} {d} {d} {d}\n", .{ A.shape[0], A.shape[1], A.shape[2], A.shape[3] });

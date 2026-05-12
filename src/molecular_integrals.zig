@@ -66,10 +66,10 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the integral engine target.
-pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(opt);
+pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(io, opt);
 
-    const system = try classical_particle.read(T, opt.system, 0, 0, allocator);
+    const system = try classical_particle.read(T, io, opt.system, 0, 0, allocator);
     defer system.deinit(allocator);
 
     var basis = try BasisSet(T).init(system, opt.basis, allocator);
@@ -78,58 +78,58 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
     var output = Output(T).init();
     errdefer output.deinit(allocator);
 
-    if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{basis.nbf()});
+    if (enable_printing) try print(io, "\nNUMBER OF BASIS FUNCTIONS: {d}\n", .{basis.nbf()});
 
     if (enable_printing and (opt.write.overlap != null or opt.write.kinetic != null or opt.write.nuclear != null or opt.write.coulomb != null)) {
-        try print("\n", .{});
+        try print(io, "\n", .{});
     }
 
     if (opt.write.overlap) |path| {
-        var timer = try std.time.Timer.start();
+        var timer = std.Io.Timestamp.now(io, .real);
 
-        if (enable_printing) try print("OVERLAP INTEGRALS: ", .{});
+        if (enable_printing) try print(io, "OVERLAP INTEGRALS: ", .{});
 
         output.S = try overlap(T, system, basis, opt.nthread, allocator);
 
-        if (enable_printing) try print("{D}\n", .{timer.read()});
+        if (enable_printing) try print(io, "{f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
 
-        try exportRealMatrix(T, path, output.S.?);
+        try exportRealMatrix(T, io, path, output.S.?);
     }
 
     if (opt.write.kinetic) |path| {
-        var timer = try std.time.Timer.start();
+        var timer = std.Io.Timestamp.now(io, .real);
 
-        if (enable_printing) try print("KINETIC INTEGRALS: ", .{});
+        if (enable_printing) try print(io, "KINETIC INTEGRALS: ", .{});
 
         output.K = try kinetic(T, system, basis, opt.nthread, allocator);
 
-        if (enable_printing) try print("{D}\n", .{timer.read()});
+        if (enable_printing) try print(io, "{f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
 
-        try exportRealMatrix(T, path, output.K.?);
+        try exportRealMatrix(T, io, path, output.K.?);
     }
 
     if (opt.write.nuclear) |path| {
-        var timer = try std.time.Timer.start();
+        var timer = std.Io.Timestamp.now(io, .real);
 
-        if (enable_printing) try print("NUCLEAR INTEGRALS: ", .{});
+        if (enable_printing) try print(io, "NUCLEAR INTEGRALS: ", .{});
 
         output.V = try nuclear(T, system, basis, opt.nthread, allocator);
 
-        if (enable_printing) try print("{D}\n", .{timer.read()});
+        if (enable_printing) try print(io, "{f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
 
-        try exportRealMatrix(T, path, output.V.?);
+        try exportRealMatrix(T, io, path, output.V.?);
     }
 
     if (opt.write.coulomb) |path| {
-        var timer = try std.time.Timer.start();
+        var timer = std.Io.Timestamp.now(io, .real);
 
-        if (enable_printing) try print("COULOMB INTEGRALS: ", .{});
+        if (enable_printing) try print(io, "COULOMB INTEGRALS: ", .{});
 
         output.J = try coulomb(T, system, basis, opt.nthread, allocator);
 
-        if (enable_printing) try print("{D}\n", .{timer.read()});
+        if (enable_printing) try print(io, "{f}\n", .{timer.durationTo(std.Io.Timestamp.now(io, .real))});
 
-        try exportRealTensorFour(T, path, output.J.?);
+        try exportRealTensorFour(T, io, path, output.J.?);
     }
 
     return output;
@@ -152,12 +152,8 @@ pub fn coulomb(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T
         return J;
     }
 
-    var pool: std.Thread.Pool = undefined;
-    try pool.init(.{ .n_jobs = nthread, .allocator = allocator });
-    defer pool.deinit();
-
     for (0..J.shape[0]) |i| for (i..J.shape[1]) |j| for (i..J.shape[2]) |k| for ((if (i == k) j else k)..J.shape[3]) |l| {
-        try pool.spawn(coulombAssign, .{ T, &J, i, j, k, l, basis });
+        coulombAssign(T, &J, i, j, k, l, basis);
     };
 
     return J;
@@ -194,12 +190,8 @@ pub fn kinetic(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T
         return K;
     }
 
-    var pool: std.Thread.Pool = undefined;
-    try pool.init(.{ .n_jobs = nthread, .allocator = allocator });
-    defer pool.deinit();
-
     for (0..K.rows) |i| for (i..K.cols) |j| {
-        try pool.spawn(kineticAssign, .{ T, &K, i, j, basis });
+        kineticAssign(T, &K, i, j, basis);
     };
 
     return K;
@@ -227,12 +219,8 @@ pub fn nuclear(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T
         return V;
     }
 
-    var pool: std.Thread.Pool = undefined;
-    try pool.init(.{ .n_jobs = nthread, .allocator = allocator });
-    defer pool.deinit();
-
     for (0..V.rows) |i| for (i..V.cols) |j| {
-        try pool.spawn(nuclearAssign, .{ T, &V, i, j, system, basis });
+        nuclearAssign(T, &V, i, j, system, basis);
     };
 
     return V;
@@ -260,12 +248,8 @@ pub fn overlap(comptime T: type, system: ClassicalParticle(T), basis: BasisSet(T
         return S;
     }
 
-    var pool: std.Thread.Pool = undefined;
-    try pool.init(.{ .n_jobs = nthread, .allocator = allocator });
-    defer pool.deinit();
-
     for (0..S.rows) |i| for (i..S.cols) |j| {
-        try pool.spawn(overlapAssign, .{ T, &S, i, j, basis });
+        overlapAssign(T, &S, i, j, basis);
     };
 
     return S;

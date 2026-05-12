@@ -19,7 +19,7 @@ const STR2F = global_variables.STR2F;
 pub fn shuntingYard(comptime T: type, input: []const u8, variables: []const []const u8, allocator: std.mem.Allocator) !ReversePolishNotation(T) {
     var rpn = try ReversePolishNotation(T).init();
 
-    var stack = std.ArrayList(union(enum) { op: Operator, bracket: u8, func: *const fn (T) T }){};
+    var stack: std.ArrayList(union(enum) { op: Operator, bracket: u8, func: *const fn (T) T }) = .empty;
     defer stack.deinit(allocator);
 
     var i: usize = 0;

@@ -43,11 +43,11 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the potential plot target with the given opt.
-pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(raw_options);
+pub fn run(comptime T: type, io: std.Io, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(io, raw_options);
 
     var opt = raw_options;
-    try opt.potential.init(allocator);
+    try opt.potential.init(io, allocator);
     defer opt.potential.deinit(allocator);
 
     if (opt.potential == .ab_initio) {
@@ -84,7 +84,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         if (opt.adiabatic) try opt.potential.evaluateAdiabatic(&value, point, 0) else try opt.potential.evaluateDiabatic(&value, point, 0);
     }
 
-    try exportRealMatrix(T, opt.output, potential_matrix);
+    try exportRealMatrix(T, io, opt.output, potential_matrix);
 
     return .{ .potential = potential_matrix };
 }
