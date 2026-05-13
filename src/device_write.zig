@@ -93,8 +93,8 @@ pub fn print(io: std.Io, comptime format: []const u8, args: anytype) !void {
 }
 
 /// Print a classical particle into a terminal.
-pub fn printClassicalParticleAsMolecule(comptime T: type, object: ClassicalParticle(T), comment: ?[]const u8) !void {
-    try writeClassicalParticleAsMolecule(T, std.fs.File.stdout(), object, comment);
+pub fn printClassicalParticleAsMolecule(comptime T: type, io: std.Io, object: ClassicalParticle(T), comment: ?[]const u8) !void {
+    try writeClassicalParticleAsMolecule(T, io, std.Io.File.stdout(), object, comment);
 }
 
 /// Print the formatted complex matrix to the standard output.
@@ -109,7 +109,7 @@ pub fn printJson(io: std.Io, object: anytype) !void {
 
 /// Print the formatted real matrix to the standard output.
 pub fn printRealMatrix(comptime T: type, io: std.Io, A: RealMatrix(T)) !void {
-    try writeRealMatrix(T, io, std.fs.File.stdout(), A);
+    try writeRealMatrix(T, io, std.Io.File.stdout(), A);
 }
 
 /// Print a formatted line into the specified device.
@@ -125,10 +125,10 @@ pub fn write(io: std.Io, device: std.Io.File, comptime format: []const u8, args:
 }
 
 /// Write the classical particle as a .xyz molecule file into the specified device with an optional comment line.
-pub fn writeClassicalParticleAsMolecule(comptime T: type, device: std.fs.File, object: ClassicalParticle(T), comment: ?[]const u8) !void {
+pub fn writeClassicalParticleAsMolecule(comptime T: type, io: std.Io, device: std.Io.File, object: ClassicalParticle(T), comment: ?[]const u8) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = device.writer(&buffer);
+    var writer = device.writer(io, &buffer);
     var writer_interface = &writer.interface;
 
     if (comment != null) {

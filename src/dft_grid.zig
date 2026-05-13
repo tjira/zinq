@@ -101,10 +101,10 @@ pub fn Becke(comptime T: type) type {
 
         /// Generate the integration grid points and weights for DFT calculations based on the provided basis set.
         pub fn get(self: @This(), basis: BasisSet(T), allocator: std.mem.Allocator) !struct { RealMatrix(T), RealVector(T) } {
-            var centers = std.ArrayList([3]T){};
+            var centers: std.ArrayList([3]T) = .empty;
             defer centers.deinit(allocator);
 
-            var atomic_numbers = std.ArrayList(usize){};
+            var atomic_numbers: std.ArrayList(usize) = .empty;
             defer atomic_numbers.deinit(allocator);
 
             const lebedev_points = try getLebedevGrid(self.n_lebedev);

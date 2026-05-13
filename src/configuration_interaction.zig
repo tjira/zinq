@@ -88,7 +88,7 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the CI calculation with the given options for the provided system, returning the energy, gradient, hessian, and frequencies if requested.
-pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (opt.gradient != null and opt.gradient.? == .analytic) {
         std.log.err("ANALYTIC GRADIENT NOT IMPLEMENTED FOR CONFIGURATION INTERACTION", .{});
 
@@ -101,51 +101,51 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         return error.InvalidInput;
     }
 
-    var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator);
+    var system = try classical_particle.read(T, io, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator);
     defer system.deinit(allocator);
 
     if (enable_printing) {
-        try print("\nINPUT GEOMETRY (A):\n", .{});
-        try printClassicalParticleAsMolecule(T, system, null);
+        try print(io, "\nINPUT GEOMETRY (A):\n", .{});
+        try printClassicalParticleAsMolecule(T, io, system, null);
     }
 
     if (opt.optimize != null) {
-        const optimized_system = try particleSteepestDescent(T, opt, system, ci, "CONFIGURATION INTERACTION", enable_printing, allocator);
+        const optimized_system = try particleSteepestDescent(T, io, opt, system, ci, "CONFIGURATION INTERACTION", enable_printing, allocator);
 
         system.deinit(allocator);
         system = optimized_system;
     }
 
     if (enable_printing and opt.optimize != null) {
-        try print("\nOPTIMIZED GEOMETRY (A):\n", .{});
-        try printClassicalParticleAsMolecule(T, system, null);
+        try print(io, "\nOPTIMIZED GEOMETRY (A):\n", .{});
+        try printClassicalParticleAsMolecule(T, io, system, null);
     }
 
-    var output = try ci(T, opt, system, enable_printing, allocator);
+    var output = try ci(T, io, opt, system, enable_printing, allocator);
     errdefer output.deinit(allocator);
 
-    output.G = if (opt.gradient != null) try nuclearGradient(T, opt, system, ci, "CONFIGURATION INTERACTION", enable_printing, allocator) else null;
+    output.G = if (opt.gradient != null) try nuclearGradient(T, io, opt, system, ci, "CONFIGURATION INTERACTION", enable_printing, allocator) else null;
 
     if (output.G) |G| {
-        try print("\nCONFIGURATION INTERACTION NUCLEAR GRADIENT (Eh/Bohr):\n", .{});
-        try printRealMatrix(T, G);
+        try print(io, "\nCONFIGURATION INTERACTION NUCLEAR GRADIENT (Eh/Bohr):\n", .{});
+        try printRealMatrix(T, io, G);
     }
 
-    output.H = if (opt.hessian != null) try nuclearHessian(T, opt, system, ci, "CONFIGURATION INTERACTION", enable_printing, allocator) else null;
+    output.H = if (opt.hessian != null) try nuclearHessian(T, io, opt, system, ci, "CONFIGURATION INTERACTION", enable_printing, allocator) else null;
 
     if (output.H) |H| output.frequencies = try particleHarmonicFrequencies(T, system, H, allocator);
 
     if (output.frequencies) |freqs| {
-        try print("\nCONFIGURATION INTERACTION VIBRATIONAL FREQUENCIES (CM^-1):\n", .{});
-        try printRealMatrix(T, freqs.asMatrix());
+        try print(io, "\nCONFIGURATION INTERACTION VIBRATIONAL FREQUENCIES (CM^-1):\n", .{});
+        try printRealMatrix(T, io, freqs.asMatrix());
     }
 
     return output;
 }
 
 /// Primary function to run the CI calculation, which first performs a Hartree-Fock calculation.
-pub fn ci(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    const hf_output = try scf(T, opt.hartree_fock, system, enable_printing, allocator);
+pub fn ci(comptime T: type, io: std.Io, opt: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    const hf_output = try scf(T, io, opt.hartree_fock, system, enable_printing, allocator);
 
     const nbf = if (opt.hartree_fock.generalized) hf_output.S.rows else 2 * hf_output.S.rows;
     const nocc = try system.noccSpin();
@@ -174,7 +174,7 @@ pub fn ci(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
         return error.InvalidInput;
     }
 
-    if (enable_printing) try print("\nCI ACTIVE SPACE: {d} ELECTRONS IN {d} SPINORBITALS\n", .{ AS[0], AS[1] });
+    if (enable_printing) try print(io, "\nCI ACTIVE SPACE: {d} ELECTRONS IN {d} SPINORBITALS\n", .{ AS[0], AS[1] });
 
     var D = try generateCasDeterminants(AS[0], AS[1], nocc, opt.hartree_fock.generalized, allocator);
     defer D.deinit(allocator);
@@ -191,7 +191,7 @@ pub fn ci(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
 
     try transform(T, &H_MS, &J_MS, H_AO, hf_output.J, hf_output.C);
 
-    if (enable_printing) try print("\nNUMBER OF CI DETERMINANTS: {d}\n", .{D.rows});
+    if (enable_printing) try print(io, "\nNUMBER OF CI DETERMINANTS: {d}\n", .{D.rows});
 
     var A = try RealVector(usize).init(nocc, allocator);
     defer A.deinit(allocator);
@@ -238,13 +238,13 @@ pub fn ci(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enabl
     try eigensystemHermitian(T, &E, &C, H);
     const energy = E.at(0, 0) + system.nuclearRepulsionEnergy();
 
-    if (enable_printing) try print("\n", .{});
+    if (enable_printing) try print(io, "\n", .{});
 
     if (enable_printing) {
         for (0..@min(opt.states, E.rows) + 1) |i| {
             const deltaE = E.at(i, i) - E.at(0, 0);
 
-            try print("CASCI STATE {d:2}: {d:20.14} Eh (DELTA E = {d:7.4} Eh = {d:7.4} eV)\n", .{ i, E.at(i, i) + system.nuclearRepulsionEnergy(), deltaE, deltaE * AU2EV });
+            try print(io, "CASCI STATE {d:2}: {d:20.14} Eh (DELTA E = {d:7.4} Eh = {d:7.4} eV)\n", .{ i, E.at(i, i) + system.nuclearRepulsionEnergy(), deltaE, deltaE * AU2EV });
         }
     }
 

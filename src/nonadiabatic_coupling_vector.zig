@@ -25,7 +25,7 @@ pub fn Parameters(comptime T: type) type {
         position: RealVector(T),
         velocity: RealVector(T),
         time: T,
-        dir: std.fs.Dir,
+        dir: std.Io.Dir,
         allocator: std.mem.Allocator,
     };
 }
@@ -37,10 +37,10 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
         maximum_energy_gap: T = std.math.inf(T),
 
         /// Evaluate the time derivative coupling.
-        pub fn evaluate(self: @This(), derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
+        pub fn evaluate(self: @This(), io: std.Io, derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
             const max_states = 16;
 
-            if (parameters.electronic_potential == .ab_initio) return try self.evaluateAbInitio(derivative_coupling, parameters);
+            if (parameters.electronic_potential == .ab_initio) return try self.evaluateAbInitio(io, derivative_coupling, parameters);
 
             if (derivative_coupling.rows > max_states or derivative_coupling.cols > max_states) {
                 std.log.err("NACV METHOD EXCEEDS MAXIMUM NUMBER OF STATES, MAXIMUM IS {d} BUT GOT {d}, THIS CAN BE CHANGED IN THE SOURCE CODE", .{ max_states, derivative_coupling.rows });
@@ -97,14 +97,14 @@ pub fn NonadiabaticCouplingVector(comptime T: type) type {
         }
 
         /// Evaluate nonadiabatic coupling vector for an ab initio potential.
-        pub fn evaluateAbInitio(self: @This(), derivative_coupling: *RealMatrix(T), params: Parameters(T)) !void {
-            const dirname = try params.dir.realpathAlloc(params.allocator, ".");
+        pub fn evaluateAbInitio(self: @This(), io: std.Io, derivative_coupling: *RealMatrix(T), params: Parameters(T)) !void {
+            const dirname = try params.dir.realPathFileAlloc(io, ".", params.allocator);
             defer params.allocator.free(dirname);
 
             const path = try std.mem.concat(params.allocator, u8, &.{ dirname, "/NACV.mat" });
             defer params.allocator.free(path);
 
-            var NACV = try readRealMatrix(T, path, params.allocator);
+            var NACV = try readRealMatrix(T, io, path, params.allocator);
             defer NACV.deinit(params.allocator);
 
             var l: usize = 0;

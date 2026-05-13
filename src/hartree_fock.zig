@@ -139,8 +139,8 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the Hartree-Fock target.
-pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(opt);
+pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(io, opt);
 
     if (opt.gradient != null and opt.gradient.? == .analytic) {
         std.log.err("ANALYTIC GRADIENT NOT IMPLEMENTED FOR HARTREE-FOCK METHOD", .{});
@@ -160,48 +160,48 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         return error.InvalidInput;
     }
 
-    var system = try classical_particle.read(T, opt.system, opt.charge, 0, allocator);
+    var system = try classical_particle.read(T, io, opt.system, opt.charge, 0, allocator);
     defer system.deinit(allocator);
 
     if (enable_printing) {
-        try print("\nINPUT GEOMETRY (A):\n", .{});
-        try printClassicalParticleAsMolecule(T, system, null);
+        try print(io, "\nINPUT GEOMETRY (A):\n", .{});
+        try printClassicalParticleAsMolecule(T, io, system, null);
     }
 
     if (opt.optimize != null) {
-        const optimized_system = try particleSteepestDescent(T, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator);
+        const optimized_system = try particleSteepestDescent(T, io, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator);
 
         system.deinit(allocator);
         system = optimized_system;
     }
 
     if (enable_printing and opt.optimize != null) {
-        try print("\nOPTIMIZED GEOMETRY (A):\n", .{});
-        try printClassicalParticleAsMolecule(T, system, null);
+        try print(io, "\nOPTIMIZED GEOMETRY (A):\n", .{});
+        try printClassicalParticleAsMolecule(T, io, system, null);
     }
 
-    var output = try scf(T, opt, system, enable_printing, allocator);
+    var output = try scf(T, io, opt, system, enable_printing, allocator);
     errdefer output.deinit(allocator);
 
-    output.G = if (opt.gradient != null) try nuclearGradient(T, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
+    output.G = if (opt.gradient != null) try nuclearGradient(T, io, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
 
     if (output.G) |G| {
-        try print("\nHARTREE-FOCK NUCLEAR GRADIENT (Eh/Bohr):\n", .{});
-        try printRealMatrix(T, G);
+        try print(io, "\nHARTREE-FOCK NUCLEAR GRADIENT (Eh/Bohr):\n", .{});
+        try printRealMatrix(T, io, G);
     }
 
-    output.H = if (opt.hessian != null) try nuclearHessian(T, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
+    output.H = if (opt.hessian != null) try nuclearHessian(T, io, opt, system, scf, "HARTREE-FOCK", enable_printing, allocator) else null;
 
     if (output.H) |H| output.frequencies = try particleHarmonicFrequencies(T, system, H, allocator);
 
     if (output.frequencies) |freqs| {
-        try print("\nHARTREE-FOCK VIBRATIONAL FREQUENCIES (CM^-1):\n", .{});
-        try printRealMatrix(T, freqs.asMatrix());
+        try print(io, "\nHARTREE-FOCK VIBRATIONAL FREQUENCIES (CM^-1):\n", .{});
+        try printRealMatrix(T, io, freqs.asMatrix());
     }
 
-    if (opt.write.coefficient) |path| try exportRealMatrix(T, path, output.C);
-    if (opt.write.density) |path| try exportRealMatrix(T, path, output.P);
-    if (opt.write.fock) |path| try exportRealMatrix(T, path, output.F);
+    if (opt.write.coefficient) |path| try exportRealMatrix(T, io, path, output.C);
+    if (opt.write.density) |path| try exportRealMatrix(T, io, path, output.P);
+    if (opt.write.fock) |path| try exportRealMatrix(T, io, path, output.F);
 
     return output;
 }
@@ -350,18 +350,18 @@ pub fn getXMatrix(comptime T: type, S: RealMatrix(T), allocator: std.mem.Allocat
 }
 
 /// Perform the SCF procedure and return the output.
-pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+pub fn scf(comptime T: type, io: std.Io, opt: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     var basis = try BasisSet(T).init(system, opt.basis, allocator);
     defer basis.deinit(allocator);
 
     const nbf = if (opt.generalized) 2 * basis.nbf() else basis.nbf();
     const nocc = if (opt.generalized) try system.noccSpin() else try system.noccSpatial();
 
-    if (enable_printing) try print("\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ nbf, nocc });
+    if (enable_printing) try print(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ nbf, nocc });
 
-    if (enable_printing) try print("\nONE-ELECTRON INTEGRALS: ", .{});
+    if (enable_printing) try print(io, "\nONE-ELECTRON INTEGRALS: ", .{});
 
-    var timer = try std.time.Timer.start();
+    var timer = std.Io.Timestamp.now(io, .real);
 
     var S = try overlap(T, system, basis, opt.nthread, allocator);
     var K = try kinetic(T, system, basis, opt.nthread, allocator);
@@ -373,10 +373,11 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
         try oneAO2AS(T, &V, allocator);
     }
 
-    if (enable_printing) try print("{D}\n", .{timer.read()});
-    timer.reset();
+    if (enable_printing) try print(io, "{f}\n", .{timer.untilNow(io, .real)});
 
-    if (enable_printing) try print("TWO-ELECTRON INTEGRALS: ", .{});
+    timer = std.Io.Timestamp.now(io, .real);
+
+    if (enable_printing) try print(io, "TWO-ELECTRON INTEGRALS: ", .{});
 
     var J = try coulomb(T, system, basis, opt.nthread, allocator);
 
@@ -387,7 +388,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     var Vxc = if (opt.dft) |_| try RealMatrix(T).initZero(nbf, nbf, allocator) else null;
     defer if (Vxc) |xc| xc.deinit(allocator);
 
-    if (enable_printing) try print("{D}\n", .{timer.read()});
+    if (enable_printing) try print(io, "{f}\n", .{timer.untilNow(io, .real)});
 
     const dft_grid_points, const dft_grid_weights = if (opt.dft) |dft| try getGrid(T, dft.grid, basis, allocator) else .{ null, null };
 
@@ -420,10 +421,10 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     var Eelp: T = 1;
     var dp_max: T = 0;
 
-    if (enable_printing) try print("\nSELF CONSISTENT FIELD:\n{s:4} {s:20} {s:9} {s:12} {s:4}\n", .{ "ITER", "ENERGY", "|DELTA E|", "MAX(DELTA P)", "TIME" });
+    if (enable_printing) try print(io, "\nSELF CONSISTENT FIELD:\n{s:4} {s:20} {s:9} {s:12} {s:4}\n", .{ "ITER", "ENERGY", "|DELTA E|", "MAX(DELTA P)", "TIME" });
 
     for (0..opt.maxiter) |i| {
-        timer.reset();
+        timer = std.Io.Timestamp.now(io, .real);
         var extrapolated = false;
 
         if (Vxc) |*xc| {
@@ -444,7 +445,7 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
         Eelp = Eel;
         Eel = Eone + Etwo;
 
-        if (enable_printing) try print("{d:4} {d:20.14} {e:9.3} {e:12.3} {D}\n", .{ i + 1, Eel + En, @abs(Eel - Eelp), dp_max, timer.read() });
+        if (enable_printing) try print(io, "{d:4} {d:20.14} {e:9.3} {e:12.3} {f}\n", .{ i + 1, Eel + En, @abs(Eel - Eelp), dp_max, timer.untilNow(io, .real) });
 
         if (i > 0 and @abs(Eel - Eelp) <= opt.threshold and dp_max <= opt.threshold) break;
 
@@ -481,14 +482,14 @@ pub fn scf(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enab
     }
 
     if (enable_printing) {
-        try print("\n", .{});
-        try print("ONE ELECTRON ENERGY:         {d:22.14} Eh\n", .{Eone});
-        try print("TWO ELECTRON ENERGY:         {d:22.14} Eh\n", .{Etwo});
-        try print("EXCHANGE CORRELATION ENERGY: {d:22.14} Eh\n", .{Exc});
-        try print("ELECTRONIC ENERGY:           {d:22.14} Eh\n", .{Eel});
-        try print("NUCLEAR REPULSION ENERGY:    {d:22.14} Eh\n", .{En});
-        try print("\n", .{});
-        try print("FINAL HF ENERGY:             {d:22.14} Eh\n", .{Eel + En});
+        try print(io, "\n", .{});
+        try print(io, "ONE ELECTRON ENERGY:         {d:22.14} Eh\n", .{Eone});
+        try print(io, "TWO ELECTRON ENERGY:         {d:22.14} Eh\n", .{Etwo});
+        try print(io, "EXCHANGE CORRELATION ENERGY: {d:22.14} Eh\n", .{Exc});
+        try print(io, "ELECTRONIC ENERGY:           {d:22.14} Eh\n", .{Eel});
+        try print(io, "NUCLEAR REPULSION ENERGY:    {d:22.14} Eh\n", .{En});
+        try print(io, "\n", .{});
+        try print(io, "FINAL HF ENERGY:             {d:22.14} Eh\n", .{Eel + En});
     }
 
     return .{

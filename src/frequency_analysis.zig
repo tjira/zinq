@@ -42,7 +42,7 @@ pub fn particleHarmonicFrequencies(comptime T: type, system: ClassicalParticle(T
 
     const factor = 5e-3 / std.math.pi / c * std.math.sqrt(Eh / amu / a0 / a0);
 
-    for (0..freqs.len) |i| freqs.ptr(i).* = factor * std.math.sign(HMJC.J.at(i, i)) * std.math.sqrt(@abs(HMJC.J.at(i, i)));
+    for (0..freqs.len) |i| freqs.ptr(i).* = factor * @as(T, @floatFromInt(std.math.sign(HMJC.J.at(i, i)))) * std.math.sqrt(@abs(HMJC.J.at(i, i)));
 
     return freqs;
 }

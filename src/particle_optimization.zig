@@ -16,6 +16,7 @@ const print = device_write.print;
 /// Optimizes the positions of a set of classical particles using the steepest descent method and a gradient.
 pub fn particleSteepestDescent(
     comptime T: type,
+    io: std.Io,
     opt: anytype,
     system: ClassicalParticle(T),
     efunc: anytype,
@@ -31,7 +32,7 @@ pub fn particleSteepestDescent(
 
     var optimized_system = try system.clone(allocator);
 
-    if (enable_printing) try print("\n{s} GEOMETRY OPTIMIZATION:\n{s:4} {s:20} {s:4}\n", .{ method, "ITER", "GRADIENT NORM", "TIME" });
+    if (enable_printing) try print(io, "\n{s} GEOMETRY OPTIMIZATION:\n{s:4} {s:20} {s:4}\n", .{ method, "ITER", "GRADIENT NORM", "TIME" });
 
     for (0..opt.optimize.?.maxiter + 1) |i| {
         if (i == opt.optimize.?.maxiter) {
@@ -40,13 +41,13 @@ pub fn particleSteepestDescent(
             return error.NumericalError;
         }
 
-        var timer = try std.time.Timer.start();
+        var timer = std.Io.Timestamp.now(io, .real);
 
-        if (enable_printing) try print("{d:4}", .{i + 1});
+        if (enable_printing) try print(io, "{d:4}", .{i + 1});
 
-        var G = try nuclearGradient(T, opt, optimized_system, efunc, method, false, allocator);
+        var G = try nuclearGradient(T, io, opt, optimized_system, efunc, method, false, allocator);
 
-        if (enable_printing) try print(" {d:20.14} {D}\n", .{ G.asVector().norm(), timer.read() });
+        if (enable_printing) try print(io, " {d:20.14} {f}\n", .{ G.asVector().norm(), timer.untilNow(io, .real) });
 
         if (G.asVector().norm() < opt.optimize.?.threshold) break;
 

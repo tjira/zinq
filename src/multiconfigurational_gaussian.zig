@@ -529,7 +529,7 @@ test "frozen real-time vMCG on Tully's First Potential" {
         .time_step = 1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06574685612813, TEST_TOLERANCE);
@@ -549,7 +549,7 @@ test "thawed real-time vMCG on Tully's First Potential" {
         .time_step = 1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06763705056010, TEST_TOLERANCE);
@@ -569,7 +569,7 @@ test "thawed real-time ss-vMCG on Tully's First Potential" {
         .time_step = 1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.06706660848155, TEST_TOLERANCE);
@@ -589,7 +589,7 @@ test "frozen real-time ss-vMCG on Tully's First Potential" {
         .time_step = 1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy, 0.07135428435411, TEST_TOLERANCE);

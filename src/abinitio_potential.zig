@@ -19,6 +19,8 @@ const RealVector = real_vector.RealVector;
 const executeCommand = prcess.executeCommand;
 const readRealMatrix = device_read.readRealMatrix;
 
+const WRITE_BUFFER_SIZE = global_variables.WRITE_BUFFER_SIZE;
+
 /// Struct holding parameters for the multidimensional ab initio potential.
 pub fn AbInitioPotential(comptime T: type) type {
     return struct {
@@ -26,14 +28,14 @@ pub fn AbInitioPotential(comptime T: type) type {
         states: usize = 1,
 
         /// Evaluate the adiabatic potential energy matrix at given system state and time.
-        pub fn evaluateAdiabatic(self: @This(), adiabatic_potential: *RealMatrix(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
-            const dirname = try dir.realpathAlloc(allocator, ".");
+        pub fn evaluateAdiabatic(self: @This(), io: std.Io, adiabatic_potential: *RealMatrix(T), dir: std.Io.Dir, allocator: std.mem.Allocator) !void {
+            const dirname = try dir.realPathFileAlloc(io, ".", allocator);
             defer allocator.free(dirname);
 
             const path = try std.mem.concat(allocator, u8, &.{ dirname, "/ENERGY.mat" });
             defer allocator.free(path);
 
-            const ENERGY = try readRealMatrix(T, path, allocator);
+            const ENERGY = try readRealMatrix(T, io, path, allocator);
             defer ENERGY.deinit(allocator);
 
             if (ENERGY.cols != 1) {
@@ -54,8 +56,8 @@ pub fn AbInitioPotential(comptime T: type) type {
         }
 
         /// Comptime adiabatic force evaluation. The evaluateAdiabatic function needs to be run first.
-        pub fn forceAdiabatic(self: @This(), i: usize, position: RealVector(T), _: T, state: usize, bias: ?BiasPotential(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !T {
-            const dirname = try dir.realpathAlloc(allocator, ".");
+        pub fn forceAdiabatic(self: @This(), io: std.Io, i: usize, position: RealVector(T), _: T, state: usize, bias: ?BiasPotential(T), dir: std.Io.Dir, allocator: std.mem.Allocator) !T {
+            const dirname = try dir.realPathFileAlloc(io, ".", allocator);
             defer allocator.free(dirname);
 
             const path_gradient = try std.mem.concat(allocator, u8, &.{ dirname, "/GRADIENT.mat" });
@@ -64,10 +66,10 @@ pub fn AbInitioPotential(comptime T: type) type {
             const path_energy = try std.mem.concat(allocator, u8, &.{ dirname, "/ENERGY.mat" });
             defer allocator.free(path_energy);
 
-            const ENERGY = try readRealMatrix(T, path_energy, allocator);
+            const ENERGY = try readRealMatrix(T, io, path_energy, allocator);
             defer ENERGY.deinit(allocator);
 
-            const GRADIENT = try readRealMatrix(T, path_gradient, allocator);
+            const GRADIENT = try readRealMatrix(T, io, path_gradient, allocator);
             defer GRADIENT.deinit(allocator);
 
             if (ENERGY.cols != 1) {
@@ -106,12 +108,12 @@ pub fn AbInitioPotential(comptime T: type) type {
             } else 0;
         }
 
-        pub fn runElectronicStructureCalculation(self: @This(), system: ClassicalParticle(T), dir: std.fs.Dir, allocator: std.mem.Allocator) !void {
-            try system.writeCoordinatesToXYZ("molecule.xyz", dir);
+        pub fn runElectronicStructureCalculation(self: @This(), io: std.Io, system: ClassicalParticle(T), dir: std.Io.Dir, allocator: std.mem.Allocator) !void {
+            try system.writeCoordinatesToXYZ(io, "molecule.xyz", dir);
 
-            try appendFileToAnother("molecule.xyz", "trajectory.xyz", dir);
+            try appendFileToAnother(io, "molecule.xyz", "trajectory.xyz", dir);
 
-            const path = try dir.realpathAlloc(allocator, ".");
+            const path = try dir.realPathFileAlloc(io, ".", allocator);
             defer allocator.free(path);
 
             const states_str = try std.fmt.allocPrint(allocator, "{d}", .{self.states});
@@ -120,7 +122,7 @@ pub fn AbInitioPotential(comptime T: type) type {
             const command = try std.mem.concat(allocator, u8, &.{ self.command, " -k ", states_str, " -s ", path, "/molecule.xyz" });
             defer allocator.free(command);
 
-            const command_output = try executeCommand(command, allocator);
+            const command_output = try executeCommand(io, command, allocator);
             defer allocator.free(command_output);
         }
 
@@ -131,25 +133,35 @@ pub fn AbInitioPotential(comptime T: type) type {
     };
 }
 
-pub fn appendFileToAnother(source_path: []const u8, target_path: []const u8, dir: std.fs.Dir) !void {
-    dir.access(target_path, .{}) catch {
-        const file = try dir.createFile(target_path, .{});
-        defer file.close();
+/// Append the contents of one file to another, creating the target file if it does not exist.
+pub fn appendFileToAnother(io: std.Io, source_path: []const u8, target_path: []const u8, dir: std.Io.Dir) !void {
+    dir.access(io, target_path, .{}) catch {
+        const file = try dir.createFile(io, target_path, .{});
+        defer file.close(io);
     };
 
-    const source_file = try dir.openFile(source_path, .{ .mode = .read_only });
-    defer source_file.close();
+    const source_file = try dir.openFile(io, source_path, .{ .mode = .read_only });
+    defer source_file.close(io);
 
-    const target_file = try dir.openFile(target_path, .{ .mode = .write_only });
-    defer target_file.close();
+    const target_file = try dir.openFile(io, target_path, .{ .mode = .write_only });
+    defer target_file.close(io);
 
-    try target_file.seekFromEnd(0);
+    var write_buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
+    var writer = target_file.writer(io, &write_buffer);
+    try writer.seekTo(try target_file.length(io));
+    var writer_interface = &writer.interface;
 
     var buffer: [4096]u8 = undefined;
+    const buffers = [_][]u8{ &buffer };
 
     while (true) {
-        const bytes_read = try source_file.read(&buffer);
+        const bytes_read = source_file.readStreaming(io, &buffers) catch |err| {
+            if (err == error.EndOfStream) {
+                break;
+            }
+            else return err;
+        };
         if (bytes_read == 0) break;
-        try target_file.writeAll(buffer[0..bytes_read]);
+        try writer_interface.writeAll(buffer[0..bytes_read]);
     }
 }

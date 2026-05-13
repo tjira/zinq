@@ -826,7 +826,7 @@ test "Exact Dynamics on 1D Harmonic Potential" {
         .time_step = 0.1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.52726330098766, TEST_TOLERANCE);
@@ -842,7 +842,7 @@ test "Exact Dynamics on 2D Harmonic Potential" {
         .time_step = 0.1,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 1.05452660197613, TEST_TOLERANCE);
@@ -858,7 +858,7 @@ test "Exact Nonadiabatic Dynamics on Tully's First Potential" {
         .time_step = 10,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.06471011654226, TEST_TOLERANCE);
@@ -877,7 +877,7 @@ test "Imaginary Time Propagation on 1D Harmonic Potential" {
         .imaginary = .{},
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.25031230493126, TEST_TOLERANCE);
@@ -894,7 +894,7 @@ test "Imaginary Time Propagation on 2D Harmonic Potential" {
         .imaginary = .{},
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.kinetic_energy.last(), 0.50062460986252, TEST_TOLERANCE);

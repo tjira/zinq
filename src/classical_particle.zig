@@ -84,18 +84,19 @@ pub fn ClassicalParticle(comptime T: type) type {
         /// Calculate the acceleration of the classical particle using the forces from the electronic potential.
         pub fn calculateAcceleration(
             self: *@This(),
+            io: std.Io,
             pot: ElectronicPotential(T),
             adiabatic: *RealMatrix(T),
             time: T,
             state: usize,
             fdiff_step: T,
             bias: ?BiasPotential(T),
-            dir: std.fs.Dir,
+            dir: std.Io.Dir,
             allocator: std.mem.Allocator,
         ) !void {
             for (0..self.ndim) |i| {
                 const force = switch (pot) {
-                    .ab_initio => try pot.ab_initio.forceAdiabatic(i, self.position, time, state, bias, dir, allocator),
+                    .ab_initio => try pot.ab_initio.forceAdiabatic(io, i, self.position, time, state, bias, dir, allocator),
                     inline else => try pot.forceAdiabatic(adiabatic, self.position, time, state, i, fdiff_step, bias),
                 };
 
@@ -236,19 +237,19 @@ pub fn ClassicalParticle(comptime T: type) type {
         }
 
         /// Write the coordinates of the system to an .xyz file. The coordinates are converted from atomic units to Angstroms before writing.
-        pub fn writeCoordinatesToXYZ(self: @This(), filename: []const u8, dir: std.fs.Dir) !void {
+        pub fn writeCoordinatesToXYZ(self: @This(), io: std.Io, filename: []const u8, dir: std.Io.Dir) !void {
             if (self.atoms == null) {
                 std.log.err("ATOMIC NUMBERS NOT DEFINED, CANNOT WRITE COORDINATES TO XYZ FILE", .{});
 
                 return error.InvalidInput;
             }
 
-            const file = try dir.createFile(filename, .{});
-            defer file.close();
+            const file = try dir.createFile(io, filename, .{});
+            defer file.close(io);
 
             var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-            var writer = file.writer(&buffer);
+            var writer = file.writer(io, &buffer);
             var writer_interface = &writer.interface;
 
             try writer_interface.print("{d}\n\n", .{self.position.len / 3});
@@ -267,12 +268,12 @@ pub fn ClassicalParticle(comptime T: type) type {
 }
 
 /// Function to extract the number of dimensions from a .xyz file. The number of dimensions is equal to three times the number of atoms in the system.
-pub fn extractDims(path: []const u8) !usize {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+pub fn extractDims(io: std.Io, path: []const u8) !usize {
+    const file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
 
     var buffer: [1024]u8 = undefined;
-    var reader = file.reader(&buffer);
+    var reader = file.reader(io, &buffer);
     var reader_interface = &reader.interface;
 
     const natom = try std.fmt.parseInt(usize, uncr(try reader_interface.takeDelimiterExclusive('\n')), 10);

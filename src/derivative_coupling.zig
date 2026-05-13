@@ -35,11 +35,11 @@ pub fn DerivativeCoupling(comptime T: type) type {
         npi: NormPreservingInterpolation(T),
 
         /// Evaluate the time derivative coupling.
-        pub fn evaluate(self: @This(), derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
+        pub fn evaluate(self: @This(), io: std.Io, derivative_coupling: *RealMatrix(T), parameters: Parameters(T)) !void {
             switch (self) {
                 .baeck_an => |field| try field.evaluate(derivative_coupling, parameters.baeck_an_parameters),
                 .hst => |field| try field.evaluate(derivative_coupling, parameters.hst_parameters),
-                .nacv => |field| try field.evaluate(derivative_coupling, parameters.nacv_parameters),
+                .nacv => |field| try field.evaluate(io, derivative_coupling, parameters.nacv_parameters),
                 .npi => |field| try field.evaluate(derivative_coupling, parameters.npi_parameters),
             }
         }

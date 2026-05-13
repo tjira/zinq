@@ -37,7 +37,6 @@ pub const eigenproblem_solver = @import("eigenproblem_solver.zig");
 pub const electronic_potential = @import("electronic_potential.zig");
 pub const embedded_files = @import("embedded_files.zig");
 pub const energy_derivative = @import("energy_derivative.zig");
-pub const error_context = @import("error_context.zig");
 pub const expression_evaluator = @import("expression_evaluator.zig");
 pub const fewest_switches = @import("fewest_switches.zig");
 pub const file_potential = @import("file_potential.zig");
@@ -121,17 +120,17 @@ pub const QuantumDynamicsOptions = quantum_dynamics.Options;
 
 /// Available targets in the program.
 const Target = enum {
-    // classical_dynamics,
-    // configuration_interaction,
+    classical_dynamics,
+    configuration_interaction,
     expression_evaluator,
     fractal_generator,
-    // hartree_fock,
+    hartree_fock,
     molecular_integrals,
-    // moller_plesset,
+    moller_plesset,
     multiconfigurational_gaussian,
     potential_plot,
     prime_numbers,
-    // time_dependent_density_functional_theory,
+    time_dependent_density_functional_theory,
     quantum_dynamics,
 };
 
@@ -237,17 +236,17 @@ pub fn parse(io: std.Io, path: []const u8, allocator: std.mem.Allocator) !void {
         };
 
         switch (tag) {
-            // .classical_dynamics => try handle(f64, classical_dynamics, io, options, allocator),
-            // .configuration_interaction => try handle(f64, configuration_interaction, io, options, allocator),
+            .classical_dynamics => try handle(f64, classical_dynamics, io, options, allocator),
+            .configuration_interaction => try handle(f64, configuration_interaction, io, options, allocator),
             .expression_evaluator => try handle(f64, expression_evaluator, io, options, allocator),
             .fractal_generator => try handle(f64, fractal_generator, io, options, allocator),
-            // .hartree_fock => try handle(f64, hartree_fock, io, options, allocator),
+            .hartree_fock => try handle(f64, hartree_fock, io, options, allocator),
             .molecular_integrals => try handle(f64, molecular_integrals, io, options, allocator),
-            // .moller_plesset => try handle(f64, moller_plesset, io, options, allocator),
+            .moller_plesset => try handle(f64, moller_plesset, io, options, allocator),
             .multiconfigurational_gaussian => try handle(f64, multiconfigurational_gaussian, io, options, allocator),
             .potential_plot => try handle(f64, potential_plot, io, options, allocator),
             .prime_numbers => try handle(f64, prime_numbers, io, options, allocator),
-            // .time_dependent_density_functional_theory => try handle(f64, tddft, io, options, allocator),
+            .time_dependent_density_functional_theory => try handle(f64, tddft, io, options, allocator),
             .quantum_dynamics => try handle(f64, quantum_dynamics, io, options, allocator),
         }
     }

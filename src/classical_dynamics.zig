@@ -13,7 +13,6 @@ const derivative_coupling = @import("derivative_coupling.zig");
 const device_write = @import("device_write.zig");
 const eigenproblem_solver = @import("eigenproblem_solver.zig");
 const electronic_potential = @import("electronic_potential.zig");
-const error_context = @import("error_context.zig");
 const fewest_switches = @import("fewest_switches.zig");
 const global_variables = @import("global_variables.zig");
 const hammes_schiffer_tully = @import("hammes_schiffer_tully.zig");
@@ -43,7 +42,6 @@ const ComplexRungeKutta = complex_runge_kutta.ComplexRungeKutta;
 const ComplexVector = complex_vector.ComplexVector;
 const DerivativeCoupling = derivative_coupling.DerivativeCoupling;
 const ElectronicPotential = electronic_potential.ElectronicPotential;
-const ErrorContext = error_context.ErrorContext;
 const FewestSwitches = fewest_switches.FewestSwitches;
 const HarmonicPotential = harmonic_potential.HarmonicPotential;
 const LandauZener = landau_zener.LandauZener;
@@ -347,12 +345,12 @@ pub fn Custom(comptime T: type) type {
 }
 
 /// Run classical dynamics simulation.
-pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    if (enable_printing) try printJson(raw_options);
+pub fn run(comptime T: type, io: std.Io, raw_options: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    if (enable_printing) try printJson(io, raw_options);
 
     var opt = raw_options;
+    try opt.potential.init(io, allocator);
     defer opt.potential.deinit(allocator);
-    try opt.potential.init(allocator);
 
     if (opt.potential == .ab_initio and opt.initial_conditions != .molecule) {
         std.log.err("AB INITIO POTENTIAL CAN ONLY BE USED WITH MOLECULE INITIAL CONDITIONS", .{});
@@ -360,7 +358,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         return error.InvalidInput;
     }
 
-    const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
+    const ndim = if (opt.potential == .ab_initio) try extractDims(io, opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
     if (nstate != 2 and opt.write.bloch_vector_mean != null) {
@@ -387,7 +385,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         return error.InvalidInput;
     };
 
-    if (opt.potential == .ab_initio) return try performDynamics(T, opt, enable_printing, allocator);
+    if (opt.potential == .ab_initio) return try performDynamics(T, io, opt, enable_printing, allocator);
 
     if (opt.initial_conditions.model.spread) |ics| if (ics.position_mean) |qstruct| if (qstruct.end.len != ndim or qstruct.step.len != ndim) {
         std.log.err("INVALID INITIAL CONDITIONS SPREAD FOR POSITION, EXPECTED LENGTH {d} BUT GOT {d}", .{ ndim, qstruct.end.len });
@@ -545,7 +543,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         const total_runs = qsteps * psteps * gsteps;
         const tp_index = (i * psteps + j) * gsteps + k;
 
-        if (enable_printing and (qsteps != 1 or psteps != 1 or gsteps != 1)) try print("\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}:\n", .{ tp_index + 1, total_runs });
+        if (enable_printing and (qsteps != 1 or psteps != 1 or gsteps != 1)) try print(io, "\nRUNNING SIMULATION FOR INITIAL CONDITIONS SET {d}/{d}:\n", .{ tp_index + 1, total_runs });
 
         var temp_i = i;
         var temp_j = j;
@@ -580,7 +578,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
             );
         }
 
-        const result = try performDynamics(T, options, enable_printing, allocator);
+        const result = try performDynamics(T, io, options, enable_printing, allocator);
 
         for (0..ndim) |l| transition_probability.ptr(tp_index, 0 * ndim + l).* = q[l];
         for (0..ndim) |l| transition_probability.ptr(tp_index, 1 * ndim + l).* = p[l];
@@ -595,7 +593,7 @@ pub fn run(comptime T: type, raw_options: Options(T), enable_printing: bool, all
         };
     };
 
-    if (opt.write.transition_probability_mean) |path| try exportRealMatrix(T, path, transition_probability);
+    if (opt.write.transition_probability_mean) |path| try exportRealMatrix(T, io, path, transition_probability);
 
     return output;
 }
@@ -605,51 +603,49 @@ pub fn renameOutputFilesWithPositionAndMomentum(comptime T: type, opt: *Options(
     inline for (std.meta.fields(@TypeOf(opt.write))) |field| if (@as(field.type, @field(opt.write, field.name)) != null) {
         const path = &@field(opt.write, field.name).?;
 
-        var new_path = std.ArrayList(u8){};
-        errdefer new_path.deinit(allocator);
+        var builder: std.Io.Writer.Allocating = .init(allocator);
+        errdefer builder.deinit();
 
-        const writer = new_path.writer(allocator);
-
-        try writer.print("{s}_Q=", .{path.*[0 .. path.len - 4]});
+        try builder.writer.print("{s}_Q=", .{path.*[0 .. path.len - 4]});
 
         for (q, 0..) |val, i| {
-            if (i > 0) try writer.writeAll(",");
-            try writer.print("{d:.4}", .{val});
+            if (i > 0) try builder.writer.writeAll(",");
+            try builder.writer.print("{d:.4}", .{val});
         }
 
-        try writer.writeAll("_P=");
+        try builder.writer.writeAll("_P=");
 
         for (p, 0..) |val, i| {
-            if (i > 0) try writer.writeAll(",");
-            try writer.print("{d:.4}", .{val});
+            if (i > 0) try builder.writer.writeAll(",");
+            try builder.writer.print("{d:.4}", .{val});
         }
 
-        try writer.writeAll("_G=");
+        try builder.writer.writeAll("_G=");
 
         for (g, 0..) |val, i| {
-            if (i > 0) try writer.writeAll(",");
-            try writer.print("{d:.4}", .{val});
+            if (i > 0) try builder.writer.writeAll(",");
+            try builder.writer.print("{d:.4}", .{val});
         }
 
-        try writer.writeAll(".mat");
-        path.* = try new_path.toOwnedSlice(allocator);
+        try builder.writer.writeAll(".mat");
+        path.* = try builder.toOwnedSlice();
     };
 }
 
 /// Perform the dynamical simulation.
-pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
-    const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
+pub fn performDynamics(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+    const ndim = if (opt.potential == .ab_initio) try extractDims(io, opt.initial_conditions.molecule.position) else try opt.potential.ndim();
     const nstate = opt.potential.nstate();
 
     var output = try Output(T).init(nstate, ndim, opt.iterations, opt.trajectories, opt.write, allocator);
     errdefer output.deinit(allocator);
 
-    if (enable_printing and opt.potential != .ab_initio) try print("\nINITIAL GAMMA: [", .{});
+    if (enable_printing and opt.potential != .ab_initio) try print(io, "\nINITIAL GAMMA: [", .{});
 
     if (enable_printing and opt.initial_conditions == .model) for (opt.initial_conditions.model.gamma_mean, 0..) |gamma, i| {
-        if (i > 0) try print(", ", .{});
-        try print("{d:.6}", .{gamma});
-        if (i == opt.initial_conditions.model.gamma_mean.len - 1) try print("]\n", .{});
+        if (i > 0) try print(io, ", ", .{});
+        try print(io, "{d:.6}", .{gamma});
+        if (i == opt.initial_conditions.model.gamma_mean.len - 1) try print(io, "]\n", .{});
     };
 
     const bloch_vector_rows = if (opt.write.bloch_vector_mean) |_| opt.iterations + 1 else 0;
@@ -696,46 +692,32 @@ pub fn performDynamics(comptime T: type, opt: Options(T), enable_printing: bool,
 
     var split_mix = std.Random.SplitMix64.init(opt.seed);
 
-    if (enable_printing) try printIterationHeader(T, ndim, nstate, opt.surface_hopping, opt.thermostat);
-
-    var pool: std.Thread.Pool = undefined;
-    var wait: std.Thread.WaitGroup = undefined;
-
-    try pool.init(.{ .n_jobs = opt.nthread, .track_ids = true, .allocator = allocator });
-
-    var error_ctx = ErrorContext{};
+    if (enable_printing) try printIterationHeader(T, io, ndim, nstate, opt.surface_hopping, opt.thermostat);
 
     for (0..(opt.trajectories + MAX_POOL_SIZE - 1) / MAX_POOL_SIZE) |i| {
-        wait.reset();
 
         for (0..@min(opt.trajectories - i * MAX_POOL_SIZE, MAX_POOL_SIZE)) |j| {
             const rng = std.Random.DefaultPrng.init(split_mix.next());
 
             const params = .{ opt, i * MAX_POOL_SIZE + j, enable_printing, rng, allocator };
 
-            if (opt.nthread == 1) {
-                runTrajectoryParallel(1, T, parallel_results, &trajectory_based_results, params, &error_ctx);
-            } else pool.spawnWgId(&wait, runTrajectoryParallel, .{ T, parallel_results, &trajectory_based_results, params, &error_ctx });
+            try runTrajectoryParallel(1, T, io, parallel_results, &trajectory_based_results, params);
         }
 
-        wait.wait();
     }
 
-    pool.deinit();
-    if (error_ctx.err) |err| return err;
+    try finalizeOutput(T, io, &output, opt, parallel_results, trajectory_based_results);
 
-    try finalizeOutput(T, &output, opt, parallel_results, trajectory_based_results);
-
-    if (enable_printing) try printFinalDetails(T, opt, output);
+    if (enable_printing) try printFinalDetails(T, io, opt, output);
 
     return output;
 }
 
 /// Run a single trajectory.
-pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalParticle(T), index: usize, equilibrate: bool, enable_printing: bool, allocator: std.mem.Allocator) !Custom(T).TrajectoryOutput {
+pub fn runTrajectory(comptime T: type, io: std.Io, opt: Options(T), system: *ClassicalParticle(T), index: usize, equilibrate: bool, enable_printing: bool, allocator: std.mem.Allocator,) !Custom(T).TrajectoryOutput {
     const nstate = opt.potential.nstate();
-    const ndim = if (opt.potential == .ab_initio) try extractDims(opt.initial_conditions.molecule.position) else try opt.potential.ndim();
-    var dir = std.fs.cwd();
+    const ndim = if (opt.potential == .ab_initio) try extractDims(io, opt.initial_conditions.molecule.position) else try opt.potential.ndim();
+    var dir = std.Io.Dir.cwd();
 
     const entropy = opt.thermodynamics.schlitter_entropy or opt.thermodynamics.qha_entropy or opt.write.schlitter_entropy != null or opt.write.qha_entropy != null;
 
@@ -743,10 +725,10 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         const dir_name = try std.fmt.allocPrint(allocator, "TRAJ_{d}", .{index + 1});
         defer allocator.free(dir_name);
 
-        try std.fs.cwd().deleteTree(dir_name);
-        try std.fs.cwd().makeDir(dir_name);
+        try std.Io.Dir.cwd().deleteTree(io, dir_name);
+        try std.Io.Dir.cwd().createDir(io, dir_name, .default_dir);
 
-        dir = try std.fs.cwd().openDir(dir_name, .{});
+        dir = try std.Io.Dir.cwd().openDir(io, dir_name, .{});
     }
 
     var split_mix = std.Random.SplitMix64.init(opt.seed + index);
@@ -799,7 +781,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
     var bloch_vector = try RealVector(T).initZero(3, allocator);
     defer bloch_vector.deinit(allocator);
 
-    var previous_nacv = try RealVector(T).initZero(nstate * (nstate - 1) / 2, allocator);
+    var previous_nacv = try RealVector(T).initZero(nstate * (nstate - 1) / 2 * ndim, allocator);
     defer previous_nacv.deinit(allocator);
 
     coefficient.ptr(current_state).* = Complex(T).init(1, 0);
@@ -914,7 +896,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         .nose_hoover_params = nose_hoover_parameters,
     };
 
-    var timer = try std.time.Timer.start();
+    var timer = std.Io.Timestamp.now(io, .real);
 
     for (0..if (equilibrate) opt.equilibration_iterations + 1 else opt.iterations + 1) |i| {
         const time = @as(T, @floatFromInt(i)) * opt.time_step;
@@ -929,8 +911,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
         if (i > 0) system.propagateVelocityVerletFirstHalf(opt.time_step);
 
         if (opt.potential == .ab_initio) {
-            try opt.potential.ab_initio.runElectronicStructureCalculation(system.*, dir, allocator);
-            try opt.potential.ab_initio.evaluateAdiabatic(&adiabatic_potential, dir, allocator);
+            try opt.potential.ab_initio.runElectronicStructureCalculation(io, system.*, dir, allocator);
+            try opt.potential.ab_initio.evaluateAdiabatic(io, &adiabatic_potential, dir, allocator);
         } else try opt.potential.evaluateEigensystem(&diabatic_potential, &adiabatic_potential, &adiabatic_eigenvectors, system.position, time);
 
         var potential_energy = adiabatic_potential.at(current_state, current_state);
@@ -952,7 +934,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
                 }
 
                 if (time_derivative_coupling_algorithm != .baeck_an or i > 1) {
-                    try time_derivative_coupling_algorithm.evaluate(&time_derivative_coupling, derivative_coupling_parameters);
+                    try time_derivative_coupling_algorithm.evaluate(io, &time_derivative_coupling, derivative_coupling_parameters);
                 }
             }
         }
@@ -970,7 +952,7 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             }
         };
 
-        try system.calculateAcceleration(opt.potential, &adiabatic_potential, time, current_state, opt.finite_differences_step, opt.bias, dir, allocator);
+        try system.calculateAcceleration(io, opt.potential, &adiabatic_potential, time, current_state, opt.finite_differences_step, opt.bias, dir, allocator);
 
         if (i > 0) try system.propagateVelocityVerletSecondHalf(opt.time_step);
 
@@ -1023,8 +1005,8 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             if (opt.write.coefficient_mean) |_| {
                 const Sz = std.math.sign(bloch_vector.at(2));
 
-                output.coefficient.ptr(i, 0).* = (1 - Sz) / 2;
-                output.coefficient.ptr(i, 1).* = (1 + Sz) / 2;
+                output.coefficient.ptr(i, 0).* = @as(T, @floatFromInt(1 - Sz)) / 2.0;
+                output.coefficient.ptr(i, 1).* = @as(T, @floatFromInt(1 + Sz)) / 2.0;
             }
         }
 
@@ -1059,16 +1041,16 @@ pub fn runTrajectory(comptime T: type, opt: Options(T), system: *ClassicalPartic
             .coefficient = coefficient,
         };
 
-        try printIterationInfo(T, iteration_info, opt.surface_hopping, opt.thermostat, equilibrate, &timer);
+        try printIterationInfo(T, io, iteration_info, opt.surface_hopping, opt.thermostat, equilibrate, &timer);
     }
 
     if (!equilibrate) {
         try getThermodynamicProperties(T, &output, system.*, opt, allocator);
 
-        if (enable_printing and opt.trajectories == 1) try printThermodynamicProperties(T, output.thermodynamics);
+        if (enable_printing and opt.trajectories == 1) try printThermodynamicProperties(T, io, output.thermodynamics);
     }
 
-    if (opt.potential == .ab_initio) dir.close();
+    if (opt.potential == .ab_initio) dir.close(io);
 
     return output;
 }
@@ -1085,16 +1067,16 @@ pub fn sampleFromBoltzmann(comptime T: type, system: *ClassicalParticle(T), temp
 }
 
 /// Initialize a system.
-pub fn initializeSystem(comptime T: type, opt: Options(T), geometry: usize, random: *std.Random, allocator: std.mem.Allocator) !ClassicalParticle(T) {
+pub fn initializeSystem(comptime T: type, io: std.Io, opt: Options(T), geometry: usize, random: *std.Random, allocator: std.mem.Allocator) !ClassicalParticle(T) {
     if (opt.potential == .ab_initio) {
         const position = opt.initial_conditions.molecule.position;
         const velocity = opt.initial_conditions.molecule.velocity;
         const charge = opt.initial_conditions.molecule.charge;
 
-        var system = try classical_particle.read(T, position, charge, geometry, allocator);
+        var system = try classical_particle.read(T, io, position, charge, geometry, allocator);
 
         if (velocity) |vel| {
-            const velocity_system = try classical_particle.read(T, vel, charge, geometry, allocator);
+            const velocity_system = try classical_particle.read(T, io, vel, charge, geometry, allocator);
             defer velocity_system.deinit(allocator);
 
             for (0..system.velocity.len) |i| system.velocity.ptr(i).* = velocity_system.position.at(i) / A2AU;
@@ -1115,30 +1097,19 @@ pub fn initializeSystem(comptime T: type, opt: Options(T), geometry: usize, rand
 }
 
 /// Parallel function to run a trajectory.
-pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, trajectory_based_results: anytype, params: anytype, error_ctx: *ErrorContext) void {
-    if (error_ctx.err != null) return;
-
+pub fn runTrajectoryParallel(id: usize, comptime T: type, io: std.Io, results: anytype, trajectory_based_results: anytype, params: anytype) !void {
     var rng = params[3];
     var random = rng.random();
 
-    var system = initializeSystem(T, params[0], params[1], &random, params[4]) catch |err| {
-        error_ctx.capture(err);
-        return;
-    };
+    var system = try initializeSystem(T, io, params[0], params[1], &random, params[4]);
     defer system.deinit(params[4]);
 
     if (params[0].equilibration_iterations > 0) {
-        const equilibration_output = runTrajectory(T, params[0], &system, params[1], true, params[2], params[4]) catch |err| {
-            error_ctx.capture(err);
-            return;
-        };
+        const equilibration_output = try runTrajectory(T, io, params[0], &system, params[1], true, params[2], params[4]);
         defer equilibration_output.deinit(params[4]);
     }
 
-    var trajectory_output = runTrajectory(T, params[0], &system, params[1], false, params[2], params[4]) catch |err| {
-        error_ctx.capture(err);
-        return;
-    };
+    var trajectory_output = try runTrajectory(T, io, params[0], &system, params[1], false, params[2], params[4]);
     defer trajectory_output.deinit(params[4]);
 
     inline for (std.meta.fields(@TypeOf(trajectory_output.thermodynamics))) |field| {
@@ -1184,13 +1155,13 @@ pub fn runTrajectoryParallel(id: usize, comptime T: type, results: anytype, traj
 }
 
 /// Print header for iteration info.
-pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surface_hopping: ?SurfaceHoppingAlgorithm(T), thm: ?Thermostat(T)) !void {
+pub fn printIterationHeader(comptime T: type, io: std.Io, ndim: usize, nstate: usize, surface_hopping: ?SurfaceHoppingAlgorithm(T), thm: ?Thermostat(T)) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
     const ndim_header_width = 9 * @as(usize, @min(ndim, 3)) + 2 * (@as(usize, @min(ndim, 3)) - 1) + @as(usize, if (ndim > 3) 7 else 2);
     const nstate_header_width = 7 * @as(usize, @min(4, nstate)) + 2 * (@as(usize, @min(4, nstate)) - 1) + @as(usize, if (nstate > 4) 7 else 2);
 
-    var writer = std.io.Writer.fixed(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
 
     try writer.print("\n{s:9} {s:8} ", .{ "TRAJ", "ITER" });
     try writer.print("{s:12} {s:12} {s:12} ", .{ "KIN (Eh)", "POT (Eh)", "TOT (Eh)" });
@@ -1208,11 +1179,11 @@ pub fn printIterationHeader(comptime T: type, ndim: usize, nstate: usize, surfac
 
     try writer.print("{s:4}", .{"TIME"});
 
-    try print("{s}\n", .{writer.buffered()});
+    try print(io, "{s}\n", .{writer.buffered()});
 }
 
 /// Add the partial results to the output vectors and export them if requested.
-pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), parallel_results: anytype, trajectory_based_results: anytype) !void {
+pub fn finalizeOutput(comptime T: type, io: std.Io, output: *Output(T), opt: Options(T), parallel_results: anytype, trajectory_based_results: anytype) !void {
     const output_bloch_vector_mean = parallel_results.bloch_vector_mean;
     const output_coefficient_mean = parallel_results.coefficient_mean;
     const output_kinetic_energy_mean = parallel_results.kinetic_energy_mean;
@@ -1260,20 +1231,20 @@ pub fn finalizeOutput(comptime T: type, output: *Output(T), opt: Options(T), par
 
     const end_time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
-    if (opt.write.bloch_vector_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.bloch_vector_mean, 0, end_time);
-    if (opt.write.coefficient_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.coefficient_mean, 0, end_time);
-    if (opt.write.kinetic_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.kinetic_energy_mean.asMatrix(), 0, end_time);
-    if (opt.write.momentum_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.momentum_mean, 0, end_time);
-    if (opt.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.population_mean, 0, end_time);
-    if (opt.write.position_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.position_mean, 0, end_time);
-    if (opt.write.potential_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.potential_energy_mean.asMatrix(), 0, end_time);
-    if (opt.write.state_potential_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.state_potential_energy_mean, 0, end_time);
-    if (opt.write.time_derivative_coupling_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.time_derivative_coupling_mean, 0, end_time);
-    if (opt.write.temperature_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.temperature_mean.asMatrix(), 0, end_time);
-    if (opt.write.total_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, output.total_energy_mean.asMatrix(), 0, end_time);
+    if (opt.write.bloch_vector_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.bloch_vector_mean, 0, end_time);
+    if (opt.write.coefficient_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.coefficient_mean, 0, end_time);
+    if (opt.write.kinetic_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.kinetic_energy_mean.asMatrix(), 0, end_time);
+    if (opt.write.momentum_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.momentum_mean, 0, end_time);
+    if (opt.write.population_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.population_mean, 0, end_time);
+    if (opt.write.position_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.position_mean, 0, end_time);
+    if (opt.write.potential_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.potential_energy_mean.asMatrix(), 0, end_time);
+    if (opt.write.state_potential_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.state_potential_energy_mean, 0, end_time);
+    if (opt.write.time_derivative_coupling_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.time_derivative_coupling_mean, 0, end_time);
+    if (opt.write.temperature_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.temperature_mean.asMatrix(), 0, end_time);
+    if (opt.write.total_energy_mean) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, output.total_energy_mean.asMatrix(), 0, end_time);
 
-    if (opt.write.schlitter_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, trajectory_based_results.schlitter_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
-    if (opt.write.qha_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, path, trajectory_based_results.qha_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
+    if (opt.write.schlitter_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, trajectory_based_results.schlitter_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
+    if (opt.write.qha_entropy) |path| try exportRealMatrixWithLinspacedLeftColumn(T, io, path, trajectory_based_results.qha_entropy.asMatrix(), 1, @as(T, @floatFromInt(opt.trajectories)));
 }
 
 /// Calculate thermodynamic properties from the trajectory output.
@@ -1307,21 +1278,21 @@ pub fn initRandomParallel(nthread: u32, seed: u32, allocator: std.mem.Allocator)
 }
 
 /// Prints the fine details after simulation.
-pub fn printFinalDetails(comptime T: type, opt: Options(T), output: Output(T)) !void {
+pub fn printFinalDetails(comptime T: type, io: std.Io, opt: Options(T), output: Output(T)) !void {
     for (0..output.final_population_mean.len) |i| {
         const population_error = binomialConfInt(output.final_population_mean.at(i), opt.trajectories);
 
         const print_payload = .{ if (i == 0) "\n" else "", i, output.final_population_mean.at(i), if (std.math.isNan(population_error)) 0 else population_error };
 
-        try print("{s}FINAL POPULATION OF STATE {d:2}: {d:.6} +- {:.6}\n", print_payload);
+        try print(io, "{s}FINAL POPULATION OF STATE {d:2}: {d:.6} +- {:.6}\n", print_payload);
     }
 }
 
 /// Prints the iteration info to standard output.
-pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T), thm: ?Thermostat(T), equilibrate: bool, timer: *std.time.Timer) !void {
+pub fn printIterationInfo(comptime T: type, io: std.Io, info: Custom(T).IterationInfo, surface_hopping: ?SurfaceHoppingAlgorithm(T), thm: ?Thermostat(T), equilibrate: bool, timer: *std.Io.Timestamp) !void {
     var buffer: [WRITE_BUFFER_SIZE]u8 = undefined;
 
-    var writer = std.io.Writer.fixed(&buffer);
+    var writer = std.Io.Writer.fixed(&buffer);
 
     if (equilibrate) try writer.print("{d:6}-EQ {d:8} ", .{ info.trajectory + 1, info.iteration }) else try writer.print("{d:9} {d:8} ", .{ info.trajectory + 1, info.iteration });
 
@@ -1361,21 +1332,22 @@ pub fn printIterationInfo(comptime T: type, info: Custom(T).IterationInfo, surfa
         }
     }
 
-    try writer.print("] {D}", .{timer.read()});
-    timer.reset();
+    try writer.print("] {f}", .{timer.untilNow(io, .real)});
 
-    try print("{s}\n", .{writer.buffered()});
+    timer.* = std.Io.Timestamp.now(io, .real);
+
+    try print(io, "{s}\n", .{writer.buffered()});
 }
 
 /// Print the thermodynamic properties to standard output.
-pub fn printThermodynamicProperties(comptime T: type, output: Custom(T).TrajectoryOutput.Thermodynamics) !void {
+pub fn printThermodynamicProperties(comptime T: type, io: std.Io, output: Custom(T).TrajectoryOutput.Thermodynamics) !void {
     inline for (std.meta.fields(@TypeOf(output))) |field| if (@field(output, field.name) != null) {
-        try print("\n", .{});
+        try print(io, "\n", .{});
         break;
     };
 
-    if (output.schlitter_entropy) |out| try print("SCHLITTER ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{ out, out * Na * Eh });
-    if (output.qha_entropy) |out| try print("QHA ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{ out, out * Na * Eh });
+    if (output.schlitter_entropy) |out| try print(io, "SCHLITTER ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{ out, out * Na * Eh });
+    if (output.qha_entropy) |out| try print(io, "QHA ENTROPY: {d:.8} Eh/K = {d:.8} J/MOL/K\n", .{ out, out * Na * Eh });
 }
 
 /// Samples the initial conditions.

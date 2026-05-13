@@ -19,8 +19,8 @@ pub fn comb(n: anytype, k: @TypeOf(n)) @TypeOf(n, k) {
 
 /// Generate all combinations of n elements from an array.
 pub fn combinations(comptime T: type, array: []const T, n: usize, allocator: std.mem.Allocator) !std.ArrayList([]T) {
-    var result = std.ArrayList([]T){};
-    var current = std.ArrayList(usize){};
+    var result: std.ArrayList([]T) = .empty;
+    var current: std.ArrayList(usize) = .empty;
     defer current.deinit(allocator);
 
     const Backtrack = struct {

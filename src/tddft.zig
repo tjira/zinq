@@ -89,7 +89,7 @@ pub fn Output(comptime T: type) type {
 }
 
 /// Run the TDDFT calculation with the given options for the provided system, returning the output struct with energy, gradient, hessian, and frequencies if requested.
-pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+pub fn run(comptime T: type, io: std.Io, opt: Options(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (opt.gradient != null and opt.gradient.? == .analytic) {
         std.log.err("ANALYTIC GRADIENT NOT IMPLEMENTED FOR TDDFT METHOD", .{});
 
@@ -102,50 +102,50 @@ pub fn run(comptime T: type, opt: Options(T), enable_printing: bool, allocator: 
         return error.InvalidInput;
     }
 
-    var system = try classical_particle.read(T, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator);
+    var system = try classical_particle.read(T, io, opt.hartree_fock.system, opt.hartree_fock.charge, 0, allocator);
     defer system.deinit(allocator);
 
     if (enable_printing) {
-        try print("\nINPUT GEOMETRY (A):\n", .{});
-        try printClassicalParticleAsMolecule(T, system, null);
+        try print(io, "\nINPUT GEOMETRY (A):\n", .{});
+        try printClassicalParticleAsMolecule(T, io, system, null);
     }
 
     if (opt.optimize != null) {
-        const optimized_system = try particleSteepestDescent(T, opt, system, tddft, "TDDFT", enable_printing, allocator);
+        const optimized_system = try particleSteepestDescent(T, io, opt, system, tddft, "TDDFT", enable_printing, allocator);
 
         system.deinit(allocator);
         system = optimized_system;
     }
 
     if (enable_printing and opt.optimize != null) {
-        try print("\nOPTIMIZED GEOMETRY (A):\n", .{});
-        try printClassicalParticleAsMolecule(T, system, null);
+        try print(io, "\nOPTIMIZED GEOMETRY (A):\n", .{});
+        try printClassicalParticleAsMolecule(T, io, system, null);
     }
 
-    var output = try tddft(T, opt, system, enable_printing, allocator);
+    var output = try tddft(T, io, opt, system, enable_printing, allocator);
     errdefer output.deinit(allocator);
 
-    output.G = if (opt.gradient != null) try nuclearGradient(T, opt, system, tddft, "TDDFT", enable_printing, allocator) else null;
+    output.G = if (opt.gradient != null) try nuclearGradient(T, io, opt, system, tddft, "TDDFT", enable_printing, allocator) else null;
 
     if (output.G) |G| {
-        try print("\nTDDFT NUCLEAR GRADIENT (Eh/Bohr):\n", .{});
-        try printRealMatrix(T, G);
+        try print(io, "\nTDDFT NUCLEAR GRADIENT (Eh/Bohr):\n", .{});
+        try printRealMatrix(T, io, G);
     }
 
-    output.H = if (opt.hessian != null) try nuclearHessian(T, opt, system, tddft, "TDDFT", enable_printing, allocator) else null;
+    output.H = if (opt.hessian != null) try nuclearHessian(T, io, opt, system, tddft, "TDDFT", enable_printing, allocator) else null;
 
     if (output.H) |H| output.frequencies = try particleHarmonicFrequencies(T, system, H, allocator);
 
     if (output.frequencies) |freqs| {
-        try print("\nTDDFT VIBRATIONAL FREQUENCIES (CM^-1):\n", .{});
-        try printRealMatrix(T, freqs.asMatrix());
+        try print(io, "\nTDDFT VIBRATIONAL FREQUENCIES (CM^-1):\n", .{});
+        try printRealMatrix(T, io, freqs.asMatrix());
     }
 
     return output;
 }
 
 /// Primary function to run the tddft calculation, returning the energy and the output of the underlying hartree-fock calculation.
-pub fn tddft(comptime T: type, opt: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
+pub fn tddft(comptime T: type, io: std.Io, opt: Options(T), system: ClassicalParticle(T), enable_printing: bool, allocator: std.mem.Allocator) !Output(T) {
     if (opt.hartree_fock.dft == null) {
         std.log.err("TDDFT CALCULATION REQUIRES A DFT FUNCTIONAL TO BE SPECIFIED IN THE HARTREE-FOCK OPTIONS", .{});
 
@@ -167,7 +167,7 @@ pub fn tddft(comptime T: type, opt: Options(T), system: ClassicalParticle(T), en
     var basis = try BasisSet(T).init(system, opt.hartree_fock.basis, allocator);
     defer basis.deinit(allocator);
 
-    const hf_output = try scf(T, opt.hartree_fock, system, enable_printing, allocator);
+    const hf_output = try scf(T, io, opt.hartree_fock, system, enable_printing, allocator);
 
     const nbf = hf_output.S.rows;
     const nocc = try system.noccSpatial();
@@ -226,11 +226,11 @@ pub fn tddft(comptime T: type, opt: Options(T), system: ClassicalParticle(T), en
     defer AJC.J.deinit(allocator);
     defer AJC.C.deinit(allocator);
 
-    if (enable_printing) try print("\nTDDFT STATE {d:2}: {d:20.14} Eh (DELTA E = {d:7.4} Eh = {d:7.4} eV)\n", .{ 0, hf_output.energy, 0.0, 0.0 });
+    if (enable_printing) try print(io, "\nTDDFT STATE {d:2}: {d:20.14} Eh (DELTA E = {d:7.4} Eh = {d:7.4} eV)\n", .{ 0, hf_output.energy, 0.0, 0.0 });
 
     if (enable_printing) {
         for (0..@min(opt.states, AJC.J.rows)) |i| {
-            try print("TDDFT STATE {d:2}: {d:20.14} Eh (DELTA E = {d:7.4} Eh = {d:7.4} eV)\n", .{ i + 1, hf_output.energy + AJC.J.at(i, i), AJC.J.at(i, i), AJC.J.at(i, i) * AU2EV });
+            try print(io, "TDDFT STATE {d:2}: {d:20.14} Eh (DELTA E = {d:7.4} Eh = {d:7.4} eV)\n", .{ i + 1, hf_output.energy + AJC.J.at(i, i), AJC.J.at(i, i), AJC.J.at(i, i) * AU2EV });
         }
     }
 
