@@ -526,7 +526,7 @@ pub fn solveRoothaan(comptime T: type, E: *RealMatrix(T), C: *RealMatrix(T), F: 
 test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
     const opt = Options(f64){ .system = "example/molecule/water.xyz", .basis = "sto-3g" };
 
-    var output = try run(f64, opt, false, std.testing.allocator);
+    var output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.energy, -74.96590121728507, TEST_TOLERANCE);
@@ -535,7 +535,7 @@ test "Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
 test "DFT Calculation for a Water Molecule with Slater-Chachiyo LDA Functional and STO-3G Basis Set" {
     const opt = Options(f64){ .system = "example/molecule/water.xyz", .basis = "sto-3g", .dft = .{ .functional = .{ .exchange = "LDA_X", .correlation = "LDA_C_CHACHIYO" } } };
 
-    var output = try run(f64, opt, false, std.testing.allocator);
+    var output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.energy, -74.72139974284826, TEST_TOLERANCE);
@@ -544,7 +544,7 @@ test "DFT Calculation for a Water Molecule with Slater-Chachiyo LDA Functional a
 test "DFT Calculation for a Water Molecule with Slater-VWN5 LDA Functional and STO-3G Basis Set" {
     const opt = Options(f64){ .system = "example/molecule/water.xyz", .basis = "sto-3g", .dft = .{ .functional = .{ .exchange = "LDA_X", .correlation = "LDA_C_VWN" } } };
 
-    var output = try run(f64, opt, false, std.testing.allocator);
+    var output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.energy, -74.73993721536317, TEST_TOLERANCE);
@@ -553,7 +553,7 @@ test "DFT Calculation for a Water Molecule with Slater-VWN5 LDA Functional and S
 test "Generalized Hartree-Fock Calculation for a Water Molecule with STO-3G Basis Set" {
     const opt = Options(f64){ .system = "example/molecule/water.xyz", .basis = "sto-3g", .generalized = true };
 
-    var output = try run(f64, opt, false, std.testing.allocator);
+    var output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.energy, -74.96590121728507, TEST_TOLERANCE);
@@ -562,7 +562,7 @@ test "Generalized Hartree-Fock Calculation for a Water Molecule with STO-3G Basi
 test "Generalized Hartree-Fock Calculation for a Methane Molecule with 6-31G* Basis Set" {
     const opt = Options(f64){ .system = "example/molecule/methane.xyz", .basis = "6-31g*", .generalized = true };
 
-    var output = try run(f64, opt, false, std.testing.allocator);
+    var output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     if (comptime !config.use_libint) try std.testing.expectApproxEqAbs(output.energy, -40.19517074914403, TEST_TOLERANCE);

@@ -1373,7 +1373,7 @@ test "Fewest Switches Surface Hopping on Tully's First Potential" {
         .trajectories = 1000,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.final_population_mean.at(0), 0.372, TEST_TOLERANCE);
@@ -1396,7 +1396,7 @@ test "Landau-Lener Surface Hopping on Tully's First Potential" {
         .trajectories = 1000,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.final_population_mean.at(0), 0.498, TEST_TOLERANCE);
@@ -1420,7 +1420,7 @@ test "Mapping Approach to Surface Hopping on Tully's First Potential" {
         .trajectories = 1000,
     };
 
-    const output = try run(f64, opt, false, std.testing.allocator);
+    const output = try run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(output.final_population_mean.at(0), 0.40697437617713, TEST_TOLERANCE);
