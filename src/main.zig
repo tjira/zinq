@@ -281,26 +281,26 @@ pub fn main(init: std.process.Init) !void {
     }
 
     if (comptime config.use_libint or config.use_openblas or config.use_xc) {
-        try device_write.print("\nLIBRARIES: ", .{});
+        try device_write.print(io, "\nLIBRARIES: ", .{});
         var needs_comma = false;
 
         if (comptime config.use_libint) {
-            try device_write.print("LIBINT {s}", .{config.libint_version});
+            try device_write.print(io, "LIBINT {s}", .{config.libint_version});
             needs_comma = true;
         }
 
         if (comptime config.use_openblas) {
-            if (needs_comma) try device_write.print(", ", .{});
-            try device_write.print("OPENBLAS {s}", .{config.openblas_version});
+            if (needs_comma) try device_write.print(io, ", ", .{});
+            try device_write.print(io, "OPENBLAS {s}", .{config.openblas_version});
             needs_comma = true;
         }
 
         if (comptime config.use_xc) {
-            if (needs_comma) try device_write.print(", ", .{});
-            try device_write.print("LIBXC v{s}", .{config.libxc_version});
+            if (needs_comma) try device_write.print(io, ", ", .{});
+            try device_write.print(io, "LIBXC v{s}", .{config.libxc_version});
         }
 
-        try device_write.print("\n", .{});
+        try device_write.print(io, "\n", .{});
     }
 
     const args = try init.minimal.args.toSlice(init.arena.allocator());
