@@ -89,17 +89,17 @@ pub fn alignTrajectory(comptime T: type, positions: RealMatrix(T), allocator: st
 }
 
 /// Function to read a trajectory from an XYZ file and return it as a RealMatrix.
-pub fn readTrajectoryFromXYZ(comptime T: type, path: []const u8, allocator: std.mem.Allocator) !struct { positions: RealMatrix(T), masses: RealVector(T) } {
-    const file = std.fs.cwd().openFile(path, .{}) catch |err| {
+pub fn readTrajectoryFromXYZ(comptime T: type, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !struct { positions: RealMatrix(T), masses: RealVector(T) } {
+    const file = std.Io.Dir.cwd().openFile(io, path, .{}) catch |err| {
         std.log.err("FILE '{s}' NOT FOUND", .{path});
 
         return err;
     };
 
-    defer file.close();
+    defer file.close(io);
 
     var buffer: [1024]u8 = undefined;
-    var reader = file.reader(&buffer);
+    var reader = file.reader(io, &buffer);
     var reader_interface = &reader.interface;
 
     const natom = try std.fmt.parseInt(u32, uncr(try reader_interface.peekDelimiterExclusive('\n')), 10);

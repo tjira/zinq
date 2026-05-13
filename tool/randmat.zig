@@ -6,70 +6,72 @@ const RealMatrix = zinq.real_matrix.RealMatrix;
 const exportRealMatrix = zinq.device_write.exportRealMatrix;
 const print = zinq.device_write.print;
 
-pub fn help() !void {
-    try print("USAGE: zinq-randmat [M] [N] [-s SEED] [-o OUTPUT] [-h]\n", .{});
+pub fn help(io: std.Io) !void {
+    try print(io, "USAGE: zinq-randmat [M] [N] [-s SEED] [-o OUTPUT] [-h]\n", .{});
 }
 
-pub fn parse(m: *usize, n: *usize, seed: *usize, output: *[]const u8, symmetric: *bool, allocator: std.mem.Allocator, h: *bool) !std.process.ArgIterator {
+pub fn parse(io: std.Io, m: *usize, n: *usize, seed: *usize, output: *[]const u8, symmetric: *bool, args: []const []const u8, h: *bool) !void {
     var argc: usize = 0;
-    var argv = try std.process.argsWithAllocator(allocator);
-    _ = argv.next();
+    var i: usize = 0;
 
-    while (argv.next()) |arg| {
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
         if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
             h.* = true;
-            try help();
-            return argv;
+            try help(io);
+            return;
+        }
+
+        if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
+            i += 1;
+            output.* = if (i < args.len) args[i] else return error.InvalidArgument;
+            continue;
+        }
+        if (std.mem.eql(u8, arg, "-s") or std.mem.eql(u8, arg, "--seed")) {
+            i += 1;
+            seed.* = try std.fmt.parseInt(usize, if (i < args.len) args[i] else return error.InvalidArgument, 10);
+            continue;
+        }
+
+        if (std.mem.eql(u8, arg, "--symmetric")) {
+            symmetric.* = true;
+            continue;
         }
 
         if (argc == 0) m.* = try std.fmt.parseInt(usize, arg, 10);
         if (argc == 1) n.* = try std.fmt.parseInt(usize, arg, 10);
 
-        if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
-            output.* = argv.next() orelse return error.InvalidArgument;
-            argc += 1;
-        }
-        if (std.mem.eql(u8, arg, "-s") or std.mem.eql(u8, arg, "--seed")) {
-            seed.* = try std.fmt.parseInt(usize, argv.next() orelse return error.InvalidArgument, 10);
-            argc += 1;
-        }
-
-        if (std.mem.eql(u8, arg, "--symmetric")) symmetric.* = true;
-
         argc += 1;
     }
-
-    return argv;
 }
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
+    const allocator = init.gpa;
+    const io = init.io;
+
     var m: usize = 0;
     var n: usize = 0;
-    var seed: usize = @intCast(std.time.milliTimestamp());
+    var seed: usize = @intCast(std.Io.Timestamp.now(io, .real).toMilliseconds());
     var output: []const u8 = "A.mat";
     var symmetric: bool = false;
 
-    var timer_total = try std.time.Timer.start();
+    var timer_total = std.Io.Timestamp.now(io, .real);
     var h = false;
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
 
-    defer {
-        if (gpa.deinit() == .leak) std.log.err("MEMORY LEAK DETECTED IN THE ALLOCATOR\n", .{});
-    }
+    try parse(io, &m, &n, &seed, &output, &symmetric, args[1..], &h);
 
-    var argv = try parse(&m, &n, &seed, &output, &symmetric, allocator, &h);
-    defer argv.deinit();
     if (h) return;
 
-    try print("RANDOM {s}MATRIX GENERATION - DIM: {d}x{d}, SEED: {d}", .{ if (symmetric) "SYMMETRIC " else "", m, n, seed });
+    try print(io, "RANDOM {s}MATRIX GENERATION - DIM: {d}x{d}, SEED: {d}", .{ if (symmetric) "SYMMETRIC " else "", m, n, seed });
 
-    if (output.len > 0) try print(", OUTPUT: {s}", .{output});
-    try print("\n", .{});
+    if (output.len > 0) try print(io, ", OUTPUT: {s}", .{output});
+    try print(io, "\n", .{});
 
     if (m == 0 or n == 0) {
-        std.log.err("YOU NEED TO PROVIDE VALID DIMENSIONS FOR THE MATRIX\n", .{});
+        try print(io, "YOU NEED TO PROVIDE VALID DIMENSIONS FOR THE MATRIX\n", .{});
 
         return error.InvalidArgument;
     }
@@ -78,16 +80,16 @@ pub fn main() !void {
         var A = try RealMatrix(f64).init(m, n, allocator);
         defer A.deinit(allocator);
 
-        var timer_randomize = try std.time.Timer.start();
-        try print("\nRANDOMIZING THE MATRIX: ", .{});
+        var timer_randomize = std.Io.Timestamp.now(io, .real);
+        try print(io, "\nRANDOMIZING THE MATRIX: ", .{});
 
         A.randomize(seed);
         if (symmetric) try A.symmetrize();
 
-        try print("{D}\n", .{timer_randomize.read()});
+        try print(io, "{f}\n", .{timer_randomize.untilNow(io, .real)});
 
-        if (output.len > 0) try exportRealMatrix(f64, output, A);
+        if (output.len > 0) try exportRealMatrix(f64, io, output, A);
     }
 
-    try print("\nTOTAL EXECUTION TIME: {D}\n", .{timer_total.read()});
+    try print(io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer_total.untilNow(io, .real)});
 }
