@@ -1,5 +1,7 @@
 import numpy as np
+
 from ..potential import Potential
+
 
 class Wavefunction:
     data: np.ndarray

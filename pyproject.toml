@@ -21,3 +21,8 @@ zinq = "zinq.__main__:main"
 
 [tool.setuptools.dynamic]
 version = {attr = "zinq.__version__"}
+
+[tool.isort]
+profile = "black"
+line_length = 120
+known_first_party = ["zinq"]

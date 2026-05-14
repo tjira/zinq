@@ -1,5 +1,8 @@
-import numpy as np, scipy.linalg
+import numpy as np
+import scipy.linalg
+
 from ..potential import Potential
+
 
 class SplitOperator:
     R: np.ndarray

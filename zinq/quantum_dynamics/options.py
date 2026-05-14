@@ -1,6 +1,9 @@
-from pydantic import BaseModel
 from typing import Optional
-from ..potential import HarmonicOptions, TullyFirstOptions, Potential
+
+from pydantic import BaseModel
+
+from ..potential import HarmonicOptions, Potential, TullyFirstOptions
+
 
 class Grid(BaseModel):
     limits: list[list[float]]

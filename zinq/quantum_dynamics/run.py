@@ -1,11 +1,14 @@
-import datetime, time
+import datetime
+import time
+
 import numpy as np
-from .grid import generatePositionGrid
-from .grid import generateMomentumGrid
+
+from ..potential import Potential
+from .grid import generateMomentumGrid, generatePositionGrid
 from .options import Options
 from .split_operator import SplitOperator
 from .wavefunction import Wavefunction
-from ..potential import Potential
+
 
 def run(options_dict: dict):
     opt = Options(**options_dict)

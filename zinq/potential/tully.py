@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 
 import numpy as np
-
 from pydantic import BaseModel
 
 from .potential import Potential
+
 
 class TullyFirstOptions(BaseModel):
     A: float = 0.01

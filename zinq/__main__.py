@@ -1,6 +1,11 @@
-import argparse, datetime, os, time
+import argparse
+import datetime
+import os
+import time
+
 from zinq import __version__
 from zinq.dispatcher import process_file
+
 
 def main():
     parser = argparse.ArgumentParser(

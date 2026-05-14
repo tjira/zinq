@@ -1,5 +1,8 @@
-import json, os
+import json
+import os
+
 from . import quantum_dynamics
+
 
 def process_file(file_path):
     if not os.path.exists(file_path):

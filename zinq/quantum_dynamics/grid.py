@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def generateMomentumGrid(limits: np.ndarray, npoint: int):
     assert limits.shape[1] == 2
 
