@@ -2,7 +2,15 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from pydantic import BaseModel
+
 from .potential import Potential
+
+class HarmonicOptions(BaseModel):
+    k: list[float] = [1]
+
+    def create(self) -> "Harmonic":
+        return Harmonic(k=np.array(self.k))
 
 @dataclass(frozen=True, kw_only=True)
 class Harmonic(Potential):

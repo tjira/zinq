@@ -4,32 +4,39 @@ import numpy as np
 
 from .grid import generatePositionGrid
 from .grid import generateMomentumGrid
+from .options import Options
 from .split_operator import SplitOperator
 from .wavefunction import Wavefunction
 
-from ..potential import TullyFirst, Harmonic, Potential
+from ..potential import Potential
 
-def run(options: dict):
-    potential: Potential = Harmonic(k=np.array(options["potential"]["harmonic"]["k"]))
-    # pot = TullyFirst()
+def run(options_dict: dict):
+    opt = Options(**options_dict)
 
-    wfn = Wavefunction(potential.ndim, potential.nstate, options["grid"]["npoint"])
+    if opt.potential.harmonic:
+        potential: Potential = opt.potential.harmonic.create()
+    elif opt.potential.tully_1:
+        potential: Potential = opt.potential.tully_1.create()
+    else:
+        raise ValueError("NO POTENTIAL SPECIFIED")
 
-    position_grid = generatePositionGrid(np.array(options["grid"]["limits"]), options["grid"]["npoint"])
-    momentum_grid = generateMomentumGrid(np.array(options["grid"]["limits"]), options["grid"]["npoint"])
+    wfn = Wavefunction(potential.ndim, potential.nstate, opt.grid.npoint)
+
+    position_grid = generatePositionGrid(np.array(opt.grid.limits), opt.grid.npoint)
+    momentum_grid = generateMomentumGrid(np.array(opt.grid.limits), opt.grid.npoint)
 
     wfn.initializeGaussian(
         position_grid,
-        np.array(options["initial_conditions"]["position"]),
-        np.array(options["initial_conditions"]["momentum"]),
-        np.array(options["initial_conditions"]["gamma"]),
-        np.array(options["initial_conditions"]["state"])
+        np.array(opt.initial_conditions.position),
+        np.array(opt.initial_conditions.momentum),
+        np.array(opt.initial_conditions.gamma),
+        opt.initial_conditions.state
     )
 
-    propagator = SplitOperator(position_grid, momentum_grid, potential, options["time_step"], options["mass"], True)
+    propagator = SplitOperator(position_grid, momentum_grid, potential, opt.time_step, opt.mass, True)
 
     with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
-        print(f"\nINITIAL GAMMA: {np.array(options['initial_conditions']['gamma'], dtype=float)}\n")
+        print(f"\nINITIAL GAMMA: {np.array(opt.initial_conditions.gamma, dtype=float)}\n")
 
     print(
         f"{'ITER':>5} {'KIN (Eh)':>12} {'POT (Eh)':>12} {'TOT (Eh)':>12} "
@@ -37,22 +44,22 @@ def run(options: dict):
         f"{'POPULATION':>{(11 * wfn.nstate + 1)}} {'NORM':>9} TIME"
     )
 
-    for i in range(options["iterations"] + 1):
+    for i in range(opt.iterations + 1):
         start_time = time.time()
 
         if i: propagator.step(wfn)
 
-        log_iteration = i == 0 or i == options["iterations"] or (i % options.get("log_interval", 1) == 0)
+        log_iteration = i == 0 or i == opt.iterations or (i % opt.log_interval == 0)
 
-        kinetic_energy = wfn.kineticEnergy(momentum_grid, options["mass"])
+        if not log_iteration: continue
+
+        kinetic_energy = wfn.kineticEnergy(momentum_grid, opt.mass)
         potential_energy = wfn.potentialEnergy(position_grid, potential)
         total_energy = kinetic_energy + potential_energy
         position = wfn.position(position_grid)
         momentum = wfn.momentum(momentum_grid)
         population = wfn.population()
         norm = wfn.norm()
-
-        if not log_iteration: continue
 
         duration = datetime.timedelta(seconds=time.time() - start_time)
 
