@@ -18,5 +18,3 @@ callouts:
 aux_links:
   "Source Code":
     - "//github.com/tjira/zinq"
-  "Code Documentation":
-    - "//tjira.github.io/zinq/code"

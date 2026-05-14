@@ -1,0 +1,25 @@
+name: Pypi
+
+on:
+  push:
+    tags:
+      - 'v**'
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Build Tools
+        run: pip install build
+
+      - name: Build Package Distributions
+        run: python -m build
+
+      - name: Publish Package Distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
