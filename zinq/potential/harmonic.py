@@ -12,6 +12,7 @@ class HarmonicOptions(BaseModel):
     def create(self) -> "Harmonic":
         return Harmonic(k=np.array(self.k))
 
+
 @dataclass(frozen=True, kw_only=True)
 class Harmonic(Potential):
     k: np.ndarray

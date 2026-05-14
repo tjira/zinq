@@ -15,6 +15,7 @@ class TullyFirstOptions(BaseModel):
     def create(self):
         return TullyFirst(A=self.A, B=self.B, C=self.C, D=self.D)
 
+
 @dataclass(frozen=True, kw_only=True)
 class TullyFirst(Potential):
     ndim: int = 1

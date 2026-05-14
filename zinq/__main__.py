@@ -41,5 +41,6 @@ def main():
 
     print(f"\nTOTAL EXECUTION TIME: {duration}")
 
+
 if __name__ == "__main__":
     main()

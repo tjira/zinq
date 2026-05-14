@@ -9,14 +9,17 @@ class GridOptions(BaseModel):
     limits: list[list[float]]
     npoint: int
 
+
 class ImaginaryOptions(BaseModel):
     nstate: int = 1
+
 
 class InitialConditionsOptions(BaseModel):
     position: list[float]
     momentum: list[float]
     gamma: list[float]
     state: int = 0
+
 
 class PotentialOptions(BaseModel):
     harmonic: Optional[HarmonicOptions] = None
@@ -26,6 +29,7 @@ class PotentialOptions(BaseModel):
         try: return next(pot.create() for _, pot in self if pot is not None)
         except StopIteration: raise ValueError("NO POTENTIAL SPECIFIED")
 
+
 class WriteOptions(BaseModel):
     kinetic_energy: Optional[str] = None
     momentum: Optional[str] = None
@@ -34,6 +38,7 @@ class WriteOptions(BaseModel):
     position: Optional[str] = None
     potential_energy: Optional[str] = None
     total_energy: Optional[str] = None
+
 
 class Options(BaseModel):
     grid: GridOptions

@@ -11,6 +11,7 @@ def generateMomentumGrid(limits: np.ndarray, npoint: int):
 
     return np.meshgrid(*grids, indexing="ij")
 
+
 def generatePositionGrid(limits: np.ndarray, npoint: int):
     assert limits.shape[1] == 2
 
