@@ -12,6 +12,11 @@ license = "MIT"
 authors = [
     {name = "Tomáš Jíra", email = "tom.jira@gmail.com"},
 ]
+dependencies = [
+    "numpy",
+    "scipy",
+    "pydantic",
+]
 
 [project.urls]
 Homepage = "https://github.com/tjira/zinq"
