@@ -1,3 +1,3 @@
 from .run import run
-from .split_operator import SplitOperator
+from .strang_split import StrangSplit
 from .wavefunction import Wavefunction

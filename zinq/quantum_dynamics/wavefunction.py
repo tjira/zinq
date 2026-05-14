@@ -31,13 +31,13 @@ class Wavefunction:
     def npoint(self) -> int:
         return self.data.shape[0]
 
-    def initializeGaussian(self,
+    def initializeGaussian(self, /,
         position_grid: list[np.ndarray],
         position: np.ndarray,
         momentum: np.ndarray,
         gamma: np.ndarray,
         state: int
-    ) -> None:
+    ):
         assert position.shape[0] == self.ndim
         assert momentum.shape[0] == self.ndim
         assert gamma.shape[0] == self.ndim

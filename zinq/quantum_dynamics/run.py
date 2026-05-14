@@ -4,9 +4,10 @@ import time
 import numpy as np
 
 from ..potential import Potential
+from . import strang_split
 from .grid import generateMomentumGrid, generatePositionGrid
 from .options import Options
-from .split_operator import SplitOperator
+from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
 
 
@@ -21,20 +22,20 @@ def run(options_dict: dict):
     momentum_grid = generateMomentumGrid(np.array(opt.grid.limits), opt.grid.npoint)
 
     wfn.initializeGaussian(
-        position_grid,
-        np.array(opt.initial_conditions.position),
-        np.array(opt.initial_conditions.momentum),
-        np.array(opt.initial_conditions.gamma),
-        opt.initial_conditions.state
+        position_grid=position_grid,
+        position=np.array(opt.initial_conditions.position),
+        momentum=np.array(opt.initial_conditions.momentum),
+        gamma=np.array(opt.initial_conditions.gamma),
+        state=opt.initial_conditions.state
     )
 
-    propagator = SplitOperator(
-        position_grid,
-        momentum_grid,
-        potential,
-        opt.time_step,
-        opt.mass,
-        opt.imaginary
+    propagator = StrangSplit(
+        position_grid=position_grid,
+        momentum_grid=momentum_grid,
+        potential=potential,
+        mass=opt.mass,
+        dt=opt.time_step,
+        imaginary=opt.imaginary,
     )
 
     with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
