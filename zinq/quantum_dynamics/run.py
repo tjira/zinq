@@ -28,7 +28,14 @@ def run(options_dict: dict):
         opt.initial_conditions.state
     )
 
-    propagator = SplitOperator(position_grid, momentum_grid, potential, opt.time_step, opt.mass, opt.imaginary)
+    propagator = SplitOperator(
+        position_grid,
+        momentum_grid,
+        potential,
+        opt.time_step,
+        opt.mass,
+        opt.imaginary
+    )
 
     with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
         print(f"\nINITIAL GAMMA: {np.array(opt.initial_conditions.gamma, dtype=float)}\n")

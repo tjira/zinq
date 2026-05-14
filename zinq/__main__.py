@@ -9,18 +9,28 @@ from zinq.dispatcher import process_file
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="zinq", description="A lightweight Python engine for electronic structure and quantum dynamics.",
+        add_help=False,
+        allow_abbrev=False,
+        description="Lightweight Python engine for electronic structure and quantum dynamics.",
         formatter_class=lambda prog: argparse.HelpFormatter(prog, max_help_position=128),
-        add_help=False, allow_abbrev=False
+        prog="zinq",
     )
 
-    parser.add_argument("-h", "--help", action="help", default=argparse.SUPPRESS, help="This help message.")
-    parser.add_argument("inputs", nargs="?", default="input.json", help="Input files to process.")
+    parser.add_argument("-h", "--help", action="help", help="This help message.")
+
+    parser.add_argument(
+        "inputs",
+        nargs="?",
+        default="input.json",
+        help="Input files to process."
+    )
 
     args = parser.parse_args()
 
-    print(f"PYTHON: {os.sys.version.split()[0]}, ZINQ: {__version__}, TIMESTAMP: {datetime.datetime.now().isoformat()}")
-
+    print(
+        f"PYTHON: {os.sys.version.split()[0]}, ZINQ: {__version__}, "
+        f"TIMESTAMP: {datetime.datetime.now().isoformat()}"
+    )
 
     start_time = time.time()
 

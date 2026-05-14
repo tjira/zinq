@@ -12,7 +12,9 @@ class SplitOperator:
     def __init__(self, position_grid: list[np.ndarray], momentum_grid: list[np.ndarray], potential: Potential, dt: float, mass: float, imaginary: bool = False):
         self.unit = -0.5 * (1.0 if imaginary else 1j) * dt
 
-        self.R = scipy.linalg.expm(self.unit * np.moveaxis(potential.evaluateDiabatic(position_grid), [0, 1], [-2, -1]))
+        V = np.moveaxis(potential.evaluateDiabatic(position_grid), [0, 1], [-2, -1])
+
+        self.R = scipy.linalg.expm(self.unit * V)
         self.K = np.exp(self.unit * sum(m**2 for m in momentum_grid) / mass)[..., np.newaxis]
 
     def step(self, wfn):

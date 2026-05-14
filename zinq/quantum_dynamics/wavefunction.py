@@ -31,7 +31,13 @@ class Wavefunction:
     def npoint(self) -> int:
         return self.data.shape[0]
 
-    def initializeGaussian(self, position_grid: list[np.ndarray], position: np.ndarray, momentum: np.ndarray, gamma: np.ndarray, state: int):
+    def initializeGaussian(self,
+        position_grid: list[np.ndarray],
+        position: np.ndarray,
+        momentum: np.ndarray,
+        gamma: np.ndarray,
+        state: int
+    ) -> None:
         assert position.shape[0] == self.ndim
         assert momentum.shape[0] == self.ndim
         assert gamma.shape[0] == self.ndim
@@ -42,7 +48,8 @@ class Wavefunction:
         exponent = np.zeros_like(position_grid[0], dtype=np.complex128)
 
         for i in range(self.ndim):
-            exponent += -0.5 * gamma[i] * (position_grid[i] - position[i])**2 + 1j * momentum[i] * (position_grid[i] - position[i])
+            dr = position_grid[i] - position[i]
+            exponent += -0.5 * gamma[i] * dr**2 + 1j * momentum[i] * dr
 
         self.data[..., state] = np.exp(exponent)
         self.measure = np.prod([np.ptp(axis) / (self.npoint - 1) for axis in position_grid])
@@ -52,19 +59,36 @@ class Wavefunction:
         self.data /= np.sqrt(self.norm())
 
     def firstDerivative(self, momentum_grid: list[np.ndarray], dim: int):
-        return Wavefunction.fromData(np.fft.ifft(1j * momentum_grid[dim][..., np.newaxis] * np.fft.fft(self.data, axis=dim), axis=dim), self.measure)
+        data_fft = np.fft.fft(self.data, axis=dim)
+        first_derivative_momentum = 1j * momentum_grid[dim][..., np.newaxis] * data_fft
+        first_derivative_position = np.fft.ifft(first_derivative_momentum, axis=dim)
+        return Wavefunction.fromData(first_derivative_position, self.measure)
 
     def secondDerivative(self, momentum_grid: list[np.ndarray], dim: int):
-        return Wavefunction.fromData(np.fft.ifft(-momentum_grid[dim][..., np.newaxis]**2 * np.fft.fft(self.data, axis=dim), axis=dim), self.measure)
+        data_fft = np.fft.fft(self.data, axis=dim)
+        second_derivative_momentum = -momentum_grid[dim][..., np.newaxis]**2 * data_fft
+        second_derivative_position = np.fft.ifft(second_derivative_momentum, axis=dim)
+        return Wavefunction.fromData(second_derivative_position, self.measure)
 
     def kineticEnergy(self, momentum_grid: list[np.ndarray], mass: float) -> float:
         return np.sum(self.kineticEnergyDensity(momentum_grid, mass)) * self.measure
 
     def kineticEnergyDensity(self, momentum_grid: list[np.ndarray], mass: float) -> np.ndarray:
-        return sum((-0.5 / mass) * self.overlapDensity(self.secondDerivative(momentum_grid, d)).real for d in range(self.ndim))
+        kinetic_energy_density = np.zeros(self.data.shape[:-1])
+
+        for d in range(self.ndim):
+            second_derivative = self.secondDerivative(momentum_grid, d)
+            kinetic_energy_density += self.overlapDensity(second_derivative).real
+
+        return (-0.5 / mass) * kinetic_energy_density
 
     def momentum(self, momentum_grid: list[np.ndarray]) -> np.ndarray:
-        return np.array([np.sum(self.momentumDensity(momentum_grid, d)) * self.measure for d in range(self.ndim)])
+        momentum = np.zeros(self.ndim)
+
+        for d in range(self.ndim):
+            momentum[d] = np.sum(self.momentumDensity(momentum_grid, d)) * self.measure
+
+        return momentum
 
     def momentumDensity(self, momentum_grid: list[np.ndarray], dim: int) -> np.ndarray:
         return self.overlapDensity(self.firstDerivative(momentum_grid, dim)).imag
@@ -82,19 +106,39 @@ class Wavefunction:
         return np.einsum("...i,...i->...", np.conj(self.data), other.data)
 
     def population(self) -> np.ndarray:
-        return np.array([np.sum(self.populationDensity(s)) * self.measure for s in range(self.nstate)])
+        population = np.zeros(self.nstate)
+
+        for s in range(self.nstate):
+            population[s] = np.sum(self.populationDensity(s)) * self.measure
+
+        return population
 
     def populationDensity(self, state: int) -> np.ndarray:
         return np.abs(self.data[..., state])**2
 
     def position(self, position_grid: list[np.ndarray]) -> np.ndarray:
-        return np.array([np.sum(self.positionDensity(position_grid, d)) * self.measure for d in range(self.ndim)])
+        position = np.zeros(self.ndim)
+
+        for d in range(self.ndim):
+            position[d] = np.sum(self.positionDensity(position_grid, d)) * self.measure
+
+        return position
 
     def positionDensity(self, position_grid: list[np.ndarray], dim: int) -> np.ndarray:
         return np.sum(np.abs(self.data)**2, axis=-1) * position_grid[dim]
 
-    def potentialEnergy(self, position_grid: list[np.ndarray], potential: Potential, time: float = 0) -> float:
-        return np.sum(self.potentialEnergyDensity(position_grid, potential, time=time)) * self.measure
+    def potentialEnergy(self,
+        position_grid: list[np.ndarray],
+        potential: Potential,
+        time: float = 0
+    ) -> float:
+        potential_energy_density = self.potentialEnergyDensity(position_grid, potential, time)
+        return np.sum(potential_energy_density) * self.measure
 
-    def potentialEnergyDensity(self, position_grid: list[np.ndarray], potential: Potential, time: float = 0) -> np.ndarray:
-        return np.einsum("...i,ij...,...j->...", np.conj(self.data), potential.evaluateDiabatic(position_grid, time=time), self.data).real
+    def potentialEnergyDensity(self,
+        position_grid: list[np.ndarray],
+        potential: Potential,
+        time: float = 0
+    ) -> np.ndarray:
+        V = potential.evaluateDiabatic(position_grid, time=time)
+        return np.einsum("...i,ij...,...j->...", np.conj(self.data), V, self.data).real
