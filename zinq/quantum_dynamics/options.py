@@ -26,6 +26,15 @@ class PotentialOptions(BaseModel):
         try: return next(pot.create() for _, pot in self if pot is not None)
         except StopIteration: raise ValueError("NO POTENTIAL SPECIFIED")
 
+class WriteOptions(BaseModel):
+    kinetic_energy: Optional[str] = None
+    momentum: Optional[str] = None
+    norm: Optional[str] = None
+    population: Optional[str] = None
+    position: Optional[str] = None
+    potential_energy: Optional[str] = None
+    total_energy: Optional[str] = None
+
 class Options(BaseModel):
     grid: GridOptions
     initial_conditions: InitialConditionsOptions
@@ -35,3 +44,4 @@ class Options(BaseModel):
     mass: float = 1
     log_interval: int = 1
     imaginary: Optional[ImaginaryOptions] = None
+    write: WriteOptions = WriteOptions()

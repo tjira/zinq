@@ -3,3 +3,4 @@ dist/
 zinq.egg-info/
 
 /*.json
+/*.mat
