@@ -19,6 +19,15 @@ class StrangSplit:
         dt: float,
         imaginary: bool
     ):
+        assert len(position_grid) == potential.ndim, (
+            f"POSITION GRID DIMENSION DOES NOT MATCH POTENTIAL DIMENSION"
+        )
+        assert len(momentum_grid) == potential.ndim, (
+            f"MOMENTUM GRID DIMENSION DOES NOT MATCH POTENTIAL DIMENSION"
+        )
+        assert mass > 0, f"MASS MUST BE POSITIVE, GOT {mass}"
+        assert dt > 0, f"TIME STEP MUST BE POSITIVE, GOT {dt}"
+
         self.unit = -0.5 * (1.0 if imaginary else 1j) * dt
 
         V = np.moveaxis(potential.evaluateDiabatic(position_grid), [0, 1], [-2, -1])

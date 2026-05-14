@@ -14,6 +14,11 @@ from .wavefunction import Wavefunction
 def run(options_dict: dict):
     opt = Options(**options_dict)
 
+    assert opt.iterations >= 0, "ITERATIONS MUST BE NON-NEGATIVE"
+    assert opt.time_step > 0, "TIME STEP MUST BE POSITIVE"
+    assert opt.mass > 0, "MASS MUST BE POSITIVE"
+    assert opt.grid.npoint > 1, "NUMBER OF GRID POINTS MUST BE GREATER THAN 1"
+
     potential = opt.potential.create()
     optimized_wfns: list[Wavefunction] = []
 
@@ -102,7 +107,7 @@ def run(options_dict: dict):
             if opt.write.potential_energy or opt.write.total_energy or log_iteration:
                 potential_energy = wfn.potentialEnergy(position_grid, potential)
                 if opt.write.potential_energy:
-                    history["total_energy"].append(potential_energy + kinetic_energy)
+                    history["potential_energy"].append(potential_energy)
 
             if opt.write.total_energy or log_iteration:
                 total_energy = kinetic_energy + potential_energy

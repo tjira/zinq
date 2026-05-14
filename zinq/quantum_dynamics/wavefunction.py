@@ -38,10 +38,21 @@ class Wavefunction:
         gamma: np.ndarray,
         state: int
     ):
-        assert position.shape[0] == self.ndim
-        assert momentum.shape[0] == self.ndim
-        assert gamma.shape[0] == self.ndim
-        assert state < self.nstate
+        assert len(position_grid) == self.ndim, (
+            f"POSITION GRID DIMENSION DOES NOT MATCH WAVEFUNCTION DIMENSION"
+        )
+        assert position.shape[0] == self.ndim, (
+            f"POSITION VECTOR DIMENSION DOES NOT MATCH WAVEFUNCTION DIMENSION"
+        )
+        assert momentum.shape[0] == self.ndim, (
+            f"MOMENTUM VECTOR DIMENSION DOES NOT MATCH WAVEFUNCTION DIMENSION"
+        )
+        assert gamma.shape[0] == self.ndim, (
+            f"GAMMA VECTOR DIMENSION DOES NOT MATCH WAVEFUNCTION DIMENSION"
+        )
+        assert state < self.nstate, (
+            f"INITIAL STATE ({state}) IS OUT OF BOUNDS FOR {self.nstate} STATES"
+        )
 
         self.data.fill(0)
 

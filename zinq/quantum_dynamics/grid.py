@@ -2,7 +2,9 @@ import numpy as np
 
 
 def generateMomentumGrid(limits: np.ndarray, npoint: int):
-    assert limits.shape[1] == 2
+    assert limits.ndim == 2, f"LIMITS MUST BE 2D ARRAY, GOT {limits.ndim}D"
+    assert limits.shape[1] == 2, f"LIMITS MUST HAVE SHAPE (NDIM, 2), GOT {limits.shape}"
+    assert npoint > 1, f"NUMBER OF GRID POINTS MUST BE GREATER THAN 1, GOT {npoint}"
 
     grids = []
 
@@ -13,7 +15,9 @@ def generateMomentumGrid(limits: np.ndarray, npoint: int):
 
 
 def generatePositionGrid(limits: np.ndarray, npoint: int):
-    assert limits.shape[1] == 2
+    assert limits.ndim == 2, f"LIMITS MUST BE 2D ARRAY, GOT {limits.ndim}D"
+    assert limits.shape[1] == 2, f"LIMITS MUST HAVE SHAPE (NDIM, 2), GOT {limits.shape}"
+    assert npoint > 1, f"NUMBER OF GRID POINTS MUST BE GREATER THAN 1, GOT {npoint}"
 
     grids = []
 
