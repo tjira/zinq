@@ -7,13 +7,13 @@ from .grid import generateMomentumGrid
 from .split_operator import SplitOperator
 from .wavefunction import Wavefunction
 
-from ..potential import TullyFirst
+from ..potential import TullyFirst, Harmonic
 
 def run(options: dict):
-    pot = TullyFirst();
+    potential = Harmonic(k=np.array(options["potential"]["harmonic"]["k"]))
+    # pot = TullyFirst()
 
-    wfn = Wavefunction(pot.ndim, pot.nstate, options["grid"]["npoint"])
-    propagator = SplitOperator(options["time_step"], options["mass"], False)
+    wfn = Wavefunction(potential.ndim, potential.nstate, options["grid"]["npoint"])
 
     position_grid = generatePositionGrid(np.array(options["grid"]["limits"]), options["grid"]["npoint"])
     momentum_grid = generateMomentumGrid(np.array(options["grid"]["limits"]), options["grid"]["npoint"])
@@ -25,6 +25,8 @@ def run(options: dict):
         np.array(options["initial_conditions"]["gamma"]),
         np.array(options["initial_conditions"]["state"])
     )
+
+    propagator = SplitOperator(position_grid, momentum_grid, potential, options["time_step"], options["mass"], True)
 
     with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
         print(f"\nINITIAL GAMMA: {np.array(options['initial_conditions']['gamma'], dtype=float)}\n")
@@ -38,15 +40,20 @@ def run(options: dict):
     for i in range(options["iterations"] + 1):
         start_time = time.time()
 
-        if i: propagator.step(wfn, position_grid, momentum_grid, pot)
+        if i: propagator.step(wfn)
 
-        kinetic_energy = wfn.kineticEnergy(momentum_grid, options["mass"])
-        potential_energy = wfn.potentialEnergy(position_grid, pot)
-        total_energy = kinetic_energy + potential_energy
-        position = wfn.position(position_grid)
-        momentum = wfn.momentum(momentum_grid)
-        population = wfn.population()
-        norm = wfn.norm()
+        log_iteration = i == 0 or i == options["iterations"] or (i % options.get("log_interval", 1) == 0)
+
+        if log_iteration:
+            kinetic_energy = wfn.kineticEnergy(momentum_grid, options["mass"])
+            potential_energy = wfn.potentialEnergy(position_grid, potential)
+            total_energy = kinetic_energy + potential_energy
+            position = wfn.position(position_grid)
+            momentum = wfn.momentum(momentum_grid)
+            population = wfn.population()
+            norm = wfn.norm()
+
+        if not log_iteration: continue
 
         duration = datetime.timedelta(seconds=time.time() - start_time)
 
@@ -55,8 +62,3 @@ def run(options: dict):
                 f"{i:5d} {kinetic_energy:12.6f} {potential_energy:12.6f} {total_energy:12.6f} "
                 f"{position} {momentum} {population} {norm:1.3e} {duration}"
             )
-
-    # import matplotlib.pyplot as plt
-    # plt.plot(grid[0], wfn.data.real[..., 1], label="state 0")
-    # plt.plot(grid[0], wfn.data.imag[..., 1], label="state 1")
-    # plt.show()

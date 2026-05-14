@@ -90,8 +90,8 @@ class Wavefunction:
     def positionDensity(self, position_grid: list[np.ndarray], dim: int) -> np.ndarray:
         return np.sum(np.abs(self.data)**2, axis=-1) * position_grid[dim]
 
-    def potentialEnergy(self, position_grid: list[np.ndarray], potential) -> float:
-        return np.sum(self.potentialEnergyDensity(position_grid, potential)) * self.measure
+    def potentialEnergy(self, position_grid: list[np.ndarray], potential, time: float = 0) -> float:
+        return np.sum(self.potentialEnergyDensity(position_grid, potential, time=time)) * self.measure
 
-    def potentialEnergyDensity(self, position_grid: list[np.ndarray], potential) -> np.ndarray:
-        return np.einsum("...i,ij...,...j->...", np.conj(self.data), potential.evaluateDiabatic(position_grid), self.data).real
+    def potentialEnergyDensity(self, position_grid: list[np.ndarray], potential, time: float = 0) -> np.ndarray:
+        return np.einsum("...i,ij...,...j->...", np.conj(self.data), potential.evaluateDiabatic(position_grid, time=time), self.data).real
