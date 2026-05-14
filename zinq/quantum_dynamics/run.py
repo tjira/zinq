@@ -7,10 +7,10 @@ from .grid import generateMomentumGrid
 from .split_operator import SplitOperator
 from .wavefunction import Wavefunction
 
-from ..potential import TullyFirst, Harmonic
+from ..potential import TullyFirst, Harmonic, Potential
 
 def run(options: dict):
-    potential = Harmonic(k=np.array(options["potential"]["harmonic"]["k"]))
+    potential: Potential = Harmonic(k=np.array(options["potential"]["harmonic"]["k"]))
     # pot = TullyFirst()
 
     wfn = Wavefunction(potential.ndim, potential.nstate, options["grid"]["npoint"])
@@ -44,14 +44,13 @@ def run(options: dict):
 
         log_iteration = i == 0 or i == options["iterations"] or (i % options.get("log_interval", 1) == 0)
 
-        if log_iteration:
-            kinetic_energy = wfn.kineticEnergy(momentum_grid, options["mass"])
-            potential_energy = wfn.potentialEnergy(position_grid, potential)
-            total_energy = kinetic_energy + potential_energy
-            position = wfn.position(position_grid)
-            momentum = wfn.momentum(momentum_grid)
-            population = wfn.population()
-            norm = wfn.norm()
+        kinetic_energy = wfn.kineticEnergy(momentum_grid, options["mass"])
+        potential_energy = wfn.potentialEnergy(position_grid, potential)
+        total_energy = kinetic_energy + potential_energy
+        position = wfn.position(position_grid)
+        momentum = wfn.momentum(momentum_grid)
+        population = wfn.population()
+        norm = wfn.norm()
 
         if not log_iteration: continue
 

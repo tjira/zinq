@@ -1,8 +1,11 @@
 from dataclasses import dataclass
+
 import numpy as np
 
+from .potential import Potential
+
 @dataclass(frozen=True, kw_only=True)
-class Harmonic:
+class Harmonic(Potential):
     k: np.ndarray
 
     @property

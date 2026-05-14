@@ -2,8 +2,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .potential import Potential
+
 @dataclass(frozen=True, kw_only=True)
-class TullyFirst:
+class TullyFirst(Potential):
     ndim: int = 1
     nstate: int = 2
 
