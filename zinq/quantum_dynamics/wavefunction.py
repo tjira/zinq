@@ -105,6 +105,12 @@ class Wavefunction:
     def overlapDensity(self, other) -> np.ndarray:
         return np.einsum("...i,...i->...", np.conj(self.data), other.data)
 
+    def projectOut(self, others):
+        for other in others:
+            self.data -= np.conj(self.overlap(other)) * other.data
+
+        self.normalize()
+
     def population(self) -> np.ndarray:
         population = np.zeros(self.nstate)
 

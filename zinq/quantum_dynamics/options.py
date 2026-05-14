@@ -5,11 +5,14 @@ from pydantic import BaseModel
 from ..potential import HarmonicOptions, Potential, TullyFirstOptions
 
 
-class Grid(BaseModel):
+class GridOptions(BaseModel):
     limits: list[list[float]]
     npoint: int
 
-class InitialConditions(BaseModel):
+class ImaginaryOptions(BaseModel):
+    nstate: int = 1
+
+class InitialConditionsOptions(BaseModel):
     position: list[float]
     momentum: list[float]
     gamma: list[float]
@@ -24,11 +27,11 @@ class PotentialOptions(BaseModel):
         except StopIteration: raise ValueError("NO POTENTIAL SPECIFIED")
 
 class Options(BaseModel):
-    grid: Grid
-    initial_conditions: InitialConditions
+    grid: GridOptions
+    initial_conditions: InitialConditionsOptions
     potential: PotentialOptions
     iterations: int
     time_step: float
     mass: float = 1
     log_interval: int = 1
-    imaginary: bool = False
+    imaginary: Optional[ImaginaryOptions] = None
