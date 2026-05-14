@@ -1,5 +1,4 @@
 import numpy as np
-
 from ..potential import Potential
 
 class Wavefunction:

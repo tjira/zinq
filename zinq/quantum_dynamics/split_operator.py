@@ -1,5 +1,4 @@
 import numpy as np, scipy.linalg
-
 from ..potential import Potential
 
 class SplitOperator:

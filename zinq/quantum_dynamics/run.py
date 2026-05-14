@@ -1,24 +1,16 @@
 import datetime, time
-
 import numpy as np
-
 from .grid import generatePositionGrid
 from .grid import generateMomentumGrid
 from .options import Options
 from .split_operator import SplitOperator
 from .wavefunction import Wavefunction
-
 from ..potential import Potential
 
 def run(options_dict: dict):
     opt = Options(**options_dict)
 
-    if opt.potential.harmonic:
-        potential: Potential = opt.potential.harmonic.create()
-    elif opt.potential.tully_1:
-        potential: Potential = opt.potential.tully_1.create()
-    else:
-        raise ValueError("NO POTENTIAL SPECIFIED")
+    potential = opt.potential.create()
 
     wfn = Wavefunction(potential.ndim, potential.nstate, opt.grid.npoint)
 
@@ -33,7 +25,7 @@ def run(options_dict: dict):
         opt.initial_conditions.state
     )
 
-    propagator = SplitOperator(position_grid, momentum_grid, potential, opt.time_step, opt.mass, True)
+    propagator = SplitOperator(position_grid, momentum_grid, potential, opt.time_step, opt.mass, opt.imaginary)
 
     with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
         print(f"\nINITIAL GAMMA: {np.array(opt.initial_conditions.gamma, dtype=float)}\n")

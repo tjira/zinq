@@ -1,5 +1,4 @@
 import json, os
-
 from . import quantum_dynamics
 
 def process_file(file_path):

@@ -1,9 +1,6 @@
 from dataclasses import dataclass
-
 import numpy as np
-
 from pydantic import BaseModel
-
 from .potential import Potential
 
 class HarmonicOptions(BaseModel):

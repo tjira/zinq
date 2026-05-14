@@ -1,5 +1,4 @@
 import argparse, datetime, os, time
-
 from zinq import __version__
 from zinq.dispatcher import process_file
 

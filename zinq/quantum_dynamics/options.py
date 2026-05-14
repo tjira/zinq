@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 from typing import Optional
-
-from ..potential import HarmonicOptions, TullyFirstOptions
+from ..potential import HarmonicOptions, TullyFirstOptions, Potential
 
 class Grid(BaseModel):
     limits: list[list[float]]
@@ -17,11 +16,16 @@ class PotentialOptions(BaseModel):
     harmonic: Optional[HarmonicOptions] = None
     tully_1: Optional[TullyFirstOptions] = None
 
+    def create(self) -> Potential:
+        try: return next(pot.create() for _, pot in self if pot is not None)
+        except StopIteration: raise ValueError("NO POTENTIAL SPECIFIED")
+
 class Options(BaseModel):
     grid: Grid
     initial_conditions: InitialConditions
     potential: PotentialOptions
-    mass: float
     iterations: int
     time_step: float
+    mass: float = 1
     log_interval: int = 1
+    imaginary: bool = False

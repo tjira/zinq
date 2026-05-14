@@ -1,0 +1,26 @@
+{
+    "zinq" : [
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-24, 24]],
+                    "npoint" : 2048
+                },
+                "initial_conditions" : {
+                    "momentum" : [15],
+                    "position" : [-10],
+                    "gamma" : [2],
+                    "state" : 1
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "log_interval" : 500,
+                "mass" : 2000,
+                "iterations" : 3000,
+                "time_step" : 1
+            }
+        }
+    ]
+}
