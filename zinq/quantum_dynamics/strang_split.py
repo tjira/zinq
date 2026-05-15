@@ -16,9 +16,9 @@ class StrangSplit:
 
         V = np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1])
 
-        k_squared, Vw, Vv = sum(k**2 for k in grid.momentum), *np.linalg.eigh(V)
+        k_squared, W, U = sum(k**2 for k in grid.momentum), *np.linalg.eigh(V)
 
-        self.R = Vv @ (np.exp(self.unit * Vw)[..., None] * Vv.conj().mT)
+        self.R = U @ (np.exp(self.unit * W)[..., None] * U.conj().mT)
         self.K = np.exp(self.unit * k_squared / ham.mass)[..., np.newaxis]
 
     def step(self, wfn):

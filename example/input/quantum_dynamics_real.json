@@ -16,6 +16,7 @@
                 "potential" : {
                     "tully_1" : {}
                 },
+                "adiabatic" : true,
                 "log_interval" : 500,
                 "mass" : 2000,
                 "iterations" : 3000,

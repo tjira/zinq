@@ -85,7 +85,8 @@ class Runner:
                 self._step(i, obs, datetime.timedelta(seconds=time.time() - start))
 
         if "final_wavefunction" in history:
-            history["final_wavefunction"] = [wfn.data.copy()]
+            wfn_final = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
+            history["final_wavefunction"] = [wfn_final.data.copy()]
 
         self._save(history, idx, nstate)
 
@@ -104,6 +105,8 @@ class Runner:
     def _obs(self, wfn: Wavefunction, is_log: bool) -> dict:
         results = {}
 
+        wfn_obs = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
+
         def should(f): return is_log or getattr(self.opt.write, f)
 
         if should("kinetic_energy") or should("total_energy"):
@@ -113,7 +116,7 @@ class Runner:
         if should("norm"):
             results["norm"] = wfn.norm()
         if should("population"):
-            results["population"] = wfn.population()
+            results["population"] = wfn_obs.population()
         if should("position"):
             results["position"] = wfn.position(self.grid)
         if should("potential_energy") or should("total_energy"):
@@ -121,7 +124,7 @@ class Runner:
         if should("total_energy"):
             results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
         if should("wavefunction"):
-            results["wavefunction"] = wfn.data.copy()
+            results["wavefunction"] = wfn_obs.data.copy()
 
         return results
 
@@ -142,11 +145,12 @@ class Runner:
         print(f"STATE {idx} {mode} TIME PROPAGATION")
 
         p_w, s_w = 11 * wfn.ndim + 1, 11 * wfn.nstate + 1
+        pop_label = "ADIABATIC POP." if self.opt.adiabatic else "POPULATION"
 
         print(
             f"{'ITER':>5} {'KIN (Eh)':>12} {'POT (Eh)':>12} {'TOT (Eh)':>12} "
             f"{'POS (a0)':>{p_w}} {'MOM (hb/a0)':>{p_w}} "
-            f"{'POPULATION':>{s_w}} {'NORM':>9} TIME"
+            f"{pop_label:>{s_w}} {'NORM':>9} TIME"
         )
 
     def _step(self, i: int, obs: dict, duration: datetime.timedelta):

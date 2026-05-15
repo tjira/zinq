@@ -50,5 +50,6 @@ class Options(BaseModel):
     time_step: float
     mass: float = 1
     log_interval: int = 1
+    adiabatic: bool = False
     imaginary: Optional[ImaginaryOptions] = None
     write: WriteOptions = WriteOptions()

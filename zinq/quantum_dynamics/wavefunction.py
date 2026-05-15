@@ -120,3 +120,7 @@ class Wavefunction:
     def pe_dens(self, grid: Grid, ham: Hamiltonian, time: float = 0) -> np.ndarray:
         V = ham.potential.eval_d(grid.position, time=time)
         return np.einsum("...i,ij...,...j->...", self.data.conj(), V, self.data).real
+
+    def to_adiabatic(self, grid: Grid, ham: Hamiltonian) -> 'Wavefunction':
+        _, U = np.linalg.eigh( np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1]))
+        return Wavefunction.from_data(np.einsum("...ji,...j->...i", U.conj(), self.data), self.measure)
