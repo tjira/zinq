@@ -25,12 +25,12 @@ class StrangSplit:
         self.R = U @ (np.exp(self.unit * W)[..., None] * U.conj().mT)
         self.K = np.exp(self.unit * k_squared / ham.mass)[..., np.newaxis]
 
-    def step(self, wfn):
-        wfn.eaten_population += self._apply_R(wfn)
+    def step(self, wfn, pop_decay: np.ndarray):
+        pop_decay += self._apply_R(wfn)
         wfn.data = np.fft.fftn(wfn.data, axes=range(wfn.ndim))
         wfn.data *= self.K
         wfn.data = np.fft.ifftn(wfn.data, axes=range(wfn.ndim))
-        wfn.eaten_population += self._apply_R(wfn)
+        pop_decay += self._apply_R(wfn)
 
         if self.unit.imag == 0: wfn.normalize()
 

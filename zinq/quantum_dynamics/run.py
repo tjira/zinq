@@ -63,7 +63,7 @@ class Runner:
         return wfn
 
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:
-        img, dt = self.opt.imaginary is not None, self.opt.time_step
+        img, dt, pop_decay = self.opt.imaginary is not None, self.opt.time_step, np.zeros(wfn.nstate)
 
         prop = StrangSplit(self.grid, self.ham, dt, img, self.opt.adiabatic)
 
@@ -74,23 +74,24 @@ class Runner:
         for i in range(self.opt.iterations + 1) if self.opt.iterations else count():
             start = time.time()
 
-            if i: prop.step(wfn)
+            if i: prop.step(wfn, pop_decay)
 
             if i and self.opt.imaginary and idx > 0: wfn.project_out(self.optimized)
 
             is_log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 
-            obs = self._obs(wfn, bool(self.opt.absorbing_potential), is_log)
+            obs = self._obs(wfn, bool(self.opt.absorbing_potential), is_log, pop_decay)
 
             for f, v in obs.items():
                 if f in history: history[f].append(v)
 
+            elapsed = datetime.timedelta(seconds=time.time() - start)
+
             if is_log:
-                self._step(i, obs, datetime.timedelta(seconds=time.time() - start))
+                self._step(i, obs, elapsed)
 
             if self.opt.absorbing_potential and obs["norm"] < self.opt.absorbing_potential.stop_norm:
-                if not is_log:
-                    self._step(i, self._obs(wfn, True, True), datetime.timedelta(seconds=time.time() - start))
+                if not is_log: self._step(i, self._obs(wfn, True, True, pop_decay), elapsed)
                 print(f"\nCAP STOP NORM REACHED, STOPPING PROPAGATION")
                 break
 
@@ -98,7 +99,7 @@ class Runner:
             wfn_final = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
             history["final_wavefunction"] = [wfn_final.data.copy()]
 
-        final_obs = self._obs(wfn, bool(self.opt.absorbing_potential), True)
+        final_obs = self._obs(wfn, bool(self.opt.absorbing_potential), True, pop_decay)
 
         pop_label = "ADIABATIC POP." if self.opt.adiabatic else "POPULATION"
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
@@ -116,7 +117,7 @@ class Runner:
             norm=final_obs["norm"]
         )
 
-    def _obs(self, wfn: Wavefunction, cap: bool, is_log: bool) -> dict:
+    def _obs(self, wfn: Wavefunction, cap: bool, is_log: bool, pop_decay: np.ndarray) -> dict:
         results = {}
 
         wfn_obs = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
@@ -130,7 +131,7 @@ class Runner:
         if should("norm") or cap:
             results["norm"] = wfn.norm()
         if should("population"):
-            results["population"] = wfn_obs.population()
+            results["population"] = wfn_obs.population(pop_decay)
         if should("position"):
             results["position"] = wfn.position(self.grid)
         if should("potential_energy") or should("total_energy"):

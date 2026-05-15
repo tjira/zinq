@@ -6,19 +6,16 @@ from .hamiltonian import Hamiltonian
 class Wavefunction:
     data: np.ndarray
     measure: float
-    eaten_population: np.ndarray
 
     def __init__(self, ndim: int, nstate: int, npoint: int):
         self.data = np.empty((*[npoint] * ndim, nstate), dtype=np.complex128)
-        self.eaten_population = np.zeros(nstate)
 
     @classmethod
-    def from_data(cls, data: np.ndarray, measure: float, eaten_population: np.ndarray = None):
+    def from_data(cls, data: np.ndarray, measure: float):
         wfn = cls.__new__(cls)
         
         wfn.data = data
         wfn.measure = measure
-        wfn.eaten_population = eaten_population if eaten_population is not None else np.zeros(data.shape[-1])
         
         return wfn
 
@@ -104,8 +101,8 @@ class Wavefunction:
 
         self.normalize()
 
-    def population(self) -> np.ndarray:
-        return np.sum(np.abs(self.data)**2, axis=tuple(range(self.ndim))) * self.measure + self.eaten_population
+    def population(self, pop_decay: np.ndarray) -> np.ndarray:
+        return np.sum(np.abs(self.data)**2, axis=tuple(range(self.ndim))) * self.measure + pop_decay
 
     def population_dens(self, state: int) -> np.ndarray:
         return np.abs(self.data[..., state])**2
@@ -126,8 +123,8 @@ class Wavefunction:
 
     def to_adiabatic(self, grid: Grid, ham: Hamiltonian) -> 'Wavefunction':
         _, U = np.linalg.eigh(np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1]))
-        return Wavefunction.from_data(np.einsum("...ji,...j->...i", U.conj(), self.data), self.measure, self.eaten_population)
+        return Wavefunction.from_data(np.einsum("...ji,...j->...i", U.conj(), self.data), self.measure)
 
     def to_diabatic(self, grid: Grid, ham: Hamiltonian) -> 'Wavefunction':
         _, U = np.linalg.eigh(np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1]))
-        return Wavefunction.from_data(np.einsum("...ij,...j->...i", U, self.data), self.measure, self.eaten_population)
+        return Wavefunction.from_data(np.einsum("...ij,...j->...i", U, self.data), self.measure)

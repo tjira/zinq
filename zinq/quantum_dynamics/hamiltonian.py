@@ -20,4 +20,6 @@ class Hamiltonian:
     def eval_cap(self, position: list[np.ndarray]) -> np.ndarray:
         if self.cap is None: return 0
 
-        return sum(np.exp(self.cap.exponent * (np.maximum(0, l[0] - x) + np.maximum(0, x - l[1]))) - 1 for x, l in zip(position, self.cap.limits))
+        exp, zipped = self.cap.exponent, zip(position, self.cap.limits)
+
+        return sum(np.exp(exp * (np.maximum(0, l[0] - x) + np.maximum(0, x - l[1]))) - 1 for x, l in zipped)
