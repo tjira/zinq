@@ -9,7 +9,7 @@ class StrangSplit:
     K: np.ndarray
     unit: complex
 
-    def __init__(self, /,
+    def __init__(self,
         position_grid: list[np.ndarray],
         momentum_grid: list[np.ndarray],
         potential: Potential,

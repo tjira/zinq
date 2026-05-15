@@ -31,7 +31,7 @@ class Wavefunction:
     def npoint(self) -> int:
         return self.data.shape[0]
 
-    def initialize_gaussian(self, /,
+    def initialize_gaussian(self,
         position_grid: list[np.ndarray],
         position: np.ndarray,
         momentum: np.ndarray,
