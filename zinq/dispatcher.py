@@ -15,4 +15,4 @@ def process_file(file_path):
 
     for item in input_json["zinq"]:
         if item["name"] == "quantum_dynamics":
-            quantum_dynamics.run(item["options"])
+            result = quantum_dynamics.run(item["options"])

@@ -5,14 +5,15 @@ from ..backend import np
 from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .options import Options
+from .results import RunResult, StateResult
 from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
 
 
-def run(options_dict: dict):
+def run(options_dict: dict) -> RunResult:
     opt = Options(**options_dict)
     _validate(opt)
-    Runner(opt).run()
+    return Runner(opt).run()
 
 
 def _validate(opt: Options):
@@ -33,13 +34,15 @@ class Runner:
         self.ham = Hamiltonian(opt.potential.create(), opt.mass)
         self.grid = Grid(np.array(opt.grid.limits), opt.grid.npoint)
 
-    def run(self):
-        n = self.opt.imaginary.nstate if self.opt.imaginary else 1
+    def run(self) -> RunResult:
+        n, results = self.opt.imaginary.nstate if self.opt.imaginary else 1, []
 
         for i in range(n):
             wfn = self._init()
-            self._prop(wfn, i, n)
+            results.append(self._prop(wfn, i, n))
             self.optimized.append(wfn)
+
+        return RunResult(states=results)
 
     def _init(self) -> Wavefunction:
         ndim, nstate = self.ham.potential.ndim, self.ham.potential.nstate
@@ -55,7 +58,7 @@ class Runner:
 
         return wfn
 
-    def _prop(self, wfn: Wavefunction, idx: int, nstate: int):
+    def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:
         img, dt = self.opt.imaginary is not None, self.opt.time_step
 
         prop = StrangSplit(self.grid, self.ham,dt, img)
@@ -82,6 +85,18 @@ class Runner:
                 self._step(i, obs, datetime.timedelta(seconds=time.time() - start))
 
         self._save(history, idx, nstate)
+
+        final_obs = self._obs(wfn, is_log=True)
+
+        return StateResult(
+            population=final_obs["population"],
+            kinetic_energy=final_obs["kinetic_energy"],
+            potential_energy=final_obs["potential_energy"],
+            total_energy=final_obs["total_energy"],
+            position=final_obs["position"],
+            momentum=final_obs["momentum"],
+            norm=final_obs["norm"]
+        )
 
     def _obs(self, wfn: Wavefunction, is_log: bool) -> dict:
         results = {}
