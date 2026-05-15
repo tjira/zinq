@@ -73,7 +73,7 @@ class Wavefunction:
 
         for d in range(self.ndim):
             d2 = self.diff2(grid, d)
-            ked += self.o_dens(d2).real
+            ked += self.overlap_dens(d2).real
 
         return (-0.5 / ham.mass) * ked
 
@@ -81,23 +81,23 @@ class Wavefunction:
         momentum = np.zeros(self.ndim)
 
         for d in range(self.ndim):
-            momentum[d] = self.p_dens(grid, d).sum() * self.measure
+            momentum[d] = self.momentum_dens(grid, d).sum() * self.measure
 
         return momentum
 
-    def p_dens(self, grid: Grid, dim: int) -> np.ndarray:
-        return self.o_dens(self.diff1(grid, dim)).imag
+    def momentum_dens(self, grid: Grid, dim: int) -> np.ndarray:
+        return self.overlap_dens(self.diff1(grid, dim)).imag
 
     def norm(self) -> float:
-        return np.sum(self.n_dens()) * self.measure
+        return np.sum(self.norm_dens()) * self.measure
 
-    def n_dens(self) -> np.ndarray:
+    def norm_dens(self) -> np.ndarray:
         return np.sum(np.abs(self.data)**2, axis=-1)
 
     def overlap(self, other) -> complex:
-        return np.sum(self.o_dens(other)) * self.measure
+        return np.sum(self.overlap_dens(other)) * self.measure
 
-    def o_dens(self, other) -> np.ndarray:
+    def overlap_dens(self, other) -> np.ndarray:
         return np.einsum("...i,...i->...", self.data.conj(), other.data)
 
     def project_out(self, others):
@@ -110,22 +110,22 @@ class Wavefunction:
         population = np.zeros(self.nstate)
 
         for s in range(self.nstate):
-            population[s] = self.pop_dens(s).sum() * self.measure
+            population[s] = self.population_dens(s).sum() * self.measure
 
         return population
 
-    def pop_dens(self, state: int) -> np.ndarray:
+    def population_dens(self, state: int) -> np.ndarray:
         return np.abs(self.data[..., state])**2
 
     def position(self, grid: Grid) -> np.ndarray:
         position = np.zeros(self.ndim)
 
         for d in range(self.ndim):
-            position[d] = self.pos_dens(grid, d).sum() * self.measure
+            position[d] = self.position_dens(grid, d).sum() * self.measure
 
         return position
 
-    def pos_dens(self, grid: Grid, dim: int) -> np.ndarray:
+    def position_dens(self, grid: Grid, dim: int) -> np.ndarray:
         return np.sum(np.abs(self.data)**2, axis=-1) * grid.position[dim]
 
     def pe(self, grid: Grid, ham: Hamiltonian, time: float = 0) -> float:
