@@ -4,7 +4,6 @@ from ..backend import np
 class Grid:
     position: list[np.ndarray]
     momentum: list[np.ndarray]
-    measure: float
 
     @property
     def ndim(self) -> int:
@@ -25,7 +24,6 @@ class Grid:
 
         self.position = self._pos_grid(np.array(limits), npoint)
         self.momentum = self._mom_grid(np.array(limits), npoint)
-        self.measure = np.array([np.ptp(axis) / (npoint - 1) for axis in self.position]).prod()
 
     def _mom_grid(self, limits: np.ndarray, npoint: int) -> list[np.ndarray]:
         grids = []

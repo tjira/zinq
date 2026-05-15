@@ -47,7 +47,7 @@ class Wavefunction:
             exponent += -0.5 * gamma[i] * dr**2 + 1j * momentum[i] * dr
 
         self.data[..., state] = np.exp(exponent)
-        self.measure = grid.measure
+        self.measure = np.array([np.ptp(axis) / (self.npoint - 1) for axis in grid.position]).prod()
         self.normalize()
 
     def normalize(self):
