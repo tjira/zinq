@@ -2,5 +2,8 @@ __pycache__/
 dist/
 zinq.egg-info/
 
+/*.dot
 /*.json
 /*.mat
+/*.pdf
+/*.stats
