@@ -19,6 +19,7 @@ class InitialConditionsOptions(BaseModel):
     momentum: list[float]
     gamma: list[float]
     state: int = 0
+    adiabatic: bool = False
 
 
 class PotentialOptions(BaseModel):

@@ -56,6 +56,9 @@ class Runner:
 
         wfn.init_gauss(self.grid, pos, mom, gamma, state)
 
+        if self.opt.initial_conditions.adiabatic:
+            wfn = wfn.to_diabatic(self.grid, self.ham)
+
         return wfn
 
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:

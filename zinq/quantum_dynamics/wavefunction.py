@@ -122,5 +122,9 @@ class Wavefunction:
         return np.einsum("...i,ij...,...j->...", self.data.conj(), V, self.data).real
 
     def to_adiabatic(self, grid: Grid, ham: Hamiltonian) -> 'Wavefunction':
-        _, U = np.linalg.eigh( np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1]))
+        _, U = np.linalg.eigh(np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1]))
         return Wavefunction.from_data(np.einsum("...ji,...j->...i", U.conj(), self.data), self.measure)
+
+    def to_diabatic(self, grid: Grid, ham: Hamiltonian) -> 'Wavefunction':
+        _, U = np.linalg.eigh(np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1]))
+        return Wavefunction.from_data(np.einsum("...ij,...j->...i", U, self.data), self.measure)
