@@ -92,6 +92,14 @@ def run(options_dict: dict):
             total_energy=[],
         )
 
+        obs_params = _ObservablesParams(
+            wfn=wfn,
+            potential=potential,
+            position_grid=position_grid,
+            momentum_grid=momentum_grid,
+            mass=opt.mass,
+        )
+
         for i in range(opt.iterations + 1):
             start_time = time.time()
 
@@ -100,14 +108,6 @@ def run(options_dict: dict):
             if i and opt.imaginary and state_idx > 0: wfn.project_out(optimized_wfns)
 
             log_iteration = i == 0 or i == opt.iterations or (i % opt.log_interval == 0)
-
-            obs_params = _ObservablesParams(
-                wfn=wfn,
-                potential=potential,
-                position_grid=position_grid,
-                momentum_grid=momentum_grid,
-                mass=opt.mass,
-            )
 
             obs = _calculate_observables(
                 params=obs_params,
