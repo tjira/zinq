@@ -18,13 +18,18 @@ class TullyFirstOptions(BaseModel):
 
 @dataclass(frozen=True, kw_only=True)
 class TullyFirst(Potential):
-    ndim: int = 1
-    nstate: int = 2
-
     A: float = 0.01
     B: float = 1.6
     C: float = 0.005
     D: float = 1
+
+    @property
+    def ndim(self) -> int:
+        return 1
+
+    @property
+    def nstate(self) -> int:
+        return 2
 
     def evaluate_diabatic(self, r: list[np.ndarray], time: float = 0.0):
         V00 = np.sign(r[0]) * self.A * (1 - np.exp(-self.B * np.abs(r[0])))

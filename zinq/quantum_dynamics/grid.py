@@ -1,27 +1,40 @@
 import numpy as np
 
 
-def generate_momentum_grid(limits: np.ndarray, npoint: int):
-    assert limits.ndim == 2, f"LIMITS MUST BE 2D ARRAY, GOT {limits.ndim}D"
-    assert limits.shape[1] == 2, f"LIMITS MUST HAVE SHAPE (NDIM, 2), GOT {limits.shape}"
-    assert npoint > 1, f"NUMBER OF GRID POINTS MUST BE GREATER THAN 1, GOT {npoint}"
+class Grid:
+    position: list[np.ndarray]
+    momentum: list[np.ndarray]
+    measure: float
 
-    grids = []
+    @property
+    def ndim(self) -> int:
+        return len(self.position)
 
-    for i in range(limits.shape[0]):
-        grids.append(2 * np.pi * np.fft.fftfreq(npoint, d=np.ptp(limits[i]) / (npoint - 1)))
+    @property
+    def npoint(self) -> int:
+        return self.position[0].shape[0]
 
-    return np.meshgrid(*grids, indexing="ij")
+    @property
+    def limits(self) -> np.ndarray:
+        return np.array([[p.min(), p.max()] for p in self.position])
 
+    def __init__(self, limits: np.ndarray, npoint: int):
+        assert limits.ndim == 2, f"LIMITS MUST BE 2D ARRAY, GOT {limits.ndim}D"
+        assert limits.shape[1] == 2, f"LIMITS MUST HAVE SHAPE (NDIM, 2), GOT {limits.shape}"
+        assert npoint > 1, f"NUMBER OF GRID POINTS MUST BE GREATER THAN 1, GOT {npoint}"
 
-def generate_position_grid(limits: np.ndarray, npoint: int):
-    assert limits.ndim == 2, f"LIMITS MUST BE 2D ARRAY, GOT {limits.ndim}D"
-    assert limits.shape[1] == 2, f"LIMITS MUST HAVE SHAPE (NDIM, 2), GOT {limits.shape}"
-    assert npoint > 1, f"NUMBER OF GRID POINTS MUST BE GREATER THAN 1, GOT {npoint}"
+        self.position = self._generate_position_grid(np.array(limits), npoint)
+        self.momentum = self._generate_momentum_grid(np.array(limits), npoint)
+        self.measure = np.prod([np.ptp(axis) / (npoint - 1) for axis in self.position])
 
-    grids = []
+    def _generate_momentum_grid(self, limits: np.ndarray, npoint: int) -> list[np.ndarray]:
+        grids = []
+        for i in range(limits.shape[0]):
+            grids.append(2 * np.pi * np.fft.fftfreq(npoint, d=np.ptp(limits[i]) / (npoint - 1)))
+        return list(np.meshgrid(*grids, indexing="ij"))
 
-    for i in range(limits.shape[0]):
-        grids.append(np.linspace(limits[i, 0], limits[i, 1], npoint))
-
-    return np.meshgrid(*grids, indexing="ij")
+    def _generate_position_grid(self, limits: np.ndarray, npoint: int) -> list[np.ndarray]:
+        grids = []
+        for i in range(limits.shape[0]):
+            grids.append(np.linspace(limits[i, 0], limits[i, 1], npoint))
+        return list(np.meshgrid(*grids, indexing="ij"))

@@ -3,8 +3,8 @@ import time
 
 import numpy as np
 
-from ..potential import Potential
-from .grid import generate_momentum_grid, generate_position_grid
+from .grid import Grid
+from .hamiltonian import Hamiltonian
 from .options import Options
 from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
@@ -25,16 +25,14 @@ def _validate(opt: Options):
 
 class Runner:
     opt: Options
-    pot: Potential
-    pos_grid: list[np.ndarray]
-    mom_grid: list[np.ndarray]
+    ham: Hamiltonian
+    grid: Grid
     optimized: list[Wavefunction] = []
 
     def __init__(self, opt: Options):
-        self.opt, self.pot = opt, opt.potential.create()
-
-        self.pos_grid = generate_position_grid(np.array(opt.grid.limits), opt.grid.npoint)
-        self.mom_grid = generate_momentum_grid(np.array(opt.grid.limits), opt.grid.npoint)
+        self.opt = opt
+        self.ham = Hamiltonian(opt.potential.create(), opt.mass)
+        self.grid = Grid(np.array(opt.grid.limits), opt.grid.npoint)
 
     def run(self):
         n = self.opt.imaginary.nstate if self.opt.imaginary else 1
@@ -45,10 +43,10 @@ class Runner:
             self.optimized.append(wfn)
 
     def _init_wfn(self) -> Wavefunction:
-        wfn = Wavefunction(self.pot.ndim, self.pot.nstate, self.opt.grid.npoint)
+        wfn = Wavefunction(self.ham.potential.ndim, self.ham.potential.nstate, self.opt.grid.npoint)
 
         wfn.initialize_gaussian(
-            self.pos_grid,
+            self.grid,
             np.array(self.opt.initial_conditions.position),
             np.array(self.opt.initial_conditions.momentum),
             np.array(self.opt.initial_conditions.gamma),
@@ -59,10 +57,8 @@ class Runner:
 
     def _propagate(self, wfn: Wavefunction, idx: int, nstate: int):
         prop = StrangSplit(
-            self.pos_grid,
-            self.mom_grid,
-            self.pot,
-            self.opt.mass,
+            self.grid,
+            self.ham,
             self.opt.time_step,
             self.opt.imaginary is not None
         )
@@ -96,17 +92,17 @@ class Runner:
         def should(f): return is_log or getattr(self.opt.write, f)
 
         if should("kinetic_energy") or should("total_energy"):
-            results["kinetic_energy"] = wfn.kinetic_energy(self.mom_grid, self.opt.mass)
+            results["kinetic_energy"] = wfn.kinetic_energy(self.grid, self.ham)
         if should("momentum"):
-            results["momentum"] = wfn.momentum(self.mom_grid)
+            results["momentum"] = wfn.momentum(self.grid)
         if should("norm"):
             results["norm"] = wfn.norm()
         if should("population"):
             results["population"] = wfn.population()
         if should("position"):
-            results["position"] = wfn.position(self.pos_grid)
+            results["position"] = wfn.position(self.grid)
         if should("potential_energy") or should("total_energy"):
-            results["potential_energy"] = wfn.potential_energy(self.pos_grid, self.pot)
+            results["potential_energy"] = wfn.potential_energy(self.grid, self.ham)
         if should("total_energy"):
             results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
 
