@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import datetime
 import time
 
@@ -9,6 +10,17 @@ from .grid import generateMomentumGrid, generatePositionGrid
 from .options import Options
 from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
+
+
+@dataclass
+class _Observables:
+    kinetic_energy: list[float]
+    momentum: list[float]
+    norm: list[float]
+    population: list[float]
+    position: list[float]
+    potential_energy: list[float]
+    total_energy: list[float]
 
 
 def run(options_dict: dict):
@@ -127,21 +139,38 @@ def run(options_dict: dict):
 
         optimized_wfns.append(wfn)
 
-        for field, path in opt.write:
-            if path is None: continue
+        _export_history(
+            history,
+            opt.write,
+            opt.iterations,
+            opt.time_step,
+            state_idx,
+            npropagations > 1,
+        )
 
-            times = np.arange(opt.iterations + 1) * opt.time_step
-            data = np.atleast_2d(history[field])
-            output = np.column_stack((times, data))
+def _export_history(
+    history: dict[str, list],
+    write_options,
+    iterations: float,
+    dt: float,
+    state_idx: int,
+    multistate: bool,
+):
+    for field, path in write_options:
+        if path is None: continue
 
-            basename, extension = path.split(".")[0], path.split(".")[1]
-            multistate_path = f"{basename}_STATE-{state_idx:02}.{extension}"
-            filename = path if npropagations == 1 else multistate_path
+        times = np.arange(iterations + 1) * dt
+        data = np.atleast_2d(history[field])
+        output = np.column_stack((times, data))
 
-            np.savetxt(
-                filename,
-                output,
-                header=f"{output.shape[0]} {output.shape[1]}",
-                comments="",
-                fmt="%20.14f",
-            )
+        basename, extension = path.split(".")[0], path.split(".")[1]
+        multistate_path = f"{basename}_STATE-{state_idx:02}.{extension}"
+        filename = path if not multistate else multistate_path
+
+        np.savetxt(
+            filename,
+            output,
+            header=f"{output.shape[0]} {output.shape[1]}",
+            comments="",
+            fmt="%20.14f",
+        )
