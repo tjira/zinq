@@ -38,14 +38,14 @@ class Runner:
         n = self.opt.imaginary.nstate if self.opt.imaginary else 1
 
         for i in range(n):
-            wfn = self._init_wfn()
-            self._propagate(wfn, i, n)
+            wfn = self._init()
+            self._prop(wfn, i, n)
             self.optimized.append(wfn)
 
-    def _init_wfn(self) -> Wavefunction:
+    def _init(self) -> Wavefunction:
         wfn = Wavefunction(self.ham.potential.ndim, self.ham.potential.nstate, self.opt.grid.npoint)
 
-        wfn.initialize_gaussian(
+        wfn.init_gauss(
             self.grid,
             np.array(self.opt.initial_conditions.position),
             np.array(self.opt.initial_conditions.momentum),
@@ -55,7 +55,7 @@ class Runner:
 
         return wfn
 
-    def _propagate(self, wfn: Wavefunction, idx: int, nstate: int):
+    def _prop(self, wfn: Wavefunction, idx: int, nstate: int):
         prop = StrangSplit(
             self.grid,
             self.ham,
@@ -65,7 +65,7 @@ class Runner:
 
         history = {f: [] for f, p in self.opt.write if p is not None}
 
-        self._print_header(idx, wfn)
+        self._head(idx, wfn)
 
         for i in range(self.opt.iterations + 1):
             start = time.time()
@@ -76,23 +76,23 @@ class Runner:
 
             is_log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 
-            obs = self._calc_obs(wfn, is_log)
+            obs = self._obs(wfn, is_log)
 
             for f, v in obs.items():
                 if f in history: history[f].append(v)
 
             if is_log:
-                self._print_step(i, obs, datetime.timedelta(seconds=time.time() - start))
+                self._step(i, obs, datetime.timedelta(seconds=time.time() - start))
 
         self._save(history, idx, nstate)
 
-    def _calc_obs(self, wfn: Wavefunction, is_log: bool) -> dict:
+    def _obs(self, wfn: Wavefunction, is_log: bool) -> dict:
         results = {}
 
         def should(f): return is_log or getattr(self.opt.write, f)
 
         if should("kinetic_energy") or should("total_energy"):
-            results["kinetic_energy"] = wfn.kinetic_energy(self.grid, self.ham)
+            results["kinetic_energy"] = wfn.ke(self.grid, self.ham)
         if should("momentum"):
             results["momentum"] = wfn.momentum(self.grid)
         if should("norm"):
@@ -102,13 +102,13 @@ class Runner:
         if should("position"):
             results["position"] = wfn.position(self.grid)
         if should("potential_energy") or should("total_energy"):
-            results["potential_energy"] = wfn.potential_energy(self.grid, self.ham)
+            results["potential_energy"] = wfn.pe(self.grid, self.ham)
         if should("total_energy"):
             results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
 
         return results
 
-    def _print_header(self, idx: int, wfn: Wavefunction):
+    def _head(self, idx: int, wfn: Wavefunction):
         ic, mode = self.opt.initial_conditions, "IMAGINARY" if self.opt.imaginary else "REAL"
 
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
@@ -124,7 +124,7 @@ class Runner:
             f"{'POPULATION':>{s_w}} {'NORM':>9} TIME"
         )
 
-    def _print_step(self, i: int, obs: dict, duration: datetime.timedelta):
+    def _step(self, i: int, obs: dict, duration: datetime.timedelta):
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
             print(
                 f"{i:5d} {obs['kinetic_energy']:12.6f} "
