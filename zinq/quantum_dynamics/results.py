@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+
 from ..backend import np
+
 
 @dataclass(frozen=True)
 class StateResult:

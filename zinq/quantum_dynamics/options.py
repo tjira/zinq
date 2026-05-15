@@ -5,6 +5,12 @@ from pydantic import BaseModel
 from ..potential import HarmonicOptions, Potential, TullyFirstOptions
 
 
+class ComplexAbsorbingPotentialOptions(BaseModel):
+    limits: list[list[float]]
+    exponent: float = 0.001
+    stop_norm: float = 1e-12
+
+
 class GridOptions(BaseModel):
     limits: list[list[float]]
     npoint: int
@@ -47,10 +53,11 @@ class Options(BaseModel):
     grid: GridOptions
     initial_conditions: InitialConditionsOptions
     potential: PotentialOptions
-    iterations: int
+    iterations: Optional[int] = None
     time_step: float
     mass: float = 1
     log_interval: int = 1
     adiabatic: bool = False
     imaginary: Optional[ImaginaryOptions] = None
+    absorbing_potential: Optional[ComplexAbsorbingPotentialOptions] = None
     write: WriteOptions = WriteOptions()

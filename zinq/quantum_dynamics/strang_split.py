@@ -1,4 +1,3 @@
-from .. import backend
 from ..backend import np
 from .grid import Grid
 from .hamiltonian import Hamiltonian
@@ -17,6 +16,9 @@ class StrangSplit:
         V = np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1])
 
         k_squared, W, U = sum(k**2 for k in grid.momentum), *np.linalg.eigh(V)
+
+        if ham.cap:
+            W = W - 1j * ham.eval_cap(grid.position)[..., np.newaxis]
 
         self.R = U @ (np.exp(self.unit * W)[..., None] * U.conj().mT)
         self.K = np.exp(self.unit * k_squared / ham.mass)[..., np.newaxis]

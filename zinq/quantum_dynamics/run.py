@@ -1,5 +1,6 @@
 import datetime
 import time
+from itertools import count
 
 from ..backend import np
 from .grid import Grid
@@ -17,7 +18,7 @@ def run(options_dict: dict) -> RunResult:
 
 
 def _validate(opt: Options):
-    assert opt.iterations >= 0, "ITERATIONS MUST BE NON-NEGATIVE"
+    if opt.iterations: assert opt.iterations >= 0, "ITERATIONS MUST BE NON-NEGATIVE"
     assert opt.time_step > 0, "TIME STEP MUST BE POSITIVE"
     assert opt.mass > 0, "MASS MUST BE POSITIVE"
     assert opt.grid.npoint > 1, "NUMBER OF GRID POINTS MUST BE GREATER THAN 1"
@@ -31,7 +32,7 @@ class Runner:
 
     def __init__(self, opt: Options):
         self.opt = opt
-        self.ham = Hamiltonian(opt.potential.create(), opt.mass)
+        self.ham = Hamiltonian(opt.potential.create(), opt.mass, opt.absorbing_potential)
         self.grid = Grid(np.array(opt.grid.limits), opt.grid.npoint)
 
     def run(self) -> RunResult:
@@ -64,13 +65,13 @@ class Runner:
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:
         img, dt = self.opt.imaginary is not None, self.opt.time_step
 
-        prop = StrangSplit(self.grid, self.ham,dt, img)
+        prop = StrangSplit(self.grid, self.ham, dt, img)
 
         history = {f: [] for f, p in self.opt.write if p is not None}
 
         self._head(idx, wfn)
 
-        for i in range(self.opt.iterations + 1):
+        for i in range(self.opt.iterations + 1) if self.opt.iterations else count():
             start = time.time()
 
             if i: prop.step(wfn)
@@ -79,7 +80,7 @@ class Runner:
 
             is_log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 
-            obs = self._obs(wfn, is_log)
+            obs = self._obs(wfn, bool(self.opt.absorbing_potential), is_log)
 
             for f, v in obs.items():
                 if f in history: history[f].append(v)
@@ -87,13 +88,19 @@ class Runner:
             if is_log:
                 self._step(i, obs, datetime.timedelta(seconds=time.time() - start))
 
+            if self.opt.absorbing_potential and obs["norm"] < self.opt.absorbing_potential.stop_norm:
+                if not is_log:
+                    self._step(i, self._obs(wfn, True, True), datetime.timedelta(seconds=time.time() - start))
+                print(f"\nCAP STOP NORM REACHED, STOPPING PROPAGATION")
+                break
+
         if "final_wavefunction" in history:
             wfn_final = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
             history["final_wavefunction"] = [wfn_final.data.copy()]
 
         self._save(history, idx, nstate)
 
-        final_obs = self._obs(wfn, is_log=True)
+        final_obs = self._obs(wfn, bool(self.opt.absorbing_potential), True)
 
         return StateResult(
             population=final_obs["population"],
@@ -105,7 +112,7 @@ class Runner:
             norm=final_obs["norm"]
         )
 
-    def _obs(self, wfn: Wavefunction, is_log: bool) -> dict:
+    def _obs(self, wfn: Wavefunction, cap: bool, is_log: bool) -> dict:
         results = {}
 
         wfn_obs = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
@@ -116,7 +123,7 @@ class Runner:
             results["kinetic_energy"] = wfn.ke(self.grid, self.ham)
         if should("momentum"):
             results["momentum"] = wfn.momentum(self.grid)
-        if should("norm"):
+        if should("norm") or cap:
             results["norm"] = wfn.norm()
         if should("population"):
             results["population"] = wfn_obs.population()
@@ -166,7 +173,7 @@ class Runner:
             )
 
     def _save(self, history: dict, idx: int, nstate: int):
-        times = np.arange(self.opt.iterations + 1) * self.opt.time_step
+        times = np.arange(len(next(iter(history.values())))) * self.opt.time_step
 
         for field, path in self.opt.write:
 
