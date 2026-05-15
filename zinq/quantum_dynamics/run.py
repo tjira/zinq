@@ -84,6 +84,9 @@ class Runner:
             if is_log:
                 self._step(i, obs, datetime.timedelta(seconds=time.time() - start))
 
+        if "final_wavefunction" in history:
+            history["final_wavefunction"] = [wfn.data.copy()]
+
         self._save(history, idx, nstate)
 
         final_obs = self._obs(wfn, is_log=True)
@@ -117,8 +120,18 @@ class Runner:
             results["potential_energy"] = wfn.pe(self.grid, self.ham)
         if should("total_energy"):
             results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
+        if should("wavefunction"):
+            results["wavefunction"] = wfn.data.copy()
 
         return results
+
+    def _pack_wfns(self, wfns: np.ndarray) -> np.ndarray:
+        length, *_, nstate = wfns.shape
+
+        grid = [r.ravel() for r in self.grid.position]
+        wfns = wfns.reshape(length, -1, nstate).swapaxes(0, 1)
+
+        return np.column_stack((*grid, wfns.view(float).reshape(len(wfns), -1)))
 
     def _head(self, idx: int, wfn: Wavefunction):
         ic, mode = self.opt.initial_conditions, "IMAGINARY" if self.opt.imaginary else "REAL"
@@ -150,11 +163,11 @@ class Runner:
 
         for field, path in self.opt.write:
 
-            if not path or field not in history: continue
+            if not path or field not in history or not history[field]: continue
 
-            base, ext = path.rsplit(".", 1)
+            field_arr, base, ext = np.array(history[field]), *path.rsplit(".", 1)
 
-            data = np.column_stack((times, np.array(history[field])))
+            data = self._pack_wfns(field_arr) if "wavefunction" in field else np.column_stack((times, field_arr))
+                
             fname = path if nstate == 1 else f"{base}_STATE-{idx:02}.{ext}"
-
             np.savetxt(fname, data, header=f"{data.shape[0]} {data.shape[1]}", comments="", fmt="%20.14f")
