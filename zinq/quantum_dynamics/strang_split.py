@@ -30,7 +30,7 @@ class StrangSplit:
 
         self.unit = -0.5 * (1.0 if imaginary else 1j) * dt
 
-        V = np.moveaxis(potential.evaluateDiabatic(position_grid), [0, 1], [-2, -1])
+        V = np.moveaxis(potential.evaluate_diabatic(position_grid), [0, 1], [-2, -1])
 
         k_squared = sum(k**2 for k in momentum_grid)
 

@@ -1,26 +1,36 @@
-from dataclasses import dataclass
 import datetime
 import time
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
 from ..potential import Potential
 from . import strang_split
-from .grid import generateMomentumGrid, generatePositionGrid
-from .options import Options
+from .grid import generate_momentum_grid, generate_position_grid
+from .options import Options, WriteOptions
 from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
 
 
 @dataclass
 class _Observables:
-    kinetic_energy: list[float]
-    momentum: list[float]
-    norm: list[float]
-    population: list[float]
-    position: list[float]
-    potential_energy: list[float]
-    total_energy: list[float]
+    kinetic_energy: Any = None
+    momentum: Any = None
+    norm: Any = None
+    population: Any = None
+    position: Any = None
+    potential_energy: Any = None
+    total_energy: Any = None
+
+
+@dataclass
+class _ObservablesParams:
+    wfn: Wavefunction
+    potential: Potential
+    position_grid: list[np.ndarray]
+    momentum_grid: list[np.ndarray]
+    mass: float
 
 
 def run(options_dict: dict):
@@ -34,15 +44,15 @@ def run(options_dict: dict):
     potential = opt.potential.create()
     optimized_wfns: list[Wavefunction] = []
 
-    position_grid = generatePositionGrid(np.array(opt.grid.limits), opt.grid.npoint)
-    momentum_grid = generateMomentumGrid(np.array(opt.grid.limits), opt.grid.npoint)
+    position_grid = generate_position_grid(np.array(opt.grid.limits), opt.grid.npoint)
+    momentum_grid = generate_momentum_grid(np.array(opt.grid.limits), opt.grid.npoint)
 
     npropagations = opt.imaginary.nstate if opt.imaginary else 1
 
     for state_idx in range(npropagations):
         wfn = Wavefunction(potential.ndim, potential.nstate, opt.grid.npoint)
 
-        wfn.initializeGaussian(
+        wfn.initialize_gaussian(
             position_grid=position_grid,
             position=np.array(opt.initial_conditions.position),
             momentum=np.array(opt.initial_conditions.momentum),
@@ -72,59 +82,39 @@ def run(options_dict: dict):
             f"{'POPULATION':>{(11 * wfn.nstate + 1)}} {'NORM':>9} TIME"
         )
 
-        history = {
-            "kinetic_energy": [],
-            "momentum": [],
-            "norm": [],
-            "population": [],
-            "position": [],
-            "potential_energy": [],
-            "total_energy": [],
-        }
+        history = _Observables(
+            kinetic_energy=[],
+            momentum=[],
+            norm=[],
+            population=[],
+            position=[],
+            potential_energy=[],
+            total_energy=[],
+        )
 
         for i in range(opt.iterations + 1):
             start_time = time.time()
 
             if i: propagator.step(wfn)
 
-            if i and opt.imaginary and state_idx > 0: wfn.projectOut(optimized_wfns)
+            if i and opt.imaginary and state_idx > 0: wfn.project_out(optimized_wfns)
 
             log_iteration = i == 0 or i == opt.iterations or (i % opt.log_interval == 0)
 
-            if opt.write.kinetic_energy or opt.write.total_energy or log_iteration:
-                kinetic_energy = wfn.kineticEnergy(momentum_grid, opt.mass)
-                if opt.write.kinetic_energy:
-                    history["kinetic_energy"].append(kinetic_energy)
+            obs_params = _ObservablesParams(
+                wfn=wfn,
+                potential=potential,
+                position_grid=position_grid,
+                momentum_grid=momentum_grid,
+                mass=opt.mass,
+            )
 
-            if opt.write.momentum or log_iteration:
-                momentum = wfn.momentum(momentum_grid)
-                if opt.write.momentum:
-                    history["momentum"].append(momentum)
-
-            if opt.write.norm or log_iteration:
-                norm = wfn.norm()
-                if opt.write.norm:
-                    history["norm"].append(norm)
-
-            if opt.write.population or log_iteration:
-                population = wfn.population()
-                if opt.write.population:
-                    history["population"].append(population)
-
-            if opt.write.position or log_iteration:
-                position = wfn.position(position_grid)
-                if opt.write.position:
-                    history["position"].append(position)
-
-            if opt.write.potential_energy or opt.write.total_energy or log_iteration:
-                potential_energy = wfn.potentialEnergy(position_grid, potential)
-                if opt.write.potential_energy:
-                    history["potential_energy"].append(potential_energy)
-
-            if opt.write.total_energy or log_iteration:
-                total_energy = kinetic_energy + potential_energy
-                if opt.write.total_energy:
-                    history["total_energy"].append(total_energy)
+            obs = _calculate_observables(
+                params=obs_params,
+                write=opt.write,
+                history=history,
+                log_iteration=log_iteration,
+            )
 
             if not log_iteration: continue
 
@@ -132,40 +122,83 @@ def run(options_dict: dict):
 
             with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
                 print(
-                    f"{i:5d} "
-                    f"{kinetic_energy:12.6f} {potential_energy:12.6f} {total_energy:12.6f} "
-                    f"{position} {momentum} {population} {norm:1.3e} {duration}"
+                    f"{i:5d} {obs.kinetic_energy:12.6f} "
+                    f"{obs.potential_energy:12.6f} {obs.total_energy:12.6f} {obs.position} "
+                    f"{obs.momentum} {obs.population} {obs.norm:1.3e} {duration}"
                 )
 
         optimized_wfns.append(wfn)
 
-        _export_history(
-            history,
-            opt.write,
-            opt.iterations,
-            opt.time_step,
-            state_idx,
-            npropagations > 1,
+        time_range = np.arange(opt.iterations + 1) * opt.time_step
+
+        _export_history(history, opt.write, time_range, tuple([state_idx, npropagations]))
+
+
+def _calculate_observables(
+    params: _ObservablesParams,
+    write: WriteOptions,
+    history: _Observables,
+    log_iteration: bool,
+) -> _Observables:
+    obs = _Observables()
+
+    if write.kinetic_energy or write.total_energy or log_iteration:
+        obs.kinetic_energy = params.wfn.kinetic_energy(params.momentum_grid, params.mass)
+        if write.kinetic_energy:
+            history.kinetic_energy.append(obs.kinetic_energy)
+
+    if write.momentum or log_iteration:
+        obs.momentum = params.wfn.momentum(params.momentum_grid)
+        if write.momentum:
+            history.momentum.append(obs.momentum)
+
+    if write.norm or log_iteration:
+        obs.norm = params.wfn.norm()
+        if write.norm:
+            history.norm.append(obs.norm)
+
+    if write.population or log_iteration:
+        obs.population = params.wfn.population()
+        if write.population:
+            history.population.append(obs.population)
+
+    if write.position or log_iteration:
+        obs.position = params.wfn.position(params.position_grid)
+        if write.position:
+            history.position.append(obs.position)
+
+    if write.potential_energy or write.total_energy or log_iteration:
+        obs.potential_energy = params.wfn.potential_energy(
+            params.position_grid,
+            params.potential
         )
+        if write.potential_energy:
+            history.potential_energy.append(obs.potential_energy)
+
+    if write.total_energy or log_iteration:
+        obs.total_energy = obs.kinetic_energy + obs.potential_energy
+        if write.total_energy:
+            history.total_energy.append(obs.total_energy)
+
+    return obs
+
 
 def _export_history(
-    history: dict[str, list],
-    write_options,
-    iterations: float,
-    dt: float,
-    state_idx: int,
-    multistate: bool,
+    history: _Observables,
+    write_options: WriteOptions,
+    time_range: np.ndarray,
+    istate_info: tuple[int, int],
 ):
     for field, path in write_options:
         if path is None: continue
 
-        times = np.arange(iterations + 1) * dt
-        data = np.atleast_2d(history[field])
-        output = np.column_stack((times, data))
+        if not (data := getattr(history, field)): continue
+
+        output = np.column_stack((time_range, np.array(data)))
 
         basename, extension = path.split(".")[0], path.split(".")[1]
-        multistate_path = f"{basename}_STATE-{state_idx:02}.{extension}"
-        filename = path if not multistate else multistate_path
+        multistate_path = f"{basename}_STATE-{istate_info[0]:02}.{extension}"
+        filename = multistate_path if istate_info[1] > 1 else path
 
         np.savetxt(
             filename,

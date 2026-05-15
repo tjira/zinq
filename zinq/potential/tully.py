@@ -26,7 +26,7 @@ class TullyFirst(Potential):
     C: float = 0.005
     D: float = 1
 
-    def evaluateDiabatic(self, r: list[np.ndarray], time: float = 0.0):
+    def evaluate_diabatic(self, r: list[np.ndarray], time: float = 0.0):
         V00 = np.sign(r[0]) * self.A * (1 - np.exp(-self.B * np.abs(r[0])))
         V01 = self.C * np.exp(-self.D * r[0]**2)
         V22 = np.sign(r[0]) * self.A * (np.exp(-self.B * np.abs(r[0])) - 1)

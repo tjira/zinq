@@ -15,5 +15,5 @@ class Potential(ABC):
         pass
 
     @abstractmethod
-    def evaluateDiabatic(self, r: list[np.ndarray], time: float = 0) -> np.ndarray:
+    def evaluate_diabatic(self, r: list[np.ndarray], time: float = 0) -> np.ndarray:
         pass
