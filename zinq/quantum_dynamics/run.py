@@ -6,7 +6,6 @@ from typing import Any
 import numpy as np
 
 from ..potential import Potential
-from . import strang_split
 from .grid import generate_momentum_grid, generate_position_grid
 from .options import Options, WriteOptions
 from .strang_split import StrangSplit
@@ -131,7 +130,7 @@ def run(options_dict: dict):
 
         time_range = np.arange(opt.iterations + 1) * opt.time_step
 
-        _export_history(history, opt.write, time_range, tuple([state_idx, npropagations]))
+        _export_history(history, opt.write, time_range, (state_idx, npropagations))
 
 
 def _calculate_observables(
@@ -142,43 +141,38 @@ def _calculate_observables(
 ) -> _Observables:
     obs = _Observables()
 
+    def _update(field, value):
+        setattr(obs, field, value)
+        if getattr(write, field):
+            getattr(history, field).append(value)
+
     if write.kinetic_energy or write.total_energy or log_iteration:
-        obs.kinetic_energy = params.wfn.kinetic_energy(params.momentum_grid, params.mass)
-        if write.kinetic_energy:
-            history.kinetic_energy.append(obs.kinetic_energy)
+        value = params.wfn.kinetic_energy(params.momentum_grid, params.mass)
+        _update("kinetic_energy", value)
 
     if write.momentum or log_iteration:
-        obs.momentum = params.wfn.momentum(params.momentum_grid)
-        if write.momentum:
-            history.momentum.append(obs.momentum)
+        value = params.wfn.momentum(params.momentum_grid)
+        _update("momentum", value)
 
     if write.norm or log_iteration:
-        obs.norm = params.wfn.norm()
-        if write.norm:
-            history.norm.append(obs.norm)
+        value = params.wfn.norm()
+        _update("norm", value)
 
     if write.population or log_iteration:
-        obs.population = params.wfn.population()
-        if write.population:
-            history.population.append(obs.population)
+        value = params.wfn.population()
+        _update("population", value)
 
     if write.position or log_iteration:
-        obs.position = params.wfn.position(params.position_grid)
-        if write.position:
-            history.position.append(obs.position)
+        value = params.wfn.position(params.position_grid)
+        _update("position", value)
 
     if write.potential_energy or write.total_energy or log_iteration:
-        obs.potential_energy = params.wfn.potential_energy(
-            params.position_grid,
-            params.potential
-        )
-        if write.potential_energy:
-            history.potential_energy.append(obs.potential_energy)
+        value = params.wfn.potential_energy(params.position_grid, params.potential)
+        _update("potential_energy", value)
 
     if write.total_energy or log_iteration:
-        obs.total_energy = obs.kinetic_energy + obs.potential_energy
-        if write.total_energy:
-            history.total_energy.append(obs.total_energy)
+        value = obs.kinetic_energy + obs.potential_energy
+        _update("total_energy", value)
 
     return obs
 
