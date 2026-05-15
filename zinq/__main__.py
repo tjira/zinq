@@ -4,7 +4,6 @@ import os
 import time
 
 from zinq import __version__
-from zinq.dispatcher import process_file
 
 
 def main():
@@ -17,19 +16,22 @@ def main():
     )
 
     parser.add_argument("-h", "--help", action="help", help="This help message.")
+    parser.add_argument("--cupy", action="store_true", help="Use Cupy instead of Numpy.")
 
-    parser.add_argument(
-        "inputs",
-        nargs="?",
-        default="input.json",
-        help="Input files to process."
-    )
+    parser.add_argument("inputs", nargs="?", default="input.json", help="Input files.")
 
     args = parser.parse_args()
 
+    if args.cupy:
+        from . import backend
+        backend.enable_cupy()
+
+    from .dispatcher import process_file
+
     print(
         f"PYTHON: {os.sys.version.split()[0]}, ZINQ: {__version__}, "
-        f"TIMESTAMP: {datetime.datetime.now().isoformat()}"
+        f"TIMESTAMP: {datetime.datetime.now().isoformat()}, "
+        f"BACKEND: {'CUPY' if args.cupy else 'NUMPY'}"
     )
 
     start_time = time.time()

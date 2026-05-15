@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 
-import numpy as np
 from pydantic import BaseModel
 
+from ..backend import np
 from .potential import Potential
 
 

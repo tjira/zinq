@@ -1,5 +1,4 @@
-import numpy as np
-
+from ..backend import np
 from .grid import Grid
 from .hamiltonian import Hamiltonian
 
@@ -82,7 +81,7 @@ class Wavefunction:
         momentum = np.zeros(self.ndim)
 
         for d in range(self.ndim):
-            momentum[d] = np.sum(self.p_dens(grid, d)) * self.measure
+            momentum[d] = self.p_dens(grid, d).sum() * self.measure
 
         return momentum
 
@@ -99,11 +98,11 @@ class Wavefunction:
         return np.sum(self.o_dens(other)) * self.measure
 
     def o_dens(self, other) -> np.ndarray:
-        return np.einsum("...i,...i->...", np.conj(self.data), other.data)
+        return np.einsum("...i,...i->...", self.data.conj(), other.data)
 
     def project_out(self, others):
         for other in others:
-            self.data -= np.conj(self.overlap(other)) * other.data
+            self.data -= self.overlap(other).conj() * other.data
 
         self.normalize()
 
@@ -111,7 +110,7 @@ class Wavefunction:
         population = np.zeros(self.nstate)
 
         for s in range(self.nstate):
-            population[s] = np.sum(self.pop_dens(s)) * self.measure
+            population[s] = self.pop_dens(s).sum() * self.measure
 
         return population
 
@@ -122,7 +121,7 @@ class Wavefunction:
         position = np.zeros(self.ndim)
 
         for d in range(self.ndim):
-            position[d] = np.sum(self.pos_dens(grid, d)) * self.measure
+            position[d] = self.pos_dens(grid, d).sum() * self.measure
 
         return position
 
@@ -130,9 +129,8 @@ class Wavefunction:
         return np.sum(np.abs(self.data)**2, axis=-1) * grid.position[dim]
 
     def pe(self, grid: Grid, ham: Hamiltonian, time: float = 0) -> float:
-        ped = self.pe_dens(grid, ham, time)
-        return np.sum(ped) * self.measure
+        return self.pe_dens(grid, ham, time).sum() * self.measure
 
     def pe_dens(self, grid: Grid, ham: Hamiltonian, time: float = 0) -> np.ndarray:
         V = ham.potential.eval_d(grid.position, time=time)
-        return np.einsum("...i,ij...,...j->...", np.conj(self.data), V, self.data).real
+        return np.einsum("...i,ij...,...j->...", self.data.conj(), V, self.data).real

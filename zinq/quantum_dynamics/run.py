@@ -1,8 +1,7 @@
 import datetime
 import time
 
-import numpy as np
-
+from ..backend import np
 from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .options import Options

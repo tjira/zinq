@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-import numpy as np
+from ..backend import np
 
 
 class Potential(ABC):
