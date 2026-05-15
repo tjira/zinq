@@ -17,6 +17,10 @@ class Grid:
     def limits(self) -> np.ndarray:
         return np.array([[p.min(), p.max()] for p in self.position])
 
+    @property
+    def measure(self) -> float:
+        return np.prod(np.ptp(self.limits, axis=1) / (self.npoint - 1))
+
     def __init__(self, limits: np.ndarray, npoint: int):
         assert limits.ndim == 2, f"LIMITS MUST BE 2D ARRAY, GOT {limits.ndim}D"
         assert limits.shape[1] == 2, f"LIMITS MUST HAVE SHAPE (NDIM, 2), GOT {limits.shape}"

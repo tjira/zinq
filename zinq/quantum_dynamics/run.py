@@ -65,7 +65,7 @@ class Runner:
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:
         img, dt = self.opt.imaginary is not None, self.opt.time_step
 
-        prop = StrangSplit(self.grid, self.ham, dt, img)
+        prop = StrangSplit(self.grid, self.ham, dt, img, self.opt.adiabatic)
 
         history = {f: [] for f, p in self.opt.write if p is not None}
 
@@ -98,9 +98,13 @@ class Runner:
             wfn_final = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
             history["final_wavefunction"] = [wfn_final.data.copy()]
 
-        self._save(history, idx, nstate)
-
         final_obs = self._obs(wfn, bool(self.opt.absorbing_potential), True)
+
+        pop_label = "ADIABATIC POP." if self.opt.adiabatic else "POPULATION"
+        with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
+            print(f"\nFINAL {pop_label}: {final_obs['population']}")
+
+        self._save(history, idx, nstate)
 
         return StateResult(
             population=final_obs["population"],
@@ -173,6 +177,8 @@ class Runner:
             )
 
     def _save(self, history: dict, idx: int, nstate: int):
+        if not history: return
+        
         times = np.arange(len(next(iter(history.values())))) * self.opt.time_step
 
         for field, path in self.opt.write:
