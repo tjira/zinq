@@ -9,6 +9,7 @@ class ComplexAbsorbingPotentialOptions(BaseModel):
     limits: list[list[float]]
     exponent: float = 0.001
     stop_norm: float = 1e-12
+    track_population: bool = True
 
 
 class GridOptions(BaseModel):

@@ -74,7 +74,7 @@ class Runner:
         for i in range(self.opt.iterations + 1) if self.opt.iterations else count():
             start = time.time()
 
-            if i: prop.step(wfn, pop_decay)
+            if i: pop_decay += prop.step(wfn)
 
             if i and self.opt.imaginary and idx > 0: wfn.project_out(self.optimized)
 
