@@ -43,25 +43,23 @@ class Runner:
             self.optimized.append(wfn)
 
     def _init(self) -> Wavefunction:
-        wfn = Wavefunction(self.ham.potential.ndim, self.ham.potential.nstate, self.opt.grid.npoint)
+        ndim, nstate = self.ham.potential.ndim, self.ham.potential.nstate
 
-        wfn.init_gauss(
-            self.grid,
-            np.array(self.opt.initial_conditions.position),
-            np.array(self.opt.initial_conditions.momentum),
-            np.array(self.opt.initial_conditions.gamma),
-            self.opt.initial_conditions.state,
-        )
+        pos = np.array(self.opt.initial_conditions.position)
+        mom = np.array(self.opt.initial_conditions.momentum)
+        gamma = np.array(self.opt.initial_conditions.gamma)
+        state = self.opt.initial_conditions.state
+
+        wfn = Wavefunction(ndim, nstate, self.opt.grid.npoint)
+
+        wfn.init_gauss(self.grid, pos, mom, gamma, state)
 
         return wfn
 
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int):
-        prop = StrangSplit(
-            self.grid,
-            self.ham,
-            self.opt.time_step,
-            self.opt.imaginary is not None
-        )
+        img, dt = self.opt.imaginary is not None, self.opt.time_step
+
+        prop = StrangSplit(self.grid, self.ham,dt, img)
 
         history = {f: [] for f, p in self.opt.write if p is not None}
 
@@ -145,10 +143,4 @@ class Runner:
             data = np.column_stack((times, np.array(history[field])))
             fname = path if nstate == 1 else f"{base}_STATE-{idx:02}.{ext}"
 
-            np.savetxt(
-                fname,
-                data,
-                header=f"{data.shape[0]} {data.shape[1]}",
-                comments="",
-                fmt="%20.14f"
-            )
+            np.savetxt(fname, data, header=f"{data.shape[0]} {data.shape[1]}", comments="", fmt="%20.14f")
