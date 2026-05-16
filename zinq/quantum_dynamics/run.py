@@ -70,6 +70,8 @@ class Runner:
 
         need_acf = bool(self.opt.write.autocorrelation) or bool(self.opt.write.spectrum)
 
+        if need_acf and "autocorrelation" not in history: history["autocorrelation"] = []
+
         self._head(idx, wfn)
 
         propagator = StrangSplit(self.grid, self.ham, dt, img, self.opt.adiabatic)
@@ -130,7 +132,7 @@ class Runner:
 
         def should(f): return log or getattr(self.opt.write, f)
 
-        if should("autocorrelation") and wfn_0:
+        if (should("autocorrelation") or self.opt.write.spectrum) and wfn_0:
             results["autocorrelation"] = wfn_0.overlap(wfn)
         if should("kinetic_energy") or should("total_energy"):
             results["kinetic_energy"] = wfn.ke(self.grid, self.ham)
