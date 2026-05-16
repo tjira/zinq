@@ -68,7 +68,7 @@ class Runner:
 
         history = {f: [] for f, p in self.opt.write if p is not None}
 
-        need_acf = bool(self.opt.write.autocorrelation)
+        need_acf = bool(self.opt.write.autocorrelation) or bool(self.opt.write.spectrum)
 
         self._head(idx, wfn)
 
@@ -102,6 +102,9 @@ class Runner:
         if "final_wavefunction" in history:
             wfn_final = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
             history["final_wavefunction"] = [wfn_final.data.copy()]
+
+        if "spectrum" in history:
+            history["spectrum"] = [self._get_spectrum(np.array(history["autocorrelation"]))]
 
         final_obs = self._obs(wfn, True, pop_decay)
 
@@ -156,6 +159,18 @@ class Runner:
 
         return np.column_stack((*grid, wfns.view(float).reshape(len(wfns), -1)))
 
+    def _get_spectrum(self, acf: np.ndarray) -> np.ndarray:
+        times = np.arange(-len(acf) + 1, len(acf)) * self.opt.time_step
+        tau = -np.log(1e-4) / (len(acf) * self.opt.time_step)**2
+
+        acf = np.concatenate((acf[1:][::-1], np.conj(acf))) * np.exp(-tau * times**2)
+        acf = np.pad(acf, 2 * [10 * len(acf)], mode="constant")
+
+        omega = 2 * np.pi * np.fft.fftfreq(len(acf), self.opt.time_step)
+        spectrum = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(acf)) * self.opt.time_step)
+
+        return np.column_stack((np.fft.fftshift(omega), np.real(spectrum)))
+
     def _head(self, idx: int, wfn: Wavefunction):
         ic, mode = self.opt.initial_conditions, "IMAGINARY" if self.opt.imaginary else "REAL"
 
@@ -168,7 +183,7 @@ class Runner:
         pop_label = "ADIABATIC POP." if self.opt.adiabatic else "POPULATION"
 
         print(
-            f"{'ITER':>5} {'KIN (Eh)':>12} {'POT (Eh)':>12} {'TOT (Eh)':>12} "
+            f"{'ITER':>7} {'KIN (Eh)':>12} {'POT (Eh)':>12} {'TOT (Eh)':>12} "
             f"{'POS (a0)':>{p_w}} {'MOM (hb/a0)':>{p_w}} "
             f"{pop_label:>{s_w}} {'NORM':>9} TIME"
         )
@@ -176,7 +191,7 @@ class Runner:
     def _log_step(self, i: int, obs: dict, duration: datetime.timedelta):
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
             print(
-                f"{i:5d} {obs['kinetic_energy']:12.6f} "
+                f"{i:7d} {obs['kinetic_energy']:12.6f} "
                 f"{obs['potential_energy']:12.6f} {obs['total_energy']:12.6f} "
                 f"{obs['position']} {obs['momentum']} {obs['population']} "
                 f"{obs['norm']:1.3e} {duration}"
@@ -193,10 +208,12 @@ class Runner:
 
             field_arr, base, ext = np.array(history[field]), *path.rsplit(".", 1)
 
-            if "wavefunction" in field:
-                data = self._pack_wfns(field_arr)
-            elif "autocorrelation" in field:
+            if "autocorrelation" in field:
                 data = np.column_stack((times, np.real(field_arr), np.imag(field_arr)))
+            if "spectrum" in field:
+                data = field_arr[0]
+            elif "wavefunction" in field:
+                data = self._pack_wfns(field_arr)
             else:
                 data = np.column_stack((times, field_arr))
                 

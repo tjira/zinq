@@ -48,6 +48,7 @@ class WriteOptions(BaseModel):
     potential_energy: Optional[str] = None
     total_energy: Optional[str] = None
     wavefunction: Optional[str] = None
+    spectrum: Optional[str] = None
     final_wavefunction: Optional[str] = None
 
 
