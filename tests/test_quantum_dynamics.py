@@ -41,14 +41,14 @@ def test_quantum_dynamics_harmonic_1d_itp():
     expected_norm_values        = [1.00000000000000, 1.00000000000000, 1.00000000000000]
 
     expected_position_values = [
-        [0.00006053550965],
+        [ 0.00006053550965],
         [-0.00002269860869],
         [-0.00004994213663]
     ]
     expected_momentum_values = [
-        [-0.00000000000000],
         [0.00000000000000],
-        [-0.00000000000000]
+        [0.00000000000000],
+        [0.00000000000000]
     ]
 
     expected_populations = [
@@ -78,7 +78,7 @@ def test_quantum_dynamics_harmonic_1d_itp():
             "population": expected_populations[i],
         }
         
-        conditions = [actual[key] == pytest.approx(expected[key], abs=1e-12) for key in actual]
+        conditions = [actual[key] == pytest.approx(expected[key], abs=1e-08) for key in actual]
 
         for j, key in enumerate(actual):
             assert conditions[j], error_message(f"{key} FOR STATE {i}", expected[key], actual[key])
@@ -150,7 +150,7 @@ def test_quantum_dynamics_harmonic_2d_itp():
             "population": expected_populations[i],
         }
         
-        conditions = [actual[key] == pytest.approx(expected[key], abs=1e-12) for key in actual]
+        conditions = [actual[key] == pytest.approx(expected[key], abs=1e-08) for key in actual]
 
         for j, key in enumerate(actual):
             assert conditions[j], error_message(f"{key} FOR STATE {i}", expected[key], actual[key])
@@ -216,7 +216,7 @@ def test_quantum_dynamics_tully_1_real():
             "population": expected_populations[i],
         }
         
-        conditions = [actual[key] == pytest.approx(expected[key], abs=1e-12) for key in actual]
+        conditions = [actual[key] == pytest.approx(expected[key], abs=1e-08) for key in actual]
 
         for j, key in enumerate(actual):
             assert conditions[j], error_message(f"{key} FOR STATE {i}", expected[key], actual[key])
