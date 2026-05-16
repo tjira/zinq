@@ -1,7 +1,5 @@
 from dataclasses import dataclass
 
-from pydantic import BaseModel
-
 from ..backend import np
 
 

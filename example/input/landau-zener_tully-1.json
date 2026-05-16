@@ -1,0 +1,29 @@
+{
+    "zinq" : [
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "momentum" : [15],
+                    "gamma" : [2],
+                    "position" : [-10],
+                    "state" : 1
+                },
+                "log_intervals" : {
+                    "iteration" : 500,
+                    "trajectory" : 500
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "surface_hopping" : {
+                    "landau_zener" : {}
+                },
+                "mass" : 2000,
+                "iterations" : 3500,
+                "time_step" : 1,
+                "trajectories" : 10000
+            }
+        }
+    ]
+}

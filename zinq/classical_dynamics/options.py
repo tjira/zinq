@@ -25,9 +25,9 @@ class WriteOptions(BaseModel):
 class Options(BaseModel):
     initial_conditions: InitialConditionsOptions
     potential: PotentialOptions
-    iterations: Optional[int] = None
-    trajectories: Optional[int] = None
+    iterations: int
+    trajectories: int = 1
     time_step: float
     mass: float = 1
-    log_interval: LogIntervalOptions = LogIntervalOptions()
+    log_interval: int = 1
     write: WriteOptions = WriteOptions()
