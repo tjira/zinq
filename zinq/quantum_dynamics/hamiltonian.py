@@ -1,7 +1,5 @@
 from typing import Optional
 
-from pydantic import BaseModel
-
 from ..backend import np
 from ..potential import Potential
 from .options import ComplexAbsorbingPotentialOptions

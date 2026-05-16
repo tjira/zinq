@@ -1,6 +1,7 @@
 import datetime
 import time
 from itertools import count
+from typing import Optional
 
 from ..backend import np
 from .grid import Grid
@@ -65,33 +66,36 @@ class Runner:
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:
         img, dt, pop_decay = self.opt.imaginary is not None, self.opt.time_step, np.zeros(wfn.nstate)
 
-        prop = StrangSplit(self.grid, self.ham, dt, img, self.opt.adiabatic)
-
         history = {f: [] for f, p in self.opt.write if p is not None}
 
+        need_acf = bool(self.opt.write.autocorrelation)
+
         self._head(idx, wfn)
+
+        propagator = StrangSplit(self.grid, self.ham, dt, img, self.opt.adiabatic)
+
+        wfn_0 = Wavefunction.from_data(wfn.data.copy(), wfn.measure) if need_acf else None
 
         for i in range(self.opt.iterations + 1) if self.opt.iterations else count():
             start = time.time()
 
-            if i: pop_decay += prop.step(wfn)
+            if i: pop_decay += propagator.step(wfn)
 
             if i and self.opt.imaginary and idx > 0: wfn.project_out(self.optimized)
 
-            is_log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
+            log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 
-            obs = self._obs(wfn, bool(self.opt.absorbing_potential), is_log, pop_decay)
+            obs = self._obs(wfn, log, pop_decay, wfn_0)
 
             for f, v in obs.items():
                 if f in history: history[f].append(v)
 
             elapsed = datetime.timedelta(seconds=time.time() - start)
 
-            if is_log:
-                self._step(i, obs, elapsed)
+            if log: self._log_step(i, obs, elapsed)
 
             if self.opt.absorbing_potential and obs["norm"] < self.opt.absorbing_potential.stop_norm:
-                if not is_log: self._step(i, self._obs(wfn, True, True, pop_decay), elapsed)
+                if not log: self._log_step(i, self._obs(wfn, True, pop_decay), elapsed)
                 print(f"\nCAP STOP NORM REACHED, STOPPING PROPAGATION")
                 break
 
@@ -99,11 +103,10 @@ class Runner:
             wfn_final = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
             history["final_wavefunction"] = [wfn_final.data.copy()]
 
-        final_obs = self._obs(wfn, bool(self.opt.absorbing_potential), True, pop_decay)
+        final_obs = self._obs(wfn, True, pop_decay)
 
-        pop_label = "ADIABATIC POP." if self.opt.adiabatic else "POPULATION"
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
-            print(f"\nFINAL {pop_label}: {final_obs['population']}")
+            print(f"\nFINAL {'ADIABATIC' if self.opt.adiabatic else 'DIABATIC'} POPULATION: {final_obs['population']}")
 
         self._save(history, idx, nstate)
 
@@ -117,18 +120,20 @@ class Runner:
             norm=final_obs["norm"]
         )
 
-    def _obs(self, wfn: Wavefunction, cap: bool, is_log: bool, pop_decay: np.ndarray) -> dict:
+    def _obs(self, wfn: Wavefunction, log: bool, pop_decay: np.ndarray, wfn_0: Optional[Wavefunction] = None) -> dict:
         results = {}
 
         wfn_obs = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
 
-        def should(f): return is_log or getattr(self.opt.write, f)
+        def should(f): return log or getattr(self.opt.write, f)
 
+        if should("autocorrelation") and wfn_0:
+            results["autocorrelation"] = wfn_0.overlap(wfn)
         if should("kinetic_energy") or should("total_energy"):
             results["kinetic_energy"] = wfn.ke(self.grid, self.ham)
         if should("momentum"):
             results["momentum"] = wfn.momentum(self.grid)
-        if should("norm") or cap:
+        if should("norm") or self.opt.absorbing_potential:
             results["norm"] = wfn.norm()
         if should("population"):
             results["population"] = wfn_obs.population(pop_decay)
@@ -168,7 +173,7 @@ class Runner:
             f"{pop_label:>{s_w}} {'NORM':>9} TIME"
         )
 
-    def _step(self, i: int, obs: dict, duration: datetime.timedelta):
+    def _log_step(self, i: int, obs: dict, duration: datetime.timedelta):
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
             print(
                 f"{i:5d} {obs['kinetic_energy']:12.6f} "
@@ -188,7 +193,12 @@ class Runner:
 
             field_arr, base, ext = np.array(history[field]), *path.rsplit(".", 1)
 
-            data = self._pack_wfns(field_arr) if "wavefunction" in field else np.column_stack((times, field_arr))
+            if "wavefunction" in field:
+                data = self._pack_wfns(field_arr)
+            elif "autocorrelation" in field:
+                data = np.column_stack((times, field_arr.real, field_arr.imag))
+            else:
+                data = np.column_stack((times, field_arr))
                 
             fname = path if nstate == 1 else f"{base}_STATE-{idx:02}.{ext}"
             np.savetxt(fname, data, header=f"{data.shape[0]} {data.shape[1]}", comments="", fmt="%20.14f")

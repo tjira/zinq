@@ -39,6 +39,7 @@ class PotentialOptions(BaseModel):
 
 
 class WriteOptions(BaseModel):
+    autocorrelation: Optional[str] = None
     kinetic_energy: Optional[str] = None
     momentum: Optional[str] = None
     norm: Optional[str] = None
