@@ -30,10 +30,10 @@ class VelocityVerlet:
             r_plus = [pos_plus[:, j] for j in range(ndim)]
             r_minus = [pos_minus[:, j] for j in range(ndim)]
             
-            V_plus = self.potential.eval_d(r_plus, time=time)
-            V_minus = self.potential.eval_d(r_minus, time=time)
+            V_plus = self.potential.eval_a(r_plus, time=time)
+            V_minus = self.potential.eval_a(r_minus, time=time)
             
-            grad[:, i] = (V_plus[states, states, indices] - V_minus[states, states, indices]) / (2 * self.h)
+            grad[:, i] = (V_plus[states, indices] - V_minus[states, indices]) / (2 * self.h)
             
         return grad
 

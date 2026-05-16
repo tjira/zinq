@@ -21,3 +21,10 @@ class Potential(ABC):
     @abstractmethod
     def eval_d(self, r: list[np.ndarray], time: float = 0) -> np.ndarray:
         pass
+
+    def eval_a(self, r: list[np.ndarray], time: float = 0) -> np.ndarray:
+        v_d = self.eval_d(r, time)
+
+        if v_d.ndim == 2: return np.linalg.eigvalsh(v_d)
+
+        return np.linalg.eigvalsh(v_d.transpose(2, 0, 1)).transpose()

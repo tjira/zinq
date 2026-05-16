@@ -55,6 +55,8 @@ class Runner:
 
         final = self._obs(ensemble, True, self.opt.iterations * self.opt.time_step)
 
+        print(f"\nFINAL ADIABATIC POPULATION: {final['population']}")
+
         return RunResult(**{k: final[k] for k in RunResult.__annotations__})
 
     def _head(self, ensemble: Ensemble):
