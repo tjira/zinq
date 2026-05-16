@@ -7,7 +7,7 @@ name = "zinq"
 dynamic = ["version"]
 description = "A lightweight Python engine for electronic structure and quantum dynamics."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = "MIT"
 authors = [
     {name = "Tomáš Jíra", email = "tom.jira@gmail.com"},
