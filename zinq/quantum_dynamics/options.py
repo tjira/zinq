@@ -2,19 +2,9 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from ..potential import HarmonicOptions, Potential, TimeLinearOptions, TullyFirstOptions
-
-
-class ComplexAbsorbingPotentialOptions(BaseModel):
-    limits: list[list[float]]
-    exponent: float = 0.001
-    stop_norm: float = 1e-12
-    track_population: bool = True
-
-
-class GridOptions(BaseModel):
-    limits: list[list[float]]
-    npoint: int
+from ..potential import PotentialOptions
+from .grid import GridOptions
+from .hamiltonian import ComplexAbsorbingPotentialOptions
 
 
 class ImaginaryOptions(BaseModel):
@@ -27,16 +17,6 @@ class InitialConditionsOptions(BaseModel):
     gamma: list[float]
     state: int = 0
     adiabatic: bool = False
-
-
-class PotentialOptions(BaseModel):
-    harmonic: Optional[HarmonicOptions] = None
-    time_linear: Optional[TimeLinearOptions] = None
-    tully_1: Optional[TullyFirstOptions] = None
-
-    def create(self) -> Potential:
-        try: return next(pot.create() for _, pot in self if pot is not None)
-        except StopIteration: raise ValueError("NO POTENTIAL SPECIFIED")
 
 
 class WriteOptions(BaseModel):

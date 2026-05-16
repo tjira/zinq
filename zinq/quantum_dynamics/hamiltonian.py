@@ -1,8 +1,16 @@
 from typing import Optional
 
+from pydantic import BaseModel
+
 from ..backend import np
 from ..potential import Potential
-from .options import ComplexAbsorbingPotentialOptions
+
+
+class ComplexAbsorbingPotentialOptions(BaseModel):
+    limits: list[list[float]]
+    exponent: float = 0.001
+    stop_norm: float = 1e-12
+    track_population: bool = True
 
 
 class Hamiltonian:

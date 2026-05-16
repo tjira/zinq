@@ -74,7 +74,7 @@ class Runner:
 
         self._head(idx, wfn)
 
-        propagator = StrangSplit(self.grid, self.ham, dt, img, self.opt.adiabatic)
+        propagator = StrangSplit(self.grid, self.ham, dt, img)
 
         wfn_0 = Wavefunction.from_data(wfn.data.copy(), wfn.measure) if need_acf else None
 

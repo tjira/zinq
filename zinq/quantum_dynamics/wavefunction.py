@@ -53,47 +53,23 @@ class Wavefunction:
     def normalize(self):
         self.data /= np.sqrt(self.norm())
 
-    def diff1(self, grid: Grid, dim: int):
-        data_fft = np.fft.fft(self.data, axis=dim)
-        d1m = 1j * grid.momentum[dim][..., np.newaxis] * data_fft
-        d1x = np.fft.ifft(d1m, axis=dim)
-        return Wavefunction.from_data(d1x, self.measure)
-
-    def diff2(self, grid: Grid, dim: int):
-        data_fft = np.fft.fft(self.data, axis=dim)
-        d2m = -grid.momentum[dim][..., np.newaxis]**2 * data_fft
-        d2x = np.fft.ifft(d2m, axis=dim)
-        return Wavefunction.from_data(d2x, self.measure)
-
     def ke(self, grid: Grid, ham: Hamiltonian) -> float:
-        return np.sum(self.ke_dens(grid, ham)) * self.measure
-
-    def ke_dens(self, grid: Grid, ham: Hamiltonian) -> np.ndarray:
-        ked = np.zeros(self.data.shape[:-1])
-
-        for d in range(self.ndim):
-            d2 = self.diff2(grid, d)
-            ked += np.real(self.overlap_dens(d2))
-
-        return (-0.5 / ham.mass) * ked
+        data_fft = np.fft.fftn(self.data, axes=range(self.ndim))
+        k_sq = sum((k**2 for k in grid.momentum), np.zeros_like(grid.momentum[0]))
+        factor = (0.5 / ham.mass) * self.measure / np.prod(self.data.shape[:-1])
+        return float(np.sum(np.abs(data_fft)**2 * k_sq[..., np.newaxis]) * factor)
 
     def momentum(self, grid: Grid) -> np.ndarray:
-        return np.array([np.imag(self.overlap(self.diff1(grid, d))) for d in range(self.ndim)])
-
-    def momentum_dens(self, grid: Grid, dim: int) -> np.ndarray:
-        return np.imag(self.overlap_dens(self.diff1(grid, dim)))
+        data_fft = np.fft.fftn(self.data, axes=range(self.ndim))
+        abs_sq = np.abs(data_fft)**2
+        factor = self.measure / np.prod(self.data.shape[:-1])
+        return np.array([np.sum(abs_sq * k[..., np.newaxis]) * factor for k in grid.momentum])
 
     def norm(self) -> float:
         return float(np.real(np.vdot(self.data, self.data)) * self.measure)
 
-    def norm_dens(self) -> np.ndarray:
-        return np.real(np.einsum("...i,...i->...", np.conj(self.data), self.data))
-
     def overlap(self, other) -> complex:
         return complex(np.vdot(self.data, other.data) * self.measure)
-
-    def overlap_dens(self, other) -> np.ndarray:
-        return np.einsum("...i,...i->...", np.conj(self.data), other.data)
 
     def project_out(self, others):
         for other in others:
@@ -104,22 +80,14 @@ class Wavefunction:
     def population(self, pop_decay: np.ndarray) -> np.ndarray:
         return np.sum(np.abs(self.data)**2, axis=tuple(range(self.ndim))) * self.measure + pop_decay
 
-    def population_dens(self, state: int) -> np.ndarray:
-        return np.abs(self.data[..., state])**2
-
     def position(self, grid: Grid) -> np.ndarray:
-        rho = self.norm_dens()
+        rho = np.real(np.einsum("...i,...i->...", np.conj(self.data), self.data))
         return np.array([np.sum(rho * p) for p in grid.position]) * self.measure
 
-    def position_dens(self, grid: Grid, dim: int) -> np.ndarray:
-        return self.norm_dens() * grid.position[dim]
-
     def pe(self, grid: Grid, ham: Hamiltonian, time: float = 0) -> float:
-        return float(np.sum(self.pe_dens(grid, ham, time)) * self.measure)
-
-    def pe_dens(self, grid: Grid, ham: Hamiltonian, time: float = 0) -> np.ndarray:
         V = ham.potential.eval_d(grid.position, time=time)
-        return np.real(np.einsum("...i,ij...,...j->...", np.conj(self.data), V, self.data))
+        pe_dens = np.real(np.einsum("...i,ij...,...j->...", np.conj(self.data), V, self.data))
+        return float(np.sum(pe_dens) * self.measure)
 
     def to_adiabatic(self, grid: Grid, ham: Hamiltonian, time: float = 0) -> 'Wavefunction':
         _, U = np.linalg.eigh(np.moveaxis(ham.potential.eval_d(grid.position, time), [0, 1], [-2, -1]))

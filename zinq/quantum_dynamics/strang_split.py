@@ -10,14 +10,11 @@ class StrangSplit:
     R: np.ndarray
     K: np.ndarray
     unit: complex
-    adiabatic: bool
 
-    U: Optional[np.ndarray] = None
-
-    def __init__(self, grid: Grid, ham: Hamiltonian, dt: float, imaginary: bool, adiabatic: bool):
+    def __init__(self, grid: Grid, ham: Hamiltonian, dt: float, imaginary: bool):
         assert dt > 0, f"TIME STEP MUST BE POSITIVE, GOT {dt}"
 
-        self.unit, self.H, self.adiabatic = -0.5 * (1.0 if imaginary else 1j) * dt, ham, adiabatic
+        self.unit, self.H = -0.5 * (1.0 if imaginary else 1j) * dt, ham
 
         self._recalculate_R(grid, 0)
 
@@ -28,8 +25,6 @@ class StrangSplit:
         V = np.moveaxis(self.H.potential.eval_d(grid.position, time), [0, 1], [-2, -1])
 
         W, U = np.linalg.eigh(V)
-
-        if self.adiabatic: self.U = U
 
         if self.H.cap: W = W - 1j * self.H.eval_cap(grid.position)[..., np.newaxis]
 
@@ -60,7 +55,6 @@ class StrangSplit:
 
         if np.allclose(col_norm, 1): return np.zeros(wfn.nstate)
 
-        data = np.einsum("...ji,...j->...i", self.U.conj(), wfn.data) if self.U is not None else wfn.data
+        decay_density = (1 / col_norm[..., np.newaxis] - 1) * np.abs(wfn.data)**2
 
-        return np.sum((1 / col_norm[..., np.newaxis] - 1) * np.abs(data)**2, axis=tuple(range(wfn.ndim))) * wfn.measure
-
+        return np.sum(decay_density, axis=tuple(range(wfn.ndim))) * wfn.measure
