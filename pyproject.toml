@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "zinq"
 dynamic = ["version"]
-description = "A lightweight Python engine for electronic structure and quantum dynamics."
+description = "Lightweight Python engine for electronic structure and quantum dynamics."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
