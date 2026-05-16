@@ -16,6 +16,8 @@ dependencies = [
     "numpy",
     "scipy",
     "pydantic",
+    "matplotlib",
+    "sympy",
 ]
 
 [project.urls]
@@ -23,6 +25,8 @@ Homepage = "https://github.com/tjira/zinq"
 
 [project.scripts]
 zinq = "zinq.__main__:main"
+zinq-plot = "zinq.scripts.plot:plot"
+zinq-heatmap = "zinq.scripts.heatmap:heatmap"
 
 [tool.setuptools.dynamic]
 version = {attr = "zinq.__version__"}
