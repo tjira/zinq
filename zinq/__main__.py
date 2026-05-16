@@ -9,6 +9,7 @@ import time
 from zinq import __version__
 
 from . import backend
+from .utils import print_startup_header
 
 
 def main():
@@ -33,11 +34,7 @@ def main():
 
     from .dispatcher import process_file
 
-    print(
-        f"PYTHON: {sys.version.split()[0]}, ZINQ: {__version__}, "
-        f"TIMESTAMP: {datetime.datetime.now().isoformat()}, "
-        f"BACKEND: {'CUPY' if args.cupy else 'NUMPY'}"
-    )
+    print_startup_header(backend_name="CUPY" if args.cupy else "NUMPY")
 
     if args.profile:
         profiler = cProfile.Profile()
