@@ -63,4 +63,17 @@ class LandauZener(SurfaceHopping):
         jump_happened = np.any(jumps, axis=1)
 
         if np.any(jump_happened):
-            ensemble.states[jump_happened] = np.argmax(jumps, axis=1)[jump_happened]
+            trajs = np.where(jump_happened)[0]
+            new_states = np.argmax(jumps, axis=1)[jump_happened]
+            
+            for i, traj_idx in enumerate(trajs):
+                old_state, new_state = ensemble.states[traj_idx], new_states[i]
+                
+                dV = V0[new_state, traj_idx] - V0[old_state, traj_idx]
+                p_sq = np.sum(ensemble.p[traj_idx]**2)
+                
+                new_p_sq = p_sq - 2 * ensemble.mass * dV
+                
+                if new_p_sq > 0:
+                    ensemble.p[traj_idx] *= np.sqrt(new_p_sq / p_sq)
+                    ensemble.states[traj_idx] = new_state

@@ -6,11 +6,13 @@ class Ensemble:
     r: np.ndarray
     p: np.ndarray
     states: np.ndarray
+    mass: float
 
-    def __init__(self, pos: np.ndarray, mom: np.ndarray, gamma: np.ndarray, ntraj: int, state: int = 0, seed: int = 1):
+    def __init__(self, pos: np.ndarray, mom: np.ndarray, gamma: np.ndarray, ntraj: int, mass: float, state: int = 0, seed: int = 1):
         self.r = np.zeros((ntraj, pos.shape[0]))
         self.p = np.zeros((ntraj, mom.shape[0]))
         self.states = np.full(ntraj, state, dtype=int)
+        self.mass = mass
 
         stdev_pos, stdev_mom = 1 / np.sqrt(2 * gamma), np.sqrt(gamma / 2)
 

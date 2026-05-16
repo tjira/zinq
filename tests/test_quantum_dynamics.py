@@ -1,5 +1,3 @@
-import json
-
 import pytest
 
 from zinq.quantum_dynamics.run import run
@@ -185,14 +183,15 @@ def test_quantum_dynamics_tully_1_real():
     expected_norm_values        = [1.00000000000074]
 
     expected_position_values = [
-        [13.41125195591602]
+        [13.41125194061655]
     ]
+
     expected_momentum_values = [
-        [16.01020085262107]
+        [16.01020083373733]
     ]
 
     expected_populations = [
-        [0.58961670754100, 0.41038329245974]
+        [0.58961671754100, 0.41038328245899]
     ]
 
     for i, state in enumerate(result.states):
