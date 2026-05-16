@@ -10,26 +10,35 @@ class StrangSplit:
     R: np.ndarray
     K: np.ndarray
     unit: complex
+    adiabatic: bool
 
     U: Optional[np.ndarray] = None
 
     def __init__(self, grid: Grid, ham: Hamiltonian, dt: float, imaginary: bool, adiabatic: bool):
         assert dt > 0, f"TIME STEP MUST BE POSITIVE, GOT {dt}"
 
-        self.unit, self.H = -0.5 * (1.0 if imaginary else 1j) * dt, ham
+        self.unit, self.H, self.adiabatic = -0.5 * (1.0 if imaginary else 1j) * dt, ham, adiabatic
 
-        V = np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1])
+        self._recalculate_R(grid, 0)
 
-        k_squared, W, U = sum((k**2 for k in grid.momentum), np.zeros_like(grid.momentum[0])), *np.linalg.eigh(V)
-
-        if adiabatic: self.U = U
-
-        if ham.cap: W = W - 1j * ham.eval_cap(grid.position)[..., np.newaxis]
-
-        self.R = U @ (np.exp(self.unit * W)[..., None] * U.conj().mT)
+        k_squared = sum((k**2 for k in grid.momentum), np.zeros_like(grid.momentum[0]))
         self.K = np.exp(self.unit * k_squared / ham.mass)[..., np.newaxis]
 
-    def step(self, wfn) -> np.ndarray:
+    def _recalculate_R(self, grid: Grid, time: float):
+        V = np.moveaxis(self.H.potential.eval_d(grid.position, time), [0, 1], [-2, -1])
+
+        W, U = np.linalg.eigh(V)
+
+        if self.adiabatic: self.U = U
+
+        if self.H.cap: W = W - 1j * self.H.eval_cap(grid.position)[..., np.newaxis]
+
+        self.R = U @ (np.exp(self.unit * W)[..., None] * U.conj().mT)
+
+    def step(self, wfn, grid: Grid, time: float) -> np.ndarray:
+        if self.H.potential.is_time_dependent:
+            self._recalculate_R(grid, time + abs(self.unit.real + self.unit.imag))
+
         decay = self._apply_R(wfn)
 
         wfn.data = np.fft.fftn(wfn.data, axes=range(wfn.ndim))

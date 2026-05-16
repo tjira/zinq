@@ -2,7 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from ..potential import HarmonicOptions, Potential, TullyFirstOptions
+from ..potential import HarmonicOptions, Potential, TimeLinearOptions, TullyFirstOptions
 
 
 class ComplexAbsorbingPotentialOptions(BaseModel):
@@ -31,6 +31,7 @@ class InitialConditionsOptions(BaseModel):
 
 class PotentialOptions(BaseModel):
     harmonic: Optional[HarmonicOptions] = None
+    time_linear: Optional[TimeLinearOptions] = None
     tully_1: Optional[TullyFirstOptions] = None
 
     def create(self) -> Potential:

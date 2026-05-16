@@ -66,7 +66,7 @@ class Runner:
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:
         img, dt, pop_decay = self.opt.imaginary is not None, self.opt.time_step, np.zeros(wfn.nstate)
 
-        history = {f: [] for f, p in self.opt.write if p is not None}
+        history, iters = {f: [] for f, p in self.opt.write if p is not None}, 0
 
         need_acf = bool(self.opt.write.autocorrelation) or bool(self.opt.write.spectrum)
 
@@ -79,15 +79,15 @@ class Runner:
         wfn_0 = Wavefunction.from_data(wfn.data.copy(), wfn.measure) if need_acf else None
 
         for i in range(self.opt.iterations + 1) if self.opt.iterations else count():
-            start = time.time()
+            start, current_time, iters = time.time(), i * dt, iters + 1
 
-            if i: pop_decay += propagator.step(wfn)
+            if i: pop_decay += propagator.step(wfn, self.grid, current_time - dt)
 
             if i and self.opt.imaginary and idx > 0: wfn.project_out(self.optimized)
 
             log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 
-            obs = self._obs(wfn, log, pop_decay, wfn_0)
+            obs = self._obs(wfn, log, pop_decay, current_time, wfn_0)
 
             for f, v in obs.items():
                 if f in history: history[f].append(v)
@@ -97,18 +97,18 @@ class Runner:
             if log: self._log_step(i, obs, elapsed)
 
             if self.opt.absorbing_potential and obs["norm"] < self.opt.absorbing_potential.stop_norm:
-                if not log: self._log_step(i, self._obs(wfn, True, pop_decay), elapsed)
+                if not log: self._log_step(i, self._obs(wfn, True, pop_decay, current_time), elapsed)
                 print(f"\nCAP STOP NORM REACHED, STOPPING PROPAGATION")
                 break
 
         if "final_wavefunction" in history:
-            wfn_final = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
+            wfn_final = wfn.to_adiabatic(self.grid, self.ham, iters * dt) if self.opt.adiabatic else wfn
             history["final_wavefunction"] = [wfn_final.data.copy()]
 
         if "spectrum" in history:
             history["spectrum"] = [self._get_spectrum(np.array(history["autocorrelation"]))]
 
-        final_obs = self._obs(wfn, True, pop_decay)
+        final_obs = self._obs(wfn, True, pop_decay, iters * dt)
 
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
             print(f"\nFINAL {'ADIABATIC' if self.opt.adiabatic else 'DIABATIC'} POPULATION: {final_obs['population']}")
@@ -125,10 +125,10 @@ class Runner:
             norm=final_obs["norm"]
         )
 
-    def _obs(self, wfn: Wavefunction, log: bool, pop_decay: np.ndarray, wfn_0: Optional[Wavefunction] = None) -> dict:
+    def _obs(self, wfn: Wavefunction, log: bool, pop_decay: np.ndarray, time: float = 0, wfn_0: Optional[Wavefunction] = None) -> dict:
         results = {}
 
-        wfn_obs = wfn.to_adiabatic(self.grid, self.ham) if self.opt.adiabatic else wfn
+        wfn_obs = wfn.to_adiabatic(self.grid, self.ham, time) if self.opt.adiabatic else wfn
 
         def should(f): return log or getattr(self.opt.write, f)
 
@@ -145,7 +145,7 @@ class Runner:
         if should("position"):
             results["position"] = wfn.position(self.grid)
         if should("potential_energy") or should("total_energy"):
-            results["potential_energy"] = wfn.pe(self.grid, self.ham)
+            results["potential_energy"] = wfn.pe(self.grid, self.ham, time)
         if should("total_energy"):
             results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
         if should("wavefunction"):
