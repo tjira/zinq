@@ -212,7 +212,7 @@ class Runner:
 
             if "autocorrelation" in field:
                 data = np.column_stack((times, np.real(field_arr), np.imag(field_arr)))
-            if "spectrum" in field:
+            elif "spectrum" in field:
                 data = field_arr[0]
             elif "wavefunction" in field:
                 data = self._pack_wfns(field_arr)

@@ -31,7 +31,7 @@ class TimeLinear(Potential):
     def is_time_dependent(self) -> bool:
         return True
 
-    def eval_d(self, r: list[np.ndarray], time: float) -> np.ndarray:
+    def eval_d(self, r: list[np.ndarray], time: float = 0.0) -> np.ndarray:
         V00 = self.slope * (time - self.slope)
         V11 = -V00
         V01 = self.coupling
