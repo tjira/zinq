@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 
 # general imports
-import argparse as ap, matplotlib.animation as anm, matplotlib.pyplot as plt, matplotlib.ticker as tck, numpy as np
+import argparse as ap
+
+import matplotlib.animation as anm
+import matplotlib.pyplot as plt
+import matplotlib.ticker as tck
+import numpy as np
 
 # additional imports
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
@@ -147,7 +152,8 @@ def plot():
         if fitf:
 
             # import the fitting libraries
-            import scipy as sc, sympy as sp
+            import scipy as sc
+            import sympy as sp
 
             # scaling the function to bring the x values in between 0 and 1 to improve the fit stability
             scalef = lambda x: (x - x.min()) / (x.max() - x.min())

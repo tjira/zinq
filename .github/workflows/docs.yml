@@ -3,7 +3,7 @@ name: Documentation
 on:
   push:
     branches:
-      - 'master'
+      - '*'
 
 permissions:
   id-token: write
@@ -21,10 +21,8 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 3.4
-
-      - name: Install Jekyll Dependencies
-        working-directory: docs
-        run: bundle install
+          bundler-cache: true 
+          working-directory: docs
 
       - name: Build Jekyll Site
         working-directory: docs

@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 
 # general imports
-import argparse as ap, matplotlib.animation as anm, matplotlib.pyplot as plt, matplotlib.ticker as tck, numpy as np
+import argparse as ap
+
+import matplotlib.animation as anm
+import matplotlib.pyplot as plt
+import matplotlib.ticker as tck
+import numpy as np
 
 # additional imports
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset

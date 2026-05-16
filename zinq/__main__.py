@@ -36,7 +36,9 @@ def main():
     )
 
     if args.profile:
-        import cProfile, pstats, subprocess
+        import cProfile
+        import pstats
+        import subprocess
         profiler = cProfile.Profile()
         profiler.enable()
 
