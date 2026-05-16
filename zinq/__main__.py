@@ -12,6 +12,7 @@ from . import backend
 
 
 def main():
+    profiler = None
     parser = argparse.ArgumentParser(
         add_help=False,
         allow_abbrev=False,
@@ -52,7 +53,7 @@ def main():
 
     print(f"\nTOTAL EXECUTION TIME: {duration}")
 
-    if args.profile:
+    if profiler:
         profiler.disable()
 
         stats_file, dot_file, pdf_file = "profile.stats", "profile.dot", "profile.pdf"

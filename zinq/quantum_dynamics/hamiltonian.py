@@ -16,8 +16,8 @@ class Hamiltonian:
         assert self.mass > 0, f"MASS MUST BE POSITIVE, GOT {self.mass}"
 
     def eval_cap(self, position: list[np.ndarray]) -> np.ndarray:
-        if self.cap is None: return 0
+        if self.cap is None: return np.zeros_like(position[0])
 
         exp, zipped = self.cap.exponent, zip(position, self.cap.limits)
 
-        return sum(np.exp(exp * (np.maximum(0, l[0] - x) + np.maximum(0, x - l[1]))) - 1 for x, l in zipped)
+        return sum((np.exp(exp * (np.maximum(0, l[0] - x) + np.maximum(0, x - l[1]))) - 1 for x, l in zipped), start=np.zeros_like(position[0]))

@@ -3,9 +3,8 @@ import scipy.linalg as linalg
 
 
 def enable_cupy():
-    global np, linalg
-
     import cupy
     import cupyx.scipy.linalg
 
-    np, linalg = cupy, cupyx.scipy.linalg
+    globals()["np"] = cupy
+    globals()["linalg"] = cupyx.scipy.linalg

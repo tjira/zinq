@@ -28,6 +28,6 @@ class Harmonic(Potential):
     def eval_d(self, r: list[np.ndarray], time: float = 0):
         assert len(r) == self.ndim
         
-        V = sum(0.5 * self.k[i] * r[i]**2 for i in range(self.ndim))
+        V = sum((0.5 * self.k[i] * r[i]**2 for i in range(self.ndim)), start=np.zeros_like(r[0]))
         
         return V[np.newaxis, np.newaxis, ...]

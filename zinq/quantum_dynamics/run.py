@@ -196,7 +196,7 @@ class Runner:
             if "wavefunction" in field:
                 data = self._pack_wfns(field_arr)
             elif "autocorrelation" in field:
-                data = np.column_stack((times, field_arr.real, field_arr.imag))
+                data = np.column_stack((times, np.real(field_arr), np.imag(field_arr)))
             else:
                 data = np.column_stack((times, field_arr))
                 

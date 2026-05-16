@@ -1,3 +1,5 @@
+from typing import Optional
+
 from ..backend import np
 from .grid import Grid
 from .hamiltonian import Hamiltonian
@@ -9,7 +11,7 @@ class StrangSplit:
     K: np.ndarray
     unit: complex
 
-    U: np.ndarray = None
+    U: Optional[np.ndarray] = None
 
     def __init__(self, grid: Grid, ham: Hamiltonian, dt: float, imaginary: bool, adiabatic: bool):
         assert dt > 0, f"TIME STEP MUST BE POSITIVE, GOT {dt}"
@@ -18,7 +20,7 @@ class StrangSplit:
 
         V = np.moveaxis(ham.potential.eval_d(grid.position), [0, 1], [-2, -1])
 
-        k_squared, W, U = sum(k**2 for k in grid.momentum), *np.linalg.eigh(V)
+        k_squared, W, U = sum((k**2 for k in grid.momentum), np.zeros_like(grid.momentum[0])), *np.linalg.eigh(V)
 
         if adiabatic: self.U = U
 
@@ -43,11 +45,11 @@ class StrangSplit:
     def _apply_R(self, wfn) -> np.ndarray:
         wfn.data = np.einsum("...ij,...j->...i", self.R, wfn.data)
 
-        if not self.H.cap or not self.H.cap.track_population: return 0
+        if not self.H.cap or not self.H.cap.track_population: return np.zeros(wfn.nstate)
 
         col_norm = np.sum(np.abs(self.R[..., :, 0])**2, axis=-1)
 
-        if np.allclose(col_norm, 1): return 0
+        if np.allclose(col_norm, 1): return np.zeros(wfn.nstate)
 
         data = np.einsum("...ji,...j->...i", self.U.conj(), wfn.data) if self.U is not None else wfn.data
 
