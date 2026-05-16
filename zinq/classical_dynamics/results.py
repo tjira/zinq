@@ -15,4 +15,4 @@ class TrajectoryResult:
 
 @dataclass(frozen=True)
 class RunResult:
-    states: list[TrajectoryResult]
+    trajs: list[TrajectoryResult]

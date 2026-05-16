@@ -160,8 +160,10 @@ class Runner:
 
     def _log_step(self, i: int, obs: dict, duration: datetime.timedelta):
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
-            print(f"{i:7d} {obs['kinetic_energy']:12.6f} {obs['potential_energy']:12.6f} {obs['total_energy']:12.6f} "
-                  f"{obs['position']} {obs['momentum']} {obs['population']} {obs['norm']:1.3e} {duration}")
+            print(
+                f"{i:7d} {obs['kinetic_energy']:12.6f} {obs['potential_energy']:12.6f} {obs['total_energy']:12.6f} "
+                f"{obs['position']} {obs['momentum']} {obs['population']} {obs['norm']:1.3e} {duration}"
+            )
 
     def _save(self, history: dict, idx: int, nstate: int):
         times = np.arange(len(next(iter(history.values())))) * self.opt.time_step if history else []

@@ -1,14 +1,15 @@
 from ..backend import np
+from ..potential import Potential
 
 
 class Ensemble:
-    position: np.ndarray
-    momentum: np.ndarray
+    r: np.ndarray
+    p: np.ndarray
     states: np.ndarray
 
     def __init__(self, position: np.ndarray, momentum: np.ndarray, gamma: np.ndarray, ntraj: int, state: int = 0):
-        self.position = np.zeros((ntraj, position.shape[0]))
-        self.momentum = np.zeros((ntraj, momentum.shape[0]))
+        self.r = np.zeros((ntraj, position.shape[0]))
+        self.p = np.zeros((ntraj, momentum.shape[0]))
         self.states = np.full(ntraj, state, dtype=int)
 
         stdev_pos, stdev_mom = 1 / np.sqrt(2 * gamma), np.sqrt(gamma / 2)
@@ -16,20 +17,29 @@ class Ensemble:
         z_pos = np.random.normal(size=(ntraj, position.shape[0]))
         z_mom = np.random.normal(size=(ntraj, momentum.shape[0]))
 
-        self.position = position + stdev_pos * z_pos
-        self.momentum = momentum + stdev_mom * z_mom
+        self.r = position + stdev_pos * z_pos
+        self.p = momentum + stdev_mom * z_mom
 
     @property
     def ntraj(self) -> int:
-        return self.position.shape[0]
+        return self.r.shape[0]
 
     @property
     def ndim(self) -> int:
-        return self.position.shape[1]
+        return self.r.shape[1]
 
-    def ke(self) -> np.ndarray:
-        return np.mean(np.sum(self.momentum**2, axis=1) / 2)
+    def ke(self, mass: float) -> float:
+        return float(np.mean(np.sum(self.p**2, axis=1) / (2 * mass)))
 
-    def pe(self, potential) -> float:
-        V = potential.eval_d([self.position[:, j] for j in range(self.ndim)])
-        return np.mean(V[self.states, self.states, np.arange(self.ntraj)])
+    def pe(self, potential: Potential, time: float = 0) -> float:
+        v = potential.eval_d([self.r[:, j] for j in range(self.ndim)], time=time)
+        return float(np.mean(v[self.states, self.states, np.arange(self.ntraj)]))
+
+    def population(self, nstate: int) -> np.ndarray:
+        return np.bincount(self.states, minlength=nstate) / self.ntraj
+
+    def position(self) -> np.ndarray:
+        return np.mean(self.r, axis=0)
+
+    def momentum(self) -> np.ndarray:
+        return np.mean(self.p, axis=0)

@@ -21,7 +21,7 @@ class Runner:
     def __init__(self, opt: Options):
         self.opt, self.potential = opt, opt.potential.create()
 
-    def run(self):
+    def run(self) -> RunResult:
         ensemble = Ensemble(
             np.array(self.opt.initial_conditions.position),
             np.array(self.opt.initial_conditions.momentum),
@@ -31,16 +31,56 @@ class Runner:
         )
 
         verlet = VelocityVerlet(self.potential, self.opt.mass, self.opt.time_step, 1e-8)
+        
+        self._head(ensemble)
+
+        obs = self._obs(ensemble, 0)
 
         for i in range(self.opt.iterations + 1):
-            time_current = i * self.opt.time_step
+            start, current_time = time.time(), i * self.opt.time_step
 
-            if i > 0: verlet.step(ensemble, time_current - self.opt.time_step)
+            if i > 0: verlet.step(ensemble, current_time - self.opt.time_step)
 
             log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 
-            kinetic_energy = ensemble.ke()
-            potential_energy = ensemble.pe(self.potential)
+            obs = self._obs(ensemble, current_time)
 
-            if log:
-                print(kinetic_energy, potential_energy, kinetic_energy + potential_energy)
+            if log: self._log_step(i, obs, datetime.timedelta(seconds=time.time() - start))
+
+        return RunResult(trajs=[TrajectoryResult(**{k: obs[k] for k in TrajectoryResult.__annotations__})])
+
+    def _head(self, ensemble: Ensemble):
+        ic = self.opt.initial_conditions
+        
+        with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
+            print(f"\nINITIAL GAMMA: {np.array(ic.gamma, float)}\n")
+            
+        print(f"CLASSICAL ENSEMBLE TIME PROPAGATION\n")
+
+        p_w = 11 * ensemble.ndim + 1
+        s_w = 11 * self.potential.nstate + 1
+
+        print(
+            f"{'ITER':>7} {'KIN (Eh)':>12} {'POT (Eh)':>12} {'TOT (Eh)':>12} "
+            f"{'POS (a0)':>{p_w}} {'MOM (hb/a0)':>{p_w}} "
+            f"{'POPULATION':>{s_w}} TIME"
+        )
+
+    def _log_step(self, i: int, obs: dict, duration: datetime.timedelta):
+        with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
+            print(
+                f"{i:7d} {obs['kinetic_energy']:12.6f} {obs['potential_energy']:12.6f} {obs['total_energy']:12.6f} "
+                f"{obs['position']} {obs['momentum']} {obs['population']} {duration}"
+            )
+
+    def _obs(self, ensemble: Ensemble, time: float = 0) -> dict:
+        results = {}
+
+        results["population"] = ensemble.population(self.potential.nstate)
+        results["position"] = ensemble.position()
+        results["momentum"] = ensemble.momentum()
+        results["kinetic_energy"] = ensemble.ke(self.opt.mass)
+        results["potential_energy"] = ensemble.pe(self.potential, time)
+        results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
+
+        return results
