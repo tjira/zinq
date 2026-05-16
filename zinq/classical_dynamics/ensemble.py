@@ -7,18 +7,20 @@ class Ensemble:
     p: np.ndarray
     states: np.ndarray
 
-    def __init__(self, position: np.ndarray, momentum: np.ndarray, gamma: np.ndarray, ntraj: int, state: int = 0):
-        self.r = np.zeros((ntraj, position.shape[0]))
-        self.p = np.zeros((ntraj, momentum.shape[0]))
+    def __init__(self, pos: np.ndarray, mom: np.ndarray, gamma: np.ndarray, ntraj: int, state: int = 0, seed: int = 1):
+        self.r = np.zeros((ntraj, pos.shape[0]))
+        self.p = np.zeros((ntraj, mom.shape[0]))
         self.states = np.full(ntraj, state, dtype=int)
 
         stdev_pos, stdev_mom = 1 / np.sqrt(2 * gamma), np.sqrt(gamma / 2)
 
-        z_pos = np.random.normal(size=(ntraj, position.shape[0]))
-        z_mom = np.random.normal(size=(ntraj, momentum.shape[0]))
+        rng = np.random.default_rng(seed)
 
-        self.r = position + stdev_pos * z_pos
-        self.p = momentum + stdev_mom * z_mom
+        z_pos = rng.normal(size=(ntraj, pos.shape[0]))
+        z_mom = rng.normal(size=(ntraj, mom.shape[0]))
+
+        self.r = pos + stdev_pos * z_pos
+        self.p = mom + stdev_mom * z_mom
 
     @property
     def ntraj(self) -> int:

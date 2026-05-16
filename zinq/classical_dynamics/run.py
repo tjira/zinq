@@ -5,7 +5,7 @@ from ..backend import np
 from ..potential import Potential
 from .options import Options
 from .ensemble import Ensemble
-from .results import RunResult, TrajectoryResult
+from .results import RunResult
 from .velocity_verlet import VelocityVerlet
 
 
@@ -27,14 +27,15 @@ class Runner:
             np.array(self.opt.initial_conditions.momentum),
             np.array(self.opt.initial_conditions.gamma),
             self.opt.trajectories,
-            self.opt.initial_conditions.state
+            self.opt.initial_conditions.state,
+            self.opt.seed
         )
 
         verlet = VelocityVerlet(self.potential, self.opt.mass, self.opt.time_step, 1e-8)
+
+        history = {f: [] for f, p in self.opt.write if p is not None}
         
         self._head(ensemble)
-
-        obs = self._obs(ensemble, 0)
 
         for i in range(self.opt.iterations + 1):
             start, current_time = time.time(), i * self.opt.time_step
@@ -43,11 +44,18 @@ class Runner:
 
             log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 
-            obs = self._obs(ensemble, current_time)
+            obs = self._obs(ensemble, log, current_time)
+
+            for f, v in obs.items():
+                if f in history: history[f].append(v)
 
             if log: self._log_step(i, obs, datetime.timedelta(seconds=time.time() - start))
 
-        return RunResult(trajs=[TrajectoryResult(**{k: obs[k] for k in TrajectoryResult.__annotations__})])
+        self._save(history)
+
+        final = self._obs(ensemble, True, self.opt.iterations * self.opt.time_step)
+
+        return RunResult(**{k: final[k] for k in RunResult.__annotations__})
 
     def _head(self, ensemble: Ensemble):
         ic = self.opt.initial_conditions
@@ -55,7 +63,7 @@ class Runner:
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
             print(f"\nINITIAL GAMMA: {np.array(ic.gamma, float)}\n")
             
-        print(f"CLASSICAL ENSEMBLE TIME PROPAGATION\n")
+        print(f"CLASSICAL ENSEMBLE TIME PROPAGATION")
 
         p_w = 11 * ensemble.ndim + 1
         s_w = 11 * self.potential.nstate + 1
@@ -73,14 +81,25 @@ class Runner:
                 f"{obs['position']} {obs['momentum']} {obs['population']} {duration}"
             )
 
-    def _obs(self, ensemble: Ensemble, time: float = 0) -> dict:
-        results = {}
+    def _obs(self, ensemble: Ensemble, log: bool, time: float = 0) -> dict:
+        results, write = {}, self.opt.write
 
-        results["population"] = ensemble.population(self.potential.nstate)
-        results["position"] = ensemble.position()
-        results["momentum"] = ensemble.momentum()
-        results["kinetic_energy"] = ensemble.ke(self.opt.mass)
-        results["potential_energy"] = ensemble.pe(self.potential, time)
-        results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
+        def has(f): return log or getattr(write, f)
+
+        if has("population"): results["population"] = ensemble.population(self.potential.nstate)
+        if has("position"): results["position"] = ensemble.position()
+        if has("momentum"): results["momentum"] = ensemble.momentum()
+        if has("kinetic_energy") or has("total_energy"): results["kinetic_energy"] = ensemble.ke(self.opt.mass)
+        if has("potential_energy") or has("total_energy"): results["potential_energy"] = ensemble.pe(self.potential, time)
+        if has("total_energy"): results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
 
         return results
+
+    def _save(self, history: dict):
+        times = np.arange(len(next(iter(history.values())))) * self.opt.time_step if history else []
+
+        for field, path in self.opt.write:
+            if not path or field not in history or not history[field]: continue
+
+            data = np.column_stack((times, np.array(history[field])))
+            np.savetxt(path, data, header=f"{data.shape[0]} {data.shape[1]}", comments="", fmt="%20.14f")

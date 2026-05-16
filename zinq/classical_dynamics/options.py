@@ -18,8 +18,12 @@ class LogIntervalOptions(BaseModel):
 
 
 class WriteOptions(BaseModel):
-    trajectory: Optional[str] = None
-    energy: Optional[str] = None
+    kinetic_energy: Optional[str] = None
+    momentum: Optional[str] = None
+    population: Optional[str] = None
+    position: Optional[str] = None
+    potential_energy: Optional[str] = None
+    total_energy: Optional[str] = None
 
 
 class Options(BaseModel):
@@ -29,5 +33,6 @@ class Options(BaseModel):
     trajectories: int = 1
     time_step: float
     mass: float = 1
+    seed: int = 1
     log_interval: int = 1
     write: WriteOptions = WriteOptions()
