@@ -29,12 +29,13 @@ class Runner:
     opt: Options
     ham: Hamiltonian
     grid: Grid
-    optimized: list[Wavefunction] = []
+    optimized: list[Wavefunction]
 
     def __init__(self, opt: Options):
         self.opt = opt
         self.ham = Hamiltonian(opt.potential.create(), opt.mass, opt.absorbing_potential)
         self.grid = Grid(np.array(opt.grid.limits), opt.grid.npoint)
+        self.optimized = []
 
     def run(self) -> RunResult:
         n, results = self.opt.imaginary.nstate if self.opt.imaginary else 1, []
