@@ -3,6 +3,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from ..potential import PotentialOptions
+from .surface_hopping import SurfaceHoppingOptions
 
 
 class InitialConditionsOptions(BaseModel):
@@ -29,6 +30,7 @@ class WriteOptions(BaseModel):
 class Options(BaseModel):
     initial_conditions: InitialConditionsOptions
     potential: PotentialOptions
+    surface_hopping: Optional[SurfaceHoppingOptions] = None
     iterations: int
     trajectories: int = 1
     time_step: float

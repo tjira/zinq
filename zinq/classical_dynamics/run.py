@@ -1,12 +1,15 @@
 import datetime
 import time
 
+from typing import Optional
+
 from ..backend import np
 from ..potential import Potential
 from .options import Options
 from .ensemble import Ensemble
 from .results import RunResult
 from .velocity_verlet import VelocityVerlet
+from .surface_hopping import SurfaceHopping
 
 
 def run(options_dict: dict):
@@ -17,9 +20,11 @@ def run(options_dict: dict):
 class Runner:
     opt: Options
     potential: Potential
+    surface_hopping: Optional[SurfaceHopping]
 
     def __init__(self, opt: Options):
         self.opt, self.potential = opt, opt.potential.create()
+        self.surface_hopping = opt.surface_hopping.create() if opt.surface_hopping else None
 
     def run(self) -> RunResult:
         ensemble = Ensemble(
@@ -40,7 +45,9 @@ class Runner:
         for i in range(self.opt.iterations + 1):
             start, current_time = time.time(), i * self.opt.time_step
 
-            if i > 0: verlet.step(ensemble, current_time - self.opt.time_step)
+            if i > 0:
+                jump_fn = self.surface_hopping.jump if self.surface_hopping else None
+                verlet.step(ensemble, current_time - self.opt.time_step, jump_fn=jump_fn)
 
             log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 

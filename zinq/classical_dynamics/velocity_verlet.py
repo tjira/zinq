@@ -1,3 +1,5 @@
+from typing import Optional, Callable
+
 from ..backend import np
 from ..potential import Potential
 from .ensemble import Ensemble
@@ -37,9 +39,13 @@ class VelocityVerlet:
             
         return grad
 
-    def step(self, ensemble: Ensemble, time: float) -> None:
+    def step(self, ensemble: Ensemble, time: float, jump_fn: Optional[Callable] = None) -> None:
         a_t = self._acceleration(ensemble.r, ensemble.states, time)
         ensemble.p += 0.5 * a_t * self.mass * self.dt
         ensemble.r += (ensemble.p / self.mass) * self.dt
+
+        if jump_fn:
+            jump_fn(ensemble, self.potential, self.dt, time + self.dt)
+
         a_t_next = self._acceleration(ensemble.r, ensemble.states, time + self.dt)
         ensemble.p += 0.5 * a_t_next * self.mass * self.dt
