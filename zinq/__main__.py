@@ -1,9 +1,14 @@
 import argparse
+import cProfile
 import datetime
-import os
+import shutil
+import subprocess
+import sys
 import time
 
 from zinq import __version__
+
+from . import backend
 
 
 def main():
@@ -19,33 +24,29 @@ def main():
     parser.add_argument("--cupy", action="store_true", help="Use Cupy instead of Numpy.")
     parser.add_argument("--profile", action="store_true", help="Profile the execution and generate a PDF graph.")
 
-    parser.add_argument("inputs", nargs="?", default="input.json", help="Input files.")
+    parser.add_argument("inputs", nargs="*", default=["input.json"], help="Input files.")
 
     args = parser.parse_args()
 
-    if args.cupy:
-        from . import backend
-        backend.enable_cupy()
+    if args.cupy: backend.enable_cupy()
 
     from .dispatcher import process_file
 
     print(
-        f"PYTHON: {os.sys.version.split()[0]}, ZINQ: {__version__}, "
+        f"PYTHON: {sys.version.split()[0]}, ZINQ: {__version__}, "
         f"TIMESTAMP: {datetime.datetime.now().isoformat()}, "
         f"BACKEND: {'CUPY' if args.cupy else 'NUMPY'}"
     )
 
     if args.profile:
-        import cProfile
-        import pstats
-        import subprocess
         profiler = cProfile.Profile()
         profiler.enable()
 
     start_time = time.time()
 
-    for input_file in args.inputs.split():
-        process_file(input_file)
+    print(f"\nINPUT FILES TO PROCESS: {args.inputs}")
+
+    for input_file in args.inputs: process_file(input_file)
 
     duration = datetime.timedelta(seconds=time.time() - start_time)
 
@@ -57,7 +58,7 @@ def main():
         stats_file, dot_file, pdf_file = "profile.stats", "profile.dot", "profile.pdf"
 
         gprof2dot_cmd = [
-            os.sys.executable, "-m", "gprof2dot",
+            sys.executable, "-m", "gprof2dot",
             "-f", "pstats",
             "-n", "1.0",
             "-e", "0.5",
@@ -73,8 +74,13 @@ def main():
         ]
 
         profiler.dump_stats(stats_file)
+
+        if not shutil.which("gprof2dot"): raise RuntimeError("EXECUTABLE 'gprof2dot' NOT FOUND")
         
         subprocess.run(gprof2dot_cmd, check=True)
+
+        if not shutil.which("dot"): raise RuntimeError("EXECUTABLE 'dot' NOT FOUND")
+
         subprocess.run(dot_cmd, check=True)
 
 
