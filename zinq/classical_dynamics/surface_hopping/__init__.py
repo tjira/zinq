@@ -9,6 +9,6 @@ from .surface_hopping import SurfaceHopping
 class SurfaceHoppingOptions(BaseModel):
     landau_zener: Optional[LandauZenerOptions] = None
 
-    def create(self) -> Optional[SurfaceHopping]:
-        try: return next(opt.create() for _, opt in self if opt is not None)
+    def create(self, seed: int) -> Optional[SurfaceHopping]:
+        try: return next(opt.create(seed) for _, opt in self if opt is not None)
         except StopIteration: return None

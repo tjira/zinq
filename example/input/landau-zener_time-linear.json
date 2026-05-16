@@ -1,14 +1,9 @@
 {
     "zinq" : [
         {
-            "name" : "quantum_dynamics",
+            "name" : "classical_dynamics",
             "options" : {
-                "grid" : {
-                    "limits" : [[-16, 16]],
-                    "npoint" : 2048
-                },
                 "initial_conditions" : {
-                    "adiabatic" : true,
                     "momentum" : [0],
                     "position" : [0],
                     "state" : 1,
@@ -17,12 +12,16 @@
                 "potential" : {
                     "time_linear" : {}
                 },
+                "surface_hopping" : {
+                    "time_linear" : {}
+                },
+                "mass" : 1,
                 "log_interval" : 5000,
                 "iterations" : 20000,
+                "trajectories" : 10000,
                 "time_step" : 0.001,
-                "adiabatic" : true,
                 "write" : {
-                    "population" : "POPULATION_QD.mat"
+                    "population" : "POPULATION_LZ.mat"
                 }
             }
         }

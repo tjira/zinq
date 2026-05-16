@@ -34,8 +34,8 @@ class Ensemble:
         return float(np.mean(np.sum(self.p**2, axis=1) / (2 * mass)))
 
     def pe(self, potential: Potential, time: float = 0) -> float:
-        v = potential.eval_a([self.r[:, j] for j in range(self.ndim)], time=time)
-        return float(np.mean(v[self.states, np.arange(self.ntraj)]))
+        V = potential.eval_a([self.r[:, j] for j in range(self.ndim)], time=time)
+        return float(np.mean(V[self.states, np.arange(self.ntraj)]))
 
     def population(self, nstate: int) -> np.ndarray:
         return np.bincount(self.states, minlength=nstate) / self.ntraj

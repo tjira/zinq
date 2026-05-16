@@ -8,6 +8,7 @@
                     "npoint" : 2048
                 },
                 "initial_conditions" : {
+                    "adiabatic" : true,
                     "momentum" : [15],
                     "position" : [-10],
                     "gamma" : [2],
@@ -16,6 +17,7 @@
                 "potential" : {
                     "tully_1" : {}
                 },
+                "adiabatic" : true,
                 "log_interval" : 500,
                 "mass" : 2000,
                 "iterations" : 3000,

@@ -1,15 +1,14 @@
 import datetime
 import time
-
 from typing import Optional
 
 from ..backend import np
 from ..potential import Potential
-from .options import Options
 from .ensemble import Ensemble
+from .options import Options
 from .results import RunResult
-from .velocity_verlet import VelocityVerlet
 from .surface_hopping import SurfaceHopping
+from .velocity_verlet import VelocityVerlet
 
 
 def run(options_dict: dict):
@@ -24,7 +23,7 @@ class Runner:
 
     def __init__(self, opt: Options):
         self.opt, self.potential = opt, opt.potential.create()
-        self.surface_hopping = opt.surface_hopping.create() if opt.surface_hopping else None
+        self.surface_hopping = opt.surface_hopping.create(seed=opt.seed) if opt.surface_hopping else None
 
     def run(self) -> RunResult:
         ensemble = Ensemble(

@@ -7,5 +7,5 @@ from ..ensemble import Ensemble
 
 class SurfaceHopping(ABC):
     @abstractmethod
-    def jump(self, ensemble: Ensemble, potential: Potential, dt: float, time: float) -> None:
+    def jump(self, ensemble: Ensemble, pot: Potential, dt: float, time: float) -> None:
         pass
