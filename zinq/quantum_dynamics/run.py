@@ -47,43 +47,28 @@ class Runner:
         return RunResult(states=results)
 
     def _init(self) -> Wavefunction:
-        ndim, nstate = self.ham.potential.ndim, self.ham.potential.nstate
-
-        pos = np.array(self.opt.initial_conditions.position)
-        mom = np.array(self.opt.initial_conditions.momentum)
-        gamma = np.array(self.opt.initial_conditions.gamma)
-        state = self.opt.initial_conditions.state
-
-        wfn = Wavefunction(ndim, nstate, self.opt.grid.npoint)
-
-        wfn.init_gauss(self.grid, pos, mom, gamma, state)
-
-        if self.opt.initial_conditions.adiabatic:
-            wfn = wfn.to_diabatic(self.grid, self.ham)
-
-        return wfn
+        ic = self.opt.initial_conditions
+        wfn = Wavefunction(self.ham.potential.ndim, self.ham.potential.nstate, self.opt.grid.npoint)
+        wfn.init_gauss(self.grid, np.array(ic.position), np.array(ic.momentum), np.array(ic.gamma), ic.state)
+        return wfn.to_diabatic(self.grid, self.ham) if ic.adiabatic else wfn
 
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:
-        img, dt, pop_decay = self.opt.imaginary is not None, self.opt.time_step, np.zeros(wfn.nstate)
-
+        dt, img, pop_decay = self.opt.time_step, self.opt.imaginary is not None, np.zeros(wfn.nstate)
         history, iters = {f: [] for f, p in self.opt.write if p is not None}, 0
-
-        need_acf = bool(self.opt.write.autocorrelation) or bool(self.opt.write.spectrum)
+        need_acf = "autocorrelation" in history or "spectrum" in history
 
         if need_acf and "autocorrelation" not in history: history["autocorrelation"] = []
 
         self._head(idx, wfn)
 
         propagator = StrangSplit(self.grid, self.ham, dt, img)
-
         wfn_0 = Wavefunction.from_data(wfn.data.copy(), wfn.measure) if need_acf else None
 
         for i in range(self.opt.iterations + 1) if self.opt.iterations else count():
-            start, current_time, iters = time.time(), i * dt, iters + 1
+            start, current_time = time.time(), i * dt
 
             if i: pop_decay += propagator.step(wfn, self.grid, current_time - dt)
-
-            if i and self.opt.imaginary and idx > 0: wfn.project_out(self.optimized)
+            if i and img and idx > 0: wfn.project_out(self.optimized)
 
             log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 
@@ -92,64 +77,47 @@ class Runner:
             for f, v in obs.items():
                 if f in history: history[f].append(v)
 
-            elapsed = datetime.timedelta(seconds=time.time() - start)
-
-            if log: self._log_step(i, obs, elapsed)
+            if log: self._log_step(i, obs, datetime.timedelta(seconds=time.time() - start))
 
             if self.opt.absorbing_potential and obs["norm"] < self.opt.absorbing_potential.stop_norm:
-                if not log: self._log_step(i, self._obs(wfn, True, pop_decay, current_time), elapsed)
                 print(f"\nCAP STOP NORM REACHED, STOPPING PROPAGATION")
                 break
+            
+            iters = i
 
+        return self._finish_prop(wfn, history, pop_decay, iters * dt, idx, nstate)
+
+    def _finish_prop(self, wfn: Wavefunction, history: dict, decay: np.ndarray, time: float, idx: int, nstate: int) -> StateResult:
         if "final_wavefunction" in history:
-            wfn_final = wfn.to_adiabatic(self.grid, self.ham, iters * dt) if self.opt.adiabatic else wfn
-            history["final_wavefunction"] = [wfn_final.data.copy()]
+            wfn_f = wfn.to_adiabatic(self.grid, self.ham, time) if self.opt.adiabatic else wfn
+            history["final_wavefunction"] = [wfn_f.data.copy()]
 
         if "spectrum" in history:
             history["spectrum"] = [self._get_spectrum(np.array(history["autocorrelation"]))]
 
-        final_obs = self._obs(wfn, True, pop_decay, iters * dt)
+        final = self._obs(wfn, True, decay, time)
 
-        with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
-            print(f"\nFINAL {'ADIABATIC' if self.opt.adiabatic else 'DIABATIC'} POPULATION: {final_obs['population']}")
+        print(f"\nFINAL {'ADIABATIC' if self.opt.adiabatic else 'DIABATIC'} POPULATION: {final['population']}")
 
         self._save(history, idx, nstate)
 
-        return StateResult(
-            population=final_obs["population"],
-            kinetic_energy=final_obs["kinetic_energy"],
-            potential_energy=final_obs["potential_energy"],
-            total_energy=final_obs["total_energy"],
-            position=final_obs["position"],
-            momentum=final_obs["momentum"],
-            norm=final_obs["norm"]
-        )
+        return StateResult(**{k: final[k] for k in StateResult.__annotations__})
 
-    def _obs(self, wfn: Wavefunction, log: bool, pop_decay: np.ndarray, time: float = 0, wfn_0: Optional[Wavefunction] = None) -> dict:
-        results = {}
-
+    def _obs(self, wfn: Wavefunction, log: bool, decay: np.ndarray, time: float = 0, wfn_0: Optional[Wavefunction] = None) -> dict:
+        results, write = {}, self.opt.write
         wfn_obs = wfn.to_adiabatic(self.grid, self.ham, time) if self.opt.adiabatic else wfn
 
-        def should(f): return log or getattr(self.opt.write, f)
+        def has(f): return log or getattr(write, f)
 
-        if (should("autocorrelation") or self.opt.write.spectrum) and wfn_0:
-            results["autocorrelation"] = wfn_0.overlap(wfn)
-        if should("kinetic_energy") or should("total_energy"):
-            results["kinetic_energy"] = wfn.ke(self.grid, self.ham)
-        if should("momentum"):
-            results["momentum"] = wfn.momentum(self.grid)
-        if should("norm") or self.opt.absorbing_potential:
-            results["norm"] = wfn.norm()
-        if should("population"):
-            results["population"] = wfn_obs.population(pop_decay)
-        if should("position"):
-            results["position"] = wfn.position(self.grid)
-        if should("potential_energy") or should("total_energy"):
-            results["potential_energy"] = wfn.pe(self.grid, self.ham, time)
-        if should("total_energy"):
-            results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
-        if should("wavefunction"):
-            results["wavefunction"] = wfn_obs.data.copy()
+        if (has("autocorrelation") or write.spectrum) and wfn_0: results["autocorrelation"] = wfn_0.overlap(wfn)
+        if has("norm") or self.opt.absorbing_potential: results["norm"] = wfn.norm()
+        if has("population"): results["population"] = wfn_obs.population(decay)
+        if has("position"): results["position"] = wfn.position(self.grid)
+        if has("momentum"): results["momentum"] = wfn.momentum(self.grid)
+        if has("kinetic_energy") or has("total_energy"): results["kinetic_energy"] = wfn.ke(self.grid, self.ham)
+        if has("potential_energy") or has("total_energy"): results["potential_energy"] = wfn.pe(self.grid, self.ham, time)
+        if has("total_energy"): results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
+        if has("wavefunction"): results["wavefunction"] = wfn_obs.data.copy()
 
         return results
 
@@ -192,32 +160,21 @@ class Runner:
 
     def _log_step(self, i: int, obs: dict, duration: datetime.timedelta):
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
-            print(
-                f"{i:7d} {obs['kinetic_energy']:12.6f} "
-                f"{obs['potential_energy']:12.6f} {obs['total_energy']:12.6f} "
-                f"{obs['position']} {obs['momentum']} {obs['population']} "
-                f"{obs['norm']:1.3e} {duration}"
-            )
+            print(f"{i:7d} {obs['kinetic_energy']:12.6f} {obs['potential_energy']:12.6f} {obs['total_energy']:12.6f} "
+                  f"{obs['position']} {obs['momentum']} {obs['population']} {obs['norm']:1.3e} {duration}")
 
     def _save(self, history: dict, idx: int, nstate: int):
-        if not history: return
-        
-        times = np.arange(len(next(iter(history.values())))) * self.opt.time_step
+        times = np.arange(len(next(iter(history.values())))) * self.opt.time_step if history else []
 
         for field, path in self.opt.write:
-
             if not path or field not in history or not history[field]: continue
 
-            field_arr, base, ext = np.array(history[field]), *path.rsplit(".", 1)
+            arr = np.array(history[field])
 
-            if "autocorrelation" in field:
-                data = np.column_stack((times, np.real(field_arr), np.imag(field_arr)))
-            elif "spectrum" in field:
-                data = field_arr[0]
-            elif "wavefunction" in field:
-                data = self._pack_wfns(field_arr)
-            else:
-                data = np.column_stack((times, field_arr))
-                
-            fname = path if nstate == 1 else f"{base}_STATE-{idx:02}.{ext}"
-            np.savetxt(fname, data, header=f"{data.shape[0]} {data.shape[1]}", comments="", fmt="%20.14f")
+            if "autocorrelation" in field: data = np.column_stack((times, np.real(arr), np.imag(arr)))
+            elif "spectrum" in field: data = arr[0]
+            elif "wavefunction" in field: data = self._pack_wfns(arr)
+            else: data = np.column_stack((times, arr))
+
+            name = path if nstate == 1 else f"{path.rsplit('.', 1)[0]}_STATE-{idx:02}.{path.rsplit('.', 1)[1]}"
+            np.savetxt(name, data, header=f"{data.shape[0]} {data.shape[1]}", comments="", fmt="%20.14f")
