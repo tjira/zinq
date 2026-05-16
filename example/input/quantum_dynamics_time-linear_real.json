@@ -23,7 +23,7 @@
                 "time_step" : 0.001,
                 "adiabatic" : true,
                 "write" : {
-                    "population" : "POPULATION.mat"
+                    "population" : "POPULATION_QD.mat"
                 }
             }
         }

@@ -21,7 +21,7 @@
                 "iterations" : 3000,
                 "time_step" : 1,
                 "write" : {
-                    "population" : "POPULATION.mat"
+                    "population" : "POPULATION_QD.mat"
                 }
             }
         }
