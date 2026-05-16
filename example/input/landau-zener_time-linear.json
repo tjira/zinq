@@ -13,7 +13,7 @@
                     "time_linear" : {}
                 },
                 "surface_hopping" : {
-                    "time_linear" : {}
+                    "landau_zener" : {}
                 },
                 "mass" : 1,
                 "log_interval" : 5000,
