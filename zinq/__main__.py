@@ -53,7 +53,7 @@ def main():
     if profiler:
         profiler.disable()
 
-        stats_file, dot_file, pdf_file = "profile.stats", "profile.dot", "profile.pdf"
+        stats_file, dot_file, pdf_file = "profile.stats", "profile.dot", "profile.svg"
 
         gprof2dot_cmd = [
             sys.executable, "-m", "gprof2dot",
@@ -66,7 +66,7 @@ def main():
 
         dot_cmd = [
             "dot",
-            "-Tpdf",
+            "-Tsvg",
             dot_file, 
             "-o", pdf_file
         ]
