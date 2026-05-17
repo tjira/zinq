@@ -67,10 +67,8 @@ class Runner:
         return RunResult(**{k: final[k] for k in RunResult.__annotations__})
 
     def _head(self, ensemble: Ensemble):
-        ic = self.opt.initial_conditions
-        
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
-            print(f"\nINITIAL GAMMA: {np.array(ic.gamma, float)}\n")
+            print(f"\nINITIAL GAMMA: {np.array(self.opt.initial_conditions.gamma, float)}\n")
             
         print(f"CLASSICAL ENSEMBLE TIME PROPAGATION")
 
@@ -86,7 +84,8 @@ class Runner:
     def _log_step(self, i: int, obs: dict, duration: datetime.timedelta):
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
             print(
-                f"{i:7d} {obs['kinetic_energy']:12.6f} {obs['potential_energy']:12.6f} {obs['total_energy']:12.6f} "
+                f"{i:7d} {obs['kinetic_energy']:12.6f} "
+                f"{obs['potential_energy']:12.6f} {obs['total_energy']:12.6f} "
                 f"{obs['position']} {obs['momentum']} {obs['population']} {duration}"
             )
 
@@ -111,4 +110,5 @@ class Runner:
             if not path or field not in history or not history[field]: continue
 
             data = np.column_stack((times, np.array(history[field])))
-            np.savetxt(path, data, header=f"{data.shape[0]} {data.shape[1]}", comments="", fmt="%20.14f")
+            header = f"{data.shape[0]} {data.shape[1]}"
+            np.savetxt(path, data, header=header, comments="", fmt="%20.14f")

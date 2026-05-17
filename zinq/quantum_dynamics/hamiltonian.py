@@ -18,6 +18,15 @@ class Hamiltonian:
     def eval_cap(self, position: list[np.ndarray]) -> np.ndarray:
         if self.cap is None: return np.zeros_like(position[0])
 
-        exp, zipped = self.cap.exponent, zip(position, self.cap.limits)
+        stiffness = self.cap.exponent
+        total_penalty = np.zeros_like(position[0])
 
-        return sum((np.exp(exp * (np.maximum(0, l[0] - x) + np.maximum(0, x - l[1]))) - 1 for x, l in zipped), start=np.zeros_like(position[0]))
+        for x, limits in zip(position, self.cap.limits):
+            lower_penetration = np.maximum(0, limits[0] - x)
+            upper_penetration = np.maximum(0, x - limits[1])
+            
+            step_penalty = np.exp(stiffness * (lower_penetration + upper_penetration)) - 1
+            
+            total_penalty += step_penalty
+
+        return total_penalty

@@ -22,9 +22,13 @@ def main():
         prog="zinq",
     )
 
-    parser.add_argument("-h", "--help", action="help", help="This help message.")
-    parser.add_argument("--cupy", action="store_true", help="Use Cupy instead of Numpy.")
-    parser.add_argument("--profile", action="store_true", help="Profile the execution and generate a PDF graph.")
+    help_help = "Show this help message and exit."
+    cupy_help = "Use Cupy instead of Numpy."
+    profile_help = "Profile the execution and generate a PDF graph."
+
+    parser.add_argument("-h", "--help", action="help", help=help_help)
+    parser.add_argument("--cupy", action="store_true", help=cupy_help)
+    parser.add_argument("--profile", action="store_true", help=profile_help)
 
     parser.add_argument("inputs", nargs="*", default=["input.json"], help="Input files.")
 

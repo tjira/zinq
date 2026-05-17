@@ -39,15 +39,14 @@ class Wavefunction:
         assert state < self.nstate, "STATE INDEX OUT OF BOUNDS FOR WAVEFUNCTION"
 
         self.data.fill(0)
-
         exponent = np.zeros_like(grid.position[0], dtype=np.complex128)
 
         for i in range(self.ndim):
             dr = grid.position[i] - position[i]
             exponent += -0.5 * gamma[i] * dr**2 + 1j * momentum[i] * dr
 
-        self.data[..., state], self.measure = np.exp(exponent), grid.measure
-
+        self.data[..., state] = np.exp(exponent)
+        self.measure = grid.measure
         self.normalize()
 
     def normalize(self):
@@ -89,17 +88,14 @@ class Wavefunction:
 
     def pe(self, grid: Grid, H: Hamiltonian, time: float = 0) -> float:
         V = H.pot.eval_d(grid.position, time=time)
-
         pe_dens = np.real(np.einsum("...i,ij...,...j->...", np.conj(self.data), V, self.data))
 
         return float(np.sum(pe_dens) * self.measure)
 
     def to_adiabatic(self, grid: Grid, H: Hamiltonian, time: float = 0) -> 'Wavefunction':
         _, U = np.linalg.eigh(np.moveaxis(H.pot.eval_d(grid.position, time), [0, 1], [-2, -1]))
-
         return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(U), self.data), self.measure)
 
     def to_diabatic(self, grid: Grid, H: Hamiltonian, time: float = 0) -> 'Wavefunction':
         _, U = np.linalg.eigh(np.moveaxis(H.pot.eval_d(grid.position, time), [0, 1], [-2, -1]))
-
         return Wavefunction.from_data(np.einsum("...ij,...j->...i", U, self.data), self.measure)

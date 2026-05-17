@@ -26,32 +26,28 @@ class LandauZener(SurfaceHopping):
 
     def _calc_prob(self, z0: np.ndarray, z1: np.ndarray, z2: np.ndarray, ddz1: np.ndarray, dt: float) -> np.ndarray:
         t0 = (b := (z2 - z0) / (2 * dt)) / (2 * (a := ddz1 / 2))
-
         veff = np.sqrt(np.maximum((g_min := a * t0**2 - b * t0 + z1) * ddz1, 0))
-
         return np.exp(-0.5 * np.pi * (g_min**2) / np.maximum(veff, 1e-14))
 
     def _normalize_probs(self, probs: np.ndarray) -> np.ndarray:
         if np.any(mask_gt1 := (row_sums := np.sum(probs, axis=1)) > 1):
             probs[mask_gt1] /= row_sums[mask_gt1][:, np.newaxis]
-
         return probs
 
     def _update_history(self, ensemble: Ensemble, H: Hamiltonian, time: float) -> bool:
         self._V_history.append(H.pot.eval_a(list(ensemble.r.T), time))
-
         return len(self._V_history) == 3
 
-    def probabilities(self, ensemble: Ensemble, H: Hamiltonian, dt: float, time: float) -> Optional[np.ndarray]:
-        if not self._update_history(ensemble, H, time): return None
+    def jump(self, ensemble: Ensemble, H: Hamiltonian, dt: float, time: float) -> None:
+        if not self._update_history(ensemble, H, time): return
 
         probs = np.zeros((ensemble.ntraj, H.pot.nstate))
 
         for j in range(H.pot.nstate):
-
             z0, z1, z2, dz0, dz1, ddz1 = self._calc_gaps(ensemble.states, j, dt)
 
             if np.any(mask := (dz0 * dz1 <= 0) & (ddz1 > 0) & (ensemble.states != j)):
                 probs[mask, j] = self._calc_prob(z0[mask], z1[mask], z2[mask], ddz1[mask], dt)
 
-        return self._normalize_probs(probs)
+        probs = self._normalize_probs(probs)
+        ensemble.states, ensemble.p = self._apply_jump(ensemble, H, time, probs)

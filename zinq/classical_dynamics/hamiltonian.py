@@ -6,6 +6,6 @@ class Hamiltonian:
     mass: float
 
     def __init__(self, pot: Potential, mass: float):
-        self.pot, self.mass = pot, mass
+        assert mass > 0, "MASS MUST BE POSITIVE"
 
-        assert self.mass > 0, "MASS MUST BE POSITIVE"
+        self.pot, self.mass = pot, mass

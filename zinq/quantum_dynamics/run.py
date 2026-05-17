@@ -50,7 +50,13 @@ class Runner:
     def _init(self) -> Wavefunction:
         ic = self.opt.initial_conditions
         wfn = Wavefunction(self.H.pot.ndim, self.H.pot.nstate, self.opt.grid.npoint)
-        wfn.init_gauss(self.grid, np.array(ic.position), np.array(ic.momentum), np.array(ic.gamma), ic.state)
+        wfn.init_gauss(
+            self.grid,
+            np.array(ic.position),
+            np.array(ic.momentum),
+            np.array(ic.gamma),
+            ic.state
+        )
         return wfn.to_diabatic(self.grid, self.H) if ic.adiabatic else wfn
 
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:

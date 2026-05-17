@@ -17,14 +17,11 @@ class StrangSplit:
         self.unit, self.H = -0.5 * (1.0 if imaginary else 1j) * dt, H
 
         self._recalculate_R(grid, 0)
-
         k_sq = sum((k**2 for k in grid.momentum), np.zeros_like(grid.momentum[0]))
-
         self.K = np.exp(self.unit * k_sq / H.mass)[..., np.newaxis]
 
     def _recalculate_R(self, grid: Grid, time: float):
         V = np.moveaxis(self.H.pot.eval_d(grid.position, time), [0, 1], [-2, -1])
-
         W, U = np.linalg.eigh(V)
 
         if self.H.cap: W = W - 1j * self.H.eval_cap(grid.position)[..., np.newaxis]
@@ -36,11 +33,9 @@ class StrangSplit:
             self._recalculate_R(grid, time + abs(self.unit.real + self.unit.imag))
 
         decay = self._apply_R(wfn)
-
         wfn.data = np.fft.fftn(wfn.data, axes=range(wfn.ndim))
         wfn.data *= self.K
         wfn.data = np.fft.ifftn(wfn.data, axes=range(wfn.ndim))
-
         decay += self._apply_R(wfn)
 
         if self.unit.imag == 0: wfn.normalize()

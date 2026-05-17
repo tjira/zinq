@@ -31,7 +31,8 @@ def get_versions():
 def print_startup_header(backend_name=None):
     package_versions = get_versions()
     
-    header = f"PYTHON: {sys.version.split()[0]}, ZINQ: {__version__}, TIMESTAMP: {datetime.datetime.now().isoformat()}"
+    header = f"PYTHON: {sys.version.split()[0]}, ZINQ: {__version__}"
+    header += f", TIMESTAMP: {datetime.datetime.now().isoformat()}"
 
     if backend_name: header += f", BACKEND: {backend_name}\n"
     
