@@ -30,7 +30,7 @@ class SurfaceHopping(ABC):
 
         V = H.pot.eval_a(list(ensemble.r.T), time)
         idx = np.flatnonzero(jump_mask)
-        dV = V[new_states, idx] - V[ensemble.states[idx], idx]
+        dV = V[idx, new_states] - V[idx, ensemble.states[idx]]
 
         p_sq = (p[idx] ** 2).sum(axis=1)
 

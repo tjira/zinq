@@ -15,7 +15,7 @@ class VelocityVerlet:
 
     def _acceleration(self, position: np.ndarray, states: np.ndarray, time: float) -> np.ndarray:
         grad = self.H.pot.grad_a(list(position.T), time, self.h)
-        return -grad[:, states, np.arange(position.shape[0])].T / self.H.mass
+        return -grad[np.arange(position.shape[0]), :, states] / self.H.mass
 
     def step(self, ensemble: Ensemble, time: float, jump_fn: Optional[Callable] = None) -> None:
         a_t = self._acceleration(ensemble.r, ensemble.states, time)

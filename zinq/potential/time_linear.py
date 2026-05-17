@@ -26,4 +26,4 @@ class TimeLinear(Potential):
         V01 = np.full_like(r[0], self.coupling)
         V11 = np.full_like(r[0], -V00)
 
-        return np.array([[V00, V01], [V01, V11]])
+        return np.moveaxis(np.array([[V00, V01], [V01, V11]]), [0, 1], [-2, -1])

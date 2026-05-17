@@ -23,9 +23,7 @@ class Potential(ABC):
         pass
 
     def eval_a(self, r: list[np.ndarray], time: float = 0) -> np.ndarray:
-        V_d = self.eval_d(r, time)
-
-        return np.moveaxis(np.linalg.eigvalsh(np.moveaxis(V_d, [0, 1], [-2, -1])), -1, 0)
+        return np.linalg.eigvalsh(self.eval_d(r, time))
 
     def grad_a(self, r: list[np.ndarray], time: float = 0.0, step: float = 1e-8) -> np.ndarray:
         grad = []
@@ -42,4 +40,4 @@ class Potential(ABC):
 
             grad.append((V_plus - V_minus) / (2 * step))
 
-        return np.array(grad)
+        return np.moveaxis(np.array(grad), 0, -2)

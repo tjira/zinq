@@ -90,14 +90,14 @@ class Wavefunction:
 
     def pe(self, grid: Grid, H: Hamiltonian, time: float = 0) -> float:
         V = H.pot.eval_d(grid.position, time=time)
-        pe_dens = np.real(np.einsum("...i,ij...,...j->...", np.conj(self.data), V, self.data))
+        pe_dens = np.real(np.einsum("...i,...ij,...j->...", np.conj(self.data), V, self.data))
 
         return float(np.sum(pe_dens) * self.measure)
 
     def to_adiabatic(self, grid: Grid, H: Hamiltonian, time: float = 0) -> 'Wavefunction':
-        _, U = np.linalg.eigh(np.moveaxis(H.pot.eval_d(grid.position, time), [0, 1], [-2, -1]))
+        _, U = np.linalg.eigh(H.pot.eval_d(grid.position, time))
         return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(U), self.data), self.measure)
 
     def to_diabatic(self, grid: Grid, H: Hamiltonian, time: float = 0) -> 'Wavefunction':
-        _, U = np.linalg.eigh(np.moveaxis(H.pot.eval_d(grid.position, time), [0, 1], [-2, -1]))
+        _, U = np.linalg.eigh(H.pot.eval_d(grid.position, time))
         return Wavefunction.from_data(np.einsum("...ij,...j->...i", U, self.data), self.measure)

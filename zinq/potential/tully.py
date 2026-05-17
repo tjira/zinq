@@ -24,4 +24,4 @@ class TullyFirst(Potential):
         V01 = self.C * np.exp(-self.D * r[0]**2)
         V11 = -V00
 
-        return np.array([[V00, V01], [V01, V11]])
+        return np.moveaxis(np.array([[V00, V01], [V01, V11]]), [0, 1], [-2, -1])

@@ -43,7 +43,7 @@ class Ensemble:
 
     def pe(self, H: Hamiltonian, time: float = 0) -> float:
         V = H.pot.eval_a(list(self.r.T), time)
-        return float(np.mean(V[self.states, np.arange(self.ntraj)]))
+        return float(np.mean(V[np.arange(self.ntraj), self.states]))
 
     def population(self, nstate: int) -> np.ndarray:
         return np.bincount(self.states, minlength=nstate) / self.ntraj

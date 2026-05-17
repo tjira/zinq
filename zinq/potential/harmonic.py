@@ -21,4 +21,4 @@ class Harmonic(Potential):
         
         V = sum((0.5 * self.k[i] * r[i]**2 for i in range(self.ndim)), start=np.zeros_like(r[0]))
         
-        return V[np.newaxis, np.newaxis, ...]
+        return V[..., np.newaxis, np.newaxis]

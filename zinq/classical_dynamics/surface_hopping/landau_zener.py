@@ -16,9 +16,9 @@ class LandauZener(SurfaceHopping):
     def _calc_gaps(self, states: np.ndarray, state: int, dt: float) -> tuple[np.ndarray, ...]:
         indices = np.arange(states.shape[0])
 
-        z0 = np.abs(self._V_history[2][state, :] - self._V_history[2][states, indices])
-        z1 = np.abs(self._V_history[1][state, :] - self._V_history[1][states, indices])
-        z2 = np.abs(self._V_history[0][state, :] - self._V_history[0][states, indices])
+        z0 = np.abs(self._V_history[2][:, state] - self._V_history[2][indices, states])
+        z1 = np.abs(self._V_history[1][:, state] - self._V_history[1][indices, states])
+        z2 = np.abs(self._V_history[0][:, state] - self._V_history[0][indices, states])
 
         dz0, dz1, ddz1 = (z0 - z1) / dt, (z1 - z2) / dt, (z0 - 2 * z1 + z2) / (dt * dt)
 

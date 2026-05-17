@@ -21,7 +21,7 @@ class StrangSplit:
         self.K = np.exp(self.unit * k_sq / H.mass)[..., np.newaxis]
 
     def _recalculate_R(self, grid: Grid, time: float):
-        V_d = np.moveaxis(self.H.pot.eval_d(grid.position, time), [0, 1], [-2, -1])
+        V_d = self.H.pot.eval_d(grid.position, time)
         V_a, U = np.linalg.eigh(V_d)
 
         if self.H.cap: V_a = V_a - 1j * self.H.eval_cap(grid.position)[..., np.newaxis]
