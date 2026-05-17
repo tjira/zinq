@@ -12,7 +12,7 @@ class TullyFirstOptions(BaseModel):
     C: float = 0.005
     D: float = 1.0
 
-    def create(self):
+    def create(self) -> "TullyFirst":
         return TullyFirst(A=self.A, B=self.B, C=self.C, D=self.D)
 
 

@@ -23,8 +23,24 @@ class Potential(ABC):
         pass
 
     def eval_a(self, r: list[np.ndarray], time: float = 0) -> np.ndarray:
-        v_d = self.eval_d(r, time)
+        V_d = self.eval_d(r, time)
 
-        if v_d.ndim == 2: return np.linalg.eigvalsh(v_d)
+        return np.linalg.eigvalsh(V_d.transpose(2, 0, 1)).transpose()
 
-        return np.linalg.eigvalsh(v_d.transpose(2, 0, 1)).transpose()
+    def grad_a(self, r: list[np.ndarray], time: float = 0.0, step: float = 1e-8) -> np.ndarray:
+        grad = []
+
+        for i in range(len(r)):
+            r_plus = r.copy()
+            r_minus = r.copy()
+
+            r_plus[i] = r_plus[i] + step
+            r_minus[i] = r_minus[i] - step
+
+            V_plus = self.eval_a(r_plus, time)
+            V_minus = self.eval_a(r_minus, time)
+
+            grad.append((V_plus - V_minus) / (2 * step))
+
+        # Converts the list of N arrays into a single array of shape (N, ...)
+        return np.array(grad)

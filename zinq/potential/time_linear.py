@@ -32,14 +32,8 @@ class TimeLinear(Potential):
         return True
 
     def eval_d(self, r: list[np.ndarray], time: float = 0.0) -> np.ndarray:
-        ones = np.ones_like(r[0])
-
-        V00 = self.slope * (time - self.slope)
-        V11 = -V00
-        V01 = self.coupling
-
-        V00 *= ones
-        V11 *= ones
-        V01 *= ones
+        V00 = np.full_like(r[0], self.slope * (time - self.slope))
+        V01 = np.full_like(r[0], self.coupling)
+        V11 = np.full_like(r[0], -V00)
 
         return np.array([[V00, V01], [V01, V11]])

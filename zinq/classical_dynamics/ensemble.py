@@ -8,21 +8,21 @@ class Ensemble:
     states: np.ndarray
     mass: float
 
-    def __init__(self, pos: np.ndarray, mom: np.ndarray, gamma: np.ndarray, ntraj: int, mass: float, state: int = 0, seed: int = 1):
-        self.r = np.zeros((ntraj, pos.shape[0]))
-        self.p = np.zeros((ntraj, mom.shape[0]))
+    def __init__(self, r: np.ndarray, p: np.ndarray, gamma: np.ndarray, ntraj: int, mass: float, state: int = 0, seed: int = 1):
+        self.r = np.zeros((ntraj, r.shape[0]))
+        self.p = np.zeros((ntraj, p.shape[0]))
         self.states = np.full(ntraj, state, dtype=int)
         self.mass = mass
 
-        stdev_pos, stdev_mom = 1 / np.sqrt(2 * gamma), np.sqrt(gamma / 2)
+        stdev_r, stdev_p = 1 / np.sqrt(2 * gamma), np.sqrt(gamma / 2)
 
         rng = np.random.default_rng(seed)
 
-        z_pos = rng.normal(size=(ntraj, pos.shape[0]))
-        z_mom = rng.normal(size=(ntraj, mom.shape[0]))
+        z_r = rng.normal(size=(ntraj, r.shape[0]))
+        z_p = rng.normal(size=(ntraj, p.shape[0]))
 
-        self.r = pos + stdev_pos * z_pos
-        self.p = mom + stdev_mom * z_mom
+        self.r = r + stdev_r * z_r
+        self.p = p + stdev_p * z_p
 
     @property
     def ntraj(self) -> int:

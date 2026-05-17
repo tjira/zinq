@@ -31,7 +31,6 @@ class Runner:
             np.array(self.opt.initial_conditions.momentum),
             np.array(self.opt.initial_conditions.gamma),
             self.opt.trajectories,
-            self.opt.mass,
             self.opt.initial_conditions.state,
             self.opt.seed
         )
