@@ -18,9 +18,10 @@ class FewestSwitches(SurfaceHopping):
         self._substeps = substeps
         self._U_history = deque(maxlen=2)
 
+    def _deriv(self, c: np.ndarray, V: np.ndarray, V_avg: np.ndarray, dot_d: np.ndarray) -> np.ndarray:
+        return -1j * (V - V_avg).T * c - np.einsum("nij,nj->ni", dot_d, c)
+
     def jump(self, ensemble: Ensemble, H: Hamiltonian, dt: float, time: float) -> None:
-        assert ensemble.c is not None, "FEWEST SWITCHES REQUIRES COEFFICIENTS IN ENSEMBLE"
-        
         V_d = H.pot.eval_d(list(ensemble.r.T), time)
         V_a, U = np.linalg.eigh(np.moveaxis(V_d, [0, 1], [-2, -1]))
         V_a = np.moveaxis(V_a, -1, 0)
@@ -58,6 +59,3 @@ class FewestSwitches(SurfaceHopping):
             probs[mask_gt1] /= row_sums[mask_gt1][:, np.newaxis]
 
         ensemble.states, ensemble.p = self._apply_jump(ensemble, H, time, probs)
-
-    def _deriv(self, c: np.ndarray, V: np.ndarray, V_avg: np.ndarray, dot_d: np.ndarray) -> np.ndarray:
-        return -1j * (V - V_avg).T * c - np.einsum("nij,nj->ni", dot_d, c)

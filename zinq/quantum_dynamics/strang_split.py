@@ -21,12 +21,12 @@ class StrangSplit:
         self.K = np.exp(self.unit * k_sq / H.mass)[..., np.newaxis]
 
     def _recalculate_R(self, grid: Grid, time: float):
-        V = np.moveaxis(self.H.pot.eval_d(grid.position, time), [0, 1], [-2, -1])
-        W, U = np.linalg.eigh(V)
+        V_d = np.moveaxis(self.H.pot.eval_d(grid.position, time), [0, 1], [-2, -1])
+        V_a, U = np.linalg.eigh(V_d)
 
-        if self.H.cap: W = W - 1j * self.H.eval_cap(grid.position)[..., np.newaxis]
+        if self.H.cap: V_a = V_a - 1j * self.H.eval_cap(grid.position)[..., np.newaxis]
 
-        self.R = U @ (np.exp(self.unit * W)[..., None] * U.conj().mT)
+        self.R = U @ (np.exp(self.unit * V_a)[..., None] * U.conj().mT)
 
     def step(self, wfn, grid: Grid, time: float) -> np.ndarray:
         if self.H.pot.is_time_dependent:
