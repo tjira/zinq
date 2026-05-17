@@ -9,7 +9,6 @@ class HammesSchifferTully(TimeDerivativeCoupling):
         phases = np.sign(np.diagonal(overlap, axis1=1, axis2=2))
         phases[phases == 0] = 1
 
-
         overlap *= phases[:, np.newaxis, :]
 
         return (overlap - np.moveaxis(overlap, [1, 2], [2, 1])) / (2 * dt)
