@@ -1,11 +1,13 @@
 from typing import Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..potential import HarmonicOptions, TimeLinearOptions, TullyFirstOptions
 
 
 class AbsorbingPotentialOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     limits: list[list[float]]
     exponent: float = 0.001
     stop_norm: float = 1e-12
@@ -13,15 +15,21 @@ class AbsorbingPotentialOptions(BaseModel):
 
 
 class GridOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     limits: list[list[float]]
     npoint: int
 
 
 class ImaginaryOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     nstate: int = 1
 
 
 class InitialConditionsOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     adiabatic: bool = False
     gamma: list[float]
     momentum: list[float]
@@ -30,6 +38,8 @@ class InitialConditionsOptions(BaseModel):
 
 
 class WriteOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     autocorrelation: Optional[str] = None
     final_wavefunction: Optional[str] = None
     kinetic_energy: Optional[str] = None
@@ -44,6 +54,8 @@ class WriteOptions(BaseModel):
 
 
 class Options(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     absorbing_potential: Optional[AbsorbingPotentialOptions] = None
     adiabatic: bool = False
     grid: GridOptions

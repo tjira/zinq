@@ -50,7 +50,9 @@ class Wavefunction:
         self.normalize()
 
     def normalize(self):
-        self.data /= np.sqrt(self.norm())
+        norm = self.norm()
+        if norm > 1e-14:
+            self.data /= np.sqrt(norm)
 
     def ke(self, grid: Grid, H: Hamiltonian) -> float:
         data_fft = np.fft.fftn(self.data, axes=range(self.ndim))

@@ -1,12 +1,14 @@
 from typing import Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..potential import HarmonicOptions, TimeLinearOptions, TullyFirstOptions
 from .surface_hopping import LandauZener, LandauZenerOptions
 
 
 class InitialConditionsOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     gamma: list[float]
     momentum: list[float]
     position: list[float]
@@ -14,6 +16,8 @@ class InitialConditionsOptions(BaseModel):
 
 
 class WriteOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     kinetic_energy: Optional[str] = None
     momentum: Optional[str] = None
     population: Optional[str] = None
@@ -23,6 +27,8 @@ class WriteOptions(BaseModel):
 
 
 class Options(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     initial_conditions: InitialConditionsOptions
     iterations: int
     log_interval: int = 1

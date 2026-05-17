@@ -13,7 +13,16 @@ from .velocity_verlet import VelocityVerlet
 
 def run(options_dict: dict):
     opt = Options(**options_dict)
+    _validate(opt)
     return Runner(opt).run()
+
+
+def _validate(opt: Options):
+    assert opt.iterations >= 0, "ITERATIONS MUST BE NON-NEGATIVE"
+    assert opt.time_step > 0, "TIME STEP MUST BE POSITIVE"
+    assert opt.mass > 0, "MASS MUST BE POSITIVE"
+    assert opt.log_interval > 0, "LOG INTERVAL MUST BE POSITIVE"
+    assert opt.trajectories > 0, "NUMBER OF TRAJECTORIES MUST BE POSITIVE"
 
 
 class Runner:

@@ -33,8 +33,12 @@ class SurfaceHopping(ABC):
         dV = V[new_states, idx] - V[ensemble.states[idx], idx]
 
         p_sq = (p[idx] ** 2).sum(axis=1)
-        factor_sq = 1 - 2 * H.mass * dV / p_sq
-        success = factor_sq > 0
+
+        mask_nonzero = p_sq > 1e-14
+        factor_sq = np.zeros_like(p_sq)
+        factor_sq[mask_nonzero] = 1 - 2 * H.mass * dV[mask_nonzero] / p_sq[mask_nonzero]
+
+        success = (factor_sq > 0) & mask_nonzero
 
         states[idx[success]] = new_states[success]
         p[idx[success]] *= np.sqrt(factor_sq[success, None])

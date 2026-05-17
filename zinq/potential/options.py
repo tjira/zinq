@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from ..backend import np
 from .harmonic import Harmonic
@@ -9,6 +9,8 @@ from .tully import TullyFirst
 
 
 class HarmonicOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["harmonic"]
 
     k: list[float] = [1]
@@ -18,6 +20,8 @@ class HarmonicOptions(BaseModel):
 
 
 class TimeLinearOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["time_linear"]
 
     coupling: float = 2
@@ -28,6 +32,8 @@ class TimeLinearOptions(BaseModel):
 
 
 class TullyFirstOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     type: Literal["tully_1"]
 
     A: float = 0.01

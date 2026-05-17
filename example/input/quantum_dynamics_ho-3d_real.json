@@ -18,7 +18,10 @@
                 },
                 "log_interval" : 200,
                 "iterations" : 1000,
-                "time_step" : 0.01
+                "time_step" : 0.01,
+                "write" : {
+                    "spectrum" : "SPECTRUM_QD.mat"
+                }
             }
         }
     ]
