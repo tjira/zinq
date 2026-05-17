@@ -17,8 +17,8 @@ class Ensemble:
 
         rng = np.random.default_rng(seed)
 
-        z_r = rng.normal(size=(ntraj, r.shape[0]))
-        z_p = rng.normal(size=(ntraj, p.shape[0]))
+        z_r = rng.standard_normal(size=(ntraj, r.shape[0]))
+        z_p = rng.standard_normal(size=(ntraj, p.shape[0]))
 
         stdev_r = np.array([1 / np.sqrt(2 * g) if g > 0 else 0 for g in gamma])
         stdev_p = np.sqrt(gamma / 2)

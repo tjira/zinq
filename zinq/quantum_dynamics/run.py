@@ -24,7 +24,7 @@ def _validate(opt: Options):
     assert opt.mass > 0, "MASS MUST BE POSITIVE"
     assert opt.grid.npoint > 1, "NUMBER OF GRID POINTS MUST BE GREATER THAN 1"
     assert opt.log_interval > 0, "LOG INTERVAL MUST BE POSITIVE"
-    assert np.all(np.ptp(opt.grid.limits, axis=1) > 0), "GRID LIMITS MUST NOT BE DEGENERATE"
+    assert np.all(np.ptp(np.array(opt.grid.limits), axis=1) > 0), "GRID LIMITS MUST NOT BE DEGENERATE"
 
 
 class Runner:

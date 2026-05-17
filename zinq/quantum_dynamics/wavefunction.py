@@ -57,14 +57,14 @@ class Wavefunction:
     def ke(self, grid: Grid, H: Hamiltonian) -> float:
         data_fft = np.fft.fftn(self.data, axes=range(self.ndim))
         k_sq = sum((k**2 for k in grid.momentum), np.zeros_like(grid.momentum[0]))
-        factor = (0.5 / H.mass) * self.measure / np.prod(self.data.shape[:-1])
+        factor = (0.5 / H.mass) * self.measure / np.prod(np.array(self.data.shape[:-1]))
 
         return float(np.sum(np.abs(data_fft)**2 * k_sq[..., np.newaxis]) * factor)
 
     def momentum(self, grid: Grid) -> np.ndarray:
         data_fft = np.fft.fftn(self.data, axes=range(self.ndim))
         abs_sq = np.abs(data_fft)**2
-        factor = self.measure / np.prod(self.data.shape[:-1])
+        factor = self.measure / np.prod(np.array(self.data.shape[:-1]))
 
         return np.array([np.sum(abs_sq * k[..., np.newaxis]) * factor for k in grid.momentum])
 
