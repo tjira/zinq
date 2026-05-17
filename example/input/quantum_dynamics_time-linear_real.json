@@ -15,7 +15,7 @@
                     "gamma" : [2]
                 },
                 "potential" : {
-                    "time_linear" : {}
+                    "type" : "time_linear"
                 },
                 "log_interval" : 5000,
                 "iterations" : 20000,

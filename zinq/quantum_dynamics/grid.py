@@ -31,12 +31,16 @@ class Grid:
 
     def _mom_grid(self, limits: np.ndarray, npoint: int) -> list[np.ndarray]:
         grids = []
+
         for i in range(limits.shape[0]):
             grids.append(2 * np.pi * np.fft.fftfreq(npoint, d=np.ptp(limits[i]) / npoint))
+
         return list(np.meshgrid(*grids, indexing="ij"))
 
     def _pos_grid(self, limits: np.ndarray, npoint: int) -> list[np.ndarray]:
         grids = []
+
         for i in range(limits.shape[0]):
             grids.append(np.linspace(limits[i, 0], limits[i, 1], npoint, endpoint=False))
+
         return list(np.meshgrid(*grids, indexing="ij"))

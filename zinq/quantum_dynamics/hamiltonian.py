@@ -2,15 +2,15 @@ from typing import Optional
 
 from ..backend import np
 from ..potential import Potential
-from .options import ComplexAbsorbingPotentialOptions
+from .options import AbsorbingPotentialOptions
 
 
 class Hamiltonian:
     pot: Potential
     mass: float
-    cap: Optional[ComplexAbsorbingPotentialOptions]
+    cap: Optional[AbsorbingPotentialOptions]
 
-    def __init__(self, pot: Potential, mass: float, cap: Optional[ComplexAbsorbingPotentialOptions] = None):
+    def __init__(self, pot: Potential, mass: float, cap: Optional[AbsorbingPotentialOptions] = None):
         self.pot, self.mass, self.cap = pot, mass, cap
 
         assert self.mass > 0, f"MASS MUST BE POSITIVE, GOT {self.mass}"

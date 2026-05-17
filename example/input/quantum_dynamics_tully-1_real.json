@@ -15,7 +15,7 @@
                     "state" : 1
                 },
                 "potential" : {
-                    "tully_1" : {}
+                    "type" : "tully_1"
                 },
                 "adiabatic" : true,
                 "log_interval" : 500,

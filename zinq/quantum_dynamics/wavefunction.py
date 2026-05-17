@@ -46,8 +46,8 @@ class Wavefunction:
             dr = grid.position[i] - position[i]
             exponent += -0.5 * gamma[i] * dr**2 + 1j * momentum[i] * dr
 
-        self.data[..., state] = np.exp(exponent)
-        self.measure = np.array([np.ptp(axis) / (self.npoint - 1) for axis in grid.position]).prod()
+        self.data[..., state], self.measure = np.exp(exponent), grid.measure
+
         self.normalize()
 
     def normalize(self):
@@ -57,12 +57,14 @@ class Wavefunction:
         data_fft = np.fft.fftn(self.data, axes=range(self.ndim))
         k_sq = sum((k**2 for k in grid.momentum), np.zeros_like(grid.momentum[0]))
         factor = (0.5 / H.mass) * self.measure / np.prod(self.data.shape[:-1])
+
         return float(np.sum(np.abs(data_fft)**2 * k_sq[..., np.newaxis]) * factor)
 
     def momentum(self, grid: Grid) -> np.ndarray:
         data_fft = np.fft.fftn(self.data, axes=range(self.ndim))
         abs_sq = np.abs(data_fft)**2
         factor = self.measure / np.prod(self.data.shape[:-1])
+
         return np.array([np.sum(abs_sq * k[..., np.newaxis]) * factor for k in grid.momentum])
 
     def norm(self) -> float:
@@ -82,17 +84,22 @@ class Wavefunction:
 
     def position(self, grid: Grid) -> np.ndarray:
         rho = np.real(np.einsum("...i,...i->...", np.conj(self.data), self.data))
+
         return np.array([np.sum(rho * p) for p in grid.position]) * self.measure
 
     def pe(self, grid: Grid, H: Hamiltonian, time: float = 0) -> float:
         V = H.pot.eval_d(grid.position, time=time)
+
         pe_dens = np.real(np.einsum("...i,ij...,...j->...", np.conj(self.data), V, self.data))
+
         return float(np.sum(pe_dens) * self.measure)
 
     def to_adiabatic(self, grid: Grid, H: Hamiltonian, time: float = 0) -> 'Wavefunction':
         _, U = np.linalg.eigh(np.moveaxis(H.pot.eval_d(grid.position, time), [0, 1], [-2, -1]))
+
         return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(U), self.data), self.measure)
 
     def to_diabatic(self, grid: Grid, H: Hamiltonian, time: float = 0) -> 'Wavefunction':
         _, U = np.linalg.eigh(np.moveaxis(H.pot.eval_d(grid.position, time), [0, 1], [-2, -1]))
+
         return Wavefunction.from_data(np.einsum("...ij,...j->...i", U, self.data), self.measure)

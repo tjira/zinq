@@ -18,8 +18,9 @@ class StrangSplit:
 
         self._recalculate_R(grid, 0)
 
-        k_squared = sum((k**2 for k in grid.momentum), np.zeros_like(grid.momentum[0]))
-        self.K = np.exp(self.unit * k_squared / H.mass)[..., np.newaxis]
+        k_sq = sum((k**2 for k in grid.momentum), np.zeros_like(grid.momentum[0]))
+
+        self.K = np.exp(self.unit * k_sq / H.mass)[..., np.newaxis]
 
     def _recalculate_R(self, grid: Grid, time: float):
         V = np.moveaxis(self.H.pot.eval_d(grid.position, time), [0, 1], [-2, -1])

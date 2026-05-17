@@ -14,7 +14,7 @@
                     "state" : 1
                 },
                 "potential" : {
-                    "tully_1" : {}
+                    "type" : "tully_1"
                 },
                 "absorbing_potential" : {
                     "limits" : [[-24, 12]],

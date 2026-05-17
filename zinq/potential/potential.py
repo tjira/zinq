@@ -42,5 +42,4 @@ class Potential(ABC):
 
             grad.append((V_plus - V_minus) / (2 * step))
 
-        # Converts the list of N arrays into a single array of shape (N, ...)
         return np.array(grad)

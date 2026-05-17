@@ -5,13 +5,13 @@ from ..backend import np
 
 @dataclass(frozen=True)
 class StateResult:
-    population: np.ndarray
     kinetic_energy: float
-    potential_energy: float
-    total_energy: float
-    position: np.ndarray
     momentum: np.ndarray
     norm: float
+    population: np.ndarray
+    position: np.ndarray
+    potential_energy: float
+    total_energy: float
 
 @dataclass(frozen=True)
 class RunResult:

@@ -8,4 +8,4 @@ class Hamiltonian:
     def __init__(self, pot: Potential, mass: float):
         self.pot, self.mass = pot, mass
 
-        assert self.mass > 0, f"MASS MUST BE POSITIVE, GOT {self.mass}"
+        assert self.mass > 0, "MASS MUST BE POSITIVE"

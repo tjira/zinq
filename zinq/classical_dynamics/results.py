@@ -5,9 +5,9 @@ from ..backend import np
 
 @dataclass(frozen=True)
 class RunResult:
-    population: np.ndarray
     kinetic_energy: float
+    momentum: np.ndarray
+    population: np.ndarray
+    position: np.ndarray
     potential_energy: float
     total_energy: float
-    position: np.ndarray
-    momentum: np.ndarray

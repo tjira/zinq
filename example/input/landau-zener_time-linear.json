@@ -10,10 +10,10 @@
                     "gamma" : [2]
                 },
                 "potential" : {
-                    "time_linear" : {}
+                    "type" : "time_linear"
                 },
                 "surface_hopping" : {
-                    "landau_zener" : {}
+                    "type" : "landau_zener"
                 },
                 "mass" : 1,
                 "log_interval" : 5000,

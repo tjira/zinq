@@ -1,5 +1,7 @@
 import pytest
+
 from zinq.classical_dynamics.run import run
+
 
 def error_message(observable: str, expected, actual) -> str:
     return f"INCORRECT {observable}: EXPECTED {expected}, GOT {actual}"
@@ -13,10 +15,10 @@ def test_classical_dynamics_landau_zener_tully_1():
             "state": 1
         },
         "potential": {
-            "tully_1": {}
+            "type": "tully_1"
         },
         "surface_hopping": {
-            "landau_zener": {}
+            "type": "landau_zener"
         },
         "log_interval": 500,
         "mass": 2000,

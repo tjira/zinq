@@ -1,34 +1,16 @@
-from typing import Optional
+from typing import Literal, Optional, Union
 
-from pydantic import BaseModel
-from .surface_hopping import LandauZener
+from pydantic import BaseModel, Field
 
-from ..potential import PotentialOptions
-
-
-class LandauZenerOptions(BaseModel):
-    def create(self, seed: int):
-        return LandauZener(seed)
-
-
-class SurfaceHoppingOptions(BaseModel):
-    landau_zener: Optional[LandauZenerOptions] = None
-
-    def create(self, seed: int):
-        try: return next(opt.create(seed) for _, opt in self if opt is not None)
-        except StopIteration: return None
+from ..potential import HarmonicOptions, TimeLinearOptions, TullyFirstOptions
+from .surface_hopping import LandauZener, LandauZenerOptions
 
 
 class InitialConditionsOptions(BaseModel):
-    position: list[float]
-    momentum: list[float]
     gamma: list[float]
+    momentum: list[float]
+    position: list[float]
     state: int = 0
-
-
-class LogIntervalOptions(BaseModel):
-    iteration: int = 1
-    trajectory: int = 1
 
 
 class WriteOptions(BaseModel):
@@ -42,12 +24,18 @@ class WriteOptions(BaseModel):
 
 class Options(BaseModel):
     initial_conditions: InitialConditionsOptions
-    potential: PotentialOptions
-    surface_hopping: Optional[SurfaceHoppingOptions] = None
     iterations: int
-    trajectories: int = 1
-    time_step: float
+    log_interval: int = 1
     mass: float = 1
     seed: int = 1
-    log_interval: int = 1
+    time_step: float
+    trajectories: int = 1
     write: WriteOptions = WriteOptions()
+    potential: Union[
+        HarmonicOptions,
+        TimeLinearOptions,
+        TullyFirstOptions,
+    ] = Field(discriminator="type")
+    surface_hopping: Optional[Union[
+        LandauZenerOptions,
+    ]] = Field(discriminator="type")

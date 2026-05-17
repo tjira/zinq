@@ -19,9 +19,8 @@ def test_quantum_dynamics_harmonic_1d_itp():
             "gamma": [2]
         },
         "potential": {
-            "harmonic": {
-                "k": [1]
-            }
+            "type" : "harmonic",
+            "k": [1]
         },
         "log_interval": 200,
         "imaginary": {
@@ -94,9 +93,8 @@ def test_quantum_dynamics_harmonic_2d_itp():
             "gamma": [2, 2]
         },
         "potential": {
-            "harmonic": {
-                "k": [1, 1]
-            }
+            "type" : "harmonic",
+            "k": [1, 1]
         },
         "log_interval": 200,
         "imaginary": {
@@ -167,7 +165,7 @@ def test_quantum_dynamics_tully_1_real():
             "state": 1
         },
         "potential": {
-            "tully_1": {}
+            "type": "tully_1"
         },
         "log_interval": 500,
         "mass": 2000,

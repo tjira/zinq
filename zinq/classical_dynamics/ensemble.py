@@ -10,6 +10,7 @@ class Ensemble:
     def __init__(self, r: np.ndarray, p: np.ndarray, gamma: np.ndarray, ntraj: int, state: int = 0, seed: int = 1):
         self.r = np.zeros((ntraj, r.shape[0]))
         self.p = np.zeros((ntraj, p.shape[0]))
+
         self.states = np.full(ntraj, state, dtype=int)
 
         stdev_r, stdev_p = 1 / np.sqrt(2 * gamma), np.sqrt(gamma / 2)
