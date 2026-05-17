@@ -19,7 +19,7 @@ class Grid:
 
     @property
     def measure(self) -> float:
-        return np.prod(np.ptp(self.limits, axis=1) / (self.npoint - 1))
+        return np.prod(np.ptp(self.limits, axis=1) / self.npoint)
 
     def __init__(self, limits: np.ndarray, npoint: int):
         assert limits.ndim == 2, f"LIMITS MUST BE 2D ARRAY, GOT {limits.ndim}D"

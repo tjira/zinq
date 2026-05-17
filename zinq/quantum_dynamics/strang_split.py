@@ -51,6 +51,6 @@ class StrangSplit:
 
         if np.allclose(col_norm, 1): return np.zeros(wfn.nstate)
 
-        decay_density = (1 / col_norm[..., np.newaxis] - 1) * np.abs(wfn.data)**2
+        decay_density = (1 / np.maximum(col_norm[..., np.newaxis], 1e-14) - 1) * np.abs(wfn.data)**2
 
         return np.sum(decay_density, axis=tuple(range(wfn.ndim))) * wfn.measure
