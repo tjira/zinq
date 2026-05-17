@@ -27,13 +27,13 @@ def _validate(opt: Options):
 
 class Runner:
     opt: Options
-    ham: Hamiltonian
+    H: Hamiltonian
     grid: Grid
     optimized: list[Wavefunction]
 
     def __init__(self, opt: Options):
         self.opt = opt
-        self.ham = Hamiltonian(opt.potential.create(), opt.mass, opt.absorbing_potential)
+        self.H = Hamiltonian(opt.potential.create(), opt.mass, opt.absorbing_potential)
         self.grid = Grid(np.array(opt.grid.limits), opt.grid.npoint)
         self.optimized = []
 
@@ -49,9 +49,9 @@ class Runner:
 
     def _init(self) -> Wavefunction:
         ic = self.opt.initial_conditions
-        wfn = Wavefunction(self.ham.potential.ndim, self.ham.potential.nstate, self.opt.grid.npoint)
+        wfn = Wavefunction(self.H.pot.ndim, self.H.pot.nstate, self.opt.grid.npoint)
         wfn.init_gauss(self.grid, np.array(ic.position), np.array(ic.momentum), np.array(ic.gamma), ic.state)
-        return wfn.to_diabatic(self.grid, self.ham) if ic.adiabatic else wfn
+        return wfn.to_diabatic(self.grid, self.H) if ic.adiabatic else wfn
 
     def _prop(self, wfn: Wavefunction, idx: int, nstate: int) -> StateResult:
         dt, img, pop_decay = self.opt.time_step, self.opt.imaginary is not None, np.zeros(wfn.nstate)
@@ -62,7 +62,7 @@ class Runner:
 
         self._head(idx, wfn)
 
-        propagator = StrangSplit(self.grid, self.ham, dt, img)
+        propagator = StrangSplit(self.grid, self.H, dt, img)
         wfn_0 = Wavefunction.from_data(wfn.data.copy(), wfn.measure) if need_acf else None
 
         for i in range(self.opt.iterations + 1) if self.opt.iterations else count():
@@ -83,14 +83,14 @@ class Runner:
             if self.opt.absorbing_potential and obs["norm"] < self.opt.absorbing_potential.stop_norm:
                 print(f"\nCAP STOP NORM REACHED, STOPPING PROPAGATION")
                 break
-            
+
             iters = i
 
         return self._finish_prop(wfn, history, pop_decay, iters * dt, idx, nstate)
 
     def _finish_prop(self, wfn: Wavefunction, history: dict, decay: np.ndarray, time: float, idx: int, nstate: int) -> StateResult:
         if "final_wavefunction" in history:
-            wfn_f = wfn.to_adiabatic(self.grid, self.ham, time) if self.opt.adiabatic else wfn
+            wfn_f = wfn.to_adiabatic(self.grid, self.H, time) if self.opt.adiabatic else wfn
             history["final_wavefunction"] = [wfn_f.data.copy()]
 
         if "spectrum" in history:
@@ -106,7 +106,7 @@ class Runner:
 
     def _obs(self, wfn: Wavefunction, log: bool, decay: np.ndarray, time: float = 0, wfn_0: Optional[Wavefunction] = None) -> dict:
         results, write = {}, self.opt.write
-        wfn_obs = wfn.to_adiabatic(self.grid, self.ham, time) if self.opt.adiabatic else wfn
+        wfn_obs = wfn.to_adiabatic(self.grid, self.H, time) if self.opt.adiabatic else wfn
 
         def has(f): return log or getattr(write, f)
 
@@ -115,12 +115,13 @@ class Runner:
         if has("population"): results["population"] = wfn_obs.population(decay)
         if has("position"): results["position"] = wfn.position(self.grid)
         if has("momentum"): results["momentum"] = wfn.momentum(self.grid)
-        if has("kinetic_energy") or has("total_energy"): results["kinetic_energy"] = wfn.ke(self.grid, self.ham)
-        if has("potential_energy") or has("total_energy"): results["potential_energy"] = wfn.pe(self.grid, self.ham, time)
+        if has("kinetic_energy") or has("total_energy"): results["kinetic_energy"] = wfn.ke(self.grid, self.H)
+        if has("potential_energy") or has("total_energy"): results["potential_energy"] = wfn.pe(self.grid, self.H, time)
         if has("total_energy"): results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
         if has("wavefunction"): results["wavefunction"] = wfn_obs.data.copy()
 
         return results
+
 
     def _pack_wfns(self, wfns: np.ndarray) -> np.ndarray:
         length, *_, nstate = wfns.shape

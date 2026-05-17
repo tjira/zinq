@@ -1,11 +1,4 @@
-from pydantic import BaseModel
-
 from ..backend import np
-
-
-class GridOptions(BaseModel):
-    limits: list[list[float]]
-    npoint: int
 
 
 class Grid:

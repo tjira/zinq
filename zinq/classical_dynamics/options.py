@@ -1,9 +1,22 @@
 from typing import Optional
 
 from pydantic import BaseModel
+from .surface_hopping import LandauZener
 
 from ..potential import PotentialOptions
-from .surface_hopping import SurfaceHoppingOptions
+
+
+class LandauZenerOptions(BaseModel):
+    def create(self, seed: int):
+        return LandauZener(seed)
+
+
+class SurfaceHoppingOptions(BaseModel):
+    landau_zener: Optional[LandauZenerOptions] = None
+
+    def create(self, seed: int):
+        try: return next(opt.create(seed) for _, opt in self if opt is not None)
+        except StopIteration: return None
 
 
 class InitialConditionsOptions(BaseModel):

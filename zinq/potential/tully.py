@@ -1,19 +1,7 @@
 from dataclasses import dataclass
 
-from pydantic import BaseModel
-
 from ..backend import np
 from .potential import Potential
-
-
-class TullyFirstOptions(BaseModel):
-    A: float = 0.01
-    B: float = 1.6
-    C: float = 0.005
-    D: float = 1.0
-
-    def create(self) -> "TullyFirst":
-        return TullyFirst(A=self.A, B=self.B, C=self.C, D=self.D)
 
 
 @dataclass(frozen=True, kw_only=True)

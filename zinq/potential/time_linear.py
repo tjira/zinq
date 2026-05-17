@@ -1,17 +1,7 @@
 from dataclasses import dataclass
 
-from pydantic import BaseModel
-
 from ..backend import np
 from .potential import Potential
-
-
-class TimeLinearOptions(BaseModel):
-    coupling: float = 2.0
-    slope: float = 10.0
-
-    def create(self) -> "TimeLinear":
-        return TimeLinear(coupling=self.coupling, slope=self.slope)
 
 
 @dataclass(frozen=True, kw_only=True)

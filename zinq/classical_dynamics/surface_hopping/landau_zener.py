@@ -1,14 +1,7 @@
-from pydantic import BaseModel
-
 from ...backend import np
-from ...potential import Potential
 from ..ensemble import Ensemble
+from ..hamiltonian import Hamiltonian
 from .surface_hopping import SurfaceHopping
-
-
-class LandauZenerOptions(BaseModel):
-    def create(self, seed: int) -> "LandauZener":
-        return LandauZener(seed)
 
 
 class LandauZener(SurfaceHopping):
@@ -19,8 +12,8 @@ class LandauZener(SurfaceHopping):
         self._V_history = []
         self._rng = np.random.default_rng(seed)
 
-    def jump(self, ensemble: Ensemble, pot: Potential, dt: float, time: float) -> None:
-        V = pot.eval_a([ensemble.r[:, i] for i in range(ensemble.ndim)], time)
+    def jump(self, ensemble: Ensemble, H: Hamiltonian, dt: float, time: float) -> None:
+        V = H.pot.eval_a([ensemble.r[:, i] for i in range(ensemble.ndim)], time)
 
         self._V_history.append(V)
 
@@ -30,11 +23,11 @@ class LandauZener(SurfaceHopping):
 
         V0, V1, V2 = self._V_history[2], self._V_history[1], self._V_history[0]
 
-        states, indices, probs = ensemble.states, np.arange(ensemble.ntraj), np.zeros((ensemble.ntraj, pot.nstate))
+        states, indices, probs = ensemble.states, np.arange(ensemble.ntraj), np.zeros((ensemble.ntraj, H.pot.nstate))
 
         V0_s, V1_s, V2_s = V0[states, indices], V1[states, indices], V2[states, indices]
 
-        for j in range(pot.nstate):
+        for j in range(H.pot.nstate):
 
             z0, z1, z2 = np.abs(V0_s - V0[j, :]), np.abs(V1_s - V1[j, :]), np.abs(V2_s - V2[j, :])
 
@@ -72,7 +65,7 @@ class LandauZener(SurfaceHopping):
                 dV = V0[new_state, traj_idx] - V0[old_state, traj_idx]
                 p_sq = np.sum(ensemble.p[traj_idx]**2)
                 
-                new_p_sq = p_sq - 2 * ensemble.mass * dV
+                new_p_sq = p_sq - 2 * H.mass * dV
                 
                 if new_p_sq > 0:
                     ensemble.p[traj_idx] *= np.sqrt(new_p_sq / p_sq)

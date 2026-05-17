@@ -3,8 +3,8 @@ import time
 from typing import Optional
 
 from ..backend import np
-from ..potential import Potential
 from .ensemble import Ensemble
+from .hamiltonian import Hamiltonian
 from .options import Options
 from .results import RunResult
 from .surface_hopping import SurfaceHopping
@@ -18,12 +18,13 @@ def run(options_dict: dict):
 
 class Runner:
     opt: Options
-    potential: Potential
-    surface_hopping: Optional[SurfaceHopping]
+    H: Hamiltonian
+    sh: Optional[SurfaceHopping]
 
     def __init__(self, opt: Options):
-        self.opt, self.potential = opt, opt.potential.create()
-        self.surface_hopping = opt.surface_hopping.create(seed=opt.seed) if opt.surface_hopping else None
+        self.opt = opt
+        self.H = Hamiltonian(opt.potential.create(), opt.mass)
+        self.sh = opt.surface_hopping.create(seed=opt.seed) if opt.surface_hopping else None
 
     def run(self) -> RunResult:
         ensemble = Ensemble(
@@ -31,12 +32,11 @@ class Runner:
             np.array(self.opt.initial_conditions.momentum),
             np.array(self.opt.initial_conditions.gamma),
             self.opt.trajectories,
-            self.opt.mass,
             self.opt.initial_conditions.state,
             self.opt.seed
         )
 
-        verlet = VelocityVerlet(self.potential, self.opt.mass, self.opt.time_step, 1e-8)
+        verlet = VelocityVerlet(self.H, self.opt.time_step, 1e-8)
 
         history = {f: [] for f, p in self.opt.write if p is not None}
         
@@ -46,7 +46,7 @@ class Runner:
             start, current_time = time.time(), i * self.opt.time_step
 
             if i > 0:
-                jump_fn = self.surface_hopping.jump if self.surface_hopping else None
+                jump_fn = self.sh.jump if self.sh else None
                 verlet.step(ensemble, current_time - self.opt.time_step, jump_fn=jump_fn)
 
             log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
@@ -75,7 +75,7 @@ class Runner:
         print(f"CLASSICAL ENSEMBLE TIME PROPAGATION")
 
         p_w = 11 * ensemble.ndim + 1
-        s_w = 11 * self.potential.nstate + 1
+        s_w = 11 * self.H.pot.nstate + 1
 
         print(
             f"{'ITER':>7} {'KIN (Eh)':>12} {'POT (Eh)':>12} {'TOT (Eh)':>12} "
@@ -95,11 +95,11 @@ class Runner:
 
         def has(f): return log or getattr(write, f)
 
-        if has("population"): results["population"] = ensemble.population(self.potential.nstate)
+        if has("population"): results["population"] = ensemble.population(self.H.pot.nstate)
         if has("position"): results["position"] = ensemble.position()
         if has("momentum"): results["momentum"] = ensemble.momentum()
-        if has("kinetic_energy") or has("total_energy"): results["kinetic_energy"] = ensemble.ke(self.opt.mass)
-        if has("potential_energy") or has("total_energy"): results["potential_energy"] = ensemble.pe(self.potential, time)
+        if has("kinetic_energy") or has("total_energy"): results["kinetic_energy"] = ensemble.ke(self.H)
+        if has("potential_energy") or has("total_energy"): results["potential_energy"] = ensemble.pe(self.H, time)
         if has("total_energy"): results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
 
         return results

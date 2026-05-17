@@ -1,25 +1,17 @@
 from typing import Optional
 
-from pydantic import BaseModel
-
 from ..backend import np
 from ..potential import Potential
-
-
-class ComplexAbsorbingPotentialOptions(BaseModel):
-    limits: list[list[float]]
-    exponent: float = 0.001
-    stop_norm: float = 1e-12
-    track_population: bool = True
+from .options import ComplexAbsorbingPotentialOptions
 
 
 class Hamiltonian:
-    potential: Potential
+    pot: Potential
     mass: float
     cap: Optional[ComplexAbsorbingPotentialOptions]
 
-    def __init__(self, potential: Potential, mass: float, cap: Optional[ComplexAbsorbingPotentialOptions] = None):
-        self.potential, self.mass, self.cap = potential, mass, cap
+    def __init__(self, pot: Potential, mass: float, cap: Optional[ComplexAbsorbingPotentialOptions] = None):
+        self.pot, self.mass, self.cap = pot, mass, cap
 
         assert self.mass > 0, f"MASS MUST BE POSITIVE, GOT {self.mass}"
 

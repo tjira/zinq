@@ -3,8 +3,18 @@ from typing import Optional
 from pydantic import BaseModel
 
 from ..potential import PotentialOptions
-from .grid import GridOptions
-from .hamiltonian import ComplexAbsorbingPotentialOptions
+
+
+class ComplexAbsorbingPotentialOptions(BaseModel):
+    limits: list[list[float]]
+    exponent: float = 0.001
+    stop_norm: float = 1e-12
+    track_population: bool = True
+
+
+class GridOptions(BaseModel):
+    limits: list[list[float]]
+    npoint: int
 
 
 class ImaginaryOptions(BaseModel):
