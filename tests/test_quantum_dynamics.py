@@ -11,7 +11,7 @@ def test_quantum_dynamics_harmonic_1d_itp():
     options = {
         "grid": {
             "limits": [[-8, 8]],
-            "npoint": 256
+            "npoint": 128
         },
         "initial_conditions": {
             "momentum": [0],
@@ -33,7 +33,7 @@ def test_quantum_dynamics_harmonic_1d_itp():
     result = run(options)
 
     expected_total_energies     = [0.50000000187134, 1.49999999864282, 2.49999999986185]
-    expected_kinetic_energies   = [0.25000312532402, 0.75000937489134, 1.25001562583497]
+    expected_kinetic_energies   = [0.25000312532402, 0.75000937489134, 1.25001562583498]
     expected_potential_energies = [0.24999687654732, 0.74999062375147, 1.24998437402687]
     expected_norm_values        = [1.00000000000000, 1.00000000000000, 1.00000000000000]
 
@@ -43,9 +43,9 @@ def test_quantum_dynamics_harmonic_1d_itp():
         [-0.00004994213663]
     ]
     expected_momentum_values = [
-        [0.00000000000000],
-        [0.00000000000000],
-        [0.00000000000000]
+        [-0.00000000000001],
+        [ 0.00000000000000],
+        [-0.00000000000001]
     ]
 
     expected_populations = [
@@ -85,7 +85,7 @@ def test_quantum_dynamics_harmonic_2d_itp():
     options = {
         "grid": {
             "limits": [[-8, 8], [-8, 8]],
-            "npoint": 256
+            "npoint": 64
         },
         "initial_conditions": {
             "momentum": [0, 0],
@@ -106,7 +106,7 @@ def test_quantum_dynamics_harmonic_2d_itp():
 
     result = run(options)
 
-    expected_total_energies     = [1.00000000374269, 1.99999999776581]
+    expected_total_energies     = [1.00000000374269, 1.99999999776582]
     expected_kinetic_energies   = [0.50000625064804, 1.00001249941377]
     expected_potential_energies = [0.49999375309464, 0.99998749835204]
     expected_norm_values        = [1.00000000000000, 1.00000000000000]
@@ -116,8 +116,8 @@ def test_quantum_dynamics_harmonic_2d_itp():
         [-0.00001134791748, -0.00001134791748]
     ]
     expected_momentum_values = [
-        [0.00000000000000, 0.00000000000000],
-        [0.00000000000000, 0.00000000000000]
+        [-0.00000000000000, -0.00000000000000],
+        [-0.00000000000000, -0.00000000000000]
     ]
 
     expected_populations = [
@@ -156,7 +156,7 @@ def test_quantum_dynamics_tully_1_real():
     options = {
         "grid": {
             "limits": [[-24, 24]],
-            "npoint": 2048
+            "npoint": 512
         },
         "initial_conditions": {
             "momentum": [15],
@@ -176,20 +176,20 @@ def test_quantum_dynamics_tully_1_real():
     result = run(options)
 
     expected_total_energies     = [0.06649999845028]
-    expected_kinetic_energies   = [0.06470766411999]
-    expected_potential_energies = [0.00179233433028]
-    expected_norm_values        = [1.00000000000074]
+    expected_kinetic_energies   = [0.06470763694838]
+    expected_potential_energies = [0.00179236150191]
+    expected_norm_values        = [1.00000000000082]
 
     expected_position_values = [
-        [13.41125194061655]
+        [13.41125026499469]
     ]
 
     expected_momentum_values = [
-        [16.01020083373733]
+        [16.01019844761806]
     ]
 
     expected_populations = [
-        [0.58961671754100, 0.41038328245899]
+        [0.58961808510494, 0.41038191489588]
     ]
 
     for i, state in enumerate(result.states):

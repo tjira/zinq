@@ -38,4 +38,4 @@ class Options(BaseModel):
     ] = Field(discriminator="type")
     surface_hopping: Optional[Union[
         LandauZenerOptions,
-    ]] = Field(discriminator="type")
+    ]] = Field(default=None, discriminator="type")

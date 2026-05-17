@@ -8,6 +8,9 @@ class Ensemble:
     states: np.ndarray
 
     def __init__(self, r: np.ndarray, p: np.ndarray, gamma: np.ndarray, ntraj: int, state: int = 0, seed: int = 1):
+        for g in gamma:
+            assert g >= 0, "GAMMA MUST BE NON-NEGATIVE"
+
         self.r = np.zeros((ntraj, r.shape[0]))
         self.p = np.zeros((ntraj, p.shape[0]))
         self.states = np.full(ntraj, state, dtype=int)
@@ -17,7 +20,7 @@ class Ensemble:
         z_r = rng.normal(size=(ntraj, r.shape[0]))
         z_p = rng.normal(size=(ntraj, p.shape[0]))
 
-        stdev_r = 1 / np.sqrt(2 * gamma)
+        stdev_r = np.array([1 / np.sqrt(2 * g) if g > 0 else 0 for g in gamma])
         stdev_p = np.sqrt(gamma / 2)
 
         self.r = r + stdev_r * z_r

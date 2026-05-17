@@ -1,0 +1,25 @@
+{
+    "zinq" : [
+        {
+            "name" : "quantum_dynamics",
+            "options" : {
+                "grid" : {
+                    "limits" : [[-8, 8], [-8, 8], [-8, 8]],
+                    "npoint" : 256
+                },
+                "initial_conditions" : {
+                    "momentum" : [0, 0, 0],
+                    "position" : [1, 1, 1],
+                    "gamma" : [2, 2, 2]
+                },
+                "potential" : {
+                    "type" : "harmonic",
+                    "k" : [1, 1, 1]
+                },
+                "log_interval" : 200,
+                "iterations" : 1000,
+                "time_step" : 0.01
+            }
+        }
+    ]
+}

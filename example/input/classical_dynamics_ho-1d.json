@@ -1,0 +1,22 @@
+{
+    "zinq" : [
+        {
+            "name" : "classical_dynamics",
+            "options" : {
+                "initial_conditions" : {
+                    "momentum" : [0],
+                    "position" : [1],
+                    "gamma" : [2]
+                },
+                "potential" : {
+                    "type" : "harmonic",
+                    "k" : [1]
+                },
+                "log_interval" : 200,
+                "iterations" : 1000,
+                "trajectories" : 10000,
+                "time_step" : 0.01
+            }
+        }
+    ]
+}
