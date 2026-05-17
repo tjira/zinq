@@ -5,15 +5,19 @@ from .hamiltonian import Hamiltonian
 class Ensemble:
     r: np.ndarray
     p: np.ndarray
+    c: np.ndarray
     states: np.ndarray
 
-    def __init__(self, r: np.ndarray, p: np.ndarray, gamma: np.ndarray, ntraj: int, state: int = 0, seed: int = 1):
+    def __init__(self, r: np.ndarray, p: np.ndarray, gamma: np.ndarray, state: int, ntraj: int, nstate: int, seed: int = 1):
         for g in gamma:
             assert g >= 0, "GAMMA MUST BE NON-NEGATIVE"
 
         self.r = np.zeros((ntraj, r.shape[0]))
         self.p = np.zeros((ntraj, p.shape[0]))
         self.states = np.full(ntraj, state, dtype=int)
+
+        self.c = np.zeros((ntraj, nstate), dtype=complex)
+        self.c[:, state] = 1
 
         rng = np.random.default_rng(seed)
 

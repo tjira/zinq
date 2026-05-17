@@ -3,7 +3,7 @@ from typing import Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..potential import HarmonicOptions, TimeLinearOptions, TullyFirstOptions
-from .surface_hopping import LandauZener, LandauZenerOptions
+from .surface_hopping import FewestSwitchesOptions, LandauZenerOptions
 
 
 class InitialConditionsOptions(BaseModel):
@@ -44,4 +44,5 @@ class Options(BaseModel):
     ] = Field(discriminator="type")
     surface_hopping: Optional[Union[
         LandauZenerOptions,
+        FewestSwitchesOptions,
     ]] = Field(default=None, discriminator="type")

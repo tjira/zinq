@@ -1,13 +1,11 @@
 import datetime
 import time
-from typing import Optional
 
 from ..backend import np
 from .ensemble import Ensemble
 from .hamiltonian import Hamiltonian
 from .options import Options
 from .results import RunResult
-from .surface_hopping import SurfaceHopping
 from .velocity_verlet import VelocityVerlet
 
 
@@ -28,21 +26,22 @@ def _validate(opt: Options):
 class Runner:
     opt: Options
     H: Hamiltonian
-    sh: Optional[SurfaceHopping]
 
     def __init__(self, opt: Options):
         self.opt = opt
         self.H = Hamiltonian(opt.potential.create(), opt.mass)
-        self.sh = opt.surface_hopping.create(seed=opt.seed) if opt.surface_hopping else None
 
     def run(self) -> RunResult:
+        sh = self.opt.surface_hopping.create(self.opt.seed) if self.opt.surface_hopping else None
+
         ensemble = Ensemble(
             np.array(self.opt.initial_conditions.position),
             np.array(self.opt.initial_conditions.momentum),
             np.array(self.opt.initial_conditions.gamma),
-            self.opt.trajectories,
             self.opt.initial_conditions.state,
-            self.opt.seed
+            self.opt.trajectories,
+            self.H.pot.nstate,
+            self.opt.seed,
         )
 
         verlet = VelocityVerlet(self.H, self.opt.time_step, 1e-8)
@@ -55,8 +54,7 @@ class Runner:
             start, current_time = time.time(), i * self.opt.time_step
 
             if i > 0:
-                jump_fn = self.sh.jump if self.sh else None
-                verlet.step(ensemble, current_time - self.opt.time_step, jump_fn=jump_fn)
+                verlet.step(ensemble, current_time - self.opt.time_step, sh.jump if sh else None)
 
             log = i == 0 or i == self.opt.iterations or (i % self.opt.log_interval == 0)
 
