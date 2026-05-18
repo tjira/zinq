@@ -18,7 +18,7 @@ class FewestSwitches(SurfaceHopping):
         self._substeps = substeps
         self._U_history = deque(maxlen=2)
 
-    def _propagate_coefficients(self, ensemble: Ensemble, H_eff: np.ndarray, dot_d: np.ndarray, dt: float) -> None:
+    def _coef_propagator(self, H_eff: np.ndarray, dot_d: np.ndarray, dt: float) -> np.ndarray:
         M = -dot_d - 1j * H_eff[..., np.newaxis] * np.eye(H_eff.shape[1])
 
         M1 = dt / self._substeps * M
@@ -26,10 +26,7 @@ class FewestSwitches(SurfaceHopping):
         M3 = M1 @ M2
         M4 = M1 @ M3
 
-        prop = np.eye(H_eff.shape[1]) + M1 + M2 / 2 + M3 / 6 + M4 / 24
-
-        for _ in range(self._substeps):
-            ensemble.c = np.einsum("nij,nj->ni", prop, ensemble.c)
+        return np.eye(H_eff.shape[1]) + M1 + M2 / 2 + M3 / 6 + M4 / 24
 
     def _calc_probs(self, ensemble: Ensemble, dot_d: np.ndarray, dt: float) -> np.ndarray:
         indices = np.arange(ensemble.ntraj)
@@ -52,6 +49,10 @@ class FewestSwitches(SurfaceHopping):
 
     def jump(self, ensemble: Ensemble, pot: Potential, dt: float, time: float) -> None:
         V_a, U = np.linalg.eigh(pot.eval_d(list(ensemble.r.T), time))
+
+        if len(self._U_history) > 0:
+            U = np.where(np.sum(self._U_history[-1] * U, axis=-2, keepdims=True) < 0, -U, U)
+
         self._U_history.append(U)
 
         if len(self._U_history) < 2: return
@@ -59,7 +60,10 @@ class FewestSwitches(SurfaceHopping):
         dot_d = self._tdc.evaluate(self._U_history[0], self._U_history[1], dt)
         H_eff = V_a - np.mean(V_a, axis=1, keepdims=True)
 
-        self._propagate_coefficients(ensemble, H_eff, dot_d, dt)
+        prop = self._coef_propagator(H_eff, dot_d, dt)
+
+        for _ in range(self._substeps):
+            ensemble.c = np.einsum("nij,nj->ni", prop, ensemble.c)
 
         probs = self._calc_probs(ensemble, dot_d, dt)
         ensemble.states, ensemble.p = self._apply_jump(ensemble, V_a, probs)

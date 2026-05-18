@@ -1,4 +1,3 @@
-from typing import Optional
 from abc import ABC, abstractmethod
 
 from ...backend import np
