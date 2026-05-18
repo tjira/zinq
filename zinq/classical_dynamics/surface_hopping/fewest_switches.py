@@ -19,27 +19,29 @@ class FewestSwitches(SurfaceHopping):
         self._U_history = deque(maxlen=2)
 
     def _propagate_coefficients(self, ensemble: Ensemble, H_eff: np.ndarray, dot_d: np.ndarray, dt: float) -> None:
-        h = dt / self._substeps
-        M = -dot_d.astype(complex)
-        M[:, np.arange(H_eff.shape[1]), np.arange(H_eff.shape[1])] -= 1j * H_eff
+        M = -dot_d - 1j * H_eff[..., np.newaxis] * np.eye(H_eff.shape[1])
 
-        hM = h * M
-        M2 = hM @ hM
-        M3 = hM @ M2 / 3
-        M4 = hM @ M3 / 4
-        m_step = np.eye(H_eff.shape[1]) + hM + M2 / 2 + M3 + M4
+        M1 = dt / self._substeps * M
+        M2 = M1 @ M1
+        M3 = M1 @ M2
+        M4 = M1 @ M3
 
-        prop = np.linalg.matrix_power(m_step, self._substeps)
-        ensemble.c = (prop @ ensemble.c[..., np.newaxis]).squeeze(-1)
+        prop = np.eye(H_eff.shape[1]) + M1 + M2 / 2 + M3 / 6 + M4 / 24
+
+        for _ in range(self._substeps):
+            ensemble.c = np.einsum("nij,nj->ni", prop, ensemble.c)
 
     def _calc_probs(self, ensemble: Ensemble, dot_d: np.ndarray, dt: float) -> np.ndarray:
-        trajs = np.arange(ensemble.ntraj)
-        c_i = ensemble.c[trajs, ensemble.states, np.newaxis]
-        term = ensemble.c * np.conj(c_i) * dot_d[trajs, ensemble.states, :]
-        probs = 2 * np.real(term) * dt / (np.abs(c_i) ** 2 + 1e-14)
+        indices = np.arange(ensemble.ntraj)
+
+        c_active = ensemble.c[indices, ensemble.states, None] 
+        coupling = dot_d[indices, ensemble.states, :]
+
+        prob_flux = 2 * np.real(ensemble.c * np.conj(c_active) * coupling) * dt
+        probs = prob_flux / (np.abs(c_active)**2 + 1e-14)
 
         probs = np.maximum(probs, 0)
-        probs[trajs, ensemble.states] = 0
+        probs[indices, ensemble.states] = 0
 
         return self._normalize_probs(probs)
 
