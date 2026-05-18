@@ -18,11 +18,13 @@ class VelocityVerlet:
         return -grad[np.arange(position.shape[0]), :, states] / mass
 
     def step(self, ensemble: Ensemble, time: float, jump_fn: Optional[Callable] = None) -> None:
-        a_t = self._acceleration(ensemble.r, ensemble.states, ensemble.mass, time)
-        ensemble.p += 0.5 * a_t * ensemble.mass * self.dt
+        if ensemble.a is None:
+            ensemble.a = self._acceleration(ensemble.r, ensemble.states, ensemble.mass, time)
+
+        ensemble.p += 0.5 * ensemble.a * ensemble.mass * self.dt
         ensemble.r += (ensemble.p / ensemble.mass) * self.dt
 
         if jump_fn: jump_fn(ensemble, self.pot, self.dt, time + self.dt)
 
-        a_t_next = self._acceleration(ensemble.r, ensemble.states, ensemble.mass, time + self.dt)
-        ensemble.p += 0.5 * a_t_next * ensemble.mass * self.dt
+        ensemble.a = self._acceleration(ensemble.r, ensemble.states, ensemble.mass, time + self.dt)
+        ensemble.p += 0.5 * ensemble.a * ensemble.mass * self.dt

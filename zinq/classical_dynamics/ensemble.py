@@ -1,9 +1,12 @@
+from typing import Optional
+
 from ..backend import np
 
 
 class Ensemble:
     r: np.ndarray
     p: np.ndarray
+    a: Optional[np.ndarray]
     c: np.ndarray
     states: np.ndarray
     mass: float
@@ -16,6 +19,7 @@ class Ensemble:
         self.mass = mass
         self.r = np.zeros((ntraj, r.shape[0]))
         self.p = np.zeros((ntraj, p.shape[0]))
+        self.a = None
         self.states = np.full(ntraj, state, dtype=int)
 
         self.c = np.zeros((ntraj, nstate), dtype=complex)
