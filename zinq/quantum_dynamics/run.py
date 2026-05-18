@@ -143,11 +143,11 @@ class Runner:
         times = np.arange(-len(acf) + 1, len(acf)) * self.opt.time_step
         tau = -np.log(1e-4) / (len(acf) * self.opt.time_step)**2
 
-        acf = np.concatenate((acf[1:][::-1], np.conj(acf))) * np.exp(-tau * times**2)
+        acf = np.concatenate((np.conj(acf[1:][::-1]), acf)) * np.exp(-tau * times**2)
         acf = np.pad(acf, 2 * [10 * len(acf)], mode="constant")
 
         omega = 2 * np.pi * np.fft.fftfreq(len(acf), self.opt.time_step)
-        spectrum = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(acf)) * self.opt.time_step)
+        spectrum = np.fft.fftshift(np.fft.fft(np.fft.ifftshift(np.conj(acf))) * self.opt.time_step)
 
         return np.column_stack((np.fft.fftshift(omega), np.real(spectrum)))
 
