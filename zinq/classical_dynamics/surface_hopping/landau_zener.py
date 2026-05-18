@@ -50,4 +50,5 @@ class LandauZener(SurfaceHopping):
                 probs[mask, j] = self._calc_prob(z0[mask], z1[mask], z2[mask], ddz1[mask], dt)
 
         probs = self._normalize_probs(probs)
-        ensemble.states, ensemble.p = self._apply_jump(ensemble, self._V_history[-1], probs)
+        jump_mask, target_states = self._propose_jumps(probs)
+        self._apply_jump(ensemble, self._V_history[-1], jump_mask, target_states)

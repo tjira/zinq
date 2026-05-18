@@ -17,20 +17,16 @@ class SurfaceHopping(ABC):
 
     def _propose_jumps(self, probs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         jumps = self._rng.random(probs.shape[0])[:, np.newaxis] < np.cumsum(probs, axis=1)
-        jump_mask = np.any(jumps, axis=1)
-        return jump_mask, np.argmax(jumps, axis=1)[jump_mask]
+        return np.any(jumps, axis=1), np.argmax(jumps, axis=1)
 
-    def _apply_jump(self, ensemble: Ensemble, V_a: np.ndarray, probs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        states, p = ensemble.states.copy(), ensemble.p.copy()
-        jump_mask, new_states = self._propose_jumps(probs)
-
+    def _apply_jump(self, ensemble: Ensemble, V_a: np.ndarray, jump_mask: np.ndarray, target_states: np.ndarray) -> np.ndarray:
         if not np.any(jump_mask):
-            return states, p
+            return np.zeros(ensemble.ntraj, dtype=bool)
 
         idx = np.flatnonzero(jump_mask)
-        dV = V_a[idx, new_states] - V_a[idx, ensemble.states[idx]]
+        dV = V_a[idx, target_states[idx]] - V_a[idx, ensemble.states[idx]]
 
-        p_sq = (p[idx] ** 2).sum(axis=1)
+        p_sq = np.sum(ensemble.p[idx] ** 2, axis=1)
 
         mask_nonzero = p_sq > 1e-14
         factor_sq = np.zeros_like(p_sq)
@@ -38,7 +34,10 @@ class SurfaceHopping(ABC):
 
         success = (factor_sq > 0) & mask_nonzero
 
-        states[idx[success]] = new_states[success]
-        p[idx[success]] *= np.sqrt(factor_sq[success, None])
+        ensemble.states[idx[success]] = target_states[idx[success]]
+        ensemble.p[idx[success]] *= np.sqrt(factor_sq[success, None])
 
-        return states, p
+        success_mask = np.zeros(ensemble.ntraj, dtype=bool)
+        success_mask[idx[success]] = True
+
+        return success_mask

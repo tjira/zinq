@@ -62,8 +62,17 @@ class FewestSwitches(SurfaceHopping):
 
         prop = self._coef_propagator(H_eff, dot_d, dt)
 
+        jump_mask = np.zeros(ensemble.ntraj, dtype=bool)
+        target_states = ensemble.states.copy()
+
         for _ in range(self._substeps):
             ensemble.c = np.einsum("nij,nj->ni", prop, ensemble.c)
 
-        probs = self._calc_probs(ensemble, dot_d, dt)
-        ensemble.states, ensemble.p = self._apply_jump(ensemble, V_a, probs)
+            probs = self._calc_probs(ensemble, dot_d, dt / self._substeps)
+            step_jump_mask, step_target_states = self._propose_jumps(probs)
+
+            if np.any(valid_mask := step_jump_mask & ~jump_mask):
+                target_states[valid_mask] = step_target_states[valid_mask]
+                jump_mask |= valid_mask
+
+        self._apply_jump(ensemble, V_a, jump_mask, target_states)

@@ -206,12 +206,12 @@ def test_classical_dynamics_fewest_switches_tully_1():
     result = run(options)
 
     expected = {
-        "total_energy": 0.06594330834986,
-        "kinetic_energy": 0.06354330847411,
-        "potential_energy": 0.00239999987575,
-        "position": [13.20360646343850],
-        "momentum": [15.86915258293628],
-        "population": [0.38000000000000, 0.62000000000000],
+        "total_energy": 0.06594481490608,
+        "kinetic_energy": 0.06434481526589,
+        "potential_energy": 0.00159999964018,
+        "position": [13.28311601904646],
+        "momentum": [15.96880112417727],
+        "population": [0.42000000000000, 0.58000000000000],
     }
 
     actual = {
