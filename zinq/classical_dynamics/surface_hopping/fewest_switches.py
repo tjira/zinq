@@ -2,9 +2,9 @@ from collections import deque
 
 from ...backend import np
 from ..ensemble import Ensemble
-from ..hamiltonian import Hamiltonian
 from ..time_derivative_coupling import TimeDerivativeCoupling
 from .surface_hopping import SurfaceHopping
+from ...potential import Potential
 
 
 class FewestSwitches(SurfaceHopping):
@@ -18,25 +18,25 @@ class FewestSwitches(SurfaceHopping):
         self._substeps = substeps
         self._U_history = deque(maxlen=2)
 
-    def _deriv(self, c: np.ndarray, H_eff: np.ndarray, dot_d: np.ndarray) -> np.ndarray:
-        return -1j * H_eff * c - np.einsum("nij,nj->ni", dot_d, c)
-
     def _propagate_coefficients(self, ensemble: Ensemble, H_eff: np.ndarray, dot_d: np.ndarray, dt: float) -> None:
-        dt_q = dt / self._substeps
+        h = dt / self._substeps
+        M = -dot_d.astype(complex)
+        M[:, np.arange(H_eff.shape[1]), np.arange(H_eff.shape[1])] -= 1j * H_eff
 
-        for _ in range(self._substeps):
-            k1 = self._deriv(ensemble.c, H_eff, dot_d)
-            k2 = self._deriv(ensemble.c + 0.5 * dt_q * k1, H_eff, dot_d)
-            k3 = self._deriv(ensemble.c + 0.5 * dt_q * k2, H_eff, dot_d)
-            k4 = self._deriv(ensemble.c + dt_q * k3, H_eff, dot_d)
-            ensemble.c += (dt_q / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4)
+        hM = h * M
+        M2 = hM @ hM
+        M3 = hM @ M2 / 3
+        M4 = hM @ M3 / 4
+        m_step = np.eye(H_eff.shape[1]) + hM + M2 / 2 + M3 + M4
+
+        prop = np.linalg.matrix_power(m_step, self._substeps)
+        ensemble.c = (prop @ ensemble.c[..., np.newaxis]).squeeze(-1)
 
     def _calc_probs(self, ensemble: Ensemble, dot_d: np.ndarray, dt: float) -> np.ndarray:
         trajs = np.arange(ensemble.ntraj)
-
-        re = np.real(ensemble.c * np.conj(ensemble.c[trajs, ensemble.states][:, np.newaxis]))
-        denominator = np.abs(ensemble.c[trajs, ensemble.states]) ** 2 + 1e-14
-        probs = 2 * dot_d[trajs, ensemble.states, :] * re / denominator[:, np.newaxis] * dt
+        c_i = ensemble.c[trajs, ensemble.states, np.newaxis]
+        term = ensemble.c * np.conj(c_i) * dot_d[trajs, ensemble.states, :]
+        probs = 2 * np.real(term) * dt / (np.abs(c_i) ** 2 + 1e-14)
 
         probs = np.maximum(probs, 0)
         probs[trajs, ensemble.states] = 0
@@ -48,8 +48,8 @@ class FewestSwitches(SurfaceHopping):
             probs[mask_gt1] /= row_sums[mask_gt1][:, np.newaxis]
         return probs
 
-    def jump(self, ensemble: Ensemble, H: Hamiltonian, dt: float, time: float) -> None:
-        V_a, U = np.linalg.eigh(H.pot.eval_d(list(ensemble.r.T), time))
+    def jump(self, ensemble: Ensemble, pot: Potential, dt: float, time: float) -> None:
+        V_a, U = np.linalg.eigh(pot.eval_d(list(ensemble.r.T), time))
         self._U_history.append(U)
 
         if len(self._U_history) < 2: return
@@ -60,4 +60,4 @@ class FewestSwitches(SurfaceHopping):
         self._propagate_coefficients(ensemble, H_eff, dot_d, dt)
 
         probs = self._calc_probs(ensemble, dot_d, dt)
-        ensemble.states, ensemble.p = self._apply_jump(ensemble, H, time, probs)
+        ensemble.states, ensemble.p = self._apply_jump(ensemble, V_a, probs)

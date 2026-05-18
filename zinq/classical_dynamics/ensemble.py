@@ -1,5 +1,4 @@
 from ..backend import np
-from .hamiltonian import Hamiltonian
 
 
 class Ensemble:
@@ -7,11 +6,14 @@ class Ensemble:
     p: np.ndarray
     c: np.ndarray
     states: np.ndarray
+    mass: float
 
-    def __init__(self, r: np.ndarray, p: np.ndarray, gamma: np.ndarray, state: int, ntraj: int, nstate: int, seed: int = 1):
+    def __init__(self, r: np.ndarray, p: np.ndarray, gamma: np.ndarray, mass: float, state: int, ntraj: int, nstate: int, seed: int = 1):
+        assert mass > 0, "MASS MUST BE POSITIVE"
         for g in gamma:
             assert g >= 0, "GAMMA MUST BE NON-NEGATIVE"
 
+        self.mass = mass
         self.r = np.zeros((ntraj, r.shape[0]))
         self.p = np.zeros((ntraj, p.shape[0]))
         self.states = np.full(ntraj, state, dtype=int)
@@ -38,11 +40,11 @@ class Ensemble:
     def ndim(self) -> int:
         return self.r.shape[1]
 
-    def ke(self, H: Hamiltonian) -> float:
-        return float(np.mean(np.sum(self.p**2, axis=1) / (2 * H.mass)))
+    def ke(self) -> float:
+        return float(np.mean(np.sum(self.p**2, axis=1) / (2 * self.mass)))
 
-    def pe(self, H: Hamiltonian, time: float = 0) -> float:
-        V = H.pot.eval_a(list(self.r.T), time)
+    def pe(self, pot, time: float = 0) -> float:
+        V = pot.eval_a(list(self.r.T), time)
         return float(np.mean(V[np.arange(self.ntraj), self.states]))
 
     def population(self, nstate: int) -> np.ndarray:

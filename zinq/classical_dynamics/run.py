@@ -3,10 +3,10 @@ import time
 
 from ..backend import np
 from .ensemble import Ensemble
-from .hamiltonian import Hamiltonian
 from .options import Options
 from .results import RunResult
 from .velocity_verlet import VelocityVerlet
+from ..potential import Potential
 
 
 def run(options_dict: dict):
@@ -25,11 +25,11 @@ def _validate(opt: Options):
 
 class Runner:
     opt: Options
-    H: Hamiltonian
+    pot: Potential
 
     def __init__(self, opt: Options):
         self.opt = opt
-        self.H = Hamiltonian(opt.potential.create(), opt.mass)
+        self.pot = opt.potential.create()
 
     def run(self) -> RunResult:
         sh = self.opt.surface_hopping.create(self.opt.seed) if self.opt.surface_hopping else None
@@ -38,13 +38,14 @@ class Runner:
             np.array(self.opt.initial_conditions.position),
             np.array(self.opt.initial_conditions.momentum),
             np.array(self.opt.initial_conditions.gamma),
+            self.opt.mass,
             self.opt.initial_conditions.state,
             self.opt.trajectories,
-            self.H.pot.nstate,
+            self.pot.nstate,
             self.opt.seed,
         )
 
-        verlet = VelocityVerlet(self.H, self.opt.time_step, 1e-8)
+        verlet = VelocityVerlet(self.pot, self.opt.time_step, 1e-8)
 
         history = {f: [] for f, p in self.opt.write if p is not None}
         
@@ -80,7 +81,7 @@ class Runner:
         print(f"CLASSICAL ENSEMBLE TIME PROPAGATION")
 
         p_w = 11 * ensemble.ndim + 1
-        s_w = 11 * self.H.pot.nstate + 1
+        s_w = 11 * self.pot.nstate + 1
 
         print(
             f"{'ITER':>7} {'KIN (Eh)':>12} {'POT (Eh)':>12} {'TOT (Eh)':>12} "
@@ -101,11 +102,11 @@ class Runner:
 
         def has(f): return log or getattr(write, f)
 
-        if has("population"): results["population"] = ensemble.population(self.H.pot.nstate)
+        if has("population"): results["population"] = ensemble.population(self.pot.nstate)
         if has("position"): results["position"] = ensemble.position()
         if has("momentum"): results["momentum"] = ensemble.momentum()
-        if has("kinetic_energy") or has("total_energy"): results["kinetic_energy"] = ensemble.ke(self.H)
-        if has("potential_energy") or has("total_energy"): results["potential_energy"] = ensemble.pe(self.H, time)
+        if has("kinetic_energy") or has("total_energy"): results["kinetic_energy"] = ensemble.ke()
+        if has("potential_energy") or has("total_energy"): results["potential_energy"] = ensemble.pe(self.pot, time)
         if has("total_energy"): results["total_energy"] = results["kinetic_energy"] + results["potential_energy"]
 
         return results

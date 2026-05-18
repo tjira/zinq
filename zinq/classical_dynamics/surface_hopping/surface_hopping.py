@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 from ...backend import np
 from ..ensemble import Ensemble
-from ..hamiltonian import Hamiltonian
+from ...potential import Potential
 
 
 class SurfaceHopping(ABC):
@@ -13,7 +13,7 @@ class SurfaceHopping(ABC):
         self._rng = np.random.default_rng(seed)
 
     @abstractmethod
-    def jump(self, ensemble: Ensemble, H: Hamiltonian, dt: float, time: float) -> None:
+    def jump(self, ensemble: Ensemble, pot: Potential, dt: float, time: float) -> None:
         pass
 
     def _propose_jumps(self, probs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -21,22 +21,21 @@ class SurfaceHopping(ABC):
         jump_mask = np.any(jumps, axis=1)
         return jump_mask, np.argmax(jumps, axis=1)[jump_mask]
 
-    def _apply_jump(self, ensemble: Ensemble, H: Hamiltonian, time: float, probs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    def _apply_jump(self, ensemble: Ensemble, V_a: np.ndarray, probs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         states, p = ensemble.states.copy(), ensemble.p.copy()
         jump_mask, new_states = self._propose_jumps(probs)
 
         if not np.any(jump_mask):
             return states, p
 
-        V = H.pot.eval_a(list(ensemble.r.T), time)
         idx = np.flatnonzero(jump_mask)
-        dV = V[idx, new_states] - V[idx, ensemble.states[idx]]
+        dV = V_a[idx, new_states] - V_a[idx, ensemble.states[idx]]
 
         p_sq = (p[idx] ** 2).sum(axis=1)
 
         mask_nonzero = p_sq > 1e-14
         factor_sq = np.zeros_like(p_sq)
-        factor_sq[mask_nonzero] = 1 - 2 * H.mass * dV[mask_nonzero] / p_sq[mask_nonzero]
+        factor_sq[mask_nonzero] = 1 - 2 * ensemble.mass * dV[mask_nonzero] / p_sq[mask_nonzero]
 
         success = (factor_sq > 0) & mask_nonzero
 

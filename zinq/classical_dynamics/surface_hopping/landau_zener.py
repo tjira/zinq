@@ -3,8 +3,8 @@ from collections import deque
 
 from ...backend import np
 from ..ensemble import Ensemble
-from ..hamiltonian import Hamiltonian
 from .surface_hopping import SurfaceHopping
+from ...potential import Potential
 
 
 class LandauZener(SurfaceHopping):
@@ -34,20 +34,20 @@ class LandauZener(SurfaceHopping):
             probs[mask_gt1] /= row_sums[mask_gt1][:, np.newaxis]
         return probs
 
-    def _update_history(self, ensemble: Ensemble, H: Hamiltonian, time: float) -> bool:
-        self._V_history.append(H.pot.eval_a(list(ensemble.r.T), time))
+    def _update_history(self, ensemble: Ensemble, pot: Potential, time: float) -> bool:
+        self._V_history.append(pot.eval_a(list(ensemble.r.T), time))
         return len(self._V_history) == 3
 
-    def jump(self, ensemble: Ensemble, H: Hamiltonian, dt: float, time: float) -> None:
-        if not self._update_history(ensemble, H, time): return
+    def jump(self, ensemble: Ensemble, pot: Potential, dt: float, time: float) -> None:
+        if not self._update_history(ensemble, pot, time): return
 
-        probs = np.zeros((ensemble.ntraj, H.pot.nstate))
+        probs = np.zeros((ensemble.ntraj, pot.nstate))
 
-        for j in range(H.pot.nstate):
+        for j in range(pot.nstate):
             z0, z1, z2, dz0, dz1, ddz1 = self._calc_gaps(ensemble.states, j, dt)
 
             if np.any(mask := (dz0 * dz1 <= 0) & (ddz1 > 0) & (ensemble.states != j)):
                 probs[mask, j] = self._calc_prob(z0[mask], z1[mask], z2[mask], ddz1[mask], dt)
 
         probs = self._normalize_probs(probs)
-        ensemble.states, ensemble.p = self._apply_jump(ensemble, H, time, probs)
+        ensemble.states, ensemble.p = self._apply_jump(ensemble, self._V_history[-1], probs)
