@@ -180,3 +180,50 @@ def test_classical_dynamics_harmonic_3d():
 
     for j, key in enumerate(actual):
         assert conditions[j], error_message(f"{key}", expected[key], actual[key])
+
+
+def test_classical_dynamics_fewest_switches_tully_1():
+    options = {
+        "initial_conditions": {
+            "momentum": [15],
+            "gamma": [2],
+            "position": [-10],
+            "state": 1
+        },
+        "potential": {
+            "type": "tully_1"
+        },
+        "surface_hopping": {
+            "type": "fewest_switches"
+        },
+        "log_interval": 500,
+        "mass": 2000,
+        "iterations": 3000,
+        "time_step": 1,
+        "trajectories": 100
+    }
+
+    result = run(options)
+
+    expected = {
+        "total_energy": 0.06594330834986,
+        "kinetic_energy": 0.06354330847411,
+        "potential_energy": 0.00239999987575,
+        "position": [13.20360646343850],
+        "momentum": [15.86915258293628],
+        "population": [0.38000000000000, 0.62000000000000],
+    }
+
+    actual = {
+        "total_energy": result.total_energy,
+        "kinetic_energy": result.kinetic_energy,
+        "potential_energy": result.potential_energy,
+        "position": result.position.tolist(),
+        "momentum": result.momentum.tolist(),
+        "population": result.population.tolist(),
+    }
+
+    conditions = [actual[key] == pytest.approx(expected[key], abs=1e-08) for key in actual]
+
+    for j, key in enumerate(actual):
+        assert conditions[j], error_message(f"{key}", expected[key], actual[key])
