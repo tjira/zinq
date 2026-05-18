@@ -42,28 +42,8 @@ class FewestSwitches(SurfaceHopping):
 
         return self._normalize_probs(probs)
 
-    def _normalize_probs(self, probs: np.ndarray) -> np.ndarray:
-        if np.any(mask_gt1 := (row_sums := np.sum(probs, axis=1)) > 1):
-            probs[mask_gt1] /= row_sums[mask_gt1][:, np.newaxis]
-        return probs
-
-    def jump(self, ensemble: Ensemble, pot: Potential, dt: float, time: float) -> None:
-        V_a, U = np.linalg.eigh(pot.eval_d(list(ensemble.r.T), time))
-
-        if len(self._U_history) > 0:
-            U = np.where(np.sum(self._U_history[-1] * U, axis=-2, keepdims=True) < 0, -U, U)
-
-        self._U_history.append(U)
-
-        if len(self._U_history) < 2: return
-
-        dot_d = self._tdc.evaluate(self._U_history[0], self._U_history[1], dt)
-        H_eff = V_a - np.mean(V_a, axis=1, keepdims=True)
-
-        prop = self._coef_propagator(H_eff, dot_d, dt)
-
-        jump_mask = np.zeros(ensemble.ntraj, dtype=bool)
-        target_states = ensemble.states.copy()
+    def _integrate_substeps(self, ensemble: Ensemble, dot_d: np.ndarray, prop: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
+        jump_mask, target_states = np.zeros(ensemble.ntraj, dtype=bool), ensemble.states.copy()
 
         for _ in range(self._substeps):
             ensemble.c = np.einsum("nij,nj->ni", prop, ensemble.c)
@@ -71,8 +51,41 @@ class FewestSwitches(SurfaceHopping):
             probs = self._calc_probs(ensemble, dot_d, dt / self._substeps)
             step_jump_mask, step_target_states = self._propose_jumps(probs)
 
-            if np.any(valid_mask := step_jump_mask & ~jump_mask):
-                target_states[valid_mask] = step_target_states[valid_mask]
-                jump_mask |= valid_mask
+            if np.any(valid := step_jump_mask & ~jump_mask):
+                target_states[valid], jump_mask = step_target_states[valid], jump_mask | valid
+
+        return jump_mask, target_states
+
+    def _normalize_probs(self, probs: np.ndarray) -> np.ndarray:
+        if np.any(mask_gt1 := (row_sums := np.sum(probs, axis=1)) > 1):
+            probs[mask_gt1] /= row_sums[mask_gt1][:, np.newaxis]
+        return probs
+
+    def _prepare_propagator(self, V_a: np.ndarray, dt: float) -> tuple[np.ndarray, np.ndarray]:
+        dot_d = self._tdc.evaluate(self._U_history[0], self._U_history[1], dt)
+        
+        H_eff = V_a - np.mean(V_a, axis=1, keepdims=True)
+        prop = self._coef_propagator(H_eff, dot_d, dt)
+        
+        return dot_d, prop
+
+    def _update_history(self, ensemble: Ensemble, pot: Potential, time: float) -> np.ndarray:
+        V_a, U = np.linalg.eigh(pot.eval_d(list(ensemble.r.T), time))
+
+        if len(self._U_history) > 0:
+            U = np.where(np.sum(self._U_history[-1] * U, axis=-2, keepdims=True) < 0, -U, U)
+
+        self._U_history.append(U)
+
+        return V_a
+
+    def jump(self, ensemble: Ensemble, pot: Potential, dt: float, time: float) -> None:
+        V_a = self._update_history(ensemble, pot, time)
+
+        if len(self._U_history) < 2: return
+
+        dot_d, prop = self._prepare_propagator(V_a, dt)
+
+        jump_mask, target_states = self._integrate_substeps(ensemble, dot_d, prop, dt)
 
         self._apply_jump(ensemble, V_a, jump_mask, target_states)
