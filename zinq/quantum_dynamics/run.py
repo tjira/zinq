@@ -16,25 +16,25 @@ from .wavefunction import Wavefunction
 def run(opt: Options):
     grid, wfn, H, pot, prop, start_time = *_init(opt), time.time()
 
+    start_time = 0
+
     for i in range(opt.iterations + 1) if opt.iterations else count():
         current_time = i * prop.dt
 
-        if i: prop.step(wfn, grid, H, pot, current_time - prop.dt)
+        if pot.is_time_dependent and i:
+            H._update_V(grid, pot, current_time)
+
+        if i: prop.step(wfn, grid, H, pot)
 
 
         norm = wfn.norm(grid)
-        pop = wfn.pop(grid)
+        pop = (wfn.to_adiabatic(grid, H) if opt.adiabatic else wfn).pop(grid)
         pos = wfn.pos(grid)
         mom = wfn.mom(grid)
         pe = wfn.pe(grid, H)
         ke = wfn.ke(grid, H)
-        # print(norm)
         print(pop)
-        # print(pos)
-        # print(mom)
-        # print(pe)
-        # print(ke)
-    # print(f"ZIG ADD(10, 32) = {load_library('native').add(10, 32)}")
+
 
 def _init(opt: Options) -> tuple[Grid, Wavefunction, Hamiltonian, Potential, StrangSplit]:
     grid = Grid(
@@ -56,12 +56,11 @@ def _init(opt: Options) -> tuple[Grid, Wavefunction, Hamiltonian, Potential, Str
     wfn = Wavefunction(
         ic=ic,
         grid=grid,
+        H=H,
         nstate=opt.hamiltonian.potential.nstate,
     )
     prop = StrangSplit(
-        grid=grid,
         H=H,
-        pot=opt.hamiltonian.potential,
         dt=opt.time_step,
         imaginary=opt.imaginary is not None,
     )

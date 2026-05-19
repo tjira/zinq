@@ -17,5 +17,4 @@ class Hamiltonian:
         self._update_V(grid, pot, 0)
 
     def _update_V(self, grid: Grid, pot: Potential, time: float):
-        self.V = pot.eval_d(grid.pos, time)
-        self.W, self.U = np.linalg.eigh(self.V)
+        self.W, self.U, self.V = *np.linalg.eigh(V := pot.eval_d(grid.pos, time)), V
