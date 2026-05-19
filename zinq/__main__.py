@@ -1,6 +1,6 @@
 import argparse
-import cProfile
 import contextlib
+import cProfile
 import datetime
 import shutil
 import subprocess
@@ -9,7 +9,7 @@ import time
 
 from zinq import __version__
 
-from .utils import print_startup_header
+from .utils import load_library, print_startup_header
 
 
 def main():
@@ -49,7 +49,7 @@ def main():
     if args.profile:
         stats_file, dot_file, svg_file = "profile.stats", "profile.dot", "profile.svg"
 
-        profiler.dump_stats(stats_file)
+        profiler.dump_stats(stats_file) # type: ignore
 
         if not shutil.which("gprof2dot"): raise RuntimeError("EXECUTABLE 'gprof2dot' NOT FOUND")
         if not shutil.which("dot"): raise RuntimeError("EXECUTABLE 'dot' NOT FOUND")
@@ -65,6 +65,8 @@ def main():
         ], check=True)
 
         subprocess.run(["dot", "-Tsvg", dot_file, "-o", svg_file], check=True)
+
+        print(f"ZIG ADD(10, 32) = {load_library('native').add(10, 32)}")
 
 
 if __name__ == "__main__":

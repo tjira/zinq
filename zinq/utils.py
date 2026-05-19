@@ -1,5 +1,7 @@
+import ctypes
 import datetime
 import sys
+from pathlib import Path
 
 from zinq import __version__
 
@@ -20,6 +22,10 @@ def get_versions():
     }
 
     return package_versions
+
+
+def load_library(lib_name: str):
+    return ctypes.CDLL(str(list((Path(__file__).parent / "lib").glob(f"{lib_name}.*"))[0]))
 
 
 def print_startup_header():
