@@ -66,7 +66,7 @@ def main():
 
         subprocess.run(["dot", "-Tsvg", dot_file, "-o", svg_file], check=True)
 
-        print(f"ZIG ADD(10, 32) = {load_library('native').add(10, 32)}")
+    print(f"ZIG ADD(10, 32) = {load_library('native').add(10, 32)}")
 
 
 if __name__ == "__main__":
