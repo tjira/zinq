@@ -9,8 +9,6 @@ import time
 
 from zinq import __version__
 
-from .utils import load_library, print_startup_header
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -66,7 +64,35 @@ def main():
 
         subprocess.run(["dot", "-Tsvg", dot_file, "-o", svg_file], check=True)
 
-    print(f"ZIG ADD(10, 32) = {load_library('native').add(10, 32)}")
+
+def get_versions():
+    import matplotlib
+    import numpy
+    import pydantic
+    import scipy
+    import sympy
+
+    package_versions = {
+        "NUMPY": numpy.__version__,
+        "SCIPY": scipy.__version__,
+        "PYDANTIC": pydantic.__version__,
+        "MATPLOTLIB": matplotlib.__version__,
+        "SYMPY": sympy.__version__,
+    }
+
+    return package_versions
+
+
+def print_startup_header():
+    package_versions = get_versions()
+
+    header = f"PYTHON: {sys.version.split()[0]}, ZINQ: {__version__}"
+    header += f", TIMESTAMP: {datetime.datetime.now().isoformat()}\n"
+
+    print(header)
+
+    for pkg, ver in package_versions.items():
+        print(f"{pkg}: {ver}")
 
 
 if __name__ == "__main__":
