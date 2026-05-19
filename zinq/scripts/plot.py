@@ -3,6 +3,7 @@
 # general imports
 import argparse as ap
 
+# library imports
 import matplotlib.animation as anm
 import matplotlib.pyplot as plt
 import matplotlib.ticker as tck

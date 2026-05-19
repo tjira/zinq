@@ -3,13 +3,10 @@
 # general imports
 import argparse as ap
 
+# library imports
 import matplotlib.animation as anm
 import matplotlib.pyplot as plt
-import matplotlib.ticker as tck
 import numpy as np
-
-# additional imports
-from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
 # set rcParams
 plt.rcParams.update({
