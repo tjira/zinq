@@ -28,9 +28,7 @@ class StrangSplit:
         if self.unit.imag == 0: wfn.normalize(grid)
 
     def _apply_K(self, wfn, ndim):
-        wfn.data = np.fft.fftn(wfn.data, axes=range(ndim))
-        wfn.data *= self.K
-        wfn.data = np.fft.ifftn(wfn.data, axes=range(ndim))
+        wfn.data = np.fft.ifftn(np.fft.fftn(wfn.data, axes=range(ndim)) * self.K, axes=range(ndim))
     
     def _apply_R(self, wfn):
         wfn.data = np.einsum("...ij,...j->...i", self.R, wfn.data)
