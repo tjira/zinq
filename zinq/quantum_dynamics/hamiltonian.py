@@ -1,11 +1,21 @@
-from dataclasses import dataclass
-from typing import Optional
+import numpy as np
 
 from ..potential import Potential
+from .grid import Grid
 
 
-@dataclass
 class Hamiltonian:
-    pot: Potential
-    cap: Optional[Potential]
-    mass: float
+    V: np.ndarray
+    W: np.ndarray
+    U: np.ndarray
+    T: np.ndarray
+    m: float
+
+    def __init__(self, grid: Grid, pot: Potential, m: float):
+        self.T, self.m = sum((k**2 for k in grid.mom), np.zeros_like(grid.mom[0])) / (2 * m), m
+        
+        self._update_V(grid, pot, 0)
+
+    def _update_V(self, grid: Grid, pot: Potential, time: float):
+        self.V = pot.eval_d(grid.pos, time)
+        self.W, self.U = np.linalg.eigh(self.V)

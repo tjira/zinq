@@ -11,4 +11,5 @@ zinq.egg-info/
 /*.stats
 /*.svg
 
+*.pyd
 *.so

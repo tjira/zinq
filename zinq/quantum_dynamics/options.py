@@ -3,12 +3,40 @@ from typing import Annotated, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..potential import TullyFirst
-from .grid import Grid
-from .initial_conditions import InitialConditions
 
 AnyPotential = Annotated[Union[
     TullyFirst
 ], Field(discriminator="name")]
+
+
+class GridConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    limits: list[tuple[float, float]]
+    npoint: int
+
+
+class HamiltonianConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    potential: AnyPotential
+    mass: float
+
+
+class ImaginaryConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nstate: int
+
+
+class InitialConditionsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    position: list[float]
+    momentum: list[float]
+    gamma: list[float]
+    state: int = 0
+    adiabatic: bool = False
 
 
 class Options(BaseModel):
@@ -16,10 +44,10 @@ class Options(BaseModel):
     type: Literal["quantum_dynamics"]
 
     adiabatic: bool = False
-    grid: Grid.Config
-    initial_conditions: InitialConditions.Config
+    grid: GridConfig
+    hamiltonian: HamiltonianConfig
+    initial_conditions: InitialConditionsConfig
+    imaginary: ImaginaryConfig | None = None
     iterations: int | None = None
     log_interval: int = 1
-    mass: float
-    potential: AnyPotential
     time_step: float
