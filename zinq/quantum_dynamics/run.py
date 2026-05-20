@@ -1,8 +1,8 @@
 import datetime
 import time
+from dataclasses import dataclass
 from itertools import count
 from typing import cast
-from dataclasses import dataclass
 
 import numpy as np
 
@@ -10,7 +10,7 @@ from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .initial_conditions import InitialConditions
 from .observables import Observables
-from .options import Options, WriteConfig
+from .options import HamiltonianConfig, Options, WriteConfig
 from .results import Results, State
 from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
@@ -86,32 +86,24 @@ def run(opt: Options) -> Results:
 
 
 def _init(opt: Options) -> dict:
-    grid = Grid(
-        limits=np.array(opt.grid.limits),
-        npoint=opt.grid.npoint,
-    )
-    H = Hamiltonian(
-        grid=grid,
-        pot=opt.hamiltonian.potential,
-        m=opt.hamiltonian.mass,
-    )
-    wfn = Wavefunction(
-        ic=InitialConditions(
-            pos=np.array(opt.initial_conditions.position),
-            mom=np.array(opt.initial_conditions.momentum),
-            gamma=np.array(opt.initial_conditions.gamma),
-            state=opt.initial_conditions.state,
-            adia=opt.initial_conditions.adiabatic,
-        ),
-        grid=grid,
-        H=H,
-    )
-    prop = StrangSplit(
-        H=H,
-        dt=opt.time_step,
-        imag=opt.imaginary is not None,
-    )
-    return {"grid": grid, "wfn": wfn, "H": H, "prop": prop}
+    def _init_grid(opt: Options) -> Grid:
+        return Grid.from_options(opt.grid)
+
+    def _init_ham(opt: HamiltonianConfig, grid: Grid) -> Hamiltonian:
+        return Hamiltonian(grid=grid, pot=opt.potential, m=opt.mass)
+
+    def _init_ic(opt: Options) -> InitialConditions:
+        return InitialConditions.from_options(opt.initial_conditions)
+
+    def _init_prop(opt: Options, H: Hamiltonian) -> StrangSplit:
+        return StrangSplit(H=H, dt=opt.time_step, imag=opt.imaginary is not None)
+
+    def _init_wfn(opt: Options, grid: Grid, H: Hamiltonian) -> Wavefunction:
+        return Wavefunction(ic=_init_ic(opt), grid=grid, H=H)
+
+    grid, H = (grid := _init_grid(opt)), _init_ham(opt.hamiltonian, grid)
+
+    return {"grid": grid, "H": H, "wfn": _init_wfn(opt, grid, H), "prop": _init_prop(opt, H)}
 
 
 def _obs_map(write_opts: WriteConfig | None, log: bool = False) -> dict[str, bool]:
