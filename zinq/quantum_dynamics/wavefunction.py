@@ -9,8 +9,12 @@ class Wavefunction:
     data: np.ndarray
 
     @classmethod
-    def from_data(cls, data: np.ndarray, measure: float):
+    def from_data(cls, data: np.ndarray):
         return setattr(wfn := cls.__new__(cls), "data", data) or wfn
+
+    @property
+    def nstate(self) -> int:
+        return self.data.shape[-1]
 
     def __init__(self, ic: InitialConditions, grid: Grid, H: Hamiltonian, nstate: int):
         self.data = np.zeros((*[grid.npoint] * grid.ndim, nstate), dtype=np.complex128)
@@ -24,7 +28,7 @@ class Wavefunction:
         self.normalize(grid)
 
         if ic.adia:
-            self.to_adiabatic(grid, H)
+            self.to_dia(H)
 
     def ke(self, grid: Grid, H: Hamiltonian) -> float:
         data_k = np.fft.fftn(self.data, axes=range(grid.ndim), norm="ortho")
@@ -57,8 +61,8 @@ class Wavefunction:
 
         return np.array([np.sum(rho * r) for r in grid.pos]) * grid.measure
 
-    def to_adiabatic(self, grid: Grid, H: Hamiltonian) -> "Wavefunction":
-        return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(H.U), self.data), grid.measure)
+    def to_adia(self, H: Hamiltonian) -> "Wavefunction":
+        return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(H.U), self.data))
 
-    def to_diabatic(self, grid: Grid, H: Hamiltonian) -> "Wavefunction":
-        return Wavefunction.from_data(np.einsum("...ij,...j->...i", H.U, self.data), grid.measure)
+    def to_dia(self, H: Hamiltonian) -> "Wavefunction":
+        return Wavefunction.from_data(np.einsum("...ij,...j->...i", H.U, self.data))

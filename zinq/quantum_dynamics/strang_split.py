@@ -1,9 +1,9 @@
 import numpy as np
 
+from ..potential import Potential
 from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .wavefunction import Wavefunction
-from ..potential import Potential
 
 
 class StrangSplit:
