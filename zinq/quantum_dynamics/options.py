@@ -1,12 +1,8 @@
-from typing import Annotated, Literal, Union
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
-from ..potential import TullyFirst
-
-AnyPotential = Annotated[Union[
-    TullyFirst
-], Field(discriminator="name")]
+from ..potential.potential import AnyPotential
 
 
 class GridConfig(BaseModel):

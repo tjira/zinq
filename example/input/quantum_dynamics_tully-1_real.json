@@ -21,7 +21,8 @@
             },
             "iterations" : 3000,
             "time_step" : 1,
-            "adiabatic" : true
+            "adiabatic" : true,
+            "log_interval" : 500
         }
     ]
 }

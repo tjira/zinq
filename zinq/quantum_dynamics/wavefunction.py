@@ -13,6 +13,10 @@ class Wavefunction:
         return setattr(wfn := cls.__new__(cls), "data", data) or wfn
 
     @property
+    def ndim(self) -> int:
+        return len(self.data.shape) - 1
+
+    @property
     def nstate(self) -> int:
         return self.data.shape[-1]
 

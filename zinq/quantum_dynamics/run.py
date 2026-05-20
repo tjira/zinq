@@ -1,29 +1,17 @@
 import datetime
 import time
-from dataclasses import dataclass
 from itertools import count
 
 import numpy as np
 
 from ..potential import Potential
-from ..zig import load_library
 from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .initial_conditions import InitialConditions
+from .observables import Observables
 from .options import Options
 from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
-
-
-@dataclass(frozen=True, kw_only=True)
-class Observables:
-    norm: float
-    pop: np.ndarray
-    pos: np.ndarray
-    mom: np.ndarray
-    pe: float
-    ke: float
-    e: float
 
 
 def run(opt: Options):
@@ -32,18 +20,16 @@ def run(opt: Options):
     for i in range(opt.iterations + 1) if opt.iterations else count():
         current_time = i * prop.dt
 
-        if pot.is_time_dependent and i:
+        if pot.is_td and i:
             H._update_V(grid, pot, current_time)
 
-        if i:
-            prop.step(wfn, grid, H, pot)
+        if i: prop.step(wfn, grid, H, pot)
 
         log = i == 0 or i == opt.iterations or (i % opt.log_interval == 0)
 
         obs = _calc_obs(wfn, grid, H, opt.adiabatic)
 
-        if log:
-            _print_step(i, obs, start_time)
+        if log: _print_step(i, obs, start_time)
 
 
 def _calc_obs(wfn_dia: Wavefunction, grid: Grid, H: Hamiltonian, adia: bool) -> Observables:

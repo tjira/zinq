@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
+from typing import Annotated, Union
 
 import numpy as np
+from pydantic import Field
 
 
 class Potential(ABC):
@@ -15,7 +17,7 @@ class Potential(ABC):
         pass
 
     @property
-    def is_time_dependent(self) -> bool:
+    def is_td(self) -> bool:
         return False
 
     @abstractmethod
@@ -24,3 +26,10 @@ class Potential(ABC):
 
     def eval_a(self, r: list[np.ndarray], time: float) -> np.ndarray:
         return np.linalg.eigvalsh(self.eval_d(r, time))
+
+
+from .tully import TullyFirst
+
+AnyPotential = Annotated[Union[
+    TullyFirst
+], Field(discriminator="name")]
