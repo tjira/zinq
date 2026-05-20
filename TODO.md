@@ -1,0 +1,1 @@
+- [ ] Remove the endpoints from the QD grid.

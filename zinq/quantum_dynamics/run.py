@@ -16,33 +16,45 @@ from .wavefunction import Wavefunction
 
 
 def run(opt: Options) -> Results:
-    grid, wfn, H, pot, prop, start_time, results = *_init(opt), time.time(), []
+    results, opt_wfn, nsim = [], [], opt.imaginary.nstate if opt.imaginary else 1
 
-    for i in range(opt.iterations + 1) if opt.iterations else count():
-        current_time = i * prop.dt
+    for i in range(nsim):
 
-        if pot.is_td and i:
-            H._update_V(grid, pot, current_time)
+        grid, wfn, H, pot, prop, start_time = *_init(opt, i), time.time()
 
-        if i: prop.step(wfn, grid, H, pot)
+        for j in range(opt.iterations + 1) if opt.iterations else count():
+            current_time = j * prop.dt
 
-        log = i == 0 or i == opt.iterations or (i % opt.log_interval == 0)
+            if pot.is_td and j:
+                H._update_V(grid, pot, current_time)
 
-        obs = _calc_obs(wfn, grid, H, opt.adiabatic)
+            if j:
+                prop.step(wfn, grid, H, pot)
 
-        if log: _print_step(i, obs, start_time)
+            if opt.imaginary and i:
+                wfn.project_out(opt_wfn, grid)
 
-    final_obs = _calc_obs(wfn, grid, H, opt.adiabatic)
+            log = j == 0 or j == opt.iterations or (j % opt.log_interval == 0)
 
-    results.append(State(
-        total_energy=final_obs.e,
-        kinetic_energy=final_obs.ke,
-        potential_energy=final_obs.pe,
-        position=final_obs.pos,
-        momentum=final_obs.mom,
-        norm=final_obs.norm,
-        population=final_obs.pop,
-    ))
+            obs = _calc_obs(wfn, grid, H, opt.adiabatic)
+
+            if log:
+                _print_step(j, obs, start_time)
+
+        final_obs = _calc_obs(wfn, grid, H, opt.adiabatic)
+
+        if opt.imaginary and nsim > 1 and i < nsim - 1:
+            opt_wfn.append(wfn.data)
+
+        results.append(State(
+            total_energy=final_obs.e,
+            kinetic_energy=final_obs.ke,
+            potential_energy=final_obs.pe,
+            position=final_obs.pos,
+            momentum=final_obs.mom,
+            norm=final_obs.norm,
+            population=final_obs.pop,
+        ))
 
     return Results(states=results)
 
@@ -54,13 +66,14 @@ def _calc_obs(wfn_dia: Wavefunction, grid: Grid, H: Hamiltonian, adia: bool) -> 
     pop = wfn.pop(grid)
     pos = wfn.pos(grid)
     mom = wfn.mom(grid)
-    pe = wfn.pe(grid, H)
-    ke = wfn.ke(grid, H)
+
+    pe = wfn_dia.pe(grid, H)
+    ke = wfn_dia.ke(grid, H)
 
     return Observables(norm=norm, pop=pop, pos=pos, mom=mom, pe=pe, ke=ke, e=pe + ke)
 
 
-def _init(opt: Options) -> tuple[Grid, Wavefunction, Hamiltonian, Potential, StrangSplit]:
+def _init(opt: Options, state: int) -> tuple[Grid, Wavefunction, Hamiltonian, Potential, StrangSplit]:
     grid = Grid(
         limits=np.array(opt.grid.limits),
         npoint=opt.grid.npoint,
@@ -89,7 +102,7 @@ def _init(opt: Options) -> tuple[Grid, Wavefunction, Hamiltonian, Potential, Str
         imaginary=opt.imaginary is not None,
     )
 
-    _print_header(ic, 0, grid.ndim, wfn.nstate, opt.imaginary is not None)
+    _print_header(ic, state, grid.ndim, wfn.nstate, opt.imaginary is not None)
 
     return grid, wfn, H, opt.hamiltonian.potential, prop
 

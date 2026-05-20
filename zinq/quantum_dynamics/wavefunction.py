@@ -1,3 +1,5 @@
+from functools import cached_property
+
 import numpy as np
 
 from .grid import Grid
@@ -7,18 +9,6 @@ from .initial_conditions import InitialConditions
 
 class Wavefunction:
     data: np.ndarray
-
-    @classmethod
-    def from_data(cls, data: np.ndarray):
-        return setattr(wfn := cls.__new__(cls), "data", data) or wfn
-
-    @property
-    def ndim(self) -> int:
-        return len(self.data.shape) - 1
-
-    @property
-    def nstate(self) -> int:
-        return self.data.shape[-1]
 
     def __init__(self, ic: InitialConditions, grid: Grid, H: Hamiltonian, nstate: int):
         self.data = np.zeros((*[grid.npoint] * grid.ndim, nstate), dtype=np.complex128)
@@ -32,7 +22,19 @@ class Wavefunction:
         self.normalize(grid)
 
         if ic.adia:
-            self.to_dia(H)
+            self.data = self.to_dia(H).data
+
+    @classmethod
+    def from_data(cls, data: np.ndarray):
+        return setattr(wfn := cls.__new__(cls), "data", data) or wfn
+
+    @cached_property
+    def ndim(self) -> int:
+        return len(self.data.shape) - 1
+
+    @cached_property
+    def nstate(self) -> int:
+        return self.data.shape[-1]
 
     def ke(self, grid: Grid, H: Hamiltonian) -> float:
         data_k = np.fft.fftn(self.data, axes=range(grid.ndim), norm="ortho")
@@ -52,6 +54,9 @@ class Wavefunction:
     def normalize(self, grid: Grid):
         self.data /= np.sqrt(self.norm(grid))
 
+    def overlap(self, other: "Wavefunction", grid: Grid) -> complex:
+        return np.vdot(self.data, other.data) * grid.measure
+
     def pe(self, grid: Grid, H: Hamiltonian) -> float:
         pe_dens = np.real(np.einsum("...i,...ij,...j->...", np.conj(self.data), H.V, self.data))
 
@@ -64,6 +69,12 @@ class Wavefunction:
         rho = np.sum(np.abs(self.data)**2, axis=-1)
 
         return np.array([np.sum(rho * r) for r in grid.pos]) * grid.measure
+
+    def project_out(self, others: list["Wavefunction"], grid: Grid):
+        for other in others:
+            self.data -= np.conj(self.overlap(other, grid)) * other.data
+
+        self.normalize(grid)
 
     def to_adia(self, H: Hamiltonian) -> "Wavefunction":
         return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(H.U), self.data))

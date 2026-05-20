@@ -1,3 +1,5 @@
+from functools import cached_property
+
 import numpy as np
 
 
@@ -5,25 +7,25 @@ class Grid:
     pos: list[np.ndarray]
     mom: list[np.ndarray]
 
-    @property
-    def ndim(self) -> int:
-        return len(self.pos)
-
-    @property
-    def npoint(self) -> int:
-        return self.pos[0].shape[0]
-
-    @property
-    def limits(self) -> np.ndarray:
-        return np.array([[p.min(), p.max()] for p in self.pos])
-
-    @property
-    def measure(self) -> float:
-        return np.prod(np.ptp(self.limits, axis=1) / (self.npoint - 1))
-
     def __init__(self, limits: np.ndarray, npoint: int):
         self.pos = self._pos_grid(np.array(limits), npoint)
         self.mom = self._mom_grid(np.array(limits), npoint)
+
+    @cached_property
+    def ndim(self) -> int:
+        return len(self.pos)
+
+    @cached_property
+    def npoint(self) -> int:
+        return self.pos[0].shape[0]
+
+    @cached_property
+    def limits(self) -> np.ndarray:
+        return np.array([[p.min(), p.max()] for p in self.pos])
+
+    @cached_property
+    def measure(self) -> float:
+        return np.prod(np.ptp(self.limits, axis=1) / (self.npoint - 1))
 
     def _mom_grid(self, limits: np.ndarray, npoint: int) -> list[np.ndarray]:
         grids = []

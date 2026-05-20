@@ -28,8 +28,10 @@ class Potential(ABC):
         return np.linalg.eigvalsh(self.eval_d(r, time))
 
 
+from .harmonic import Harmonic
 from .tully import TullyFirst
 
 AnyPotential = Annotated[Union[
-    TullyFirst
+    Harmonic,
+    TullyFirst,
 ], Field(discriminator="name")]
