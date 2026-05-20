@@ -10,12 +10,13 @@ from .hamiltonian import Hamiltonian
 from .initial_conditions import InitialConditions
 from .observables import Observables
 from .options import Options
+from .results import Results, State
 from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
 
 
-def run(opt: Options):
-    grid, wfn, H, pot, prop, start_time = *_init(opt), time.time()
+def run(opt: Options) -> Results:
+    grid, wfn, H, pot, prop, start_time, results = *_init(opt), time.time(), []
 
     for i in range(opt.iterations + 1) if opt.iterations else count():
         current_time = i * prop.dt
@@ -30,6 +31,20 @@ def run(opt: Options):
         obs = _calc_obs(wfn, grid, H, opt.adiabatic)
 
         if log: _print_step(i, obs, start_time)
+
+    final_obs = _calc_obs(wfn, grid, H, opt.adiabatic)
+
+    results.append(State(
+        total_energy=final_obs.e,
+        kinetic_energy=final_obs.ke,
+        potential_energy=final_obs.pe,
+        position=final_obs.pos,
+        momentum=final_obs.mom,
+        norm=final_obs.norm,
+        population=final_obs.pop,
+    ))
+
+    return Results(states=results)
 
 
 def _calc_obs(wfn_dia: Wavefunction, grid: Grid, H: Hamiltonian, adia: bool) -> Observables:
