@@ -24,37 +24,36 @@ def run(opt: Options) -> Results:
 
         _print_header(i, opt.initial_conditions.gamma, grid.ndim, wfn.nstate, opt.imaginary is not None)
 
+        obs: Observables = Observables.__new__(Observables)
+
         for j in range(opt.iterations + 1) if opt.iterations else count():
-            log = j == 0 or j == opt.iterations or (j % opt.log_interval == 0)
-            start_time, current_time = time.time() if log else start_time, j * prop.dt
+            if pot.is_td and j > 0:
+                H._update_V(grid, pot, j * prop.dt)
 
-            if pot.is_td and j:
-                H._update_V(grid, pot, current_time)
-
-            if j:
+            if j > 0:
                 prop.step(wfn, grid, H, pot)
 
-            if opt.imaginary and i:
+            if opt.imaginary and i > 0:
                 wfn.project_out(opt_wfn, grid)
 
-            obs = _calc_obs(wfn, grid, H, opt.adiabatic)
+            log = j == 0 or j == opt.iterations or (j % opt.log_interval == 0)
 
             if log:
-                _print_step(j, obs, start_time)
+                obs = _calc_obs(wfn, grid, H, opt.adiabatic)
 
-        final_obs = _calc_obs(wfn, grid, H, opt.adiabatic)
+            if log: _, start_time = _print_step(j, obs, start_time), time.time()
 
         if opt.imaginary and nsim > 1 and i < nsim - 1:
             opt_wfn.append(wfn)
 
         results.append(State(
-            total_energy=final_obs.e,
-            kinetic_energy=final_obs.ke,
-            potential_energy=final_obs.pe,
-            position=final_obs.pos,
-            momentum=final_obs.mom,
-            norm=final_obs.norm,
-            population=final_obs.pop,
+            total_energy=obs.e,
+            kinetic_energy=obs.ke,
+            potential_energy=obs.pe,
+            position=obs.pos,
+            momentum=obs.mom,
+            norm=obs.norm,
+            population=obs.pop,
         ))
 
     return Results(states=results)
