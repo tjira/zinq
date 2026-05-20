@@ -19,7 +19,7 @@
                 "mass" : 1
             },
             "imaginary" : {
-                "nstate" : 4
+                "nstate" : 2
             },
             "iterations" : 1000,
             "time_step" : 0.01,

@@ -20,10 +20,13 @@ def run(opt: Options) -> Results:
 
     for i in range(nsim):
 
-        grid, wfn, H, pot, prop, start_time = *_init(opt, i), time.time()
+        grid, wfn, H, pot, prop, start_time = *_init(opt), time.time()
+
+        _print_header(i, opt.initial_conditions.gamma, grid.ndim, wfn.nstate, opt.imaginary is not None)
 
         for j in range(opt.iterations + 1) if opt.iterations else count():
-            current_time = j * prop.dt
+            log = j == 0 or j == opt.iterations or (j % opt.log_interval == 0)
+            start_time, current_time = time.time() if log else start_time, j * prop.dt
 
             if pot.is_td and j:
                 H._update_V(grid, pot, current_time)
@@ -34,8 +37,6 @@ def run(opt: Options) -> Results:
             if opt.imaginary and i:
                 wfn.project_out(opt_wfn, grid)
 
-            log = j == 0 or j == opt.iterations or (j % opt.log_interval == 0)
-
             obs = _calc_obs(wfn, grid, H, opt.adiabatic)
 
             if log:
@@ -44,7 +45,7 @@ def run(opt: Options) -> Results:
         final_obs = _calc_obs(wfn, grid, H, opt.adiabatic)
 
         if opt.imaginary and nsim > 1 and i < nsim - 1:
-            opt_wfn.append(wfn.data)
+            opt_wfn.append(wfn)
 
         results.append(State(
             total_energy=final_obs.e,
@@ -73,7 +74,7 @@ def _calc_obs(wfn_dia: Wavefunction, grid: Grid, H: Hamiltonian, adia: bool) -> 
     return Observables(norm=norm, pop=pop, pos=pos, mom=mom, pe=pe, ke=ke, e=pe + ke)
 
 
-def _init(opt: Options, state: int) -> tuple[Grid, Wavefunction, Hamiltonian, Potential, StrangSplit]:
+def _init(opt: Options) -> tuple[Grid, Wavefunction, Hamiltonian, Potential, StrangSplit]:
     grid = Grid(
         limits=np.array(opt.grid.limits),
         npoint=opt.grid.npoint,
@@ -101,17 +102,14 @@ def _init(opt: Options, state: int) -> tuple[Grid, Wavefunction, Hamiltonian, Po
         dt=opt.time_step,
         imaginary=opt.imaginary is not None,
     )
-
-    _print_header(ic, state, grid.ndim, wfn.nstate, opt.imaginary is not None)
-
     return grid, wfn, H, opt.hamiltonian.potential, prop
 
 
-def _print_header(ic: InitialConditions, idx: int, ndim: int, nstate: int, imag: bool):
+def _print_header(idx: int, gamma: list[float], ndim: int, nstate: int, imag: bool):
         mode = "IMAGINARY" if imag else "REAL"
 
         with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
-            print(f"\nSTATE {idx} INITIAL GAMMA: {np.array(ic.gamma, float)}\n")
+            print(f"\nSTATE {idx} INITIAL GAMMA: {np.array(gamma, float)}\n")
 
         print(f"STATE {idx} {mode} TIME PROPAGATION")
 
