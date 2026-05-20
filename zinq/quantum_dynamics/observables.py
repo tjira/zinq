@@ -5,10 +5,12 @@ import numpy as np
 
 @dataclass(frozen=True, kw_only=True)
 class Observables:
-    norm: float
-    pop: np.ndarray
-    pos: np.ndarray
-    mom: np.ndarray
-    pe: float
-    ke: float
-    e: float
+    acf: complex | None = None
+    e: float | None = None
+    ke: float | None = None
+    mom: np.ndarray | None = None
+    norm: float | None = None
+    pe: float | None = None
+    pop: np.ndarray | None = None
+    pos: np.ndarray | None = None
+    wfn: np.ndarray | None = None

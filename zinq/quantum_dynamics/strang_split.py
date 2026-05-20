@@ -12,8 +12,8 @@ class StrangSplit:
     unit: complex
     dt: float
 
-    def __init__(self, H: Hamiltonian, dt: float, imaginary: bool):
-        self.dt, self.unit = dt, -0.5 * (1 if imaginary else 1j) * dt
+    def __init__(self, H: Hamiltonian, dt: float, imag: bool):
+        self.dt, self.unit = dt, -0.5 * (1 if imag else 1j) * dt
 
         self._update_R(H)
         self._update_K(H)

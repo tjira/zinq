@@ -36,6 +36,9 @@ class Wavefunction:
     def nstate(self) -> int:
         return self.data.shape[-1]
 
+    def copy(self) -> "Wavefunction":
+        return Wavefunction.from_data(self.data.copy())
+
     def ke(self, grid: Grid, H: Hamiltonian) -> float:
         data_k = np.fft.fftn(self.data, axes=range(grid.ndim), norm="ortho")
         ke_dens = np.real(np.einsum("...i,...,...i->...", np.conj(data_k), H.T, data_k))

@@ -35,6 +35,22 @@ class InitialConditionsConfig(BaseModel):
     adiabatic: bool = False
 
 
+class WriteOptions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    autocorrelation: str | None = None
+    final_wavefunction: str | None = None
+    kinetic_energy: str | None = None
+    momentum: str | None = None
+    norm: str | None = None
+    population: str | None = None
+    position: str | None = None
+    potential_energy: str | None = None
+    spectrum: str | None = None
+    total_energy: str | None = None
+    wavefunction: str | None = None
+
+
 class Options(BaseModel):
     model_config = ConfigDict(extra="forbid")
     type: Literal["quantum_dynamics"]
@@ -47,3 +63,4 @@ class Options(BaseModel):
     iterations: int | None = None
     log_interval: int = 1
     time_step: float
+    write: WriteOptions | None = None
