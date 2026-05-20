@@ -10,8 +10,9 @@ from .initial_conditions import InitialConditions
 class Wavefunction:
     data: np.ndarray
 
-    def __init__(self, ic: InitialConditions, grid: Grid, H: Hamiltonian, nstate: int):
-        self.data = np.zeros((*[grid.npoint] * grid.ndim, nstate), dtype=np.complex128)
+    def __init__(self, ic: InitialConditions, grid: Grid, H: Hamiltonian):
+        self.data = np.zeros((*[grid.npoint] * grid.ndim, H.pot.nstate), dtype=np.complex128)
+
         exponent = np.zeros_like(grid.pos[0], dtype=np.complex128)
 
         for pos, r, k, g in zip(grid.pos, ic.pos, ic.mom, ic.gamma):

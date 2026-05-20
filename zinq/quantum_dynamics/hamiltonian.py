@@ -5,6 +5,7 @@ from .grid import Grid
 
 
 class Hamiltonian:
+    pot: Potential
     V: np.ndarray
     W: np.ndarray
     U: np.ndarray
@@ -12,9 +13,11 @@ class Hamiltonian:
     m: float
 
     def __init__(self, grid: Grid, pot: Potential, m: float):
-        self.T, self.m = sum((k**2 for k in grid.mom), np.zeros_like(grid.mom[0])) / (2 * m), m
+        self.pot, self.m = pot, m
         
-        self._update_V(grid, pot, 0)
+        self.update_V(grid, 0)
 
-    def _update_V(self, grid: Grid, pot: Potential, time: float):
-        self.W, self.U, self.V = *np.linalg.eigh(V := pot.eval_d(grid.pos, time)), V
+        self.T = sum((k**2 for k in grid.mom), np.zeros_like(grid.mom[0])) / (2 * m)
+
+    def update_V(self, grid: Grid, time: float):
+        self.W, self.U, self.V = *np.linalg.eigh(V := self.pot.eval_d(grid.pos, time)), V

@@ -1,6 +1,6 @@
 import numpy as np
+from functools import cached_property
 
-from ..potential import Potential
 from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .wavefunction import Wavefunction
@@ -18,14 +18,18 @@ class StrangSplit:
         self._update_R(H)
         self._update_K(H)
 
-    def step(self, wfn: Wavefunction, grid: Grid, H: Hamiltonian, pot: Potential):
-        if pot.is_td: self._update_R(H)
+    @cached_property
+    def imag(self):
+        return self.unit.imag == 0
+
+    def step(self, wfn: Wavefunction, grid: Grid, H: Hamiltonian, time: float):
+        if H.pot.is_td: H.update_V(grid, time); self._update_R(H)
 
         self._apply_R(wfn)
         self._apply_K(wfn)
         self._apply_R(wfn)
 
-        if self.unit.imag == 0: wfn.normalize(grid)
+        if self.imag: wfn.normalize(grid)
 
     def _apply_K(self, wfn):
         wfn.data = np.fft.ifftn(np.fft.fftn(wfn.data, axes=range(wfn.ndim)) * self.K, axes=range(wfn.ndim))

@@ -35,7 +35,7 @@ class InitialConditionsConfig(BaseModel):
     adiabatic: bool = False
 
 
-class WriteOptions(BaseModel):
+class WriteConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     autocorrelation: str | None = None
@@ -63,4 +63,4 @@ class Options(BaseModel):
     iterations: int | None = None
     log_interval: int = 1
     time_step: float
-    write: WriteOptions | None = None
+    write: WriteConfig | None = None

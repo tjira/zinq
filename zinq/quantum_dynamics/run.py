@@ -2,74 +2,40 @@ import datetime
 import time
 from itertools import count
 from typing import cast
+from dataclasses import dataclass
 
 import numpy as np
 
-from ..potential import Potential
 from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .initial_conditions import InitialConditions
 from .observables import Observables
-from .options import Options, WriteOptions
+from .options import Options, WriteConfig
 from .results import Results, State
 from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
 
 
+@dataclass(kw_only=True)
 class Runner:
     H: Hamiltonian
     grid: Grid
     opt: Options
-    pot: Potential
     prop: StrangSplit
     wfn: Wavefunction
 
-    def __init__(self, opt: Options) -> None:
-        self.opt, self.pot = opt, opt.hamiltonian.potential
-
-        self.grid = Grid(
-            limits=np.array(opt.grid.limits),
-            npoint=opt.grid.npoint
-        )
-        self.H = Hamiltonian(
-            grid=self.grid,
-            pot=self.pot,
-            m=opt.hamiltonian.mass
-        )
-        self.wfn = Wavefunction(
-            ic=InitialConditions(
-                pos=np.array(opt.initial_conditions.position),
-                mom=np.array(opt.initial_conditions.momentum),
-                gamma=np.array(opt.initial_conditions.gamma),
-                state=opt.initial_conditions.state,
-                adia=opt.initial_conditions.adiabatic,
-            ),
-            grid=self.grid,
-            H=self.H,
-            nstate=self.pot.nstate
-        )
-        self.prop = StrangSplit(
-            H=self.H,
-            dt=opt.time_step,
-            imag=opt.imaginary is not None
-        )
-
-    def run(self, idx: int = 0, prev_states: list[Wavefunction] | None = None) -> State:
+    def run(self, idx: int, wfn_opt: list[Wavefunction]) -> State:
         obs, start_time = Observables.__new__(Observables), time.time()
 
-        _print_header(idx, self.opt.initial_conditions.gamma, self.grid.ndim, self.wfn.nstate, self.opt.imaginary is not None)
+        _print_header(idx, self.opt.initial_conditions.gamma, self.wfn, self.prop.imag)
 
         wfn_0 = self.wfn.copy() if _obs_map(self.opt.write)["autocorrelation"] else None
 
         for j in range(self.opt.iterations + 1) if self.opt.iterations else count():
-            if self.pot.is_td and j > 0:
-                self.H._update_V(self.grid, self.pot, j * self.prop.dt)
+            if j > 0: self.prop.step(self.wfn, self.grid, self.H, j * self.prop.dt)
 
-            if j > 0:
-                self.prop.step(self.wfn, self.grid, self.H, self.pot)
-
-            if self.opt.imaginary and prev_states:
-                self.wfn.project_out(prev_states, self.grid)
+            if self.opt.imaginary and wfn_opt:
+                self.wfn.project_out(wfn_opt, self.grid)
 
             log = j == 0 or j == self.opt.iterations or (j % self.opt.log_interval == 0)
 
@@ -109,7 +75,7 @@ def run(opt: Options) -> Results:
     results, opt_wfn, nsim = [], [], opt.imaginary.nstate if opt.imaginary else 1
 
     for i in range(nsim):
-        state = (runner := Runner(opt)).run(i, opt_wfn)
+        state = (runner := Runner(**_init(opt), opt=opt)).run(i, opt_wfn)
 
         if opt.imaginary and nsim > 1 and i < nsim - 1:
             opt_wfn.append(runner.wfn)
@@ -119,7 +85,36 @@ def run(opt: Options) -> Results:
     return Results(states=results)
 
 
-def _obs_map(write_opts: WriteOptions | None, log: bool = False) -> dict[str, bool]:
+def _init(opt: Options) -> dict:
+    grid = Grid(
+        limits=np.array(opt.grid.limits),
+        npoint=opt.grid.npoint,
+    )
+    H = Hamiltonian(
+        grid=grid,
+        pot=opt.hamiltonian.potential,
+        m=opt.hamiltonian.mass,
+    )
+    wfn = Wavefunction(
+        ic=InitialConditions(
+            pos=np.array(opt.initial_conditions.position),
+            mom=np.array(opt.initial_conditions.momentum),
+            gamma=np.array(opt.initial_conditions.gamma),
+            state=opt.initial_conditions.state,
+            adia=opt.initial_conditions.adiabatic,
+        ),
+        grid=grid,
+        H=H,
+    )
+    prop = StrangSplit(
+        H=H,
+        dt=opt.time_step,
+        imag=opt.imaginary is not None,
+    )
+    return {"grid": grid, "wfn": wfn, "H": H, "prop": prop}
+
+
+def _obs_map(write_opts: WriteConfig | None, log: bool = False) -> dict[str, bool]:
     def is_set(attr: str) -> bool:
         return write_opts is not None and getattr(write_opts, attr) is not None
 
@@ -140,7 +135,7 @@ def _obs_map(write_opts: WriteOptions | None, log: bool = False) -> dict[str, bo
     }
 
 
-def _print_header(idx: int, gamma: list[float], ndim: int, nstate: int, imag: bool) -> None:
+def _print_header(idx: int, gamma: list[float], wfn: Wavefunction, imag: bool) -> None:
     mode = "IMAGINARY" if imag else "REAL"
 
     with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
@@ -153,9 +148,9 @@ def _print_header(idx: int, gamma: list[float], ndim: int, nstate: int, imag: bo
         f"{'KIN (Eh)':>12}",
         f"{'POT (Eh)':>12}",
         f"{'TOT (Eh)':>12}",
-        f"{'POS (a0)':>{11 * ndim + 1}}",
-        f"{'MOM (hb/a0)':>{11 * ndim + 1}}",
-        f"{'POPULATION':>{11 * nstate + 1}}",
+        f"{'POS (a0)':>{11 * wfn.ndim + 1}}",
+        f"{'MOM (hb/a0)':>{11 * wfn.ndim + 1}}",
+        f"{'POPULATION':>{11 * wfn.nstate + 1}}",
         f"{'NORM':>9}",
         "TIME"
     ]
