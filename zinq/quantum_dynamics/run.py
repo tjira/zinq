@@ -2,6 +2,8 @@ import datetime
 import time
 from dataclasses import dataclass
 from itertools import count
+from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 
@@ -9,7 +11,6 @@ from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .history import History
 from .initial_conditions import InitialConditions
-from .observables import Observables
 from .options import HamiltonianConfig, Options, WriteConfig
 from .results import Results, State
 from .strang_split import StrangSplit
@@ -25,7 +26,7 @@ class Runner:
     wfn: Wavefunction
 
     def run(self, idx: int, wfn_opt: list[Wavefunction]) -> State:
-        obs, history, start_time = Observables.__new__(Observables), History(), time.time()
+        history, start_time = History(), time.time()
 
         _print_header(idx, self.opt.initial_conditions.gamma, self.wfn, self.prop.imag)
 
@@ -39,31 +40,32 @@ class Runner:
 
             log = j == 0 or j == self.opt.iterations or (j % self.opt.log_interval == 0)
 
-            history.append(obs := self._calc_obs(_obs_map(self.opt.write, log), wfn_0))
+            history.record(**self._calc_obs(_obs_map(self.opt.write, log), wfn_0))
 
             if log:
-                _, start_time = _print_step(j, obs, start_time), time.time()
+                _, start_time = _print_step(j, history.latest, start_time), time.time()
         
         self._export_obs(history, self.opt.write, self.prop.dt)
 
-        return State(**{o: getattr(obs, o) for o in State.__annotations__})
+        return State(**{o: getattr(history.latest, o) for o in State.__annotations__})
 
-    def _calc_obs(self, write_map: dict[str, bool], wfn_0: Wavefunction | None) -> Observables:
+    def _calc_obs(self, write_map: dict[str, bool], wfn_0: Wavefunction | None) -> dict[str, Any]:
         wfn = self.wfn.to_adia(self.H) if self.opt.adiabatic else self.wfn
 
         pe = self.wfn.pe(self.grid, self.H) if write_map["potential_energy"] or write_map["total_energy"] else None
         ke = self.wfn.ke(self.grid, self.H) if write_map["kinetic_energy"] or write_map["total_energy"] else None
 
-        return Observables(
-            norm=wfn.norm(self.grid) if write_map["norm"] else None,
-            population=wfn.pop(self.grid) if write_map["population"] else None,
-            position=wfn.pos(self.grid) if write_map["position"] else None,
-            momentum=wfn.mom(self.grid) if write_map["momentum"] else None,
-            potential_energy=pe, kinetic_energy=ke,
-            total_energy=pe + ke if write_map["total_energy"] and pe is not None and ke is not None else None,
-            autocorrelation=wfn_0.overlap(wfn, self.grid) if write_map["autocorrelation"] and wfn_0 else None,
-            wavefunction=wfn.data.copy() if write_map["wavefunction"] else None,
-        )
+        return {
+            "norm": wfn.norm(self.grid) if write_map["norm"] else None,
+            "population": wfn.pop(self.grid) if write_map["population"] else None,
+            "position": wfn.pos(self.grid) if write_map["position"] else None,
+            "momentum": wfn.mom(self.grid) if write_map["momentum"] else None,
+            "potential_energy": pe,
+            "kinetic_energy": ke,
+            "total_energy": pe + ke if write_map["total_energy"] and pe is not None and ke is not None else None,
+            "autocorrelation": wfn_0.overlap(wfn, self.grid) if write_map["autocorrelation"] and wfn_0 else None,
+            "wavefunction": wfn.data.copy() if write_map["wavefunction"] else None,
+        }
 
 
     def _export_obs(self, history: History, write_opts: WriteConfig | None, dt: float) -> None:
@@ -155,7 +157,7 @@ def _print_header(idx: int, gamma: list[float], wfn: Wavefunction, imag: bool) -
     print(" ".join(columns))
 
 
-def _print_step(i: int, obs: Observables, time_from: float) -> None:
+def _print_step(i: int, obs: SimpleNamespace, time_from: float) -> None:
     with np.printoptions(formatter={"float": "{:10.4f}".format}, suppress=True):
         duration = datetime.timedelta(seconds=time.time() - time_from)
 
