@@ -39,7 +39,6 @@ class WriteConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     autocorrelation: str | None = None
-    final_wavefunction: str | None = None
     kinetic_energy: str | None = None
     momentum: str | None = None
     norm: str | None = None

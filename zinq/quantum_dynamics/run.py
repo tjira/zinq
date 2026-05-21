@@ -2,12 +2,12 @@ import datetime
 import time
 from dataclasses import dataclass
 from itertools import count
-from typing import cast
 
 import numpy as np
 
 from .grid import Grid
 from .hamiltonian import Hamiltonian
+from .history import History
 from .initial_conditions import InitialConditions
 from .observables import Observables
 from .options import HamiltonianConfig, Options, WriteConfig
@@ -25,7 +25,7 @@ class Runner:
     wfn: Wavefunction
 
     def run(self, idx: int, wfn_opt: list[Wavefunction]) -> State:
-        obs, start_time = Observables.__new__(Observables), time.time()
+        obs, history, start_time = Observables.__new__(Observables), History(), time.time()
 
         _print_header(idx, self.opt.initial_conditions.gamma, self.wfn, self.prop.imag)
 
@@ -39,36 +39,42 @@ class Runner:
 
             log = j == 0 or j == self.opt.iterations or (j % self.opt.log_interval == 0)
 
-            obs = self._calc_obs(_obs_map(self.opt.write, log), wfn_0)
+            history.append(obs := self._calc_obs(_obs_map(self.opt.write, log), wfn_0))
 
             if log:
                 _, start_time = _print_step(j, obs, start_time), time.time()
+        
+        self._export_obs(history, self.opt.write, self.prop.dt)
 
-        return State(
-            total_energy=cast(float, obs.e),
-            kinetic_energy=cast(float, obs.ke),
-            potential_energy=cast(float, obs.pe),
-            position=cast(np.ndarray, obs.pos),
-            momentum=cast(np.ndarray, obs.mom),
-            norm=cast(float, obs.norm),
-            population=cast(np.ndarray, obs.pop),
-        )
+        return State(**{o: getattr(obs, o) for o in State.__annotations__})
 
     def _calc_obs(self, write_map: dict[str, bool], wfn_0: Wavefunction | None) -> Observables:
         wfn = self.wfn.to_adia(self.H) if self.opt.adiabatic else self.wfn
 
-        pe = self.wfn.pe(self.grid, self.H) if write_map.get("potential_energy") or write_map.get("total_energy") else None
-        ke = self.wfn.ke(self.grid, self.H) if write_map.get("kinetic_energy") or write_map.get("total_energy") else None
+        pe = self.wfn.pe(self.grid, self.H) if write_map["potential_energy"] or write_map["total_energy"] else None
+        ke = self.wfn.ke(self.grid, self.H) if write_map["kinetic_energy"] or write_map["total_energy"] else None
 
         return Observables(
-            norm=wfn.norm(self.grid) if write_map.get("norm") else None,
-            pop=wfn.pop(self.grid) if write_map.get("population") else None,
-            pos=wfn.pos(self.grid) if write_map.get("position") else None,
-            mom=wfn.mom(self.grid) if write_map.get("momentum") else None,
-            pe=pe, ke=ke, e=pe + ke if write_map.get("total_energy") and pe is not None and ke is not None else None,
-            acf=wfn_0.overlap(wfn, self.grid) if write_map.get("autocorrelation") and wfn_0 else None,
-            wfn=wfn.data.copy() if write_map.get("wavefunction") else None
+            norm=wfn.norm(self.grid) if write_map["norm"] else None,
+            population=wfn.pop(self.grid) if write_map["population"] else None,
+            position=wfn.pos(self.grid) if write_map["position"] else None,
+            momentum=wfn.mom(self.grid) if write_map["momentum"] else None,
+            potential_energy=pe, kinetic_energy=ke,
+            total_energy=pe + ke if write_map["total_energy"] and pe is not None and ke is not None else None,
+            autocorrelation=wfn_0.overlap(wfn, self.grid) if write_map["autocorrelation"] and wfn_0 else None,
+            wavefunction=wfn.data.copy() if write_map["wavefunction"] else None,
         )
+
+
+    def _export_obs(self, history: History, write_opts: WriteConfig | None, dt: float) -> None:
+        if write_opts is None: return
+
+        for field, path in write_opts.model_dump().items():
+            if not path or field == "spectrum": continue
+
+            data = history.get(field, self.grid, dt)
+
+            np.savetxt(path, data, header=f"{data.shape[0]} {data.shape[1]}", comments="", fmt="%20.14f")
 
 
 def run(opt: Options) -> Results:
@@ -114,7 +120,6 @@ def _obs_map(write_opts: WriteConfig | None, log: bool = False) -> dict[str, boo
 
     return {
         "autocorrelation": is_set("autocorrelation") or spectrum,
-        "final_wavefunction": is_set("final_wavefunction"),
         "kinetic_energy": is_set("kinetic_energy") or log,
         "momentum": is_set("momentum") or log,
         "norm": is_set("norm") or log,
@@ -156,12 +161,12 @@ def _print_step(i: int, obs: Observables, time_from: float) -> None:
 
         columns = [
             f"{i:7d}",
-            f"{obs.ke:12.6f}",
-            f"{obs.pe:12.6f}",
-            f"{obs.e:12.6f}",
-            f"{obs.pos}",
-            f"{obs.mom}",
-            f"{obs.pop}",
+            f"{obs.kinetic_energy:12.6f}",
+            f"{obs.potential_energy:12.6f}",
+            f"{obs.total_energy:12.6f}",
+            f"{obs.position}",
+            f"{obs.momentum}",
+            f"{obs.population}",
             f"{obs.norm:1.3e}",
             str(duration)
         ]

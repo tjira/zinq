@@ -5,12 +5,12 @@ import numpy as np
 
 @dataclass(frozen=True, kw_only=True)
 class Observables:
-    acf: complex | None = None
-    e: float | None = None
-    ke: float | None = None
-    mom: np.ndarray | None = None
+    autocorrelation: complex | None = None
+    total_energy: float | None = None
+    kinetic_energy: float | None = None
+    momentum: np.ndarray | None = None
     norm: float | None = None
-    pe: float | None = None
-    pop: np.ndarray | None = None
-    pos: np.ndarray | None = None
-    wfn: np.ndarray | None = None
+    potential_energy: float | None = None
+    population: np.ndarray | None = None
+    position: np.ndarray | None = None
+    wavefunction: np.ndarray | None = None
