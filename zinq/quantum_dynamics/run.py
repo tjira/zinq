@@ -56,14 +56,14 @@ class Runner:
         ke = self.wfn.ke(self.grid, self.H) if write_map["kinetic_energy"] or write_map["total_energy"] else None
 
         return {
-            "norm": wfn.norm(self.grid) if write_map["norm"] else None,
-            "population": wfn.pop(self.grid) if write_map["population"] else None,
-            "position": wfn.pos(self.grid) if write_map["position"] else None,
-            "momentum": wfn.mom(self.grid) if write_map["momentum"] else None,
+            "norm": self.wfn.norm(self.grid) if write_map["norm"] else None,
+            "population": self.wfn.pop(self.grid) if write_map["population"] else None,
+            "position": self.wfn.pos(self.grid) if write_map["position"] else None,
+            "momentum": self.wfn.mom(self.grid) if write_map["momentum"] else None,
             "potential_energy": pe,
             "kinetic_energy": ke,
             "total_energy": pe + ke if write_map["total_energy"] and pe is not None and ke is not None else None,
-            "autocorrelation": wfn_0.overlap(wfn, self.grid) if write_map["autocorrelation"] and wfn_0 else None,
+            "autocorrelation": wfn_0.overlap(self.wfn, self.grid) if write_map["autocorrelation"] and wfn_0 else None,
             "wavefunction": wfn.data.copy() if write_map["wavefunction"] else None,
         }
 
