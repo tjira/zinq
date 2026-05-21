@@ -43,4 +43,4 @@ class History:
         return np.column_stack((*grid_map.get(name, times)(), data))
 
     def record(self, **kwargs: Any) -> None:
-        for k in kwargs.keys() & vars(self).keys(): getattr(self, k).append(kwargs[k])
+        for key in kwargs.keys() & vars(self).keys(): getattr(self, key).append(kwargs[key])

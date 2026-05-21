@@ -33,7 +33,7 @@ class Runner:
         wfn_0 = self.wfn.copy() if _obs_map(self.opt.write)["autocorrelation"] else None
 
         for j in range(self.opt.iterations + 1) if self.opt.iterations else count():
-            if j > 0: self.prop.step(self.wfn, self.grid, self.H, j * self.prop.dt)
+            if j > 0: self.prop.step(self.wfn, self.grid, self.H, (j - 0.5) * self.prop.dt)
 
             if self.opt.imaginary and wfn_opt:
                 self.wfn.project_out(wfn_opt, self.grid)
