@@ -58,15 +58,15 @@ def test_quantum_dynamics_harmonic_1d_itp():
         [1.00000000000000]
     ]
 
-    for i, state in enumerate(result.states):
+    for i in range(len(result.total_energy)):
         actual = {
-            "total_energy": state.total_energy,
-            "kinetic_energy": state.kinetic_energy,
-            "potential_energy": state.potential_energy,
-            "position": state.position.tolist(),
-            "momentum": state.momentum.tolist(),
-            "norm": state.norm,
-            "population": state.population.tolist(),
+            "total_energy": result.total_energy[i],
+            "kinetic_energy": result.kinetic_energy[i],
+            "potential_energy": result.potential_energy[i],
+            "position": result.position[i].tolist(),
+            "momentum": result.momentum[i].tolist(),
+            "norm": result.norm[i],
+            "population": result.population[i].tolist(),
         }
         
         expected = {
@@ -133,15 +133,15 @@ def test_quantum_dynamics_harmonic_2d_itp():
         [1.00000000000000]
     ]
 
-    for i, state in enumerate(result.states):
+    for i in range(len(result.total_energy)):
         actual = {
-            "total_energy": state.total_energy,
-            "kinetic_energy": state.kinetic_energy,
-            "potential_energy": state.potential_energy,
-            "position": state.position.tolist(),
-            "momentum": state.momentum.tolist(),
-            "norm": state.norm,
-            "population": state.population.tolist(),
+            "total_energy": result.total_energy[i],
+            "kinetic_energy": result.kinetic_energy[i],
+            "potential_energy": result.potential_energy[i],
+            "position": result.position[i].tolist(),
+            "momentum": result.momentum[i].tolist(),
+            "norm": result.norm[i],
+            "population": result.population[i].tolist(),
         }
         
         expected = {
@@ -203,15 +203,15 @@ def test_quantum_dynamics_tully_1_real():
         [0.58961548497405, 0.41038451502648]
     ]
 
-    for i, state in enumerate(result.states):
+    for i in range(len(result.total_energy)):
         actual = {
-            "total_energy": state.total_energy,
-            "kinetic_energy": state.kinetic_energy,
-            "potential_energy": state.potential_energy,
-            "position": state.position.tolist(),
-            "momentum": state.momentum.tolist(),
-            "norm": state.norm,
-            "population": state.population.tolist(),
+            "total_energy": result.total_energy[i],
+            "kinetic_energy": result.kinetic_energy[i],
+            "potential_energy": result.potential_energy[i],
+            "position": result.position[i].tolist(),
+            "momentum": result.momentum[i].tolist(),
+            "norm": result.norm[i],
+            "population": result.population[i].tolist(),
         }
         
         expected = {

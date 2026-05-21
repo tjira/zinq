@@ -12,7 +12,7 @@ from .hamiltonian import Hamiltonian
 from .history import History
 from .initial_conditions import InitialConditions
 from .options import HamiltonianConfig, Options, WriteConfig
-from .results import Results, State
+from .result import Result
 from .strang_split import StrangSplit
 from .wavefunction import Wavefunction
 
@@ -25,7 +25,7 @@ class Runner:
     prop: StrangSplit
     wfn: Wavefunction
 
-    def run(self, idx: int, wfn_opt: list[Wavefunction]) -> State:
+    def run(self, idx: int, wfn_opt: list[Wavefunction]) -> dict[str, Any]:
         history, start_time = History(), time.time()
 
         _print_header(idx, self.opt.initial_conditions.gamma, self.wfn, self.prop.imag)
@@ -47,7 +47,7 @@ class Runner:
         
         self._export_obs(history, self.opt.write, self.prop.dt)
 
-        return State(**{o: getattr(history.latest, o) for o in State.__annotations__})
+        return {o: getattr(history.latest, o) for o in Result.__annotations__}
 
     def _calc_obs(self, write_map: dict[str, bool], wfn_0: Wavefunction | None) -> dict[str, Any]:
         wfn = self.wfn.to_adia(self.H) if self.opt.adiabatic else self.wfn
@@ -79,8 +79,8 @@ class Runner:
             np.savetxt(path, data, header=f"{data.shape[0]} {data.shape[1]}", comments="", fmt="%20.14f")
 
 
-def run(opt: Options) -> Results:
-    results, opt_wfn, nsim = [], [], opt.imaginary.nstate if opt.imaginary else 1
+def run(opt: Options) -> Result:
+    states, opt_wfn, nsim = [], [], opt.imaginary.nstate if opt.imaginary else 1
 
     for i in range(nsim):
         state = (runner := Runner(**_init(opt), opt=opt)).run(i, opt_wfn)
@@ -88,9 +88,9 @@ def run(opt: Options) -> Results:
         if opt.imaginary and nsim > 1 and i < nsim - 1:
             opt_wfn.append(runner.wfn)
 
-        results.append(state)
+        states.append(state)
 
-    return Results(states=results)
+    return Result(**{o: np.array([s[o] for s in states]) for o in Result.__annotations__})
 
 
 def _init(opt: Options) -> dict:
