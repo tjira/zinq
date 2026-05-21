@@ -57,7 +57,7 @@ class Runner:
 
         return {
             "norm": self.wfn.norm(self.grid) if write_map["norm"] else None,
-            "population": self.wfn.pop(self.grid) if write_map["population"] else None,
+            "population": wfn.pop(self.grid) if write_map["population"] else None,
             "position": self.wfn.pos(self.grid) if write_map["position"] else None,
             "momentum": self.wfn.mom(self.grid) if write_map["momentum"] else None,
             "potential_energy": pe,
