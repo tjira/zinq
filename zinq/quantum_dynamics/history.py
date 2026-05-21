@@ -21,7 +21,7 @@ class History:
 
     @property
     def latest(self) -> SimpleNamespace:
-        return SimpleNamespace(**{k: v[-1] if v else None for k, v in self.__dict__.items() if isinstance(v, list)})
+        return SimpleNamespace(**{obs: value[-1] if value else None for obs, value in self.__dict__.items()})
 
     def get(self, name: str, grid: Grid, dt: float) -> np.ndarray:
         times = lambda: [np.arange(len(getattr(self, name))) * dt]

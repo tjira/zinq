@@ -47,7 +47,7 @@ class Runner:
         
         self._export_obs(history, self.opt.write, self.prop.dt)
 
-        return {o: getattr(history.latest, o) for o in Result.__annotations__}
+        return {obs: getattr(history.latest, obs) for obs in Result.__annotations__}
 
     def _calc_obs(self, write_map: dict[str, bool], wfn_0: Wavefunction | None) -> dict[str, Any]:
         wfn = self.wfn.to_adia(self.H) if self.opt.adiabatic else self.wfn
@@ -90,7 +90,7 @@ def run(opt: Options) -> Result:
 
         states.append(state)
 
-    return Result(**{o: np.array([s[o] for s in states]) for o in Result.__annotations__})
+    return Result(**{obs: np.array([state[obs] for state in states]) for obs in Result.__annotations__})
 
 
 def _init(opt: Options) -> dict:
