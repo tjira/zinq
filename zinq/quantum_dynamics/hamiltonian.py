@@ -5,13 +5,6 @@ from .grid import Grid
 
 
 class Hamiltonian:
-    T: np.ndarray
-    U: np.ndarray
-    V: np.ndarray
-    W: np.ndarray
-    m: float
-    pot: Potential
-
     def __init__(self, grid: Grid, pot: Potential, m: float):
         self.pot, self.m = pot, m
         

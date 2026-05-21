@@ -8,8 +8,6 @@ from .initial_conditions import InitialConditions
 
 
 class Wavefunction:
-    data: np.ndarray
-
     def __init__(self, ic: InitialConditions, grid: Grid, H: Hamiltonian):
         self.data = np.zeros((*[grid.npoint] * grid.ndim, H.pot.nstate), dtype=np.complex128)
 
