@@ -70,6 +70,9 @@ class Monitor:
 
         obs = {k: (ops[k]() if k in to_calc else None) for k in ops}
 
+        if self.H.absorber and obs["population"] is not None:
+            obs["population"] += wfn.absorbed
+
         self._update_history(obs)
 
         if self._is_log(i, force_log):

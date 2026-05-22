@@ -32,7 +32,7 @@ class Runner:
             return Wavefunction(init_ic(), grid, H)
 
         def init_prop(H: Hamiltonian) -> StrangSplit:
-            return StrangSplit(H, opt.time_step, opt.imaginary is not None)
+            return StrangSplit(H, opt.time_step, opt.imaginary is not None, opt.adiabatic)
 
         self.opt, self.grid, self.H, self.wfn, self.prop = (
             opt, (grid := init_grid()), (H := init_ham(grid)), init_wfn(grid, H), init_prop(H)
