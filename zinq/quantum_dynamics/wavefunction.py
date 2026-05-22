@@ -16,7 +16,7 @@ class Wavefunction:
         for pos, r, k, g in zip(grid.pos, ic.pos, ic.mom, ic.gamma):
             exponent += -0.5 * g * (dr := pos - r)**2 + 1j * k * dr
 
-        self.data[..., ic.state], self.absorbed = np.exp(exponent), np.zeros(H.pot.nstate)
+        self.data[..., ic.state] = np.exp(exponent)
 
         self.normalize(grid)
 
@@ -24,11 +24,8 @@ class Wavefunction:
             self.data = self.to_dia(H).data
 
     @classmethod
-    def from_data(cls, data: np.ndarray, absorbed: np.ndarray | None = None):
-        (wfn := cls.__new__(cls)).__dict__.update({"data": data, "absorbed": np.zeros(data.shape[-1])})
-
-        if absorbed is not None:
-            wfn.absorbed = absorbed
+    def from_data(cls, data: np.ndarray):
+        (wfn := cls.__new__(cls)).__dict__.update({"data": data})
 
         return wfn
 
@@ -49,7 +46,7 @@ class Wavefunction:
         return np.sum(self.density, axis=-1)
 
     def copy(self) -> "Wavefunction":
-        return Wavefunction.from_data(self.data.copy(), self.absorbed.copy())
+        return Wavefunction.from_data(self.data.copy())
 
     def ke(self, grid: Grid, H: Hamiltonian) -> float:
         return np.sum(self.to_kspace().rho * H.T) * grid.measure
@@ -88,10 +85,10 @@ class Wavefunction:
         self.normalize(grid)
 
     def to_adia(self, H: Hamiltonian) -> "Wavefunction":
-        return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(H.U), self.data), self.absorbed)
+        return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(H.U), self.data))
 
     def to_dia(self, H: Hamiltonian) -> "Wavefunction":
-        return Wavefunction.from_data(np.einsum("...ij,...j->...i", H.U, self.data), self.absorbed)
+        return Wavefunction.from_data(np.einsum("...ij,...j->...i", H.U, self.data))
 
     def to_kspace(self) -> "Wavefunction":
-        return Wavefunction.from_data(np.fft.fftn(self.data, axes=range(self.ndim), norm="ortho"), self.absorbed)
+        return Wavefunction.from_data(np.fft.fftn(self.data, axes=range(self.ndim), norm="ortho"))

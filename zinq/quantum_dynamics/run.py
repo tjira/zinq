@@ -39,20 +39,20 @@ class Runner:
         )
 
     def run(self, idx: int, wfn_opt: list[Wavefunction]) -> dict[str, Any]:
-        monitor = Monitor(idx=idx, grid=self.grid, H=self.H, opt=self.opt)
+        monitor = Monitor(idx=idx, grid=self.grid, H=self.H, opt=self.opt, wfn_0=self.wfn)
 
-        wfn_0 = self.wfn.copy() if monitor.get_write_map().get("autocorrelation") else None
+        decay = np.zeros(self.H.pot.nstate)
 
         for j in range(self.opt.iterations + 1) if self.opt.iterations else count():
-            if j > 0: self.prop.step(self.wfn, self.grid, self.H, (j - 0.5) * self.prop.dt)
+            if j > 0: decay += self.prop.step(self.wfn, self.grid, self.H, (j - 0.5) * self.prop.dt)
 
             if self.opt.imaginary and wfn_opt:
                 self.wfn.project_out(wfn_opt, self.grid)
 
-            monitor.record(j, self.wfn, wfn_0)
+            monitor.record(j, self.wfn, decay)
 
             if self.opt.iterations is None and self.wfn.norm(self.grid) < self.opt.stop_norm:
-                monitor.record(j, self.wfn, wfn_0, True); break
+                monitor.record(j, self.wfn, decay, True); break
 
         monitor.export(self.prop.dt)
 

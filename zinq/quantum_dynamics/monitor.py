@@ -13,8 +13,10 @@ from .wavefunction import Wavefunction
 
 
 class Monitor:
-    def __init__(self, *, idx: int, grid: Grid, H: Hamiltonian, opt: Options):
+    def __init__(self, *, idx: int, grid: Grid, H: Hamiltonian, opt: Options, wfn_0: Wavefunction):
         self.idx, self.grid, self.H, self.opt = idx, grid, H, opt
+
+        self.wfn_0 = wfn_0.copy() if self.get_write_map().get("autocorrelation") else None
 
         def get_history() -> dict[str, list]:
             return {k: [] for k, v in self.get_write_map(False).items() if v}
@@ -53,7 +55,7 @@ class Monitor:
 
         return {k: k in active for k in (set(Result.__annotations__) | active) - {"spectrum"}}
     
-    def record(self, i: int, wfn: Wavefunction, wfn_0: Wavefunction | None, force_log: bool = False) -> None:
+    def record(self, i: int, wfn: Wavefunction, decay: np.ndarray, force_log: bool = False) -> None:
         wfn_adia, to_calc = wfn.to_adia(self.H) if self.opt.adiabatic else wfn, self._to_calc(i, force_log)
 
         ops = {
@@ -64,14 +66,14 @@ class Monitor:
             "potential_energy": lambda: wfn.pe(self.grid, self.H),
             "kinetic_energy": lambda: wfn.ke(self.grid, self.H),
             "total_energy": lambda: wfn.pe(self.grid, self.H) + wfn.ke(self.grid, self.H),
-            "autocorrelation": lambda: wfn_0.overlap(wfn, self.grid) if wfn_0 else None,
+            "autocorrelation": lambda: self.wfn_0.overlap(wfn, self.grid) if self.wfn_0 else None,
             "wavefunction": lambda: wfn_adia.data.copy(),
         }
 
         obs = {k: (ops[k]() if k in to_calc else None) for k in ops}
 
         if self.H.absorber and obs["population"] is not None:
-            obs["population"] += wfn.absorbed
+            obs["population"] += decay
 
         self._update_history(obs)
 

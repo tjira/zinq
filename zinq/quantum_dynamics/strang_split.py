@@ -18,14 +18,18 @@ class StrangSplit:
     def imag(self):
         return self.unit.imag == 0
 
-    def step(self, wfn: Wavefunction, grid: Grid, H: Hamiltonian, time: float):
+    def step(self, wfn: Wavefunction, grid: Grid, H: Hamiltonian, time: float) -> np.ndarray:
         if H.pot.is_td: H.update_V(grid, time); self._update_R(H)
 
-        wfn.absorbed += self._apply_R(wfn, grid, H)
+        decay = 0
+
+        decay += self._apply_R(wfn, grid, H)
         self._apply_K(wfn)
-        wfn.absorbed += self._apply_R(wfn, grid, H)
+        decay += self._apply_R(wfn, grid, H)
 
         if self.imag: wfn.normalize(grid)
+
+        return decay
 
     def _apply_K(self, wfn):
         wfn.data = np.fft.ifftn(np.fft.fftn(wfn.data, axes=range(wfn.ndim)) * self.K, axes=range(wfn.ndim))
