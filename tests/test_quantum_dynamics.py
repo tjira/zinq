@@ -27,7 +27,7 @@ def test_quantum_dynamics_harmonic_1d_itp():
             "mass": 1
         },
         "imaginary": {
-            "nstate": 2
+            "nstate": 3
         },
         "iterations": 1000,
         "time_step": 0.01,
@@ -37,19 +37,19 @@ def test_quantum_dynamics_harmonic_1d_itp():
     result = run(Options.model_validate(options))
 
     expected_total_energies     = [0.50000000187134, 1.49999999864282, 2.49999999986185]
-    expected_kinetic_energies   = [0.25000312532402, 0.75000937489134, 1.25001562583498]
+    expected_kinetic_energies   = [0.25000312532402, 0.75000937489134, 1.25001562583497]
     expected_potential_energies = [0.24999687654732, 0.74999062375147, 1.24998437402687]
     expected_norm_values        = [1.00000000000000, 1.00000000000000, 1.00000000000000]
 
     expected_position_values = [
         [ 0.00006053550965],
-        [-0.00002269860869],
-        [-0.00004994213663]
+        [-0.00002269862596],
+        [-0.00004994211384]
     ]
     expected_momentum_values = [
-        [-0.00000000000001],
+        [-0.00000000000000],
         [ 0.00000000000000],
-        [-0.00000000000001]
+        [-0.00000000000000]
     ]
 
     expected_populations = [
@@ -68,7 +68,7 @@ def test_quantum_dynamics_harmonic_1d_itp():
             "norm": result.norm[i],
             "population": result.population[i].tolist(),
         }
-        
+
         expected = {
             "total_energy": expected_total_energies[i],
             "kinetic_energy": expected_kinetic_energies[i],
@@ -78,7 +78,7 @@ def test_quantum_dynamics_harmonic_1d_itp():
             "norm": expected_norm_values[i],
             "population": expected_populations[i],
         }
-        
+
         conditions = [actual[key] == pytest.approx(expected[key], abs=1e-08) for key in actual]
 
         for j, key in enumerate(actual):
@@ -114,14 +114,14 @@ def test_quantum_dynamics_harmonic_2d_itp():
 
     result = run(Options.model_validate(options))
 
-    expected_total_energies     = [1.00000000374269, 1.99999999776582]
+    expected_total_energies     = [1.00000000374269, 1.99999999776581]
     expected_kinetic_energies   = [0.50000625064804, 1.00001249941377]
     expected_potential_energies = [0.49999375309464, 0.99998749835204]
     expected_norm_values        = [1.00000000000000, 1.00000000000000]
 
     expected_position_values = [
         [ 0.00006053550965,  0.00006053550965],
-        [-0.00001134791748, -0.00001134791748]
+        [-0.00001134793993, -0.00001134793993]
     ]
     expected_momentum_values = [
         [-0.00000000000000, -0.00000000000000],
@@ -143,7 +143,7 @@ def test_quantum_dynamics_harmonic_2d_itp():
             "norm": result.norm[i],
             "population": result.population[i].tolist(),
         }
-        
+
         expected = {
             "total_energy": expected_total_energies[i],
             "kinetic_energy": expected_kinetic_energies[i],
@@ -153,7 +153,7 @@ def test_quantum_dynamics_harmonic_2d_itp():
             "norm": expected_norm_values[i],
             "population": expected_populations[i],
         }
-        
+
         conditions = [actual[key] == pytest.approx(expected[key], abs=1e-08) for key in actual]
 
         for j, key in enumerate(actual):
@@ -186,21 +186,21 @@ def test_quantum_dynamics_tully_1_real():
 
     result = run(Options.model_validate(options))
 
-    expected_total_energies     = [0.06649999845026]
-    expected_kinetic_energies   = [0.06470768763626]
-    expected_potential_energies = [0.00179231081400]
-    expected_norm_values        = [1.00000000000053]
+    expected_total_energies     = [0.06649999845028]
+    expected_kinetic_energies   = [0.06470763694838]
+    expected_potential_energies = [0.00179236150191]
+    expected_norm_values        = [1.00000000000082]
 
     expected_position_values = [
-        [13.41125215693357]
+        [13.41125026499473]
     ]
 
     expected_momentum_values = [
-        [16.01020146127416]
+        [16.01019844761809]
     ]
 
     expected_populations = [
-        [0.58961548497405, 0.41038451502648]
+        [0.58961808510495, 0.41038191489588]
     ]
 
     for i in range(len(result.total_energy)):
@@ -213,7 +213,7 @@ def test_quantum_dynamics_tully_1_real():
             "norm": result.norm[i],
             "population": result.population[i].tolist(),
         }
-        
+
         expected = {
             "total_energy": expected_total_energies[i],
             "kinetic_energy": expected_kinetic_energies[i],
@@ -223,7 +223,7 @@ def test_quantum_dynamics_tully_1_real():
             "norm": expected_norm_values[i],
             "population": expected_populations[i],
         }
-        
+
         conditions = [actual[key] == pytest.approx(expected[key], abs=1e-08) for key in actual]
 
         for j, key in enumerate(actual):

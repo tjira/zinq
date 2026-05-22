@@ -27,17 +27,17 @@ class Grid:
 
     @cached_property
     def limits(self) -> np.ndarray:
-        return np.array([[p.min(), p.max()] for p in self.pos])
+        return np.array([[p.min(), p.max() + np.ptp(p) / (self.npoint - 1)] for p in self.pos])
 
     @cached_property
     def measure(self) -> float:
-        return np.prod(np.ptp(self.limits, axis=1) / (self.npoint - 1))
+        return np.prod(np.ptp(self.limits, axis=1) / self.npoint)
 
     def _mom_grid(self, limits: np.ndarray, npoint: int) -> list[np.ndarray]:
         grids = []
 
         for i in range(limits.shape[0]):
-            grids.append(2 * np.pi * np.fft.fftfreq(npoint, d=np.ptp(limits[i]) / (npoint - 1)))
+            grids.append(2 * np.pi * np.fft.fftfreq(npoint, d=np.ptp(limits[i]) / npoint))
 
         return list(np.meshgrid(*grids, indexing="ij"))
 
@@ -45,6 +45,6 @@ class Grid:
         grids = []
 
         for i in range(limits.shape[0]):
-            grids.append(np.linspace(limits[i, 0], limits[i, 1], npoint, endpoint=True))
+            grids.append(np.linspace(limits[i, 0], limits[i, 1], npoint, endpoint=False))
 
         return list(np.meshgrid(*grids, indexing="ij"))
