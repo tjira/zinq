@@ -35,40 +35,44 @@ class Wavefunction:
     def nstate(self) -> int:
         return self.data.shape[-1]
 
+    @property
+    def density(self) -> np.ndarray:
+        return np.abs(self.data)**2
+
+    @property
+    def rho(self) -> np.ndarray:
+        return np.sum(self.density, axis=-1)
+
     def copy(self) -> "Wavefunction":
         return Wavefunction.from_data(self.data.copy())
 
     def ke(self, grid: Grid, H: Hamiltonian) -> float:
-        data_k = np.fft.fftn(self.data, axes=range(grid.ndim), norm="ortho")
-        ke_dens = np.real(np.einsum("...i,...,...i->...", np.conj(data_k), H.T, data_k))
-
-        return np.sum(ke_dens) * grid.measure
+        return np.sum(self.to_kspace().rho * H.T) * grid.measure
 
     def mom(self, grid: Grid) -> np.ndarray:
-        data_k = np.fft.fftn(self.data, axes=range(grid.ndim), norm="ortho")
-        rho_k = np.sum(np.abs(data_k)**2, axis=-1)
+        rho_k = self.to_kspace().rho
 
         return np.array([np.sum(rho_k * k) for k in grid.mom]) * grid.measure
 
     def norm(self, grid: Grid) -> float:
-        return np.real(np.vdot(self.data, self.data)) * grid.measure
+        return np.real(np.vdot(self.data, self.data)).item() * grid.measure
 
     def normalize(self, grid: Grid):
-        self.data /= np.sqrt(self.norm(grid))
+        self.data /= np.sqrt(norm) if (norm := self.norm(grid)) > 1e-14 else 1
 
     def overlap(self, other: "Wavefunction", grid: Grid) -> complex:
-        return np.vdot(self.data, other.data) * grid.measure
+        return np.vdot(self.data, other.data).item() * grid.measure
 
     def pe(self, grid: Grid, H: Hamiltonian) -> float:
-        pe_dens = np.real(np.einsum("...i,...ij,...j->...", np.conj(self.data), H.V, self.data))
+        pe_dens = np.einsum("...i,...ij,...j->...", np.conj(self.data), H.V, self.data)
 
-        return np.sum(pe_dens) * grid.measure
+        return np.real(np.sum(pe_dens)) * grid.measure
 
     def pop(self, grid: Grid) -> np.ndarray:
-        return np.sum(np.abs(self.data)**2, axis=tuple(range(grid.ndim))) * grid.measure
+        return np.sum(self.density, axis=tuple(range(grid.ndim))) * grid.measure
 
     def pos(self, grid: Grid) -> np.ndarray:
-        rho = np.sum(np.abs(self.data)**2, axis=-1)
+        rho = self.rho
 
         return np.array([np.sum(rho * r) for r in grid.pos]) * grid.measure
 
@@ -83,3 +87,6 @@ class Wavefunction:
 
     def to_dia(self, H: Hamiltonian) -> "Wavefunction":
         return Wavefunction.from_data(np.einsum("...ij,...j->...i", H.U, self.data))
+
+    def to_kspace(self) -> "Wavefunction":
+        return Wavefunction.from_data(np.fft.fftn(self.data, axes=range(self.ndim), norm="ortho"))

@@ -15,25 +15,23 @@ from .wavefunction import Wavefunction
 
 class Runner:
     def __init__(self, opt: Options):
-        self.__dict__.update({k: v for k, v in locals().items() if k != "self"})
-
         def init_grid() -> Grid:
             return Grid.from_options(opt.grid)
 
         def init_ham(grid: Grid) -> Hamiltonian:
             return Hamiltonian(grid, opt.hamiltonian.potential, opt.hamiltonian.mass)
 
-        def init_ic(grid: Grid, H: Hamiltonian) -> InitialConditions:
+        def init_ic() -> InitialConditions:
             return InitialConditions.from_options(opt.initial_conditions)
 
         def init_wfn(grid: Grid, H: Hamiltonian) -> Wavefunction:
-            return Wavefunction(init_ic(grid, H), grid, H)
+            return Wavefunction(init_ic(), grid, H)
 
         def init_prop(H: Hamiltonian) -> StrangSplit:
             return StrangSplit(H, opt.time_step, opt.imaginary is not None)
 
-        self.grid, self.H, self.wfn, self.prop = (
-            (grid := init_grid()), (H := init_ham(grid)), init_wfn(grid, H), init_prop(H)
+        self.opt, self.grid, self.H, self.wfn, self.prop = (
+            opt, (grid := init_grid()), (H := init_ham(grid)), init_wfn(grid, H), init_prop(H)
         )
 
     def run(self, idx: int, wfn_opt: list[Wavefunction]) -> dict[str, Any]:
