@@ -4,7 +4,7 @@
             "type" : "quantum_dynamics",
             "grid" : {
                 "limits" : [[-24, 24]],
-                "npoint" : 512
+                "npoint" : 2048
             },
             "initial_conditions" : {
                 "position" : [-10],
