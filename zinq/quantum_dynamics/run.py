@@ -70,4 +70,11 @@ def run(opt: Options) -> Result:
 
         results.append(result)
 
-    return Result(**{k: np.array([res[k] for res in results]) for k in Result.__annotations__})
+    res = Result(**{k: np.array([res[k] for res in results]) for k in Result.__annotations__})
+
+    print()
+
+    with np.printoptions(formatter={"float": "{:10.6f}".format}, suppress=True):
+        for i, pop in enumerate(res.population): print(f"SIMULATION {i:02} POPULATIONS: {pop}")
+
+    return res

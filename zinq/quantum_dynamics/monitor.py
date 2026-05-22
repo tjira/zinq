@@ -1,4 +1,5 @@
 import datetime
+import os
 import time
 from types import SimpleNamespace
 from typing import Any
@@ -28,8 +29,13 @@ class Monitor:
     def export(self, dt: float) -> None:
         if self.opt.write is None: return
 
+        nsim = self.opt.imaginary.nstate if self.opt.imaginary else 1
+
         for field, path in self.opt.write.model_dump().items():
             if not path: continue
+
+            if nsim > 1:
+                path = "{0}_STATE-{2:02}{1}".format(*os.path.splitext(path), self.idx)
 
             data = self._format_data(field, dt); header = f"{data.shape[0]} {data.shape[1]}"
 
