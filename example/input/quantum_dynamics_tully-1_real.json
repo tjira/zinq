@@ -24,7 +24,7 @@
             "adiabatic" : true,
             "log_interval" : 500,
             "write" : {
-                "population" : "POPULATION.mat"
+                "population" : "POP.mat"
             }
         }
     ]
