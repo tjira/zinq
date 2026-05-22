@@ -29,9 +29,11 @@ class Potential(ABC):
 
 
 from .harmonic import Harmonic
+from .time_linear import TimeLinear
 from .tully import TullyFirst
 
 AnyPotential = Annotated[Union[
     Harmonic,
+    TimeLinear,
     TullyFirst,
 ], Field(discriminator="name")]
