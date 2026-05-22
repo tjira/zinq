@@ -3,6 +3,7 @@ from typing import Any
 
 import numpy as np
 
+from .absorber import Absorber
 from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .initial_conditions import InitialConditions
@@ -15,11 +16,14 @@ from .wavefunction import Wavefunction
 
 class Runner:
     def __init__(self, opt: Options):
+        def init_absorber() -> Absorber | None:
+            return Absorber.from_options(opt.hamiltonian.absorber) if opt.hamiltonian.absorber else None
+
         def init_grid() -> Grid:
             return Grid.from_options(opt.grid)
 
         def init_ham(grid: Grid) -> Hamiltonian:
-            return Hamiltonian(grid, opt.hamiltonian.potential, opt.hamiltonian.mass)
+            return Hamiltonian(grid, opt.hamiltonian.potential, opt.hamiltonian.mass, init_absorber())
 
         def init_ic() -> InitialConditions:
             return InitialConditions.from_options(opt.initial_conditions)
@@ -46,6 +50,9 @@ class Runner:
                 self.wfn.project_out(wfn_opt, self.grid)
 
             monitor.record(j, self.wfn, wfn_0)
+
+            if self.opt.iterations is None and self.wfn.norm(self.grid) < self.opt.stop_norm:
+                monitor.record(j, self.wfn, wfn_0, True); break
 
         monitor.export(self.prop.dt)
 

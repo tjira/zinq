@@ -11,7 +11,7 @@ class InitialConditions:
     gamma: np.ndarray
     mom: np.ndarray
     pos: np.ndarray
-    state: int = 0
+    state: int
 
     @classmethod
     def from_options(cls, opt: InitialConditionsConfig):

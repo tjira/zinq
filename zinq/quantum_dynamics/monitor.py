@@ -53,8 +53,8 @@ class Monitor:
 
         return {k: k in active for k in (set(Result.__annotations__) | active) - {"spectrum"}}
     
-    def record(self, i: int, wfn: Wavefunction, wfn_0: Wavefunction | None) -> None:
-        wfn_adia, to_calc = wfn.to_adia(self.H) if self.opt.adiabatic else wfn, self._to_calc(i)
+    def record(self, i: int, wfn: Wavefunction, wfn_0: Wavefunction | None, force_log: bool = False) -> None:
+        wfn_adia, to_calc = wfn.to_adia(self.H) if self.opt.adiabatic else wfn, self._to_calc(i, force_log)
 
         ops = {
             "norm": lambda: wfn.norm(self.grid),
@@ -72,7 +72,7 @@ class Monitor:
 
         self._update_history(obs)
 
-        if self._is_log(i):
+        if self._is_log(i, force_log):
             self._print_step(SimpleNamespace(**obs), i)
 
     def _format_data(self, name: str, dt: float) -> np.ndarray:
@@ -125,10 +125,10 @@ class Monitor:
 
         return np.column_stack((get_omega(acf), get_spectrum(acf)))
 
-    def _is_log(self, i: int) -> bool:
+    def _is_log(self, i: int, force_log: bool = False) -> bool:
         iters, interval = self.opt.iterations, self.opt.log_interval
 
-        return i == 0 or (iters and i == iters) or (i % interval == 0)
+        return i == 0 or (iters and i == iters) or (i % interval == 0) or force_log
 
     def _print_header(self) -> None:
         mode, g = "IMAGINARY" if self.opt.imaginary else "REAL", self.opt.initial_conditions.gamma
@@ -168,8 +168,8 @@ class Monitor:
 
             self.start_time = time.time()
 
-    def _to_calc(self, i: int) -> set[str]:
-        return {k for k, v in self.get_write_map(self._is_log(i)).items() if v}
+    def _to_calc(self, i: int, force_log: bool = False) -> set[str]:
+        return {k for k, v in self.get_write_map(self._is_log(i, force_log)).items() if v}
 
     def _update_history(self, obs: dict[str, Any]) -> None:
         self.latest.update({k: v for k, v in obs.items() if v is not None})

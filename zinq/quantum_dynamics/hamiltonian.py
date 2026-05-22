@@ -1,12 +1,13 @@
 import numpy as np
 
 from ..potential import Potential
+from .absorber import Absorber
 from .grid import Grid
 
 
 class Hamiltonian:
-    def __init__(self, grid: Grid, pot: Potential, m: float):
-        self.pot, self.m = pot, m
+    def __init__(self, grid: Grid, pot: Potential, m: float, absorber: Absorber | None = None):
+        self.pot, self.m, self.absorber = pot, m, absorber
         
         self.update_V(grid, 0)
 
@@ -14,3 +15,6 @@ class Hamiltonian:
 
     def update_V(self, grid: Grid, time: float):
         self.W, self.U, self.V = *np.linalg.eigh(V := self.pot.eval_d(grid.pos, time)), V
+
+        if self.absorber:
+            self.W = self.W - 1j * self.absorber.eval(grid.pos)[..., np.newaxis]

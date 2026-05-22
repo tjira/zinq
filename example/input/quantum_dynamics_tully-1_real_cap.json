@@ -4,7 +4,7 @@
             "type" : "quantum_dynamics",
             "grid" : {
                 "limits" : [[-24, 24]],
-                "npoint" : 512
+                "npoint" : 2048
             },
             "initial_conditions" : {
                 "position" : [-10],
@@ -17,14 +17,17 @@
                 "potential" : {
                     "name" : "tully_1"
                 },
+                "absorber" : {
+                    "limits" : [[-24, 12]],
+                    "exponent" : 0.001
+                },
                 "mass" : 2000
             },
-            "iterations" : 3000,
             "time_step" : 1,
             "adiabatic" : true,
             "log_interval" : 500,
             "write" : {
-                "population" : "POP.mat"
+                "wavefunction" : "WFN.mat"
             }
         }
     ]

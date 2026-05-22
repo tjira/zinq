@@ -5,6 +5,13 @@ from pydantic import BaseModel, ConfigDict
 from ..potential.potential import AnyPotential
 
 
+class AbsorberConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    limits: list[tuple[float, float]]
+    exponent: float = 0.001
+
+
 class GridConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -17,6 +24,7 @@ class HamiltonianConfig(BaseModel):
 
     potential: AnyPotential
     mass: float
+    absorber: AbsorberConfig | None = None
 
 
 class ImaginaryConfig(BaseModel):
@@ -52,14 +60,16 @@ class WriteConfig(BaseModel):
 
 class Options(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
     type: Literal["quantum_dynamics"]
 
     adiabatic: bool = False
     grid: GridConfig
     hamiltonian: HamiltonianConfig
-    initial_conditions: InitialConditionsConfig
     imaginary: ImaginaryConfig | None = None
+    initial_conditions: InitialConditionsConfig
     iterations: int | None = None
     log_interval: int = 1
+    stop_norm: float = 1e-8
     time_step: float
     write: WriteConfig | None = None
