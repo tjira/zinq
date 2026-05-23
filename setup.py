@@ -1,22 +1,59 @@
-import os
+"""Setup script for compiling Zig extensions and building the zinq package."""
+
 import subprocess
 import sys
+from pathlib import Path
 
 from setuptools import Extension, setup
 from setuptools.command.build_ext import build_ext
 
 
 class ZigExtension(Extension):
-    def __init__(self, name: str, source: str):
+    """
+    Representation of a Zig C-compatible extension module.
+
+    Parameters
+    ----------
+    name : str
+        The full module name.
+    source : str
+        The path to the Zig source file.
+
+    """
+
+    def __init__(self, name: str, source: str) -> None:
+        """
+        Initialize the ZigExtension.
+
+        Parameters
+        ----------
+        name : str
+            Module name.
+        source : str
+            Zig source file path.
+
+        """
         super().__init__(name, sources=[source])
 
 
 class ZigBuild(build_ext):
-    def build_extension(self, ext: Extension) -> None:
-        if not isinstance(ext, ZigExtension):
-            return super().build_extension(ext)
+    """Custom build extension command to compile Zig source code into shared libraries."""
 
-        dest_path = os.path.abspath(self.get_ext_fullpath(ext.name))
+    def build_extension(self, ext: Extension) -> None:
+        """
+        Build a ZigExtension compile target.
+
+        Parameters
+        ----------
+        ext : Extension
+            The extension target to build.
+
+        """
+        if not isinstance(ext, ZigExtension):
+            super().build_extension(ext)
+            return
+
+        dest_path = Path(self.get_ext_fullpath(ext.name)).resolve()
         flags = [
             "-dynamic",
             f"-femit-bin={dest_path}",
@@ -26,14 +63,14 @@ class ZigBuild(build_ext):
             "ReleaseFast",
         ]
 
-        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        subprocess.check_call(
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.check_call(  # noqa: S603
             [sys.executable, "-m", "ziglang", "build-lib", *flags, ext.sources[0]]
         )
 
 
 if __name__ == "__main__":
-    os.makedirs("zinq/lib", exist_ok=True)
+    Path("zinq/lib").mkdir(parents=True, exist_ok=True)
 
     modules = [
         ZigExtension("zinq.lib.native", "zinq/zig/native.zig"),

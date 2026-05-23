@@ -1,2 +1,4 @@
-from .potential import Potential
-from .tully import TullyFirst
+"""Potential energy operators package."""
+
+from .potential import Potential as Potential
+from .tully import TullyFirst as TullyFirst

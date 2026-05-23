@@ -1,3 +1,5 @@
+"""Module executing quantum dynamics propagation simulations."""
+
 from itertools import count
 from typing import Any
 
@@ -12,7 +14,34 @@ from .wavefunction import Wavefunction
 
 
 class Runner:
-    def __init__(self, opt: Options):
+    """
+    Simulation runner for managing quantum dynamics propagation.
+
+    Attributes
+    ----------
+    opt : Options
+        The configuration options.
+    system : System
+        The physical system undergoing propagation.
+    prop : StrangSplit
+        The Strang split-operator propagator.
+
+    """
+
+    opt: Options
+    system: System
+    prop: StrangSplit
+
+    def __init__(self, opt: Options) -> None:
+        """
+        Initialize the runner.
+
+        Parameters
+        ----------
+        opt : Options
+            The simulation options.
+
+        """
         self.opt, self.system = opt, System.from_options(opt)
 
         self.prop = StrangSplit(
@@ -23,6 +52,22 @@ class Runner:
         )
 
     def run(self, idx: int, wfn_opt: list[Wavefunction]) -> dict[str, Any]:
+        """
+        Run the propagation simulation.
+
+        Parameters
+        ----------
+        idx : int
+            The simulation index (e.g. state index in imaginary time).
+        wfn_opt : list[Wavefunction]
+            Optimized lower-energy wavefunctions to project out.
+
+        Returns
+        -------
+        dict[str, Any]
+            Dictionary containing recorded expectation values over time.
+
+        """
         monitor = Monitor(idx=idx, system=self.system, opt=self.opt)
 
         decay = np.zeros(self.system.ham.pot.nstate)
@@ -45,6 +90,20 @@ class Runner:
 
 
 def run(opt: Options) -> Result:
+    """
+    Run one or multiple quantum dynamics simulations as configured by options.
+
+    Parameters
+    ----------
+    opt : Options
+        The configuration options.
+
+    Returns
+    -------
+    Result
+        The consolidated results of the simulation.
+
+    """
     results, opt_wfn, nsim = [], [], opt.imaginary.nstate if opt.imaginary else 1
 
     for i in range(nsim):
@@ -55,11 +114,4 @@ def run(opt: Options) -> Result:
 
         results.append(result)
 
-    res = Result(**{k: np.array([res[k] for res in results]) for k in Result.__annotations__})
-
-    print()
-
-    with np.printoptions(formatter={"float": "{:10.6f}".format}, suppress=True):
-        for i, pop in enumerate(res.population): print(f"SIMULATION {i:02} POPULATIONS: {pop}")
-
-    return res
+    return Result(**{k: np.array([res[k] for res in results]) for k in Result.__annotations__})
