@@ -20,7 +20,7 @@ class Monitor:
         self.wfn_0 = system.wfn.copy() if "autocorrelation" in self.get_write_map() else None
 
         def get_history() -> dict[str, list]:
-            return {k: [] for k, v in self.get_write_map(False) if v}
+            return {k: [] for k in self.get_write_map(False)}
 
         self.history, self.latest, self.start_time = get_history(), {}, time.time()
 
