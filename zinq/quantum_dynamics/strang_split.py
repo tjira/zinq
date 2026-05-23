@@ -21,11 +21,7 @@ class StrangSplit:
     def step(self, system: System, time: float) -> np.ndarray:
         if system.ham.pot.is_td: system.update_V(time); self._update_R(system.ham)
 
-        decay = 0
-
-        decay += self._apply_R(system)
-        self._apply_K(system.wfn)
-        decay += self._apply_R(system)
+        decay = self._apply_R(system) + (self._apply_K(system.wfn) or 0) + self._apply_R(system)
 
         if self.imag: system.normalize()
 
