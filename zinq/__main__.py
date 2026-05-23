@@ -16,7 +16,6 @@ import matplotlib as mpl
 import numpy as np
 import pydantic
 import scipy
-import sympy
 from pydantic import BaseModel, ConfigDict, Field
 
 from zinq import __version__
@@ -77,7 +76,7 @@ def main() -> None:
     if args.profile:
         stats_file, dot_file, svg_file = "profile.stats", "profile.dot", "profile.svg"
 
-        profiler.dump_stats(stats_file)
+        profiler.dump_stats(stats_file) if profiler else None
 
         gprof2dot_path = shutil.which("gprof2dot")
         if not gprof2dot_path:
@@ -116,7 +115,6 @@ def _get_versions() -> dict[str, str]:
         "SCIPY": scipy.__version__,
         "PYDANTIC": pydantic.__version__,
         "MATPLOTLIB": mpl.__version__,
-        "SYMPY": sympy.__version__,
     }
 
 

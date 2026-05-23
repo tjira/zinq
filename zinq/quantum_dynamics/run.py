@@ -104,7 +104,8 @@ def run(opt: Options) -> Result:
         The consolidated results of the simulation.
 
     """
-    results, opt_wfn, nsim = [], [], opt.imaginary.nstate if opt.imaginary else 1
+    results, nsim = [], opt.imaginary.nstate if opt.imaginary else 1
+    opt_wfn: list[Wavefunction] = []
 
     for i in range(nsim):
         result = (runner := Runner(opt)).run(i, opt_wfn)

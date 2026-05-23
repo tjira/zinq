@@ -89,7 +89,9 @@ class StrangSplit:
             system.update_v(time)
             self._update_r(system.ham)
 
-        decay = self._apply_r(system) + (self._apply_k(system.wfn) or 0) + self._apply_r(system)
+        decay = self._apply_r(system)
+        self._apply_k(system.wfn)
+        decay += self._apply_r(system)
 
         if self.imag:
             system.normalize()

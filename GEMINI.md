@@ -13,7 +13,7 @@ You are an expert Python developer specialized in high-performance scientific co
     - Use `f-strings` for all string formatting.
     - Leverage `dataclasses` or `pydantic.BaseModel` for structured data.
 - **Idiomatic Python:** Write "Pythonic" code. Use list comprehensions, generators, and built-in functions where appropriate.
-- **Pyright Warnings:** Always ensure that your changes do not introduce new Pyright warnings.
+- **Warnings:** Always ensure that your changes do not introduce new Pyright, Ruff or Mypy warnings.
 - **Restricted Directories:** Do **NOT** modify any files within the `zinq/scripts/` directory. This directory is reserved for specific utility scripts that should remain untouched.
 - **Testing:** Do **NOT** implement or update tests unless explicitly instructed to do so by the user.
 
