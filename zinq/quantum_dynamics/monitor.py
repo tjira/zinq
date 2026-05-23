@@ -1,3 +1,4 @@
+from functools import lru_cache
 import datetime
 import os
 import time
@@ -16,10 +17,10 @@ class Monitor:
     def __init__(self, *, idx: int, system: System, opt: Options):
         self.idx, self.system, self.opt, self.adia = idx, system, opt, opt.adiabatic
 
-        self.wfn_0 = system.wfn.copy() if self.get_write_map().get("autocorrelation") else None
+        self.wfn_0 = system.wfn.copy() if "autocorrelation" in self.get_write_map() else None
 
         def get_history() -> dict[str, list]:
-            return {k: [] for k, v in self.get_write_map(False).items() if v}
+            return {k: [] for k, v in self.get_write_map(False) if v}
 
         self.history, self.latest, self.start_time = get_history(), {}, time.time()
 
@@ -43,7 +44,8 @@ class Monitor:
     def get_result_dict(self) -> dict[str, Any]:
         return {k: v for k, v in self.latest.items() if v is not None}
 
-    def get_write_map(self, log: bool = False) -> dict[str, bool]:
+    @lru_cache(maxsize=2)
+    def get_write_map(self, log: bool = False) -> set[str]:
         active = set(self.opt.write.model_dump(exclude_none=True)) if self.opt.write else set()
 
         if "spectrum" in active: active.add("autocorrelation")
@@ -58,9 +60,11 @@ class Monitor:
             "norm"
         }
 
-        return {k: k in active for k in (set(Result.__annotations__) | active) - {"spectrum"}}
+        return (active | (set(Result.__annotations__) & active)) - {"spectrum"}
 
     def record(self, i: int, decay: np.ndarray, force_log: bool = False) -> None:
+        if not (to_calc := self._to_calc(i, force_log)): return
+
         wfn_adia = self.system.wfn.to_adia(self.system.ham) if self.adia else self.system.wfn
 
         def get_acorr(wfn_0: Wavefunction | None) -> complex | None:
@@ -80,7 +84,7 @@ class Monitor:
             "wavefunction": lambda: wfn_adia.data.copy(),
         }
 
-        obs = {k: (ops[k]() if k in self._to_calc(i, force_log) else None) for k in ops}
+        obs = {k: (ops[k]() if k in to_calc else None) for k in ops}
 
         if self.system.ham.absorber and obs["population"] is not None:
             obs["population"] += decay
@@ -184,7 +188,7 @@ class Monitor:
             self.start_time = time.time()
 
     def _to_calc(self, i: int, force_log: bool = False) -> set[str]:
-        return {k for k, v in self.get_write_map(self._is_log(i, force_log)).items() if v}
+        return self.get_write_map(self._is_log(i, force_log))
 
     def _update_history(self, obs: dict[str, Any]) -> None:
         self.latest.update({k: v for k, v in obs.items() if v is not None})
