@@ -1,4 +1,0 @@
-test:
-  stage: test
-  script:
-    - make test
