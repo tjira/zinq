@@ -4,8 +4,6 @@ import numpy as np
 
 from .grid import Grid
 from .hamiltonian import Hamiltonian
-from .absorber import Absorber
-from .initial_conditions import InitialConditions
 from .wavefunction import Wavefunction
 from .options import Options
 
@@ -18,25 +16,11 @@ class System:
 
     @classmethod
     def from_options(cls, opt: Options):
-        grid, absorber = Grid.from_options(opt.grid), None
-
-        if opt.hamiltonian.absorber:
-            absorber = Absorber.from_options(opt.hamiltonian.absorber)
-
-        ham = Hamiltonian(
-            grid=grid,
-            pot=opt.hamiltonian.potential,
-            m=opt.hamiltonian.mass,
-            absorber=absorber,
+        return cls(
+            grid=(grid := Grid.from_options(opt.grid)),
+            ham=(ham := Hamiltonian.from_options(opt.hamiltonian, grid)),
+            wfn=Wavefunction.from_options(opt.initial_conditions, grid, ham),
         )
-
-        wfn = Wavefunction(
-            ic=InitialConditions.from_options(opt.initial_conditions),
-            grid=grid,
-            ham=ham,
-        )
-
-        return cls(ham=ham, grid=grid, wfn=wfn)
 
     @property
     def ke(self) -> float:

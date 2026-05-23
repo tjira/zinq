@@ -3,6 +3,7 @@ import numpy as np
 from ..potential import Potential
 from .absorber import Absorber
 from .grid import Grid
+from .options import HamiltonianConfig
 
 
 class Hamiltonian:
@@ -12,6 +13,12 @@ class Hamiltonian:
         self.update_V(grid, 0)
 
         self.T = sum((k**2 for k in grid.mom), np.zeros_like(grid.mom[0])) / (2 * m)
+
+    @classmethod
+    def from_options(cls, opt: HamiltonianConfig, grid: Grid):
+        absorber = Absorber.from_options(opt.absorber) if opt.absorber else None
+
+        return cls(grid=grid, pot=opt.potential, m=opt.mass, absorber=absorber)
 
     def update_V(self, grid: Grid, time: float):
         self.W, self.U, self.V = *np.linalg.eigh(V := self.pot.eval_d(grid.pos, time)), V

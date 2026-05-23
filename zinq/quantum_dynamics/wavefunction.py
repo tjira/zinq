@@ -5,6 +5,7 @@ import numpy as np
 from .grid import Grid
 from .hamiltonian import Hamiltonian
 from .initial_conditions import InitialConditions
+from .options import InitialConditionsConfig
 
 
 class Wavefunction:
@@ -25,9 +26,11 @@ class Wavefunction:
 
     @classmethod
     def from_data(cls, data: np.ndarray):
-        (wfn := cls.__new__(cls)).__dict__.update({"data": data})
+        return (wfn := cls.__new__(cls)).__dict__.update({"data": data}) or wfn
 
-        return wfn
+    @classmethod
+    def from_options(cls, opt: InitialConditionsConfig, grid: Grid, ham: Hamiltonian):
+        return cls(ic=InitialConditions.from_options(opt), grid=grid, ham=ham)
 
     @cached_property
     def ndim(self) -> int:
