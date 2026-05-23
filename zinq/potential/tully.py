@@ -61,7 +61,7 @@ class TullyFirst(Potential):
         """
         return 2
 
-    def eval_d(self, r: list[np.ndarray], time: float = 0.0) -> np.ndarray:  # noqa: ARG002
+    def eval_d(self, r: list[np.ndarray], time: float = 0.0) -> np.ndarray:
         """
         Evaluate the diabatic potential energy matrix.
 
@@ -78,6 +78,7 @@ class TullyFirst(Potential):
             The diabatic potential energy matrix.
 
         """
+        _ = time
         v00 = np.sign(r[0]) * self.A * (1 - np.exp(-self.B * np.abs(r[0])))
         v01 = self.C * np.exp(-self.D * r[0] ** 2)
         v11 = -v00

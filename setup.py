@@ -64,7 +64,7 @@ class ZigBuild(build_ext):
         ]
 
         dest_path.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.check_call(  # noqa: S603
+        subprocess.check_call(
             [sys.executable, "-m", "ziglang", "build-lib", *flags, ext.sources[0]]
         )
 

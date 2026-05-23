@@ -52,7 +52,7 @@ class Harmonic(Potential):
         """
         return 1
 
-    def eval_d(self, r: list[np.ndarray], time: float = 0.0) -> np.ndarray:  # noqa: ARG002
+    def eval_d(self, r: list[np.ndarray], time: float = 0.0) -> np.ndarray:
         """
         Evaluate the harmonic potential in the diabatic basis.
 
@@ -69,6 +69,7 @@ class Harmonic(Potential):
             The potential energy matrix.
 
         """
+        _ = time
         v_val = sum(
             (0.5 * self.k[i] * r[i] ** 2 for i in range(self.ndim)),
             start=np.zeros_like(r[0]),

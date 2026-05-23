@@ -53,5 +53,6 @@ ignore = [
     "ISC001",
     "T201",
     "T203",
+    "S603",
 ]
 per-file-ignores = {"tests/*" = ["S101", "D100", "D103", "ANN", "INP001"]}

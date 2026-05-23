@@ -1,10 +1,8 @@
 """Module defining the abstract base class for potential energy operators."""
 
 from abc import ABC, abstractmethod
-from typing import Annotated
 
 import numpy as np
-from pydantic import Field
 
 
 class Potential(ABC):
@@ -91,10 +89,3 @@ class Potential(ABC):
 
         """
         return np.linalg.eigvalsh(self.eval_d(r, time))
-
-
-from .harmonic import Harmonic  # noqa: E402
-from .time_linear import TimeLinear  # noqa: E402
-from .tully import TullyFirst  # noqa: E402
-
-AnyPotential = Annotated[Harmonic | TimeLinear | TullyFirst, Field(discriminator="name")]

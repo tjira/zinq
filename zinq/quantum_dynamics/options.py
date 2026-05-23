@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from zinq.potential.potential import AnyPotential
+from zinq.potential.union import AnyPotential
 
 
 class AbsorberConfig(BaseModel):

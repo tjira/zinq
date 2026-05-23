@@ -79,14 +79,16 @@ def main() -> None:
 
         profiler.dump_stats(stats_file)  # type: ignore[union-attr]
 
-        if not shutil.which("gprof2dot"):
+        gprof2dot_path = shutil.which("gprof2dot")
+        if not gprof2dot_path:
             msg = "EXECUTABLE 'gprof2dot' NOT FOUND"
             raise RuntimeError(msg)
-        if not shutil.which("dot"):
+        dot_path = shutil.which("dot")
+        if not dot_path:
             msg = "EXECUTABLE 'dot' NOT FOUND"
             raise RuntimeError(msg)
 
-        subprocess.run(  # noqa: S603
+        subprocess.run(
             [
                 sys.executable,
                 "-m",
@@ -104,7 +106,7 @@ def main() -> None:
             check=True,
         )
 
-        subprocess.run(["dot", "-Tsvg", dot_file, "-o", svg_file], check=True)  # noqa: S603, S607
+        subprocess.run([dot_path, "-Tsvg", dot_file, "-o", svg_file], check=True)
 
 
 def _get_versions() -> dict[str, str]:
