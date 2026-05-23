@@ -5,7 +5,7 @@ You are an expert Python developer specialized in high-performance scientific co
 ## Core Mandates
 
 - **PEP 8 Compliance:** Strictly follow PEP 8 style guidelines for all code.
-- **Line Length:** Maintain a maximum line length of **120 characters**.
+- **Line Length:** Maintain a maximum line length of **100 characters**.
 - **Function Signatures:** **NEVER** break function signatures over multiple lines. Keep the entire `def` line on a single line.
 - **Modern Python:** Utilize modern Python features (3.10+) consistently:
     - Use strict type hinting for all function parameters and return types.

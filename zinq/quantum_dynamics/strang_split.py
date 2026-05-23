@@ -2,56 +2,58 @@ from functools import cached_property
 
 import numpy as np
 
-from .grid import Grid
 from .hamiltonian import Hamiltonian
+from .system import System
 from .wavefunction import Wavefunction
 
 
 class StrangSplit:
-    def __init__(self, H: Hamiltonian, dt: float, imag: bool, adiabatic: bool = False):
-        self.dt, self.unit, self.adiabatic = dt, -0.5 * (1 if imag else 1j) * dt, adiabatic
+    def __init__(self, *, ham: Hamiltonian, dt: float, imag: bool, adia: bool = False):
+        self.dt, self.unit, self.adia = dt, -0.5 * (1 if imag else 1j) * dt, adia
 
-        self._update_R(H)
-        self._update_K(H)
+        self._update_R(ham)
+        self._update_K(ham)
 
     @cached_property
     def imag(self):
         return self.unit.imag == 0
 
-    def step(self, wfn: Wavefunction, grid: Grid, H: Hamiltonian, time: float) -> np.ndarray:
-        if H.pot.is_td: H.update_V(grid, time); self._update_R(H)
+    def step(self, system: System, time: float) -> np.ndarray:
+        if system.ham.pot.is_td: system.update_V(time); self._update_R(system.ham)
 
         decay = 0
 
-        decay += self._apply_R(wfn, grid, H)
-        self._apply_K(wfn)
-        decay += self._apply_R(wfn, grid, H)
+        decay += self._apply_R(system)
+        self._apply_K(system.wfn)
+        decay += self._apply_R(system)
 
-        if self.imag: wfn.normalize(grid)
+        if self.imag: system.normalize()
 
         return decay
 
-    def _apply_K(self, wfn):
+    def _apply_K(self, wfn: Wavefunction):
         wfn.data = np.fft.ifftn(np.fft.fftn(wfn.data, axes=range(wfn.ndim)) * self.K, axes=range(wfn.ndim))
-    
-    def _apply_R(self, wfn: Wavefunction, grid: Grid, H: Hamiltonian) -> np.ndarray:
-        wfn.data = np.einsum("...ij,...j->...i", self.R, wfn.data)
 
-        if self.imag or not H.absorber: return np.zeros(wfn.nstate)
+    def _apply_R(self, system: System) -> np.ndarray:
+        system.wfn.data = np.einsum("...ij,...j->...i", self.R, system.wfn.data)
 
-        return self._get_decay(wfn.to_adia(H) if self.adiabatic else wfn, grid)
+        if self.imag or not system.ham.absorber: return np.zeros(system.wfn.nstate)
 
-    def _get_decay(self, wfn: Wavefunction, grid: Grid) -> np.ndarray:
+        return self._get_decay(system)
+
+    def _get_decay(self, system: System) -> np.ndarray:
+        wfn = system.wfn.to_adia(system.ham) if self.adia else system.wfn
+
         remaining_norm = np.sum(np.abs(self.R[..., :, 0])**2, axis=-1)
 
         if np.allclose(remaining_norm, 1): return np.zeros(wfn.nstate)
 
         decay_density = (1 / np.maximum(remaining_norm[..., np.newaxis], 1e-14) - 1) * wfn.density
 
-        return np.sum(decay_density, axis=tuple(range(wfn.ndim))) * grid.measure
+        return np.sum(decay_density, axis=tuple(range(wfn.ndim))) * system.grid.measure
 
-    def _update_K(self, H: Hamiltonian):
-        self.K = np.exp(2 * self.unit * H.T)[..., None]
+    def _update_K(self, ham: Hamiltonian):
+        self.K = np.exp(2 * self.unit * ham.T)[..., None]
 
-    def _update_R(self, H: Hamiltonian):
-        self.R = H.U @ (np.exp(self.unit * H.W)[..., np.newaxis] * H.U.conj().mT)
+    def _update_R(self, ham: Hamiltonian):
+        self.R = ham.U @ (np.exp(self.unit * ham.W)[..., np.newaxis] * ham.U.conj().mT)

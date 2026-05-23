@@ -6,7 +6,7 @@ from .grid import Grid
 
 
 class Hamiltonian:
-    def __init__(self, grid: Grid, pot: Potential, m: float, absorber: Absorber | None = None):
+    def __init__(self, *, grid: Grid, pot: Potential, m: float, absorber: Absorber | None = None):
         self.pot, self.m, self.absorber = pot, m, absorber
         
         self.update_V(grid, 0)

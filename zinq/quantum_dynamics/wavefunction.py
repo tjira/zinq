@@ -8,8 +8,8 @@ from .initial_conditions import InitialConditions
 
 
 class Wavefunction:
-    def __init__(self, ic: InitialConditions, grid: Grid, H: Hamiltonian):
-        self.data = np.zeros((*[grid.npoint] * grid.ndim, H.pot.nstate), dtype=np.complex128)
+    def __init__(self, *, ic: InitialConditions, grid: Grid, ham: Hamiltonian):
+        self.data = np.zeros((*[grid.npoint] * grid.ndim, ham.pot.nstate), dtype=np.complex128)
 
         exponent = np.zeros_like(grid.pos[0], dtype=np.complex128)
 
@@ -21,7 +21,7 @@ class Wavefunction:
         self.normalize(grid)
 
         if ic.adia:
-            self.data = self.to_dia(H).data
+            self.data = self.to_dia(ham).data
 
     @classmethod
     def from_data(cls, data: np.ndarray):
@@ -48,8 +48,8 @@ class Wavefunction:
     def copy(self) -> "Wavefunction":
         return Wavefunction.from_data(self.data.copy())
 
-    def ke(self, grid: Grid, H: Hamiltonian) -> float:
-        return np.sum(self.to_kspace().rho * H.T) * grid.measure
+    def ke(self, grid: Grid, ham: Hamiltonian) -> float:
+        return np.sum(self.to_kspace().rho * ham.T) * grid.measure
 
     def mom(self, grid: Grid) -> np.ndarray:
         rho_k = self.to_kspace().rho
@@ -65,8 +65,8 @@ class Wavefunction:
     def overlap(self, other: "Wavefunction", grid: Grid) -> complex:
         return np.vdot(self.data, other.data).item() * grid.measure
 
-    def pe(self, grid: Grid, H: Hamiltonian) -> float:
-        pe_dens = np.einsum("...i,...ij,...j->...", np.conj(self.data), H.V, self.data)
+    def pe(self, grid: Grid, ham: Hamiltonian) -> float:
+        pe_dens = np.einsum("...i,...ij,...j->...", np.conj(self.data), ham.V, self.data)
 
         return np.real(np.sum(pe_dens)) * grid.measure
 
@@ -84,11 +84,11 @@ class Wavefunction:
 
         self.normalize(grid)
 
-    def to_adia(self, H: Hamiltonian) -> "Wavefunction":
-        return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(H.U), self.data))
+    def to_adia(self, ham: Hamiltonian) -> "Wavefunction":
+        return Wavefunction.from_data(np.einsum("...ji,...j->...i", np.conj(ham.U), self.data))
 
-    def to_dia(self, H: Hamiltonian) -> "Wavefunction":
-        return Wavefunction.from_data(np.einsum("...ij,...j->...i", H.U, self.data))
+    def to_dia(self, ham: Hamiltonian) -> "Wavefunction":
+        return Wavefunction.from_data(np.einsum("...ij,...j->...i", ham.U, self.data))
 
     def to_kspace(self) -> "Wavefunction":
         return Wavefunction.from_data(np.fft.fftn(self.data, axes=range(self.ndim), norm="ortho"))

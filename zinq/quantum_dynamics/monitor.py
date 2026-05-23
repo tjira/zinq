@@ -6,18 +6,17 @@ from typing import Any
 
 import numpy as np
 
-from .grid import Grid
-from .hamiltonian import Hamiltonian
+from .wavefunction import Wavefunction
 from .options import Options
 from .result import Result
-from .wavefunction import Wavefunction
+from .system import System
 
 
 class Monitor:
-    def __init__(self, *, idx: int, grid: Grid, H: Hamiltonian, opt: Options, wfn_0: Wavefunction):
-        self.idx, self.grid, self.H, self.opt = idx, grid, H, opt
+    def __init__(self, *, idx: int, system: System, opt: Options):
+        self.idx, self.system, self.opt, self.adia = idx, system, opt, opt.adiabatic
 
-        self.wfn_0 = wfn_0.copy() if self.get_write_map().get("autocorrelation") else None
+        self.wfn_0 = system.wfn.copy() if self.get_write_map().get("autocorrelation") else None
 
         def get_history() -> dict[str, list]:
             return {k: [] for k, v in self.get_write_map(False).items() if v}
@@ -60,25 +59,30 @@ class Monitor:
         }
 
         return {k: k in active for k in (set(Result.__annotations__) | active) - {"spectrum"}}
-    
-    def record(self, i: int, wfn: Wavefunction, decay: np.ndarray, force_log: bool = False) -> None:
-        wfn_adia, to_calc = wfn.to_adia(self.H) if self.opt.adiabatic else wfn, self._to_calc(i, force_log)
+
+    def record(self, i: int, decay: np.ndarray, force_log: bool = False) -> None:
+        wfn_adia = self.system.wfn.to_adia(self.system.ham) if self.adia else self.system.wfn
+
+        def get_acorr(wfn_0: Wavefunction | None) -> complex | None:
+            if wfn_0 is None: return None
+
+            return wfn_0.overlap(self.system.wfn, self.system.grid)
 
         ops = {
-            "norm": lambda: wfn.norm(self.grid),
-            "population": lambda: wfn_adia.pop(self.grid),
-            "position": lambda: wfn.pos(self.grid),
-            "momentum": lambda: wfn.mom(self.grid),
-            "potential_energy": lambda: wfn.pe(self.grid, self.H),
-            "kinetic_energy": lambda: wfn.ke(self.grid, self.H),
-            "total_energy": lambda: wfn.pe(self.grid, self.H) + wfn.ke(self.grid, self.H),
-            "autocorrelation": lambda: self.wfn_0.overlap(wfn, self.grid) if self.wfn_0 else None,
+            "norm": lambda: self.system.norm,
+            "population": lambda: wfn_adia.pop(self.system.grid),
+            "position": lambda: self.system.pos,
+            "momentum": lambda: self.system.mom,
+            "potential_energy": lambda: self.system.pe,
+            "kinetic_energy": lambda: self.system.ke,
+            "total_energy": lambda: self.system.pe + self.system.ke,
+            "autocorrelation": lambda: get_acorr(self.wfn_0),
             "wavefunction": lambda: wfn_adia.data.copy(),
         }
 
-        obs = {k: (ops[k]() if k in to_calc else None) for k in ops}
+        obs = {k: (ops[k]() if k in self._to_calc(i, force_log) else None) for k in ops}
 
-        if self.H.absorber and obs["population"] is not None:
+        if self.system.ham.absorber and obs["population"] is not None:
             obs["population"] += decay
 
         self._update_history(obs)
@@ -100,7 +104,7 @@ class Monitor:
             return np.moveaxis(data, 0, -2).reshape(-1, data.shape[0] * data.shape[-1])
 
         def wfn_grid(data) -> list[np.ndarray]:
-            return [r.ravel() for r in self.grid.pos]
+            return [r.ravel() for r in self.system.grid.pos]
 
         data, funcs = np.array(self.history[name]), {
             "wavefunction": (wfn_data, wfn_grid)
@@ -110,9 +114,9 @@ class Monitor:
             data = np.ascontiguousarray(data).view(np.real(data).dtype)
 
         return np.column_stack((*funcs.get(name, (normal_data, normal_grid))[1](data), data))
-    
+
     def _get_spectrum(self, acf: np.ndarray) -> np.ndarray:
-        dt, times =self.opt.time_step, np.arange(-len(acf) + 1, len(acf)) * self.opt.time_step
+        dt, times = self.opt.time_step, np.arange(-len(acf) + 1, len(acf)) * self.opt.time_step
 
         def get_omega(acf) -> np.ndarray:
             return np.fft.fftshift(2 * np.pi * np.fft.fftfreq(len(acf), dt))
@@ -151,9 +155,9 @@ class Monitor:
 
         cols = [
             f"{'ITER':>7}", f"{'KIN (Eh)':>12}", f"{'POT (Eh)':>12}", f"{'TOT (Eh)':>12}",
-            f"{'POS (a0)':>{11 * self.grid.ndim + 1}}",
-            f"{'MOM (hb/a0)':>{11 * self.grid.ndim + 1}}",
-            f"{'POPULATION':>{11 * self.H.pot.nstate + 1}}",
+            f"{'POS (a0)':>{11 * self.system.grid.ndim + 1}}",
+            f"{'MOM (hb/a0)':>{11 * self.system.grid.ndim + 1}}",
+            f"{'POPULATION':>{11 * self.system.ham.pot.nstate + 1}}",
             f"{'NORM':>9}", "TIME"
         ]
 
