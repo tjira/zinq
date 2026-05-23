@@ -17,10 +17,19 @@ class ZigBuild(build_ext):
             return super().build_extension(ext)
 
         dest_path = os.path.abspath(self.get_ext_fullpath(ext.name))
-        flags = ["-dynamic", f"-femit-bin={dest_path}", "--name", ext.name.split(".")[-1], "-O", "ReleaseFast"]
+        flags = [
+            "-dynamic",
+            f"-femit-bin={dest_path}",
+            "--name",
+            ext.name.split(".")[-1],
+            "-O",
+            "ReleaseFast",
+        ]
 
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        subprocess.check_call([sys.executable, "-m", "ziglang", "build-lib", *flags, ext.sources[0]])
+        subprocess.check_call(
+            [sys.executable, "-m", "ziglang", "build-lib", *flags, ext.sources[0]]
+        )
 
 
 if __name__ == "__main__":
