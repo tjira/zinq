@@ -82,6 +82,7 @@ def main() -> None:
         if not gprof2dot_path:
             msg = "EXECUTABLE 'gprof2dot' NOT FOUND"
             raise RuntimeError(msg)
+
         dot_path = shutil.which("dot")
         if not dot_path:
             msg = "EXECUTABLE 'dot' NOT FOUND"
