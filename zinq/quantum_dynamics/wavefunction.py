@@ -212,7 +212,7 @@ class Wavefunction:
             The L2 norm of the wavefunction.
 
         """
-        return np.real(np.vdot(self.data, self.data)).item() * grid.measure
+        return np.sqrt(np.real(np.vdot(self.data, self.data)).item() * grid.measure)
 
     def normalize(self, grid: Grid) -> None:
         """
@@ -224,7 +224,7 @@ class Wavefunction:
             The spatial grid.
 
         """
-        self.data /= np.sqrt(norm) if (norm := self.norm(grid)) > NORM_THRESHOLD else 1
+        self.data /= norm if (norm := self.norm(grid)) > NORM_THRESHOLD else 1
 
     def overlap(self, other: "Wavefunction", grid: Grid) -> complex:
         """
