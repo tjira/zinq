@@ -77,7 +77,7 @@ def main() -> None:
     if args.profile:
         stats_file, dot_file, svg_file = "profile.stats", "profile.dot", "profile.svg"
 
-        profiler.dump_stats(stats_file)  # type: ignore[union-attr]
+        profiler.dump_stats(stats_file)
 
         gprof2dot_path = shutil.which("gprof2dot")
         if not gprof2dot_path:
