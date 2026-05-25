@@ -1,8 +1,8 @@
 module Zinq
 
-using FFTW, LinearAlgebra, Tullio
+using FFTW, Dates, LinearAlgebra, Printf, Tullio
 
-export Grid, InitialConditions, gen_grid_r, gen_grid_k, gen_wfn, tully_1, normalize!, calc_norm, calc_pe, calc_pop, calc_pos, to_kspace, calc_ke, calc_mom, get_pot_eigen, get_prop_r, get_prop_k, propagate!
+export julia_main
 
 struct Grid{N}
     limits::NTuple{N, Tuple{Float64, Float64}}
@@ -155,7 +155,7 @@ function get_prop_r(A::AbstractArray{Float64}, U::AbstractArray{Float64}, dt::Fl
     return R
 end
 
-function get_prop_k(grid::Grid{N}, m::Float64, k::NTuple{N, AbstractArray{Float64}}, dt::Float64) where N
+function get_prop_k(m::Float64, k::NTuple{N, AbstractArray{Float64}}, dt::Float64) where N
     return @. exp(-0.5im * $(reduce(.+, @. k[i]^2 / m for i in 1:N)) * dt)
 end
 
@@ -179,6 +179,73 @@ function propagate!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64}, 
     propagate_r!(W, R)
     propagate_k!(W, K)
     propagate_r!(W, R)
+end
+
+function print_iter(i::Int, pe::Float64, ke::Float64, pos::NTuple{N, Float64}, mom::NTuple{N, Float64}, pop::NTuple{S, Float64}, norm::Float64, elapsed::Float64) where {N, S}
+    fmt_pos = join([@sprintf("%10.4f", x) for x in pos], " ")
+    fmt_mom = join([@sprintf("%10.4f", x) for x in mom], " ")
+    fmt_pop = join([@sprintf("%10.4f", x) for x in pop], " ")
+
+    values = (i - 1, ke, pe, ke + pe, fmt_pos, fmt_mom, fmt_pop, norm, format_duration(elapsed))
+
+    @printf("%7d %12.6f %12.6f %12.6f [%s] [%s] [%s] %9.4f %s\n", values...)
+end
+
+function print_header(ndim::Int, nstate::Int)
+    dim_w, state_w = 11 * ndim + 1, 11 * nstate + 1
+
+    labels = ("ITER", "KIN (Eh)", "POT (Eh)", "TOT (Eh)", dim_w, "POS (a0)", dim_w, "MOM (hb/a0)", state_w, "POPULATION", "NORM", "TIME")
+
+    @printf("%7s %12s %12s %12s %*s %*s %*s %9s %-s\n", labels...)
+end
+
+function format_duration(seconds::Float64)
+    return Dates.format(Time(0) + Millisecond(round(Int, seconds * 1000)), "HH:MM:SS.sss")
+end
+
+function run_qd()
+    ic = InitialConditions((-10.0,), (15.0,), (2.0,), 1, true)
+    grid = Grid(((-24.0, 32.0),), 2048)
+    m = 2000.0
+    iters = 3000
+    dt = 1.0
+    log_interval = 500
+
+    r = gen_grid_r(grid)
+    k = gen_grid_k(grid)
+
+    W = gen_wfn(ic, r, grid.npoint, 2)
+    V = tully_1(r..., 0.01)
+    A, U = get_pot_eigen(V)
+    K = get_prop_k(m, k, dt)
+    R = get_prop_r(A, U, dt / 2)
+
+    normalize!(W, grid)
+
+    print_header(length(r), size(W, ndims(W)))
+
+    for i in 1:iters + 1
+        elapsed = @elapsed if i > 1
+            propagate!(W, R, K)
+        end
+
+        if (i - 1) % log_interval == 0
+            W_k = to_kspace(W)
+
+            norm = calc_norm(W, grid)
+            pe = calc_pe(W, V, grid)
+            ke = calc_ke(W_k, grid, m, k)
+            pop = calc_pop(W, grid)
+            pos = calc_pos(W, grid, r)
+            mom = calc_mom(to_kspace(W), grid, k)
+
+            print_iter(i, pe, ke, pos, mom, pop, norm, elapsed)
+        end
+    end
+end
+
+function julia_main()
+    run_qd()
 end
 
 end # module Zinq
