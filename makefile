@@ -1,5 +1,10 @@
+all: build
+
 bootstrap:
 	@julia -e 'using Pkg; Pkg.add(["BenchmarkTools", "PackageCompiler", "Revise"])'
+
+build: instantiate
+	@julia --project=. -e 'using PackageCompiler; create_app(".", "dist", executables=["zinq" => "julia_main"], include_lazy_artifacts=true, precompile_execution_file="src/Zinq.jl", force=true)'
 
 instantiate:
 	@julia --project=. -e 'using Pkg; Pkg.instantiate()'

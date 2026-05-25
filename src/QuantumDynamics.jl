@@ -7,7 +7,7 @@ using .Potential, FFTW, Dates, LinearAlgebra, Printf, TimerOutputs, Tullio
 export run_qd
 
 struct Grid{N}
-    limits::NTuple{N, Tuple{Float64, Float64}}
+    bounds::NTuple{N, Tuple{Float64, Float64}}
     npoint::Int
 end
 
@@ -41,10 +41,10 @@ struct SimulationContext{N}
 end
 
 function gen_grid_r(grid::Grid{N}) where N
-    limits, npoint = grid.limits, grid.npoint
+    bounds, npoint = grid.bounds, grid.npoint
 
     axes = ntuple(N) do i
-        Vector(range(limits[i][1], step=(limits[i][2] - limits[i][1]) / npoint, length=npoint))
+        Vector(range(bounds[i][1], step=(bounds[i][2] - bounds[i][1]) / npoint, length=npoint))
     end
 
     return ntuple(N) do i
@@ -53,10 +53,10 @@ function gen_grid_r(grid::Grid{N}) where N
 end
 
 function gen_grid_k(grid::Grid{N}) where N
-    limits, npoint = grid.limits, grid.npoint
+    bounds, npoint = grid.bounds, grid.npoint
 
     axes = ntuple(N) do i
-        Vector(fftfreq(npoint, 2pi * npoint / (limits[i][2] - limits[i][1])))
+        Vector(fftfreq(npoint, 2pi * npoint / (bounds[i][2] - bounds[i][1])))
     end
 
     return ntuple(N) do i
@@ -77,7 +77,7 @@ function gen_wfn(ic::InitialConditions{N}, r::NTuple{N, AbstractArray{Float64}},
 end
 
 function get_dr(grid::Grid{N}) where N
-    return prod(map(limit -> (limit[2] - limit[1]) / grid.npoint, grid.limits))
+    return prod(map(limit -> (limit[2] - limit[1]) / grid.npoint, grid.bounds))
 end
 
 function calc_norm(W::AbstractArray{ComplexF64}, grid::Grid{N}) where N

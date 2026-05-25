@@ -14,7 +14,7 @@ function print_header()
     println("ZINQ")
 end
 
-function julia_main()
+function julia_main()::Cint
     print_header()
 
     reset_timer!()
@@ -22,6 +22,8 @@ function julia_main()
     @timeit "QUANTUM DYNAMICS" run_qd()
 
     println(get_timer_table())
+
+    return 0
 end
 
 end # module Zinq
