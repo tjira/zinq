@@ -2,49 +2,73 @@ module QuantumDynamics
 
 include("Potential.jl")
 
-using .Potential, FFTW, TOML, Dates, LinearAlgebra, Printf, TimerOutputs, Tullio
+using .Potential, FFTW, HDF5, TOML, Dates, LinearAlgebra, Printf, TimerOutputs, Tullio
 
 export run_qd
 
-struct Grid{N}
-    bounds::NTuple{N, Tuple{Float64, Float64}}
-    npoint::Int
+Base.@kwdef struct Grid{N}
+    bounds::NTuple{N, Tuple{Float64, Float64}}; npoint::Int
 end
 
-struct InitialConditions{N}
-    pos::NTuple{N, Float64}
-    mom::NTuple{N, Float64}
+Base.@kwdef struct InitialConditions{N}
+    pos  ::NTuple{N, Float64}
+    mom  ::NTuple{N, Float64}
     gamma::NTuple{N, Float64}
-    state::Int
-    adia::Bool
+
+    state::Int; adia::Bool
 end
 
-struct Observables{N, S}
-    pos::NTuple{N, Float64}
-    mom::NTuple{N, Float64}
-    pop::NTuple{S, Float64}
-    norm::Float64
-    pe::Float64
-    ke::Float64
+Base.@kwdef struct Observables{N, S}
+    pos::Union{NTuple{N, Float64}, Nothing}
+    mom::Union{NTuple{N, Float64}, Nothing}
+    pop::Union{NTuple{S, Float64}, Nothing}
+
+    norm::Union{Float64, Nothing}
+    pe  ::Union{Float64, Nothing}
+    ke  ::Union{Float64, Nothing}
 end
 
-struct Simulation
-    itp::Int
-    iters::Int
-    dt::Float64
-    m::Float64
-    adia::Bool
+Base.@kwdef struct History{N, S}
+    pos::Union{Vector{NTuple{N, Float64}}, Nothing} = nothing
+    mom::Union{Vector{NTuple{N, Float64}}, Nothing} = nothing
+    pop::Union{Vector{NTuple{S, Float64}}, Nothing} = nothing
+
+    norm::Union{Vector{Float64}, Nothing} = nothing
+    pe  ::Union{Vector{Float64}, Nothing} = nothing
+    ke  ::Union{Vector{Float64}, Nothing} = nothing
+end
+
+Base.@kwdef struct Simulation
+    itp         ::Int
+    iters       ::Int
     log_interval::Int
+
+    dt::Float64
+    m ::Float64
+
+    adia::Bool
 end
 
-struct SimulationContext{N}
+Base.@kwdef struct Writer
+    norm::Union{String, Nothing} = nothing
+    pos ::Union{String, Nothing} = nothing
+    mom ::Union{String, Nothing} = nothing
+    pop ::Union{String, Nothing} = nothing
+    pe  ::Union{String, Nothing} = nothing
+    ke  ::Union{String, Nothing} = nothing
+    te  ::Union{String, Nothing} = nothing
+end
+
+Base.@kwdef struct SimulationContext{N}
     W::AbstractArray{ComplexF64}
     R::AbstractArray{ComplexF64}
     K::AbstractArray{ComplexF64}
+
     V::AbstractArray{Float64}
     A::AbstractArray{Float64}
     U::AbstractArray{Float64}
     T::AbstractArray{Float64}
+
     r::NTuple{N, AbstractArray{Float64}}
     k::NTuple{N, AbstractArray{Float64}}
 end
@@ -231,19 +255,33 @@ function to_dia(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64})
     return reshape(W_d, size(W))
 end
 
-function calc_observables(ctx::SimulationContext{N}, sim::Simulation, grid::Grid{N}) where N
-    W_d, W_k, W_a = ctx.W, to_kspace(ctx.W), sim.adia ? to_adia(ctx.W, ctx.U) : ctx.W
+function calc_observables(ctx::SimulationContext{N}, sim::Simulation, grid::Grid{N}, writer::Writer, log::Bool) where N
+    need_k, need_a = log || !isnothing(writer.mom) || !isnothing(writer.ke) || !isnothing(writer.te), (log || !isnothing(writer.pop)) && sim.adia
 
-    norm = calc_norm(W_d, grid)
-    pops = calc_pops(W_a, grid)
+    W_d, W_k, W_a = ctx.W, need_k ? to_kspace(ctx.W) : ctx.W, need_a ? to_adia(ctx.W, ctx.U) : ctx.W
 
-    pe = calc_pe(W_d, ctx.V, grid)
-    ke = calc_ke(W_k, ctx.T, grid)
+    norm = log || !isnothing(writer.norm) ? calc_norm(W_d, grid) : nothing
+    pops = log || !isnothing(writer.pop)  ? calc_pops(W_a, grid) : nothing
 
-    pos = calc_pos(W_d, grid, ctx.r)
-    mom = calc_mom(W_k, grid, ctx.k)
+    pe = log || !isnothing(writer.pe) || !isnothing(writer.te) ? calc_pe(W_d, ctx.V, grid) : nothing
+    ke = log || !isnothing(writer.ke) || !isnothing(writer.te) ? calc_ke(W_k, ctx.T, grid) : nothing
 
-    return Observables(pos, mom, pops, norm, pe, ke)
+    pos = log || !isnothing(writer.pos) ? calc_pos(W_d, grid, ctx.r) : nothing
+    mom = log || !isnothing(writer.mom) ? calc_mom(W_k, grid, ctx.k) : nothing
+
+    return Observables{N, size(ctx.V, 1)}(pos=pos, mom=mom, pop=pops, norm=norm, pe=pe, ke=ke)
+end
+
+function init_history(writer::Writer, ndim::Int, nstate::Int)
+    return History{ndim, nstate}(
+        pos = !isnothing(writer.pos) ? NTuple{ndim,   Float64}[] : nothing,
+        mom = !isnothing(writer.mom) ? NTuple{ndim,   Float64}[] : nothing,
+        pop = !isnothing(writer.pop) ? NTuple{nstate, Float64}[] : nothing,
+        
+        norm = !isnothing(writer.norm) ? Float64[] : nothing,
+        pe   = !isnothing(writer.pe)   ? Float64[] : nothing,
+        ke   = !isnothing(writer.ke)   ? Float64[] : nothing,
+    )
 end
 
 function get_kin_op(m::Float64, k::NTuple{N, AbstractArray{Float64}}) where N
@@ -289,11 +327,11 @@ function parse_config(config::Dict{String, Any})
     log_interval::Int = get(config["simulation"], "log_interval", 1    )
     m::Float64        = get(config["simulation"], "mass",         1    )
 
-    sim = Simulation(itp, iters, dt, m, adia, log_interval)
+    sim = Simulation(itp=itp, iters=iters, dt=dt, m=m, adia=adia, log_interval=log_interval)
 
     bounds = Tuple(Tuple{Float64, Float64}(b) for b in config["grid"]["bounds"])
 
-    grid = Grid(bounds, config["grid"]["npoint"])
+    grid = Grid(bounds=bounds, npoint=config["grid"]["npoint"])
 
     pos   = Tuple(Float64(q) for q in config["initial_conditions"]["position"])
     mom   = Tuple(Float64(p) for p in config["initial_conditions"]["momentum"])
@@ -302,13 +340,59 @@ function parse_config(config::Dict{String, Any})
     state::Int    = get(config["initial_conditions"], "state",     0    )
     ic_adia::Bool = get(config["initial_conditions"], "adiabatic", false)
 
-    ic = InitialConditions(pos, mom, gamma, state, ic_adia)
+    ic = InitialConditions(pos=pos, mom=mom, gamma=gamma, state=state, adia=ic_adia)
 
-    return sim, grid, ic, POTENTIALS[config["potential"]["name"]]
+    writer::Writer = if haskey(config, "write")
+        pos  = get(config["write"], "position",         nothing)
+        mom  = get(config["write"], "momentum",         nothing)
+        pop  = get(config["write"], "population",       nothing)
+        pe   = get(config["write"], "potential_energy", nothing)
+        ke   = get(config["write"], "kinetic_energy",   nothing)
+        te   = get(config["write"], "total_energy",     nothing)
+        norm = get(config["write"], "norm",             nothing)
+
+        Writer(pos=pos, mom=mom, pop=pop, pe=pe, ke=ke, te=te, norm=norm)
+    else Writer() end
+
+    return sim, grid, ic, POTENTIALS[config["potential"]["name"]], writer
+end
+
+function log_history!(history::History{N, S}, obs::Observables{N, S}) where {N, S}
+    !isnothing(history.pos) && !isnothing(obs.pos) && push!(history.pos, obs.pos)
+    !isnothing(history.mom) && !isnothing(obs.mom) && push!(history.mom, obs.mom)
+    !isnothing(history.pop) && !isnothing(obs.pop) && push!(history.pop, obs.pop)
+    
+    !isnothing(history.norm) && !isnothing(obs.norm) && push!(history.norm, obs.norm)
+    !isnothing(history.pe  ) && !isnothing(obs.pe  ) && push!(history.pe,   obs.pe  )
+    !isnothing(history.ke  ) && !isnothing(obs.ke  ) && push!(history.ke,   obs.ke  )
+end
+
+function export_history(history::History{N, S}, sim::Simulation, writer::Writer, state::Int) where {N, S}
+    to_matrix(v::Vector{NTuple{M, Float64}}) where M = [row[col] for row in v, col in 1:M]
+
+    function format_name(fname::String, state::Int, itp::Bool)
+        return itp ? "$(splitext(fname)[1])_STATE-$(state)$(splitext(fname)[2])" : fname
+    end
+
+    t = collect(0:sim.dt:sim.dt * sim.iters)
+
+    !isnothing(history.pos) && write_matrix(format_name(writer.pos, state, sim.itp > 0), hcat(t, to_matrix(history.pos)))
+    !isnothing(history.mom) && write_matrix(format_name(writer.mom, state, sim.itp > 0), hcat(t, to_matrix(history.mom)))
+    !isnothing(history.pop) && write_matrix(format_name(writer.pop, state, sim.itp > 0), hcat(t, to_matrix(history.pop)))
+
+    !isnothing(history.norm) && write_matrix(format_name(writer.norm, state, sim.itp > 0), hcat(t, history.norm))
+
+    !isnothing(history.pe) && write_matrix(format_name(writer.pe, state, sim.itp > 0), hcat(t, history.pe              ))
+    !isnothing(history.ke) && write_matrix(format_name(writer.ke, state, sim.itp > 0), hcat(t, history.ke              ))
+    !isnothing(writer.te ) && write_matrix(format_name(writer.te, state, sim.itp > 0), hcat(t, history.pe .+ history.ke))
+end
+
+function write_matrix(fname::String, mat::AbstractArray{Float64})
+    h5open(fname, "w") do file file["data"] = mat end
 end
 
 function run_qd(config::Dict{String, Any})
-    sim, grid, ic, pot = parse_config(config)
+    sim, grid, ic, pot, writer = parse_config(config)
 
     @timeit "INITIALIZATION" begin
         r = gen_grid_r(grid)
@@ -331,11 +415,15 @@ function run_qd(config::Dict{String, Any})
             W = to_dia(W, U)
         end
 
-        ctx, start_time = SimulationContext(W, R, K, V, A, U, T, r, k), time_ns()
+        ctx = SimulationContext(W=W, R=R, K=K, V=V, A=A, U=U, T=T, r=r, k=k)
 
         print_header(i, length(r), pot.nstate, sim.itp > 0)
 
+        history, start_time = init_history(writer, length(r), pot.nstate), time_ns()
+
         for j in 1:sim.iters + 1
+            log = (j - 1) % sim.log_interval == 0 || j == sim.iters + 1
+
             if j > 1
                 @timeit "PROPAGATION" propagate!(W, R, K)
             end
@@ -344,9 +432,9 @@ function run_qd(config::Dict{String, Any})
                 @timeit "PROJECTION" project_and_normalize!(W, opt_wfn, grid)
             end
 
-            if (j - 1) % sim.log_interval == 0
-                @timeit "OBSERVABLES" obs = calc_observables(ctx, sim, grid)
+            @timeit "OBSERVABLES" obs = calc_observables(ctx, sim, grid, writer, log)
 
+            if log
                 print_iter(j, obs, time_ns() - start_time)
 
                 if j == sim.iters + 1 && sim.itp > 1
@@ -355,6 +443,8 @@ function run_qd(config::Dict{String, Any})
 
                 start_time = time_ns()
             end
+
+            log_history!(history, obs)
         end
 
         if pot.nstate > 1 && sim.itp == 0
@@ -362,6 +452,8 @@ function run_qd(config::Dict{String, Any})
         end
 
         sim.itp > 0 && push!(opt_wfn, W)
+
+        export_history(history, sim, writer, i)
     end
 
     sim.itp > 1 && log_final_te(opt_wfn_te)
