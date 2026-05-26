@@ -76,7 +76,7 @@ function gen_wfn(ic::InitialConditions{N}, r::NTuple{N, AbstractArray{Float64}},
     W = zeros(ComplexF64, (ntuple(_ -> npoint, N)..., nstate))
 
     components = ntuple(N) do i
-        @. exp(-0.5ic.gamma[i] * (r[i] - ic.pos[i])^2 + im * ic.mom[i] * (r[i] - ic.pos[i]))
+        @. exp(-0.5 * ic.gamma[i] * (r[i] - ic.pos[i])^2 + im * ic.mom[i] * (r[i] - ic.pos[i]))
     end
 
     broadcast!(*, selectdim(W, N + 1, ic.state + 1), components...)
@@ -125,7 +125,7 @@ function normalize!(W::AbstractArray{ComplexF64}, grid::Grid{N}) where N
 end
 
 function calc_pos(W::AbstractArray{ComplexF64}, grid::Grid{N}, r::NTuple{N, AbstractArray{Float64}}) where N
-    return ntuple(i -> sum(@. abs2(W) * r[i]) * get_dr(grid), N)
+    return ntuple(i -> sum(abs2.(W) .* r[i]) * get_dr(grid), N)
 end
 
 function to_kspace(W::AbstractArray{ComplexF64})
@@ -137,11 +137,11 @@ function get_dk(grid::Grid{N}) where N
 end
 
 function calc_mom(W::AbstractArray{ComplexF64}, grid::Grid{N}, k::NTuple{N, AbstractArray{Float64}}) where N
-    return ntuple(i -> sum(@. abs2(W) * k[i]) * get_dk(grid), N)
+    return ntuple(i -> sum(abs2.(W) .* k[i]) * get_dk(grid), N)
 end
 
 function calc_ke(W::AbstractArray{ComplexF64}, grid::Grid{N}, m::Float64, k::NTuple{N, AbstractArray{Float64}}) where N
-    return 0.5 * sum(@. abs2(W) * $reduce(.+, k[i]^2 / m for i in 1:N)) * get_dk(grid)
+    return 0.5 * sum(abs2.(W) .* reduce(.+, k[i].^2 / m for i in 1:N)) * get_dk(grid)
 end
 
 function get_pot_eigen(V::AbstractArray{Float64, P}) where P
@@ -158,14 +158,14 @@ function get_prop_r(A::AbstractArray{Float64}, U::AbstractArray{Float64}, dt::Co
     R = similar(U, ComplexF64)
 
     for l in CartesianIndices(size(A)[2:end])
-        @views R[:, :, l] = U[:, :, l] * Diagonal(@. exp(-im * A[:, l] * dt)) * U[:, :, l]'
+        @views R[:, :, l] = U[:, :, l] * Diagonal(exp.(-im * A[:, l] * dt)) * U[:, :, l]'
     end
 
     return R
 end
 
 function get_prop_k(m::Float64, k::NTuple{N, AbstractArray{Float64}}, dt::ComplexF64) where N
-    return @. exp(-0.5im * $reduce(.+, k[i]^2 / m for i in 1:N) * dt)
+    return exp.(-0.5im * reduce(.+, k[i].^2 / m for i in 1:N) * dt)
 end
 
 function propagate_r!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64})
@@ -217,9 +217,17 @@ end
 function to_adia(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64})
     W_f, U_f = flat_wfn(W), flat_pot(U)
 
-    @tullio W_a[i, I] := U_f[I, J, i]' * W_f[i, J]
+    @tullio W_a[i, I] := conj(U_f[J, I, i]) * W_f[i, J]
 
     return reshape(W_a, size(W))
+end
+
+function to_dia(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64})
+    W_f, U_f = flat_wfn(W), flat_pot(U)
+
+    @tullio W_d[i, I] := U_f[I, J, i] * W_f[i, J]
+
+    return reshape(W_d, size(W))
 end
 
 function calc_observables(ctx::SimulationContext{N}, sim::Simulation, grid::Grid{N}) where N
@@ -309,6 +317,10 @@ function run_qd(config::Dict{String, Any})
 
     for i in 1:(sim.itp > 0 ? sim.itp : 1)
         W = gen_wfn(ic, r, grid.npoint, pot.nstate); normalize!(W, grid)
+
+        if ic.adia
+            W = to_dia(W, U)
+        end
 
         ctx, start_time = SimulationContext(W, R, K, V, A, U, r, k), time_ns()
 
