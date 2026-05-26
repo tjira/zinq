@@ -312,7 +312,7 @@ uuid = "4ec0a83e-493e-50e2-b9ac-8f72acf5a8f5"
 version = "1.11.0"
 
 [[deps.Zinq]]
-deps = ["Dates", "FFTW", "LinearAlgebra", "Printf", "TimerOutputs", "Tullio"]
+deps = ["Dates", "FFTW", "LinearAlgebra", "Printf", "TOML", "TimerOutputs", "Tullio"]
 path = "."
 uuid = "086c8f94-71be-47ea-a2f0-128a1c8651c6"
 version = "0.8.1"
