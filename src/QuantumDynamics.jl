@@ -44,6 +44,7 @@ struct SimulationContext{N}
     V::AbstractArray{Float64}
     A::AbstractArray{Float64}
     U::AbstractArray{Float64}
+    T::AbstractArray{Float64}
     r::NTuple{N, AbstractArray{Float64}}
     k::NTuple{N, AbstractArray{Float64}}
 end
@@ -112,7 +113,7 @@ function calc_pe(W::AbstractArray{ComplexF64}, V::AbstractArray{Float64}, grid::
     return real(pe) * get_dr(grid)
 end
 
-function calc_pop(W::AbstractArray{ComplexF64}, grid::Grid{N}) where N
+function calc_pops(W::AbstractArray{ComplexF64}, grid::Grid{N}) where N
     W_f = flat_wfn(W)
     
     @tullio pop[I] := abs2(W_f[i, I])
@@ -140,8 +141,8 @@ function calc_mom(W::AbstractArray{ComplexF64}, grid::Grid{N}, k::NTuple{N, Abst
     return ntuple(i -> sum(abs2.(W) .* k[i]) * get_dk(grid), N)
 end
 
-function calc_ke(W::AbstractArray{ComplexF64}, grid::Grid{N}, m::Float64, k::NTuple{N, AbstractArray{Float64}}) where N
-    return 0.5 * sum(abs2.(W) .* reduce(.+, k[i].^2 / m for i in 1:N)) * get_dk(grid)
+function calc_ke(W::AbstractArray{ComplexF64}, T::AbstractArray{Float64}, grid::Grid{N}) where N
+    return sum(abs2.(W) .* T) * get_dk(grid)
 end
 
 function get_pot_eigen(V::AbstractArray{Float64, P}) where P
@@ -231,16 +232,22 @@ function to_dia(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64})
 end
 
 function calc_observables(ctx::SimulationContext{N}, sim::Simulation, grid::Grid{N}) where N
-    W_k = to_kspace(ctx.W)
+    W_d, W_k, W_a = ctx.W, to_kspace(ctx.W), sim.adia ? to_adia(ctx.W, ctx.U) : ctx.W
 
-    norm = calc_norm(ctx.W, grid)
-    pe = calc_pe(ctx.W, ctx.V, grid)
-    ke = calc_ke(W_k, grid, sim.m, ctx.k)
-    pop = calc_pop(sim.adia ? to_adia(ctx.W, ctx.U) : ctx.W, grid)
-    pos = calc_pos(ctx.W, grid, ctx.r)
+    norm = calc_norm(W_d, grid)
+    pops = calc_pops(W_a, grid)
+
+    pe = calc_pe(W_d, ctx.V, grid)
+    ke = calc_ke(W_k, ctx.T, grid)
+
+    pos = calc_pos(W_d, grid, ctx.r)
     mom = calc_mom(W_k, grid, ctx.k)
 
-    return Observables(pos, mom, pop, norm, pe, ke)
+    return Observables(pos, mom, pops, norm, pe, ke)
+end
+
+function get_kin_op(m::Float64, k::NTuple{N, AbstractArray{Float64}}) where N
+    return 0.5 * reduce(.+, k[i].^2 for i in 1:N) / m
 end
 
 function overlap(W1::AbstractArray{ComplexF64}, W2::AbstractArray{ComplexF64}, grid::Grid{N}) where N
@@ -252,7 +259,7 @@ function project_out!(W1::AbstractArray{ComplexF64}, W2::AbstractArray{ComplexF6
 end
 
 function log_final_pop(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64}, grid::Grid{N}, adia::Bool) where N
-    pop = calc_pop(adia ? to_adia(W, U) : W, grid)
+    pop = calc_pops(adia ? to_adia(W, U) : W, grid)
 
     for (i, p) in enumerate(pop)
         @printf("%sFINAL POPULATION OF STATE %02d: %.6f\n", i == 1 ? "\n" : "", i, p)
@@ -307,7 +314,9 @@ function run_qd(config::Dict{String, Any})
         r = gen_grid_r(grid)
         k = gen_grid_k(grid)
 
-        V, m = pot.fn(r...), sim.m; A, U = get_pot_eigen(V)
+        V, m = pot.fn(r...), sim.m; T = get_kin_op(m, k)
+
+        A, U = get_pot_eigen(V)
 
         R = get_prop_r(A, U, 0.5 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
         K = get_prop_k(m, k, 1.0 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
@@ -322,7 +331,7 @@ function run_qd(config::Dict{String, Any})
             W = to_dia(W, U)
         end
 
-        ctx, start_time = SimulationContext(W, R, K, V, A, U, r, k), time_ns()
+        ctx, start_time = SimulationContext(W, R, K, V, A, U, T, r, k), time_ns()
 
         print_header(i, length(r), pot.nstate, sim.itp > 0)
 
