@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as tck
 import numpy as np
 
+# file handling
+import h5py
+
 # additional imports
 from mpl_toolkits.axes_grid1.inset_locator import mark_inset
 
@@ -71,7 +74,7 @@ def plot():
     parser.add_argument("files", nargs="+", help="The data files to plot."); args = parser.parse_args()
 
     # function to load the data from the input string as well as the columns to plot and also some helper functions
-    def load(fname): tmp = fname.split(":"); data = np.loadtxt(tmp[0], ndmin=2, skiprows=1); return data, np.array(tmp[1].split(","), int) if len(tmp) == 2 and tmp[1] else np.arange(data.shape[1] - 1)
+    def load(fname): tmp = fname.split(":"); data = h5py.File(tmp[0], "r").get("data")[:].T; return data, np.array(tmp[1].split(","), int) if len(tmp) == 2 and tmp[1] else np.arange(data.shape[1] - 1)
     dcit, indc, trng = lambda d, c: ((x, j) for x, y in zip(d, c) for j in y), lambda l, e: [i for i, sl in enumerate(l) if e in sl], lambda s: range((a := list(map(int, s.split("-"))))[0], a[-1] + 1)
 
     # load the data with plotted columns and get the total number of lines
