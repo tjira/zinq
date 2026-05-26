@@ -17,9 +17,15 @@ end
 function julia_main()::Cint
     print_header()
 
+    input_file = isempty(ARGS) ? "input.toml" : ARGS[1]
+
+    if !isfile(input_file)
+        println(stderr, "INPUT FILE '$input_file' NOT FOUND"); return 1
+    end
+
     reset_timer!()
 
-    @timeit "QUANTUM DYNAMICS" run_qd(TOML.parsefile("input.toml"))
+    @timeit "QUANTUM DYNAMICS" run_qd(TOML.parsefile(input_file))
 
     println(get_timer_table())
 
