@@ -2,7 +2,7 @@ module Zinq
 
 include("QuantumDynamics.jl")
 
-using .QuantumDynamics, TimerOutputs
+using .QuantumDynamics, TOML, TimerOutputs
 
 export julia_main
 
@@ -19,7 +19,7 @@ function julia_main()::Cint
 
     reset_timer!()
 
-    @timeit "QUANTUM DYNAMICS" run_qd()
+    @timeit "QUANTUM DYNAMICS" run_qd(TOML.parsefile("input.toml"))
 
     println(get_timer_table())
 

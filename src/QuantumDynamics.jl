@@ -2,7 +2,7 @@ module QuantumDynamics
 
 include("Potential.jl")
 
-using .Potential, FFTW, Dates, LinearAlgebra, Printf, TimerOutputs, Tullio
+using .Potential, FFTW, TOML, Dates, LinearAlgebra, Printf, TimerOutputs, Tullio
 
 export run_qd
 
@@ -28,6 +28,15 @@ struct Observables{N, S}
     ke::Float64
 end
 
+struct Simulation
+    itp::Int
+    iters::Int
+    dt::Float64
+    m::Float64
+    adia::Bool
+    log_interval::Int
+end
+
 struct SimulationContext{N}
     W::AbstractArray{ComplexF64}
     R::AbstractArray{ComplexF64}
@@ -37,7 +46,6 @@ struct SimulationContext{N}
     U::AbstractArray{Float64}
     r::NTuple{N, AbstractArray{Float64}}
     k::NTuple{N, AbstractArray{Float64}}
-    m::Float64
 end
 
 function gen_grid_r(grid::Grid{N}) where N
@@ -193,11 +201,11 @@ function print_iter(i::Int, obs::Observables{N}, elapsed::UInt64) where N
 end
 
 function print_header(state::Int, ndim::Int, nstate::Int, itp::Bool)
+    dim_w, state_w = 11 * ndim + 1, 11 * nstate + 1
+
     if itp > 0
         print("\nSTATE $state ITP")
     end
-
-    dim_w, state_w = 11 * ndim + 1, 11 * nstate + 1
 
     labels = ("ITER", "KIN (Eh)", "POT (Eh)", "TOT (Eh)", dim_w, "POS (a0)", dim_w, "MOM (hb/a0)", state_w, "POPULATION", "NORM", "TIME")
 
@@ -216,13 +224,13 @@ function to_adia(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64})
     return reshape(W_a, size(W))
 end
 
-function calc_observables(ctx::SimulationContext{N}, grid::Grid{N}, adia::Bool) where N
+function calc_observables(ctx::SimulationContext{N}, sim::Simulation, grid::Grid{N}) where N
     W_k = to_kspace(ctx.W)
 
     norm = calc_norm(ctx.W, grid)
     pe = calc_pe(ctx.W, ctx.V, grid)
-    ke = calc_ke(W_k, grid, ctx.m, ctx.k)
-    pop = calc_pop(adia ? to_adia(ctx.W, ctx.U) : ctx.W, grid)
+    ke = calc_ke(W_k, grid, sim.m, ctx.k)
+    pop = calc_pop(sim.adia ? to_adia(ctx.W, ctx.U) : ctx.W, grid)
     pos = calc_pos(ctx.W, grid, ctx.r)
     mom = calc_mom(W_k, grid, ctx.k)
 
@@ -259,64 +267,70 @@ function project_and_normalize!(W::AbstractArray{ComplexF64}, wfns::Vector{Abstr
     normalize!(W, grid)
 end
 
-function run_qd()
-    # ic = InitialConditions((-10.0,), (15.0,), (2.0,), 1, true)
-    # grid = Grid(((-24.0, 32.0),), 4096)
-    # m = 2000.0
-    # iters = 3000
-    # dt = 1.0
-    # log_interval = 500
-    # adia = true
-    # itp = false
-    # pot = POTENTIALS["tully_1"]
+function parse_config(config::Dict{String, Any})
+    dt::Float64 = config["simulation"]["time_step" ]
+    iters::Int  = config["simulation"]["iterations"]
 
-    ic = InitialConditions((1.0,), (0.0,), (2.0,), 0, true)
-    grid = Grid(((-8.0, 8.0),), 256)
-    m = 1.0
-    iters = 1000
-    dt = 0.01
-    log_interval = 200
-    adia = false
-    itp = 5
-    pot = POTENTIALS["harmonic"]
+    adia::Bool        = get(config["simulation"], "adiabatic",    false)
+    itp::Int          = get(config["simulation"], "imaginary",    0    )
+    log_interval::Int = get(config["simulation"], "log_interval", 1    )
+    m::Float64        = get(config["simulation"], "mass",         1    )
+
+    sim = Simulation(itp, iters, dt, m, adia, log_interval)
+
+    bounds = Tuple(Tuple{Float64, Float64}(b) for b in config["grid"]["bounds"])
+
+    grid = Grid(bounds, config["grid"]["npoint"])
+
+    pos   = Tuple(Float64(q) for q in config["initial_conditions"]["position"])
+    mom   = Tuple(Float64(p) for p in config["initial_conditions"]["momentum"])
+    gamma = Tuple(Float64(g) for g in config["initial_conditions"]["gamma"   ])
+
+    state::Int    = get(config["initial_conditions"], "state",     0    )
+    ic_adia::Bool = get(config["initial_conditions"], "adiabatic", false)
+
+    ic = InitialConditions(pos, mom, gamma, state, ic_adia)
+
+    return sim, grid, ic, POTENTIALS[config["potential"]["name"]]
+end
+
+function run_qd(config::Dict{String, Any})
+    sim, grid, ic, pot = parse_config(config)
 
     @timeit "INITIALIZATION" begin
         r = gen_grid_r(grid)
         k = gen_grid_k(grid)
 
-        V = pot.fn(r...); A, U = get_pot_eigen(V)
+        V, m = pot.fn(r...), sim.m; A, U = get_pot_eigen(V)
 
-        R = get_prop_r(A, U, 0.5 * (itp > 0 ? -im * dt : dt + 0im))
-        K = get_prop_k(m, k, 1.0 * (itp > 0 ? -im * dt : dt + 0im))
+        R = get_prop_r(A, U, 0.5 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
+        K = get_prop_k(m, k, 1.0 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
     end
 
     opt_wfn, opt_wfn_te = AbstractArray{ComplexF64}[], Float64[]
 
-    for i in 1:(itp > 0 ? itp : 1)
-
+    for i in 1:(sim.itp > 0 ? sim.itp : 1)
         W = gen_wfn(ic, r, grid.npoint, pot.nstate); normalize!(W, grid)
 
-        ctx = SimulationContext(W, R, K, V, A, U, r, k, m)
+        ctx, start_time = SimulationContext(W, R, K, V, A, U, r, k), time_ns()
 
-        print_header(i, length(r), pot.nstate, itp > 0)
+        print_header(i, length(r), pot.nstate, sim.itp > 0)
 
-        start_time = time_ns()
-
-        for j in 1:iters + 1
+        for j in 1:sim.iters + 1
             if j > 1
                 @timeit "PROPAGATION" propagate!(W, R, K)
             end
 
-            @timeit "PROJECTION" if itp > 0
-                project_and_normalize!(W, opt_wfn, grid)
+            if sim.itp > 0
+                @timeit "PROJECTION" project_and_normalize!(W, opt_wfn, grid)
             end
 
-            if (j - 1) % log_interval == 0
-                @timeit "OBSERVABLES" obs = calc_observables(ctx, grid, adia)
+            if (j - 1) % sim.log_interval == 0
+                @timeit "OBSERVABLES" obs = calc_observables(ctx, sim, grid)
 
                 print_iter(j, obs, time_ns() - start_time)
 
-                if j == iters + 1 && itp > 1
+                if j == sim.iters + 1 && sim.itp > 1
                     push!(opt_wfn_te, obs.pe + obs.ke)
                 end
 
@@ -324,16 +338,16 @@ function run_qd()
             end
         end
 
-        if pot.nstate > 1 && itp == 0
+        if pot.nstate > 1 && sim.itp == 0
             log_final_pop(W, grid)
         end
 
-        push!(opt_wfn, W)
+        sim.itp > 0 && push!(opt_wfn, W)
     end
 
-    if itp > 1
-        log_final_te(opt_wfn_te)
-    end
+    sim.itp > 1 && log_final_te(opt_wfn_te)
+
+    parse_config(config)
 end
 
 end # module QuantumDynamics
