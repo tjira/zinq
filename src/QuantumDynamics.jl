@@ -36,6 +36,8 @@ Base.@kwdef struct History{N, S}
     norm::Union{Vector{Float64}, Nothing} = nothing
     pe  ::Union{Vector{Float64}, Nothing} = nothing
     ke  ::Union{Vector{Float64}, Nothing} = nothing
+
+    wfn::Union{Vector{AbstractArray{ComplexF64}}, Nothing} = nothing
 end
 
 Base.@kwdef struct Simulation
@@ -57,6 +59,7 @@ Base.@kwdef struct Writer
     pe  ::Union{String, Nothing} = nothing
     ke  ::Union{String, Nothing} = nothing
     te  ::Union{String, Nothing} = nothing
+    wfn ::Union{String, Nothing} = nothing
 end
 
 Base.@kwdef struct SimulationContext{N}
@@ -281,6 +284,8 @@ function init_history(writer::Writer, ndim::Int, nstate::Int)
         norm = !isnothing(writer.norm) ? Float64[] : nothing,
         pe   = !isnothing(writer.pe)   ? Float64[] : nothing,
         ke   = !isnothing(writer.ke)   ? Float64[] : nothing,
+
+        wfn = !isnothing(writer.wfn) ? AbstractArray{ComplexF64}[] : nothing
     )
 end
 
@@ -350,14 +355,15 @@ function parse_config(config::Dict{String, Any})
         ke   = get(config["write"], "kinetic_energy",   nothing)
         te   = get(config["write"], "total_energy",     nothing)
         norm = get(config["write"], "norm",             nothing)
+        wfn  = get(config["write"], "wavefunction",     nothing)
 
-        Writer(pos=pos, mom=mom, pop=pop, pe=pe, ke=ke, te=te, norm=norm)
+        Writer(pos=pos, mom=mom, pop=pop, pe=pe, ke=ke, te=te, norm=norm, wfn=wfn)
     else Writer() end
 
     return sim, grid, ic, POTENTIALS[config["potential"]["name"]], writer
 end
 
-function log_history!(history::History{N, S}, obs::Observables{N, S}) where {N, S}
+function log_history!(history::History{N, S}, W::AbstractArray{ComplexF64}, obs::Observables{N, S}) where {N, S}
     !isnothing(history.pos) && !isnothing(obs.pos) && push!(history.pos, obs.pos)
     !isnothing(history.mom) && !isnothing(obs.mom) && push!(history.mom, obs.mom)
     !isnothing(history.pop) && !isnothing(obs.pop) && push!(history.pop, obs.pop)
@@ -365,9 +371,11 @@ function log_history!(history::History{N, S}, obs::Observables{N, S}) where {N, 
     !isnothing(history.norm) && !isnothing(obs.norm) && push!(history.norm, obs.norm)
     !isnothing(history.pe  ) && !isnothing(obs.pe  ) && push!(history.pe,   obs.pe  )
     !isnothing(history.ke  ) && !isnothing(obs.ke  ) && push!(history.ke,   obs.ke  )
+
+    !isnothing(history.wfn) && push!(history.wfn, copy(W))
 end
 
-function export_history(history::History{N, S}, sim::Simulation, writer::Writer, state::Int) where {N, S}
+function export_history(history::History{N, S}, ctx::SimulationContext{N}, sim::Simulation, writer::Writer, state::Int) where {N, S}
     to_matrix(v::Vector{NTuple{M, Float64}}) where M = [row[col] for row in v, col in 1:M]
 
     function format_name(fname::String, state::Int, itp::Bool)
@@ -385,6 +393,18 @@ function export_history(history::History{N, S}, sim::Simulation, writer::Writer,
     !isnothing(history.pe) && write_matrix(format_name(writer.pe, state, sim.itp > 0), hcat(t, history.pe              ))
     !isnothing(history.ke) && write_matrix(format_name(writer.ke, state, sim.itp > 0), hcat(t, history.ke              ))
     !isnothing(writer.te ) && write_matrix(format_name(writer.te, state, sim.itp > 0), hcat(t, history.pe .+ history.ke))
+
+    if !isnothing(history.wfn)
+        write_matrix(format_name(writer.wfn, state, sim.itp > 0), hcat(flatten_coords(ctx.r), flatten_wfn_history(history.wfn)))
+    end
+end
+
+function flatten_coords(r::NTuple{N, AbstractArray{Float64}}) where N
+    return [map(vec, r)[d][c[d]] for c in vec(CartesianIndices(map(length, map(vec, r)))), d in 1:N]
+end
+
+function flatten_wfn_history(wfns::Vector{<:AbstractArray{ComplexF64}})
+    reduce(hcat, [hcat(real.(vec(slice)), imag.(vec(slice))) for W in wfns for slice in eachslice(W, dims=ndims(W))])
 end
 
 function write_matrix(fname::String, mat::AbstractArray{Float64})
@@ -444,7 +464,7 @@ function run_qd(config::Dict{String, Any})
                 start_time = time_ns()
             end
 
-            log_history!(history, obs)
+            log_history!(history, W, obs)
         end
 
         if pot.nstate > 1 && sim.itp == 0
@@ -453,7 +473,7 @@ function run_qd(config::Dict{String, Any})
 
         sim.itp > 0 && push!(opt_wfn, W)
 
-        export_history(history, sim, writer, i)
+        export_history(history, ctx, sim, writer, i)
     end
 
     sim.itp > 1 && log_final_te(opt_wfn_te)
