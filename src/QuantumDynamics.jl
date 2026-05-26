@@ -100,6 +100,10 @@ function flat_pot(V::AbstractArray{Float64})
     return reshape(V, size(V, 1), size(V, 2), :)
 end
 
+function flat_prop(P::AbstractArray{ComplexF64})
+    return reshape(P, size(P, 1), size(P, 2), :)
+end
+
 function calc_pe(W::AbstractArray{ComplexF64}, V::AbstractArray{Float64}, grid::Grid{N}) where N
     W_f, V_f = flat_wfn(W), flat_pot(V)
 
@@ -121,9 +125,7 @@ function normalize!(W::AbstractArray{ComplexF64}, grid::Grid{N}) where N
 end
 
 function calc_pos(W::AbstractArray{ComplexF64}, grid::Grid{N}, r::NTuple{N, AbstractArray{Float64}}) where N
-    return ntuple(N) do k
-        sum(abs2(W[l]) * r[k][l[k]] for l in CartesianIndices(W)) * get_dr(grid)
-    end
+    return ntuple(i -> sum(@. abs2(W) * r[i]) * get_dr(grid), N)
 end
 
 function to_kspace(W::AbstractArray{ComplexF64})
@@ -135,13 +137,11 @@ function get_dk(grid::Grid{N}) where N
 end
 
 function calc_mom(W::AbstractArray{ComplexF64}, grid::Grid{N}, k::NTuple{N, AbstractArray{Float64}}) where N
-    return ntuple(N) do i
-        sum(abs2(W[l]) * k[i][l[i]] for l in CartesianIndices(W)) * get_dk(grid)
-    end
+    return ntuple(i -> sum(@. abs2(W) * k[i]) * get_dk(grid), N)
 end
 
 function calc_ke(W::AbstractArray{ComplexF64}, grid::Grid{N}, m::Float64, k::NTuple{N, AbstractArray{Float64}}) where N
-    return 0.5 * sum(abs2(W[l]) * sum(k[i][l[i]]^2 / m for i in 1:N) for l in CartesianIndices(W)) * get_dk(grid)
+    return 0.5 * sum(@. abs2(W) * $reduce(.+, k[i]^2 / m for i in 1:N)) * get_dk(grid)
 end
 
 function get_pot_eigen(V::AbstractArray{Float64, P}) where P
@@ -165,15 +165,15 @@ function get_prop_r(A::AbstractArray{Float64}, U::AbstractArray{Float64}, dt::Co
 end
 
 function get_prop_k(m::Float64, k::NTuple{N, AbstractArray{Float64}}, dt::ComplexF64) where N
-    return @. exp(-0.5im * $(reduce(.+, @. k[i]^2 / m for i in 1:N)) * dt)
+    return @. exp(-0.5im * $reduce(.+, k[i]^2 / m for i in 1:N) * dt)
 end
 
 function propagate_r!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64})
-    W_f = flat_wfn(W)
+    W_f, R_f = flat_wfn(W), flat_prop(R)
 
-    @tullio W_t[i, I] := R[I, J, i] * W_f[i, J]
+    @tullio W_t[i, I] := R_f[I, J, i] * W_f[i, J]
 
-    W .= W_t
+    W_f .= W_t
 end
 
 function propagate_k!(W::AbstractArray{ComplexF64}, K::AbstractArray{ComplexF64}) 
@@ -203,9 +203,7 @@ end
 function print_header(state::Int, ndim::Int, nstate::Int, itp::Bool)
     dim_w, state_w = 11 * ndim + 1, 11 * nstate + 1
 
-    if itp > 0
-        print("\nSTATE $state ITP")
-    end
+    itp && print("\nSTATE $state ITP")
 
     labels = ("ITER", "KIN (Eh)", "POT (Eh)", "TOT (Eh)", dim_w, "POS (a0)", dim_w, "MOM (hb/a0)", state_w, "POPULATION", "NORM", "TIME")
 
@@ -217,9 +215,9 @@ function format_duration(nanos::UInt64)
 end
 
 function to_adia(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64})
-    W_a, W_f = similar(flat_wfn(W)), flat_wfn(W)
+    W_f, U_f = flat_wfn(W), flat_pot(U)
 
-    @tullio W_a[i, I] := U[I, J, i]' * W_f[i, J]
+    @tullio W_a[i, I] := U_f[I, J, i]' * W_f[i, J]
 
     return reshape(W_a, size(W))
 end
@@ -245,8 +243,8 @@ function project_out!(W1::AbstractArray{ComplexF64}, W2::AbstractArray{ComplexF6
     W1 .-= overlap(W2, W1, grid) .* W2
 end
 
-function log_final_pop(W::AbstractArray{ComplexF64}, grid::Grid{N}) where N
-    pop = calc_pop(W, grid)
+function log_final_pop(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64}, grid::Grid{N}, adia::Bool) where N
+    pop = calc_pop(adia ? to_adia(W, U) : W, grid)
 
     for (i, p) in enumerate(pop)
         @printf("%sFINAL POPULATION OF STATE %02d: %.6f\n", i == 1 ? "\n" : "", i, p)
@@ -339,15 +337,13 @@ function run_qd(config::Dict{String, Any})
         end
 
         if pot.nstate > 1 && sim.itp == 0
-            log_final_pop(W, grid)
+            log_final_pop(W, ctx.U, grid, sim.adia)
         end
 
         sim.itp > 0 && push!(opt_wfn, W)
     end
 
     sim.itp > 1 && log_final_te(opt_wfn_te)
-
-    parse_config(config)
 end
 
 end # module QuantumDynamics

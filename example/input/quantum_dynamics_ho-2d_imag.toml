@@ -1,0 +1,17 @@
+[simulation]
+imaginary = 2
+iterations = 1000
+time_step = 0.01
+log_interval = 200
+
+[grid]
+bounds = [[-8.0, 8.0], [-8.0, 8.0]]
+npoint = 128
+
+[initial_conditions]
+position = [1, 1]
+momentum = [0, 0]
+gamma = [2, 2]
+
+[potential]
+name = "harmonic"
