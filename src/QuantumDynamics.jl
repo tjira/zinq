@@ -6,6 +6,10 @@ using .Potentials, FFTW, HDF5, TOML, Dates, LinearAlgebra, Printf, TimerOutputs,
 
 export run_qd
 
+Base.@kwdef struct Absorber{N}
+    bounds::NTuple{N, Tuple{Float64, Float64}}; exponent::Float64
+end
+
 Base.@kwdef struct Grid{N}
     bounds::NTuple{N, Tuple{Float64, Float64}}; npoint::Int
 end
@@ -178,6 +182,12 @@ function get_pot_eigen(V::AbstractArray{Float64, P}) where P
     for l in CartesianIndices(size(V)[3:end])
         A[:, l], U[:, :, l] = eigen(Symmetric(view(V, :, :, l)))
     end
+
+    U_f = reshape(U, size(V, 1), size(V, 2), :)
+    
+    for i in 2:size(U_f, 3), j in 1:size(V, 1)
+        if dot(view(U_f, :, j, i - 1), view(U_f, :, j, i)) < 0 U_f[:, j, i] .*= -1.0 end
+    end
     
     return A, U
 end
@@ -196,6 +206,16 @@ function get_prop_k(m::Float64, k::NTuple{N, AbstractArray{Float64}}, dt::Comple
     return exp.(-0.5im * reduce(.+, k[i].^2 / m for i in 1:N) * dt)
 end
 
+function apply_cap!(R::AbstractArray{ComplexF64}, absorber::Absorber{N}, r::NTuple{N, AbstractArray{Float64}}, dt::Float64) where N
+    C = map(1:N) do i
+        @. exp(absorber.exponent * max(0, absorber.bounds[i][1] - r[i], r[i] - absorber.bounds[i][2])) - 1
+    end
+
+    decay = exp.(-0.5 .* reduce(.+, C) .* dt)
+
+    R .*= ComplexF64.(reshape(decay, 1, 1, size(decay)...))
+end
+
 function propagate_r!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64})
     W_f, R_f = flat_wfn(W), flat_prop(R)
 
@@ -204,7 +224,7 @@ function propagate_r!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64}
     W_f .= W_t
 end
 
-function propagate_k!(W::AbstractArray{ComplexF64}, K::AbstractArray{ComplexF64}) 
+function propagate_k!(W::AbstractArray{ComplexF64}, K::AbstractArray{ComplexF64})
     fft!(W, 1:ndims(W) - 1)
 
     W .*= K
@@ -216,6 +236,16 @@ function propagate!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64}, 
     propagate_r!(W, R)
     propagate_k!(W, K)
     propagate_r!(W, R)
+end
+
+function propagate!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64}, K::AbstractArray{ComplexF64}, U::AbstractArray{Float64}, grid::Grid{N}, adia::Bool) where N
+    propagate_r!(W, R); d1 = calc_decay(W, R, U, grid, adia)
+
+    propagate_k!(W, K)
+
+    propagate_r!(W, R); d2 = calc_decay(W, R, U, grid, adia)
+
+    return d1 .+ d2
 end
 
 function print_iter(i::Int, obs::Observables{N}, elapsed::UInt64) where N
@@ -258,13 +288,13 @@ function to_dia(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64})
     return reshape(W_d, size(W))
 end
 
-function calc_observables(ctx::SimulationContext{N}, sim::Simulation, grid::Grid{N}, writer::Writer, log::Bool) where N
+function calc_observables(ctx::SimulationContext{N}, sim::Simulation, grid::Grid{N}, decay::Tuple, writer::Writer, log::Bool) where N
     need_k, need_a = log || !isnothing(writer.mom) || !isnothing(writer.ke) || !isnothing(writer.te), (log || !isnothing(writer.pop)) && sim.adia
 
     W_d, W_k, W_a = ctx.W, need_k ? to_kspace(ctx.W) : ctx.W, need_a ? to_adia(ctx.W, ctx.U) : ctx.W
 
-    norm = log || !isnothing(writer.norm) ? calc_norm(W_d, grid) : nothing
-    pops = log || !isnothing(writer.pop)  ? calc_pops(W_a, grid) : nothing
+    norm = log || !isnothing(writer.norm) ? calc_norm(W_d, grid)          : nothing
+    pops = log || !isnothing(writer.pop)  ? calc_pops(W_a, grid) .+ decay : nothing
 
     pe = log || !isnothing(writer.pe) || !isnothing(writer.te) ? calc_pe(W_d, ctx.V, grid) : nothing
     ke = log || !isnothing(writer.ke) || !isnothing(writer.te) ? calc_ke(W_k, ctx.T, grid) : nothing
@@ -301,8 +331,8 @@ function project_out!(W1::AbstractArray{ComplexF64}, W2::AbstractArray{ComplexF6
     W1 .-= overlap(W2, W1, grid) .* W2
 end
 
-function log_final_pop(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64}, grid::Grid{N}, adia::Bool) where N
-    pop = calc_pops(adia ? to_adia(W, U) : W, grid)
+function log_final_pop(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64}, grid::Grid{N}, decay::Tuple, adia::Bool) where N
+    pop = calc_pops(adia ? to_adia(W, U) : W, grid) .+ decay
 
     for (i, p) in enumerate(pop)
         @printf("%sFINAL POPULATION OF STATE %02d: %.6f\n", i == 1 ? "\n" : "", i, p)
@@ -347,7 +377,7 @@ function parse_config(config::Dict{String, Any})
 
     ic = InitialConditions(pos=pos, mom=mom, gamma=gamma, state=state, adia=ic_adia)
 
-    writer::Writer = if haskey(config, "write")
+    writer = if haskey(config, "write")
         pos  = get(config["write"], "position",         nothing)
         mom  = get(config["write"], "momentum",         nothing)
         pop  = get(config["write"], "population",       nothing)
@@ -360,7 +390,13 @@ function parse_config(config::Dict{String, Any})
         Writer(pos=pos, mom=mom, pop=pop, pe=pe, ke=ke, te=te, norm=norm, wfn=wfn)
     else Writer() end
 
-    return sim, grid, ic, POTENTIALS[config["potential"]["name"]], writer
+    absorber = if haskey(config, "cap")
+        bounds = Tuple(Tuple{Float64, Float64}(b) for b in config["cap"]["bounds"])
+
+        Absorber(bounds=bounds, exponent=config["cap"]["exponent"])
+    else nothing end
+
+    return sim, grid, ic, POTENTIALS[config["potential"]["name"]], absorber, writer
 end
 
 function log_history!(history::History{N, S}, W::AbstractArray{ComplexF64}, obs::Observables{N, S}) where {N, S}
@@ -411,8 +447,18 @@ function write_matrix(fname::String, mat::AbstractArray{Float64})
     h5open(fname, "w") do file file["data"] = mat end
 end
 
+function calc_decay(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64}, U::AbstractArray{Float64}, grid::Grid{N}, adia::Bool) where N
+    W_f, R_f = flat_wfn(adia ? to_adia(W, U) : W), flat_prop(R)
+
+    @tullio surv[i] := abs2(R_f[I, 1, i])
+
+    @tullio decay[I] := abs2(W_f[i, I]) * (1 / max(surv[i], 1e-14) - 1)
+
+    return Tuple(decay .* get_dr(grid))
+end
+
 function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
-    sim, grid, ic, pot, writer = parse_config(config)
+    sim, grid, ic, pot, absorber, writer = parse_config(config)
 
     @timeit "INITIALIZATION" begin
         r = gen_grid_r(grid)
@@ -424,6 +470,10 @@ function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
 
         R = get_prop_r(A, U, 0.5 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
         K = get_prop_k(m, k, 1.0 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
+
+        if !isnothing(absorber)
+            apply_cap!(R, absorber, r, 0.5 * sim.dt)
+        end
     end
 
     opt_wfn, opt_wfn_te, output = AbstractArray{ComplexF64}[], Float64[], Observables{length(r), pot.nstate}[]
@@ -435,7 +485,7 @@ function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
             W = to_dia(W, U)
         end
 
-        ctx = SimulationContext(W=W, R=R, K=K, V=V, A=A, U=U, T=T, r=r, k=k)
+        ctx, decay = SimulationContext(W=W, R=R, K=K, V=V, A=A, U=U, T=T, r=r, k=k), ntuple(_ -> 0.0, pot.nstate)
 
         enable_print && print_header(i, length(r), pot.nstate, sim.itp > 0)
 
@@ -445,7 +495,7 @@ function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
             log = (j - 1) % sim.log_interval == 0 || j == sim.iters + 1
 
             if j > 1
-                @timeit "PROPAGATION" propagate!(W, R, K)
+                @timeit "PROPAGATION" if isnothing(absorber) propagate!(W, R, K) else decay = decay .+ propagate!(W, R, K, U, grid, sim.adia) end
             end
 
             if sim.itp > 0
@@ -453,7 +503,7 @@ function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
             end
 
             if log || writer != Writer()
-                @timeit "OBSERVABLES" obs = calc_observables(ctx, sim, grid, writer, log)
+                @timeit "OBSERVABLES" obs = calc_observables(ctx, sim, grid, decay, writer, log)
 
                 enable_print && log && print_iter(j, obs, time_ns() - start_time)
 
@@ -464,13 +514,13 @@ function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
                 if log start_time = time_ns() end
 
                 if writer != Writer()
-                    @timeit "HISTORY APPEND" log_history!(history, W, obs)
+                    @timeit "HISTORY APPEND" log_history!(history, sim.adia ? to_adia(W, U) : W, obs)
                 end
             end
         end
 
         if pot.nstate > 1 && sim.itp == 0
-            enable_print && log_final_pop(W, ctx.U, grid, sim.adia)
+            enable_print && log_final_pop(W, ctx.U, grid, decay, sim.adia)
         end
 
         sim.itp > 0 && push!(opt_wfn, W)

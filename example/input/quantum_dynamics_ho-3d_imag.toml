@@ -6,7 +6,7 @@ mass = 1
 log_interval = 200
 
 [grid]
-bounds = [[-8.0, 8.0], [-8.0, 8.0], [-8.0, 8.0]]
+bounds = [[-8, 8], [-8, 8], [-8, 8]]
 npoint = 64
 
 [initial_conditions]
