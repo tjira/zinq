@@ -364,13 +364,13 @@ function parse_config(config::Dict{String, Any})
 end
 
 function log_history!(history::History{N, S}, W::AbstractArray{ComplexF64}, obs::Observables{N, S}) where {N, S}
-    !isnothing(history.pos) && !isnothing(obs.pos) && push!(history.pos, obs.pos)
-    !isnothing(history.mom) && !isnothing(obs.mom) && push!(history.mom, obs.mom)
-    !isnothing(history.pop) && !isnothing(obs.pop) && push!(history.pop, obs.pop)
+    !isnothing(history.pos) && push!(history.pos, obs.pos)
+    !isnothing(history.mom) && push!(history.mom, obs.mom)
+    !isnothing(history.pop) && push!(history.pop, obs.pop)
     
-    !isnothing(history.norm) && !isnothing(obs.norm) && push!(history.norm, obs.norm)
-    !isnothing(history.pe  ) && !isnothing(obs.pe  ) && push!(history.pe,   obs.pe  )
-    !isnothing(history.ke  ) && !isnothing(obs.ke  ) && push!(history.ke,   obs.ke  )
+    !isnothing(history.norm) && push!(history.norm, obs.norm)
+    !isnothing(history.pe  ) && push!(history.pe,   obs.pe  )
+    !isnothing(history.ke  ) && push!(history.ke,   obs.ke  )
 
     !isnothing(history.wfn) && push!(history.wfn, copy(W))
 end
@@ -411,7 +411,7 @@ function write_matrix(fname::String, mat::AbstractArray{Float64})
     h5open(fname, "w") do file file["data"] = mat end
 end
 
-function run_qd(config::Dict{String, Any})
+function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
     sim, grid, ic, pot, writer = parse_config(config)
 
     @timeit "INITIALIZATION" begin
@@ -426,7 +426,7 @@ function run_qd(config::Dict{String, Any})
         K = get_prop_k(m, k, 1.0 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
     end
 
-    opt_wfn, opt_wfn_te = AbstractArray{ComplexF64}[], Float64[]
+    opt_wfn, opt_wfn_te, output = AbstractArray{ComplexF64}[], Float64[], Observables{length(r), pot.nstate}[]
 
     for i in 1:(sim.itp > 0 ? sim.itp : 1)
         W = gen_wfn(ic, r, grid.npoint, pot.nstate); normalize!(W, grid)
@@ -437,7 +437,7 @@ function run_qd(config::Dict{String, Any})
 
         ctx = SimulationContext(W=W, R=R, K=K, V=V, A=A, U=U, T=T, r=r, k=k)
 
-        print_header(i, length(r), pot.nstate, sim.itp > 0)
+        enable_print && print_header(i, length(r), pot.nstate, sim.itp > 0)
 
         history, start_time = init_history(writer, length(r), pot.nstate), time_ns()
 
@@ -452,31 +452,37 @@ function run_qd(config::Dict{String, Any})
                 @timeit "PROJECTION" project_and_normalize!(W, opt_wfn, grid)
             end
 
-            @timeit "OBSERVABLES" obs = calc_observables(ctx, sim, grid, writer, log)
+            if log || writer != Writer()
+                @timeit "OBSERVABLES" obs = calc_observables(ctx, sim, grid, writer, log)
 
-            if log
-                print_iter(j, obs, time_ns() - start_time)
+                enable_print && log && print_iter(j, obs, time_ns() - start_time)
 
-                if j == sim.iters + 1 && sim.itp > 1
-                    push!(opt_wfn_te, obs.pe + obs.ke)
+                if j == sim.iters + 1
+                    sim.itp > 1 && push!(opt_wfn_te, obs.pe + obs.ke); push!(output, obs)
                 end
 
-                start_time = time_ns()
-            end
+                if log start_time = time_ns() end
 
-            log_history!(history, W, obs)
+                if writer != Writer()
+                    @timeit "HISTORY APPEND" log_history!(history, W, obs)
+                end
+            end
         end
 
         if pot.nstate > 1 && sim.itp == 0
-            log_final_pop(W, ctx.U, grid, sim.adia)
+            enable_print && log_final_pop(W, ctx.U, grid, sim.adia)
         end
 
         sim.itp > 0 && push!(opt_wfn, W)
 
-        export_history(history, ctx, sim, writer, i)
+        if writer != Writer()
+            @timeit "DATA EXPORT" export_history(history, ctx, sim, writer, i)
+        end
     end
 
-    sim.itp > 1 && log_final_te(opt_wfn_te)
+    sim.itp > 1 && enable_print && log_final_te(opt_wfn_te)
+
+    return output
 end
 
 end # module QuantumDynamics

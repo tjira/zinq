@@ -16,10 +16,13 @@ resolve:
 	@julia --project=. -e 'using Pkg; rm("Manifest.toml"); Pkg.resolve()'
 
 repl: bootstrap instantiate
-	@julia --project=. -e 'using Revise, Zinq, BenchmarkTools' -i
+	@julia --project=. -e 'using Pkg, Revise, Zinq, BenchmarkTools' -i
 
 run: instantiate
 	@julia --project=. -e 'using Zinq; julia_main()'
+
+test: instantiate
+	@julia --project=. -e 'using Pkg; Pkg.test()'
 
 update:
 	@julia --project=. -e 'using Pkg; Pkg.update()'

@@ -23,7 +23,7 @@ function julia_main()::Cint
 
     print_header(); reset_timer!()
 
-    @timeit "QUANTUM DYNAMICS" run_qd(TOML.parsefile(input_file))
+    @timeit "QUANTUM DYNAMICS" output = run_qd(TOML.parsefile(input_file))
 
     println(get_timer_table())
 
