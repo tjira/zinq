@@ -1,4 +1,4 @@
-module Potential
+module Potentials
 
 export POTENTIALS
 
@@ -29,4 +29,4 @@ const POTENTIALS = Dict{String, Potential}(
     "tully_1" => Potential(tully_1, 2),
 )
 
-end # module Potential
+end # module Potentials
