@@ -1,10 +1,9 @@
 module Potentials
 
-export POTENTIALS
+export POTENTIALS, Potential
 
-struct Potential
-    fn::Function
-    nstate::Int
+struct Potential{S, F <: Function}
+    fn::F
 end
 
 function tully_1(r::Vararg{AbstractArray{Float64}, N}; A::Float64 = 0.01, B::Float64 = 1.6, C::Float64 = 0.005, D::Float64 = 1.0) where N
@@ -24,9 +23,9 @@ function harmonic(r::Vararg{AbstractArray{Float64}, N}; k::NTuple{N, Float64}=nt
     return reshape(V, 1, 1, size(V)...)
 end
 
-const POTENTIALS = Dict{String, Potential}(
-    "harmonic" => Potential(harmonic, 1),
-    "tully_1" => Potential(tully_1, 2),
+const POTENTIALS = Dict(
+    "harmonic" => Potential{1, typeof(harmonic)}(harmonic),
+    "tully_1"  => Potential{2, typeof(tully_1 )}(tully_1 ),
 )
 
 end # module Potentials

@@ -4,33 +4,29 @@ include("Potentials.jl")
 
 using .Potentials, FFTW, HDF5, TOML, Dates, LinearAlgebra, Printf, TimerOutputs, Tullio
 
-export run_qd
+export parse_config_qd, run_qd, run_qd_stable
 
 Base.@kwdef struct Absorber{N}
     bounds::NTuple{N, Tuple{Float64, Float64}}; exponent::Float64
 end
 
-Base.@kwdef struct Grid{N}
+Base.@kwdef struct Grid{N, T <: AbstractArray{Float64}}
     bounds::NTuple{N, Tuple{Float64, Float64}}; npoint::Int
 
-    r::NTuple{N, AbstractArray{Float64}}
-    k::NTuple{N, AbstractArray{Float64}}
+    r::NTuple{N, T}
+    k::NTuple{N, T}
 end
 
-Base.@kwdef mutable struct Wavefunction
-    data::AbstractArray{ComplexF64}; decay::Vector{Float64}
+Base.@kwdef mutable struct Wavefunction{T <: AbstractArray{ComplexF64}}
+    data::T; decay::Vector{Float64}
 end
 
-Base.@kwdef struct Hamiltonian
-    V::AbstractArray{Float64}
-    T::AbstractArray{Float64}
-    A::AbstractArray{Float64}
-    U::AbstractArray{Float64}
+Base.@kwdef struct Hamiltonian{TV <: AbstractArray{Float64}, TK <: AbstractArray{Float64}, TA <: AbstractArray{Float64}}
+    V::TV; K::TK; A::TA; U::TV
 end
 
-Base.@kwdef struct Propagator
-    R::AbstractArray{ComplexF64}
-    K::AbstractArray{ComplexF64}
+Base.@kwdef struct Propagator{TR <: AbstractArray{ComplexF64}, TK <: AbstractArray{ComplexF64}}
+    R::TR; K::TK
 end
 
 Base.@kwdef struct InitialConditions{N}
@@ -51,7 +47,7 @@ Base.@kwdef struct Observables{N, S}
     ke  ::Union{Float64, Nothing}
 end
 
-Base.@kwdef struct History{N, S}
+Base.@kwdef struct History{N, S, T <: AbstractArray{ComplexF64}}
     pos::Union{Vector{NTuple{N, Float64}}, Nothing} = nothing
     mom::Union{Vector{NTuple{N, Float64}}, Nothing} = nothing
     pop::Union{Vector{NTuple{S, Float64}}, Nothing} = nothing
@@ -60,7 +56,7 @@ Base.@kwdef struct History{N, S}
     pe  ::Union{Vector{Float64}, Nothing} = nothing
     ke  ::Union{Vector{Float64}, Nothing} = nothing
 
-    wfn::Union{Vector{AbstractArray{ComplexF64}}, Nothing} = nothing
+    wfn::Union{Vector{T}, Nothing} = nothing
 end
 
 Base.@kwdef struct Simulation
@@ -160,7 +156,7 @@ function calc_pops(psi::Wavefunction, grid::Grid{N}) where N
     return Vector(pop .* get_dr(grid))
 end
 
-function normalize!(psi::Wavefunction, grid::Grid{N}) where N
+function normalize!(psi::Wavefunction{T}, grid::Grid{N}) where {N, T}
     psi.data ./= calc_norm(psi, grid) 
 end
 
@@ -181,10 +177,10 @@ function calc_mom(psi_k::Wavefunction, grid::Grid{N}) where N
 end
 
 function calc_ke(psi_k::Wavefunction, ham::Hamiltonian, grid::Grid{N}) where N
-    return sum(abs2.(psi_k.data) .* ham.T) * get_dk(grid)
+    return sum(abs2.(psi_k.data) .* ham.K) * get_dk(grid)
 end
 
-function get_pot_eigen(V::AbstractArray{Float64, P}) where P
+function get_pot_eigen(V::T) where T
     A, U = similar(V, (size(V, 1), size(V)[3:end]...)), similar(V)
 
     for l in CartesianIndices(size(V)[3:end])
@@ -255,7 +251,7 @@ function propagate!(psi::Wavefunction, prop::Propagator, ham::Hamiltonian, grid:
     end
 end
 
-function print_iter(i::Int, obs::Observables{N}, elapsed::UInt64) where N
+function print_iter(i::Int, obs::Observables{N, S}, elapsed::UInt64) where {N, S}
     fmt_pos = join([@sprintf("%10.4f", x) for x in obs.pos], " ")
     fmt_mom = join([@sprintf("%10.4f", x) for x in obs.mom], " ")
     fmt_pop = join([@sprintf("%10.4f", x) for x in obs.pop], " ")
@@ -265,8 +261,8 @@ function print_iter(i::Int, obs::Observables{N}, elapsed::UInt64) where N
     @printf("%7d %12.6f %12.6f %12.6f [%s] [%s] [%s] %9.4f %s\n", values...)
 end
 
-function print_header(state::Int, ndim::Int, nstate::Int, itp::Bool)
-    dim_w, state_w = 11 * ndim + 1, 11 * nstate + 1
+function print_header(state::Int, itp::Bool, ::Val{N}, ::Val{S}) where {N, S}
+    dim_w, state_w = 11 * N + 1, 11 * S + 1
 
     itp && print("\nSTATE $state ITP")
 
@@ -312,17 +308,17 @@ function calc_observables(psi::Wavefunction, ham::Hamiltonian, grid::Grid{N}, si
     return Observables{N, size(ham.V, 1)}(pos=pos, mom=mom, pop=pops, norm=norm, pe=pe, ke=ke)
 end
 
-function init_history(writer::Writer, ndim::Int, nstate::Int)
-    return History{ndim, nstate}(
-        pos = !isnothing(writer.pos) ? NTuple{ndim,   Float64}[] : nothing,
-        mom = !isnothing(writer.mom) ? NTuple{ndim,   Float64}[] : nothing,
-        pop = !isnothing(writer.pop) ? NTuple{nstate, Float64}[] : nothing,
+function init_history(writer::Writer, ::Val{N}, ::Val{S}, ::Type{T}) where {N, S, T}
+    return History{N, S, T}(
+        pos = !isnothing(writer.pos) ? NTuple{N, Float64}[] : nothing,
+        mom = !isnothing(writer.mom) ? NTuple{N, Float64}[] : nothing,
+        pop = !isnothing(writer.pop) ? NTuple{S, Float64}[] : nothing,
         
         norm = !isnothing(writer.norm) ? Float64[] : nothing,
         pe   = !isnothing(writer.pe)   ? Float64[] : nothing,
         ke   = !isnothing(writer.ke)   ? Float64[] : nothing,
 
-        wfn = !isnothing(writer.wfn) ? AbstractArray{ComplexF64}[] : nothing
+        wfn = !isnothing(writer.wfn) ? T[] : nothing
     )
 end
 
@@ -358,52 +354,6 @@ function project_and_normalize!(psi::Wavefunction, wfns::Vector{Wavefunction}, g
     end
 
     normalize!(psi, grid)
-end
-
-function parse_config(config::Dict{String, Any})
-    dt::Float64 = config["simulation"]["time_step" ]
-    iters::Int  = config["simulation"]["iterations"]
-
-    adia::Bool        = get(config["simulation"], "adiabatic",    false)
-    itp::Int          = get(config["simulation"], "imaginary",    0    )
-    log_interval::Int = get(config["simulation"], "log_interval", 1    )
-    m::Float64        = get(config["simulation"], "mass",         1    )
-
-    sim = Simulation(itp=itp, iters=iters, dt=dt, m=m, adia=adia, log_interval=log_interval)
-
-    bounds = Tuple(Tuple{Float64, Float64}(b) for b in config["grid"]["bounds"])
-
-    grid = Grid(bounds, config["grid"]["npoint"])
-
-    pos   = Tuple(Float64(q) for q in config["initial_conditions"]["position"])
-    mom   = Tuple(Float64(p) for p in config["initial_conditions"]["momentum"])
-    gamma = Tuple(Float64(g) for g in config["initial_conditions"]["gamma"   ])
-
-    state::Int    = get(config["initial_conditions"], "state",     0    )
-    ic_adia::Bool = get(config["initial_conditions"], "adiabatic", false)
-
-    ic = InitialConditions(pos=pos, mom=mom, gamma=gamma, state=state, adia=ic_adia)
-
-    writer = if haskey(config, "write")
-        pos  = get(config["write"], "position",         nothing)
-        mom  = get(config["write"], "momentum",         nothing)
-        pop  = get(config["write"], "population",       nothing)
-        pe   = get(config["write"], "potential_energy", nothing)
-        ke   = get(config["write"], "kinetic_energy",   nothing)
-        te   = get(config["write"], "total_energy",     nothing)
-        norm = get(config["write"], "norm",             nothing)
-        wfn  = get(config["write"], "wavefunction",     nothing)
-
-        Writer(pos=pos, mom=mom, pop=pop, pe=pe, ke=ke, te=te, norm=norm, wfn=wfn)
-    else Writer() end
-
-    absorber = if haskey(config, "cap")
-        bounds = Tuple(Tuple{Float64, Float64}(b) for b in config["cap"]["bounds"])
-
-        Absorber(bounds=bounds, exponent=config["cap"]["exponent"])
-    else nothing end
-
-    return sim, grid, ic, POTENTIALS[config["potential"]["name"]], absorber, writer
 end
 
 function log_history!(history::History{N, S}, psi::Wavefunction, obs::Observables{N, S}) where {N, S}
@@ -464,13 +414,76 @@ function calc_decay(psi::Wavefunction, prop::Propagator, ham::Hamiltonian, grid:
     return Vector(decay .* get_dr(grid))
 end
 
+Base.@kwdef struct StableParams{N, S, T <: AbstractArray{Float64}, F <: Function}
+    sim      ::Simulation
+    grid     ::Grid{N, T}
+    ic       ::InitialConditions{N}
+    pot      ::Potential{S, F}
+    absorber ::Union{Absorber{N}, Nothing}
+    writer   ::Writer
+end
+
+function parse_config_qd(config::Dict{String, Any})
+    dt::Float64 = config["simulation"]["time_step" ]
+    iters::Int  = config["simulation"]["iterations"]
+
+    adia::Bool        = get(config["simulation"], "adiabatic",    false)
+    itp::Int          = get(config["simulation"], "imaginary",    0    )
+    log_interval::Int = get(config["simulation"], "log_interval", 1    )
+    m::Float64        = get(config["simulation"], "mass",         1    )
+
+    sim = Simulation(itp=itp, iters=iters, dt=dt, m=m, adia=adia, log_interval=log_interval)
+
+    bounds = Tuple(Tuple{Float64, Float64}(b) for b in config["grid"]["bounds"])
+
+    grid = Grid(bounds, config["grid"]["npoint"])
+
+    pos   = Tuple(Float64(q) for q in config["initial_conditions"]["position"])
+    mom   = Tuple(Float64(p) for p in config["initial_conditions"]["momentum"])
+    gamma = Tuple(Float64(g) for g in config["initial_conditions"]["gamma"   ])
+
+    state::Int    = get(config["initial_conditions"], "state",     0    )
+    ic_adia::Bool = get(config["initial_conditions"], "adiabatic", false)
+
+    ic = InitialConditions(pos=pos, mom=mom, gamma=gamma, state=state, adia=ic_adia)
+
+    writer = if haskey(config, "write")
+        pos  = get(config["write"], "position",         nothing)
+        mom  = get(config["write"], "momentum",         nothing)
+        pop  = get(config["write"], "population",       nothing)
+        pe   = get(config["write"], "potential_energy", nothing)
+        ke   = get(config["write"], "kinetic_energy",   nothing)
+        te   = get(config["write"], "total_energy",     nothing)
+        norm = get(config["write"], "norm",             nothing)
+        wfn  = get(config["write"], "wavefunction",     nothing)
+
+        Writer(pos=pos, mom=mom, pop=pop, pe=pe, ke=ke, te=te, norm=norm, wfn=wfn)
+    else Writer() end
+
+    absorber = if haskey(config, "cap")
+        bounds = Tuple(Tuple{Float64, Float64}(b) for b in config["cap"]["bounds"])
+
+        Absorber(bounds=bounds, exponent=config["cap"]["exponent"])
+    else nothing end
+
+    return StableParams(sim=sim, grid=grid, ic=ic, pot=POTENTIALS[config["potential"]["name"]], absorber=absorber, writer=writer)
+end
+
+function parse_config_qd(fname::String)
+    return parse_config_qd(TOML.parsefile(fname))
+end
+
 function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
-    sim, grid, ic, pot, absorber, writer = parse_config(config)
+    return run_qd_stable(parse_config_qd(config), enable_print)
+end
+
+function run_qd_stable(sp::StableParams{N, S, T, F}, enable_print::Bool = true) where {N, S, T, F}
+    (;sim, grid, ic, pot, absorber, writer) = sp
 
     @timeit "INITIALIZATION" begin
-        V, T = pot.fn(grid.r...), get_kin_op(sim.m, grid)
+        V, K = pot.fn(grid.r...), get_kin_op(sim.m, grid)
 
-        A, U = get_pot_eigen(V); ham = Hamiltonian(V=V, T=T, A=A, U=U)
+        A, U = get_pot_eigen(V); ham = Hamiltonian(V=V, K=K, A=A, U=U)
 
         R = get_prop_r(A,     U,    0.5 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
         K = get_prop_k(sim.m, grid, 1.0 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
@@ -482,18 +495,18 @@ function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
         end
     end
 
-    opt_psi, opt_psi_te, output = Wavefunction[], Float64[], Observables{length(grid.r), pot.nstate}[]
+    opt_psi, opt_psi_te, output = Wavefunction[], Float64[], Observables{N, S}[]
 
     for i in 1:(sim.itp > 0 ? sim.itp : 1)
-        psi = gen_wfn(ic, grid, pot.nstate); normalize!(psi, grid)
+        psi = gen_wfn(ic, grid, S); normalize!(psi, grid)
 
         if ic.adia
             psi = to_dia(psi, ham)
         end
 
-        enable_print && print_header(i, length(grid.r), pot.nstate, sim.itp > 0)
+        enable_print && print_header(i, sim.itp > 0, Val(N), Val(S))
 
-        history, start_time = init_history(writer, length(grid.r), pot.nstate), time_ns()
+        history, start_time = init_history(writer, Val(N), Val(S), typeof(psi.data)), time_ns()
 
         for j in 1:sim.iters + 1
             log = (j - 1) % sim.log_interval == 0 || j == sim.iters + 1
@@ -523,7 +536,7 @@ function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
             end
         end
 
-        if pot.nstate > 1 && sim.itp == 0
+        if S > 1 && sim.itp == 0
             enable_print && log_final_pop(psi, ham, grid, sim.adia)
         end
 
