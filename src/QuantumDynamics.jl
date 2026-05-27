@@ -12,6 +12,25 @@ end
 
 Base.@kwdef struct Grid{N}
     bounds::NTuple{N, Tuple{Float64, Float64}}; npoint::Int
+
+    r::NTuple{N, AbstractArray{Float64}}
+    k::NTuple{N, AbstractArray{Float64}}
+end
+
+Base.@kwdef mutable struct Wavefunction
+    data::AbstractArray{ComplexF64}; decay::Vector{Float64}
+end
+
+Base.@kwdef struct Hamiltonian
+    V::AbstractArray{Float64}
+    T::AbstractArray{Float64}
+    A::AbstractArray{Float64}
+    U::AbstractArray{Float64}
+end
+
+Base.@kwdef struct Propagator
+    R::AbstractArray{ComplexF64}
+    K::AbstractArray{ComplexF64}
 end
 
 Base.@kwdef struct InitialConditions{N}
@@ -66,23 +85,7 @@ Base.@kwdef struct Writer
     wfn ::Union{String, Nothing} = nothing
 end
 
-Base.@kwdef struct SimulationContext{N}
-    W::AbstractArray{ComplexF64}
-    R::AbstractArray{ComplexF64}
-    K::AbstractArray{ComplexF64}
-
-    V::AbstractArray{Float64}
-    A::AbstractArray{Float64}
-    U::AbstractArray{Float64}
-    T::AbstractArray{Float64}
-
-    r::NTuple{N, AbstractArray{Float64}}
-    k::NTuple{N, AbstractArray{Float64}}
-end
-
-function gen_grid_r(grid::Grid{N}) where N
-    bounds, npoint = grid.bounds, grid.npoint
-
+function gen_grid_r(bounds::NTuple{N, Tuple{Float64, Float64}}, npoint::Int) where N
     axes = ntuple(N) do i
         Vector(range(bounds[i][1], step=(bounds[i][2] - bounds[i][1]) / npoint, length=npoint))
     end
@@ -92,9 +95,7 @@ function gen_grid_r(grid::Grid{N}) where N
     end
 end
 
-function gen_grid_k(grid::Grid{N}) where N
-    bounds, npoint = grid.bounds, grid.npoint
-
+function gen_grid_k(bounds::NTuple{N, Tuple{Float64, Float64}}, npoint::Int) where N
     axes = ntuple(N) do i
         Vector(fftfreq(npoint, 2pi * npoint / (bounds[i][2] - bounds[i][1])))
     end
@@ -104,24 +105,31 @@ function gen_grid_k(grid::Grid{N}) where N
     end
 end
 
-function gen_wfn(ic::InitialConditions{N}, r::NTuple{N, AbstractArray{Float64}}, npoint::Int, nstate::Int) where N
-    W = zeros(ComplexF64, (ntuple(_ -> npoint, N)..., nstate))
+function Grid(bounds::NTuple{N, Tuple{Float64, Float64}}, npoint::Int) where N
+    r = gen_grid_r(bounds, npoint)
+    k = gen_grid_k(bounds, npoint)
+
+    return Grid(bounds=bounds, npoint=npoint, r=r, k=k)
+end
+
+function gen_wfn(ic::InitialConditions{N}, grid::Grid{N}, nstate::Int) where N
+    W = zeros(ComplexF64, (ntuple(_ -> grid.npoint, N)..., nstate))
 
     components = ntuple(N) do i
-        @. exp(-0.5 * ic.gamma[i] * (r[i] - ic.pos[i])^2 + im * ic.mom[i] * (r[i] - ic.pos[i]))
+        @. exp(-0.5 * ic.gamma[i] * (grid.r[i] - ic.pos[i])^2 + im * ic.mom[i] * (grid.r[i] - ic.pos[i]))
     end
 
     broadcast!(*, selectdim(W, N + 1, ic.state + 1), components...)
 
-    return W
+    return Wavefunction(data=W, decay=zeros(Float64, nstate))
 end
 
 function get_dr(grid::Grid{N}) where N
     return prod(map(limit -> (limit[2] - limit[1]) / grid.npoint, grid.bounds))
 end
 
-function calc_norm(W::AbstractArray{ComplexF64}, grid::Grid{N}) where N
-    return sqrt(sum(abs2, W) * get_dr(grid))
+function calc_norm(psi::Wavefunction, grid::Grid{N}) where N
+    return sqrt(sum(abs2, psi.data) * get_dr(grid))
 end
 
 function flat_wfn(W::AbstractArray{ComplexF64})
@@ -136,44 +144,44 @@ function flat_prop(P::AbstractArray{ComplexF64})
     return reshape(P, size(P, 1), size(P, 2), :)
 end
 
-function calc_pe(W::AbstractArray{ComplexF64}, V::AbstractArray{Float64}, grid::Grid{N}) where N
-    W_f, V_f = flat_wfn(W), flat_pot(V)
+function calc_pe(psi::Wavefunction, ham::Hamiltonian, grid::Grid{N}) where N
+    W_f, V_f = flat_wfn(psi.data), flat_pot(ham.V)
 
     @tullio pe := conj(W_f[i, I]) * V_f[I, J, i] * W_f[i, J]
 
     return real(pe) * get_dr(grid)
 end
 
-function calc_pops(W::AbstractArray{ComplexF64}, grid::Grid{N}) where N
-    W_f = flat_wfn(W)
+function calc_pops(psi::Wavefunction, grid::Grid{N}) where N
+    W_f = flat_wfn(psi.data)
     
     @tullio pop[I] := abs2(W_f[i, I])
     
-    return Tuple(pop .* get_dr(grid))
+    return Vector(pop .* get_dr(grid))
 end
 
-function normalize!(W::AbstractArray{ComplexF64}, grid::Grid{N}) where N
-    W ./= calc_norm(W, grid) 
+function normalize!(psi::Wavefunction, grid::Grid{N}) where N
+    psi.data ./= calc_norm(psi, grid) 
 end
 
-function calc_pos(W::AbstractArray{ComplexF64}, grid::Grid{N}, r::NTuple{N, AbstractArray{Float64}}) where N
-    return ntuple(i -> sum(abs2.(W) .* r[i]) * get_dr(grid), N)
+function calc_pos(psi::Wavefunction, grid::Grid{N}) where N
+    return ntuple(i -> sum(abs2.(psi.data) .* grid.r[i]) * get_dr(grid), N)
 end
 
-function to_kspace(W::AbstractArray{ComplexF64})
-    return fft(W, 1:ndims(W) - 1)
+function to_kspace(psi::Wavefunction)
+    return Wavefunction(data=fft(psi.data, 1:ndims(psi.data) - 1), decay=psi.decay)
 end
 
 function get_dk(grid::Grid{N}) where N
     return get_dr(grid) / grid.npoint^N
 end
 
-function calc_mom(W::AbstractArray{ComplexF64}, grid::Grid{N}, k::NTuple{N, AbstractArray{Float64}}) where N
-    return ntuple(i -> sum(abs2.(W) .* k[i]) * get_dk(grid), N)
+function calc_mom(psi_k::Wavefunction, grid::Grid{N}) where N
+    return ntuple(i -> sum(abs2.(psi_k.data) .* grid.k[i]) * get_dk(grid), N)
 end
 
-function calc_ke(W::AbstractArray{ComplexF64}, T::AbstractArray{Float64}, grid::Grid{N}) where N
-    return sum(abs2.(W) .* T) * get_dk(grid)
+function calc_ke(psi_k::Wavefunction, ham::Hamiltonian, grid::Grid{N}) where N
+    return sum(abs2.(psi_k.data) .* ham.T) * get_dk(grid)
 end
 
 function get_pot_eigen(V::AbstractArray{Float64, P}) where P
@@ -202,50 +210,49 @@ function get_prop_r(A::AbstractArray{Float64}, U::AbstractArray{Float64}, dt::Co
     return R
 end
 
-function get_prop_k(m::Float64, k::NTuple{N, AbstractArray{Float64}}, dt::ComplexF64) where N
-    return exp.(-0.5im * reduce(.+, k[i].^2 / m for i in 1:N) * dt)
+function get_prop_k(m::Float64, grid::Grid{N}, dt::ComplexF64) where N
+    return exp.(-0.5im * reduce(.+, grid.k[i].^2 / m for i in 1:N) * dt)
 end
 
-function apply_cap!(R::AbstractArray{ComplexF64}, absorber::Absorber{N}, r::NTuple{N, AbstractArray{Float64}}, dt::Float64) where N
+function apply_cap!(prop::Propagator, absorber::Absorber{N}, grid::Grid{N}, dt::Float64) where N
     C = map(1:N) do i
-        @. exp(absorber.exponent * max(0, absorber.bounds[i][1] - r[i], r[i] - absorber.bounds[i][2])) - 1
+        @. exp(absorber.exponent * max(0, absorber.bounds[i][1] - grid.r[i], grid.r[i] - absorber.bounds[i][2])) - 1
     end
 
     decay = exp.(-0.5 .* reduce(.+, C) .* dt)
 
-    R .*= ComplexF64.(reshape(decay, 1, 1, size(decay)...))
+    prop.R .*= ComplexF64.(reshape(decay, 1, 1, size(decay)...))
 end
 
-function propagate_r!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64})
-    W_f, R_f = flat_wfn(W), flat_prop(R)
+function propagate_r!(psi::Wavefunction, prop::Propagator)
+    W_f, R_f = flat_wfn(psi.data), flat_prop(prop.R)
 
     @tullio W_t[i, I] := R_f[I, J, i] * W_f[i, J]
 
     W_f .= W_t
 end
 
-function propagate_k!(W::AbstractArray{ComplexF64}, K::AbstractArray{ComplexF64})
-    fft!(W, 1:ndims(W) - 1)
+function propagate_k!(psi::Wavefunction, prop::Propagator)
+    fft!(psi.data, 1:ndims(psi.data) - 1)
 
-    W .*= K
+    psi.data .*= prop.K
 
-    ifft!(W, 1:ndims(W) - 1)
+    ifft!(psi.data, 1:ndims(psi.data) - 1)
 end
 
-function propagate!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64}, K::AbstractArray{ComplexF64})
-    propagate_r!(W, R)
-    propagate_k!(W, K)
-    propagate_r!(W, R)
-end
+function propagate!(psi::Wavefunction, prop::Propagator, ham::Hamiltonian, grid::Grid{N}, adia::Bool, absorber = nothing) where N
+    propagate_r!(psi, prop)
 
-function propagate!(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64}, K::AbstractArray{ComplexF64}, U::AbstractArray{Float64}, grid::Grid{N}, adia::Bool) where N
-    propagate_r!(W, R); d1 = calc_decay(W, R, U, grid, adia)
+    if !isnothing(absorber)
+        psi.decay .+= calc_decay(psi, prop, ham, grid, adia)
+    end
 
-    propagate_k!(W, K)
+    propagate_k!(psi, prop)
+    propagate_r!(psi, prop)
 
-    propagate_r!(W, R); d2 = calc_decay(W, R, U, grid, adia)
-
-    return d1 .+ d2
+    if !isnothing(absorber)
+        psi.decay .+= calc_decay(psi, prop, ham, grid, adia)
+    end
 end
 
 function print_iter(i::Int, obs::Observables{N}, elapsed::UInt64) where N
@@ -272,37 +279,37 @@ function format_duration(nanos::UInt64)
     return Dates.format(Time(0) + Nanosecond(nanos), "HH:MM:SS.sss")
 end
 
-function to_adia(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64})
-    W_f, U_f = flat_wfn(W), flat_pot(U)
+function to_adia(psi::Wavefunction, ham::Hamiltonian)
+    W_f, U_f = flat_wfn(psi.data), flat_pot(ham.U)
 
     @tullio W_a[i, I] := conj(U_f[J, I, i]) * W_f[i, J]
 
-    return reshape(W_a, size(W))
+    return Wavefunction(data=reshape(W_a, size(psi.data)), decay=psi.decay)
 end
 
-function to_dia(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64})
-    W_f, U_f = flat_wfn(W), flat_pot(U)
+function to_dia(psi::Wavefunction, ham::Hamiltonian)
+    W_f, U_f = flat_wfn(psi.data), flat_pot(ham.U)
 
     @tullio W_d[i, I] := U_f[I, J, i] * W_f[i, J]
 
-    return reshape(W_d, size(W))
+    return Wavefunction(data=reshape(W_d, size(psi.data)), decay=psi.decay)
 end
 
-function calc_observables(ctx::SimulationContext{N}, sim::Simulation, grid::Grid{N}, decay::Tuple, writer::Writer, log::Bool) where N
+function calc_observables(psi::Wavefunction, ham::Hamiltonian, grid::Grid{N}, sim::Simulation, writer::Writer, log::Bool) where N
     need_k, need_a = log || !isnothing(writer.mom) || !isnothing(writer.ke) || !isnothing(writer.te), (log || !isnothing(writer.pop)) && sim.adia
 
-    W_d, W_k, W_a = ctx.W, need_k ? to_kspace(ctx.W) : ctx.W, need_a ? to_adia(ctx.W, ctx.U) : ctx.W
+    psi_k, psi_a = need_k ? to_kspace(psi) : nothing, need_a ? to_adia(psi, ham) : nothing
 
-    norm = log || !isnothing(writer.norm) ? calc_norm(W_d, grid)          : nothing
-    pops = log || !isnothing(writer.pop)  ? calc_pops(W_a, grid) .+ decay : nothing
+    pops = log || !isnothing(writer.pop) ? Tuple(calc_pops(need_a ? psi_a : psi, grid) .+ psi.decay) : nothing
 
-    pe = log || !isnothing(writer.pe) || !isnothing(writer.te) ? calc_pe(W_d, ctx.V, grid) : nothing
-    ke = log || !isnothing(writer.ke) || !isnothing(writer.te) ? calc_ke(W_k, ctx.T, grid) : nothing
+    pe = log || !isnothing(writer.pe) || !isnothing(writer.te) ? calc_pe(psi,   ham, grid) : nothing
+    ke = log || !isnothing(writer.ke) || !isnothing(writer.te) ? calc_ke(psi_k, ham, grid) : nothing
 
-    pos = log || !isnothing(writer.pos) ? calc_pos(W_d, grid, ctx.r) : nothing
-    mom = log || !isnothing(writer.mom) ? calc_mom(W_k, grid, ctx.k) : nothing
+    norm = log || !isnothing(writer.norm) ? calc_norm(psi,   grid) : nothing
+    pos  = log || !isnothing(writer.pos ) ? calc_pos( psi,   grid) : nothing
+    mom  = log || !isnothing(writer.mom ) ? calc_mom( psi_k, grid) : nothing
 
-    return Observables{N, size(ctx.V, 1)}(pos=pos, mom=mom, pop=pops, norm=norm, pe=pe, ke=ke)
+    return Observables{N, size(ham.V, 1)}(pos=pos, mom=mom, pop=pops, norm=norm, pe=pe, ke=ke)
 end
 
 function init_history(writer::Writer, ndim::Int, nstate::Int)
@@ -319,20 +326,20 @@ function init_history(writer::Writer, ndim::Int, nstate::Int)
     )
 end
 
-function get_kin_op(m::Float64, k::NTuple{N, AbstractArray{Float64}}) where N
-    return 0.5 * reduce(.+, k[i].^2 for i in 1:N) / m
+function get_kin_op(m::Float64, grid::Grid{N}) where N
+    return 0.5 * reduce(.+, grid.k[i].^2 for i in 1:N) / m
 end
 
-function overlap(W1::AbstractArray{ComplexF64}, W2::AbstractArray{ComplexF64}, grid::Grid{N}) where N
-    return sum(conj(W1[l]) * W2[l] for l in CartesianIndices(W1)) * get_dr(grid)
+function overlap(psi1::Wavefunction, psi2::Wavefunction, grid::Grid{N}) where N
+    return sum(conj(psi1.data[l]) * psi2.data[l] for l in CartesianIndices(psi1.data)) * get_dr(grid)
 end
 
-function project_out!(W1::AbstractArray{ComplexF64}, W2::AbstractArray{ComplexF64}, grid::Grid{N}) where N
-    W1 .-= overlap(W2, W1, grid) .* W2
+function project_out!(psi1::Wavefunction, psi2::Wavefunction, grid::Grid{N}) where N
+    psi1.data .-= overlap(psi2, psi1, grid) .* psi2.data
 end
 
-function log_final_pop(W::AbstractArray{ComplexF64}, U::AbstractArray{Float64}, grid::Grid{N}, decay::Tuple, adia::Bool) where N
-    pop = calc_pops(adia ? to_adia(W, U) : W, grid) .+ decay
+function log_final_pop(psi::Wavefunction, ham::Hamiltonian, grid::Grid{N}, adia::Bool) where N
+    pop = calc_pops(adia ? to_adia(psi, ham) : psi, grid) .+ psi.decay
 
     for (i, p) in enumerate(pop)
         @printf("%sFINAL POPULATION OF STATE %02d: %.6f\n", i == 1 ? "\n" : "", i, p)
@@ -345,12 +352,12 @@ function log_final_te(tes::Vector{Float64})
     end
 end
 
-function project_and_normalize!(W::AbstractArray{ComplexF64}, wfns::Vector{AbstractArray{ComplexF64}}, grid::Grid{N}) where N
-    for W2 in wfns
-        project_out!(W, W2, grid)
+function project_and_normalize!(psi::Wavefunction, wfns::Vector{Wavefunction}, grid::Grid{N}) where N
+    for psi2 in wfns
+        project_out!(psi, psi2, grid)
     end
 
-    normalize!(W, grid)
+    normalize!(psi, grid)
 end
 
 function parse_config(config::Dict{String, Any})
@@ -366,7 +373,7 @@ function parse_config(config::Dict{String, Any})
 
     bounds = Tuple(Tuple{Float64, Float64}(b) for b in config["grid"]["bounds"])
 
-    grid = Grid(bounds=bounds, npoint=config["grid"]["npoint"])
+    grid = Grid(bounds, config["grid"]["npoint"])
 
     pos   = Tuple(Float64(q) for q in config["initial_conditions"]["position"])
     mom   = Tuple(Float64(p) for p in config["initial_conditions"]["momentum"])
@@ -399,7 +406,7 @@ function parse_config(config::Dict{String, Any})
     return sim, grid, ic, POTENTIALS[config["potential"]["name"]], absorber, writer
 end
 
-function log_history!(history::History{N, S}, W::AbstractArray{ComplexF64}, obs::Observables{N, S}) where {N, S}
+function log_history!(history::History{N, S}, psi::Wavefunction, obs::Observables{N, S}) where {N, S}
     !isnothing(history.pos) && push!(history.pos, obs.pos)
     !isnothing(history.mom) && push!(history.mom, obs.mom)
     !isnothing(history.pop) && push!(history.pop, obs.pop)
@@ -408,10 +415,10 @@ function log_history!(history::History{N, S}, W::AbstractArray{ComplexF64}, obs:
     !isnothing(history.pe  ) && push!(history.pe,   obs.pe  )
     !isnothing(history.ke  ) && push!(history.ke,   obs.ke  )
 
-    !isnothing(history.wfn) && push!(history.wfn, copy(W))
+    !isnothing(history.wfn) && push!(history.wfn, copy(psi.data))
 end
 
-function export_history(history::History{N, S}, ctx::SimulationContext{N}, sim::Simulation, writer::Writer, state::Int) where {N, S}
+function export_history(history::History{N, S}, grid::Grid{N}, sim::Simulation, writer::Writer, state::Int) where {N, S}
     to_matrix(v::Vector{NTuple{M, Float64}}) where M = [row[col] for row in v, col in 1:M]
 
     function format_name(fname::String, state::Int, itp::Bool)
@@ -431,7 +438,7 @@ function export_history(history::History{N, S}, ctx::SimulationContext{N}, sim::
     !isnothing(writer.te ) && write_matrix(format_name(writer.te, state, sim.itp > 0), hcat(t, history.pe .+ history.ke))
 
     if !isnothing(history.wfn)
-        write_matrix(format_name(writer.wfn, state, sim.itp > 0), hcat(flatten_coords(ctx.r), flatten_wfn_history(history.wfn)))
+        write_matrix(format_name(writer.wfn, state, sim.itp > 0), hcat(flatten_coords(grid.r), flatten_wfn_history(history.wfn)))
     end
 end
 
@@ -447,90 +454,87 @@ function write_matrix(fname::String, mat::AbstractArray{Float64})
     h5open(fname, "w") do file file["data"] = mat end
 end
 
-function calc_decay(W::AbstractArray{ComplexF64}, R::AbstractArray{ComplexF64}, U::AbstractArray{Float64}, grid::Grid{N}, adia::Bool) where N
-    W_f, R_f = flat_wfn(adia ? to_adia(W, U) : W), flat_prop(R)
+function calc_decay(psi::Wavefunction, prop::Propagator, ham::Hamiltonian, grid::Grid{N}, adia::Bool) where N
+    W_f, R_f = flat_wfn(adia ? to_adia(psi, ham).data : psi.data), flat_prop(prop.R)
 
     @tullio surv[i] := abs2(R_f[I, 1, i])
 
     @tullio decay[I] := abs2(W_f[i, I]) * (1 / max(surv[i], 1e-14) - 1)
 
-    return Tuple(decay .* get_dr(grid))
+    return Vector(decay .* get_dr(grid))
 end
 
 function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
     sim, grid, ic, pot, absorber, writer = parse_config(config)
 
     @timeit "INITIALIZATION" begin
-        r = gen_grid_r(grid)
-        k = gen_grid_k(grid)
+        V, T = pot.fn(grid.r...), get_kin_op(sim.m, grid)
 
-        V, m = pot.fn(r...), sim.m; T = get_kin_op(m, k)
+        A, U = get_pot_eigen(V); ham = Hamiltonian(V=V, T=T, A=A, U=U)
 
-        A, U = get_pot_eigen(V)
+        R = get_prop_r(A,     U,    0.5 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
+        K = get_prop_k(sim.m, grid, 1.0 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
 
-        R = get_prop_r(A, U, 0.5 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
-        K = get_prop_k(m, k, 1.0 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
+        prop = Propagator(R=R, K=K)
 
         if !isnothing(absorber)
-            apply_cap!(R, absorber, r, 0.5 * sim.dt)
+            apply_cap!(prop, absorber, grid, 0.5 * sim.dt)
         end
     end
 
-    opt_wfn, opt_wfn_te, output = AbstractArray{ComplexF64}[], Float64[], Observables{length(r), pot.nstate}[]
+    opt_psi, opt_psi_te, output = Wavefunction[], Float64[], Observables{length(grid.r), pot.nstate}[]
 
     for i in 1:(sim.itp > 0 ? sim.itp : 1)
-        W = gen_wfn(ic, r, grid.npoint, pot.nstate); normalize!(W, grid)
+        psi = gen_wfn(ic, grid, pot.nstate); normalize!(psi, grid)
 
         if ic.adia
-            W = to_dia(W, U)
+            psi = to_dia(psi, ham)
         end
 
-        ctx, decay = SimulationContext(W=W, R=R, K=K, V=V, A=A, U=U, T=T, r=r, k=k), ntuple(_ -> 0.0, pot.nstate)
+        enable_print && print_header(i, length(grid.r), pot.nstate, sim.itp > 0)
 
-        enable_print && print_header(i, length(r), pot.nstate, sim.itp > 0)
-
-        history, start_time = init_history(writer, length(r), pot.nstate), time_ns()
+        history, start_time = init_history(writer, length(grid.r), pot.nstate), time_ns()
 
         for j in 1:sim.iters + 1
             log = (j - 1) % sim.log_interval == 0 || j == sim.iters + 1
 
             if j > 1
-                @timeit "PROPAGATION" if isnothing(absorber) propagate!(W, R, K) else decay = decay .+ propagate!(W, R, K, U, grid, sim.adia) end
+                @timeit "PROPAGATION" propagate!(psi, prop, ham, grid, sim.adia, absorber)
             end
 
             if sim.itp > 0
-                @timeit "PROJECTION" project_and_normalize!(W, opt_wfn, grid)
+                @timeit "PROJECTION" project_and_normalize!(psi, opt_psi, grid)
             end
 
             if log || writer != Writer()
-                @timeit "OBSERVABLES" obs = calc_observables(ctx, sim, grid, decay, writer, log)
+                @timeit "OBSERVABLES" obs = calc_observables(psi, ham, grid, sim, writer, log)
 
                 enable_print && log && print_iter(j, obs, time_ns() - start_time)
 
                 if j == sim.iters + 1
-                    sim.itp > 1 && push!(opt_wfn_te, obs.pe + obs.ke); push!(output, obs)
+                    sim.itp > 1 && push!(opt_psi_te, obs.pe + obs.ke); push!(output, obs)
                 end
 
                 if log start_time = time_ns() end
 
                 if writer != Writer()
-                    @timeit "HISTORY APPEND" log_history!(history, sim.adia ? to_adia(W, U) : W, obs)
+                    @timeit "HISTORY APPEND" log_history!(history, sim.adia ? to_adia(psi, ham) : psi, obs)
                 end
             end
         end
 
         if pot.nstate > 1 && sim.itp == 0
-            enable_print && log_final_pop(W, ctx.U, grid, decay, sim.adia)
+            enable_print && log_final_pop(psi, ham, grid, sim.adia)
         end
 
-        sim.itp > 0 && push!(opt_wfn, W)
+        sim.itp > 0 && push!(opt_psi, psi)
 
         if writer != Writer()
-            @timeit "DATA EXPORT" export_history(history, ctx, sim, writer, i)
+            @timeit "DATA EXPORT" export_history(history, grid, sim, writer, i)
         end
     end
 
-    sim.itp > 1 && enable_print && log_final_te(opt_wfn_te)
+    sim.itp > 1 && enable_print && log_final_te(opt_psi_te)
 
     return output
 end
