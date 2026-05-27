@@ -27,8 +27,8 @@ jobs:
       - name: Cache dependencies
         uses: julia-actions/cache@v3
 
-      - name: Update the Manifest
-        run: julia --project=. -e 'using Pkg; Pkg.update()'
+      - name: Remove the Manifest
+        run: rm Manifest.toml
 
       - name: Insantiate the Project
         uses: julia-actions/julia-buildpkg@v1
