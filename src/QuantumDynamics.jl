@@ -2,7 +2,7 @@ module QuantumDynamics
 
 include("Potentials.jl")
 
-using .Potentials, FFTW, HDF5, TOML, Dates, LinearAlgebra, Printf, TimerOutputs, Tullio
+using .Potentials, FFTW, HDF5, TOML, Dates, LinearAlgebra, LoopVectorization, Printf, TimerOutputs, Tullio
 
 export parse_config_qd, run_qd, run_qd_stable
 
