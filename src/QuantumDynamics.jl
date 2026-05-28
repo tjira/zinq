@@ -21,11 +21,11 @@ Base.@kwdef mutable struct Wavefunction{T <: AbstractArray{ComplexF64}}
     data::T; decay::Vector{Float64}
 end
 
-Base.@kwdef struct Hamiltonian{TV <: AbstractArray{Float64}, TK <: AbstractArray{Float64}, TA <: AbstractArray{Float64}}
+Base.@kwdef mutable struct Hamiltonian{TV <: AbstractArray{Float64}, TK <: AbstractArray{Float64}, TA <: AbstractArray{Float64}}
     V::TV; K::TK; A::TA; U::TV
 end
 
-Base.@kwdef struct Propagator{TR <: AbstractArray{ComplexF64}, TK <: AbstractArray{ComplexF64}}
+Base.@kwdef mutable struct Propagator{TR <: AbstractArray{ComplexF64}, TK <: AbstractArray{ComplexF64}}
     R::TR; K::TK
 end
 
@@ -474,7 +474,7 @@ function run_qd_stable(params, ::Val{N}, ::Val{S}, enable_print::Bool = true) wh
     (;sim, grid, ic, pot, absorber, writer) = params
 
     @timeit "INITIALIZATION" begin
-        V, K = pot.fn(grid.r...), get_kin_op(sim.m, grid)
+        V, K = pot.fn(0.0, grid.r...), get_kin_op(sim.m, grid)
 
         A, U = get_pot_eigen(V); ham = Hamiltonian(V=V, K=K, A=A, U=U)
 
@@ -502,7 +502,19 @@ function run_qd_stable(params, ::Val{N}, ::Val{S}, enable_print::Bool = true) wh
         history, start_time = init_history(writer, Val(N), Val(S), typeof(psi.data)), time_ns()
 
         for j in 1:sim.iters + 1
-            log = (j - 1) % sim.log_interval == 0 || j == sim.iters + 1
+            log, time = (j - 1) % sim.log_interval == 0 || j == sim.iters + 1, (j - 1.5) * sim.dt
+
+            if j > 1 && pot.td
+                @timeit "POTENTIAL UPDATE" begin
+                    ham.V = pot.fn(time, grid.r...); ham.A, ham.U = get_pot_eigen(ham.V);
+
+                    prop.R = get_prop_r(ham.A, ham.U, 0.5 * (sim.itp > 0 ? -im * sim.dt : sim.dt + 0im))
+
+                    if !isnothing(absorber)
+                        apply_cap!(prop, absorber, grid, 0.5 * sim.dt)
+                    end
+                end
+            end
 
             if j > 1
                 @timeit "PROPAGATION" propagate!(psi, prop, ham, grid, sim.adia, absorber)
@@ -513,6 +525,12 @@ function run_qd_stable(params, ::Val{N}, ::Val{S}, enable_print::Bool = true) wh
             end
 
             if log || writer != Writer()
+                if pot.td
+                    @timeit "POTENTIAL UPDATE" begin
+                        ham.V = pot.fn((j - 1) * sim.dt, grid.r...); ham.A, ham.U = get_pot_eigen(ham.V)
+                    end
+                end
+
                 @timeit "OBSERVABLES" obs = calc_observables(psi, ham, grid, sim, writer, log, Val(S))
 
                 enable_print && log && print_iter(j, obs, time_ns() - start_time)
