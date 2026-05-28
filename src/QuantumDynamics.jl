@@ -261,8 +261,8 @@ function print_iter(i::Int, obs::Observables{N, S}, elapsed::UInt64) where {N, S
     @printf("%7d %12.6f %12.6f %12.6f [%s] [%s] [%s] %9.4f %s\n", values...)
 end
 
-function print_header(state::Int, itp::Bool, ::Val{N}, ::Val{S}) where {N, S}
-    dim_w, state_w = 11 * N + 1, 11 * S + 1
+function print_header(state::Int, ndim::Int, nstate::Int, itp::Bool)
+    dim_w, state_w = 11 * ndim + 1, 11 * nstate + 1
 
     itp && print("\nSTATE $state ITP")
 
@@ -291,12 +291,12 @@ function to_dia(psi::Wavefunction, ham::Hamiltonian)
     return Wavefunction(data=reshape(W_d, size(psi.data)), decay=psi.decay)
 end
 
-function calc_observables(psi::Wavefunction, ham::Hamiltonian, grid::Grid{N}, sim::Simulation, writer::Writer, log::Bool) where N
+function calc_observables(psi::Wavefunction, ham::Hamiltonian, grid::Grid{N}, sim::Simulation, writer::Writer, log::Bool, ::Val{S}) where {N, S}
     need_k, need_a = log || !isnothing(writer.mom) || !isnothing(writer.ke) || !isnothing(writer.te), (log || !isnothing(writer.pop)) && sim.adia
 
     psi_k, psi_a = need_k ? to_kspace(psi) : nothing, need_a ? to_adia(psi, ham) : nothing
 
-    pops = log || !isnothing(writer.pop) ? Tuple(calc_pops(need_a ? psi_a : psi, grid) .+ psi.decay) : nothing
+    pops = log || !isnothing(writer.pop) ? (p -> ntuple(i -> p[i], Val(S)))(calc_pops(need_a ? psi_a : psi, grid) .+ psi.decay) : nothing
 
     pe = log || !isnothing(writer.pe) || !isnothing(writer.te) ? calc_pe(psi,   ham, grid) : nothing
     ke = log || !isnothing(writer.ke) || !isnothing(writer.te) ? calc_ke(psi_k, ham, grid) : nothing
@@ -305,7 +305,7 @@ function calc_observables(psi::Wavefunction, ham::Hamiltonian, grid::Grid{N}, si
     pos  = log || !isnothing(writer.pos ) ? calc_pos( psi,   grid) : nothing
     mom  = log || !isnothing(writer.mom ) ? calc_mom( psi_k, grid) : nothing
 
-    return Observables{N, size(ham.V, 1)}(pos=pos, mom=mom, pop=pops, norm=norm, pe=pe, ke=ke)
+    return Observables{N, S}(pos=pos, mom=mom, pop=pops, norm=norm, pe=pe, ke=ke)
 end
 
 function init_history(writer::Writer, ::Val{N}, ::Val{S}, ::Type{T}) where {N, S, T}
@@ -348,7 +348,7 @@ function log_final_te(tes::Vector{Float64})
     end
 end
 
-function project_and_normalize!(psi::Wavefunction, wfns::Vector{Wavefunction}, grid::Grid{N}) where N
+function project_and_normalize!(psi::Wavefunction, wfns::Vector{<:Wavefunction}, grid::Grid{N}) where N
     for psi2 in wfns
         project_out!(psi, psi2, grid)
     end
@@ -414,15 +414,6 @@ function calc_decay(psi::Wavefunction, prop::Propagator, ham::Hamiltonian, grid:
     return Vector(decay .* get_dr(grid))
 end
 
-Base.@kwdef struct StableParams{N, S, T <: AbstractArray{Float64}, F <: Function}
-    sim      ::Simulation
-    grid     ::Grid{N, T}
-    ic       ::InitialConditions{N}
-    pot      ::Potential{S, F}
-    absorber ::Union{Absorber{N}, Nothing}
-    writer   ::Writer
-end
-
 function parse_config_qd(config::Dict{String, Any})
     dt::Float64 = config["simulation"]["time_step" ]
     iters::Int  = config["simulation"]["iterations"]
@@ -466,7 +457,9 @@ function parse_config_qd(config::Dict{String, Any})
         Absorber(bounds=bounds, exponent=config["cap"]["exponent"])
     else nothing end
 
-    return StableParams(sim=sim, grid=grid, ic=ic, pot=POTENTIALS[config["potential"]["name"]], absorber=absorber, writer=writer)
+    pot = POTENTIALS[config["potential"]["name"]]
+
+    return (; sim, grid, ic, pot, absorber, writer), Val(length(bounds)), Val(get_nstate(pot))
 end
 
 function parse_config_qd(fname::String)
@@ -474,11 +467,11 @@ function parse_config_qd(fname::String)
 end
 
 function run_qd(config::Dict{String, Any}, enable_print::Bool = true)
-    return run_qd_stable(parse_config_qd(config), enable_print)
+    return run_qd_stable(parse_config_qd(config)..., enable_print)
 end
 
-function run_qd_stable(sp::StableParams{N, S, T, F}, enable_print::Bool = true) where {N, S, T, F}
-    (;sim, grid, ic, pot, absorber, writer) = sp
+function run_qd_stable(params, ::Val{N}, ::Val{S}, enable_print::Bool = true) where {N, S}
+    (;sim, grid, ic, pot, absorber, writer) = params
 
     @timeit "INITIALIZATION" begin
         V, K = pot.fn(grid.r...), get_kin_op(sim.m, grid)
@@ -495,7 +488,7 @@ function run_qd_stable(sp::StableParams{N, S, T, F}, enable_print::Bool = true) 
         end
     end
 
-    opt_psi, opt_psi_te, output = Wavefunction[], Float64[], Observables{N, S}[]
+    opt_psi, opt_psi_te, output = Wavefunction{Array{ComplexF64, N + 1}}[], Float64[], Observables{N, S}[]
 
     for i in 1:(sim.itp > 0 ? sim.itp : 1)
         psi = gen_wfn(ic, grid, S); normalize!(psi, grid)
@@ -504,7 +497,7 @@ function run_qd_stable(sp::StableParams{N, S, T, F}, enable_print::Bool = true) 
             psi = to_dia(psi, ham)
         end
 
-        enable_print && print_header(i, sim.itp > 0, Val(N), Val(S))
+        enable_print && print_header(i, length(grid.r), S, sim.itp > 0)
 
         history, start_time = init_history(writer, Val(N), Val(S), typeof(psi.data)), time_ns()
 
@@ -520,7 +513,7 @@ function run_qd_stable(sp::StableParams{N, S, T, F}, enable_print::Bool = true) 
             end
 
             if log || writer != Writer()
-                @timeit "OBSERVABLES" obs = calc_observables(psi, ham, grid, sim, writer, log)
+                @timeit "OBSERVABLES" obs = calc_observables(psi, ham, grid, sim, writer, log, Val(S))
 
                 enable_print && log && print_iter(j, obs, time_ns() - start_time)
 

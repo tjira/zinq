@@ -1,6 +1,6 @@
 module Potentials
 
-export POTENTIALS, Potential
+export POTENTIALS, Potential, get_nstate
 
 struct Potential{S, F <: Function}
     fn::F
@@ -21,6 +21,10 @@ function harmonic(r::Vararg{AbstractArray{Float64}, N}; k::NTuple{N, Float64}=nt
     V = @. $reduce(.+, 0.5 * k[i] * r[i]^2 for i in 1:N)
 
     return reshape(V, 1, 1, size(V)...)
+end
+
+function get_nstate(::Potential{S, F}) where {S, F}
+    return S
 end
 
 const POTENTIALS = Dict(
