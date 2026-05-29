@@ -1,9 +1,12 @@
 .antigravitycli/
 .zig-cache/
 dist/
+external-x86_64-linux/
+lib/
 zig-out/
 
-/*.hdf
 /*.exe
+/*.hdf
+/*.json
 /*.pdb
 /*.toml
