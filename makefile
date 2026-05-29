@@ -1,28 +1,9 @@
-all: build
+DEBUG ?= 0
 
-bootstrap:
-	@julia -e 'using Pkg; Pkg.add(["BenchmarkTools", "PackageCompiler", "Revise"])'
+all: zinq
 
-build: bootstrap instantiate
-	@julia --project=. -e 'using PackageCompiler; create_app(".", "dist", executables=["zinq" => "julia_main"], include_lazy_artifacts=true, precompile_execution_file="src/Zinq.jl", force=true)'
+zinq:
+	zig build $(if $(filter 0,$(DEBUG)),--release=fast)
 
 clean:
-	@git clean -dffx
-
-instantiate:
-	@julia --project=. -e 'using Pkg; Pkg.instantiate()'
-
-resolve:
-	@julia --project=. -e 'using Pkg; rm("Manifest.toml"); Pkg.resolve()'
-
-repl: bootstrap instantiate
-	@julia --project=. -e 'using Pkg, Revise, Zinq, Zinq.QuantumDynamics, BenchmarkTools' -i
-
-run: instantiate
-	@julia --project=. -e 'using Zinq; julia_main()'
-
-test: instantiate
-	@julia --project=. -e 'using Pkg; Pkg.test()'
-
-update:
-	@julia --project=. -e 'using Pkg; Pkg.update()'
+	git clean -dffx

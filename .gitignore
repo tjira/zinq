@@ -1,5 +1,9 @@
 .antigravitycli/
+.zig-cache/
 dist/
+zig-out/
 
 /*.hdf
+/*.exe
+/*.pdb
 /*.toml
