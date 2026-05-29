@@ -1,5 +1,11 @@
 const std = @import("std");
+const writer = @import("writer.zig");
 
-pub fn main() !void {
-    std.debug.print("Hello World!\n", .{});
+const printf = writer.printf;
+
+pub fn main(init: std.process.Init) !void {
+    // const gpa = init.gpa;
+    const io = init.io;
+
+    try printf(io, "Hello World!\n", .{});
 }
