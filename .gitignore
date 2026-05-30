@@ -8,5 +8,7 @@ zig-out/
 /*.exe
 /*.hdf
 /*.json
+/*.mat
 /*.pdb
 /*.toml
+/*.txt
