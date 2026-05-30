@@ -1,41 +1,46 @@
 const std = @import("std");
 
+const Allocator = std.mem.Allocator;
+
 const quantum_dynamics = @import("quantum_dynamics.zig");
 const writer = @import("writer.zig");
 
 const printf = writer.printf;
 
-pub fn parse(comptime T: type, io: std.Io, fname: []const u8, gpa: std.mem.Allocator) !std.json.Parsed(T) {
-    const fcontent = try std.Io.Dir.cwd().readFileAlloc(io, fname, gpa, .unlimited);
-    defer gpa.free(fcontent);
+// OPTIONS =============================================================================================================
 
-    return try std.json.parseFromSlice(T, gpa, fcontent, .{});
+const Options = struct {
+    zinq: []union(enum) {
+        quantum_dynamics: quantum_dynamics.Options,
+    },
+};
+
+// INIT FUNCTIONS ======================================================================================================
+
+fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !std.json.Parsed(T) {
+    const fcontent = try std.Io.Dir.cwd().readFileAlloc(io, fname, arena, .unlimited);
+
+    return try std.json.parseFromSlice(T, arena, fcontent, .{});
 }
 
-pub fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: std.mem.Allocator) !void {
-    const options = try parse(quantum_dynamics.Options, io, fname, gpa);
-    defer options.deinit();
+fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
+    for ((try parse(Options, io, fname, arena)).value.zinq) |opt| switch (opt) {
+        .quantum_dynamics => |field| try quantum_dynamics.run(T, io, field, gpa, arena),
+    };
+}
 
-    try quantum_dynamics.run(T, io, options.value, gpa);
+fn targets(args: []const []const u8) []const []const u8 {
+    return if (args.len > 1) args[1..] else &[_][]const u8{"input.json"};
 }
 
 pub fn main(init: std.process.Init) !void {
-    const gpa = init.gpa;
-    const io = init.io;
+    var timer = std.Io.Timestamp.now(init.io, .real);
 
-    var timer = std.Io.Timestamp.now(io, .real);
+    try std.Io.File.stdout().writeStreamingAll(init.io, "ZINQ\n");
 
-    try std.Io.File.stdout().writeStreamingAll(io, "ZINQ\n");
-
-    const args = try init.minimal.args.toSlice(init.arena.allocator());
-
-    if (args.len == 1) {
-        try run(f64, io, "input.json", gpa);
+    for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |target| {
+        try run(f64, init.io, target, init.gpa, init.arena.allocator());
     }
 
-    for (args[1..]) |arg| {
-        try run(f64, io, arg, gpa);
-    }
-
-    try printf(io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.untilNow(io, .real)});
+    try printf(init.io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.untilNow(init.io, .real)});
 }

@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Matrix = @import("matrix.zig").Matrix;
+const Matrix = @import("tensor.zig").Matrix;
 
 pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     var buffer: [4096]u8 = undefined;

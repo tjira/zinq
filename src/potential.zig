@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const Matrix = @import("matrix.zig").Matrix;
-const Vector = @import("vector.zig").Vector;
+const Matrix = @import("tensor.zig").Matrix;
+const Vector = @import("tensor.zig").Vector;
 
 // OPTIONS =============================================================================================================
 
@@ -31,9 +31,20 @@ pub fn Potential(comptime T: type) type {
             };
         }
 
-        pub fn evalMany(self: @This(), V: *Matrix(T), r: Matrix(T)) void {
+        pub fn evalBatch(self: @This(), V: *Matrix(T), r: Matrix(T)) void {
             switch (self) {
-                inline else => |field| evalAny(field, V, r),
+                inline else => |field| {
+                    // zig fmt: off
+                    const coupled   = comptime @hasDecl(@TypeOf(field), "evalCoupled"  );
+                    const separable = comptime @hasDecl(@TypeOf(field), "evalSeparable");
+                    // zig fmt: on
+
+                    if (!coupled and !separable) @compileError("INVALID POTENTIAL STRUCTURE");
+
+                    const func = if (comptime coupled) @This().evalCoupled else @This().evalSeparable;
+
+                    func(field, V, r);
+                }
             }
         }
 
@@ -41,20 +52,6 @@ pub fn Potential(comptime T: type) type {
             return switch (self) {
                 inline else => |field| field.nstate(),
             };
-        }
-
-        fn evalAny(field: anytype, V: *Matrix(T), r: Matrix(T)) void {
-            const ftype = @TypeOf(field);
-
-            if (comptime @hasDecl(ftype, "evalCoupled")) {
-                return evalCoupled(field, V, r);
-            }
-
-            if (comptime @hasDecl(ftype, "evalSeparable")) {
-                return evalSeparable(field, V, r);
-            }
-
-            @compileError("POTENTIAL DOES NOT IMPLEMENT CORRECT EVAL METHOD");
         }
 
         fn evalCoupled(field: anytype, V: *Matrix(T), r: Matrix(T)) void {
@@ -66,11 +63,9 @@ pub fn Potential(comptime T: type) type {
         fn evalSeparable(field: anytype, V: *Matrix(T), r: Matrix(T)) void {
             V.zero();
 
-            for (0..r.ncol()) |j| {
-                for (0..r.nrow()) |i| {
-                    field.evalSeparable(V, r, i, j);
-                }
-            }
+            for (0..r.ncol()) |j| for (0..r.nrow()) |i| {
+                field.evalSeparable(V, r, i, j);
+            };
         }
     };
 }

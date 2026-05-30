@@ -56,7 +56,6 @@ for TARGET in "${TARGETS[@]}"; do
         NO_SHARED=1
         NUM_THREADS=128
         PREFIX=$PREFIX
-        TARGET=GENERIC
     )
 
     # CREATE COMPILER WRAPPERS

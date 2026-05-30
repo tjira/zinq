@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const Matrix = @import("matrix.zig").Matrix;
+const Matrix = @import("tensor.zig").Matrix;
 
 pub fn eigh2x2Slice(comptime T: type, W: []T, U: []T, V: []T) !void {
     const a = V[0];
@@ -13,14 +13,15 @@ pub fn eigh2x2Slice(comptime T: type, W: []T, U: []T, V: []T) !void {
     W[1] = 0.5 * (a + c + R);
 
     const theta = 0.5 * std.math.atan2(2 * b, a - c);
-    
+
     const cos_t = @cos(theta);
     const sin_t = @sin(theta);
 
     U[0] = -sin_t;
-    U[1] =  cos_t;
-    U[2] =  cos_t;
-    U[3] =  sin_t;
+
+    U[1] = cos_t;
+    U[2] = cos_t;
+    U[3] = sin_t;
 }
 
 pub fn eighMany(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {

@@ -9,6 +9,8 @@ zig-out/
 /*.hdf
 /*.json
 /*.mat
+/*.old
 /*.pdb
+/*.svg
 /*.toml
 /*.txt

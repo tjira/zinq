@@ -1,18 +1,28 @@
 {
-    "grid" : {
-        "limits" : [[-24, 32]],
-        "npoint" : 2048
-    },
-    "initial_conditions" : {
-        "position" : [-10],
-        "momentum" : [15],
-        "gamma" : [2],
-        "state" : 1,
-        "adiabatic" : true
-    },
-    "mass" : 2000,
-    "iterations" : 3000,
-    "time_step" : 1,
-    "adiabatic" : true,
-    "log_interval" : 500
+    "zinq" : [
+        {
+            "quantum_dynamics" : {
+                "grid" : {
+                    "bounds" : [[-24, 32]],
+                    "npoint" : 2048
+                },
+                "initial_conditions" : {
+                    "position" : [-10],
+                    "momentum" : [15],
+                    "gamma" : [2],
+                    "state" : 1,
+                    "adiabatic" : true
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "mass" : 2000,
+                "iterations" : 3000,
+                "time_step" : 1,
+                "adiabatic" : true,
+                "log_interval" : 500
+            }
+        }
+    ]
 }
+
