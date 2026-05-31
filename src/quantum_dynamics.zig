@@ -231,6 +231,28 @@ fn Wavefunction(comptime T: type) type {
             return value;
         }
 
+        pub fn popAdia(self: @This(), ham: Hamiltonian(T), grid: Grid(T), gpa: Allocator) !Vector(T) {
+            var value = try Vector(T).initZero(self.W.ncol(), gpa);
+
+            for (0..self.W.nrow()) |i| for (0..self.W.ncol()) |m| {
+                var adia_re: T = 0;
+                var adia_im: T = 0;
+
+                for (0..self.W.ncol()) |j| {
+                    const u_jm = ham.U.at(j * self.W.ncol() + m, i);
+
+                    adia_re += self.W.at(i, j).re * u_jm;
+                    adia_im += self.W.at(i, j).im * u_jm;
+                }
+
+                value.ptr(m).* += (adia_re * adia_re) + (adia_im * adia_im);
+            };
+
+            value.muls(grid.dr);
+
+            return value;
+        }
+
         pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.nrow(), gpa);
 
@@ -263,6 +285,30 @@ fn Wavefunction(comptime T: type) type {
             }
 
             self.normalize(grid);
+        }
+
+        pub fn toDia(self: *@This(), ham: Hamiltonian(T), gpa: Allocator) !void {
+            var temp = try gpa.alloc(Complex(T), self.W.ncol());
+
+            for (0..self.W.nrow()) |i| {
+                for (0..self.W.ncol()) |k| {
+                    temp[k] = self.W.at(i, k);
+                }
+
+                for (0..self.W.ncol()) |j| {
+                    var sum = Complex(T).init(0, 0);
+
+                    for (0..self.W.ncol()) |k| {
+                        const u_jk = Complex(T).init(ham.U.at(j * self.W.ncol() + k, i), 0);
+
+                        sum = sum.add(temp[k].mul(u_jk));
+                    }
+
+                    self.W.ptr(i, j).* = sum;
+                }
+            }
+
+            gpa.free(temp);
         }
     };
 }
@@ -349,8 +395,6 @@ fn Propagator(comptime T: type) type {
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            gpa.free(self.temp);
-
             self.R.deinit(gpa);
             self.K.deinit(gpa);
         }
@@ -436,7 +480,7 @@ fn Observables(comptime T: type) type {
         ekin: ?T = null,
         norm: ?T = null,
 
-        pub fn init(qsys: *QuantumSystem(T), write: Write, log: bool, gpa: Allocator) !@This() {
+        pub fn init(qsys: *QuantumSystem(T), write: Write, adia: bool, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
 
             // zig fmt: off
@@ -457,8 +501,14 @@ fn Observables(comptime T: type) type {
             if (calc.pos ) obs.pos  = try qsys.wfn.pos (          qsys.grid, gpa);
             if (calc.norm) obs.norm =     qsys.wfn.norm(          qsys.grid     );
             if (calc.epot) obs.epot =     qsys.wfn.epot(qsys.ham, qsys.grid     );
-            if (calc.pop ) obs.pop  = try qsys.wfn.pop (          qsys.grid, gpa);
             // zig fmt: on
+
+            if (calc.pop) {
+                // zig fmt: on
+                if (adia == true) obs.pop = try qsys.wfn.popAdia(qsys.ham, qsys.grid, gpa);
+                if (adia != true) obs.pop = try qsys.wfn.pop(qsys.grid, gpa);
+                // zig fmt: off
+            }
 
             const needs_fft = calc.mom or calc.ekin;
 
@@ -513,7 +563,7 @@ fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize)
     try printf(io, fmt, tuple);
 }
 
-pub fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, timer: *std.Io.Timestamp) !void {
+fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, timer: *std.Io.Timestamp) !void {
     const ekin = obs.ekin orelse std.math.nan(T);
     const epot = obs.epot orelse std.math.nan(T);
 
@@ -594,6 +644,10 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sim: *SimulationState(T
 
     sim.qsys.wfn.setGaussian(opt.initial_conditions, sim.qsys.grid);
 
+    if (opt.initial_conditions.adiabatic) {
+        try sim.qsys.wfn.toDia(sim.qsys.ham, gpa);
+    }
+
     var timer = std.Io.Timestamp.now(io, .real);
 
     for (0..opt.iterations + 1) |i| {
@@ -613,7 +667,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sim: *SimulationState(T
 
         const is_log_step = (i % opt.log_interval == 0) or (i == opt.iterations);
 
-        var obs = try Observables(T).init(&sim.qsys, opt.write, is_log_step, gpa);
+        var obs = try Observables(T).init(&sim.qsys, opt.write, opt.adiabatic, is_log_step, gpa);
 
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
@@ -629,7 +683,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, gpa: Allocator, arena: Al
     for (0..if (opt.imaginary) |imag| imag.nstate else 1) |i| {
         try solve(T, io, opt, &sim, i, gpa);
 
-        if (i < if (opt.imaginary) |imag| imag.nstate - 1 else 0) {
+        if (i < if (opt.imaginary) |imag| imag.nstate else 0) {
             try sim.orthw.append(arena, try sim.qsys.wfn.clone(arena));
         }
     }

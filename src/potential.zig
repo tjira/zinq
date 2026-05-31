@@ -21,13 +21,17 @@ pub const Options = union(enum) {
 
 pub fn Potential(comptime T: type) type {
     return union(enum) {
+        // zig fmt: off
         harmonic: Harmonic(T),
-        tully_1: Tully1(T),
+        tully_1:  Tully1  (T),
+        // zig fmt: on
 
         pub fn init(options: Options) @This() {
             return switch (options) {
-                .harmonic => |f| .{ .harmonic = Harmonic(T).init(f.k) },
-                .tully_1 => |f| .{ .tully_1 = Tully1(T).init(f.A, f.B, f.C, f.D) },
+                // zig fmt: off
+                .harmonic => |f| .{ .harmonic = Harmonic(T).init(f.k               ) },
+                .tully_1  => |f| .{ .tully_1  = Tully1  (T).init(f.A, f.B, f.C, f.D) },
+                // zig fmt: on
             };
         }
 
@@ -77,7 +81,7 @@ pub fn Harmonic(comptime T: type) type {
             }
 
             return .{
-                .{ V00 },
+                .{V00},
             };
         }
 
