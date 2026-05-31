@@ -257,7 +257,7 @@ fn Wavefunction(comptime T: type) type {
         pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
-            for (0..self.W.ncol()) |j| for (0..self.W.nrow()) |i| {
+            for (0..self.W.nrow()) |i| for (0..self.W.ncol()) |j| {
                 const mag = self.W.at(i, j).squaredMagnitude();
 
                 for (0..grid.r.ncol()) |k| {
