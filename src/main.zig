@@ -2,16 +2,16 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const quantum_dynamics = @import("quantum_dynamics.zig");
-const writer = @import("writer.zig");
+const QuantumDynamicsOptions = @import("quantum_dynamics.zig").Options;
 
-const printf = writer.printf;
+const printf = @import("read_write.zig").printf;
+const quantum_dynamics_run = @import("quantum_dynamics.zig").run;
 
 // OPTIONS =============================================================================================================
 
 const Options = struct {
     zinq: []union(enum) {
-        quantum_dynamics: quantum_dynamics.Options,
+        quantum_dynamics: QuantumDynamicsOptions,
     },
 };
 
@@ -25,7 +25,7 @@ fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !std
 
 fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
     for ((try parse(Options, io, fname, arena)).value.zinq) |opt| switch (opt) {
-        .quantum_dynamics => |field| try quantum_dynamics.run(T, io, field, gpa, arena),
+        .quantum_dynamics => |field| try quantum_dynamics_run(T, io, field, gpa, arena),
     };
 }
 

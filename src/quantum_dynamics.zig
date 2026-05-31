@@ -11,8 +11,8 @@ const Vector = @import("tensor.zig").Vector;
 const eighBatch = @import("openblas.zig").eighBatch;
 const fftn = @import("fftw.zig").fftn;
 const fixGauge = @import("openblas.zig").fixGauge;
-const printf = @import("writer.zig").printf;
-const writeMatrix = @import("writer.zig").writeMatrix;
+const printf = @import("read_write.zig").printf;
+const writeMatrix = @import("read_write.zig").writeMatrix;
 
 // GLOBAL VARIABLES ====================================================================================================
 
