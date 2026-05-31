@@ -44,11 +44,11 @@ pub fn Potential(comptime T: type) type {
         pub fn evalBatch(self: @This(), V: *Matrix(T), r: Matrix(T), t: T) void {
             switch (self) {
                 inline else => |field| {
-                    for (0..r.ncol()) |i| {
-                        const val = field.eval(r.colSlice(i), t);
+                    for (0..r.nrow()) |i| {
+                        const val = field.eval(r.rowSlice(i), t);
 
                         for (0..field.nstate()) |j| for (0..field.nstate()) |k| {
-                            V.ptr(j * field.nstate() + k, i).* = val[j][k];
+                            V.ptr(i, j * field.nstate() + k).* = val[j][k];
                         };
                     }
                 },

@@ -4,8 +4,9 @@ const std = @import("std");
 
 pub fn Matrix(comptime T: type) type {
     return struct {
-        data: []T,
-        shape: [2]usize,
+        // zig fmt: off
+        data: []T, shape: [2]usize,
+        // zig fmt: on
 
         pub fn init(rows: usize, cols: usize, gpa: std.mem.Allocator) !@This() {
             return .{ .data = try gpa.alloc(T, rows * cols), .shape = .{ rows, cols } };
@@ -34,11 +35,7 @@ pub fn Matrix(comptime T: type) type {
         }
 
         pub fn at(self: @This(), i: usize, j: usize) T {
-            return self.data[j * self.shape[0] + i];
-        }
-
-        pub fn colSlice(self: @This(), j: usize) []T {
-            return self.data[j * self.shape[0] .. (j + 1) * self.shape[0]];
+            return self.data[i * self.shape[1] + j];
         }
 
         pub fn divs(self: *@This(), scalar: T) void {
@@ -66,7 +63,11 @@ pub fn Matrix(comptime T: type) type {
         }
 
         pub fn ptr(self: *@This(), i: usize, j: usize) *T {
-            return &self.data[j * self.shape[0] + i];
+            return &self.data[i * self.shape[1] + j];
+        }
+
+        pub fn rowSlice(self: @This(), i: usize) []T {
+            return self.data[i * self.shape[1] .. (i + 1) * self.shape[1]];
         }
 
         pub fn slice(self: @This(), start: usize, end: usize) []T {
@@ -83,8 +84,9 @@ pub fn Matrix(comptime T: type) type {
 
 pub fn Vector(comptime T: type) type {
     return struct {
-        data: []T,
-        shape: [1]usize,
+        // zig fmt: off
+        data: []T, shape: [1]usize,
+        // zig fmt: on
 
         pub fn init(size: usize, gpa: std.mem.Allocator) !@This() {
             return .{ .data = try gpa.alloc(T, size), .shape = .{size} };

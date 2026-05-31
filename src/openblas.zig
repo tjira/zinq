@@ -26,24 +26,24 @@ pub fn eigh2x2(comptime T: type, W: []T, U: []T, V: []T) !void {
 }
 
 pub fn eighBatch(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
-    if (V.nrow() == 1) return eighBatch1x1(T, W, U, V);
-    if (V.nrow() == 4) return eighBatch2x2(T, W, U, V);
+    if (V.ncol() == 1) return eighBatch1x1(T, W, U, V);
+    if (V.ncol() == 4) return eighBatch2x2(T, W, U, V);
 }
 
 pub fn eighBatch1x1(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
-    for (0..V.ncol()) |j| {
-        W.ptr(0, j).* = V.at(0, j);
+    for (0..V.nrow()) |i| {
+        W.ptr(i, 0).* = V.at(i, 0);
     }
 
     U.fill(1);
 }
 
 pub fn eighBatch2x2(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
-    for (0..V.ncol()) |j| {
-        const Vj = V.colSlice(j);
-        const Wj = W.colSlice(j);
-        const Uj = U.colSlice(j);
+    for (0..V.nrow()) |i| {
+        const Vi = V.rowSlice(i);
+        const Wi = W.rowSlice(i);
+        const Ui = U.rowSlice(i);
 
-        try eigh2x2(T, Wj, Uj, Vj);
+        try eigh2x2(T, Wi, Ui, Vi);
     }
 }
