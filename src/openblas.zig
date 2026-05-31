@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Matrix = @import("tensor.zig").Matrix;
 
-pub fn eigh2x2Slice(comptime T: type, W: []T, U: []T, V: []T) !void {
+pub fn eigh2x2(comptime T: type, W: []T, U: []T, V: []T) !void {
     const a = V[0];
     const b = V[1];
     const c = V[3];
@@ -17,23 +17,33 @@ pub fn eigh2x2Slice(comptime T: type, W: []T, U: []T, V: []T) !void {
     const cos_t = @cos(theta);
     const sin_t = @sin(theta);
 
-    U[0] = -sin_t;
-
-    U[1] = cos_t;
-    U[2] = cos_t;
-    U[3] = sin_t;
+    // zig fmt: off
+    U[0] =  sin_t;
+    U[1] = -cos_t;
+    U[2] =  cos_t;
+    U[3] =  sin_t;
+    // zig fmt: on
 }
 
-pub fn eighMany(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
-    if (V.nrow() == 4) return eighMany2x2(T, W, U, V);
+pub fn eighBatch(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
+    if (V.nrow() == 1) return eighBatch1x1(T, W, U, V);
+    if (V.nrow() == 4) return eighBatch2x2(T, W, U, V);
 }
 
-pub fn eighMany2x2(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
+pub fn eighBatch1x1(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
+    for (0..V.ncol()) |j| {
+        W.ptr(0, j).* = V.at(0, j);
+    }
+
+    U.fill(1);
+}
+
+pub fn eighBatch2x2(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
     for (0..V.ncol()) |j| {
         const Vj = V.colSlice(j);
         const Wj = W.colSlice(j);
         const Uj = U.colSlice(j);
 
-        try eigh2x2Slice(T, Wj, Uj, Vj);
+        try eigh2x2(T, Wj, Uj, Vj);
     }
 }

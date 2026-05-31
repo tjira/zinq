@@ -51,6 +51,12 @@ pub fn Matrix(comptime T: type) type {
             };
         }
 
+        pub fn fill(self: *@This(), scalar: T) void {
+            for (self.data) |*e| {
+                e.* = scalar;
+            }
+        }
+
         pub fn ncol(self: @This()) usize {
             return self.shape[1];
         }
@@ -68,9 +74,7 @@ pub fn Matrix(comptime T: type) type {
         }
 
         pub fn zero(self: *@This()) void {
-            for (self.data) |*e| {
-                e.* = std.mem.zeroes(T);
-            }
+            self.fill(std.mem.zeroes(T));
         }
     };
 }

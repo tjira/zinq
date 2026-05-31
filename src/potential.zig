@@ -34,37 +34,26 @@ pub fn Potential(comptime T: type) type {
         pub fn evalBatch(self: @This(), V: *Matrix(T), r: Matrix(T)) void {
             switch (self) {
                 inline else => |field| {
-                    // zig fmt: off
-                    const coupled   = comptime @hasDecl(@TypeOf(field), "evalCoupled"  );
-                    const separable = comptime @hasDecl(@TypeOf(field), "evalSeparable");
-                    // zig fmt: on
+                    for (0..r.ncol()) |i| {
+                        const val = field.eval(r.colSlice(i));
 
-                    if (!coupled and !separable) @compileError("INVALID POTENTIAL STRUCTURE");
-
-                    const func = if (comptime coupled) @This().evalCoupled else @This().evalSeparable;
-
-                    func(field, V, r);
-                }
+                        for (0..field.nstate()) |j| for (0..field.nstate()) |k| {
+                            V.ptr(j * field.nstate() + k, i).* = val[j][k];
+                        };
+                    }
+                },
             }
+        }
+
+        pub fn ndim(self: @This()) usize {
+            return switch (self) {
+                inline else => |field| field.ndim(),
+            };
         }
 
         pub fn nstate(self: @This()) usize {
             return switch (self) {
                 inline else => |field| field.nstate(),
-            };
-        }
-
-        fn evalCoupled(field: anytype, V: *Matrix(T), r: Matrix(T)) void {
-            for (0..r.nrow()) |i| {
-                field.evalCoupled(V, r, i);
-            }
-        }
-
-        fn evalSeparable(field: anytype, V: *Matrix(T), r: Matrix(T)) void {
-            V.zero();
-
-            for (0..r.ncol()) |j| for (0..r.nrow()) |i| {
-                field.evalSeparable(V, r, i, j);
             };
         }
     };
@@ -80,10 +69,20 @@ pub fn Harmonic(comptime T: type) type {
             return .{ .k = k };
         }
 
-        pub fn evalSeparable(self: @This(), V: *Matrix(T), r: Matrix(T), i: usize, j: usize) void {
-            const rj = r.at(i, j);
+        pub fn eval(self: @This(), r: []const T) [1][1]T {
+            var V00: T = 0;
 
-            V.ptr(0, i).* += 0.5 * self.k[j] * rj * rj;
+            for (r, 0..) |ri, i| {
+                V00 += 0.5 * self.k[i] * ri * ri;
+            }
+
+            return .{
+                .{ V00 },
+            };
+        }
+
+        pub fn ndim(self: @This()) usize {
+            return self.k.len;
         }
 
         pub fn nstate(_: @This()) usize {
@@ -103,17 +102,19 @@ pub fn Tully1(comptime T: type) type {
             return .{ .A = A, .B = B, .C = C, .D = D };
         }
 
-        pub fn evalCoupled(self: @This(), V: *Matrix(T), r: Matrix(T), i: usize) void {
-            const r0 = r.at(i, 0);
-
-            const V00 = std.math.sign(r0) * self.A * (1 - std.math.exp(-self.B * @abs(r0)));
-            const V01 = self.C * std.math.exp(-self.D * r0 * r0);
+        pub fn eval(self: @This(), r: []const T) [2][2]T {
+            const V00 = std.math.sign(r[0]) * self.A * (1 - std.math.exp(-self.B * @abs(r[0])));
+            const V01 = self.C * std.math.exp(-self.D * r[0] * r[0]);
             const V11 = -V00;
 
-            V.ptr(0, i).* = V00;
-            V.ptr(1, i).* = V01;
-            V.ptr(2, i).* = V01;
-            V.ptr(3, i).* = V11;
+            return .{
+                .{ V00, V01 },
+                .{ V01, V11 },
+            };
+        }
+
+        pub fn ndim(_: @This()) usize {
+            return 1;
         }
 
         pub fn nstate(_: @This()) usize {
