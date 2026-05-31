@@ -10,6 +10,7 @@ const Vector = @import("tensor.zig").Vector;
 
 const eighBatch = @import("openblas.zig").eighBatch;
 const fftn = @import("fftw.zig").fftn;
+const fixGauge = @import("openblas.zig").fixGauge;
 const printf = @import("writer.zig").printf;
 const writeMatrix = @import("writer.zig").writeMatrix;
 
@@ -212,8 +213,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn overlap(self: @This(), other: @This(), grid: Grid(T)) Complex(T) {
             var value = Complex(T).init(0, 0);
 
-            for (0..self.W.ncol()) |j| for (0..other.W.ncol()) |k| for (0..self.W.nrow()) |i| {
-                value = value.add(self.W.at(i, j).conjugate().mul(other.W.at(i, k)));
+            for (0..self.W.ncol()) |j| for (0..self.W.nrow()) |i| {
+                value = value.add(self.W.at(i, j).conjugate().mul(other.W.at(i, j)));
             };
 
             return value.mul(Complex(T).init(grid.dr, 0));
@@ -323,14 +324,12 @@ fn Hamiltonian(comptime T: type) type {
         K: Vector(T),
 
         pub fn init(grid: Grid(T), pot: Potential(T), m: T, gpa: Allocator) !@This() {
-            var V = try Matrix(T).init(pot.nstate() * pot.nstate(), grid.r.ncol(), gpa);
-            var U = try Matrix(T).init(pot.nstate() * pot.nstate(), grid.r.ncol(), gpa);
+            const V = try Matrix(T).init(pot.nstate() * pot.nstate(), grid.r.ncol(), gpa);
+            const U = try Matrix(T).init(pot.nstate() * pot.nstate(), grid.r.ncol(), gpa);
 
-            var W = try Matrix(T).init(pot.nstate(), grid.r.ncol(), gpa);
+            const W = try Matrix(T).init(pot.nstate(), grid.r.ncol(), gpa);
 
             var K = try Vector(T).initZero(grid.r.ncol(), gpa);
-
-            pot.evalBatch(&V, grid.r);
 
             for (0..grid.r.ncol()) |i| {
                 var sum: T = 0;
@@ -344,9 +343,11 @@ fn Hamiltonian(comptime T: type) type {
                 K.ptr(i).* = sum;
             }
 
-            try eighBatch(T, &W, &U, V);
+            var ham = @This(){ .V = V, .W = W, .U = U, .K = K };
 
-            return .{ .V = V, .W = W, .U = U, .K = K };
+            ham.update(grid, pot, 0);
+
+            return ham;
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -354,6 +355,16 @@ fn Hamiltonian(comptime T: type) type {
             self.W.deinit(gpa);
             self.U.deinit(gpa);
             self.K.deinit(gpa);
+        }
+
+        pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T) void {
+            pot.evalBatch(&self.V, grid.r, t);
+
+            try eighBatch(T, &self.W, &self.U, self.V);
+
+            // if (grid.r.ncol() == 1) {
+            //     fixGauge(T, &self.U);
+            // }
         }
     };
 }
@@ -365,25 +376,10 @@ fn Propagator(comptime T: type) type {
         R: Matrix(Complex(T)),
         K: Vector(Complex(T)),
 
+        dt: Complex(T),
+
         pub fn init(ham: Hamiltonian(T), dt: Complex(T), gpa: Allocator) !@This() {
-            var R = try Matrix(Complex(T)).init(ham.V.nrow(), ham.V.ncol(), gpa);
-
-            const nstate = std.math.sqrt(ham.V.nrow());
-
-            for (0..R.ncol()) |i| for (0..nstate) |j| for (0..nstate) |k| {
-                var sum = Complex(T).init(0, 0);
-
-                for (0..nstate) |m| {
-                    const U_jm = ham.U.at(j * nstate + m, i);
-                    const U_km = ham.U.at(k * nstate + m, i);
-
-                    const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * ham.W.at(m, i)).mul(dt));
-
-                    sum = sum.add(Complex(T).init(phase.re * U_jm * U_km, phase.im * U_jm * U_km));
-                }
-
-                R.ptr(j * nstate + k, i).* = sum;
-            };
+            const R = try Matrix(Complex(T)).init(ham.V.nrow(), ham.V.ncol(), gpa);
 
             var K = try Vector(Complex(T)).initZero(ham.K.length(), gpa);
 
@@ -391,7 +387,11 @@ fn Propagator(comptime T: type) type {
                 K.ptr(i).* = std.math.complex.exp(Complex(T).init(0, -ham.K.at(i)).mul(dt));
             }
 
-            return .{ .R = R, .K = K };
+            var prop = @This(){ .R = R, .K = K, .dt = dt };
+
+            prop.update(ham);
+
+            return prop;
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -405,6 +405,25 @@ fn Propagator(comptime T: type) type {
             try self.applyK(wfn, grid);
             try self.applyR(wfn, gpa );
             // zig fmt: on
+        }
+
+        pub fn update(self: *@This(), ham: Hamiltonian(T)) void {
+            const nstate = std.math.sqrt(ham.V.nrow());
+
+            for (0..self.R.ncol()) |i| for (0..nstate) |j| for (0..nstate) |k| {
+                var sum = Complex(T).init(0, 0);
+
+                for (0..nstate) |m| {
+                    const U_jm = ham.U.at(j * nstate + m, i);
+                    const U_km = ham.U.at(k * nstate + m, i);
+
+                    const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * ham.W.at(m, i)).mul(self.dt));
+
+                    sum = sum.add(Complex(T).init(phase.re * U_jm * U_km, phase.im * U_jm * U_km));
+                }
+
+                self.R.ptr(j * nstate + k, i).* = sum;
+            };
         }
 
         fn applyK(self: @This(), wfn: *Wavefunction(T), grid: Grid(T)) !void {
@@ -563,6 +582,29 @@ fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize)
     try printf(io, fmt, tuple);
 }
 
+pub fn printFinalEnergies(comptime T: type, io: std.Io, obs: std.ArrayList(Observables(T))) !void {
+    try std.Io.File.stdout().writeStreamingAll(io, "\n");
+
+    for (0..obs.items.len) |i| {
+        const ekin = obs.items[i].ekin orelse std.math.nan(T);
+        const epot = obs.items[i].epot orelse std.math.nan(T);
+
+        const etot = ekin + epot;
+
+        try printf(io, "FINAL ENERGY OF VIBRONIC STATE {d:02}: {d:13.8} Eh\n", .{ i, etot });
+    }
+}
+
+pub fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
+    if (obs.pop) |pop| {
+        try std.Io.File.stdout().writeStreamingAll(io, "\n");
+
+        for (0..pop.length()) |i| {
+            try printf(io, "FINAL POPULATION OF ELECTRONIC STATE {d:02}: {d:.8}\n", .{ i, pop.at(i) });
+        }
+    }
+}
+
 fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, timer: *std.Io.Timestamp) !void {
     const ekin = obs.ekin orelse std.math.nan(T);
     const epot = obs.epot orelse std.math.nan(T);
@@ -622,6 +664,10 @@ pub fn SimulationState(comptime T: type) type {
     return struct { qsys: QuantumSystem(T), prop: Propagator(T), orthw: std.ArrayList(Wavefunction(T)) };
 }
 
+pub fn SolveContext(comptime T: type) type {
+    return struct { opt: Options, sim: *SimulationState(T), eigs: usize };
+}
+
 fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     const pot = Potential(T).init(opt.potential);
 
@@ -637,37 +683,47 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     return .{ .qsys = .{ .grid = grid, .ham = ham, .wfn = wfn, .pot = pot }, .prop = prop, .orthw = .empty };
 }
 
-pub fn solve(comptime T: type, io: std.Io, opt: Options, sim: *SimulationState(T), eigs: usize, gpa: Allocator) !void {
-    const neig = if (opt.imaginary) |imag| imag.nstate else 1;
+pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
+    const neig = if (ctx.opt.imaginary) |imag| imag.nstate else 1;
 
-    try printHeader(io, eigs, sim.qsys.grid.r.nrow(), sim.qsys.wfn.W.ncol(), neig);
+    try printHeader(io, ctx.eigs, ctx.sim.qsys.grid.r.nrow(), ctx.sim.qsys.wfn.W.ncol(), neig);
 
-    sim.qsys.wfn.setGaussian(opt.initial_conditions, sim.qsys.grid);
+    ctx.sim.qsys.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.qsys.grid);
 
-    if (opt.initial_conditions.adiabatic) {
-        try sim.qsys.wfn.toDia(sim.qsys.ham, gpa);
+    if (ctx.opt.initial_conditions.adiabatic) {
+        try ctx.sim.qsys.wfn.toDia(ctx.sim.qsys.ham, gpa);
     }
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    for (0..opt.iterations + 1) |i| {
-        // const time = (@as(T, @floatFromInt(i)) + 0.5) * opt.time_step;
+    for (0..ctx.opt.iterations + 1) |i| {
+        const time = (@as(T, @floatFromInt(i)) - 0.5) * ctx.opt.time_step;
 
-        if (i > 0) try sim.prop.step(&sim.qsys.wfn, sim.qsys.grid, gpa);
+        if (i > 0 and ctx.sim.qsys.pot.is_td()) {
+            ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, time);
 
-        if (opt.imaginary != null) for (0..sim.orthw.items.len) |j| {
-            const overlap = sim.orthw.items[j].overlap(sim.qsys.wfn, sim.qsys.grid);
+            ctx.sim.prop.update(ctx.sim.qsys.ham);
+        }
 
-            for (0..sim.qsys.wfn.W.data.len) |k| {
-                sim.qsys.wfn.W.data[k] = sim.qsys.wfn.W.data[k].sub(overlap.mul(sim.orthw.items[j].W.data[k]));
+        if (i > 0) try ctx.sim.prop.step(&ctx.sim.qsys.wfn, ctx.sim.qsys.grid, gpa);
+
+        if (ctx.opt.imaginary != null) for (ctx.sim.orthw.items) |wfn| {
+            const overlap = wfn.overlap(ctx.sim.qsys.wfn, ctx.sim.qsys.grid);
+
+            for (0..ctx.sim.qsys.wfn.W.data.len) |k| {
+                ctx.sim.qsys.wfn.W.data[k] = ctx.sim.qsys.wfn.W.data[k].sub(overlap.mul(wfn.W.data[k]));
             }
         };
 
-        if (opt.imaginary != null) sim.qsys.wfn.normalize(sim.qsys.grid);
+        if (ctx.opt.imaginary != null) ctx.sim.qsys.wfn.normalize(ctx.sim.qsys.grid);
 
-        const is_log_step = (i % opt.log_interval == 0) or (i == opt.iterations);
+        const is_log_step = (i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations);
 
-        var obs = try Observables(T).init(&sim.qsys, opt.write, opt.adiabatic, is_log_step, gpa);
+        if (ctx.sim.qsys.pot.is_td()) {
+            ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, @as(T, @floatFromInt(i)) * ctx.opt.time_step);
+        }
+
+        var obs = try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
 
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
@@ -675,16 +731,31 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sim: *SimulationState(T
 
         obs.deinit(gpa);
     }
+
+    return try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, true, arena);
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, gpa: Allocator, arena: Allocator) !void {
+    var output: std.ArrayList(Observables(T)) = .empty;
+
+    try std.Io.File.stdout().writeStreamingAll(io, "\nQUANTUM DYNAMICS INIT: ");
+
+    var timer = std.Io.Timestamp.now(io, .real);
+
     var sim = try init(T, opt, arena);
 
+    try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+
     for (0..if (opt.imaginary) |imag| imag.nstate else 1) |i| {
-        try solve(T, io, opt, &sim, i, gpa);
+        const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i }, gpa, arena);
 
         if (i < if (opt.imaginary) |imag| imag.nstate else 0) {
             try sim.orthw.append(arena, try sim.qsys.wfn.clone(arena));
         }
+
+        try output.append(arena, obs);
+        try printFinalPop(T, io, obs);
     }
+
+    try printFinalEnergies(T, io, output);
 }

@@ -18,8 +18,8 @@ pub fn eigh2x2(comptime T: type, W: []T, U: []T, V: []T) !void {
     const sin_t = @sin(theta);
 
     // zig fmt: off
-    U[0] =  sin_t;
-    U[1] = -cos_t;
+    U[0] = -sin_t;
+    U[1] =  cos_t;
     U[2] =  cos_t;
     U[3] =  sin_t;
     // zig fmt: on

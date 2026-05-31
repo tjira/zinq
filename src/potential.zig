@@ -9,6 +9,10 @@ pub const Options = union(enum) {
     harmonic: struct {
         k: []const f64 = &.{1},
     },
+    time_linear: struct {
+        a: f64 = 10,
+        g: f64 = 2,
+    },
     tully_1: struct {
         A: f64 = 0.01,
         B: f64 = 1.6,
@@ -17,29 +21,31 @@ pub const Options = union(enum) {
     },
 };
 
-// GENERIC POTENTIAL ===================================================================================================
+// GENERIC POTgNTIAL ===================================================================================================
 
 pub fn Potential(comptime T: type) type {
     return union(enum) {
         // zig fmt: off
-        harmonic: Harmonic(T),
-        tully_1:  Tully1  (T),
+        harmonic:    Harmonic  (T),
+        time_linear: TimeLinear(T),
+        tully_1:     Tully1    (T),
         // zig fmt: on
 
         pub fn init(options: Options) @This() {
             return switch (options) {
                 // zig fmt: off
-                .harmonic => |f| .{ .harmonic = Harmonic(T).init(f.k               ) },
-                .tully_1  => |f| .{ .tully_1  = Tully1  (T).init(f.A, f.B, f.C, f.D) },
+                .harmonic    => |f| .{ .harmonic    = Harmonic  (T).init(f.k               ) },
+                .time_linear => |f| .{ .time_linear = TimeLinear(T).init(f.a, f.g          ) },
+                .tully_1     => |f| .{ .tully_1     = Tully1    (T).init(f.A, f.B, f.C, f.D) },
                 // zig fmt: on
             };
         }
 
-        pub fn evalBatch(self: @This(), V: *Matrix(T), r: Matrix(T)) void {
+        pub fn evalBatch(self: @This(), V: *Matrix(T), r: Matrix(T), t: T) void {
             switch (self) {
                 inline else => |field| {
                     for (0..r.ncol()) |i| {
-                        const val = field.eval(r.colSlice(i));
+                        const val = field.eval(r.colSlice(i), t);
 
                         for (0..field.nstate()) |j| for (0..field.nstate()) |k| {
                             V.ptr(j * field.nstate() + k, i).* = val[j][k];
@@ -47,6 +53,13 @@ pub fn Potential(comptime T: type) type {
                     }
                 },
             }
+        }
+
+        pub fn is_td(self: @This()) bool {
+            return switch (self) {
+                .time_linear => true,
+                inline else => false,
+            };
         }
 
         pub fn ndim(self: @This()) usize {
@@ -73,7 +86,7 @@ pub fn Harmonic(comptime T: type) type {
             return .{ .k = k };
         }
 
-        pub fn eval(self: @This(), r: []const T) [1][1]T {
+        pub fn eval(self: @This(), r: []const T, _: T) [1][1]T {
             var V00: T = 0;
 
             for (r, 0..) |ri, i| {
@@ -95,6 +108,36 @@ pub fn Harmonic(comptime T: type) type {
     };
 }
 
+pub fn TimeLinear(comptime T: type) type {
+    return struct {
+        a: T,
+        g: T,
+
+        pub fn init(a: T, g: T) @This() {
+            return .{ .a = a, .g = g };
+        }
+
+        pub fn eval(self: @This(), _: []const T, t: T) [2][2]T {
+            const V00 = self.a * (t - self.a);
+            const V01 = self.g;
+            const V11 = -V00;
+
+            return .{
+                .{ V00, V01 },
+                .{ V01, V11 },
+            };
+        }
+
+        pub fn ndim(_: @This()) usize {
+            return 1;
+        }
+
+        pub fn nstate(_: @This()) usize {
+            return 2;
+        }
+    };
+}
+
 pub fn Tully1(comptime T: type) type {
     return struct {
         A: T,
@@ -106,7 +149,7 @@ pub fn Tully1(comptime T: type) type {
             return .{ .A = A, .B = B, .C = C, .D = D };
         }
 
-        pub fn eval(self: @This(), r: []const T) [2][2]T {
+        pub fn eval(self: @This(), r: []const T, _: T) [2][2]T {
             const V00 = std.math.sign(r[0]) * self.A * (1 - std.math.exp(-self.B * @abs(r[0])));
             const V01 = self.C * std.math.exp(-self.D * r[0] * r[0]);
             const V11 = -V00;
