@@ -11,7 +11,7 @@ const Vector = @import("tensor.zig").Vector;
 const eighBatch = @import("openblas.zig").eighBatch;
 const fftn = @import("fftw.zig").fftn;
 const printf = @import("read_write.zig").printf;
-const writeMatrix = @import("read_write.zig").writeMatrix;
+const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
 // GLOBAL VARIABLES ====================================================================================================
 
@@ -560,20 +560,86 @@ fn History(comptime T: type) type {
         pop:  ?Matrix(T),
         epot: ?Matrix(T),
         ekin: ?Matrix(T),
+        etot: ?Matrix(T),
         norm: ?Matrix(T),
         // zig fmt: on
 
+        index: usize = 0,
+
         pub fn init(ndim: usize, nstate: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
+            // zig fmt: off
+            const store_epot = write.potential_energy != null or write.total_energy != null;
+            const store_ekin = write.kinetic_energy   != null or write.total_energy != null;
+            // zig fmt: on
+
             return .{
                 // zig fmt: off
-                .pos  = if (write.position         != null) try Matrix(T).init(iters, ndim,   gpa) else null,
-                .mom  = if (write.momentum         != null) try Matrix(T).init(iters, ndim,   gpa) else null,
-                .pop  = if (write.population       != null) try Matrix(T).init(iters, nstate, gpa) else null,
-                .epot = if (write.potential_energy != null) try Matrix(T).init(iters, 1,      gpa) else null,
-                .ekin = if (write.kinetic_energy   != null) try Matrix(T).init(iters, 1,      gpa) else null,
-                .norm = if (write.norm             != null) try Matrix(T).init(iters, 1,      gpa) else null,
+                .pos  = if (write.position     != null) try Matrix(T).init(iters, ndim,   gpa) else null,
+                .mom  = if (write.momentum     != null) try Matrix(T).init(iters, ndim,   gpa) else null,
+                .pop  = if (write.population   != null) try Matrix(T).init(iters, nstate, gpa) else null,
+                .norm = if (write.norm         != null) try Matrix(T).init(iters, 1,      gpa) else null,
+                .etot = if (write.total_energy != null) try Matrix(T).init(iters, 1,      gpa) else null,
                 // zig fmt: on
+
+                .ekin = if (store_ekin) try Matrix(T).init(iters, 1, gpa) else null,
+                .epot = if (store_epot) try Matrix(T).init(iters, 1, gpa) else null,
             };
+        }
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            // zig fmt: off
+            if (self.pos)  |*pos|   pos.deinit(gpa);
+            if (self.mom)  |*mom|   mom.deinit(gpa);
+            if (self.pop)  |*pop|   pop.deinit(gpa);
+            if (self.epot) |*epot| epot.deinit(gpa);
+            if (self.ekin) |*ekin| ekin.deinit(gpa);
+            if (self.etot) |*etot| etot.deinit(gpa);
+            if (self.norm) |*norm| norm.deinit(gpa);
+            // zig fmt: on
+        }
+
+        pub fn append(self: *@This(), obs: Observables(T)) void {
+            const i = self.index;
+
+            if (self.pos) |*pos| if (obs.pos) |v| {
+                for (0..v.length()) |j| pos.ptr(i, j).* = v.at(j);
+            };
+
+            if (self.mom) |*mom| if (obs.mom) |v| {
+                for (0..v.length()) |j| mom.ptr(i, j).* = v.at(j);
+            };
+
+            if (self.pop) |*pop| if (obs.pop) |v| {
+                for (0..v.length()) |j| pop.ptr(i, j).* = v.at(j);
+            };
+
+            // zig fmt: off
+            if (self.epot) |*epot| {if (obs.epot) |v| epot.ptr(i, 0).* = v;}
+            if (self.ekin) |*ekin| {if (obs.ekin) |v| ekin.ptr(i, 0).* = v;}
+            if (self.norm) |*norm| {if (obs.norm) |v| norm.ptr(i, 0).* = v;}
+            // zig fmt: on
+
+            if (self.etot) |*etot| {
+                etot.ptr(i, 0).* = obs.ekin.? + obs.epot.?;
+            }
+
+            self.index += 1;
+        }
+
+        pub fn exportAndDeinit(self: *@This(), io: std.Io, dt: f64, write: Write, gpa: Allocator) !void {
+            defer self.deinit(gpa);
+
+            const end = dt * @as(T, @floatFromInt(self.index - 1));
+
+            // zig fmt: off
+            if (write.position        ) |path| try writeMatrixLspace(T, io, path, self.pos.?,  0, end);
+            if (write.momentum        ) |path| try writeMatrixLspace(T, io, path, self.mom.?,  0, end);
+            if (write.population      ) |path| try writeMatrixLspace(T, io, path, self.pop.?,  0, end);
+            if (write.potential_energy) |path| try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
+            if (write.kinetic_energy  ) |path| try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
+            if (write.norm            ) |path| try writeMatrixLspace(T, io, path, self.norm.?, 0, end);
+            if (write.total_energy    ) |path| try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
+            // zig fmt: on
         }
     };
 }
@@ -709,11 +775,19 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
 }
 
 pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
+    // zig fmt: off
+    const ndim   = ctx.sim.qsys.grid.r.ncol();
+    const nstate =  ctx.sim.qsys.wfn.W.nrow();
+    const iters  =         ctx.opt.iterations;
+    // zig fmt: on
+
     const neig = if (ctx.opt.imaginary) |imag| imag.nstate else 1;
 
     try printHeader(io, ctx.eigs, ctx.sim.qsys.grid.r.ncol(), ctx.sim.qsys.wfn.W.nrow(), neig);
 
     ctx.sim.qsys.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.qsys.grid);
+
+    var hist = try History(T).init(ndim, nstate, iters + 1, ctx.opt.write, gpa);
 
     if (ctx.opt.initial_conditions.adiabatic) {
         try ctx.sim.qsys.wfn.toDia(ctx.sim.qsys.ham, gpa);
@@ -750,12 +824,16 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
 
         var obs = try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
 
+        hist.append(obs);
+
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
         }
 
         obs.deinit(gpa);
     }
+
+    try hist.exportAndDeinit(io, ctx.opt.time_step, ctx.opt.write, gpa);
 
     return try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, true, arena);
 }

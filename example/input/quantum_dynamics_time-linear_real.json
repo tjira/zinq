@@ -20,7 +20,10 @@
                 "iterations" : 20000,
                 "time_step" : 0.001,
                 "adiabatic" : true,
-                "log_interval" : 5000
+                "log_interval" : 5000,
+                "write" : {
+                    "population" : "POP_QD.mat"
+                }
             }
         }
     ]
