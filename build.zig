@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    const libinc = .{ "lib", "inclde" };
+    const libinc = .{ "lib", "include" };
 
     exe.root_module.addLibraryPath(.{ .cwd_relative = "external-x86_64-linux/" ++ libinc[0] });
     exe.root_module.addIncludePath(.{ .cwd_relative = "external-x86_64-linux/" ++ libinc[1] });
