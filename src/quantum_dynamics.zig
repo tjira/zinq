@@ -550,6 +550,34 @@ fn Observables(comptime T: type) type {
     };
 }
 
+// HISTORY =============================================================================================================
+
+fn History(comptime T: type) type {
+    return struct {
+        // zig fmt: off
+        pos:  ?Matrix(T),
+        mom:  ?Matrix(T),
+        pop:  ?Matrix(T),
+        epot: ?Matrix(T),
+        ekin: ?Matrix(T),
+        norm: ?Matrix(T),
+        // zig fmt: on
+
+        pub fn init(ndim: usize, nstate: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
+            return .{
+                // zig fmt: off
+                .pos  = if (write.position         != null) try Matrix(T).init(iters, ndim,   gpa) else null,
+                .mom  = if (write.momentum         != null) try Matrix(T).init(iters, ndim,   gpa) else null,
+                .pop  = if (write.population       != null) try Matrix(T).init(iters, nstate, gpa) else null,
+                .epot = if (write.potential_energy != null) try Matrix(T).init(iters, 1,      gpa) else null,
+                .ekin = if (write.kinetic_energy   != null) try Matrix(T).init(iters, 1,      gpa) else null,
+                .norm = if (write.norm             != null) try Matrix(T).init(iters, 1,      gpa) else null,
+                // zig fmt: on
+            };
+        }
+    };
+}
+
 // LOGGERS =============================================================================================================
 
 fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize) !void {
