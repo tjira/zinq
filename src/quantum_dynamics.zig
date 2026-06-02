@@ -864,7 +864,15 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
 
         var obs = try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
 
+        if (ctx.opt.write.wavefunction != null and ctx.opt.adiabatic) {
+            try ctx.sim.qsys.wfn.toAdia(ctx.sim.qsys.ham, gpa);
+        }
+
         hist.append(ctx.sim.qsys.wfn, obs);
+
+        if (ctx.opt.write.wavefunction != null and ctx.opt.adiabatic) {
+            try ctx.sim.qsys.wfn.toDia(ctx.sim.qsys.ham, gpa);
+        }
 
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
