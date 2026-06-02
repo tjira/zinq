@@ -10,6 +10,66 @@ pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     try writeAndFlush(&writer, format, args);
 }
 
+pub fn writeMatrixHjoin(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), B: Matrix(T)) !void {
+    if (@typeInfo(T) == .@"struct") {
+        return try writeMatrixHjoinComplex(T, io, fname, A, B);
+    }
+
+    try writeMatrixHjoinReal(T, io, fname, A, B);
+}
+
+pub fn writeMatrixHjoinReal(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), B: Matrix(T)) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
+
+    // zig fmt: off
+    var buffer: [65536]u8 = undefined; var writer = file.writer(io, &buffer);
+    // zig fmt: on
+
+    try writer.interface.print("{d} {d}\n", .{ A.nrow(), A.ncol() + B.ncol() });
+
+    for (0..A.nrow()) |i| {
+        for (0..A.ncol()) |j| {
+            try writer.interface.print("{d:20.14} ", .{A.at(i, j)});
+        }
+
+        for (0..B.ncol()) |j| {
+            const sep = if (j == B.ncol() - 1) "\n" else " ";
+
+            try writer.interface.print("{d:20.14}{s}", .{ B.at(i, j), sep });
+        }
+    }
+
+    try writer.interface.flush();
+
+    file.close(io);
+}
+
+pub fn writeMatrixHjoinComplex(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), B: Matrix(T)) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
+
+    // zig fmt: off
+    var buffer: [65536]u8 = undefined; var writer = file.writer(io, &buffer);
+    // zig fmt: on
+
+    try writer.interface.print("{d} {d}\n", .{ A.nrow(), 2 * A.ncol() + 2 * B.ncol() });
+
+    for (0..A.nrow()) |i| {
+        for (0..A.ncol()) |j| {
+            try writer.interface.print(" {d:20.14} {d:20.14} ", .{ A.at(i, j).re, A.at(i, j).im });
+        }
+
+        for (0..B.ncol()) |j| {
+            const sep = if (j == B.ncol() - 1) "\n" else " ";
+
+            try writer.interface.print(" {d:20.14} {d:20.14}{s}", .{ B.at(i, j).re, B.at(i, j).im, sep });
+        }
+    }
+
+    try writer.interface.flush();
+
+    file.close(io);
+}
+
 pub fn writeMatrixLspace(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), start: T, end: T) !void {
     if (@typeInfo(T) == .@"struct") {
         return try writeMatrixLspaceComplex(T, io, fname, A, start, end);

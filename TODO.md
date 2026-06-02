@@ -1,0 +1,1 @@
+- [ ] The QD code always saves diabatic wavefunction, even if adiabatic is selected.

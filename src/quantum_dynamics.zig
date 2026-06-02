@@ -11,6 +11,7 @@ const Vector = @import("tensor.zig").Vector;
 const eighBatch = @import("openblas.zig").eighBatch;
 const fftn = @import("fftw.zig").fftn;
 const printf = @import("read_write.zig").printf;
+const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
 // GLOBAL VARIABLES ====================================================================================================
@@ -288,6 +289,30 @@ fn Wavefunction(comptime T: type) type {
             self.normalize(grid);
         }
 
+        pub fn toAdia(self: *@This(), ham: Hamiltonian(T), gpa: Allocator) !void {
+            var temp = try gpa.alloc(Complex(T), self.W.nrow());
+
+            for (0..self.W.ncol()) |j| {
+                for (0..self.W.nrow()) |k| {
+                    temp[k] = self.W.at(k, j);
+                }
+
+                for (0..self.W.nrow()) |i| {
+                    var sum = Complex(T).init(0, 0);
+
+                    for (0..self.W.nrow()) |k| {
+                        const u_kj = Complex(T).init(ham.U.at(j, k * self.W.nrow() + i), 0);
+
+                        sum = sum.add(temp[k].mul(u_kj));
+                    }
+
+                    self.W.ptr(i, j).* = sum;
+                }
+            }
+
+            gpa.free(temp);
+        }
+
         pub fn toDia(self: *@This(), ham: Hamiltonian(T), gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), self.W.nrow());
 
@@ -562,15 +587,20 @@ fn History(comptime T: type) type {
         ekin: ?Matrix(T),
         etot: ?Matrix(T),
         norm: ?Matrix(T),
+        wfn:  ?Matrix(T),
         // zig fmt: on
 
         index: usize = 0,
 
-        pub fn init(ndim: usize, nstate: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
+        pub fn init(ndim: usize, nstate: usize, npoint: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
+            const store_wfn = write.wavefunction != null;
+
             // zig fmt: off
             const store_epot = write.potential_energy != null or write.total_energy != null;
             const store_ekin = write.kinetic_energy   != null or write.total_energy != null;
             // zig fmt: on
+
+            const wfn_nrow = std.math.pow(usize, npoint, ndim);
 
             return .{
                 // zig fmt: off
@@ -580,6 +610,8 @@ fn History(comptime T: type) type {
                 .norm = if (write.norm         != null) try Matrix(T).init(iters, 1,      gpa) else null,
                 .etot = if (write.total_energy != null) try Matrix(T).init(iters, 1,      gpa) else null,
                 // zig fmt: on
+                
+                .wfn = if (store_wfn) try Matrix(T).init(wfn_nrow, 2 * nstate * iters, gpa) else null,
 
                 .ekin = if (store_ekin) try Matrix(T).init(iters, 1, gpa) else null,
                 .epot = if (store_epot) try Matrix(T).init(iters, 1, gpa) else null,
@@ -595,11 +627,17 @@ fn History(comptime T: type) type {
             if (self.ekin) |*ekin| ekin.deinit(gpa);
             if (self.etot) |*etot| etot.deinit(gpa);
             if (self.norm) |*norm| norm.deinit(gpa);
+            if (self.wfn)  |*wfn|   wfn.deinit(gpa);
             // zig fmt: on
         }
 
-        pub fn append(self: *@This(), obs: Observables(T)) void {
+        pub fn append(self: *@This(), wfn: Wavefunction(T), obs: Observables(T)) void {
             const i = self.index;
+
+            if (self.wfn) |*storage| for (0..wfn.W.nrow()) |j| for (0..wfn.W.ncol()) |k| {
+                storage.ptr(k, 2 * (i * wfn.W.nrow() + j) + 0).* = wfn.W.at(j, k).re;
+                storage.ptr(k, 2 * (i * wfn.W.nrow() + j) + 1).* = wfn.W.at(j, k).im;
+            };
 
             if (self.pos) |*pos| if (obs.pos) |v| {
                 for (0..v.length()) |j| pos.ptr(i, j).* = v.at(j);
@@ -626,7 +664,7 @@ fn History(comptime T: type) type {
             self.index += 1;
         }
 
-        pub fn exportAndDeinit(self: *@This(), io: std.Io, dt: f64, write: Write, gpa: Allocator) !void {
+        pub fn exportAndDeinit(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write, gpa: Allocator) !void {
             defer self.deinit(gpa);
 
             const end = dt * @as(T, @floatFromInt(self.index - 1));
@@ -640,6 +678,8 @@ fn History(comptime T: type) type {
             if (write.norm            ) |path| try writeMatrixLspace(T, io, path, self.norm.?, 0, end);
             if (write.total_energy    ) |path| try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
             // zig fmt: on
+
+            if (write.wavefunction) |path| try writeMatrixHjoin(T, io, path, grid.r, self.wfn.?);
         }
     };
 }
@@ -787,7 +827,7 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
 
     ctx.sim.qsys.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.qsys.grid);
 
-    var hist = try History(T).init(ndim, nstate, iters + 1, ctx.opt.write, gpa);
+    var hist = try History(T).init(ndim, nstate, ctx.opt.grid.npoint, iters + 1, ctx.opt.write, gpa);
 
     if (ctx.opt.initial_conditions.adiabatic) {
         try ctx.sim.qsys.wfn.toDia(ctx.sim.qsys.ham, gpa);
@@ -824,7 +864,7 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
 
         var obs = try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
 
-        hist.append(obs);
+        hist.append(ctx.sim.qsys.wfn, obs);
 
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
@@ -833,7 +873,7 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
         obs.deinit(gpa);
     }
 
-    try hist.exportAndDeinit(io, ctx.opt.time_step, ctx.opt.write, gpa);
+    try hist.exportAndDeinit(io, ctx.opt.time_step, ctx.sim.qsys.grid, ctx.opt.write, gpa);
 
     return try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, true, arena);
 }
