@@ -55,7 +55,7 @@ pub fn writeMatrixHjoinComplex(comptime T: type, io: std.Io, fname: []const u8, 
 
     for (0..A.nrow()) |i| {
         for (0..A.ncol()) |j| {
-            try writer.interface.print(" {d:20.14} {d:20.14} ", .{ A.at(i, j).re, A.at(i, j).im });
+            try writer.interface.print("{d:20.14} {d:20.14} ", .{ A.at(i, j).re, A.at(i, j).im });
         }
 
         for (0..B.ncol()) |j| {
@@ -90,7 +90,7 @@ pub fn writeMatrixLspaceReal(comptime T: type, io: std.Io, fname: []const u8, A:
     const dt: T = if (A.nrow() > 1) (end - start) / @as(T, @floatFromInt(A.nrow() - 1)) else 0;
 
     for (0..A.nrow()) |i| {
-        try writer.interface.print("{d:20.14}", .{start + dt * @as(T, @floatFromInt(i))});
+        try writer.interface.print("{d:20.14} ", .{start + dt * @as(T, @floatFromInt(i))});
 
         for (0..A.ncol()) |j| {
             const sep = if (j == A.ncol() - 1) "\n" else " ";
@@ -116,7 +116,7 @@ pub fn writeMatrixLspaceComplex(comptime T: type, io: std.Io, fname: []const u8,
     const dt: T = if (A.nrow() > 1) (end - start) / @as(T, @floatFromInt(A.nrow() - 1)) else 0;
 
     for (0..A.nrow()) |i| {
-        try writer.interface.print("{d:20.14}", .{start + dt * @as(T, @floatFromInt(i))});
+        try writer.interface.print("{d:20.14} ", .{start + dt * @as(T, @floatFromInt(i))});
 
         for (0..A.ncol()) |j| {
             const sep = if (j == A.ncol() - 1) "\n" else " ";
