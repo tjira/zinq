@@ -53,12 +53,9 @@ const Write = struct {
 
 pub const Options = struct {
     adiabatic: bool = false,
-    fft_plan: enum {
-        estimate,
-        measure,
-        patient,
-        exhaustive,
-    } = .measure,
+    fft: struct {
+        plan: enum { estimate, measure, patient, exhaustive } = .measure,
+    } = .{},
     grid: struct {
         bounds: []const [2]f64,
         npoint: u32,
@@ -843,7 +840,7 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
 
     const dt = if (opt.imaginary) |_| Complex(T).init(0, -opt.time_step) else Complex(T).init(opt.time_step, 0);
 
-    const plan_mode = switch (opt.fft_plan) {
+    const plan_mode = switch (opt.fft.plan) {
         // zig fmt: off
         .estimate   => fftw  .FFTW_ESTIMATE,
         .measure    => fftw   .FFTW_MEASURE,
