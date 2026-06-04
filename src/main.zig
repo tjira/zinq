@@ -2,10 +2,16 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const QuantumDynamicsOptions = @import("quantum_dynamics.zig").Options;
+// zig fmt: off
+pub const QuantumDynamicsOptions = @import("quantum_dynamics.zig").Options;
+pub const quantum_dynamics_run   = @import("quantum_dynamics.zig")    .run;
+// zig fmt: on
+
+// zig fmt: off
+pub const PotentialOptions = @import("potential.zig").Options;
+// zig fmt: on
 
 const printf = @import("read_write.zig").printf;
-const quantum_dynamics_run = @import("quantum_dynamics.zig").run;
 
 // OPTIONS =============================================================================================================
 
@@ -25,7 +31,7 @@ fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !std
 
 fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
     for ((try parse(Options, io, fname, arena)).value.zinq) |opt| switch (opt) {
-        .quantum_dynamics => |field| try quantum_dynamics_run(T, io, field, gpa, arena),
+        .quantum_dynamics => |field| _ = try quantum_dynamics_run(T, io, field, true, gpa, arena),
     };
 }
 

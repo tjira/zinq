@@ -2,20 +2,25 @@ const std = @import("std");
 
 const fftw = @cImport(@cInclude("fftw3.h"));
 
-const Allocator = std.mem.Allocator;
-const Complex = std.math.Complex;
+// zig fmt: off
+const Allocator = std.mem .Allocator;
+const Complex   = std.math.  Complex;
+// zig fmt: on
 
-const FftPlan = @import("fftw.zig").FftPlan;
-const Matrix = @import("tensor.zig").Matrix;
-const Potential = @import("potential.zig").Potential;
-const PotentialOptions = @import("potential.zig").Options;
-const Vector = @import("tensor.zig").Vector;
+// zig fmt: off
+const FftPlan          = @import("fftw.zig"     ).  FftPlan;
+const Matrix           = @import("tensor.zig"   ).   Matrix;
+const Potential        = @import("potential.zig").Potential;
+const PotentialOptions = @import("potential.zig").  Options;
+const Vector           = @import("tensor.zig"   )   .Vector;
+// zig fmt: on
 
-const eighBatch = @import("openblas.zig").eighBatch;
-const fftn = @import("fftw.zig").fftn;
-const printf = @import("read_write.zig").printf;
-const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
+// zig fmt: off
+const eighBatch         = @import("openblas.zig"  )        .eighBatch;
+const printf            = @import("read_write.zig")           .printf;
+const writeMatrixHjoin  = @import("read_write.zig") .writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
+// zig fmt: on
 
 // GLOBAL VARIABLES ====================================================================================================
 
@@ -406,7 +411,7 @@ fn Hamiltonian(comptime T: type) type {
 
             var ham = @This(){ .V = V, .W = W, .U = U, .K = K };
 
-            ham.update(grid, pot, 0);
+            try ham.update(grid, pot, 0);
 
             return ham;
         }
@@ -418,7 +423,7 @@ fn Hamiltonian(comptime T: type) type {
             self.K.deinit(gpa);
         }
 
-        pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T) void {
+        pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T) !void {
             pot.evalBatch(&self.V, grid.r, t);
 
             try eighBatch(T, &self.W, &self.U, self.V);
@@ -832,7 +837,7 @@ pub fn SimulationState(comptime T: type) type {
 }
 
 pub fn SolveContext(comptime T: type) type {
-    return struct { opt: Options, sim: *SimulationState(T), eigs: usize };
+    return struct { opt: Options, sim: *SimulationState(T), eigs: usize, log: bool };
 }
 
 fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
@@ -868,7 +873,7 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
 
     const neig = if (ctx.opt.imaginary) |imag| imag.nstate else 1;
 
-    try printHeader(io, ctx.eigs, ctx.sim.qsys.grid.r.ncol(), ctx.sim.qsys.wfn.W.nrow(), neig);
+    if (ctx.log) try printHeader(io, ctx.eigs, ctx.sim.qsys.grid.r.ncol(), ctx.sim.qsys.wfn.W.nrow(), neig);
 
     ctx.sim.qsys.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.qsys.grid);
 
@@ -884,7 +889,7 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
         const time = (@as(T, @floatFromInt(i)) - 0.5) * ctx.opt.time_step;
 
         if (i > 0 and ctx.sim.qsys.pot.is_td()) {
-            ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, time);
+            try ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, time);
 
             ctx.sim.prop.update(ctx.sim.qsys.ham);
         }
@@ -901,10 +906,12 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
 
         if (ctx.opt.imaginary != null) ctx.sim.qsys.wfn.normalize(ctx.sim.qsys.grid);
 
-        const is_log_step = (i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations);
+        const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
         if (ctx.sim.qsys.pot.is_td()) {
-            ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, @as(T, @floatFromInt(i)) * ctx.opt.time_step);
+            const t = @as(T, @floatFromInt(i)) * ctx.opt.time_step;
+
+            try ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, t);
         }
 
         var obs = try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
@@ -931,27 +938,32 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
     return try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, true, arena);
 }
 
-pub fn run(comptime T: type, io: std.Io, opt: Options, gpa: Allocator, arena: Allocator) !void {
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator, arena: Allocator) !std.ArrayList(Observables(T)) {
     var output: std.ArrayList(Observables(T)) = .empty;
 
-    try std.Io.File.stdout().writeStreamingAll(io, "\nQUANTUM DYNAMICS INIT: ");
+    if (log) try std.Io.File.stdout().writeStreamingAll(io, "\nQUANTUM DYNAMICS INIT: ");
 
     var timer = std.Io.Timestamp.now(io, .real);
 
     var sim = try init(T, opt, arena);
 
-    try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 
     for (0..if (opt.imaginary) |imag| imag.nstate else 1) |i| {
-        const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i }, gpa, arena);
+        const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i, .log = log }, gpa, arena);
 
         if (i < if (opt.imaginary) |imag| imag.nstate else 0) {
             try sim.orthw.append(arena, try sim.qsys.wfn.clone(arena));
         }
 
         try output.append(arena, obs);
-        try printFinalPop(T, io, obs);
+
+        if (log) {
+            try printFinalPop(T, io, obs);
+        }
     }
 
-    try printFinalEnergies(T, io, output);
+    if (log) try printFinalEnergies(T, io, output);
+
+    return output;
 }

@@ -10,14 +10,16 @@ pub const Options = union(enum) {
         k: []const f64 = &.{1},
     },
     time_linear: struct {
+        // zig fmt: off
         a: f64 = 10,
-        g: f64 = 2,
+        g: f64 =  2,
+        // zig fmt: on
     },
     tully_1: struct {
-        A: f64 = 0.01,
-        B: f64 = 1.6,
+        A: f64 = 0.010,
+        B: f64 = 1.600,
         C: f64 = 0.005,
-        D: f64 = 1.0,
+        D: f64 = 1.000,
     },
 };
 
