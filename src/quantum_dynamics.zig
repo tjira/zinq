@@ -189,13 +189,11 @@ fn Wavefunction(comptime T: type) type {
         }
 
         pub fn ekin(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
-            var value: T = 0;
-
-            for (0..self.W.nrow()) |i| for (0..self.W.ncol()) |j| {
-                value += self.W.at(i, j).squaredMagnitude() * ham.K.at(j);
+            inline for (1..MAX_NSTATE + 1) |i| if (self.W.nrow() == i) {
+                return self.ekinFast(ham, grid, i);
             };
 
-            return value * grid.dk;
+            return self.ekinSlow(ham, grid);
         }
 
         pub fn epot(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
@@ -263,37 +261,19 @@ fn Wavefunction(comptime T: type) type {
         }
 
         pub fn pop(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(self.W.nrow(), gpa);
-
-            for (0..self.W.nrow()) |i| for (0..self.W.ncol()) |j| {
-                value.ptr(i).* += self.W.at(i, j).squaredMagnitude();
+            inline for (1..MAX_NSTATE + 1) |i| if (self.W.nrow() == i) {
+                return self.popFast(grid, i, gpa);
             };
 
-            value.muls(grid.dr);
-
-            return value;
+            return self.popSlow(grid, gpa);
         }
 
         pub fn popAdia(self: @This(), ham: Hamiltonian(T), grid: Grid(T), gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(self.W.nrow(), gpa);
-
-            for (0..self.W.ncol()) |j| for (0..self.W.nrow()) |m| {
-                var adia_re: T = 0;
-                var adia_im: T = 0;
-
-                for (0..self.W.nrow()) |i| {
-                    const u_jm = ham.U.at(j, i * self.W.nrow() + m);
-
-                    adia_re += self.W.at(i, j).re * u_jm;
-                    adia_im += self.W.at(i, j).im * u_jm;
-                }
-
-                value.ptr(m).* += adia_re * adia_re + adia_im * adia_im;
+            inline for (1..MAX_NSTATE + 1) |i| if (self.W.nrow() == i) {
+                return self.popAdiaFast(ham, grid, i, gpa);
             };
 
-            value.muls(grid.dr);
-
-            return value;
+            return self.popAdiaSlow(ham, grid, gpa);
         }
 
         pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
@@ -376,6 +356,114 @@ fn Wavefunction(comptime T: type) type {
             }
 
             gpa.free(temp);
+        }
+
+        fn ekinFast(self: @This(), ham: Hamiltonian(T), grid: Grid(T), comptime nstate: usize) T {
+            var value: T = 0;
+
+            inline for (0..nstate) |i| for (self.W.rowSlice(i), 0..) |w, j| {
+                value += w.squaredMagnitude() * ham.K.at(j);
+            };
+
+            return value * grid.dk;
+        }
+
+        fn ekinSlow(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
+            var value: T = 0;
+
+            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |w, j| {
+                value += w.squaredMagnitude() * ham.K.at(j);
+            };
+
+            return value * grid.dk;
+        }
+
+        fn popAdiaFast(self: @This(), ham: Hamiltonian(T), grid: Grid(T), comptime nstate: usize, gpa: Allocator) !Vector(T) {
+            var value = try Vector(T).initZero(nstate, gpa);
+
+            for (0..self.W.ncol()) |j| {
+                var temp: [nstate]Complex(T) = undefined;
+
+                inline for (0..nstate) |i| {
+                    temp[i] = self.W.at(i, j);
+                }
+
+                inline for (0..nstate) |m| {
+                    var adia_re: T = 0;
+                    var adia_im: T = 0;
+
+                    inline for (0..nstate) |i| {
+                        const u_jm = ham.U.at(j, i * nstate + m);
+
+                        adia_re += temp[i].re * u_jm;
+                        adia_im += temp[i].im * u_jm;
+                    }
+
+                    value.ptr(m).* += adia_re * adia_re + adia_im * adia_im;
+                }
+            }
+
+            value.muls(grid.dr);
+
+            return value;
+        }
+
+        fn popAdiaSlow(self: @This(), ham: Hamiltonian(T), grid: Grid(T), gpa: Allocator) !Vector(T) {
+            var value = try Vector(T).initZero(self.W.nrow(), gpa);
+
+            for (0..self.W.ncol()) |j| for (0..self.W.nrow()) |m| {
+                var adia_re: T = 0;
+                var adia_im: T = 0;
+
+                for (0..self.W.nrow()) |i| {
+                    const u_jm = ham.U.at(j, i * self.W.nrow() + m);
+
+                    adia_re += self.W.at(i, j).re * u_jm;
+                    adia_im += self.W.at(i, j).im * u_jm;
+                }
+
+                value.ptr(m).* += adia_re * adia_re + adia_im * adia_im;
+            };
+
+            value.muls(grid.dr);
+
+            return value;
+        }
+
+        fn popFast(self: @This(), grid: Grid(T), comptime nstate: usize, gpa: Allocator) !Vector(T) {
+            var value = try Vector(T).initZero(nstate, gpa);
+
+            inline for (0..nstate) |i| {
+                var sum: T = 0;
+
+                for (self.W.rowSlice(i)) |w| {
+                    sum += w.squaredMagnitude();
+                }
+
+                value.ptr(i).* = sum;
+            }
+
+            value.muls(grid.dr);
+
+            return value;
+        }
+
+        fn popSlow(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
+            var value = try Vector(T).initZero(self.W.nrow(), gpa);
+
+            for (0..self.W.nrow()) |i| {
+                var sum: T = 0;
+
+                for (self.W.rowSlice(i)) |w| {
+                    sum += w.squaredMagnitude();
+                }
+
+                value.ptr(i).* = sum;
+            }
+
+            value.muls(grid.dr);
+
+            return value;
         }
     };
 }
