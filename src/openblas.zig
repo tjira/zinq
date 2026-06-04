@@ -21,10 +21,6 @@ pub fn eighSlice(comptime T: type, W: []T, U: []T, V: []T) !void {
         U[i] = V[i];
     }
 
-    for (0..W.len) |i| {
-        W[i] = V[i];
-    }
-
     const info = lapacke.LAPACKE_dsyevd(lapacke.LAPACK_ROW_MAJOR, 'V', 'U', n, U.ptr, n, W.ptr);
 
     if (info != 0) return error.LapackError;
