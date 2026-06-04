@@ -2,16 +2,39 @@ const std = @import("std");
 
 const fftw = @cImport(@cInclude("fftw3.h"));
 
-pub fn fftn(comptime T: type, arr: []T, shape: []i32, sign: i32) !void {
-    const ptr = @as([*c]fftw.fftw_complex, @ptrCast(arr.ptr));
+pub fn FftPlan(comptime T: type) type {
+    return struct {
+        // zig fmt: off
+        plan: fftw.fftw_plan, sign: i32,
+        // zig fmt: on
 
-    const plan = fftw.fftw_plan_dft(@intCast(shape.len), shape.ptr, ptr, ptr, sign, fftw.FFTW_ESTIMATE);
-    defer fftw.fftw_destroy_plan(plan);
+        pub fn init(arr: []T, shape: []i32, sign: i32, mode: u32) !@This() {
+            const ptr = @as([*c]fftw.fftw_complex, @ptrCast(arr.ptr));
 
-    fftw.fftw_execute(plan);
+            const plan = fftw.fftw_plan_dft(@intCast(shape.len), shape.ptr, ptr, ptr, sign, mode);
 
-    if (sign == 1) for (arr) |*e| {
-        e.*.re /= @as(f64, @floatFromInt(arr.len));
-        e.*.im /= @as(f64, @floatFromInt(arr.len));
+            return .{ .plan = plan orelse return error.PlanCreationFailed, .sign = sign };
+        }
+
+        pub fn deinit(self: @This()) void {
+            fftw.fftw_destroy_plan(self.plan);
+        }
+
+        pub fn clone(self: @This()) !@This() {
+            const plan = fftw.fftw_copy_plan(self.plan);
+
+            return .{ .plan = plan orelse return error.PlanDuplicationFailed, .sign = self.sign };
+        }
+
+        pub fn execute(self: @This(), arr: []T) void {
+            const ptr = @as([*c]fftw.fftw_complex, @ptrCast(arr.ptr));
+
+            fftw.fftw_execute_dft(self.plan, ptr, ptr);
+
+            if (self.sign == 1) for (arr) |*e| {
+                e.*.re /= @as(f64, @floatFromInt(arr.len));
+                e.*.im /= @as(f64, @floatFromInt(arr.len));
+            };
+        }
     };
 }

@@ -1,8 +1,11 @@
 const std = @import("std");
 
+const fftw = @cImport(@cInclude("fftw3.h"));
+
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
+const FftPlan = @import("fftw.zig").FftPlan;
 const Matrix = @import("tensor.zig").Matrix;
 const Potential = @import("potential.zig").Potential;
 const PotentialOptions = @import("potential.zig").Options;
@@ -50,6 +53,12 @@ const Write = struct {
 
 pub const Options = struct {
     adiabatic: bool = false,
+    fft_plan: enum {
+        estimate,
+        measure,
+        patient,
+        exhaustive,
+    } = .measure,
     grid: struct {
         bounds: []const [2]f64,
         npoint: u32,
@@ -68,7 +77,6 @@ pub const Options = struct {
 
 fn Grid(comptime T: type) type {
     return struct {
-        shape: []i32,
         r: Matrix(T),
         k: Matrix(T),
 
@@ -113,18 +121,10 @@ fn Grid(comptime T: type) type {
                 }
             }
 
-            var shape = try gpa.alloc(i32, bounds.len);
-
-            for (0..bounds.len) |i| {
-                shape[i] = @as(i32, @intCast(npoint));
-            }
-
-            return .{ .shape = shape, .r = r, .k = k, .dr = dr, .dk = dk };
+            return .{ .r = r, .k = k, .dr = dr, .dk = dk };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            gpa.free(self.shape);
-
             self.r.deinit(gpa);
             self.k.deinit(gpa);
         }
@@ -137,16 +137,53 @@ fn Wavefunction(comptime T: type) type {
     return struct {
         W: Matrix(Complex(T)),
 
-        pub fn init(ndim: usize, nstate: usize, npoint: usize, gpa: Allocator) !@This() {
-            return .{ .W = try Matrix(Complex(T)).init(nstate, std.math.pow(usize, npoint, ndim), gpa) };
+        ffft: []FftPlan(Complex(T)),
+        ifft: []FftPlan(Complex(T)),
+
+        pub fn init(ndim: usize, nstate: usize, npoint: usize, plan_mode: u32, gpa: Allocator) !@This() {
+            const W = try Matrix(Complex(T)).init(nstate, std.math.pow(usize, npoint, ndim), gpa);
+
+            const ffft = try gpa.alloc(FftPlan(Complex(T)), nstate);
+            const ifft = try gpa.alloc(FftPlan(Complex(T)), nstate);
+
+            var shape = try gpa.alloc(i32, ndim);
+
+            for (0..ndim) |i| {
+                shape[i] = @as(i32, @intCast(npoint));
+            }
+
+            for (0..nstate) |i| {
+                // zig fmt: off
+                ffft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape, -1, plan_mode);
+                ifft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape,  1, plan_mode);
+                // zig fmt: on
+            }
+
+            gpa.free(shape);
+
+            return .{ .W = W, .ffft = ffft, .ifft = ifft };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.W.deinit(gpa);
+
+            for (self.ffft) |plan| plan.deinit();
+            for (self.ifft) |plan| plan.deinit();
+
+            gpa.free(self.ffft);
+            gpa.free(self.ifft);
         }
 
         pub fn clone(self: @This(), gpa: Allocator) !@This() {
-            return .{ .W = try self.W.clone(gpa) };
+            var ffft = try gpa.alloc(FftPlan(Complex(T)), self.ffft.len);
+            var ifft = try gpa.alloc(FftPlan(Complex(T)), self.ifft.len);
+
+            for (0..self.ffft.len) |i| {
+                ffft[i] = try self.ffft[i].clone();
+                ifft[i] = try self.ifft[i].clone();
+            }
+
+            return .{ .W = try self.W.clone(gpa), .ffft = ffft, .ifft = ifft };
         }
 
         pub fn ekin(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
@@ -175,9 +212,11 @@ fn Wavefunction(comptime T: type) type {
             return value * grid.dr;
         }
 
-        pub fn fft(self: *@This(), grid: Grid(T), sign: i32) !void {
+        pub fn fft(self: *@This(), comptime sign: i32) !void {
             for (0..self.W.nrow()) |i| {
-                try fftn(Complex(T), self.W.rowSlice(i), grid.shape, sign);
+                const slice = self.W.rowSlice(i);
+
+                if (comptime sign == -1) self.ffft[i].execute(slice) else self.ifft[i].execute(slice);
             }
         }
 
@@ -420,10 +459,10 @@ fn Propagator(comptime T: type) type {
             self.K.deinit(gpa);
         }
 
-        pub fn step(self: @This(), wfn: *Wavefunction(T), grid: Grid(T), gpa: Allocator) !void {
+        pub fn step(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
             // zig fmt: off
             try self.applyR(wfn, gpa );
-            try self.applyK(wfn, grid);
+            try self.applyK(wfn      );
             try self.applyR(wfn, gpa );
             // zig fmt: on
         }
@@ -447,14 +486,14 @@ fn Propagator(comptime T: type) type {
             };
         }
 
-        fn applyK(self: @This(), wfn: *Wavefunction(T), grid: Grid(T)) !void {
-            try wfn.fft(grid, -1);
+        fn applyK(self: @This(), wfn: *Wavefunction(T)) !void {
+            try wfn.fft(-1);
 
             for (0..wfn.W.nrow()) |i| for (0..wfn.W.ncol()) |j| {
                 wfn.W.ptr(i, j).* = self.K.at(j).mul(wfn.W.at(i, j));
             };
 
-            try wfn.fft(grid, 1);
+            try wfn.fft(1);
         }
 
         fn applyR(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
@@ -554,14 +593,14 @@ fn Observables(comptime T: type) type {
             const needs_fft = calc.mom or calc.ekin;
 
             if (needs_fft) {
-                try qsys.wfn.fft(qsys.grid, -1);
+                try qsys.wfn.fft(-1);
 
                 // zig fmt: off
                 if (calc.mom ) obs.mom  = try qsys.wfn.mom (          qsys.grid, gpa);
                 if (calc.ekin) obs.ekin =     qsys.wfn.ekin(qsys.ham, qsys.grid     );
                 // zig fmt: on
 
-                try qsys.wfn.fft(qsys.grid, 1);
+                try qsys.wfn.fft(1);
             }
 
             return obs;
@@ -610,7 +649,7 @@ fn History(comptime T: type) type {
                 .norm = if (write.norm         != null) try Matrix(T).init(iters, 1,      gpa) else null,
                 .etot = if (write.total_energy != null) try Matrix(T).init(iters, 1,      gpa) else null,
                 // zig fmt: on
-                
+
                 .wfn = if (store_wfn) try Matrix(T).init(wfn_nrow, 2 * nstate * iters, gpa) else null,
 
                 .ekin = if (store_ekin) try Matrix(T).init(iters, 1, gpa) else null,
@@ -804,11 +843,20 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
 
     const dt = if (opt.imaginary) |_| Complex(T).init(0, -opt.time_step) else Complex(T).init(opt.time_step, 0);
 
+    const plan_mode = switch (opt.fft_plan) {
+        // zig fmt: off
+        .estimate   => fftw  .FFTW_ESTIMATE,
+        .measure    => fftw   .FFTW_MEASURE,
+        .patient    => fftw   .FFTW_PATIENT,
+        .exhaustive => fftw.FFTW_EXHAUSTIVE,
+        // zig fmt: on
+    };
+
     // zig fmt: off
-    const grid = try Grid(T)        .init(opt.grid.bounds, opt.grid.npoint,                 arena);
-    const wfn  = try Wavefunction(T).init(pot.ndim(),      pot.nstate(),   opt.grid.npoint, arena);
-    const ham  = try Hamiltonian(T) .init(grid,            pot,            opt.mass,        arena);
-    const prop = try Propagator(T)  .init(ham,             dt,                              arena);
+    const grid = try Grid(T)        .init(opt.grid.bounds, opt.grid.npoint,                             arena);
+    const wfn  = try Wavefunction(T).init(pot.ndim(),      pot.nstate(),    opt.grid.npoint, plan_mode, arena);
+    const ham  = try Hamiltonian(T) .init(grid,            pot,             opt.mass,                   arena);
+    const prop = try Propagator(T)  .init(ham,             dt,                                          arena);
     // zig fmt: on
 
     return .{ .qsys = .{ .grid = grid, .ham = ham, .wfn = wfn, .pot = pot }, .prop = prop, .orthw = .empty };
@@ -844,7 +892,7 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
             ctx.sim.prop.update(ctx.sim.qsys.ham);
         }
 
-        if (i > 0) try ctx.sim.prop.step(&ctx.sim.qsys.wfn, ctx.sim.qsys.grid, gpa);
+        if (i > 0) try ctx.sim.prop.step(&ctx.sim.qsys.wfn, gpa);
 
         if (ctx.opt.imaginary != null) for (ctx.sim.orthw.items) |wfn| {
             const overlap = wfn.overlap(ctx.sim.qsys.wfn, ctx.sim.qsys.grid);
