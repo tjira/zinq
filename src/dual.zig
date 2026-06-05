@@ -1,49 +1,46 @@
-pub fn Dual(comptime T: type, N: usize) type {
+const std = @import("std");
+
+pub fn ScalarDual(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        val: T, grad: [N]T,
-        // zig fmt: on
+        val: T,
+        der: T,
 
-        pub fn init(val: T, i: usize) @This() {
-            var grad: [N]T = undefined;
-
-            inline for (0..N) |i| {
-                grad[i] = 0;
-            }
-
-            grad[i] = 1;
-
-            return .{ .val = val, .grad = grad };
+        pub fn init(val: T, der: T) @This() {
+            return .{ .val = val, .der = der };
         }
 
         pub fn add(self: @This(), other: @This()) @This() {
-            var grad: [N]T = undefined;
+            return .{ .val = self.val + other.val, .der = self.der + other.der };
+        }
 
-            inline for (0..N) |i| {
-                grad[i] = self.grad[i] + other.grad[i];
-            }
+        pub fn adds(self: @This(), scalar: T) @This() {
+            return .{ .val = self.val + scalar, .der = self.der };
+        }
 
-            return .{ .val = self.val + other.val, .grad = grad };
+        pub fn sub(self: @This(), other: @This()) @This() {
+            return .{ .val = self.val - other.val, .der = self.der - other.der };
+        }
+
+        pub fn subs(self: @This(), scalar: T) @This() {
+            return .{ .val = self.val - scalar, .der = self.der };
         }
 
         pub fn mul(self: @This(), other: @This()) @This() {
-            var grad: [N]T = undefined;
-
-            inline for (0..N) |i| {
-                grad[i] = self.val * other.grad[i] + other.val * self.grad[i];
-            }
-
-            return .{ .val = self.val * other.val, .grad = grad };
+            return .{ .val = self.val * other.val, .der = self.val * other.der + other.val * self.der };
         }
 
         pub fn muls(self: @This(), scalar: T) @This() {
-            var grad: [N]T = undefined;
+            return .{ .val = self.val * scalar, .der = self.der * scalar };
+        }
 
-            inline for (0..N) |i| {
-                grad[i] = self.grad[i] * scalar;
-            }
+        pub fn exp(self: @This()) @This() {
+            const val = std.math.exp(self.val);
 
-            return .{ .val = self.val * scalar, .grad = grad };
+            return .{ .val = val, .der = val * self.der };
+        }
+
+        pub fn abs(self: @This()) @This() {
+            return .{ .val = @abs(self.val), .der = if (self.val >= 0) self.der else -self.der };
         }
     };
 }

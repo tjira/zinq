@@ -1,7 +1,10 @@
 const std = @import("std");
 
-const Matrix = @import("tensor.zig").Matrix;
-const Vector = @import("tensor.zig").Vector;
+// zig fmt: off
+const Matrix     = @import("tensor.zig")    .Matrix;
+const Vector     = @import("tensor.zig")    .Vector;
+const ScalarDual = @import("dual.zig"  ).ScalarDual;
+// zig fmt: on
 
 // OPTIONS =============================================================================================================
 
@@ -23,7 +26,7 @@ pub const Options = union(enum) {
     },
 };
 
-// GENERIC POTgNTIAL ===================================================================================================
+// GENERIC POTENTIAL ===================================================================================================
 
 pub fn Potential(comptime T: type) type {
     return union(enum) {
@@ -46,13 +49,17 @@ pub fn Potential(comptime T: type) type {
         pub fn evalBatch(self: @This(), V: *Matrix(T), r: Matrix(T), t: T) void {
             switch (self) {
                 inline else => |field| {
-                    for (0..r.nrow()) |i| {
-                        const val = field.eval(r.rowSlice(i), t);
+                    for (0..r.nrow()) |i| field.eval(V.rowSlice(i), r.rowSlice(i), t);
+                },
+            }
+        }
 
-                        for (0..field.nstate()) |k| for (0..field.nstate()) |j| {
-                            V.ptr(i, k * field.nstate() + j).* = val[k][j];
-                        };
-                    }
+        pub fn evalDualBatch(self: @This(), V: *Matrix(ScalarDual(T)), r: Matrix(ScalarDual(T)), t: T) void {
+            const t_dual = ScalarDual(T).init(t, 0.0);
+
+            switch (self) {
+                inline else => |field| {
+                    for (0..r.nrow()) |i| field.evalDual(V.rowSlice(i), r.rowSlice(i), t_dual);
                 },
             }
         }
@@ -88,16 +95,20 @@ pub fn Harmonic(comptime T: type) type {
             return .{ .k = k };
         }
 
-        pub fn eval(self: @This(), r: []const T, _: T) [1][1]T {
-            var V00: T = 0;
+        pub fn eval(self: @This(), V: []T, r: []const T, _: T) void {
+            V[0] = 0;
 
             for (r, 0..) |e, i| {
-                V00 += 0.5 * self.k[i] * e * e;
+                V[0] += 0.5 * self.k[i] * e * e;
             }
+        }
 
-            return .{
-                .{V00},
-            };
+        pub fn evalDual(self: @This(), V: []ScalarDual(T), r: []const ScalarDual(T), _: ScalarDual(T)) void {
+            V[0] = ScalarDual(T).init(0, 0);
+
+            for (r, 0..) |e, i| {
+                V[0] = V[0].add(e.mul(e).muls(0.5 * self.k[i]));
+            }
         }
 
         pub fn ndim(self: @This()) usize {
@@ -119,15 +130,18 @@ pub fn TimeLinear(comptime T: type) type {
             return .{ .a = a, .g = g };
         }
 
-        pub fn eval(self: @This(), _: []const T, t: T) [2][2]T {
-            const V00 = self.a * (t - self.a);
-            const V01 = self.g;
-            const V11 = -V00;
+        pub fn eval(self: @This(), V: []T, _: []const T, t: T) void {
+            V[0] = self.a * (t - self.a);
+            V[1] = self.g;
+            V[2] = V[1];
+            V[3] = -V[0];
+        }
 
-            return .{
-                .{ V00, V01 },
-                .{ V01, V11 },
-            };
+        pub fn evalDual(self: @This(), V: []ScalarDual(T), _: []const ScalarDual(T), t: ScalarDual(T)) void {
+            V[0] = t.subs(self.a).muls(self.a);
+            V[1] = ScalarDual(T).init(self.g, 0);
+            V[2] = V[1];
+            V[3] = V[0].muls(-1);
         }
 
         pub fn ndim(_: @This()) usize {
@@ -151,15 +165,18 @@ pub fn Tully1(comptime T: type) type {
             return .{ .A = A, .B = B, .C = C, .D = D };
         }
 
-        pub fn eval(self: @This(), r: []const T, _: T) [2][2]T {
-            const V00 = std.math.sign(r[0]) * self.A * (1 - std.math.exp(-self.B * @abs(r[0])));
-            const V01 = self.C * std.math.exp(-self.D * r[0] * r[0]);
-            const V11 = -V00;
+        pub fn eval(self: @This(), V: []T, r: []const T, _: T) void {
+            V[0] = std.math.sign(r[0]) * self.A * (1 - std.math.exp(-self.B * @abs(r[0])));
+            V[1] = self.C * std.math.exp(-self.D * r[0] * r[0]);
+            V[2] = V[1];
+            V[3] = -V[0];
+        }
 
-            return .{
-                .{ V00, V01 },
-                .{ V01, V11 },
-            };
+        pub fn evalDual(self: @This(), V: []ScalarDual(T), r: []const ScalarDual(T), _: ScalarDual(T)) void {
+            V[0] = r[0].abs().muls(-self.B).exp().muls(-1).adds(1).muls(std.math.sign(r[0].val) * self.A);
+            V[1] = r[0].mul(r[0]).muls(-self.D).exp().muls(self.C);
+            V[2] = V[1];
+            V[3] = V[0].muls(-1);
         }
 
         pub fn ndim(_: @This()) usize {

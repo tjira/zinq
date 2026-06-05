@@ -3,8 +3,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 // zig fmt: off
-pub const QuantumDynamicsOptions = @import("quantum_dynamics.zig").Options;
-pub const quantum_dynamics_run   = @import("quantum_dynamics.zig")    .run;
+pub const ClassicalDynamicsOptions = @import("classical_dynamics.zig").Options;
+pub const classical_dynamics_run   = @import("classical_dynamics.zig")    .run;
+pub const QuantumDynamicsOptions   = @import("quantum_dynamics.zig"  ).Options;
+pub const quantum_dynamics_run     = @import("quantum_dynamics.zig"  )    .run;
 // zig fmt: on
 
 // zig fmt: off
@@ -17,7 +19,10 @@ const printf = @import("read_write.zig").printf;
 
 const Options = struct {
     zinq: []union(enum) {
-        quantum_dynamics: QuantumDynamicsOptions,
+        // zig fmt: off
+        classical_dynamics: ClassicalDynamicsOptions,
+        quantum_dynamics:     QuantumDynamicsOptions,
+        // zig fmt: on
     },
 };
 
@@ -31,7 +36,10 @@ fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !std
 
 fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
     for ((try parse(Options, io, fname, arena)).value.zinq) |e| switch (e) {
-        .quantum_dynamics => |field| _ = try quantum_dynamics_run(T, io, field, true, gpa, arena),
+        // zig fmt: off
+        .classical_dynamics => |field| _ = try classical_dynamics_run(T, io, field, true, gpa, arena),
+        .quantum_dynamics =>   |field| _ = try quantum_dynamics_run  (T, io, field, true, gpa, arena),
+        // zig fmt: on
     };
 }
 

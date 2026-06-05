@@ -568,10 +568,10 @@ fn Observables(comptime T: type) type {
             // zig fmt: on
 
             if (calc.pop) {
-                // zig fmt: on
+                // zig fmt: off
                 if (adia == true) obs.pop = try qsys.wfn.popAdia(qsys.ham,  qsys.grid, gpa);
                 if (adia != true) obs.pop = try qsys.wfn.pop    (qsys.grid,            gpa);
-                // zig fmt: off
+                // zig fmt: on
             }
 
             const needs_fft = calc.mom or calc.ekin;
