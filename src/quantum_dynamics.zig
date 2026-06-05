@@ -22,10 +22,6 @@ const writeMatrixHjoin  = @import("read_write.zig") .writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 // zig fmt: on
 
-// GLOBAL VARIABLES ====================================================================================================
-
-const MAX_NSTATE = 8;
-
 // OPTIONS =============================================================================================================
 
 // zig fmt: off
@@ -511,34 +507,6 @@ fn Propagator(comptime T: type) type {
         }
 
         fn applyR(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
-            inline for (1..MAX_NSTATE + 1) |i| if (wfn.W.nrow() == i) {
-                return self.applyRFast(wfn, i);
-            };
-
-            try self.applyRSlow(wfn, gpa);
-        }
-
-        fn applyRFast(self: @This(), wfn: *Wavefunction(T), comptime nstate: usize) void {
-            for (0..wfn.W.ncol()) |j| {
-                var temp: [nstate]Complex(T) = undefined;
-
-                inline for (0..nstate) |k| {
-                    temp[k] = wfn.W.at(k, j);
-                }
-
-                inline for (0..nstate) |i| {
-                    var sum = Complex(T).init(0, 0);
-
-                    inline for (0..nstate) |k| {
-                        sum = sum.add(self.R.at(j, i * nstate + k).mul(temp[k]));
-                    }
-
-                    wfn.W.ptr(i, j).* = sum;
-                }
-            }
-        }
-
-        fn applyRSlow(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), wfn.W.nrow());
 
             for (0..wfn.W.ncol()) |j| {
