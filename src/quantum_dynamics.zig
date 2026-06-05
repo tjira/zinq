@@ -95,9 +95,9 @@ fn Grid(comptime T: type) type {
 
             var dr: T = 1;
 
-            for (0..bounds.len) |i| {
-                const min = bounds[i][0];
-                const max = bounds[i][1];
+            for (bounds) |e| {
+                const min = e[0];
+                const max = e[1];
 
                 dr *= (max - min) / @as(T, @floatFromInt(npoint));
             }
@@ -150,10 +150,10 @@ fn Wavefunction(comptime T: type) type {
             const ffft = try gpa.alloc(FftPlan(Complex(T)), nstate);
             const ifft = try gpa.alloc(FftPlan(Complex(T)), nstate);
 
-            var shape = try gpa.alloc(i32, ndim);
+            const shape = try gpa.alloc(i32, ndim);
 
-            for (0..ndim) |i| {
-                shape[i] = @as(i32, @intCast(npoint));
+            for (shape) |*e| {
+                e.* = @as(i32, @intCast(npoint));
             }
 
             for (0..nstate) |i| {
@@ -171,8 +171,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.W.deinit(gpa);
 
-            for (self.ffft) |plan| plan.deinit();
-            for (self.ifft) |plan| plan.deinit();
+            for (self.ffft) |e| e.deinit();
+            for (self.ifft) |e| e.deinit();
 
             gpa.free(self.ffft);
             gpa.free(self.ifft);
@@ -193,8 +193,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn ekin(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
             var value: T = 0;
 
-            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |w, j| {
-                value += w.squaredMagnitude() * ham.K.at(j);
+            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |e, j| {
+                value += e.squaredMagnitude() * ham.K.at(j);
             };
 
             return value * grid.dk;
@@ -227,8 +227,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn mom(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
-            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |w, j| {
-                const mag = w.squaredMagnitude();
+            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |e, j| {
+                const mag = e.squaredMagnitude();
 
                 for (0..grid.r.ncol()) |k| {
                     value.ptr(k).* += mag * grid.k.at(j, k);
@@ -243,8 +243,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn norm(self: @This(), grid: Grid(T)) T {
             var value: T = 0;
 
-            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i)) |w| {
-                value += w.squaredMagnitude();
+            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i)) |e| {
+                value += e.squaredMagnitude();
             };
 
             return value * grid.dr;
@@ -270,8 +270,8 @@ fn Wavefunction(comptime T: type) type {
             for (0..self.W.nrow()) |i| {
                 var sum: T = 0;
 
-                for (self.W.rowSlice(i)) |w| {
-                    sum += w.squaredMagnitude();
+                for (self.W.rowSlice(i)) |e| {
+                    sum += e.squaredMagnitude();
                 }
 
                 value.ptr(i).* = sum;
@@ -285,19 +285,21 @@ fn Wavefunction(comptime T: type) type {
         pub fn popAdia(self: @This(), ham: Hamiltonian(T), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(self.W.nrow(), gpa);
 
-            for (0..self.W.ncol()) |j| for (0..self.W.nrow()) |m| {
-                var adia_re: T = 0;
-                var adia_im: T = 0;
+            for (0..self.W.nrow()) |i| {
+                for (0..self.W.ncol()) |j| {
+                    var adia_re: T = 0;
+                    var adia_im: T = 0;
 
-                for (0..self.W.nrow()) |i| {
-                    const u_jm = ham.U.at(j, i * self.W.nrow() + m);
+                    for (0..self.W.nrow()) |k| {
+                        const U_jk = ham.U.at(j, k * self.W.nrow() + i);
 
-                    adia_re += self.W.at(i, j).re * u_jm;
-                    adia_im += self.W.at(i, j).im * u_jm;
+                        adia_re += self.W.at(k, j).re * U_jk;
+                        adia_im += self.W.at(k, j).im * U_jk;
+                    }
+
+                    value.ptr(i).* += adia_re * adia_re + adia_im * adia_im;
                 }
-
-                value.ptr(m).* += adia_re * adia_re + adia_im * adia_im;
-            };
+            }
 
             value.muls(grid.dr);
 
@@ -307,8 +309,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
-            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |w, j| {
-                const mag = w.squaredMagnitude();
+            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |e, j| {
+                const mag = e.squaredMagnitude();
 
                 for (0..grid.r.ncol()) |k| {
                     value.ptr(k).* += mag * grid.r.at(j, k);
@@ -342,8 +344,8 @@ fn Wavefunction(comptime T: type) type {
             var temp = try gpa.alloc(Complex(T), self.W.nrow());
 
             for (0..self.W.ncol()) |j| {
-                for (0..self.W.nrow()) |k| {
-                    temp[k] = self.W.at(k, j);
+                for (0..self.W.nrow()) |i| {
+                    temp[i] = self.W.at(i, j);
                 }
 
                 for (0..self.W.nrow()) |i| {
@@ -366,8 +368,8 @@ fn Wavefunction(comptime T: type) type {
             var temp = try gpa.alloc(Complex(T), self.W.nrow());
 
             for (0..self.W.ncol()) |j| {
-                for (0..self.W.nrow()) |k| {
-                    temp[k] = self.W.at(k, j);
+                for (0..self.W.nrow()) |i| {
+                    temp[i] = self.W.at(i, j);
                 }
 
                 for (0..self.W.nrow()) |i| {
@@ -453,8 +455,8 @@ fn Propagator(comptime T: type) type {
 
             var K = try Vector(Complex(T)).initZero(ham.K.length(), gpa);
 
-            for (0..ham.K.length()) |i| {
-                K.ptr(i).* = std.math.complex.exp(Complex(T).init(0, -ham.K.at(i)).mul(dt));
+            for (ham.K.data, 0..) |e, i| {
+                K.data[i] = std.math.complex.exp(Complex(T).init(0, -e).mul(dt));
             }
 
             var prop = @This(){ .R = R, .K = K, .dt = dt };
@@ -480,19 +482,19 @@ fn Propagator(comptime T: type) type {
         pub fn update(self: *@This(), ham: Hamiltonian(T)) void {
             const nstate = std.math.sqrt(ham.V.ncol());
 
-            for (0..self.R.nrow()) |i| for (0..nstate) |j| for (0..nstate) |k| {
+            for (0..self.R.nrow()) |i| for (0..nstate) |k| for (0..nstate) |j| {
                 var sum = Complex(T).init(0, 0);
 
                 for (0..nstate) |m| {
-                    const U_jm = ham.U.at(i, j * nstate + m);
                     const U_km = ham.U.at(i, k * nstate + m);
+                    const U_jm = ham.U.at(i, j * nstate + m);
 
                     const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * ham.W.at(i, m)).mul(self.dt));
 
-                    sum = sum.add(Complex(T).init(phase.re * U_jm * U_km, phase.im * U_jm * U_km));
+                    sum = sum.add(Complex(T).init(phase.re * U_km * U_jm, phase.im * U_km * U_jm));
                 }
 
-                self.R.ptr(i, j * nstate + k).* = sum;
+                self.R.ptr(i, k * nstate + j).* = sum;
             };
         }
 
@@ -641,45 +643,45 @@ fn History(comptime T: type) type {
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             // zig fmt: off
-            if (self.pos)  |*pos|   pos.deinit(gpa);
-            if (self.mom)  |*mom|   mom.deinit(gpa);
-            if (self.pop)  |*pop|   pop.deinit(gpa);
+            if (self.pos)  |*pos |  pos.deinit(gpa);
+            if (self.mom)  |*mom |  mom.deinit(gpa);
+            if (self.pop)  |*pop |  pop.deinit(gpa);
             if (self.epot) |*epot| epot.deinit(gpa);
             if (self.ekin) |*ekin| ekin.deinit(gpa);
             if (self.etot) |*etot| etot.deinit(gpa);
             if (self.norm) |*norm| norm.deinit(gpa);
-            if (self.wfn)  |*wfn|   wfn.deinit(gpa);
+            if (self.wfn)  |*wfn |  wfn.deinit(gpa);
             // zig fmt: on
         }
 
         pub fn append(self: *@This(), wfn: Wavefunction(T), obs: Observables(T)) void {
-            const i = self.index;
+            const step_idx = self.index;
 
-            if (self.wfn) |*storage| for (0..wfn.W.ncol()) |k| for (0..wfn.W.nrow()) |j| {
-                storage.ptr(k, 2 * (i * wfn.W.nrow() + j) + 0).* = wfn.W.at(j, k).re;
-                storage.ptr(k, 2 * (i * wfn.W.nrow() + j) + 1).* = wfn.W.at(j, k).im;
+            if (self.wfn) |*storage| for (0..wfn.W.ncol()) |j| for (0..wfn.W.nrow()) |i| {
+                storage.ptr(j, 2 * (step_idx * wfn.W.nrow() + i) + 0).* = wfn.W.at(i, j).re;
+                storage.ptr(j, 2 * (step_idx * wfn.W.nrow() + i) + 1).* = wfn.W.at(i, j).im;
             };
 
             if (self.pos) |*pos| if (obs.pos) |v| {
-                for (0..v.length()) |j| pos.ptr(i, j).* = v.at(j);
+                for (0..v.length()) |j| pos.ptr(step_idx, j).* = v.at(j);
             };
 
             if (self.mom) |*mom| if (obs.mom) |v| {
-                for (0..v.length()) |j| mom.ptr(i, j).* = v.at(j);
+                for (0..v.length()) |j| mom.ptr(step_idx, j).* = v.at(j);
             };
 
             if (self.pop) |*pop| if (obs.pop) |v| {
-                for (0..v.length()) |j| pop.ptr(i, j).* = v.at(j);
+                for (0..v.length()) |j| pop.ptr(step_idx, j).* = v.at(j);
             };
 
             // zig fmt: off
-            if (self.epot) |*epot| {if (obs.epot) |v| epot.ptr(i, 0).* = v;}
-            if (self.ekin) |*ekin| {if (obs.ekin) |v| ekin.ptr(i, 0).* = v;}
-            if (self.norm) |*norm| {if (obs.norm) |v| norm.ptr(i, 0).* = v;}
+            if (self.epot) |*epot| {if (obs.epot) |v| epot.ptr(step_idx, 0).* = v;}
+            if (self.ekin) |*ekin| {if (obs.ekin) |v| ekin.ptr(step_idx, 0).* = v;}
+            if (self.norm) |*norm| {if (obs.norm) |v| norm.ptr(step_idx, 0).* = v;}
             // zig fmt: on
 
             if (self.etot) |*etot| {
-                etot.ptr(i, 0).* = obs.ekin.? + obs.epot.?;
+                etot.ptr(step_idx, 0).* = obs.ekin.? + obs.epot.?;
             }
 
             self.index += 1;
@@ -737,9 +739,9 @@ fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize)
 pub fn printFinalEnergies(comptime T: type, io: std.Io, obs: std.ArrayList(Observables(T))) !void {
     try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
-    for (0..obs.items.len) |i| {
-        const ekin = obs.items[i].ekin orelse std.math.nan(T);
-        const epot = obs.items[i].epot orelse std.math.nan(T);
+    for (obs.items, 0..) |e, i| {
+        const ekin = e.ekin orelse std.math.nan(T);
+        const epot = e.epot orelse std.math.nan(T);
 
         const etot = ekin + epot;
 
@@ -876,11 +878,11 @@ pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator,
 
         if (i > 0) try ctx.sim.prop.step(&ctx.sim.qsys.wfn, gpa);
 
-        if (ctx.opt.imaginary != null) for (ctx.sim.orthw.items) |wfn| {
-            const overlap = wfn.overlap(ctx.sim.qsys.wfn, ctx.sim.qsys.grid);
+        if (ctx.opt.imaginary != null) for (ctx.sim.orthw.items) |e| {
+            const overlap = e.overlap(ctx.sim.qsys.wfn, ctx.sim.qsys.grid);
 
             for (0..ctx.sim.qsys.wfn.W.data.len) |k| {
-                ctx.sim.qsys.wfn.W.data[k] = ctx.sim.qsys.wfn.W.data[k].sub(overlap.mul(wfn.W.data[k]));
+                ctx.sim.qsys.wfn.W.data[k] = ctx.sim.qsys.wfn.W.data[k].sub(overlap.mul(e.W.data[k]));
             }
         };
 

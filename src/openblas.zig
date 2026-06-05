@@ -17,8 +17,8 @@ pub fn eighBatch(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !
 pub fn eighSlice(comptime T: type, W: []T, U: []T, V: []T) !void {
     const n: i32 = @intCast(W.len);
 
-    for (0..V.len) |i| {
-        U[i] = V[i];
+    for (V, 0..) |e, i| {
+        U[i] = e;
     }
 
     const info = lapacke.LAPACKE_dsyevd(lapacke.LAPACK_ROW_MAJOR, 'V', 'U', n, U.ptr, n, W.ptr);

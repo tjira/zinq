@@ -49,8 +49,8 @@ pub fn Potential(comptime T: type) type {
                     for (0..r.nrow()) |i| {
                         const val = field.eval(r.rowSlice(i), t);
 
-                        for (0..field.nstate()) |j| for (0..field.nstate()) |k| {
-                            V.ptr(i, j * field.nstate() + k).* = val[j][k];
+                        for (0..field.nstate()) |k| for (0..field.nstate()) |j| {
+                            V.ptr(i, k * field.nstate() + j).* = val[k][j];
                         };
                     }
                 },
@@ -91,8 +91,8 @@ pub fn Harmonic(comptime T: type) type {
         pub fn eval(self: @This(), r: []const T, _: T) [1][1]T {
             var V00: T = 0;
 
-            for (r, 0..) |ri, i| {
-                V00 += 0.5 * self.k[i] * ri * ri;
+            for (r, 0..) |e, i| {
+                V00 += 0.5 * self.k[i] * e * e;
             }
 
             return .{

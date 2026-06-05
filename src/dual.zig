@@ -7,8 +7,8 @@ pub fn Dual(comptime T: type, N: usize) type {
         pub fn init(val: T, i: usize) @This() {
             var grad: [N]T = undefined;
 
-            inline for (0..N) |d| {
-                grad[d] = 0;
+            inline for (0..N) |i| {
+                grad[i] = 0;
             }
 
             grad[i] = 1;

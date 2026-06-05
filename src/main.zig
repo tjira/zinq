@@ -30,7 +30,7 @@ fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !std
 }
 
 fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
-    for ((try parse(Options, io, fname, arena)).value.zinq) |opt| switch (opt) {
+    for ((try parse(Options, io, fname, arena)).value.zinq) |e| switch (e) {
         .quantum_dynamics => |field| _ = try quantum_dynamics_run(T, io, field, true, gpa, arena),
     };
 }
@@ -44,8 +44,8 @@ pub fn main(init: std.process.Init) !void {
 
     try std.Io.File.stdout().writeStreamingAll(init.io, "ZINQ\n");
 
-    for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |target| {
-        try run(f64, init.io, target, init.gpa, init.arena.allocator());
+    for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |e| {
+        try run(f64, init.io, e, init.gpa, init.arena.allocator());
     }
 
     try printf(init.io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.untilNow(init.io, .real)});
