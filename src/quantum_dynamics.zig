@@ -473,9 +473,9 @@ fn Propagator(comptime T: type) type {
 
         pub fn step(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
             // zig fmt: off
-            try self.applyR(wfn, gpa );
-            try self.applyK(wfn      );
-            try self.applyR(wfn, gpa );
+            try self.applyR(wfn, gpa);
+            try self.applyK(wfn     );
+            try self.applyR(wfn, gpa);
             // zig fmt: on
         }
 
@@ -569,8 +569,8 @@ fn Observables(comptime T: type) type {
 
             if (calc.pop) {
                 // zig fmt: on
-                if (adia == true) obs.pop = try qsys.wfn.popAdia(qsys.ham, qsys.grid, gpa);
-                if (adia != true) obs.pop = try qsys.wfn.pop(qsys.grid, gpa);
+                if (adia == true) obs.pop = try qsys.wfn.popAdia(qsys.ham,  qsys.grid, gpa);
+                if (adia != true) obs.pop = try qsys.wfn.pop    (qsys.grid,            gpa);
                 // zig fmt: off
             }
 
