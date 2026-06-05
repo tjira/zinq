@@ -16,6 +16,7 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = opt,
+        .strip = opt == .ReleaseFast or opt == .ReleaseSmall,
         .link_libc = true,
     });
 
