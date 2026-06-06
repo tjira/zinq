@@ -12,7 +12,7 @@ const FftPlan          = @import("fftw.zig"     ).  FftPlan;
 const Matrix           = @import("tensor.zig"   ).   Matrix;
 const Potential        = @import("potential.zig").Potential;
 const PotentialOptions = @import("potential.zig").  Options;
-const Vector           = @import("tensor.zig"   )   .Vector;
+const Vector           = @import("tensor.zig"   ).   Vector;
 // zig fmt: on
 
 // zig fmt: off
@@ -867,7 +867,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
     for (0..ctx.opt.iterations + 1) |i| {
         const time = (@as(T, @floatFromInt(i)) - 0.5) * ctx.opt.time_step;
 
-        if (i > 0 and ctx.sim.qsys.pot.is_td()) {
+        if (i > 0 and ctx.sim.qsys.pot.isTd()) {
             try ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, time);
 
             ctx.sim.prop.update(ctx.sim.qsys.ham);
@@ -887,7 +887,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
 
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
-        if (ctx.sim.qsys.pot.is_td()) {
+        if (ctx.sim.qsys.pot.isTd()) {
             const t = @as(T, @floatFromInt(i)) * ctx.opt.time_step;
 
             try ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, t);

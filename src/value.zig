@@ -131,7 +131,7 @@ pub fn Value(comptime T: type) type {
 
         pub fn sign(self: @This()) @This() {
             // zig fmt: off
-            if (comptime isFloat  (T)) return init(std.math.sign(self.val)                );
+            if (comptime isFloat  (T)) return init(std.math.sign(self.val)               );
             if (comptime isDual   (T)) return init(T.init(std.math.sign(self.val.val), 0));
             // zig fmt: on
 

@@ -4,9 +4,9 @@ const Allocator = std.mem.Allocator;
 
 // zig fmt: off
 pub const ClassicalDynamicsOptions = @import("classical_dynamics.zig").Options;
-pub const classical_dynamics_run   = @import("classical_dynamics.zig")    .run;
+pub const classical_dynamics_run   = @import("classical_dynamics.zig").    run;
 pub const QuantumDynamicsOptions   = @import("quantum_dynamics.zig"  ).Options;
-pub const quantum_dynamics_run     = @import("quantum_dynamics.zig"  )    .run;
+pub const quantum_dynamics_run     = @import("quantum_dynamics.zig"  ).    run;
 // zig fmt: on
 
 // zig fmt: off

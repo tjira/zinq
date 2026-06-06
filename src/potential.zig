@@ -65,7 +65,7 @@ pub fn Potential(comptime T: type) type {
             }
         }
 
-        pub fn is_td(self: @This()) bool {
+        pub fn isTd(self: @This()) bool {
             return switch (self) {
                 .time_linear => true,
                 inline else => false,

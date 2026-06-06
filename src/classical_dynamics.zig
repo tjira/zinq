@@ -7,7 +7,7 @@ const Matrix           = @import("tensor.zig"   ).    Matrix;
 const Potential        = @import("potential.zig"). Potential;
 const PotentialOptions = @import("potential.zig").   Options;
 const ScalarDual       = @import("dual.zig"     ).ScalarDual;
-const Vector           = @import("tensor.zig"   )    .Vector;
+const Vector           = @import("tensor.zig"   ).    Vector;
 // zig fmt: on
 
 // zig fmt: off
