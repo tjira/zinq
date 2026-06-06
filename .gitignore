@@ -5,6 +5,7 @@ external-x86_64-linux/
 lib/
 zig-out/
 
+/*.data
 /*.exe
 /*.hdf
 /*.json

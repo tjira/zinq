@@ -4,6 +4,9 @@ const std = @import("std");
 const Matrix     = @import("tensor.zig")    .Matrix;
 const Vector     = @import("tensor.zig")    .Vector;
 const ScalarDual = @import("dual.zig"  ).ScalarDual;
+
+const eighBatch = @import("openblas.zig").eighBatch;
+const eighSlice = @import("openblas.zig").eighSlice;
 // zig fmt: on
 
 // OPTIONS =============================================================================================================
@@ -87,6 +90,16 @@ pub fn Potential(comptime T: type) type {
             return switch (self) {
                 inline else => |field| field.nstate(),
             };
+        }
+
+        pub fn evalAdiabatic(self: @This(), W: []T, U: []T, V: []T, r: []const T, t: T) !void {
+            self.eval(V, r, t);
+            try eighSlice(T, W, U, V);
+        }
+
+        pub fn evalAdiabaticBatch(self: @This(), W: *Matrix(T), U: *Matrix(T), V: *Matrix(T), r: Matrix(T), t: T) !void {
+            self.evalBatch(V, r, t);
+            try eighBatch(T, W, U, V.*);
         }
     };
 }
