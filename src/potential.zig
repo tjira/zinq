@@ -46,6 +46,12 @@ pub fn Potential(comptime T: type) type {
             };
         }
 
+        pub fn eval(self: @This(), V: []T, r: []const T, t: T) void {
+            switch (self) {
+                inline else => |field| field.eval(V, r, t),
+            }
+        }
+
         pub fn evalBatch(self: @This(), V: *Matrix(T), r: Matrix(T), t: T) void {
             switch (self) {
                 inline else => |field| {

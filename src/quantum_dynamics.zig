@@ -736,7 +736,7 @@ fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize)
     try printf(io, fmt, tuple);
 }
 
-pub fn printFinalEnergies(comptime T: type, io: std.Io, obs: std.ArrayList(Observables(T))) !void {
+fn printFinalEnergies(comptime T: type, io: std.Io, obs: std.ArrayList(Observables(T))) !void {
     try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
     for (obs.items, 0..) |e, i| {
@@ -749,7 +749,7 @@ pub fn printFinalEnergies(comptime T: type, io: std.Io, obs: std.ArrayList(Obser
     }
 }
 
-pub fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
+fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
     if (obs.pop) |pop| {
         try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
@@ -808,17 +808,17 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
 
 // QUANTUM SYSTEM ======================================================================================================
 
-pub fn QuantumSystem(comptime T: type) type {
+fn QuantumSystem(comptime T: type) type {
     return struct { grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), wfn: Wavefunction(T) };
 }
 
 // RUN =================================================================================================================
 
-pub fn SimulationState(comptime T: type) type {
+fn SimulationState(comptime T: type) type {
     return struct { qsys: QuantumSystem(T), prop: Propagator(T), orthw: std.ArrayList(Wavefunction(T)) };
 }
 
-pub fn SolveContext(comptime T: type) type {
+fn SolveContext(comptime T: type) type {
     return struct { opt: Options, sim: *SimulationState(T), eigs: usize, log: bool };
 }
 
@@ -846,7 +846,7 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     return .{ .qsys = .{ .grid = grid, .ham = ham, .wfn = wfn, .pot = pot }, .prop = prop, .orthw = .empty };
 }
 
-pub fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
+fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
     // zig fmt: off
     const ndim   = ctx.sim.qsys.grid.r.ncol();
     const nstate =  ctx.sim.qsys.wfn.W.nrow();
