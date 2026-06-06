@@ -213,17 +213,19 @@ pub fn Propagator(comptime T: type) type {
         }
 
         pub fn calcAcc(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), time: T) void {
-            for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
-                self.r_dual.ptr(i, j).* = ScalarDual(T).init(ensemble.r.ptr(i, j).*, 1);
-            };
+            for (0..ensemble.r.ncol()) |j| {
+                for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |k| {
+                    self.r_dual.ptr(i, k).* = ScalarDual(T).init(ensemble.r.ptr(i, k).*, if (k == j) 1 else 0);
+                };
 
-            pot.evalDualBatch(&self.V_dual, self.r_dual, time);
+                pot.evalDualBatch(&self.V_dual, self.r_dual, time);
 
-            for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
-                const k = ensemble.s.at(i) * pot.nstate() + ensemble.s.at(i);
+                for (0..ensemble.r.nrow()) |i| {
+                    const k = ensemble.s.at(i) * pot.nstate() + ensemble.s.at(i);
 
-                ensemble.a.ptr(i, j).* = -self.V_dual.at(i, k).der / ensemble.mass;
-            };
+                    ensemble.a.ptr(i, j).* = -self.V_dual.at(i, k).der / ensemble.mass;
+                }
+            }
         }
 
         pub fn step(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), time: T) void {
