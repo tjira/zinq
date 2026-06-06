@@ -33,6 +33,16 @@ pub fn ScalarDual(comptime T: type) type {
             return .{ .val = self.val * scalar, .der = self.der * scalar };
         }
 
+        pub fn div(self: @This(), other: @This()) @This() {
+            const der = (self.der * other.val - self.val * other.der) / (other.val * other.val);
+
+            return .{ .val = self.val / other.val, .der = der };
+        }
+
+        pub fn divs(self: @This(), scalar: T) @This() {
+            return .{ .val = self.val / scalar, .der = self.der / scalar };
+        }
+
         pub fn exp(self: @This()) @This() {
             const val = std.math.exp(self.val);
 

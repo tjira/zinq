@@ -434,7 +434,7 @@ fn Hamiltonian(comptime T: type) type {
         }
 
         pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T) !void {
-            pot.evalBatch(&self.V, grid.r, t);
+            pot.evalBatch(T, &self.V, grid.r, t);
 
             try eighBatch(T, &self.W, &self.U, self.V);
         }

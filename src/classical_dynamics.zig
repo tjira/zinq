@@ -12,6 +12,7 @@ const Vector           = @import("tensor.zig"   )    .Vector;
 
 // zig fmt: off
 const eighBatch         = @import("openblas.zig"  )        .eighBatch;
+const eighSlice         = @import("openblas.zig"  )        .eighSlice;
 const printf            = @import("read_write.zig")           .printf;
 const writeMatrixHjoin  = @import("read_write.zig") .writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
@@ -159,13 +160,15 @@ pub fn Ensemble(comptime T: type) type {
             defer gpa.free(W_slice);
 
             if (adiabatic) for (0..self.r.nrow()) |i| {
-                try pot.evalAdiabatic(W_slice, U_slice, V_slice, self.r.rowSlice(i), time);
+                pot.eval(T, V_slice, self.r.rowSlice(i), time);
+
+                try eighSlice(T, W_slice, U_slice, V_slice);
 
                 sum += W_slice[self.s.at(i)];
             };
 
             if (!adiabatic) for (0..self.r.nrow()) |i| {
-                pot.eval(V_slice, self.r.rowSlice(i), time);
+                pot.eval(T, V_slice, self.r.rowSlice(i), time);
 
                 sum += V_slice[self.s.at(i) * self.nstate + self.s.at(i)];
             };
@@ -236,17 +239,19 @@ pub fn GradientBuffer(comptime T: type) type {
 
         pub fn calcAcc(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), time: T, adiabatic: bool) !void {
             if (adiabatic) {
-                try pot.evalAdiabaticBatch(&self.W, &self.U, &self.V, ensemble.r, time);
+                pot.evalBatch(T, &self.V, ensemble.r, time);
+
+                try eighBatch(T, &self.W, &self.U, self.V);
             }
 
-            for (0..ensemble.r.ncol()) |j| {
-                for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |k| {
+            for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
+                for (0..ensemble.r.ncol()) |k| {
                     self.r_dual.ptr(i, k).* = ScalarDual(T).init(ensemble.r.ptr(i, k).*, if (k == j) 1 else 0);
-                };
+                }
 
-                pot.evalDualBatch(&self.V_dual, self.r_dual, time);
+                pot.eval(ScalarDual(T), self.V_dual.rowSlice(i), self.r_dual.rowSlice(i), ScalarDual(T).init(time, 0));
 
-                if (adiabatic) for (0..ensemble.r.nrow()) |i| {
+                if (adiabatic) {
                     var der: T = 0;
 
                     for (0..pot.nstate()) |k| {
@@ -260,14 +265,14 @@ pub fn GradientBuffer(comptime T: type) type {
                     }
 
                     ensemble.a.ptr(i, j).* = -der / ensemble.mass;
-                };
+                }
 
-                if (!adiabatic) for (0..ensemble.r.nrow()) |i| {
+                if (!adiabatic) {
                     const k = ensemble.s.at(i) * pot.nstate() + ensemble.s.at(i);
 
                     ensemble.a.ptr(i, j).* = -self.V_dual.at(i, k).der / ensemble.mass;
-                };
-            }
+                }
+            };
         }
     };
 }

@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Value = @import("value.zig").Value;
+
 // MATRIX ==============================================================================================================
 
 pub fn Matrix(comptime T: type) type {
@@ -39,13 +41,9 @@ pub fn Matrix(comptime T: type) type {
         }
 
         pub fn divs(self: *@This(), scalar: T) void {
-            if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "div")) for (self.data) |*e| {
-                e.* = e.div(scalar);
-            };
-
-            if (comptime @typeInfo(T) != .@"struct") for (self.data) |*e| {
-                e.* /= scalar;
-            };
+            for (self.data) |*e| {
+                e.* = Value(T).init(e.*).div(Value(T).init(scalar)).val;
+            }
         }
 
         pub fn fill(self: *@This(), scalar: T) void {
@@ -109,13 +107,9 @@ pub fn Vector(comptime T: type) type {
         }
 
         pub fn divs(self: *@This(), scalar: T) void {
-            if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "div")) for (self.data) |*e| {
-                e.* = e.div(scalar);
-            };
-
-            if (comptime @typeInfo(T) != .@"struct") for (self.data) |*e| {
-                e.* /= scalar;
-            };
+            for (self.data) |*e| {
+                e.* = Value(T).init(e.*).div(Value(T).init(scalar)).val;
+            }
         }
 
         pub fn length(self: @This()) usize {
@@ -123,13 +117,9 @@ pub fn Vector(comptime T: type) type {
         }
 
         pub fn muls(self: *@This(), scalar: T) void {
-            if (comptime @typeInfo(T) == .@"struct" and @hasDecl(T, "mul")) for (self.data) |*e| {
-                e.* = e.mul(scalar);
-            };
-
-            if (comptime @typeInfo(T) != .@"struct") for (self.data) |*e| {
-                e.* *= scalar;
-            };
+            for (self.data) |*e| {
+                e.* = Value(T).init(e.*).mul(Value(T).init(scalar)).val;
+            }
         }
 
         pub fn ptr(self: *@This(), i: usize) *T {
