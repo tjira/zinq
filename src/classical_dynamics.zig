@@ -187,23 +187,19 @@ pub fn Ensemble(comptime T: type) type {
     };
 }
 
-// PROPAGATOR ==========================================================================================================
+// GRADIENT BUFFER =====================================================================================================
 
-pub fn Propagator(comptime T: type) type {
+pub fn GradientBuffer(comptime T: type) type {
     return struct {
         r_dual: Matrix(ScalarDual(T)),
         V_dual: Matrix(ScalarDual(T)),
 
-        dt: T,
-
-        pub fn init(ndim: usize, nstate: usize, ntraj: usize, dt: T, gpa: Allocator) !@This() {
+        pub fn init(ndim: usize, nstate: usize, ntraj: usize, gpa: Allocator) !@This() {
             return .{
                 // zig fmt: off
                 .r_dual = try Matrix(ScalarDual(T)).init(ntraj, ndim,            gpa),
                 .V_dual = try Matrix(ScalarDual(T)).init(ntraj, nstate * nstate, gpa),
                 // zig fmt: on
-
-                .dt = dt,
             };
         }
 
@@ -227,15 +223,27 @@ pub fn Propagator(comptime T: type) type {
                 }
             }
         }
+    };
+}
 
-        pub fn step(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), time: T) void {
+// PROPAGATOR ==========================================================================================================
+
+pub fn Propagator(comptime T: type) type {
+    return struct {
+        dt: T,
+
+        pub fn init(dt: T) @This() {
+            return .{ .dt = dt };
+        }
+
+        pub fn step(self: *@This(), ensemble: *Ensemble(T), gb: *GradientBuffer(T), pot: Potential(T), time: T) void {
             for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
                 ensemble.p.ptr(i, j).* += 0.5 * ensemble.mass * ensemble.a.at(i, j) * self.dt;
 
                 ensemble.r.ptr(i, j).* += (ensemble.p.at(i, j) / ensemble.mass) * self.dt;
             };
 
-            self.calcAcc(ensemble, pot, time);
+            gb.calcAcc(ensemble, pot, time);
 
             for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
                 ensemble.p.ptr(i, j).* += 0.5 * ensemble.mass * ensemble.a.at(i, j) * self.dt;
@@ -466,7 +474,7 @@ fn ClassicalSystem(comptime T: type) type {
 // RUN =================================================================================================================
 
 fn SimulationState(comptime T: type) type {
-    return struct { csys: ClassicalSystem(T), prop: Propagator(T) };
+    return struct { csys: ClassicalSystem(T), prop: Propagator(T), gb: GradientBuffer(T) };
 }
 
 fn SolveContext(comptime T: type) type {
@@ -477,15 +485,16 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     const pot = Potential(T).init(opt.potential);
 
     // zig fmt: off
-    var ensemble = try Ensemble  (T).init(pot.ndim(), pot.nstate(), opt.trajectories, opt.mass,      arena);
-    var prop     = try Propagator(T).init(pot.ndim(), pot.nstate(), opt.trajectories, opt.time_step, arena);
+    var ensemble = try Ensemble      (T).init(pot.ndim(),    pot.nstate(), opt.trajectories, opt.mass, arena);
+    var gb       = try GradientBuffer(T).init(pot.ndim(),    pot.nstate(), opt.trajectories,           arena);
+    const prop   =     Propagator    (T).init(opt.time_step                                                );
     // zig fmt: on
 
     ensemble.setGaussian(opt.initial_conditions);
 
-    prop.calcAcc(&ensemble, pot, 0);
+    gb.calcAcc(&ensemble, pot, 0);
 
-    return .{ .csys = .{ .ensemble = ensemble, .pot = pot }, .prop = prop };
+    return .{ .csys = .{ .ensemble = ensemble, .pot = pot }, .prop = prop, .gb = gb };
 }
 
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
@@ -504,7 +513,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
     for (0..ctx.opt.iterations + 1) |i| {
         const time = (@as(T, @floatFromInt(i)) - 0.5) * ctx.opt.time_step;
 
-        if (i > 0) ctx.sim.prop.step(&ctx.sim.csys.ensemble, ctx.sim.csys.pot, time);
+        if (i > 0) ctx.sim.prop.step(&ctx.sim.csys.ensemble, &ctx.sim.gb, ctx.sim.csys.pot, time);
 
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
