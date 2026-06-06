@@ -203,14 +203,11 @@ fn Wavefunction(comptime T: type) type {
         pub fn epot(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
             var value: T = 0;
 
-            for (0..self.W.ncol()) |j| for (0..self.W.nrow()) |i| {
+            for (0..self.W.nrow()) |i| for (0..self.W.nrow()) |k| for (0..self.W.ncol()) |j| {
                 const psi_i = self.W.at(i, j);
+                const psi_k = self.W.at(k, j);
 
-                for (0..self.W.nrow()) |k| {
-                    const psi_k = self.W.at(k, j);
-
-                    value += (psi_i.re * psi_k.re + psi_i.im * psi_k.im) * ham.V.at(j, i * self.W.nrow() + k);
-                }
+                value += (psi_i.re * psi_k.re + psi_i.im * psi_k.im) * ham.V.at(j, i * self.W.nrow() + k);
             };
 
             return value * grid.dr;
