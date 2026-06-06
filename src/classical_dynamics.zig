@@ -291,6 +291,95 @@ fn Observables(comptime T: type) type {
     };
 }
 
+// HISTORY =============================================================================================================
+
+fn History(comptime T: type) type {
+    return struct {
+        // zig fmt: off
+        pos:  ?Matrix(T),
+        mom:  ?Matrix(T),
+        pop:  ?Matrix(T),
+        epot: ?Matrix(T),
+        ekin: ?Matrix(T),
+        etot: ?Matrix(T),
+        // zig fmt: on
+
+        index: usize = 0,
+
+        pub fn init(ndim: usize, nstate: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
+            // zig fmt: off
+            const store_epot = write.potential_energy != null or write.total_energy != null;
+            const store_ekin = write.kinetic_energy   != null or write.total_energy != null;
+            // zig fmt: on
+
+            return .{
+                // zig fmt: off
+                .pos  = if (write.position     != null) try Matrix(T).init(iters, ndim,   gpa) else null,
+                .mom  = if (write.momentum     != null) try Matrix(T).init(iters, ndim,   gpa) else null,
+                .pop  = if (write.population   != null) try Matrix(T).init(iters, nstate, gpa) else null,
+                .etot = if (write.total_energy != null) try Matrix(T).init(iters, 1,      gpa) else null,
+                // zig fmt: on
+
+                .ekin = if (store_ekin) try Matrix(T).init(iters, 1, gpa) else null,
+                .epot = if (store_epot) try Matrix(T).init(iters, 1, gpa) else null,
+            };
+        }
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            // zig fmt: off
+            if (self.pos)  |*pos |  pos.deinit(gpa);
+            if (self.mom)  |*mom |  mom.deinit(gpa);
+            if (self.pop)  |*pop |  pop.deinit(gpa);
+            if (self.epot) |*epot| epot.deinit(gpa);
+            if (self.ekin) |*ekin| ekin.deinit(gpa);
+            if (self.etot) |*etot| etot.deinit(gpa);
+            // zig fmt: on
+        }
+
+        pub fn append(self: *@This(), obs: Observables(T)) void {
+            const step_idx = self.index;
+
+            if (self.pos) |*pos| if (obs.pos) |v| {
+                for (0..v.length()) |j| pos.ptr(step_idx, j).* = v.at(j);
+            };
+
+            if (self.mom) |*mom| if (obs.mom) |v| {
+                for (0..v.length()) |j| mom.ptr(step_idx, j).* = v.at(j);
+            };
+
+            if (self.pop) |*pop| if (obs.pop) |v| {
+                for (0..v.length()) |j| pop.ptr(step_idx, j).* = v.at(j);
+            };
+
+            // zig fmt: off
+            if (self.epot) |*epot| {if (obs.epot) |v| epot.ptr(step_idx, 0).* = v;}
+            if (self.ekin) |*ekin| {if (obs.ekin) |v| ekin.ptr(step_idx, 0).* = v;}
+            // zig fmt: on
+
+            if (self.etot) |*etot| {
+                etot.ptr(step_idx, 0).* = obs.ekin.? + obs.epot.?;
+            }
+
+            self.index += 1;
+        }
+
+        pub fn exportAndDeinit(self: *@This(), io: std.Io, dt: f64, write: Write, gpa: Allocator) !void {
+            defer self.deinit(gpa);
+
+            const end = dt * @as(T, @floatFromInt(self.index - 1));
+
+            // zig fmt: off
+            if (write.position        ) |path| try writeMatrixLspace(T, io, path, self.pos.?,  0, end);
+            if (write.momentum        ) |path| try writeMatrixLspace(T, io, path, self.mom.?,  0, end);
+            if (write.population      ) |path| try writeMatrixLspace(T, io, path, self.pop.?,  0, end);
+            if (write.potential_energy) |path| try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
+            if (write.kinetic_energy  ) |path| try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
+            if (write.total_energy    ) |path| try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
+            // zig fmt: on
+        }
+    };
+}
+
 // LOGGERS =============================================================================================================
 
 fn printHeader(io: std.Io, ndim: usize, nstate: usize) !void {
@@ -399,8 +488,16 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     return .{ .csys = .{ .ensemble = ensemble, .pot = pot }, .prop = prop };
 }
 
-fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !void {
+fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
+    // zig fmt: off
+    const ndim   = ctx.sim.csys.ensemble.r.ncol();
+    const nstate = ctx.sim.csys.ensemble.nstate;
+    const iters  = ctx.opt.iterations;
+    // zig fmt: on
+
     if (ctx.log) try printHeader(io, ctx.sim.csys.pot.ndim(), ctx.sim.csys.pot.nstate());
+
+    var hist = try History(T).init(ndim, nstate, iters + 1, ctx.opt.write, gpa);
 
     var timer = std.Io.Timestamp.now(io, .real);
 
@@ -413,6 +510,8 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
 
         var obs = try Observables(T).init(ctx.sim.csys, time + 0.5 * ctx.opt.time_step, ctx.opt.write, is_log_step, gpa);
 
+        hist.append(obs);
+
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
         }
@@ -420,10 +519,14 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
         obs.deinit(gpa);
     }
 
-    _ = arena;
+    try hist.exportAndDeinit(io, ctx.opt.time_step, ctx.opt.write, gpa);
+
+    const end_time = @as(T, @floatFromInt(ctx.opt.iterations)) * ctx.opt.time_step;
+
+    return try Observables(T).init(ctx.sim.csys, end_time, ctx.opt.write, true, arena);
 }
 
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator, arena: Allocator) !void {
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator, arena: Allocator) !Observables(T) {
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\nCLASSICAL DYNAMICS INIT: ");
 
     var timer = std.Io.Timestamp.now(io, .real);
@@ -432,5 +535,11 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 
-    try solve(T, io, .{ .opt = opt, .sim = &sim, .log = log }, gpa, arena);
+    const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .log = log }, gpa, arena);
+
+    if (log) {
+        try printFinalPop(T, io, obs);
+    }
+
+    return obs;
 }
