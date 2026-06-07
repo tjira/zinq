@@ -87,15 +87,19 @@ pub fn SurfaceHopping(comptime T: type) type {
                     }
                 }
 
-                if (ns != c) {
+                if (self.adia and ns != c) {
                     // zig fmt: off
-                    const E_new = if (self.adia) W.at(i, ns) else V.at(i, ns * ensemble.nstate + ns);
-                    const E_old = if (self.adia) W.at(i, c)  else V.at(i, c  * ensemble.nstate + c );
+                    const E_new = W.at(i, ns);
+                    const E_old = W.at(i, c );
                     // zig fmt: on
 
                     if (rescaleMomentumIsotropic(T, ensemble, i, E_new - E_old)) {
                         ensemble.s.ptr(i).* = ns;
                     }
+                }
+
+                if (!self.adia and ns != c) {
+                    ensemble.s.ptr(i).* = ns;
                 }
             }
         }
