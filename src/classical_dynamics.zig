@@ -299,15 +299,17 @@ pub fn Propagator(comptime T: type) type {
 
             try gb.update(ensemble.r, pot, time, self.adiabatic);
 
-            if (self.sh) |*sh| {
-                try sh.hop(ensemble, gb.V, gb.W, gb.U, self.dt);
-            }
-
             gb.apply(ensemble, pot, self.adiabatic);
 
             for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
                 ensemble.p.ptr(i, j).* += 0.5 * ensemble.mass * ensemble.a.at(i, j) * self.dt;
             };
+
+            if (self.sh) |*sh| {
+                try sh.hop(ensemble, gb.V, gb.W, gb.U, self.dt);
+
+                gb.apply(ensemble, pot, self.adiabatic);
+            }
         }
     };
 }

@@ -87,7 +87,7 @@ pub fn SurfaceHopping(comptime T: type) type {
                     }
                 }
 
-                if (ns != c) {
+                if (self.adia and ns != c) {
                     // zig fmt: off
                     const E_new = if (self.adia) W.at(i, ns) else V.at(i, ns * ensemble.nstate + ns);
                     const E_old = if (self.adia) W.at(i, c)  else V.at(i, c  * ensemble.nstate + c );
@@ -96,6 +96,10 @@ pub fn SurfaceHopping(comptime T: type) type {
                     if (rescaleMomentumIsotropic(T, ensemble, i, E_new - E_old)) {
                         ensemble.s.ptr(i).* = ns;
                     }
+                }
+
+                if (!self.adia and ns != c) {
+                    ensemble.s.ptr(i).* = ns;
                 }
             }
         }
@@ -172,7 +176,7 @@ pub fn LandauZener(comptime T: type) type {
         }
 
         pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), dt: T) !void {
-            if (std.math.isNan(self.history[0].at(0, 0))) return;
+            if (std.math.isNan(self.history[1].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {
                 const c = ensemble.s.at(i);

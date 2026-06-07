@@ -22,12 +22,12 @@ test "Landau--Zener on Tully's First Potential" {
     const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.pos.?.at(0), 13.5132448878387430, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.mom.?.at(0), 16.1428500655748500, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pos.?.at(0), 13.5131323261878540, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.mom.?.at(0), 16.1427158175045270, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.pop.?.at(0),  0.4600000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.pop.?.at(1),  0.5400000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.epot.?,       0.0007999958390208, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.ekin.?,       0.0657457029387250, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.epot.?,       0.0007999958390219, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.ekin.?,       0.0657445231400523, TEST_TOLERANCE);
     // zig fmt: on
 
     arena.deinit();
