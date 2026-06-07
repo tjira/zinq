@@ -3,11 +3,13 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 // zig fmt: off
-const Matrix           = @import("tensor.zig"   ).    Matrix;
-const Potential        = @import("potential.zig"). Potential;
-const PotentialOptions = @import("potential.zig").   Options;
-const ScalarDual       = @import("dual.zig"     ).ScalarDual;
-const Vector           = @import("tensor.zig"   ).    Vector;
+const Matrix                = @import("tensor.zig"         ).        Matrix;
+const Potential             = @import("potential.zig"      ).     Potential;
+const PotentialOptions      = @import("potential.zig"      ).       Options;
+const ScalarDual            = @import("dual.zig"           ).    ScalarDual;
+const SurfaceHopping        = @import("surface_hopping.zig").SurfaceHopping;
+const SurfaceHoppingOptions = @import("surface_hopping.zig")       .Options;
+const Vector                = @import("tensor.zig"         ).        Vector;
 // zig fmt: on
 
 // zig fmt: off
@@ -51,9 +53,10 @@ pub const Options = struct {
     mass:                             f64,
     trajectories:                     u32,
 
-    write:        Write =   .{},
-    adiabatic:    bool  =  true,
-    log_interval: u32   =     1,
+    surface_hopping: ?SurfaceHoppingOptions =  null,
+    write:           Write                  =   .{},
+    adiabatic:       bool                   =  true,
+    log_interval:    u32                    =     1,
 };
 // zig fmt: on
 
@@ -85,13 +88,6 @@ pub fn Ensemble(comptime T: type) type {
                 .nstate = nstate,
                 // zig fmt: on
             };
-        }
-
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.r.deinit(gpa);
-            self.p.deinit(gpa);
-            self.a.deinit(gpa);
-            self.s.deinit(gpa);
         }
 
         pub fn pos(self: @This(), gpa: Allocator) !Vector(T) {
@@ -213,6 +209,8 @@ pub fn GradientBuffer(comptime T: type) type {
         W: Matrix(T),
         U: Matrix(T),
 
+        grad_V: Matrix(T),
+
         pub fn init(ndim: usize, nstate: usize, ntraj: usize, gpa: Allocator) !@This() {
             return .{
                 // zig fmt: off
@@ -225,42 +223,25 @@ pub fn GradientBuffer(comptime T: type) type {
                 .W = try Matrix(T).init(ntraj, nstate,          gpa),
                 .U = try Matrix(T).init(ntraj, nstate * nstate, gpa),
                 // zig fmt: on
+
+                .grad_V = try Matrix(T).init(ntraj, ndim * nstate * nstate, gpa),
             };
         }
 
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.r_dual.deinit(gpa);
-            self.V_dual.deinit(gpa);
-
-            self.V.deinit(gpa);
-            self.W.deinit(gpa);
-            self.U.deinit(gpa);
-        }
-
-        pub fn calcAcc(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), time: T, adiabatic: bool) !void {
-            if (adiabatic) {
-                pot.evalBatch(T, &self.V, ensemble.r, time);
-
-                try eighBatch(T, &self.W, &self.U, self.V);
-            }
+        pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), adiabatic: bool) void {
+            const nstate = pot.nstate();
 
             for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
-                for (0..ensemble.r.ncol()) |k| {
-                    self.r_dual.ptr(i, k).* = ScalarDual(T).init(ensemble.r.ptr(i, k).*, if (k == j) 1 else 0);
-                }
-
-                pot.eval(ScalarDual(T), self.V_dual.rowSlice(i), self.r_dual.rowSlice(i), ScalarDual(T).init(time, 0));
-
                 if (adiabatic) {
                     var der: T = 0;
 
-                    for (0..pot.nstate()) |k| {
-                        const U_ka = self.U.at(i, k * pot.nstate() + ensemble.s.at(i));
+                    for (0..nstate) |k| {
+                        const U_ka = self.U.at(i, k * nstate + ensemble.s.at(i));
 
-                        for (0..pot.nstate()) |l| {
-                            const U_la = self.U.at(i, l * pot.nstate() + ensemble.s.at(i));
+                        for (0..nstate) |l| {
+                            const U_la = self.U.at(i, l * nstate + ensemble.s.at(i));
 
-                            der += U_ka * U_la * self.V_dual.at(i, k * pot.nstate() + l).der;
+                            der += U_ka * U_la * self.grad_V.at(i, j * nstate * nstate + k * nstate + l);
                         }
                     }
 
@@ -268,9 +249,29 @@ pub fn GradientBuffer(comptime T: type) type {
                 }
 
                 if (!adiabatic) {
-                    const k = ensemble.s.at(i) * pot.nstate() + ensemble.s.at(i);
+                    const k = ensemble.s.at(i) * nstate + ensemble.s.at(i);
 
-                    ensemble.a.ptr(i, j).* = -self.V_dual.at(i, k).der / ensemble.mass;
+                    ensemble.a.ptr(i, j).* = -self.grad_V.at(i, j * nstate * nstate + k) / ensemble.mass;
+                }
+            };
+        }
+
+        pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T, adiabatic: bool) !void {
+            if (adiabatic) {
+                pot.evalBatch(T, &self.V, r, time);
+
+                try eighBatch(T, &self.W, &self.U, self.V);
+            }
+
+            for (0..r.nrow()) |i| for (0..r.ncol()) |j| {
+                for (0..r.ncol()) |k| {
+                    self.r_dual.ptr(i, k).* = ScalarDual(T).init(r.at(i, k), if (k == j) 1 else 0);
+                }
+
+                pot.eval(ScalarDual(T), self.V_dual.rowSlice(i), self.r_dual.rowSlice(i), ScalarDual(T).init(time, 0));
+
+                for (0..pot.nstate() * pot.nstate()) |k| {
+                    self.grad_V.ptr(i, j * pot.nstate() * pot.nstate() + k).* = self.V_dual.at(i, k).der;
                 }
             };
         }
@@ -282,11 +283,11 @@ pub fn GradientBuffer(comptime T: type) type {
 pub fn Propagator(comptime T: type) type {
     return struct {
         // zig fmt: off
-        dt: T, adiabatic: bool,
+        dt: T, adiabatic: bool, sh: ?SurfaceHopping(T),
         // zig fmt: on
 
-        pub fn init(dt: T, adiabatic: bool) @This() {
-            return .{ .dt = dt, .adiabatic = adiabatic };
+        pub fn init(dt: T, adiabatic: bool, sh: ?SurfaceHopping(T)) @This() {
+            return .{ .dt = dt, .adiabatic = adiabatic, .sh = sh };
         }
 
         pub fn step(self: *@This(), ensemble: *Ensemble(T), gb: *GradientBuffer(T), pot: Potential(T), time: T) !void {
@@ -296,7 +297,13 @@ pub fn Propagator(comptime T: type) type {
                 ensemble.r.ptr(i, j).* += (ensemble.p.at(i, j) / ensemble.mass) * self.dt;
             };
 
-            try gb.calcAcc(ensemble, pot, time, self.adiabatic);
+            try gb.update(ensemble.r, pot, time, self.adiabatic);
+
+            if (self.sh) |*sh| {
+                try sh.hop(ensemble, gb.V, gb.W, gb.U, self.dt);
+            }
+
+            gb.apply(ensemble, pot, self.adiabatic);
 
             for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
                 ensemble.p.ptr(i, j).* += 0.5 * ensemble.mass * ensemble.a.at(i, j) * self.dt;
@@ -538,14 +545,27 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     const pot = Potential(T).init(opt.potential);
 
     // zig fmt: off
-    var ensemble = try Ensemble      (T).init(pot.ndim(),    pot.nstate(),  opt.trajectories, opt.mass, arena);
-    var gb       = try GradientBuffer(T).init(pot.ndim(),    pot.nstate(),  opt.trajectories,           arena);
-    const prop   =     Propagator    (T).init(opt.time_step, opt.adiabatic                                   );
+    const nstate =     pot.nstate();
+    const ntraj  = opt.trajectories;
+    // zig fmt: on
+
+    var sh = if (opt.surface_hopping) |shopt| try SurfaceHopping(T).init(shopt, nstate, ntraj, arena) else null;
+
+    // zig fmt: off
+    var ensemble = try Ensemble      (T).init(pot.ndim(),    nstate,        ntraj, opt.mass, arena);
+    var gb       = try GradientBuffer(T).init(pot.ndim(),    nstate,        ntraj,           arena);
+    const prop   =     Propagator    (T).init(opt.time_step, opt.adiabatic, sh                    );
     // zig fmt: on
 
     ensemble.setGaussian(opt.initial_conditions);
 
-    try gb.calcAcc(&ensemble, pot, 0, opt.adiabatic);
+    try gb.update(ensemble.r, pot, 0, opt.adiabatic);
+
+    if (sh != null) {
+        sh.?.update(gb.V, gb.W);
+    }
+
+    gb.apply(&ensemble, pot, opt.adiabatic);
 
     return .{ .csys = .{ .ensemble = ensemble, .pot = pot, .adiabatic = opt.adiabatic }, .prop = prop, .gb = gb };
 }
@@ -564,13 +584,15 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
     var timer = std.Io.Timestamp.now(io, .real);
 
     for (0..ctx.opt.iterations + 1) |i| {
-        const time = (@as(T, @floatFromInt(i)) - 0.5) * ctx.opt.time_step;
+        const time = @as(T, @floatFromInt(i)) * ctx.opt.time_step;
 
-        if (i > 0) try ctx.sim.prop.step(&ctx.sim.csys.ensemble, &ctx.sim.gb, ctx.sim.csys.pot, time);
+        if (i > 0) {
+            try ctx.sim.prop.step(&ctx.sim.csys.ensemble, &ctx.sim.gb, ctx.sim.csys.pot, time);
+        }
 
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
-        var obs = try Observables(T).init(ctx.sim.csys, time + ctx.opt.time_step / 2, ctx.opt.write, is_log_step, gpa);
+        var obs = try Observables(T).init(ctx.sim.csys, time, ctx.opt.write, is_log_step, gpa);
 
         hist.append(obs);
 

@@ -127,11 +127,6 @@ fn Grid(comptime T: type) type {
 
             return .{ .r = r, .k = k, .dr = dr, .dk = dk };
         }
-
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.r.deinit(gpa);
-            self.k.deinit(gpa);
-        }
     };
 }
 
@@ -166,16 +161,6 @@ fn Wavefunction(comptime T: type) type {
             gpa.free(shape);
 
             return .{ .W = W, .ffft = ffft, .ifft = ifft };
-        }
-
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.W.deinit(gpa);
-
-            for (self.ffft) |e| e.deinit();
-            for (self.ifft) |e| e.deinit();
-
-            gpa.free(self.ffft);
-            gpa.free(self.ifft);
         }
 
         pub fn clone(self: @This(), gpa: Allocator) !@This() {
@@ -423,13 +408,6 @@ fn Hamiltonian(comptime T: type) type {
             return ham;
         }
 
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.V.deinit(gpa);
-            self.W.deinit(gpa);
-            self.U.deinit(gpa);
-            self.K.deinit(gpa);
-        }
-
         pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T) !void {
             pot.evalBatch(T, &self.V, grid.r, t);
 
@@ -461,11 +439,6 @@ fn Propagator(comptime T: type) type {
             prop.update(ham);
 
             return prop;
-        }
-
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.R.deinit(gpa);
-            self.K.deinit(gpa);
         }
 
         pub fn step(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {

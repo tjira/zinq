@@ -1,4 +1,4 @@
 - [x] The QD code always saves diabatic wavefunction, even if adiabatic is selected.
 - [x] Cloning the wavefunction does not clone the FFTW plan.
 - [x] Add the option to choose the FFTW plan type (estimate, measure, patient, exhaustive).
-- [ ] Try to join the eval and evalDual methods into one method that can handle both cases.
+- [x] Try to join the eval and evalDual methods into one method that can handle both cases.

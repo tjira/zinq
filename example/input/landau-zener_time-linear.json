@@ -3,23 +3,23 @@
         {
             "classical_dynamics" : {
                 "initial_conditions" : {
-                    "position" : [-10],
-                    "momentum" : [15],
+                    "position" : [0],
+                    "momentum" : [0],
                     "gamma" : [2],
                     "state" : 1
                 },
                 "potential" : {
-                    "tully_1" : {}
+                    "time_linear" : {}
                 },
                 "surface_hopping" : {
                     "landau_zener" : {}
                 },
-                "mass" : 2000,
+                "mass" : 1,
                 "trajectories" : 1000,
-                "iterations" : 3000,
-                "time_step" : 1,
+                "iterations" : 20000,
+                "time_step" : 0.001,
                 "adiabatic" : true,
-                "log_interval" : 500,
+                "log_interval" : 5000,
                 "write" : {
                     "population" : "POP_LZ.mat"
                 }

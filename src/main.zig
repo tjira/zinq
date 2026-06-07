@@ -7,6 +7,8 @@ pub const ClassicalDynamicsOptions = @import("classical_dynamics.zig").Options;
 pub const classical_dynamics_run   = @import("classical_dynamics.zig").    run;
 pub const QuantumDynamicsOptions   = @import("quantum_dynamics.zig"  ).Options;
 pub const quantum_dynamics_run     = @import("quantum_dynamics.zig"  ).    run;
+pub const SurfaceHopping           = @import("surface_hopping.zig").SurfaceHopping;
+pub const SurfaceHoppingOptions    = @import("surface_hopping.zig").Options;
 // zig fmt: on
 
 // zig fmt: off
