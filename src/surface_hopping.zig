@@ -27,14 +27,14 @@ pub const LandauZenerOptions = struct {
 pub fn SurfaceHopping(comptime T: type) type {
     return struct {
         // zig fmt: off
-        rng: std.Random.DefaultPrng, probs: Matrix(T), method: Method,
+        rng: std.Random.DefaultPrng, probs: Matrix(T), method: Method, adia: bool,
         // zig fmt: on
 
         pub const Method = union(enum) {
             landau_zener: LandauZener(T),
         };
 
-        pub fn init(options: Options, nstate: usize, ntraj: usize, gpa: Allocator) !@This() {
+        pub fn init(options: Options, nstate: usize, ntraj: usize, adia: bool, gpa: Allocator) !@This() {
             const seed = switch (options) {
                 .landau_zener => |field| field.seed,
             };
@@ -42,12 +42,12 @@ pub fn SurfaceHopping(comptime T: type) type {
             var split_mix = std.Random.SplitMix64.init(seed);
 
             const method: Method = switch (options) {
-                .landau_zener => .{ .landau_zener = try LandauZener(T).init(nstate, ntraj, gpa) },
+                .landau_zener => .{ .landau_zener = try LandauZener(T).init(nstate, ntraj, adia, gpa) },
             };
 
             const probs = try Matrix(T).init(ntraj, nstate, gpa);
 
-            return .{ .rng = std.Random.DefaultPrng.init(split_mix.next()), .probs = probs, .method = method };
+            return .{ .rng = std.Random.DefaultPrng.init(split_mix.next()), .probs = probs, .method = method, .adia = adia };
         }
 
         pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), _: Matrix(T), dt: T) !void {
@@ -88,9 +88,12 @@ pub fn SurfaceHopping(comptime T: type) type {
                 }
 
                 if (ns != c) {
-                    const dE = W.at(i, ns) - W.at(i, c);
+                    // zig fmt: off
+                    const E_new = if (self.adia) W.at(i, ns) else V.at(i, ns * ensemble.nstate + ns);
+                    const E_old = if (self.adia) W.at(i, c)  else V.at(i, c  * ensemble.nstate + c );
+                    // zig fmt: on
 
-                    if (rescaleMomentumIsotropic(T, ensemble, i, dE)) {
+                    if (rescaleMomentumIsotropic(T, ensemble, i, E_new - E_old)) {
                         ensemble.s.ptr(i).* = ns;
                     }
                 }
@@ -109,23 +112,31 @@ pub fn SurfaceHopping(comptime T: type) type {
 
 pub fn LandauZener(comptime T: type) type {
     return struct {
-        history: [3]Matrix(T),
+        // zig fmt: off
+        history: [3]Matrix(T), adia: bool,
+        // zig fmt: on
 
-        pub fn init(nstate: usize, ntraj: usize, gpa: Allocator) !@This() {
+        pub fn init(nstate: usize, ntraj: usize, adia: bool, gpa: Allocator) !@This() {
             var history: [3]Matrix(T) = undefined;
 
-            history[0] = try Matrix(T).init(ntraj, nstate, gpa);
-            history[1] = try Matrix(T).init(ntraj, nstate, gpa);
-            history[2] = try Matrix(T).init(ntraj, nstate, gpa);
+            const cols = if (adia) nstate else nstate * nstate;
+
+            history[0] = try Matrix(T).init(ntraj, cols, gpa);
+            history[1] = try Matrix(T).init(ntraj, cols, gpa);
+            history[2] = try Matrix(T).init(ntraj, cols, gpa);
 
             history[0].fill(std.math.nan(T));
             history[1].fill(std.math.nan(T));
             history[2].fill(std.math.nan(T));
 
-            return .{ .history = history };
+            return .{ .history = history, .adia = adia };
         }
 
         pub fn calcProbs(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), dt: T) !void {
+            if (self.adia) try self.calcProbsAdia(probs, ensemble, dt) else try self.calcProbsDia(probs, ensemble, dt);
+        }
+
+        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), dt: T) !void {
             if (std.math.isNan(self.history[0].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {
@@ -160,12 +171,44 @@ pub fn LandauZener(comptime T: type) type {
             }
         }
 
-        pub fn update(self: *@This(), _: Matrix(T), W: Matrix(T)) void {
-            for (0..W.nrow()) |i| for (0..W.ncol()) |j| {
+        pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), dt: T) !void {
+            if (std.math.isNan(self.history[0].at(0, 0))) return;
+
+            for (0..self.history[0].nrow()) |i| {
+                const c = ensemble.s.at(i);
+
+                for (0..ensemble.nstate) |j| {
+                    if (c == j) continue;
+
+                    const v_cc_old = self.history[1].at(i, c * ensemble.nstate + c);
+                    const v_cc_new = self.history[2].at(i, c * ensemble.nstate + c);
+                    const v_jj_old = self.history[1].at(i, j * ensemble.nstate + j);
+                    const v_jj_new = self.history[2].at(i, j * ensemble.nstate + j);
+
+                    const gap_old  = v_cc_old - v_jj_old;
+                    const gap_new  = v_cc_new - v_jj_new;
+
+                    if (gap_old * gap_new <= 0) {
+                        const d_gap = @abs(gap_new - gap_old) / dt;
+
+                        if (d_gap > 1e-14) {
+                            const v_cj = @abs(self.history[2].at(i, c * ensemble.nstate + j));
+
+                            probs.ptr(i, j).* = 1 - std.math.exp(-2 * std.math.pi * v_cj * v_cj / d_gap);
+                        }
+                    }
+                }
+            }
+        }
+
+        pub fn update(self: *@This(), V: Matrix(T), W: Matrix(T)) void {
+            const data = if (self.adia) W else V;
+
+            for (0..data.nrow()) |i| for (0..data.ncol()) |j| {
                 self.history[0].ptr(i, j).* = self.history[1].at(i, j);
                 self.history[1].ptr(i, j).* = self.history[2].at(i, j);
 
-                self.history[2].ptr(i, j).* = W.at(i, j);
+                self.history[2].ptr(i, j).* = data.at(i, j);
             };
         }
     };

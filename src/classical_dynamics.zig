@@ -257,9 +257,9 @@ pub fn GradientBuffer(comptime T: type) type {
         }
 
         pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T, adiabatic: bool) !void {
-            if (adiabatic) {
-                pot.evalBatch(T, &self.V, r, time);
+            pot.evalBatch(T, &self.V, r, time);
 
+            if (adiabatic) {
                 try eighBatch(T, &self.W, &self.U, self.V);
             }
 
@@ -549,7 +549,7 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     const ntraj  = opt.trajectories;
     // zig fmt: on
 
-    var sh = if (opt.surface_hopping) |shopt| try SurfaceHopping(T).init(shopt, nstate, ntraj, arena) else null;
+    var sh = if (opt.surface_hopping) |shopt| try SurfaceHopping(T).init(shopt, nstate, ntraj, opt.adiabatic, arena) else null;
 
     // zig fmt: off
     var ensemble = try Ensemble      (T).init(pot.ndim(),    nstate,        ntraj, opt.mass, arena);
