@@ -3,11 +3,11 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 // zig fmt: off
-const Ensemble       = @import("classical_dynamics.zig")      .Ensemble;
+const Ensemble       = @import("classical_dynamics.zig").      Ensemble;
 const GradientBuffer = @import("classical_dynamics.zig").GradientBuffer;
-const Matrix         = @import("tensor.zig"            )        .Matrix;
-const Potential      = @import("potential.zig"         )     .Potential;
-const Vector         = @import("tensor.zig"            )        .Vector;
+const Matrix         = @import("tensor.zig"            ).        Matrix;
+const Potential      = @import("potential.zig"         ).     Potential;
+const Vector         = @import("tensor.zig"            ).        Vector;
 // zig fmt: on
 
 // OPTIONS =============================================================================================================

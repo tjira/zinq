@@ -4,5 +4,8 @@ const zinq = @import("zinq");
 // zig fmt: on
 
 test {
-    _ = @import("quantum_dynamics.zig");
+    // zig fmt: off
+    _ = @import("quantum_dynamics.zig"  );
+    _ = @import("classical_dynamics.zig");
+    // zig fmt: on
 }

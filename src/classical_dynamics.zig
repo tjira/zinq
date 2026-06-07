@@ -8,15 +8,15 @@ const Potential             = @import("potential.zig"      ).     Potential;
 const PotentialOptions      = @import("potential.zig"      ).       Options;
 const ScalarDual            = @import("dual.zig"           ).    ScalarDual;
 const SurfaceHopping        = @import("surface_hopping.zig").SurfaceHopping;
-const SurfaceHoppingOptions = @import("surface_hopping.zig")       .Options;
+const SurfaceHoppingOptions = @import("surface_hopping.zig").       Options;
 const Vector                = @import("tensor.zig"         ).        Vector;
 // zig fmt: on
 
 // zig fmt: off
-const eighBatch         = @import("openblas.zig"  )        .eighBatch;
-const eighSlice         = @import("openblas.zig"  )        .eighSlice;
-const printf            = @import("read_write.zig")           .printf;
-const writeMatrixHjoin  = @import("read_write.zig") .writeMatrixHjoin;
+const eighBatch         = @import("openblas.zig"  ).        eighBatch;
+const eighSlice         = @import("openblas.zig"  ).        eighSlice;
+const printf            = @import("read_write.zig").           printf;
+const writeMatrixHjoin  = @import("read_write.zig"). writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 // zig fmt: on
 
@@ -420,8 +420,8 @@ fn History(comptime T: type) type {
             };
 
             // zig fmt: off
-            if (self.epot) |*epot| {if (obs.epot) |v| epot.ptr(step_idx, 0).* = v;}
-            if (self.ekin) |*ekin| {if (obs.ekin) |v| ekin.ptr(step_idx, 0).* = v;}
+            if (self.epot) |*epot| if (obs.epot) |v| { epot.ptr(step_idx, 0).* = v; };
+            if (self.ekin) |*ekin| if (obs.ekin) |v| { ekin.ptr(step_idx, 0).* = v; };
             // zig fmt: on
 
             if (self.etot) |*etot| {
