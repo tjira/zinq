@@ -148,7 +148,7 @@ pub fn Value(comptime T: type) type {
     };
 }
 
-fn isComplex(comptime T: type) bool {
+pub fn isComplex(comptime T: type) bool {
     if (@typeInfo(T) == .@"struct") {
         return @hasField(T, "re") and @hasField(T, "im");
     }
@@ -156,7 +156,7 @@ fn isComplex(comptime T: type) bool {
     return false;
 }
 
-fn isDual(comptime T: type) bool {
+pub fn isDual(comptime T: type) bool {
     if (@typeInfo(T) == .@"struct") {
         return @hasField(T, "val") and @hasField(T, "der");
     }
@@ -164,6 +164,6 @@ fn isDual(comptime T: type) bool {
     return false;
 }
 
-fn isFloat(comptime T: type) bool {
+pub fn isFloat(comptime T: type) bool {
     return @typeInfo(T) == .float;
 }

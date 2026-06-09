@@ -60,3 +60,59 @@ test "Landau--Zener on Time-Linear Potential" {
 
     arena.deinit();
 }
+
+test "Fewest Switches on Tully's First Potential" {
+    const opt = zinq.ClassicalDynamicsOptions{
+        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 1 },
+        .potential = .{ .tully_1 = .{} },
+        .surface_hopping = .{ .fewest_switches = .{} },
+        .mass = 2000,
+        .trajectories = 100,
+        .iterations = 3000,
+        .time_step = 1,
+        .adiabatic = true,
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+
+    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.pos.?.at(0), 13.4849803222532180, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.mom.?.at(0), 16.0917854719325900, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(0),  0.4400000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(1),  0.5600000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.epot.?,       0.0011999958406232, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.ekin.?,       0.0653446603416648, TEST_TOLERANCE);
+    // zig fmt: on
+
+    arena.deinit();
+}
+
+test "Fewest Switches on Time-Linear Potential" {
+    const opt = zinq.ClassicalDynamicsOptions{
+        .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
+        .potential = .{ .time_linear = .{} },
+        .surface_hopping = .{ .fewest_switches = .{} },
+        .mass = 1,
+        .trajectories = 100,
+        .iterations = 2000,
+        .time_step = 0.01,
+        .adiabatic = true,
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+
+    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.pos.?.at(0),  3.5584375676562480, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.mom.?.at(0),  0.3898200603047847, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(0),  0.3600000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(1),  0.6400000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.epot.?,      28.0055994401119800, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.ekin.?,       2.4083820506614500, TEST_TOLERANCE);
+    // zig fmt: on
+
+    arena.deinit();
+}

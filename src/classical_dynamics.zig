@@ -551,7 +551,7 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     const ntraj  = opt.trajectories;
     // zig fmt: on
 
-    var sh = if (opt.surface_hopping) |shopt| try SurfaceHopping(T).init(shopt, nstate, ntraj, opt.adiabatic, arena) else null;
+    var sh = if (opt.surface_hopping) |shopt| try SurfaceHopping(T).init(shopt, nstate, ntraj, opt.initial_conditions.state, opt.adiabatic, arena) else null;
 
     // zig fmt: off
     var ensemble = try Ensemble      (T).init(pot.ndim(),    nstate,        ntraj, opt.mass, arena);
@@ -564,7 +564,7 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     try gb.update(ensemble.r, pot, 0, opt.adiabatic);
 
     if (sh != null) {
-        sh.?.update(gb.V, gb.W);
+        sh.?.update(if (opt.adiabatic) gb.W else gb.V, gb.U);
     }
 
     gb.apply(&ensemble, pot, opt.adiabatic);
@@ -575,8 +575,8 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
     // zig fmt: off
     const ndim   = ctx.sim.csys.ensemble.r.ncol();
-    const nstate = ctx.sim.csys.ensemble.nstate;
-    const iters  = ctx.opt.iterations;
+    const nstate =   ctx.sim.csys.ensemble.nstate;
+    const iters  =             ctx.opt.iterations;
     // zig fmt: on
 
     if (ctx.log) try printHeader(io, ctx.sim.csys.pot.ndim(), ctx.sim.csys.pot.nstate());

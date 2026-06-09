@@ -1,0 +1,29 @@
+{
+    "zinq" : [
+        {
+            "classical_dynamics" : {
+                "initial_conditions" : {
+                    "position" : [-10],
+                    "momentum" : [15],
+                    "gamma" : [2],
+                    "state" : 1
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "surface_hopping" : {
+                    "fewest_switches" : {}
+                },
+                "mass" : 2000,
+                "trajectories" : 1000,
+                "iterations" : 3000,
+                "time_step" : 1,
+                "adiabatic" : true,
+                "log_interval" : 500,
+                "write" : {
+                    "population" : "POP_FS.mat"
+                }
+            }
+        }
+    ]
+}
