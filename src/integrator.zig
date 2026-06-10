@@ -4,16 +4,26 @@ const Allocator = std.mem.Allocator;
 
 const Value = @import("value.zig").Value;
 
-const isFloat = @import("value.zig").isFloat;
+const primType = @import("value.zig").primType;
+
+pub fn ButcherTableau(comptime T: type, comptime STAGES: usize) type {
+    return struct {
+        a: [STAGES][STAGES]T,
+
+        b: [STAGES]T,
+        c: [STAGES]T,
+    };
+}
 
 pub fn Integrator(comptime T: type) type {
-    const U = if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
+    const U = primType(T);
 
     return struct {
         method: Method,
 
         pub const Method = union(enum) {
-            euler: Euler(T),
+            rk1: Rk1(T),
+            rk4: Rk4(T),
         };
 
         pub fn init(method: Method) @This() {
@@ -22,30 +32,90 @@ pub fn Integrator(comptime T: type) type {
 
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {
             switch (self.method) {
-                .euler => |*euler| euler.step(y, dt, ctx, dFn),
+                .rk1 => |*rk1| rk1.step(y, dt, ctx, dFn),
+                .rk4 => |*rk4| rk4.step(y, dt, ctx, dFn),
             }
         }
     };
 }
 
-pub fn Euler(comptime T: type) type {
-    const U = if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
+pub fn RungeKutta(comptime T: type, comptime tab: anytype) type {
+    const U = primType(T);
 
     return struct {
-        dy: []T,
+        k: [tab.b.len][]T,
+
+        tmp: []T,
 
         pub fn init(nstate: usize, gpa: Allocator) !@This() {
-            return .{
-                .dy = try gpa.alloc(T, nstate),
-            };
+            var self: @This() = undefined;
+
+            for (0..self.k.len) |i| {
+                self.k[i] = try gpa.alloc(T, nstate);
+            }
+
+            self.tmp = try gpa.alloc(T, nstate);
+
+            return self;
         }
 
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {
-            dFn(ctx, y, self.dy);
+            inline for (0..self.k.len) |i| {
+                for (0..y.len) |j| {
+                    var sum = Value(T).init(y[j]);
+
+                    inline for (0..i) |k| if (tab.a[i][k] != 0) {
+                        sum = sum.add(Value(T).init(self.k[k][j]).muls(tab.a[i][k] * dt));
+                    };
+
+                    self.tmp[j] = sum.val;
+                }
+
+                dFn(ctx, self.tmp, self.k[i]);
+            }
 
             for (0..y.len) |i| {
-                y[i] = Value(T).init(y[i]).add(Value(T).init(self.dy[i]).muls(dt)).val;
+                var sum = Value(T).init(y[i]);
+
+                inline for (0..self.k.len) |j| if (tab.b[j] != 0.0) {
+                    sum = sum.add(Value(T).init(self.k[j][i]).muls(tab.b[j] * dt));
+                };
+
+                y[i] = sum.val;
             }
         }
+    };
+}
+
+pub fn Rk1(comptime T: type) type {
+    return RungeKutta(T, rk1Tableau(primType(T)));
+}
+
+pub fn Rk4(comptime T: type) type {
+    return RungeKutta(T, rk4Tableau(primType(T)));
+}
+
+pub fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {
+    return .{
+        .a = .{
+            .{0.0},
+        },
+
+        .b = .{1.0},
+        .c = .{0.0},
+    };
+}
+
+pub fn rk4Tableau(comptime U: type) ButcherTableau(U, 4) {
+    return .{
+        .a = .{
+            .{ 0.0, 0.0, 0.0, 0.0 },
+            .{ 0.5, 0.0, 0.0, 0.0 },
+            .{ 0.0, 0.5, 0.0, 0.0 },
+            .{ 0.0, 0.0, 1.0, 0.0 },
+        },
+
+        .b = .{ 1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0 },
+        .c = .{ 0.0 / 1.0, 1.0 / 2.0, 1.0 / 2.0, 1.0 / 1.0 },
     };
 }

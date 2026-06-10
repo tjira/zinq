@@ -5,7 +5,7 @@ const Complex = std.math.Complex;
 const ScalarDual = @import("dual.zig").ScalarDual;
 
 pub fn Value(comptime T: type) type {
-    const U = if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
+    const U = primType(T);
 
     return struct {
         val: T,
@@ -166,4 +166,8 @@ pub fn isDual(comptime T: type) bool {
 
 pub fn isFloat(comptime T: type) bool {
     return @typeInfo(T) == .float;
+}
+
+pub fn primType(comptime T: type) type {
+    return if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
 }
