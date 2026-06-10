@@ -26,8 +26,12 @@ pub fn Integrator(comptime T: type) type {
             rk4: Rk4(T),
         };
 
-        pub fn init(method: Method) @This() {
-            return .{ .method = method };
+        pub fn init(comptime tag: std.meta.Tag(Method), nstate: usize, gpa: Allocator) !@This() {
+            inline for (std.meta.fields(Method)) |field| if (tag == @field(std.meta.Tag(Method), field.name)) {
+                return .{ .method = @unionInit(Method, field.name, try field.type.init(nstate, gpa)) };
+            };
+
+            @compileError("METHOD '" ++ @typeName(Method) ++ "' UNSUPPORTED");
         }
 
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {
@@ -39,7 +43,7 @@ pub fn Integrator(comptime T: type) type {
     };
 }
 
-pub fn RungeKutta(comptime T: type, comptime tab: anytype) type {
+fn RungeKutta(comptime T: type, comptime tab: anytype) type {
     const U = primType(T);
 
     return struct {
@@ -87,15 +91,11 @@ pub fn RungeKutta(comptime T: type, comptime tab: anytype) type {
     };
 }
 
-pub fn Rk1(comptime T: type) type {
+fn Rk1(comptime T: type) type {
     return RungeKutta(T, rk1Tableau(primType(T)));
 }
 
-pub fn Rk4(comptime T: type) type {
-    return RungeKutta(T, rk4Tableau(primType(T)));
-}
-
-pub fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {
+fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {
     return .{
         .a = .{
             .{0.0},
@@ -106,7 +106,11 @@ pub fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {
     };
 }
 
-pub fn rk4Tableau(comptime U: type) ButcherTableau(U, 4) {
+fn Rk4(comptime T: type) type {
+    return RungeKutta(T, rk4Tableau(primType(T)));
+}
+
+fn rk4Tableau(comptime U: type) ButcherTableau(U, 4) {
     return .{
         .a = .{
             .{ 0.0, 0.0, 0.0, 0.0 },

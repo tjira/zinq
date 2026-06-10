@@ -7,7 +7,6 @@ const Complex   = std.math.  Complex;
 
 // zig fmt: off
 const Ensemble       = @import("classical_dynamics.zig").      Ensemble;
-const Rk4            = @import("integrator.zig"        ).           Rk4;
 const GradientBuffer = @import("classical_dynamics.zig").GradientBuffer;
 const Integrator     = @import("integrator.zig"        ).    Integrator;
 const Matrix         = @import("tensor.zig"            ).        Matrix;
@@ -207,7 +206,7 @@ pub fn FewestSwitches(comptime T: type) type {
                 coef.ptr(i, istate).* = Complex(T).init(1, 0);
             }
 
-            const itg = Integrator(Complex(T)).init(.{ .rk4 = try Rk4(Complex(T)).init(nstate, gpa) });
+            const itg = try Integrator(Complex(T)).init(.rk4, nstate, gpa);
 
             return .{ .coef = coef, .ham = ham, .uhist = uhist, .sigma = sigma, .itg = itg };
         }

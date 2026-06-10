@@ -3,4 +3,4 @@
 - [x] Add the option to choose the FFTW plan type (estimate, measure, patient, exhaustive).
 - [x] Try to join the eval and evalDual methods into one method that can handle both cases.
 - [x] Implement better integrators for the FSSH coefficients.
-- [ ] Generalize the Runge-Kutta integrators.
+- [x] Generalize the Runge-Kutta integrators.
