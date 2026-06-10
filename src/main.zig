@@ -2,18 +2,14 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-// zig fmt: off
 pub const ClassicalDynamicsOptions = @import("classical_dynamics.zig").Options;
-pub const classical_dynamics_run   = @import("classical_dynamics.zig").    run;
-pub const QuantumDynamicsOptions   = @import("quantum_dynamics.zig"  ).Options;
-pub const quantum_dynamics_run     = @import("quantum_dynamics.zig"  ).    run;
-pub const SurfaceHopping           = @import("surface_hopping.zig").SurfaceHopping;
-pub const SurfaceHoppingOptions    = @import("surface_hopping.zig").Options;
-// zig fmt: on
+pub const classical_dynamics_run = @import("classical_dynamics.zig").run;
+pub const QuantumDynamicsOptions = @import("quantum_dynamics.zig").Options;
+pub const quantum_dynamics_run = @import("quantum_dynamics.zig").run;
+pub const SurfaceHopping = @import("surface_hopping.zig").SurfaceHopping;
+pub const SurfaceHoppingOptions = @import("surface_hopping.zig").Options;
 
-// zig fmt: off
 pub const PotentialOptions = @import("potential.zig").Options;
-// zig fmt: on
 
 const printf = @import("read_write.zig").printf;
 
@@ -21,10 +17,8 @@ const printf = @import("read_write.zig").printf;
 
 const Options = struct {
     zinq: []union(enum) {
-        // zig fmt: off
         classical_dynamics: ClassicalDynamicsOptions,
-        quantum_dynamics:     QuantumDynamicsOptions,
-        // zig fmt: on
+        quantum_dynamics: QuantumDynamicsOptions,
     },
 };
 
@@ -37,12 +31,16 @@ fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !std
 }
 
 fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
-    for ((try parse(Options, io, fname, arena)).value.zinq) |e| switch (e) {
-        // zig fmt: off
-        .classical_dynamics => |field| _ = try classical_dynamics_run(T, io, field, true, gpa, arena),
-        .quantum_dynamics =>   |field| _ = try quantum_dynamics_run  (T, io, field, true, gpa, arena),
-        // zig fmt: on
-    };
+    const inputs = (try parse(Options, io, fname, arena)).value.zinq;
+
+    for (inputs, 0..) |e, i| {
+        try printf(io, "/#{d}\n", .{i + 1});
+
+        switch (e) {
+            .classical_dynamics => |field| _ = try classical_dynamics_run(T, io, field, true, gpa, arena),
+            .quantum_dynamics => |field| _ = try quantum_dynamics_run(T, io, field, true, gpa, arena),
+        }
+    }
 }
 
 fn targets(args: []const []const u8) []const []const u8 {
@@ -55,6 +53,8 @@ pub fn main(init: std.process.Init) !void {
     try std.Io.File.stdout().writeStreamingAll(init.io, "ZINQ\n");
 
     for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |e| {
+        try printf(init.io, "\nRUNNING TARGET: {s}", .{e});
+
         try run(f64, init.io, e, init.gpa, init.arena.allocator());
     }
 

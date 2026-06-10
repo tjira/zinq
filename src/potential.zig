@@ -2,12 +2,10 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-// zig fmt: off
-const Matrix     = @import("tensor.zig")    .Matrix;
-const Vector     = @import("tensor.zig")    .Vector;
-const ScalarDual = @import("dual.zig"  ).ScalarDual;
-const Value      = @import("value.zig" )     .Value;
-// zig fmt: on
+const Matrix = @import("tensor.zig").Matrix;
+const Vector = @import("tensor.zig").Vector;
+const ScalarDual = @import("dual.zig").ScalarDual;
+const Value = @import("value.zig").Value;
 
 const eighSlice = @import("openblas.zig").eighSlice;
 
@@ -18,10 +16,8 @@ pub const Options = union(enum) {
         k: []const f64 = &.{1},
     },
     time_linear: struct {
-        // zig fmt: off
         a: f64 = 10,
-        g: f64 =  2,
-        // zig fmt: on
+        g: f64 = 2,
     },
     tully_1: struct {
         A: f64 = 0.010,
@@ -35,19 +31,15 @@ pub const Options = union(enum) {
 
 pub fn Potential(comptime T: type) type {
     return union(enum) {
-        // zig fmt: off
-        harmonic:    Harmonic  (T),
+        harmonic: Harmonic(T),
         time_linear: TimeLinear(T),
-        tully_1:     Tully1    (T),
-        // zig fmt: on
+        tully_1: Tully1(T),
 
         pub fn init(options: Options) @This() {
             return switch (options) {
-                // zig fmt: off
-                .harmonic    => |f| .{ .harmonic    = Harmonic  (T).init(f.k               ) },
-                .time_linear => |f| .{ .time_linear = TimeLinear(T).init(f.a, f.g          ) },
-                .tully_1     => |f| .{ .tully_1     = Tully1    (T).init(f.A, f.B, f.C, f.D) },
-                // zig fmt: on
+                .harmonic => |f| .{ .harmonic = Harmonic(T).init(f.k) },
+                .time_linear => |f| .{ .time_linear = TimeLinear(T).init(f.a, f.g) },
+                .tully_1 => |f| .{ .tully_1 = Tully1(T).init(f.A, f.B, f.C, f.D) },
             };
         }
 

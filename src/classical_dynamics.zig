@@ -2,63 +2,55 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-// zig fmt: off
-const Matrix                = @import("tensor.zig"         ).        Matrix;
-const Potential             = @import("potential.zig"      ).     Potential;
-const PotentialOptions      = @import("potential.zig"      ).       Options;
-const ScalarDual            = @import("dual.zig"           ).    ScalarDual;
-const SurfaceHopping        = @import("surface_hopping.zig").SurfaceHopping;
-const SurfaceHoppingOptions = @import("surface_hopping.zig").       Options;
-const Vector                = @import("tensor.zig"         ).        Vector;
-// zig fmt: on
+const Matrix = @import("tensor.zig").Matrix;
+const Potential = @import("potential.zig").Potential;
+const PotentialOptions = @import("potential.zig").Options;
+const ScalarDual = @import("dual.zig").ScalarDual;
+const SurfaceHopping = @import("surface_hopping.zig").SurfaceHopping;
+const SurfaceHoppingOptions = @import("surface_hopping.zig").Options;
+const Vector = @import("tensor.zig").Vector;
 
-// zig fmt: off
-const eighBatch         = @import("openblas.zig"  ).        eighBatch;
-const eighSlice         = @import("openblas.zig"  ).        eighSlice;
-const printf            = @import("read_write.zig").           printf;
-const writeMatrixHjoin  = @import("read_write.zig"). writeMatrixHjoin;
+const eighBatch = @import("openblas.zig").eighBatch;
+const eighSlice = @import("openblas.zig").eighSlice;
+const printf = @import("read_write.zig").printf;
+const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
-// zig fmt: on
 
 // OPTIONS =============================================================================================================
 
-// zig fmt: off
 const InitialConditions = struct {
     position: []const f64,
     momentum: []const f64,
-    gamma:    []const f64,
+    gamma: []const f64,
 
     state: u32 = 0,
-    seed:  u32 = 1,
+    seed: u32 = 1,
 };
-// zig fmt: on
 
-// zig fmt: off
 const Write = struct {
-    kinetic_energy:   ?[]const u8 = null,
-    momentum:         ?[]const u8 = null,
-    population:       ?[]const u8 = null,
-    position:         ?[]const u8 = null,
+    kinetic_energy: ?[]const u8 = null,
+    momentum: ?[]const u8 = null,
+    population: ?[]const u8 = null,
+    position: ?[]const u8 = null,
     potential_energy: ?[]const u8 = null,
-    total_energy:     ?[]const u8 = null,
+    total_energy: ?[]const u8 = null,
 };
-// zig fmt: on
 
-// zig fmt: off
 pub const Options = struct {
     initial_conditions: InitialConditions,
-    potential:           PotentialOptions,
-    time_step:                        f64,
-    iterations:                       u32,
-    mass:                             f64,
-    trajectories:                     u32,
+    potential: PotentialOptions,
 
-    surface_hopping: ?SurfaceHoppingOptions =  null,
-    write:           Write                  =   .{},
-    adiabatic:       bool                   =  true,
-    log_interval:    u32                    =     1,
+    time_step: f64,
+    iterations: u32,
+    mass: f64,
+    trajectories: u32,
+
+    surface_hopping: ?SurfaceHoppingOptions = null,
+    write: Write = .{},
+
+    adiabatic: bool = true,
+    log_interval: u32 = 1,
 };
-// zig fmt: on
 
 // ENSEMBLE ============================================================================================================
 
@@ -455,9 +447,7 @@ fn History(comptime T: type) type {
             self.index += 1;
         }
 
-        pub fn exportAndDeinit(self: *@This(), io: std.Io, dt: f64, write: Write, gpa: Allocator) !void {
-            defer self.deinit(gpa);
-
+        pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, write: Write) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
             // zig fmt: off
@@ -625,6 +615,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
     if (ctx.log) try printHeader(io, ctx.sim.csys.pot.ndim(), ctx.sim.csys.pot.nstate());
 
     var hist = try History(T).init(ndim, nstate, iters + 1, ctx.opt.write, gpa);
+    defer hist.deinit(gpa);
 
     var timer = std.Io.Timestamp.now(io, .real);
 
@@ -638,17 +629,16 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
         var obs = try Observables(T).init(ctx.sim.csys, time, ctx.opt.write, is_log_step, gpa);
+        defer obs.deinit(gpa);
 
         hist.append(obs);
 
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
         }
-
-        obs.deinit(gpa);
     }
 
-    try hist.exportAndDeinit(io, ctx.opt.time_step, ctx.opt.write, gpa);
+    try hist.exportWrite(io, ctx.opt.time_step, ctx.opt.write);
 
     const end_time = @as(T, @floatFromInt(ctx.opt.iterations)) * ctx.opt.time_step;
 
@@ -661,7 +651,6 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var timer = std.Io.Timestamp.now(io, .real);
 
     var sim = try init(T, opt, gpa);
-
     defer sim.deinit(gpa);
 
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});

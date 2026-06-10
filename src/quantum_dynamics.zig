@@ -2,78 +2,69 @@ const std = @import("std");
 
 const fftw = @cImport(@cInclude("fftw3.h"));
 
-// zig fmt: off
-const Allocator = std.mem .Allocator;
-const Complex   = std.math.  Complex;
-// zig fmt: on
+const Allocator = std.mem.Allocator;
+const Complex = std.math.Complex;
 
-// zig fmt: off
-const FftPlan          = @import("fftw.zig"     ).  FftPlan;
-const Matrix           = @import("tensor.zig"   ).   Matrix;
-const Potential        = @import("potential.zig").Potential;
-const PotentialOptions = @import("potential.zig").  Options;
-const Vector           = @import("tensor.zig"   ).   Vector;
-// zig fmt: on
+const FftPlan = @import("fftw.zig").FftPlan;
+const Matrix = @import("tensor.zig").Matrix;
+const Potential = @import("potential.zig").Potential;
+const PotentialOptions = @import("potential.zig").Options;
+const Vector = @import("tensor.zig").Vector;
 
-// zig fmt: off
-const eighBatch         = @import("openblas.zig"  )        .eighBatch;
-const printf            = @import("read_write.zig")           .printf;
-const writeMatrixHjoin  = @import("read_write.zig") .writeMatrixHjoin;
+const eighBatch = @import("openblas.zig").eighBatch;
+const printf = @import("read_write.zig").printf;
+const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
-// zig fmt: on
 
 // OPTIONS =============================================================================================================
 
-// zig fmt: off
 const InitialConditions = struct {
     position: []const f64,
     momentum: []const f64,
-    gamma:    []const f64,
+    gamma: []const f64,
 
-    state:     u32 =      0,
+    state: u32 = 0,
     adiabatic: bool = false,
 };
-// zig fmt: on
 
 const Imaginary = struct {
     nstate: u32 = 1,
 };
 
-// zig fmt: off
 const Write = struct {
-    kinetic_energy:   ?[]const u8 = null,
-    momentum:         ?[]const u8 = null,
-    norm:             ?[]const u8 = null,
-    population:       ?[]const u8 = null,
-    position:         ?[]const u8 = null,
+    kinetic_energy: ?[]const u8 = null,
+    momentum: ?[]const u8 = null,
+    norm: ?[]const u8 = null,
+    population: ?[]const u8 = null,
+    position: ?[]const u8 = null,
     potential_energy: ?[]const u8 = null,
-    total_energy:     ?[]const u8 = null,
-    wavefunction:     ?[]const u8 = null,
+    total_energy: ?[]const u8 = null,
+    wavefunction: ?[]const u8 = null,
 };
-// zig fmt: on
 
-// zig fmt: off
 pub const Options = struct {
     const FftOpt = struct {
         plan: enum { estimate, measure, patient, exhaustive } = .measure,
     };
     const GridOpt = struct {
         bounds: []const [2]f64,
-        npoint:            u32,
+        npoint: u32,
     };
 
-    grid:                         GridOpt,
+    grid: GridOpt,
     initial_conditions: InitialConditions,
-    potential:           PotentialOptions,
-    time_step:                        f64,
-    iterations:                       u32,
-    mass:                             f64,
+    potential: PotentialOptions,
 
-    fft:          FftOpt    =   .{},
-    imaginary:   ?Imaginary =  null,
-    write:        Write     =   .{},
-    adiabatic:    bool      = false,
-    log_interval: u32       =     1,
+    time_step: f64,
+    iterations: u32,
+    mass: f64,
+
+    fft: FftOpt = .{},
+    imaginary: ?Imaginary = null,
+    write: Write = .{},
+
+    adiabatic: bool = false,
+    log_interval: u32 = 1,
 };
 // zig fmt: on
 
@@ -157,10 +148,8 @@ fn Wavefunction(comptime T: type) type {
             }
 
             for (0..nstate) |i| {
-                // zig fmt: off
-                ffft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape, -1, plan_mode);
-                ifft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape,  1, plan_mode);
-                // zig fmt: on
+                ffft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape, 0 - 1, plan_mode);
+                ifft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape, 0 + 1, plan_mode);
             }
 
             gpa.free(shape);
@@ -341,6 +330,7 @@ fn Wavefunction(comptime T: type) type {
 
         pub fn toAdia(self: *@This(), ham: Hamiltonian(T), gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), self.W.nrow());
+            defer gpa.free(temp);
 
             for (0..self.W.ncol()) |j| {
                 for (0..self.W.nrow()) |i| {
@@ -359,12 +349,11 @@ fn Wavefunction(comptime T: type) type {
                     self.W.ptr(i, j).* = sum;
                 }
             }
-
-            gpa.free(temp);
         }
 
         pub fn toDia(self: *@This(), ham: Hamiltonian(T), gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), self.W.nrow());
+            defer gpa.free(temp);
 
             for (0..self.W.ncol()) |j| {
                 for (0..self.W.nrow()) |i| {
@@ -383,8 +372,6 @@ fn Wavefunction(comptime T: type) type {
                     self.W.ptr(i, j).* = sum;
                 }
             }
-
-            gpa.free(temp);
         }
     };
 }
@@ -686,9 +673,7 @@ fn History(comptime T: type) type {
             self.index += 1;
         }
 
-        pub fn exportAndDeinit(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write, gpa: Allocator) !void {
-            defer self.deinit(gpa);
-
+        pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
             // zig fmt: off
@@ -852,12 +837,10 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     const dt = if (opt.imaginary) |_| Complex(T).init(0, -opt.time_step) else Complex(T).init(opt.time_step, 0);
 
     const plan_mode = switch (opt.fft.plan) {
-        // zig fmt: off
-        .estimate   => fftw  .FFTW_ESTIMATE,
-        .measure    => fftw   .FFTW_MEASURE,
-        .patient    => fftw   .FFTW_PATIENT,
+        .estimate => fftw.FFTW_ESTIMATE,
+        .measure => fftw.FFTW_MEASURE,
+        .patient => fftw.FFTW_PATIENT,
         .exhaustive => fftw.FFTW_EXHAUSTIVE,
-        // zig fmt: on
     };
 
     // zig fmt: off
@@ -884,6 +867,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
     ctx.sim.qsys.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.qsys.grid);
 
     var hist = try History(T).init(ndim, nstate, ctx.opt.grid.npoint, iters + 1, ctx.opt.write, gpa);
+    defer hist.deinit(gpa);
 
     if (ctx.opt.initial_conditions.adiabatic) {
         try ctx.sim.qsys.wfn.toDia(ctx.sim.qsys.ham, gpa);
@@ -921,7 +905,6 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
         }
 
         var obs = try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
-
         defer obs.deinit(gpa);
 
         if (ctx.opt.write.wavefunction != null and ctx.opt.adiabatic) {
@@ -939,7 +922,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
         }
     }
 
-    try hist.exportAndDeinit(io, ctx.opt.time_step, ctx.sim.qsys.grid, ctx.opt.write, gpa);
+    try hist.exportWrite(io, ctx.opt.time_step, ctx.sim.qsys.grid, ctx.opt.write);
 
     return try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, true, arena);
 }
@@ -952,7 +935,6 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var timer = std.Io.Timestamp.now(io, .real);
 
     var sim = try init(T, opt, gpa);
-
     defer sim.deinit(gpa);
 
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});

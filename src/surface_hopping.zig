@@ -1,32 +1,27 @@
 const std = @import("std");
 
-// zig fmt: off
-const Allocator = std.mem .Allocator;
-const Complex   = std.math.  Complex;
-// zig fmt: on
+const Allocator = std.mem.Allocator;
+const Complex = std.math.Complex;
 
-// zig fmt: off
-const Ensemble       = @import("classical_dynamics.zig").      Ensemble;
+const Ensemble = @import("classical_dynamics.zig").Ensemble;
 const GradientBuffer = @import("classical_dynamics.zig").GradientBuffer;
-const Integrator     = @import("integrator.zig"        ).    Integrator;
-const Matrix         = @import("tensor.zig"            ).        Matrix;
-const Potential      = @import("potential.zig"         ).     Potential;
-const Vector         = @import("tensor.zig"            ).        Vector;
-// zig fmt: on
+const Integrator = @import("integrator.zig").Integrator;
+const Matrix = @import("tensor.zig").Matrix;
+const Potential = @import("potential.zig").Potential;
+const Vector = @import("tensor.zig").Vector;
 
 // OPTIONS =============================================================================================================
 
 pub const Options = union(enum) {
-    // zig fmt: off
     fewest_switches: FewestSwitchesOptions,
-    landau_zener:       LandauZenerOptions,
-    // zig fmt: on
+    landau_zener: LandauZenerOptions,
 };
 
 pub const FewestSwitchesOptions = struct {
-    // zig fmt: off
-    seed: u32 = 1, nstep: u32 = 10, integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
-    // zig fmt: on
+    integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
+
+    seed: u32 = 1,
+    nstep: u32 = 10,
 };
 
 pub const LandauZenerOptions = struct {
@@ -42,10 +37,8 @@ pub fn SurfaceHopping(comptime T: type) type {
         // zig fmt: on
 
         pub const Method = union(enum) {
-            // zig fmt: off
             fewest_switches: FewestSwitches(T),
-            landau_zener:       LandauZener(T),
-            // zig fmt: on
+            landau_zener: LandauZener(T),
         };
 
         pub fn init(options: Options, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
@@ -56,10 +49,8 @@ pub fn SurfaceHopping(comptime T: type) type {
             const targets = try gpa.alloc(usize, ntraj);
 
             const nstep = switch (options) {
-                // zig fmt: off
                 .fewest_switches => |field| field.nstep,
-                inline else      =>                   1,
-                // zig fmt: on
+                inline else => 1,
             };
 
             // zig fmt: off
@@ -358,9 +349,7 @@ pub fn FewestSwitches(comptime T: type) type {
 
 pub fn LandauZener(comptime T: type) type {
     return struct {
-        // zig fmt: off
         history: [3]Matrix(T),
-        // zig fmt: on
 
         pub fn init(_: anytype, nstate: usize, ntraj: usize, _: usize, adia: bool, gpa: Allocator) !@This() {
             var history: [3]Matrix(T) = undefined;
