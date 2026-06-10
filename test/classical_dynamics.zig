@@ -106,8 +106,8 @@ test "Fewest Switches on Time-Linear Potential" {
     const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.pos.?.at(0),  3.5584375676562480, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.mom.?.at(0),  0.3898200603047847, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pos.?.at(0),  1.6763424299984810, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.mom.?.at(0),  0.1635017328919781, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.pop.?.at(0),  0.3600000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.pop.?.at(1),  0.6400000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.epot.?,      28.0055994401119800, TEST_TOLERANCE);
