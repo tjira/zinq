@@ -5,7 +5,7 @@ const zinq = @import("zinq");
 
 const TEST_TOLERANCE = 1e-12;
 
-test "Landau--Zener on Tully's First Potential" {
+test "Adiabatic Landau--Zener on Tully's First Potential" {
     const opt = zinq.ClassicalDynamicsOptions{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .tully_1 = .{} },
@@ -33,7 +33,35 @@ test "Landau--Zener on Tully's First Potential" {
     arena.deinit();
 }
 
-test "Landau--Zener on Time-Linear Potential" {
+test "Diabatic Landau--Zener on Tully's First Potential" {
+    const opt = zinq.ClassicalDynamicsOptions{
+        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 1 },
+        .potential = .{ .tully_1 = .{} },
+        .surface_hopping = .{ .landau_zener = .{} },
+        .mass = 2000,
+        .trajectories = 100,
+        .iterations = 3000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+
+    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.pos.?.at(0), 13.6655776269540750, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.mom.?.at(0), 16.3260684484533800, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(0),  0.4700000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(1),  0.5300000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.epot.?,      -0.0005999997545603, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.ekin.?,       0.0672098969720091, TEST_TOLERANCE);
+    // zig fmt: on
+
+    arena.deinit();
+}
+
+test "Adiabatic Landau--Zener on Time-Linear Potential" {
     const opt = zinq.ClassicalDynamicsOptions{
         .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .time_linear = .{} },
@@ -61,7 +89,35 @@ test "Landau--Zener on Time-Linear Potential" {
     arena.deinit();
 }
 
-test "Fewest Switches on Tully's First Potential" {
+test "Diabatic Landau--Zener on Time-Linear Potential" {
+    const opt = zinq.ClassicalDynamicsOptions{
+        .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
+        .potential = .{ .time_linear = .{} },
+        .surface_hopping = .{ .landau_zener = .{} },
+        .mass = 1,
+        .trajectories = 100,
+        .iterations = 2000,
+        .time_step = 0.01,
+        .adiabatic = false,
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+
+    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.pos.?.at(0),  0.1908475272076625, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.mom.?.at(0),  0.0091217734431337, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(0),  0.7200000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(1),  0.2800000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.epot.?,      44.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.ekin.?,       0.4526169090816229, TEST_TOLERANCE);
+    // zig fmt: on
+
+    arena.deinit();
+}
+
+test "Adiabatic Fewest Switches on Tully's First Potential" {
     const opt = zinq.ClassicalDynamicsOptions{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .tully_1 = .{} },
@@ -89,7 +145,35 @@ test "Fewest Switches on Tully's First Potential" {
     arena.deinit();
 }
 
-test "Fewest Switches on Time-Linear Potential" {
+test "Diabatic Fewest Switches on Tully's First Potential" {
+    const opt = zinq.ClassicalDynamicsOptions{
+        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 1 },
+        .potential = .{ .tully_1 = .{} },
+        .surface_hopping = .{ .fewest_switches = .{} },
+        .mass = 2000,
+        .trajectories = 100,
+        .iterations = 3000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+
+    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.pos.?.at(0), 13.7651613977406570, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.mom.?.at(0), 16.4323403120651750, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(0),  0.6700000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(1),  0.3300000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.epot.?,       0.0034000002314440, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.ekin.?,       0.0680141209505341, TEST_TOLERANCE);
+    // zig fmt: on
+
+    arena.deinit();
+}
+
+test "Adiabatic Fewest Switches on Time-Linear Potential" {
     const opt = zinq.ClassicalDynamicsOptions{
         .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .time_linear = .{} },
@@ -112,6 +196,34 @@ test "Fewest Switches on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.pop.?.at(1),  0.6400000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.epot.?,      28.0055994401119800, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.ekin.?,       2.4083820506614500, TEST_TOLERANCE);
+    // zig fmt: on
+
+    arena.deinit();
+}
+
+test "Diabatic Fewest Switches on Time-Linear Potential" {
+    const opt = zinq.ClassicalDynamicsOptions{
+        .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
+        .potential = .{ .time_linear = .{} },
+        .surface_hopping = .{ .fewest_switches = .{} },
+        .mass = 1,
+        .trajectories = 100,
+        .iterations = 2000,
+        .time_step = 0.01,
+        .adiabatic = false,
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+
+    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.pos.?.at(0),  0.1908475272076625, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.mom.?.at(0),  0.0091217734431337, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(0),  0.7800000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.pop.?.at(1),  0.2200000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.epot.?,      56.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.ekin.?,       0.4526169090816229, TEST_TOLERANCE);
     // zig fmt: on
 
     arena.deinit();

@@ -5,7 +5,7 @@ const zinq = @import("zinq");
 
 const TEST_TOLERANCE = 1e-12;
 
-test "RTP on Tully's First Potential" {
+test "Adiabatic RTP on Tully's First Potential" {
     const opt = zinq.QuantumDynamicsOptions{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
         .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 1, .gamma = &.{2}, .adiabatic = true },
@@ -34,7 +34,36 @@ test "RTP on Tully's First Potential" {
     arena.deinit();
 }
 
-test "RTP on Time-Linear Potential" {
+test "Diabatic RTP on Tully's First Potential" {
+    const opt = zinq.QuantumDynamicsOptions{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 1, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .tully_1 = .{} },
+        .fft = .{ .plan = .estimate },
+        .mass = 2000,
+        .iterations = 3000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+
+    const output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.items[0].pos.?.at(0), 13.4112458739984270, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].mom.?.at(0), 16.0101963477169900, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].pop.?.at(0),  0.5896145961498663, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].pop.?.at(1),  0.4103854038505511, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].epot.?,       0.0017922958069610, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].ekin.?,       0.0647077026432969, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].norm.?,       1.0000000000004168, TEST_TOLERANCE);
+    // zig fmt: on
+
+    arena.deinit();
+}
+
+test "Adiabatic RTP on Time-Linear Potential" {
     const opt = zinq.QuantumDynamicsOptions{
         .grid = .{ .bounds = &.{.{ -16, 16 }}, .npoint = 256 },
         .initial_conditions = .{ .momentum = &.{0}, .position = &.{0}, .state = 1, .gamma = &.{2}, .adiabatic = true },
@@ -58,6 +87,35 @@ test "RTP on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.items[0].epot.?,      43.0869894832452600, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.items[0].ekin.?,       0.5000000000000960, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.items[0].norm.?,       1.0000000000002331, TEST_TOLERANCE);
+    // zig fmt: on
+
+    arena.deinit();
+}
+
+test "Diabatic RTP on Time-Linear Potential" {
+    const opt = zinq.QuantumDynamicsOptions{
+        .grid = .{ .bounds = &.{.{ -16, 16 }}, .npoint = 256 },
+        .initial_conditions = .{ .momentum = &.{0}, .position = &.{0}, .state = 1, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .time_linear = .{} },
+        .fft = .{ .plan = .estimate },
+        .mass = 1,
+        .iterations = 2000,
+        .time_step = 0.01,
+        .adiabatic = false,
+    };
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+
+    const output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.items[0].pos.?.at(0), -0.1600504125015565, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].mom.?.at(0), -0.0000000000000480, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].pop.?.at(0),  0.7327195219719144, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].pop.?.at(1),  0.2672804780283119, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].epot.?,      44.8273168241485200, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].ekin.?,       0.5000000000000941, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.items[0].norm.?,       1.0000000000002260, TEST_TOLERANCE);
     // zig fmt: on
 
     arena.deinit();
