@@ -84,6 +84,7 @@ fn Grid(comptime T: type) type {
             errdefer r.deinit(gpa);
 
             var k = try Matrix(T).init(ncol, bounds.len, gpa);
+            errdefer k.deinit(gpa);
 
             var dr: T = 1;
 
@@ -133,18 +134,12 @@ fn Wavefunction(comptime T: type) type {
     return struct {
         W: Matrix(Complex(T)),
 
-        ffft: []FftPlan(Complex(T)),
-        ifft: []FftPlan(Complex(T)),
+        ffft: FftPlan(Complex(T)),
+        ifft: FftPlan(Complex(T)),
 
         pub fn init(ndim: usize, nstate: usize, npoint: usize, plan_mode: u32, gpa: Allocator) !@This() {
             var W = try Matrix(Complex(T)).init(nstate, std.math.pow(usize, npoint, ndim), gpa);
             errdefer W.deinit(gpa);
-
-            var ffft = try gpa.alloc(FftPlan(Complex(T)), nstate);
-            errdefer gpa.free(ffft);
-
-            var ifft = try gpa.alloc(FftPlan(Complex(T)), nstate);
-            errdefer gpa.free(ifft);
 
             const shape = try gpa.alloc(i32, ndim);
             defer gpa.free(shape);
@@ -153,10 +148,11 @@ fn Wavefunction(comptime T: type) type {
                 e.* = @as(i32, @intCast(npoint));
             }
 
-            for (0..nstate) |i| {
-                ffft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape, 0 - 1, plan_mode);
-                ifft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape, 0 + 1, plan_mode);
-            }
+            const ffft = try FftPlan(Complex(T)).init(W.rowSlice(0), shape, -1, plan_mode);
+            errdefer ffft.deinit();
+
+            const ifft = try FftPlan(Complex(T)).init(W.rowSlice(0), shape, 1, plan_mode);
+            errdefer ifft.deinit();
 
             return .{ .W = W, .ffft = ffft, .ifft = ifft };
         }
@@ -164,28 +160,20 @@ fn Wavefunction(comptime T: type) type {
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.W.deinit(gpa);
 
-            for (0..self.ffft.len) |i| {
-                self.ffft[i].deinit();
-                self.ifft[i].deinit();
-            }
-
-            gpa.free(self.ffft);
-            gpa.free(self.ifft);
+            self.ffft.deinit();
+            self.ifft.deinit();
         }
 
         pub fn clone(self: @This(), gpa: Allocator) !@This() {
-            var ffft = try gpa.alloc(FftPlan(Complex(T)), self.ffft.len);
-            errdefer gpa.free(ffft);
+            const ffft = try self.ffft.clone();
+            errdefer ffft.deinit();
 
-            var ifft = try gpa.alloc(FftPlan(Complex(T)), self.ifft.len);
-            errdefer gpa.free(ifft);
-
-            for (0..self.ffft.len) |i| {
-                ffft[i] = try self.ffft[i].clone();
-                ifft[i] = try self.ifft[i].clone();
-            }
+            const ifft = try self.ifft.clone();
+            errdefer ifft.deinit();
 
             const W = try self.W.clone(gpa);
+            errdefer W.deinit(gpa);
+
             return .{ .W = W, .ffft = ffft, .ifft = ifft };
         }
 
@@ -216,7 +204,7 @@ fn Wavefunction(comptime T: type) type {
             for (0..self.W.nrow()) |i| {
                 const slice = self.W.rowSlice(i);
 
-                if (comptime sign == -1) self.ffft[i].execute(slice) else self.ifft[i].execute(slice);
+                if (comptime sign == -1) self.ffft.execute(slice) else self.ifft.execute(slice);
             }
         }
 
@@ -454,6 +442,7 @@ fn Propagator(comptime T: type) type {
             errdefer R.deinit(gpa);
 
             var K = try Vector(Complex(T)).initZero(ham.K.length(), gpa);
+            errdefer K.deinit(gpa);
 
             for (ham.K.data, 0..) |e, i| {
                 K.data[i] = std.math.complex.exp(Complex(T).init(0, -e).mul(dt));
@@ -544,6 +533,7 @@ fn Observables(comptime T: type) type {
 
         pub fn init(qsys: *QuantumSystem(T), write: Write, adia: bool, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
+            errdefer obs.deinit(gpa);
 
             var calc = .{
                 .pos = log or write.position != null,
@@ -877,6 +867,7 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     errdefer ham.deinit(gpa);
 
     const prop = try Propagator(T).init(ham, dt, gpa);
+    errdefer prop.deinit(gpa);
 
     return .{ .qsys = .{ .grid = grid, .ham = ham, .wfn = wfn, .pot = pot }, .prop = prop, .orthw = .empty };
 }
@@ -969,7 +960,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i, .log = log }, gpa, arena);
 
         if (i < if (opt.imaginary) |imag| imag.nstate else 0) {
-            try sim.orthw.append(gpa, try sim.qsys.wfn.clone(gpa));
+            var cloned = try sim.qsys.wfn.clone(gpa);
+            errdefer cloned.deinit(gpa);
+
+            try sim.orthw.append(gpa, cloned);
         }
 
         try output.append(arena, obs);

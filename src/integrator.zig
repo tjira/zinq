@@ -67,6 +67,7 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
             }
 
             self.tmp = try gpa.alloc(T, nstate);
+            errdefer gpa.free(self.tmp);
 
             return self;
         }

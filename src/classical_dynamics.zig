@@ -76,6 +76,7 @@ pub fn Ensemble(comptime T: type) type {
             errdefer a.deinit(gpa);
 
             const s = try Vector(usize).init(ntraj, gpa);
+            errdefer s.deinit(gpa);
 
             return .{ .r = r, .p = p, .a = a, .s = s, .mass = mass, .nstate = nstate };
         }
@@ -143,11 +144,12 @@ pub fn Ensemble(comptime T: type) type {
             var sum: T = 0;
 
             const V_slice = try gpa.alloc(T, self.nstate * self.nstate);
-            const U_slice = try gpa.alloc(T, self.nstate * self.nstate);
-            const W_slice = try gpa.alloc(T, self.nstate);
-
             defer gpa.free(V_slice);
+
+            const U_slice = try gpa.alloc(T, self.nstate * self.nstate);
             defer gpa.free(U_slice);
+
+            const W_slice = try gpa.alloc(T, self.nstate);
             defer gpa.free(W_slice);
 
             if (adiabatic) for (0..self.r.nrow()) |i| {
@@ -223,6 +225,7 @@ pub fn GradientBuffer(comptime T: type) type {
             errdefer U.deinit(gpa);
 
             const grad_V = try Matrix(T).init(ntraj, ndim * nstate * nstate, gpa);
+            errdefer grad_V.deinit(gpa);
 
             return .{ .r_dual = r_dual, .V_dual = V_dual, .V = V, .W = W, .U = U, .grad_V = grad_V };
         }
@@ -342,6 +345,7 @@ fn Observables(comptime T: type) type {
 
         pub fn init(csys: ClassicalSystem(T), time: T, write: Write, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
+            errdefer obs.deinit(gpa);
 
             var calc = .{
                 .pos = log or write.position != null,
@@ -606,7 +610,8 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     var gb = try GradientBuffer(T).init(pot.ndim(), nstate, ntraj, gpa);
     errdefer gb.deinit(gpa);
 
-    const prop = Propagator(T).init(opt.time_step, opt.adiabatic, sh);
+    var prop = Propagator(T).init(opt.time_step, opt.adiabatic, sh);
+    errdefer prop.deinit(gpa);
 
     ensemble.setGaussian(opt.initial_conditions);
 

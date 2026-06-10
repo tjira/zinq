@@ -109,7 +109,7 @@ pub fn writeMatrixLspaceComplex(comptime T: type, io: std.Io, fname: []const u8,
 
     try writer.interface.print("{d} {d}\n", .{ A.nrow(), 2 * A.ncol() + 1 });
 
-    const dt: T = if (A.nrow() > 1) (end - start) / @as(T, @floatFromInt(A.nrow() - 1)) else 0;
+    const dt: T = if (A.nrow() > 1) (end - start) / @as(T, @floatFromInt(A.nrow() - 1)) else std.mem.zeroes(T);
 
     for (0..A.nrow()) |i| {
         try writer.interface.print("{d:20.14} ", .{start + dt * @as(T, @floatFromInt(i))});

@@ -75,6 +75,7 @@ pub fn SurfaceHopping(comptime T: type) type {
             };
 
             const probs = try Matrix(T).init(ntraj, nstate, gpa);
+            errdefer probs.deinit(gpa);
 
             return .{ .rng = rng, .probs = probs, .method = method, .nstep = nstep, .targets = targets, .adia = adia };
         }
@@ -223,6 +224,7 @@ pub fn FewestSwitches(comptime T: type) type {
             };
 
             const itg = try Integrator(Complex(T)).init(itg_tag, nstate, gpa);
+            errdefer itg.deinit(gpa);
 
             return .{ .coef = coef, .ham = ham, .uhist = uhist, .sigma = sigma, .itg = itg };
         }
@@ -385,6 +387,7 @@ pub fn LandauZener(comptime T: type) type {
             errdefer history[1].deinit(gpa);
 
             history[2] = try Matrix(T).init(ntraj, cols, gpa);
+            errdefer history[2].deinit(gpa);
 
             history[0].fill(std.math.nan(T));
             history[1].fill(std.math.nan(T));
