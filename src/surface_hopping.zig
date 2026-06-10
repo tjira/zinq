@@ -230,7 +230,7 @@ pub fn FewestSwitches(comptime T: type) type {
 
                 const int_ctx = .{ .ham = self.ham.rowSlice(i), .sigma = row_sigma, .nstate = ensemble.nstate };
 
-                self.itg.step(self.coef.rowSlice(i), dt, int_ctx, coefDer);
+                self.itg.step(self.coef.rowSlice(i), dt, int_ctx, coefDerAdia);
 
                 const rho_cc = self.coef.at(i, c).squaredMagnitude();
 
@@ -249,12 +249,29 @@ pub fn FewestSwitches(comptime T: type) type {
             }
         }
 
-        pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
-            _ = nstep;
-            _ = probs;
-            _ = ensemble;
-            _ = dt;
-            _ = self;
+        pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
+            for (0..ensemble.s.length()) |i| {
+                const c = ensemble.s.at(i);
+
+                const int_ctx = .{ .ham = self.ham.rowSlice(i), .nstate = ensemble.nstate };
+
+                self.itg.step(self.coef.rowSlice(i), dt, int_ctx, coefDerDia);
+
+                const rho_cc = self.coef.at(i, c).squaredMagnitude();
+
+                if (rho_cc < 1e-14) continue;
+
+                for (0..ensemble.nstate) |j| {
+                    if (c == j) continue;
+
+                    const coef_c = self.coef.at(i, c);
+                    const coef_j = self.coef.at(i, j);
+
+                    const flux = self.ham.at(i, c * ensemble.nstate + j) * coef_c.mul(coef_j.conjugate()).im;
+
+                    probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
+                }
+            }
         }
 
         pub fn update(self: *@This(), H: Matrix(T), U: Matrix(T)) void {
@@ -285,7 +302,7 @@ pub fn FewestSwitches(comptime T: type) type {
             }
         }
 
-        fn coefDer(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
+        fn coefDerAdia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
             const nstate = ctx.nstate;
 
             for (0..nstate) |i| {
@@ -298,6 +315,22 @@ pub fn FewestSwitches(comptime T: type) type {
                 }
 
                 dy[i] = Complex(T).init(0, -ctx.ham[i]).mul(y[i]).sub(sum_sigma);
+            }
+        }
+
+        fn coefDerDia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
+            const nstate = ctx.nstate;
+
+            for (0..nstate) |i| {
+                var sum = Complex(T).init(0, 0);
+
+                for (0..nstate) |j| {
+                    const term = y[j].mul(Complex(T).init(0, -ctx.ham[i * nstate + j]));
+
+                    sum = sum.add(term);
+                }
+
+                dy[i] = sum;
             }
         }
     };
