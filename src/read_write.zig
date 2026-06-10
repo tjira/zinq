@@ -11,6 +11,8 @@ pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
 }
 
 pub fn writeMatrixHjoin(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), B: Matrix(T)) !void {
+    std.debug.assert(A.nrow() == B.nrow());
+
     if (@typeInfo(T) == .@"struct") {
         return try writeMatrixHjoinComplex(T, io, fname, A, B);
     }
@@ -22,9 +24,8 @@ pub fn writeMatrixHjoinReal(comptime T: type, io: std.Io, fname: []const u8, A: 
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
 
-    // zig fmt: off
-    var buffer: [65536]u8 = undefined; var writer = file.writer(io, &buffer);
-    // zig fmt: on
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
 
     try writer.interface.print("{d} {d}\n", .{ A.nrow(), A.ncol() + B.ncol() });
 
@@ -47,9 +48,8 @@ pub fn writeMatrixHjoinComplex(comptime T: type, io: std.Io, fname: []const u8, 
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
 
-    // zig fmt: off
-    var buffer: [65536]u8 = undefined; var writer = file.writer(io, &buffer);
-    // zig fmt: on
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
 
     try writer.interface.print("{d} {d}\n", .{ A.nrow(), 2 * A.ncol() + 2 * B.ncol() });
 
@@ -80,9 +80,8 @@ pub fn writeMatrixLspaceReal(comptime T: type, io: std.Io, fname: []const u8, A:
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
 
-    // zig fmt: off
-    var buffer: [65536]u8 = undefined; var writer = file.writer(io, &buffer);
-    // zig fmt: on
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
 
     try writer.interface.print("{d} {d}\n", .{ A.nrow(), A.ncol() + 1 });
 
@@ -105,9 +104,8 @@ pub fn writeMatrixLspaceComplex(comptime T: type, io: std.Io, fname: []const u8,
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
 
-    // zig fmt: off
-    var buffer: [65536]u8 = undefined; var writer = file.writer(io, &buffer);
-    // zig fmt: on
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
 
     try writer.interface.print("{d} {d}\n", .{ A.nrow(), 2 * A.ncol() + 1 });
 
@@ -138,9 +136,8 @@ pub fn writeMatrixReal(comptime T: type, io: std.Io, fname: []const u8, A: Matri
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
 
-    // zig fmt: off
-    var buffer: [65536]u8 = undefined; var writer = file.writer(io, &buffer);
-    // zig fmt: on
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
 
     try writer.interface.print("{d} {d}\n", .{ A.nrow(), A.ncol() });
 
@@ -157,9 +154,8 @@ pub fn writeMatrixComplex(comptime T: type, io: std.Io, fname: []const u8, A: Ma
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
 
-    // zig fmt: off
-    var buffer: [65536]u8 = undefined; var writer = file.writer(io, &buffer);
-    // zig fmt: on
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
 
     try writer.interface.print("{d} {d}\n", .{ A.nrow(), 2 * A.ncol() });
 

@@ -32,9 +32,13 @@ pub const LandauZenerOptions = struct {
 
 pub fn SurfaceHopping(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        rng: std.Random.DefaultPrng, probs: Matrix(T), method: Method, nstep: usize, targets: []usize, adia: bool,
-        // zig fmt: on
+        rng: std.Random.DefaultPrng,
+        probs: Matrix(T),
+        method: Method,
+
+        nstep: usize,
+        targets: []usize,
+        adia: bool,
 
         pub const Method = union(enum) {
             fewest_switches: FewestSwitches(T),
@@ -53,10 +57,8 @@ pub fn SurfaceHopping(comptime T: type) type {
                 inline else => 1,
             };
 
-            // zig fmt: off
-            var split_mix = std.Random.SplitMix64 .init(seed            );
-            const rng     = std.Random.DefaultPrng.init(split_mix.next());
-            // zig fmt: on
+            var split_mix = std.Random.SplitMix64.init(seed);
+            const rng = std.Random.DefaultPrng.init(split_mix.next());
 
             const method: Method = switch (options) {
                 .fewest_switches => |opt| .{
@@ -146,9 +148,8 @@ pub fn SurfaceHopping(comptime T: type) type {
             for (0..ensemble.s.length()) |i| {
                 if (self.targets[i] != ensemble.s.at(i)) continue;
 
-                // zig fmt: off
-                var sum: T = 0; var accum: T = 0;
-                // zig fmt: on
+                var sum: T = 0;
+                var accum: T = 0;
 
                 for (0..self.probs.ncol()) |j| {
                     sum += self.probs.at(i, j);
@@ -164,9 +165,8 @@ pub fn SurfaceHopping(comptime T: type) type {
                     accum += self.probs.at(i, j);
 
                     if (rv < accum) {
-                        // zig fmt: off
-                        self.targets[i] = j; break;
-                        // zig fmt: on
+                        self.targets[i] = j;
+                        break;
                     }
                 }
             }
@@ -178,9 +178,11 @@ pub fn SurfaceHopping(comptime T: type) type {
 
 pub fn FewestSwitches(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        coef: Matrix(Complex(T)), itg: Integrator(Complex(T)), ham: Matrix(T), sigma: Matrix(T), uhist: [2]Matrix(T),
-        // zig fmt: on
+        coef: Matrix(Complex(T)),
+        itg: Integrator(Complex(T)),
+        ham: Matrix(T),
+        sigma: Matrix(T),
+        uhist: [2]Matrix(T),
 
         pub fn init(opt: anytype, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
             const cols = if (adia) nstate else nstate * nstate;
@@ -195,10 +197,8 @@ pub fn FewestSwitches(comptime T: type) type {
             uhist[0].fill(std.math.nan(T));
             uhist[1].fill(std.math.nan(T));
 
-            // zig fmt: off
-            var   coef  = try Matrix(Complex(T)).init(ntraj, nstate,          gpa);
-            const sigma = try Matrix(T         ).init(ntraj, nstate * nstate, gpa);
-            // zig fmt: on
+            var coef = try Matrix(Complex(T)).init(ntraj, nstate, gpa);
+            const sigma = try Matrix(T).init(ntraj, nstate * nstate, gpa);
 
             coef.zero();
 
@@ -216,9 +216,9 @@ pub fn FewestSwitches(comptime T: type) type {
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            // zig fmt: off
-            self.coef.deinit(gpa); self.ham.deinit(gpa); self.sigma.deinit(gpa);
-            // zig fmt: on
+            self.coef.deinit(gpa);
+            self.ham.deinit(gpa);
+            self.sigma.deinit(gpa);
 
             self.uhist[0].deinit(gpa);
             self.uhist[1].deinit(gpa);
@@ -228,6 +228,11 @@ pub fn FewestSwitches(comptime T: type) type {
 
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
             if (std.math.isNan(self.uhist[0].at(0, 0))) return;
+
+            std.debug.assert(probs.nrow() == ensemble.s.length());
+            std.debug.assert(probs.ncol() == ensemble.nstate);
+            std.debug.assert(self.sigma.nrow() == ensemble.s.length());
+            std.debug.assert(self.sigma.ncol() == ensemble.nstate * ensemble.nstate);
 
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
@@ -261,6 +266,11 @@ pub fn FewestSwitches(comptime T: type) type {
         }
 
         pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
+            std.debug.assert(probs.nrow() == ensemble.s.length());
+            std.debug.assert(probs.ncol() == ensemble.nstate);
+            std.debug.assert(self.ham.nrow() == ensemble.s.length());
+            std.debug.assert(self.ham.ncol() == ensemble.nstate * ensemble.nstate);
+
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
 
@@ -376,6 +386,11 @@ pub fn LandauZener(comptime T: type) type {
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
             if (std.math.isNan(self.history[0].at(0, 0))) return;
 
+            std.debug.assert(probs.nrow() == ensemble.s.length());
+            std.debug.assert(probs.ncol() == ensemble.nstate);
+            std.debug.assert(self.history[0].nrow() == ensemble.s.length());
+            std.debug.assert(self.history[0].ncol() == ensemble.nstate);
+
             for (0..self.history[0].nrow()) |i| {
                 const c = ensemble.s.at(i);
 
@@ -393,9 +408,10 @@ pub fn LandauZener(comptime T: type) type {
                         const d2z = (dz2 - dz1) / dt;
 
                         if (d2z > 1e-14) {
-                            // zig fmt: off
-                            const b = (z2 - z0) / (2 * dt); const a = d2z / 2; var z_min = z1 - (b * b) / (4 * a);
-                            // zig fmt: on
+                            const b = (z2 - z0) / (2 * dt);
+                            const a = d2z / 2;
+
+                            var z_min = z1 - (b * b) / (4 * a);
 
                             if (z_min < 0) z_min = 0;
 
@@ -410,6 +426,11 @@ pub fn LandauZener(comptime T: type) type {
 
         pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
             if (std.math.isNan(self.history[1].at(0, 0))) return;
+
+            std.debug.assert(probs.nrow() == ensemble.s.length());
+            std.debug.assert(probs.ncol() == ensemble.nstate);
+            std.debug.assert(self.history[0].nrow() == ensemble.s.length());
+            std.debug.assert(self.history[0].ncol() == ensemble.nstate * ensemble.nstate);
 
             for (0..self.history[0].nrow()) |i| {
                 const c = ensemble.s.at(i);

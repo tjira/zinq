@@ -6,9 +6,8 @@ const Value = @import("value.zig").Value;
 
 pub fn Matrix(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        data: []T, shape: [2]usize,
-        // zig fmt: on
+        data: []T,
+        shape: [2]usize,
 
         pub fn init(rows: usize, cols: usize, gpa: std.mem.Allocator) !@This() {
             return .{ .data = try gpa.alloc(T, rows * cols), .shape = .{ rows, cols } };
@@ -37,6 +36,9 @@ pub fn Matrix(comptime T: type) type {
         }
 
         pub fn at(self: @This(), i: usize, j: usize) T {
+            std.debug.assert(i < self.shape[0]);
+            std.debug.assert(j < self.shape[1]);
+
             return self.data[i * self.shape[1] + j];
         }
 
@@ -61,10 +63,15 @@ pub fn Matrix(comptime T: type) type {
         }
 
         pub fn ptr(self: *@This(), i: usize, j: usize) *T {
+            std.debug.assert(i < self.shape[0]);
+            std.debug.assert(j < self.shape[1]);
+
             return &self.data[i * self.shape[1] + j];
         }
 
         pub fn rowSlice(self: @This(), i: usize) []T {
+            std.debug.assert(i < self.shape[0]);
+
             return self.data[i * self.shape[1] .. (i + 1) * self.shape[1]];
         }
 
@@ -82,9 +89,8 @@ pub fn Matrix(comptime T: type) type {
 
 pub fn Vector(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        data: []T, shape: [1]usize,
-        // zig fmt: on
+        data: []T,
+        shape: [1]usize,
 
         pub fn init(size: usize, gpa: std.mem.Allocator) !@This() {
             return .{ .data = try gpa.alloc(T, size), .shape = .{size} };
@@ -103,6 +109,8 @@ pub fn Vector(comptime T: type) type {
         }
 
         pub fn at(self: @This(), i: usize) T {
+            std.debug.assert(i < self.shape[0]);
+
             return self.data[i];
         }
 
@@ -123,6 +131,8 @@ pub fn Vector(comptime T: type) type {
         }
 
         pub fn ptr(self: *@This(), i: usize) *T {
+            std.debug.assert(i < self.shape[0]);
+
             return &self.data[i];
         }
 

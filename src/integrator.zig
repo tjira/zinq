@@ -77,6 +77,12 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
         }
 
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {
+            std.debug.assert(self.tmp.len == y.len);
+
+            for (self.k) |ki| {
+                std.debug.assert(ki.len == y.len);
+            }
+
             inline for (0..self.k.len) |i| {
                 for (0..y.len) |j| {
                     var sum = Value(T).init(y[j]);

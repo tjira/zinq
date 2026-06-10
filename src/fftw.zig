@@ -4,9 +4,9 @@ const fftw = @cImport(@cInclude("fftw3.h"));
 
 pub fn FftPlan(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        plan: fftw.fftw_plan, sign: i32,
-        // zig fmt: on
+        plan: fftw.fftw_plan,
+
+        sign: i32,
 
         pub fn init(arr: []T, shape: []i32, sign: i32, mode: u32) !@This() {
             const ptr = @as([*c]fftw.fftw_complex, @ptrCast(arr.ptr));

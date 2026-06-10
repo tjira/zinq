@@ -62,10 +62,8 @@ pub fn Ensemble(comptime T: type) type {
 
         s: Vector(usize),
 
-        // zig fmt: off
-        mass:       T,
+        mass: T,
         nstate: usize,
-        // zig fmt: on
 
         pub fn init(ndim: usize, nstate: usize, ntraj: usize, mass: T, gpa: Allocator) !@This() {
             return .{
@@ -75,10 +73,8 @@ pub fn Ensemble(comptime T: type) type {
 
                 .s = try Vector(usize).init(ntraj, gpa),
 
-                // zig fmt: off
-                .mass   =   mass,
+                .mass = mass,
                 .nstate = nstate,
-                // zig fmt: on
             };
         }
 
@@ -144,11 +140,9 @@ pub fn Ensemble(comptime T: type) type {
         pub fn epot(self: @This(), pot: Potential(T), time: T, adiabatic: bool, gpa: Allocator) !T {
             var sum: T = 0;
 
-            // zig fmt: off
             const V_slice = try gpa.alloc(T, self.nstate * self.nstate);
             const U_slice = try gpa.alloc(T, self.nstate * self.nstate);
-            const W_slice = try gpa.alloc(T, self.nstate              );
-            // zig fmt: on
+            const W_slice = try gpa.alloc(T, self.nstate);
 
             defer gpa.free(V_slice);
             defer gpa.free(U_slice);
@@ -212,16 +206,12 @@ pub fn GradientBuffer(comptime T: type) type {
 
         pub fn init(ndim: usize, nstate: usize, ntraj: usize, gpa: Allocator) !@This() {
             return .{
-                // zig fmt: off
-                .r_dual = try Matrix(ScalarDual(T)).init(ntraj, ndim,            gpa),
+                .r_dual = try Matrix(ScalarDual(T)).init(ntraj, ndim, gpa),
                 .V_dual = try Matrix(ScalarDual(T)).init(ntraj, nstate * nstate, gpa),
-                // zig fmt: on
 
-                // zig fmt: off
                 .V = try Matrix(T).init(ntraj, nstate * nstate, gpa),
-                .W = try Matrix(T).init(ntraj, nstate,          gpa),
+                .W = try Matrix(T).init(ntraj, nstate, gpa),
                 .U = try Matrix(T).init(ntraj, nstate * nstate, gpa),
-                // zig fmt: on
 
                 .grad_V = try Matrix(T).init(ntraj, ndim * nstate * nstate, gpa),
             };
@@ -292,9 +282,10 @@ pub fn GradientBuffer(comptime T: type) type {
 
 pub fn Propagator(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        dt: T, adiabatic: bool, sh: ?SurfaceHopping(T),
-        // zig fmt: on
+        sh: ?SurfaceHopping(T),
+
+        adiabatic: bool,
+        dt: T,
 
         pub fn init(dt: T, adiabatic: bool, sh: ?SurfaceHopping(T)) @This() {
             return .{ .dt = dt, .adiabatic = adiabatic, .sh = sh };
@@ -342,15 +333,13 @@ fn Observables(comptime T: type) type {
         pub fn init(csys: ClassicalSystem(T), time: T, write: Write, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
 
-            // zig fmt: off
             var calc = .{
-                .pos  = log or write.position         != null,
+                .pos = log or write.position != null,
                 .epot = log or write.potential_energy != null,
-                .pop  = log or write.population       != null,
-                .mom  = log or write.momentum         != null,
-                .ekin = log or write.kinetic_energy   != null,
+                .pop = log or write.population != null,
+                .mom = log or write.momentum != null,
+                .ekin = log or write.kinetic_energy != null,
             };
-            // zig fmt: on
 
             calc.ekin = calc.ekin or write.total_energy != null;
             calc.epot = calc.epot or write.total_energy != null;
@@ -359,10 +348,8 @@ fn Observables(comptime T: type) type {
             if (calc.pos) obs.pos = try csys.ensemble.pos(gpa);
             if (calc.pop) obs.pop = try csys.ensemble.pop(gpa);
 
-            // zig fmt: off
-            if (calc.ekin) obs.ekin =     csys.ensemble.ekin(                                   );
+            if (calc.ekin) obs.ekin = csys.ensemble.ekin();
             if (calc.epot) obs.epot = try csys.ensemble.epot(csys.pot, time, csys.adiabatic, gpa);
-            // zig fmt: on
 
             return obs;
         }
@@ -379,45 +366,41 @@ fn Observables(comptime T: type) type {
 
 fn History(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        pos:  ?Matrix(T),
-        mom:  ?Matrix(T),
-        pop:  ?Matrix(T),
+        pos: ?Matrix(T),
+        mom: ?Matrix(T),
+        pop: ?Matrix(T),
+
         epot: ?Matrix(T),
         ekin: ?Matrix(T),
         etot: ?Matrix(T),
-        // zig fmt: on
 
         index: usize = 0,
 
         pub fn init(ndim: usize, nstate: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
-            // zig fmt: off
             const store_epot = write.potential_energy != null or write.total_energy != null;
-            const store_ekin = write.kinetic_energy   != null or write.total_energy != null;
-            // zig fmt: on
+            const store_ekin = write.kinetic_energy != null or write.total_energy != null;
+
+            const store_etot = write.total_energy != null;
 
             return .{
-                // zig fmt: off
-                .pos  = if (write.position     != null) try Matrix(T).init(iters, ndim,   gpa) else null,
-                .mom  = if (write.momentum     != null) try Matrix(T).init(iters, ndim,   gpa) else null,
-                .pop  = if (write.population   != null) try Matrix(T).init(iters, nstate, gpa) else null,
-                .etot = if (write.total_energy != null) try Matrix(T).init(iters, 1,      gpa) else null,
-                // zig fmt: on
+                .pos = if (write.position != null) try Matrix(T).init(iters, ndim, gpa) else null,
+                .mom = if (write.momentum != null) try Matrix(T).init(iters, ndim, gpa) else null,
+                .pop = if (write.population != null) try Matrix(T).init(iters, nstate, gpa) else null,
 
                 .ekin = if (store_ekin) try Matrix(T).init(iters, 1, gpa) else null,
                 .epot = if (store_epot) try Matrix(T).init(iters, 1, gpa) else null,
+                .etot = if (store_etot) try Matrix(T).init(iters, 1, gpa) else null,
             };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            // zig fmt: off
-            if (self.pos)  |*pos |  pos.deinit(gpa);
-            if (self.mom)  |*mom |  mom.deinit(gpa);
-            if (self.pop)  |*pop |  pop.deinit(gpa);
+            if (self.pos) |*pos| pos.deinit(gpa);
+            if (self.mom) |*mom| mom.deinit(gpa);
+            if (self.pop) |*pop| pop.deinit(gpa);
+
             if (self.epot) |*epot| epot.deinit(gpa);
             if (self.ekin) |*ekin| ekin.deinit(gpa);
             if (self.etot) |*etot| etot.deinit(gpa);
-            // zig fmt: on
         }
 
         pub fn append(self: *@This(), obs: Observables(T)) void {
@@ -435,10 +418,13 @@ fn History(comptime T: type) type {
                 for (0..v.length()) |j| pop.ptr(step_idx, j).* = v.at(j);
             };
 
-            // zig fmt: off
-            if (self.epot) |*epot| if (obs.epot) |v| { epot.ptr(step_idx, 0).* = v; };
-            if (self.ekin) |*ekin| if (obs.ekin) |v| { ekin.ptr(step_idx, 0).* = v; };
-            // zig fmt: on
+            if (self.epot) |*epot| if (obs.epot) |v| {
+                epot.ptr(step_idx, 0).* = v;
+            };
+
+            if (self.ekin) |*ekin| if (obs.ekin) |v| {
+                ekin.ptr(step_idx, 0).* = v;
+            };
 
             if (self.etot) |*etot| {
                 etot.ptr(step_idx, 0).* = obs.ekin.? + obs.epot.?;
@@ -450,14 +436,12 @@ fn History(comptime T: type) type {
         pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, write: Write) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
-            // zig fmt: off
-            if (write.position        ) |path| try writeMatrixLspace(T, io, path, self.pos.?,  0, end);
-            if (write.momentum        ) |path| try writeMatrixLspace(T, io, path, self.mom.?,  0, end);
-            if (write.population      ) |path| try writeMatrixLspace(T, io, path, self.pop.?,  0, end);
+            if (write.position) |path| try writeMatrixLspace(T, io, path, self.pos.?, 0, end);
+            if (write.momentum) |path| try writeMatrixLspace(T, io, path, self.mom.?, 0, end);
+            if (write.population) |path| try writeMatrixLspace(T, io, path, self.pop.?, 0, end);
             if (write.potential_energy) |path| try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
-            if (write.kinetic_energy  ) |path| try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
-            if (write.total_energy    ) |path| try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
-            // zig fmt: on
+            if (write.kinetic_energy) |path| try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
+            if (write.total_energy) |path| try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
         }
     };
 }
@@ -474,11 +458,14 @@ fn printHeader(io: std.Io, ndim: usize, nstate: usize) !void {
         "EPOT (Eh)",
         "ETOT (Eh)",
 
-        // zig fmt: off
-        "POS (a0)",    12 *   ndim,
-        "MOM (hb/a0)", 12 *   ndim,
-        "POP (-)",     11 * nstate,
-        // zig fmt: on
+        "POS (a0)",
+        12 * ndim,
+
+        "MOM (hb/a0)",
+        12 * ndim,
+
+        "POP (-)",
+        11 * nstate,
 
         "TIME",
     };
@@ -543,9 +530,10 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
 
 fn ClassicalSystem(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        ensemble: Ensemble(T), pot: Potential(T), adiabatic: bool,
-        // zig fmt: on
+        ensemble: Ensemble(T),
+        pot: Potential(T),
+
+        adiabatic: bool,
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.ensemble.deinit(gpa);
@@ -559,9 +547,9 @@ fn ClassicalSystem(comptime T: type) type {
 
 fn SimulationState(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        csys: ClassicalSystem(T), prop: Propagator(T), gb: GradientBuffer(T),
-        // zig fmt: on
+        csys: ClassicalSystem(T),
+        prop: Propagator(T),
+        gb: GradientBuffer(T),
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.csys.deinit(gpa);
@@ -579,18 +567,20 @@ fn SolveContext(comptime T: type) type {
 fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     const pot = Potential(T).init(opt.potential);
 
-    // zig fmt: off
-    const nstate =     pot.nstate();
-    const ntraj  = opt.trajectories;
-    // zig fmt: on
+    const nstate = pot.nstate();
+    const ntraj = opt.trajectories;
+    const istate = opt.initial_conditions.state;
+    const adia = opt.adiabatic;
 
-    var sh = if (opt.surface_hopping) |shopt| try SurfaceHopping(T).init(shopt, nstate, ntraj, opt.initial_conditions.state, opt.adiabatic, gpa) else null;
+    var sh: ?SurfaceHopping(T) = null;
 
-    // zig fmt: off
-    var ensemble = try Ensemble      (T).init(pot.ndim(),    nstate,        ntraj, opt.mass, gpa);
-    var gb       = try GradientBuffer(T).init(pot.ndim(),    nstate,        ntraj,           gpa);
-    const prop   =     Propagator    (T).init(opt.time_step, opt.adiabatic, sh                  );
-    // zig fmt: on
+    if (opt.surface_hopping) |shopt| {
+        sh = try SurfaceHopping(T).init(shopt, nstate, ntraj, istate, adia, gpa);
+    }
+
+    var ensemble = try Ensemble(T).init(pot.ndim(), nstate, ntraj, opt.mass, gpa);
+    var gb = try GradientBuffer(T).init(pot.ndim(), nstate, ntraj, gpa);
+    const prop = Propagator(T).init(opt.time_step, opt.adiabatic, sh);
 
     ensemble.setGaussian(opt.initial_conditions);
 
@@ -606,11 +596,9 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
 }
 
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
-    // zig fmt: off
-    const ndim   = ctx.sim.csys.ensemble.r.ncol();
-    const nstate =   ctx.sim.csys.ensemble.nstate;
-    const iters  =             ctx.opt.iterations;
-    // zig fmt: on
+    const ndim = ctx.sim.csys.ensemble.r.ncol();
+    const nstate = ctx.sim.csys.ensemble.nstate;
+    const iters = ctx.opt.iterations;
 
     if (ctx.log) try printHeader(io, ctx.sim.csys.pot.ndim(), ctx.sim.csys.pot.nstate());
 

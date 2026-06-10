@@ -66,7 +66,6 @@ pub const Options = struct {
     adiabatic: bool = false,
     log_interval: u32 = 1,
 };
-// zig fmt: on
 
 // GRID ================================================================================================================
 
@@ -458,11 +457,9 @@ fn Propagator(comptime T: type) type {
         }
 
         pub fn step(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
-            // zig fmt: off
             try self.applyR(wfn, gpa);
-            try self.applyK(wfn     );
+            try self.applyK(wfn);
             try self.applyR(wfn, gpa);
-            // zig fmt: on
         }
 
         pub fn update(self: *@This(), ham: Hamiltonian(T)) void {
@@ -533,31 +530,25 @@ fn Observables(comptime T: type) type {
         pub fn init(qsys: *QuantumSystem(T), write: Write, adia: bool, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
 
-            // zig fmt: off
             var calc = .{
-                .pos  = log or write.position         != null,
-                .norm = log or write.norm             != null,
+                .pos = log or write.position != null,
+                .norm = log or write.norm != null,
                 .epot = log or write.potential_energy != null,
-                .pop  = log or write.population       != null,
-                .mom  = log or write.momentum         != null,
-                .ekin = log or write.kinetic_energy   != null,
+                .pop = log or write.population != null,
+                .mom = log or write.momentum != null,
+                .ekin = log or write.kinetic_energy != null,
             };
-            // zig fmt: on
 
             calc.ekin = calc.ekin or write.total_energy != null;
             calc.epot = calc.epot or write.total_energy != null;
 
-            // zig fmt: off
-            if (calc.pos ) obs.pos  = try qsys.wfn.pos (          qsys.grid, gpa);
-            if (calc.norm) obs.norm =     qsys.wfn.norm(          qsys.grid     );
-            if (calc.epot) obs.epot =     qsys.wfn.epot(qsys.ham, qsys.grid     );
-            // zig fmt: on
+            if (calc.pos) obs.pos = try qsys.wfn.pos(qsys.grid, gpa);
+            if (calc.norm) obs.norm = qsys.wfn.norm(qsys.grid);
+            if (calc.epot) obs.epot = qsys.wfn.epot(qsys.ham, qsys.grid);
 
             if (calc.pop) {
-                // zig fmt: off
-                if (adia == true) obs.pop = try qsys.wfn.popAdia(qsys.ham,  qsys.grid, gpa);
-                if (adia != true) obs.pop = try qsys.wfn.pop    (qsys.grid,            gpa);
-                // zig fmt: on
+                if (adia == true) obs.pop = try qsys.wfn.popAdia(qsys.ham, qsys.grid, gpa);
+                if (adia != true) obs.pop = try qsys.wfn.pop(qsys.grid, gpa);
             }
 
             const needs_fft = calc.mom or calc.ekin;
@@ -565,10 +556,8 @@ fn Observables(comptime T: type) type {
             if (needs_fft) {
                 try qsys.wfn.fft(-1);
 
-                // zig fmt: off
-                if (calc.mom ) obs.mom  = try qsys.wfn.mom (          qsys.grid, gpa);
-                if (calc.ekin) obs.ekin =     qsys.wfn.ekin(qsys.ham, qsys.grid     );
-                // zig fmt: on
+                if (calc.mom) obs.mom = try qsys.wfn.mom(qsys.grid, gpa);
+                if (calc.ekin) obs.ekin = qsys.wfn.ekin(qsys.ham, qsys.grid);
 
                 try qsys.wfn.fft(1);
             }
@@ -588,56 +577,54 @@ fn Observables(comptime T: type) type {
 
 fn History(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        pos:  ?Matrix(T),
-        mom:  ?Matrix(T),
-        pop:  ?Matrix(T),
+        pos: ?Matrix(T),
+        mom: ?Matrix(T),
+        pop: ?Matrix(T),
+
         epot: ?Matrix(T),
         ekin: ?Matrix(T),
         etot: ?Matrix(T),
         norm: ?Matrix(T),
-        wfn:  ?Matrix(T),
-        // zig fmt: on
+
+        wfn: ?Matrix(T),
 
         index: usize = 0,
 
         pub fn init(ndim: usize, nstate: usize, npoint: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
             const store_wfn = write.wavefunction != null;
 
-            // zig fmt: off
             const store_epot = write.potential_energy != null or write.total_energy != null;
-            const store_ekin = write.kinetic_energy   != null or write.total_energy != null;
-            // zig fmt: on
+            const store_ekin = write.kinetic_energy != null or write.total_energy != null;
+
+            const store_etot = write.total_energy != null;
 
             const wfn_nrow = std.math.pow(usize, npoint, ndim);
 
             return .{
-                // zig fmt: off
-                .pos  = if (write.position     != null) try Matrix(T).init(iters, ndim,   gpa) else null,
-                .mom  = if (write.momentum     != null) try Matrix(T).init(iters, ndim,   gpa) else null,
-                .pop  = if (write.population   != null) try Matrix(T).init(iters, nstate, gpa) else null,
-                .norm = if (write.norm         != null) try Matrix(T).init(iters, 1,      gpa) else null,
-                .etot = if (write.total_energy != null) try Matrix(T).init(iters, 1,      gpa) else null,
-                // zig fmt: on
+                .pos = if (write.position != null) try Matrix(T).init(iters, ndim, gpa) else null,
+                .mom = if (write.momentum != null) try Matrix(T).init(iters, ndim, gpa) else null,
+                .pop = if (write.population != null) try Matrix(T).init(iters, nstate, gpa) else null,
+                .norm = if (write.norm != null) try Matrix(T).init(iters, 1, gpa) else null,
 
                 .wfn = if (store_wfn) try Matrix(T).init(wfn_nrow, 2 * nstate * iters, gpa) else null,
 
+                .etot = if (store_etot) try Matrix(T).init(iters, 1, gpa) else null,
                 .ekin = if (store_ekin) try Matrix(T).init(iters, 1, gpa) else null,
                 .epot = if (store_epot) try Matrix(T).init(iters, 1, gpa) else null,
             };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            // zig fmt: off
-            if (self.pos)  |*pos |  pos.deinit(gpa);
-            if (self.mom)  |*mom |  mom.deinit(gpa);
-            if (self.pop)  |*pop |  pop.deinit(gpa);
+            if (self.pos) |*pos| pos.deinit(gpa);
+            if (self.mom) |*mom| mom.deinit(gpa);
+            if (self.pop) |*pop| pop.deinit(gpa);
+
             if (self.epot) |*epot| epot.deinit(gpa);
             if (self.ekin) |*ekin| ekin.deinit(gpa);
             if (self.etot) |*etot| etot.deinit(gpa);
             if (self.norm) |*norm| norm.deinit(gpa);
-            if (self.wfn)  |*wfn |  wfn.deinit(gpa);
-            // zig fmt: on
+
+            if (self.wfn) |*wfn| wfn.deinit(gpa);
         }
 
         pub fn append(self: *@This(), wfn: Wavefunction(T), obs: Observables(T)) void {
@@ -660,11 +647,17 @@ fn History(comptime T: type) type {
                 for (0..v.length()) |j| pop.ptr(step_idx, j).* = v.at(j);
             };
 
-            // zig fmt: off
-            if (self.epot) |*epot| {if (obs.epot) |v| epot.ptr(step_idx, 0).* = v;}
-            if (self.ekin) |*ekin| {if (obs.ekin) |v| ekin.ptr(step_idx, 0).* = v;}
-            if (self.norm) |*norm| {if (obs.norm) |v| norm.ptr(step_idx, 0).* = v;}
-            // zig fmt: on
+            if (self.epot) |*epot| {
+                if (obs.epot) |v| epot.ptr(step_idx, 0).* = v;
+            }
+
+            if (self.ekin) |*ekin| {
+                if (obs.ekin) |v| ekin.ptr(step_idx, 0).* = v;
+            }
+
+            if (self.norm) |*norm| {
+                if (obs.norm) |v| norm.ptr(step_idx, 0).* = v;
+            }
 
             if (self.etot) |*etot| {
                 etot.ptr(step_idx, 0).* = obs.ekin.? + obs.epot.?;
@@ -676,15 +669,13 @@ fn History(comptime T: type) type {
         pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
-            // zig fmt: off
-            if (write.position        ) |path| try writeMatrixLspace(T, io, path, self.pos.?,  0, end);
-            if (write.momentum        ) |path| try writeMatrixLspace(T, io, path, self.mom.?,  0, end);
-            if (write.population      ) |path| try writeMatrixLspace(T, io, path, self.pop.?,  0, end);
+            if (write.position) |path| try writeMatrixLspace(T, io, path, self.pos.?, 0, end);
+            if (write.momentum) |path| try writeMatrixLspace(T, io, path, self.mom.?, 0, end);
+            if (write.population) |path| try writeMatrixLspace(T, io, path, self.pop.?, 0, end);
             if (write.potential_energy) |path| try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
-            if (write.kinetic_energy  ) |path| try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
-            if (write.norm            ) |path| try writeMatrixLspace(T, io, path, self.norm.?, 0, end);
-            if (write.total_energy    ) |path| try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
-            // zig fmt: on
+            if (write.kinetic_energy) |path| try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
+            if (write.norm) |path| try writeMatrixLspace(T, io, path, self.norm.?, 0, end);
+            if (write.total_energy) |path| try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
 
             if (write.wavefunction) |path| try writeMatrixHjoin(T, io, path, grid.r, self.wfn.?);
         }
@@ -707,11 +698,14 @@ fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize)
         "EPOT (Eh)",
         "ETOT (Eh)",
 
-        // zig fmt: off
-        "POS (a0)",    12 *   ndim,
-        "MOM (hb/a0)", 12 *   ndim,
-        "POP (-)",     11 * nstate,
-        // zig fmt: on
+        "POS (a0)",
+        12 * ndim,
+
+        "MOM (hb/a0)",
+        12 * ndim,
+
+        "POP (-)",
+        11 * nstate,
 
         "NORM (-)",
         "TIME",
@@ -794,9 +788,10 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
 
 fn QuantumSystem(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), wfn: Wavefunction(T),
-        // zig fmt: on
+        grid: Grid(T),
+        ham: Hamiltonian(T),
+        pot: Potential(T),
+        wfn: Wavefunction(T),
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.grid.deinit(gpa);
@@ -812,9 +807,9 @@ fn QuantumSystem(comptime T: type) type {
 
 fn SimulationState(comptime T: type) type {
     return struct {
-        // zig fmt: off
-        qsys: QuantumSystem(T), prop: Propagator(T), orthw: std.ArrayList(Wavefunction(T)),
-        // zig fmt: on
+        qsys: QuantumSystem(T),
+        prop: Propagator(T),
+        orthw: std.ArrayList(Wavefunction(T)),
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.qsys.deinit(gpa);
@@ -843,22 +838,18 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
         .exhaustive => fftw.FFTW_EXHAUSTIVE,
     };
 
-    // zig fmt: off
-    const grid = try Grid(T)        .init(opt.grid.bounds, opt.grid.npoint,                             gpa);
-    const wfn  = try Wavefunction(T).init(pot.ndim(),      pot.nstate(),    opt.grid.npoint, plan_mode, gpa);
-    const ham  = try Hamiltonian(T) .init(grid,            pot,             opt.mass,                   gpa);
-    const prop = try Propagator(T)  .init(ham,             dt,                                          gpa);
-    // zig fmt: on
+    const grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, gpa);
+    const wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);
+    const ham = try Hamiltonian(T).init(grid, pot, opt.mass, gpa);
+    const prop = try Propagator(T).init(ham, dt, gpa);
 
     return .{ .qsys = .{ .grid = grid, .ham = ham, .wfn = wfn, .pot = pot }, .prop = prop, .orthw = .empty };
 }
 
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
-    // zig fmt: off
-    const ndim   = ctx.sim.qsys.grid.r.ncol();
-    const nstate =  ctx.sim.qsys.wfn.W.nrow();
-    const iters  =         ctx.opt.iterations;
-    // zig fmt: on
+    const ndim = ctx.sim.qsys.grid.r.ncol();
+    const nstate = ctx.sim.qsys.wfn.W.nrow();
+    const iters = ctx.opt.iterations;
 
     const neig = if (ctx.opt.imaginary) |imag| imag.nstate else 1;
 

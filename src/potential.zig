@@ -46,6 +46,9 @@ pub fn Potential(comptime T: type) type {
         pub fn deinit(_: *@This(), _: Allocator) void {}
 
         pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) void {
+            std.debug.assert(V.len == self.nstate() * self.nstate());
+            std.debug.assert(r.len == self.ndim());
+
             switch (self) {
                 inline else => |field| field.eval(U, V, r, t),
             }
@@ -127,10 +130,10 @@ pub fn TimeLinear(comptime T: type) type {
 
             const V0 = Value(U).init(t).sub(a).mul(a);
 
-            // zig fmt: off
-            V[0] = V0.val; V[1] =        g.val;
-            V[2] =   V[1]; V[3] = V0.neg().val;
-            // zig fmt: on
+            V[0] = V0.val;
+            V[1] = g.val;
+            V[2] = V[1];
+            V[3] = V0.neg().val;
         }
 
         pub fn ndim(_: @This()) usize {
@@ -165,10 +168,10 @@ pub fn Tully1(comptime T: type) type {
             const v0 = r0.abs().mul(B).neg().exp().neg().adds(1).mul(A).mul(r0.sign());
             const v1 = r0.mul(r0).mul(D).neg().exp().mul(C);
 
-            // zig fmt: off
-            V[0] = v0.val; V[1] =       v1.val;
-            V[2] =   V[1]; V[3] = v0.neg().val;
-            // zig fmt: on
+            V[0] = v0.val;
+            V[1] = v1.val;
+            V[2] = V[1];
+            V[3] = v0.neg().val;
         }
 
         pub fn ndim(_: @This()) usize {
