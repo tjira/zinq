@@ -234,6 +234,8 @@ pub fn FewestSwitches(comptime T: type) type {
 
                 const rho_cc = self.coef.at(i, c).squaredMagnitude();
 
+                if (rho_cc < 1e-14) continue;
+
                 for (0..ensemble.nstate) |j| {
                     if (c == j) continue;
 
@@ -339,7 +341,7 @@ pub fn LandauZener(comptime T: type) type {
                     const dz1 = (z1 - z0) / dt;
                     const dz2 = (z2 - z1) / dt;
 
-                    if (dz1 < 0 and dz2 > 0) {
+                    if (dz1 < 0 and dz2 >= 0) {
                         const d2z = (dz2 - dz1) / dt;
 
                         if (d2z > 1e-14) {
