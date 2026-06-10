@@ -26,18 +26,17 @@ pub fn Integrator(comptime T: type) type {
             rk4: Rk4(T),
         };
 
-        pub fn init(comptime tag: std.meta.Tag(Method), nstate: usize, gpa: Allocator) !@This() {
+        pub fn init(tag: std.meta.Tag(Method), nstate: usize, gpa: Allocator) !@This() {
             inline for (std.meta.fields(Method)) |field| if (tag == @field(std.meta.Tag(Method), field.name)) {
                 return .{ .method = @unionInit(Method, field.name, try field.type.init(nstate, gpa)) };
             };
 
-            @compileError("METHOD '" ++ @typeName(Method) ++ "' UNSUPPORTED");
+            unreachable;
         }
 
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {
             switch (self.method) {
-                .rk1 => |*rk1| rk1.step(y, dt, ctx, dFn),
-                .rk4 => |*rk4| rk4.step(y, dt, ctx, dFn),
+                inline else => |*method| method.step(y, dt, ctx, dFn),
             }
         }
     };

@@ -25,7 +25,7 @@ pub const Options = union(enum) {
 
 pub const FewestSwitchesOptions = struct {
     // zig fmt: off
-    seed: u32 = 1, nstep: u32 = 10,
+    seed: u32 = 1, nstep: u32 = 10, integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
     // zig fmt: on
 };
 
@@ -68,11 +68,11 @@ pub fn SurfaceHopping(comptime T: type) type {
             // zig fmt: on
 
             const method: Method = switch (options) {
-                .fewest_switches => .{
-                    .fewest_switches = try FewestSwitches(T).init(nstate, ntraj, istate, adia, gpa),
+                .fewest_switches => |opt| .{
+                    .fewest_switches = try FewestSwitches(T).init(opt, nstate, ntraj, istate, adia, gpa),
                 },
-                .landau_zener => .{
-                    .landau_zener = try LandauZener(T).init(nstate, ntraj, adia, gpa),
+                .landau_zener => |opt| .{
+                    .landau_zener = try LandauZener(T).init(opt, nstate, ntraj, istate, adia, gpa),
                 },
             };
 
@@ -182,7 +182,7 @@ pub fn FewestSwitches(comptime T: type) type {
         coef: Matrix(Complex(T)), itg: Integrator(Complex(T)), ham: Matrix(T), sigma: Matrix(T), uhist: [2]Matrix(T),
         // zig fmt: on
 
-        pub fn init(nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
+        pub fn init(opt: anytype, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
             const cols = if (adia) nstate else nstate * nstate;
 
             const ham = try Matrix(T).init(ntraj, cols, gpa);
@@ -206,7 +206,11 @@ pub fn FewestSwitches(comptime T: type) type {
                 coef.ptr(i, istate).* = Complex(T).init(1, 0);
             }
 
-            const itg = try Integrator(Complex(T)).init(.rk4, nstate, gpa);
+            const itg_tag = switch (opt.integrator) {
+                inline else => |tag| @field(Integrator(Complex(T)).Method, @tagName(tag)),
+            };
+
+            const itg = try Integrator(Complex(T)).init(itg_tag, nstate, gpa);
 
             return .{ .coef = coef, .ham = ham, .uhist = uhist, .sigma = sigma, .itg = itg };
         }
@@ -303,7 +307,7 @@ pub fn LandauZener(comptime T: type) type {
         history: [3]Matrix(T),
         // zig fmt: on
 
-        pub fn init(nstate: usize, ntraj: usize, adia: bool, gpa: Allocator) !@This() {
+        pub fn init(_: anytype, nstate: usize, ntraj: usize, _: usize, adia: bool, gpa: Allocator) !@This() {
             var history: [3]Matrix(T) = undefined;
 
             const cols = if (adia) nstate else nstate * nstate;
