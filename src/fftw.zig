@@ -2,6 +2,8 @@ const std = @import("std");
 
 const fftw = @cImport(@cInclude("fftw3.h"));
 
+const primType = @import("value.zig").primType;
+
 pub fn FftPlan(comptime T: type) type {
     return struct {
         plan: fftw.fftw_plan,
@@ -9,6 +11,8 @@ pub fn FftPlan(comptime T: type) type {
         sign: i32,
 
         pub fn init(arr: []T, shape: []i32, sign: i32, mode: u32) !@This() {
+            if (comptime primType(T) != f64) @compileError("FFTW NOW ONLY SUPPORTS F64 NUMBERS");
+
             const ptr = @as([*c]fftw.fftw_complex, @ptrCast(arr.ptr));
 
             const plan = fftw.fftw_plan_dft(@intCast(shape.len), shape.ptr, ptr, ptr, sign, mode);

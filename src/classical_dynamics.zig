@@ -66,16 +66,18 @@ pub fn Ensemble(comptime T: type) type {
         nstate: usize,
 
         pub fn init(ndim: usize, nstate: usize, ntraj: usize, mass: T, gpa: Allocator) !@This() {
-            return .{
-                .r = try Matrix(T).init(ntraj, ndim, gpa),
-                .p = try Matrix(T).init(ntraj, ndim, gpa),
-                .a = try Matrix(T).init(ntraj, ndim, gpa),
+            var r = try Matrix(T).init(ntraj, ndim, gpa);
+            errdefer r.deinit(gpa);
 
-                .s = try Vector(usize).init(ntraj, gpa),
+            var p = try Matrix(T).init(ntraj, ndim, gpa);
+            errdefer p.deinit(gpa);
 
-                .mass = mass,
-                .nstate = nstate,
-            };
+            var a = try Matrix(T).init(ntraj, ndim, gpa);
+            errdefer a.deinit(gpa);
+
+            const s = try Vector(usize).init(ntraj, gpa);
+
+            return .{ .r = r, .p = p, .a = a, .s = s, .mass = mass, .nstate = nstate };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -205,16 +207,24 @@ pub fn GradientBuffer(comptime T: type) type {
         grad_V: Matrix(T),
 
         pub fn init(ndim: usize, nstate: usize, ntraj: usize, gpa: Allocator) !@This() {
-            return .{
-                .r_dual = try Matrix(ScalarDual(T)).init(ntraj, ndim, gpa),
-                .V_dual = try Matrix(ScalarDual(T)).init(ntraj, nstate * nstate, gpa),
+            var r_dual = try Matrix(ScalarDual(T)).init(ntraj, ndim, gpa);
+            errdefer r_dual.deinit(gpa);
 
-                .V = try Matrix(T).init(ntraj, nstate * nstate, gpa),
-                .W = try Matrix(T).init(ntraj, nstate, gpa),
-                .U = try Matrix(T).init(ntraj, nstate * nstate, gpa),
+            var V_dual = try Matrix(ScalarDual(T)).init(ntraj, nstate * nstate, gpa);
+            errdefer V_dual.deinit(gpa);
 
-                .grad_V = try Matrix(T).init(ntraj, ndim * nstate * nstate, gpa),
-            };
+            var V = try Matrix(T).init(ntraj, nstate * nstate, gpa);
+            errdefer V.deinit(gpa);
+
+            var W = try Matrix(T).init(ntraj, nstate, gpa);
+            errdefer W.deinit(gpa);
+
+            var U = try Matrix(T).init(ntraj, nstate * nstate, gpa);
+            errdefer U.deinit(gpa);
+
+            const grad_V = try Matrix(T).init(ntraj, ndim * nstate * nstate, gpa);
+
+            return .{ .r_dual = r_dual, .V_dual = V_dual, .V = V, .W = W, .U = U, .grad_V = grad_V };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -382,15 +392,26 @@ fn History(comptime T: type) type {
 
             const store_etot = write.total_energy != null;
 
-            return .{
-                .pos = if (write.position != null) try Matrix(T).init(iters, ndim, gpa) else null,
-                .mom = if (write.momentum != null) try Matrix(T).init(iters, ndim, gpa) else null,
-                .pop = if (write.population != null) try Matrix(T).init(iters, nstate, gpa) else null,
+            var self = @This(){
+                .pos = null,
+                .mom = null,
+                .pop = null,
 
-                .ekin = if (store_ekin) try Matrix(T).init(iters, 1, gpa) else null,
-                .epot = if (store_epot) try Matrix(T).init(iters, 1, gpa) else null,
-                .etot = if (store_etot) try Matrix(T).init(iters, 1, gpa) else null,
+                .ekin = null,
+                .epot = null,
+                .etot = null,
             };
+            errdefer self.deinit(gpa);
+
+            if (write.position != null) self.pos = try Matrix(T).init(iters, ndim, gpa);
+            if (write.momentum != null) self.mom = try Matrix(T).init(iters, ndim, gpa);
+            if (write.population != null) self.pop = try Matrix(T).init(iters, nstate, gpa);
+
+            if (store_ekin) self.ekin = try Matrix(T).init(iters, 1, gpa);
+            if (store_epot) self.epot = try Matrix(T).init(iters, 1, gpa);
+            if (store_etot) self.etot = try Matrix(T).init(iters, 1, gpa);
+
+            return self;
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -573,13 +594,18 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     const adia = opt.adiabatic;
 
     var sh: ?SurfaceHopping(T) = null;
+    errdefer if (sh) |*s| s.deinit(gpa);
 
     if (opt.surface_hopping) |shopt| {
         sh = try SurfaceHopping(T).init(shopt, nstate, ntraj, istate, adia, gpa);
     }
 
     var ensemble = try Ensemble(T).init(pot.ndim(), nstate, ntraj, opt.mass, gpa);
+    errdefer ensemble.deinit(gpa);
+
     var gb = try GradientBuffer(T).init(pot.ndim(), nstate, ntraj, gpa);
+    errdefer gb.deinit(gpa);
+
     const prop = Propagator(T).init(opt.time_step, opt.adiabatic, sh);
 
     ensemble.setGaussian(opt.initial_conditions);

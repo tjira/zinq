@@ -4,6 +4,8 @@ const lapacke = @cImport(@cInclude("lapacke.h"));
 
 const Matrix = @import("tensor.zig").Matrix;
 
+const primType = @import("value.zig").primType;
+
 pub fn eighBatch(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
     std.debug.assert(V.ncol() == W.ncol() * W.ncol());
 
@@ -29,6 +31,8 @@ pub fn eighSlice(comptime T: type, W: []T, U: []T, V: []T) !void {
     for (V, 0..) |e, i| {
         U[i] = e;
     }
+
+    if (primType(T) != f64) @compileError("EIGH NOW ONLY SUPPORTS F64 NUMBERS");
 
     const info = lapacke.LAPACKE_dsyevd(lapacke.LAPACK_ROW_MAJOR, 'V', 'U', n, U.ptr, n, W.ptr);
 

@@ -51,6 +51,7 @@ pub fn SurfaceHopping(comptime T: type) type {
             };
 
             const targets = try gpa.alloc(usize, ntraj);
+            errdefer gpa.free(targets);
 
             const nstep = switch (options) {
                 .fewest_switches => |field| field.nstep,
@@ -60,13 +61,17 @@ pub fn SurfaceHopping(comptime T: type) type {
             var split_mix = std.Random.SplitMix64.init(seed);
             const rng = std.Random.DefaultPrng.init(split_mix.next());
 
-            const method: Method = switch (options) {
+            var method: Method = switch (options) {
                 .fewest_switches => |opt| .{
                     .fewest_switches = try FewestSwitches(T).init(opt, nstate, ntraj, istate, adia, gpa),
                 },
                 .landau_zener => |opt| .{
                     .landau_zener = try LandauZener(T).init(opt, nstate, ntraj, istate, adia, gpa),
                 },
+            };
+
+            errdefer switch (method) {
+                inline else => |*field| field.deinit(gpa),
             };
 
             const probs = try Matrix(T).init(ntraj, nstate, gpa);
@@ -187,18 +192,25 @@ pub fn FewestSwitches(comptime T: type) type {
         pub fn init(opt: anytype, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
             const cols = if (adia) nstate else nstate * nstate;
 
-            const ham = try Matrix(T).init(ntraj, cols, gpa);
+            var ham = try Matrix(T).init(ntraj, cols, gpa);
+            errdefer ham.deinit(gpa);
 
             var uhist: [2]Matrix(T) = undefined;
 
             uhist[0] = try Matrix(T).init(ntraj, nstate * nstate, gpa);
+            errdefer uhist[0].deinit(gpa);
+
             uhist[1] = try Matrix(T).init(ntraj, nstate * nstate, gpa);
+            errdefer uhist[1].deinit(gpa);
 
             uhist[0].fill(std.math.nan(T));
             uhist[1].fill(std.math.nan(T));
 
             var coef = try Matrix(Complex(T)).init(ntraj, nstate, gpa);
-            const sigma = try Matrix(T).init(ntraj, nstate * nstate, gpa);
+            errdefer coef.deinit(gpa);
+
+            var sigma = try Matrix(T).init(ntraj, nstate * nstate, gpa);
+            errdefer sigma.deinit(gpa);
 
             coef.zero();
 
@@ -367,7 +379,11 @@ pub fn LandauZener(comptime T: type) type {
             const cols = if (adia) nstate else nstate * nstate;
 
             history[0] = try Matrix(T).init(ntraj, cols, gpa);
+            errdefer history[0].deinit(gpa);
+
             history[1] = try Matrix(T).init(ntraj, cols, gpa);
+            errdefer history[1].deinit(gpa);
+
             history[2] = try Matrix(T).init(ntraj, cols, gpa);
 
             history[0].fill(std.math.nan(T));
@@ -501,6 +517,10 @@ fn rescaleMomentumIsotropic(comptime T: type, ensemble: *Ensemble(T), i: usize, 
 
     for (0..ensemble.p.ncol()) |j| {
         ekin_old += ensemble.p.at(i, j) * ensemble.p.at(i, j) / (2 * ensemble.mass);
+    }
+
+    if (ekin_old < 1e-14) {
+        return false;
     }
 
     const ekin_new = ekin_old - dE;

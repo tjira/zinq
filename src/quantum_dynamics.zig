@@ -81,6 +81,8 @@ fn Grid(comptime T: type) type {
             const ncol = std.math.pow(usize, npoint, bounds.len);
 
             var r = try Matrix(T).init(ncol, bounds.len, gpa);
+            errdefer r.deinit(gpa);
+
             var k = try Matrix(T).init(ncol, bounds.len, gpa);
 
             var dr: T = 1;
@@ -135,12 +137,17 @@ fn Wavefunction(comptime T: type) type {
         ifft: []FftPlan(Complex(T)),
 
         pub fn init(ndim: usize, nstate: usize, npoint: usize, plan_mode: u32, gpa: Allocator) !@This() {
-            const W = try Matrix(Complex(T)).init(nstate, std.math.pow(usize, npoint, ndim), gpa);
+            var W = try Matrix(Complex(T)).init(nstate, std.math.pow(usize, npoint, ndim), gpa);
+            errdefer W.deinit(gpa);
 
-            const ffft = try gpa.alloc(FftPlan(Complex(T)), nstate);
-            const ifft = try gpa.alloc(FftPlan(Complex(T)), nstate);
+            var ffft = try gpa.alloc(FftPlan(Complex(T)), nstate);
+            errdefer gpa.free(ffft);
+
+            var ifft = try gpa.alloc(FftPlan(Complex(T)), nstate);
+            errdefer gpa.free(ifft);
 
             const shape = try gpa.alloc(i32, ndim);
+            defer gpa.free(shape);
 
             for (shape) |*e| {
                 e.* = @as(i32, @intCast(npoint));
@@ -150,8 +157,6 @@ fn Wavefunction(comptime T: type) type {
                 ffft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape, 0 - 1, plan_mode);
                 ifft[i] = try FftPlan(Complex(T)).init(W.rowSlice(i), shape, 0 + 1, plan_mode);
             }
-
-            gpa.free(shape);
 
             return .{ .W = W, .ffft = ffft, .ifft = ifft };
         }
@@ -170,14 +175,18 @@ fn Wavefunction(comptime T: type) type {
 
         pub fn clone(self: @This(), gpa: Allocator) !@This() {
             var ffft = try gpa.alloc(FftPlan(Complex(T)), self.ffft.len);
+            errdefer gpa.free(ffft);
+
             var ifft = try gpa.alloc(FftPlan(Complex(T)), self.ifft.len);
+            errdefer gpa.free(ifft);
 
             for (0..self.ffft.len) |i| {
                 ffft[i] = try self.ffft[i].clone();
                 ifft[i] = try self.ifft[i].clone();
             }
 
-            return .{ .W = try self.W.clone(gpa), .ffft = ffft, .ifft = ifft };
+            const W = try self.W.clone(gpa);
+            return .{ .W = W, .ffft = ffft, .ifft = ifft };
         }
 
         pub fn ekin(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
@@ -385,12 +394,17 @@ fn Hamiltonian(comptime T: type) type {
         K: Vector(T),
 
         pub fn init(grid: Grid(T), pot: Potential(T), m: T, gpa: Allocator) !@This() {
-            const V = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
-            const U = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
+            var V = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
+            errdefer V.deinit(gpa);
 
-            const W = try Matrix(T).init(grid.r.nrow(), pot.nstate(), gpa);
+            var U = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
+            errdefer U.deinit(gpa);
+
+            var W = try Matrix(T).init(grid.r.nrow(), pot.nstate(), gpa);
+            errdefer W.deinit(gpa);
 
             var K = try Vector(T).initZero(grid.r.nrow(), gpa);
+            errdefer K.deinit(gpa);
 
             for (0..grid.r.nrow()) |i| {
                 var sum: T = 0;
@@ -436,7 +450,8 @@ fn Propagator(comptime T: type) type {
         dt: Complex(T),
 
         pub fn init(ham: Hamiltonian(T), dt: Complex(T), gpa: Allocator) !@This() {
-            const R = try Matrix(Complex(T)).init(ham.V.nrow(), ham.V.ncol(), gpa);
+            var R = try Matrix(Complex(T)).init(ham.V.nrow(), ham.V.ncol(), gpa);
+            errdefer R.deinit(gpa);
 
             var K = try Vector(Complex(T)).initZero(ham.K.length(), gpa);
 
@@ -600,18 +615,32 @@ fn History(comptime T: type) type {
 
             const wfn_nrow = std.math.pow(usize, npoint, ndim);
 
-            return .{
-                .pos = if (write.position != null) try Matrix(T).init(iters, ndim, gpa) else null,
-                .mom = if (write.momentum != null) try Matrix(T).init(iters, ndim, gpa) else null,
-                .pop = if (write.population != null) try Matrix(T).init(iters, nstate, gpa) else null,
-                .norm = if (write.norm != null) try Matrix(T).init(iters, 1, gpa) else null,
+            var self = @This(){
+                .pos = null,
+                .mom = null,
+                .pop = null,
 
-                .wfn = if (store_wfn) try Matrix(T).init(wfn_nrow, 2 * nstate * iters, gpa) else null,
+                .norm = null,
+                .etot = null,
+                .ekin = null,
+                .epot = null,
 
-                .etot = if (store_etot) try Matrix(T).init(iters, 1, gpa) else null,
-                .ekin = if (store_ekin) try Matrix(T).init(iters, 1, gpa) else null,
-                .epot = if (store_epot) try Matrix(T).init(iters, 1, gpa) else null,
+                .wfn = null,
             };
+            errdefer self.deinit(gpa);
+
+            if (write.position != null) self.pos = try Matrix(T).init(iters, ndim, gpa);
+            if (write.momentum != null) self.mom = try Matrix(T).init(iters, ndim, gpa);
+            if (write.population != null) self.pop = try Matrix(T).init(iters, nstate, gpa);
+            if (write.norm != null) self.norm = try Matrix(T).init(iters, 1, gpa);
+
+            if (store_wfn) self.wfn = try Matrix(T).init(wfn_nrow, 2 * nstate * iters, gpa);
+
+            if (store_etot) self.etot = try Matrix(T).init(iters, 1, gpa);
+            if (store_ekin) self.ekin = try Matrix(T).init(iters, 1, gpa);
+            if (store_epot) self.epot = try Matrix(T).init(iters, 1, gpa);
+
+            return self;
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -838,9 +867,15 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
         .exhaustive => fftw.FFTW_EXHAUSTIVE,
     };
 
-    const grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, gpa);
-    const wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);
-    const ham = try Hamiltonian(T).init(grid, pot, opt.mass, gpa);
+    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, gpa);
+    errdefer grid.deinit(gpa);
+
+    var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);
+    errdefer wfn.deinit(gpa);
+
+    var ham = try Hamiltonian(T).init(grid, pot, opt.mass, gpa);
+    errdefer ham.deinit(gpa);
+
     const prop = try Propagator(T).init(ham, dt, gpa);
 
     return .{ .qsys = .{ .grid = grid, .ham = ham, .wfn = wfn, .pot = pot }, .prop = prop, .orthw = .empty };

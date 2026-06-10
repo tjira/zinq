@@ -59,8 +59,11 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
         pub fn init(nstate: usize, gpa: Allocator) !@This() {
             var self: @This() = undefined;
 
+            const k_mem = try gpa.alloc(T, tab.b.len * nstate);
+            errdefer gpa.free(k_mem);
+
             for (0..self.k.len) |i| {
-                self.k[i] = try gpa.alloc(T, nstate);
+                self.k[i] = k_mem[i * nstate .. (i + 1) * nstate];
             }
 
             self.tmp = try gpa.alloc(T, nstate);
@@ -69,9 +72,7 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
         }
 
         pub fn deinit(self: @This(), gpa: Allocator) void {
-            for (0..self.k.len) |i| {
-                gpa.free(self.k[i]);
-            }
+            gpa.free(self.k[0].ptr[0 .. self.k.len * self.tmp.len]);
 
             gpa.free(self.tmp);
         }
