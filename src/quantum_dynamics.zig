@@ -127,6 +127,11 @@ fn Grid(comptime T: type) type {
 
             return .{ .r = r, .k = k, .dr = dr, .dk = dk };
         }
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.r.deinit(gpa);
+            self.k.deinit(gpa);
+        }
     };
 }
 
@@ -161,6 +166,18 @@ fn Wavefunction(comptime T: type) type {
             gpa.free(shape);
 
             return .{ .W = W, .ffft = ffft, .ifft = ifft };
+        }
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.W.deinit(gpa);
+
+            for (0..self.ffft.len) |i| {
+                self.ffft[i].deinit();
+                self.ifft[i].deinit();
+            }
+
+            gpa.free(self.ffft);
+            gpa.free(self.ifft);
         }
 
         pub fn clone(self: @This(), gpa: Allocator) !@This() {
@@ -408,6 +425,13 @@ fn Hamiltonian(comptime T: type) type {
             return ham;
         }
 
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.V.deinit(gpa);
+            self.W.deinit(gpa);
+            self.U.deinit(gpa);
+            self.K.deinit(gpa);
+        }
+
         pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T) !void {
             pot.evalBatch(T, &self.V, grid.r, t);
 
@@ -439,6 +463,11 @@ fn Propagator(comptime T: type) type {
             prop.update(ham);
 
             return prop;
+        }
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.R.deinit(gpa);
+            self.K.deinit(gpa);
         }
 
         pub fn step(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
@@ -779,20 +808,45 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
 // QUANTUM SYSTEM ======================================================================================================
 
 fn QuantumSystem(comptime T: type) type {
-    return struct { grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), wfn: Wavefunction(T) };
+    return struct {
+        // zig fmt: off
+        grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), wfn: Wavefunction(T),
+        // zig fmt: on
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.grid.deinit(gpa);
+
+            self.ham.deinit(gpa);
+            self.pot.deinit(gpa);
+            self.wfn.deinit(gpa);
+        }
+    };
 }
 
 // RUN =================================================================================================================
 
 fn SimulationState(comptime T: type) type {
-    return struct { qsys: QuantumSystem(T), prop: Propagator(T), orthw: std.ArrayList(Wavefunction(T)) };
+    return struct {
+        // zig fmt: off
+        qsys: QuantumSystem(T), prop: Propagator(T), orthw: std.ArrayList(Wavefunction(T)),
+        // zig fmt: on
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.qsys.deinit(gpa);
+            self.prop.deinit(gpa);
+
+            for (self.orthw.items) |*e| e.deinit(gpa);
+
+            self.orthw.deinit(gpa);
+        }
+    };
 }
 
 fn SolveContext(comptime T: type) type {
     return struct { opt: Options, sim: *SimulationState(T), eigs: usize, log: bool };
 }
 
-fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
+fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     const pot = Potential(T).init(opt.potential);
 
     const dt = if (opt.imaginary) |_| Complex(T).init(0, -opt.time_step) else Complex(T).init(opt.time_step, 0);
@@ -807,10 +861,10 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     };
 
     // zig fmt: off
-    const grid = try Grid(T)        .init(opt.grid.bounds, opt.grid.npoint,                             arena);
-    const wfn  = try Wavefunction(T).init(pot.ndim(),      pot.nstate(),    opt.grid.npoint, plan_mode, arena);
-    const ham  = try Hamiltonian(T) .init(grid,            pot,             opt.mass,                   arena);
-    const prop = try Propagator(T)  .init(ham,             dt,                                          arena);
+    const grid = try Grid(T)        .init(opt.grid.bounds, opt.grid.npoint,                             gpa);
+    const wfn  = try Wavefunction(T).init(pot.ndim(),      pot.nstate(),    opt.grid.npoint, plan_mode, gpa);
+    const ham  = try Hamiltonian(T) .init(grid,            pot,             opt.mass,                   gpa);
+    const prop = try Propagator(T)  .init(ham,             dt,                                          gpa);
     // zig fmt: on
 
     return .{ .qsys = .{ .grid = grid, .ham = ham, .wfn = wfn, .pot = pot }, .prop = prop, .orthw = .empty };
@@ -868,6 +922,8 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
 
         var obs = try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
 
+        defer obs.deinit(gpa);
+
         if (ctx.opt.write.wavefunction != null and ctx.opt.adiabatic) {
             try ctx.sim.qsys.wfn.toAdia(ctx.sim.qsys.ham, gpa);
         }
@@ -881,8 +937,6 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
         }
-
-        obs.deinit(gpa);
     }
 
     try hist.exportAndDeinit(io, ctx.opt.time_step, ctx.sim.qsys.grid, ctx.opt.write, gpa);
@@ -897,7 +951,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var sim = try init(T, opt, arena);
+    var sim = try init(T, opt, gpa);
+
+    defer sim.deinit(gpa);
 
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 
@@ -905,7 +961,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i, .log = log }, gpa, arena);
 
         if (i < if (opt.imaginary) |imag| imag.nstate else 0) {
-            try sim.orthw.append(arena, try sim.qsys.wfn.clone(arena));
+            try sim.orthw.append(gpa, try sim.qsys.wfn.clone(gpa));
         }
 
         try output.append(arena, obs);

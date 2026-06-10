@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Allocator = std.mem.Allocator;
+
 // zig fmt: off
 const Matrix     = @import("tensor.zig")    .Matrix;
 const Vector     = @import("tensor.zig")    .Vector;
@@ -48,6 +50,8 @@ pub fn Potential(comptime T: type) type {
                 // zig fmt: on
             };
         }
+
+        pub fn deinit(_: *@This(), _: Allocator) void {}
 
         pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) void {
             switch (self) {

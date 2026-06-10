@@ -34,6 +34,12 @@ pub fn Integrator(comptime T: type) type {
             unreachable;
         }
 
+        pub fn deinit(self: @This(), gpa: Allocator) void {
+            switch (self.method) {
+                inline else => |*method| method.deinit(gpa),
+            }
+        }
+
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {
             switch (self.method) {
                 inline else => |*method| method.step(y, dt, ctx, dFn),
@@ -60,6 +66,14 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
             self.tmp = try gpa.alloc(T, nstate);
 
             return self;
+        }
+
+        pub fn deinit(self: @This(), gpa: Allocator) void {
+            for (0..self.k.len) |i| {
+                gpa.free(self.k[i]);
+            }
+
+            gpa.free(self.tmp);
         }
 
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {

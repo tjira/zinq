@@ -90,6 +90,13 @@ pub fn Ensemble(comptime T: type) type {
             };
         }
 
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.r.deinit(gpa);
+            self.p.deinit(gpa);
+            self.a.deinit(gpa);
+            self.s.deinit(gpa);
+        }
+
         pub fn pos(self: @This(), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(self.r.ncol(), gpa);
 
@@ -228,6 +235,17 @@ pub fn GradientBuffer(comptime T: type) type {
             };
         }
 
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.r_dual.deinit(gpa);
+            self.V_dual.deinit(gpa);
+
+            self.V.deinit(gpa);
+            self.W.deinit(gpa);
+            self.U.deinit(gpa);
+
+            self.grad_V.deinit(gpa);
+        }
+
         pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), adiabatic: bool) void {
             const nstate = pot.nstate();
 
@@ -288,6 +306,10 @@ pub fn Propagator(comptime T: type) type {
 
         pub fn init(dt: T, adiabatic: bool, sh: ?SurfaceHopping(T)) @This() {
             return .{ .dt = dt, .adiabatic = adiabatic, .sh = sh };
+        }
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            if (self.sh) |*sh| sh.deinit(gpa);
         }
 
         pub fn step(self: *@This(), ensemble: *Ensemble(T), gb: *GradientBuffer(T), pot: Potential(T), time: T) !void {
@@ -530,20 +552,41 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
 // CLASSICAL SYSTEM ====================================================================================================
 
 fn ClassicalSystem(comptime T: type) type {
-    return struct { ensemble: Ensemble(T), pot: Potential(T), adiabatic: bool };
+    return struct {
+        // zig fmt: off
+        ensemble: Ensemble(T), pot: Potential(T), adiabatic: bool,
+        // zig fmt: on
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.ensemble.deinit(gpa);
+
+            self.pot.deinit(gpa);
+        }
+    };
 }
 
 // RUN =================================================================================================================
 
 fn SimulationState(comptime T: type) type {
-    return struct { csys: ClassicalSystem(T), prop: Propagator(T), gb: GradientBuffer(T) };
+    return struct {
+        // zig fmt: off
+        csys: ClassicalSystem(T), prop: Propagator(T), gb: GradientBuffer(T),
+        // zig fmt: on
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.csys.deinit(gpa);
+            self.prop.deinit(gpa);
+
+            self.gb.deinit(gpa);
+        }
+    };
 }
 
 fn SolveContext(comptime T: type) type {
     return struct { opt: Options, sim: *SimulationState(T), log: bool };
 }
 
-fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
+fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     const pot = Potential(T).init(opt.potential);
 
     // zig fmt: off
@@ -551,12 +594,12 @@ fn init(comptime T: type, opt: Options, arena: Allocator) !SimulationState(T) {
     const ntraj  = opt.trajectories;
     // zig fmt: on
 
-    var sh = if (opt.surface_hopping) |shopt| try SurfaceHopping(T).init(shopt, nstate, ntraj, opt.initial_conditions.state, opt.adiabatic, arena) else null;
+    var sh = if (opt.surface_hopping) |shopt| try SurfaceHopping(T).init(shopt, nstate, ntraj, opt.initial_conditions.state, opt.adiabatic, gpa) else null;
 
     // zig fmt: off
-    var ensemble = try Ensemble      (T).init(pot.ndim(),    nstate,        ntraj, opt.mass, arena);
-    var gb       = try GradientBuffer(T).init(pot.ndim(),    nstate,        ntraj,           arena);
-    const prop   =     Propagator    (T).init(opt.time_step, opt.adiabatic, sh                    );
+    var ensemble = try Ensemble      (T).init(pot.ndim(),    nstate,        ntraj, opt.mass, gpa);
+    var gb       = try GradientBuffer(T).init(pot.ndim(),    nstate,        ntraj,           gpa);
+    const prop   =     Propagator    (T).init(opt.time_step, opt.adiabatic, sh                  );
     // zig fmt: on
 
     ensemble.setGaussian(opt.initial_conditions);
@@ -617,7 +660,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var sim = try init(T, opt, arena);
+    var sim = try init(T, opt, gpa);
+
+    defer sim.deinit(gpa);
 
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 

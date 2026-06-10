@@ -81,6 +81,15 @@ pub fn SurfaceHopping(comptime T: type) type {
             return .{ .rng = rng, .probs = probs, .method = method, .nstep = nstep, .targets = targets, .adia = adia };
         }
 
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.probs.deinit(gpa);
+            gpa.free(self.targets);
+
+            switch (self.method) {
+                inline else => |*field| field.deinit(gpa),
+            }
+        }
+
         pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), dt: T) !void {
             self.update(if (self.adia) W else V, U);
 
@@ -213,6 +222,17 @@ pub fn FewestSwitches(comptime T: type) type {
             const itg = try Integrator(Complex(T)).init(itg_tag, nstate, gpa);
 
             return .{ .coef = coef, .ham = ham, .uhist = uhist, .sigma = sigma, .itg = itg };
+        }
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            // zig fmt: off
+            self.coef.deinit(gpa); self.ham.deinit(gpa); self.sigma.deinit(gpa);
+            // zig fmt: on
+
+            self.uhist[0].deinit(gpa);
+            self.uhist[1].deinit(gpa);
+
+            self.itg.deinit(gpa);
         }
 
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
@@ -356,6 +376,12 @@ pub fn LandauZener(comptime T: type) type {
             history[2].fill(std.math.nan(T));
 
             return .{ .history = history };
+        }
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.history[0].deinit(gpa);
+            self.history[1].deinit(gpa);
+            self.history[2].deinit(gpa);
         }
 
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
