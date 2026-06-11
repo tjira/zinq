@@ -462,7 +462,9 @@ fn Propagator(comptime T: type) type {
 
         pub fn step(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
             try self.applyR(wfn, gpa);
+
             try self.applyK(wfn);
+
             try self.applyR(wfn, gpa);
         }
 
@@ -531,40 +533,64 @@ fn Observables(comptime T: type) type {
         ekin: ?T = null,
         norm: ?T = null,
 
-        pub fn init(qsys: *QuantumSystem(T), write: Write, adia: bool, log: bool, gpa: Allocator) !@This() {
+        pub fn init(sim: *SimulationState(T), write: Write, adia: bool, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
             errdefer obs.deinit(gpa);
 
+            const calc_ekin, const calc_epot = .{ write.kinetic_energy != null, write.potential_energy != null };
+
+            const calc_norm = write.norm != null;
+
             var calc = .{
                 .pos = log or write.position != null,
-                .norm = log or write.norm != null,
-                .epot = log or write.potential_energy != null,
-                .pop = log or write.population != null,
                 .mom = log or write.momentum != null,
-                .ekin = log or write.kinetic_energy != null,
+
+                .pop = log or write.population != null,
+
+                .norm = log or calc_norm,
+                .ekin = log or calc_ekin,
+                .epot = log or calc_epot,
             };
 
             calc.ekin = calc.ekin or write.total_energy != null;
             calc.epot = calc.epot or write.total_energy != null;
 
-            if (calc.pos) obs.pos = try qsys.wfn.pos(qsys.grid, gpa);
-            if (calc.norm) obs.norm = qsys.wfn.norm(qsys.grid);
-            if (calc.epot) obs.epot = qsys.wfn.epot(qsys.ham, qsys.grid);
+            if (calc.pos) {
+                obs.pos = try sim.wfn.pos(sim.wfn_kpgrids, gpa);
+            }
+
+            if (calc.norm) {
+                obs.norm = sim.wfn.norm(sim.wfn_kpgrids);
+            }
+
+            if (calc.epot) {
+                obs.epot = sim.wfn.epot(sim.hams, sim.wfn_kpgrids);
+            }
 
             if (calc.pop) {
-                if (adia == true) obs.pop = try qsys.wfn.popAdia(qsys.ham, qsys.grid, gpa);
-                if (adia != true) obs.pop = try qsys.wfn.pop(qsys.grid, gpa);
+                if (adia == true) {
+                    obs.pop = try sim.wfn.popAdia(sim.hams, sim.wfn_kpgrids, gpa);
+                }
+
+                if (adia != true) {
+                    obs.pop = try sim.wfn.pop(sim.wfn_kpgrids, gpa);
+                }
             }
 
             const needs_fft = calc.mom or calc.ekin;
 
             if (needs_fft) {
-                try qsys.wfn.fft(-1);
+                try sim.wfn.fft(-1);
 
-                if (calc.mom) obs.mom = try qsys.wfn.mom(qsys.grid, gpa);
-                if (calc.ekin) obs.ekin = qsys.wfn.ekin(qsys.ham, qsys.grid);
+                if (calc.mom) {
+                    obs.mom = try sim.wfn.mom(sim.wfn_kpgrids, gpa);
+                }
 
-                try qsys.wfn.fft(1);
+                if (calc.ekin) {
+                    obs.ekin = sim.wfn.ekin(sim.hams, sim.wfn_kpgrids);
+                }
+
+                try sim.wfn.fft(1);
             }
 
             return obs;
@@ -582,55 +608,54 @@ fn Observables(comptime T: type) type {
 
 fn History(comptime T: type) type {
     return struct {
-        pos: ?Matrix(T),
-        mom: ?Matrix(T),
-        pop: ?Matrix(T),
+        pos: ?Matrix(T) = null,
+        mom: ?Matrix(T) = null,
+        pop: ?Matrix(T) = null,
 
-        epot: ?Matrix(T),
-        ekin: ?Matrix(T),
-        etot: ?Matrix(T),
-        norm: ?Matrix(T),
+        epot: ?Matrix(T) = null,
+        ekin: ?Matrix(T) = null,
+        etot: ?Matrix(T) = null,
+        norm: ?Matrix(T) = null,
 
-        wfn: ?Matrix(T),
+        wfn: ?Matrix(T) = null,
 
         index: usize = 0,
 
         pub fn init(ndim: usize, nstate: usize, npoint: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
+            var hist = @This(){};
+            errdefer hist.deinit(gpa);
+
+            var store_ekin, var store_epot = .{ write.kinetic_energy != null, write.potential_energy != null };
+
             const store_wfn = write.wavefunction != null;
 
-            const store_epot = write.potential_energy != null or write.total_energy != null;
-            const store_ekin = write.kinetic_energy != null or write.total_energy != null;
+            store_epot = store_epot or write.total_energy != null;
+            store_ekin = store_ekin or write.total_energy != null;
 
             const store_etot = write.total_energy != null;
 
             const wfn_nrow = std.math.pow(usize, npoint, ndim);
 
-            var self = @This(){
-                .pos = null,
-                .mom = null,
-                .pop = null,
+            if (write.position != null) hist.pos = try Matrix(T).init(iters, ndim, gpa);
+            if (write.momentum != null) hist.mom = try Matrix(T).init(iters, ndim, gpa);
 
-                .norm = null,
-                .etot = null,
-                .ekin = null,
-                .epot = null,
+            if (write.population != null) {
+                hist.pop = try Matrix(T).init(iters, nstate, gpa);
+            }
 
-                .wfn = null,
-            };
-            errdefer self.deinit(gpa);
+            if (write.norm != null) {
+                hist.norm = try Matrix(T).init(iters, 1, gpa);
+            }
 
-            if (write.position != null) self.pos = try Matrix(T).init(iters, ndim, gpa);
-            if (write.momentum != null) self.mom = try Matrix(T).init(iters, ndim, gpa);
-            if (write.population != null) self.pop = try Matrix(T).init(iters, nstate, gpa);
-            if (write.norm != null) self.norm = try Matrix(T).init(iters, 1, gpa);
+            if (store_wfn) {
+                hist.wfn = try Matrix(T).init(wfn_nrow, 2 * nstate * iters, gpa);
+            }
 
-            if (store_wfn) self.wfn = try Matrix(T).init(wfn_nrow, 2 * nstate * iters, gpa);
+            if (store_etot) hist.etot = try Matrix(T).init(iters, 1, gpa);
+            if (store_ekin) hist.ekin = try Matrix(T).init(iters, 1, gpa);
+            if (store_epot) hist.epot = try Matrix(T).init(iters, 1, gpa);
 
-            if (store_etot) self.etot = try Matrix(T).init(iters, 1, gpa);
-            if (store_ekin) self.ekin = try Matrix(T).init(iters, 1, gpa);
-            if (store_epot) self.epot = try Matrix(T).init(iters, 1, gpa);
-
-            return self;
+            return hist;
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -688,15 +713,37 @@ fn History(comptime T: type) type {
         pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
-            if (write.position) |path| try writeMatrixLspace(T, io, path, self.pos.?, 0, end);
-            if (write.momentum) |path| try writeMatrixLspace(T, io, path, self.mom.?, 0, end);
-            if (write.population) |path| try writeMatrixLspace(T, io, path, self.pop.?, 0, end);
-            if (write.potential_energy) |path| try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
-            if (write.kinetic_energy) |path| try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
-            if (write.norm) |path| try writeMatrixLspace(T, io, path, self.norm.?, 0, end);
-            if (write.total_energy) |path| try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
+            if (write.position) |path| {
+                try writeMatrixLspace(T, io, path, self.pos.?, 0, end);
+            }
 
-            if (write.wavefunction) |path| try writeMatrixHjoin(T, io, path, grid.r, self.wfn.?);
+            if (write.momentum) |path| {
+                try writeMatrixLspace(T, io, path, self.mom.?, 0, end);
+            }
+
+            if (write.population) |path| {
+                try writeMatrixLspace(T, io, path, self.pop.?, 0, end);
+            }
+
+            if (write.potential_energy) |path| {
+                try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
+            }
+
+            if (write.kinetic_energy) |path| {
+                try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
+            }
+
+            if (write.norm) |path| {
+                try writeMatrixLspace(T, io, path, self.norm.?, 0, end);
+            }
+
+            if (write.total_energy) |path| {
+                try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
+            }
+
+            if (write.wavefunction) |path| {
+                try writeMatrixHjoin(T, io, path, grid.r, self.wfn.?);
+            }
         }
     };
 }
@@ -803,40 +850,24 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
     timer.* = std.Io.Timestamp.now(io, .real);
 }
 
-// QUANTUM SYSTEM ======================================================================================================
-
-fn QuantumSystem(comptime T: type) type {
-    return struct {
-        grid: Grid(T),
-        ham: Hamiltonian(T),
-        pot: Potential(T),
-        wfn: Wavefunction(T),
-
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.grid.deinit(gpa);
-
-            self.ham.deinit(gpa);
-            self.pot.deinit(gpa);
-            self.wfn.deinit(gpa);
-        }
-    };
-}
-
 // RUN =================================================================================================================
 
 fn SimulationState(comptime T: type) type {
     return struct {
-        qsys: QuantumSystem(T),
-        prop: Propagator(T),
+        wfn_kpgrids: Grid(T),
+        hams: Hamiltonian(T),
+        epoten: Potential(T),
+        wfn: Wavefunction(T),
+        propg: Propagator(T),
+
         orthw: std.ArrayList(Wavefunction(T)),
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.qsys.deinit(gpa);
-            self.prop.deinit(gpa);
-
             for (self.orthw.items) |*e| e.deinit(gpa);
 
-            self.orthw.deinit(gpa);
+            inline for (@typeInfo(@This()).@"struct".fields) |field| {
+                @field(self, field.name).deinit(gpa);
+            }
         }
     };
 }
@@ -869,25 +900,23 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     const prop = try Propagator(T).init(ham, dt, gpa);
     errdefer prop.deinit(gpa);
 
-    return .{ .qsys = .{ .grid = grid, .ham = ham, .wfn = wfn, .pot = pot }, .prop = prop, .orthw = .empty };
+    return .{ .wfn_kpgrids = grid, .hams = ham, .wfn = wfn, .epoten = pot, .propg = prop, .orthw = .empty };
 }
 
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
-    const ndim = ctx.sim.qsys.grid.r.ncol();
-    const nstate = ctx.sim.qsys.wfn.W.nrow();
-    const iters = ctx.opt.iterations;
+    const ndim, const nstate = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate() };
 
     const neig = if (ctx.opt.imaginary) |imag| imag.nstate else 1;
 
-    if (ctx.log) try printHeader(io, ctx.eigs, ctx.sim.qsys.grid.r.ncol(), ctx.sim.qsys.wfn.W.nrow(), neig);
+    if (ctx.log) try printHeader(io, ctx.eigs, ndim, nstate, neig);
 
-    ctx.sim.qsys.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.qsys.grid);
+    ctx.sim.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.wfn_kpgrids);
 
-    var hist = try History(T).init(ndim, nstate, ctx.opt.grid.npoint, iters + 1, ctx.opt.write, gpa);
+    var hist = try History(T).init(ndim, nstate, ctx.opt.grid.npoint, ctx.opt.iterations + 1, ctx.opt.write, gpa);
     defer hist.deinit(gpa);
 
     if (ctx.opt.initial_conditions.adiabatic) {
-        try ctx.sim.qsys.wfn.toDia(ctx.sim.qsys.ham, gpa);
+        try ctx.sim.wfn.toDia(ctx.sim.hams, gpa);
     }
 
     var timer = std.Io.Timestamp.now(io, .real);
@@ -895,43 +924,43 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
     for (0..ctx.opt.iterations + 1) |i| {
         const time = (@as(T, @floatFromInt(i)) - 0.5) * ctx.opt.time_step;
 
-        if (i > 0 and ctx.sim.qsys.pot.isTd()) {
-            try ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, time);
+        if (i > 0 and ctx.sim.epoten.isTd()) {
+            try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, time);
 
-            ctx.sim.prop.update(ctx.sim.qsys.ham);
+            ctx.sim.propg.update(ctx.sim.hams);
         }
 
-        if (i > 0) try ctx.sim.prop.step(&ctx.sim.qsys.wfn, gpa);
+        if (i > 0) try ctx.sim.propg.step(&ctx.sim.wfn, gpa);
 
         if (ctx.opt.imaginary != null) for (ctx.sim.orthw.items) |e| {
-            const overlap = e.overlap(ctx.sim.qsys.wfn, ctx.sim.qsys.grid);
+            const overlap = e.overlap(ctx.sim.wfn, ctx.sim.wfn_kpgrids);
 
-            for (0..ctx.sim.qsys.wfn.W.data.len) |k| {
-                ctx.sim.qsys.wfn.W.data[k] = ctx.sim.qsys.wfn.W.data[k].sub(overlap.mul(e.W.data[k]));
+            for (0..ctx.sim.wfn.W.data.len) |k| {
+                ctx.sim.wfn.W.data[k] = ctx.sim.wfn.W.data[k].sub(overlap.mul(e.W.data[k]));
             }
         };
 
-        if (ctx.opt.imaginary != null) ctx.sim.qsys.wfn.normalize(ctx.sim.qsys.grid);
+        if (ctx.opt.imaginary != null) ctx.sim.wfn.normalize(ctx.sim.wfn_kpgrids);
 
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
-        if (ctx.sim.qsys.pot.isTd()) {
+        if (ctx.sim.epoten.isTd()) {
             const t = @as(T, @floatFromInt(i)) * ctx.opt.time_step;
 
-            try ctx.sim.qsys.ham.update(ctx.sim.qsys.grid, ctx.sim.qsys.pot, t);
+            try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, t);
         }
 
-        var obs = try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
+        var obs = try Observables(T).init(ctx.sim, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
         defer obs.deinit(gpa);
 
         if (ctx.opt.write.wavefunction != null and ctx.opt.adiabatic) {
-            try ctx.sim.qsys.wfn.toAdia(ctx.sim.qsys.ham, gpa);
+            try ctx.sim.wfn.toAdia(ctx.sim.hams, gpa);
         }
 
-        hist.append(ctx.sim.qsys.wfn, obs);
+        hist.append(ctx.sim.wfn, obs);
 
         if (ctx.opt.write.wavefunction != null and ctx.opt.adiabatic) {
-            try ctx.sim.qsys.wfn.toDia(ctx.sim.qsys.ham, gpa);
+            try ctx.sim.wfn.toDia(ctx.sim.hams, gpa);
         }
 
         if (is_log_step) {
@@ -939,9 +968,9 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
         }
     }
 
-    try hist.exportWrite(io, ctx.opt.time_step, ctx.sim.qsys.grid, ctx.opt.write);
+    try hist.exportWrite(io, ctx.opt.time_step, ctx.sim.wfn_kpgrids, ctx.opt.write);
 
-    return try Observables(T).init(&ctx.sim.qsys, ctx.opt.write, ctx.opt.adiabatic, true, arena);
+    return try Observables(T).init(ctx.sim, ctx.opt.write, ctx.opt.adiabatic, true, arena);
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator, arena: Allocator) !std.ArrayList(Observables(T)) {
@@ -960,7 +989,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i, .log = log }, gpa, arena);
 
         if (i < if (opt.imaginary) |imag| imag.nstate else 0) {
-            var cloned = try sim.qsys.wfn.clone(gpa);
+            var cloned = try sim.wfn.clone(gpa);
             errdefer cloned.deinit(gpa);
 
             try sim.orthw.append(gpa, cloned);

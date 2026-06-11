@@ -63,9 +63,8 @@ pub fn Ensemble(comptime T: type) type {
         s: Vector(usize),
 
         mass: T,
-        nstate: usize,
 
-        pub fn init(ndim: usize, nstate: usize, ntraj: usize, mass: T, gpa: Allocator) !@This() {
+        pub fn init(ndim: usize, ntraj: usize, mass: T, gpa: Allocator) !@This() {
             var r = try Matrix(T).init(ntraj, ndim, gpa);
             errdefer r.deinit(gpa);
 
@@ -78,7 +77,7 @@ pub fn Ensemble(comptime T: type) type {
             const s = try Vector(usize).init(ntraj, gpa);
             errdefer s.deinit(gpa);
 
-            return .{ .r = r, .p = p, .a = a, .s = s, .mass = mass, .nstate = nstate };
+            return .{ .r = r, .p = p, .a = a, .s = s, .mass = mass };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -112,8 +111,8 @@ pub fn Ensemble(comptime T: type) type {
             return value;
         }
 
-        pub fn pop(self: @This(), gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(self.nstate, gpa);
+        pub fn pop(self: @This(), nstate: usize, gpa: Allocator) !Vector(T) {
+            var value = try Vector(T).initZero(nstate, gpa);
 
             for (0..self.s.length()) |i| {
                 value.ptr(self.s.at(i)).* += 1.0;
@@ -143,13 +142,13 @@ pub fn Ensemble(comptime T: type) type {
         pub fn epot(self: @This(), pot: Potential(T), time: T, adiabatic: bool, gpa: Allocator) !T {
             var sum: T = 0;
 
-            const V_slice = try gpa.alloc(T, self.nstate * self.nstate);
+            const V_slice = try gpa.alloc(T, pot.nstate() * pot.nstate());
             defer gpa.free(V_slice);
 
-            const U_slice = try gpa.alloc(T, self.nstate * self.nstate);
+            const U_slice = try gpa.alloc(T, pot.nstate() * pot.nstate());
             defer gpa.free(U_slice);
 
-            const W_slice = try gpa.alloc(T, self.nstate);
+            const W_slice = try gpa.alloc(T, pot.nstate());
             defer gpa.free(W_slice);
 
             if (adiabatic) for (0..self.r.nrow()) |i| {
@@ -163,7 +162,7 @@ pub fn Ensemble(comptime T: type) type {
             if (!adiabatic) for (0..self.r.nrow()) |i| {
                 pot.eval(T, V_slice, self.r.rowSlice(i), time);
 
-                sum += V_slice[self.s.at(i) * self.nstate + self.s.at(i)];
+                sum += V_slice[self.s.at(i) * pot.nstate() + self.s.at(i)];
             };
 
             return sum / @as(T, @floatFromInt(self.r.nrow()));
@@ -171,12 +170,11 @@ pub fn Ensemble(comptime T: type) type {
 
         pub fn setGaussian(self: *@This(), ic: InitialConditions) void {
             var split_mix = std.Random.SplitMix64.init(ic.seed);
+            var rng = std.Random.DefaultPrng.init(split_mix.next());
 
             for (0..self.s.length()) |i| {
                 self.s.ptr(i).* = ic.state;
             }
-
-            var rng = std.Random.DefaultPrng.init(split_mix.next());
 
             const random = rng.random();
 
@@ -199,6 +197,8 @@ pub fn Ensemble(comptime T: type) type {
 
 pub fn GradientBuffer(comptime T: type) type {
     return struct {
+        adia: bool,
+
         r_dual: Matrix(ScalarDual(T)),
         V_dual: Matrix(ScalarDual(T)),
 
@@ -208,7 +208,7 @@ pub fn GradientBuffer(comptime T: type) type {
 
         grad_V: Matrix(T),
 
-        pub fn init(ndim: usize, nstate: usize, ntraj: usize, gpa: Allocator) !@This() {
+        pub fn init(ndim: usize, nstate: usize, ntraj: usize, adia: bool, gpa: Allocator) !@This() {
             var r_dual = try Matrix(ScalarDual(T)).init(ntraj, ndim, gpa);
             errdefer r_dual.deinit(gpa);
 
@@ -227,7 +227,7 @@ pub fn GradientBuffer(comptime T: type) type {
             const grad_V = try Matrix(T).init(ntraj, ndim * nstate * nstate, gpa);
             errdefer grad_V.deinit(gpa);
 
-            return .{ .r_dual = r_dual, .V_dual = V_dual, .V = V, .W = W, .U = U, .grad_V = grad_V };
+            return .{ .r_dual = r_dual, .V_dual = V_dual, .V = V, .W = W, .U = U, .grad_V = grad_V, .adia = adia };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -241,11 +241,11 @@ pub fn GradientBuffer(comptime T: type) type {
             self.grad_V.deinit(gpa);
         }
 
-        pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), adiabatic: bool) void {
+        pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T)) void {
             const nstate = pot.nstate();
 
             for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
-                if (adiabatic) {
+                if (self.adia) {
                     var der: T = 0;
 
                     for (0..nstate) |k| {
@@ -261,7 +261,7 @@ pub fn GradientBuffer(comptime T: type) type {
                     ensemble.a.ptr(i, j).* = -der / ensemble.mass;
                 }
 
-                if (!adiabatic) {
+                if (!self.adia) {
                     const k = ensemble.s.at(i) * nstate + ensemble.s.at(i);
 
                     ensemble.a.ptr(i, j).* = -self.grad_V.at(i, j * nstate * nstate + k) / ensemble.mass;
@@ -269,10 +269,10 @@ pub fn GradientBuffer(comptime T: type) type {
             };
         }
 
-        pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T, adiabatic: bool) !void {
+        pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T) !void {
             pot.evalBatch(T, &self.V, r, time);
 
-            if (adiabatic) {
+            if (self.adia) {
                 try eighBatch(T, &self.W, &self.U, self.V);
             }
 
@@ -297,36 +297,36 @@ pub fn Propagator(comptime T: type) type {
     return struct {
         sh: ?SurfaceHopping(T),
 
-        adiabatic: bool,
         dt: T,
 
-        pub fn init(dt: T, adiabatic: bool, sh: ?SurfaceHopping(T)) @This() {
-            return .{ .dt = dt, .adiabatic = adiabatic, .sh = sh };
+        pub fn init(dt: T, sh: ?SurfaceHopping(T)) @This() {
+            return .{ .dt = dt, .sh = sh };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.sh) |*sh| sh.deinit(gpa);
         }
 
-        pub fn step(self: *@This(), ensemble: *Ensemble(T), gb: *GradientBuffer(T), pot: Potential(T), time: T) !void {
-            for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
-                ensemble.p.ptr(i, j).* += 0.5 * ensemble.mass * ensemble.a.at(i, j) * self.dt;
+        // pub fn step(self: *@This(), csys: *ClassicalSystem(T), gb: *GradientBuffer(T), time: T, dt: T) !void {
+        pub fn step(self: *@This(), ens: *Ensemble(T), gb: *GradientBuffer(T), pot: Potential(T), time: T) !void {
+            for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
+                ens.p.ptr(i, j).* += 0.5 * ens.mass * ens.a.at(i, j) * self.dt;
 
-                ensemble.r.ptr(i, j).* += (ensemble.p.at(i, j) / ensemble.mass) * self.dt;
+                ens.r.ptr(i, j).* += (ens.p.at(i, j) / ens.mass) * self.dt;
             };
 
-            try gb.update(ensemble.r, pot, time, self.adiabatic);
+            try gb.update(ens.r, pot, time);
 
-            gb.apply(ensemble, pot, self.adiabatic);
+            gb.apply(ens, pot);
 
-            for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
-                ensemble.p.ptr(i, j).* += 0.5 * ensemble.mass * ensemble.a.at(i, j) * self.dt;
+            for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
+                ens.p.ptr(i, j).* += 0.5 * ens.mass * ens.a.at(i, j) * self.dt;
             };
 
             if (self.sh) |*sh| {
-                try sh.hop(ensemble, gb.V, gb.W, gb.U, self.dt);
+                try sh.hop(ens, gb.V, gb.W, gb.U, self.dt);
 
-                gb.apply(ensemble, pot, self.adiabatic);
+                gb.apply(ens, pot);
             }
         }
     };
@@ -343,27 +343,37 @@ fn Observables(comptime T: type) type {
         epot: ?T = null,
         ekin: ?T = null,
 
-        pub fn init(csys: ClassicalSystem(T), time: T, write: Write, log: bool, gpa: Allocator) !@This() {
+        pub fn init(sim: SimulationState(T), time: T, write: Write, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
             errdefer obs.deinit(gpa);
 
+            const calc_ekin, const calc_epot = .{ write.kinetic_energy != null, write.potential_energy != null };
+
             var calc = .{
                 .pos = log or write.position != null,
-                .epot = log or write.potential_energy != null,
-                .pop = log or write.population != null,
                 .mom = log or write.momentum != null,
-                .ekin = log or write.kinetic_energy != null,
+
+                .pop = log or write.population != null,
+
+                .ekin = log or calc_ekin,
+                .epot = log or calc_epot,
             };
 
             calc.ekin = calc.ekin or write.total_energy != null;
             calc.epot = calc.epot or write.total_energy != null;
 
-            if (calc.mom) obs.mom = try csys.ensemble.mom(gpa);
-            if (calc.pos) obs.pos = try csys.ensemble.pos(gpa);
-            if (calc.pop) obs.pop = try csys.ensemble.pop(gpa);
+            if (calc.mom) obs.mom = try sim.ensemble.mom(gpa);
+            if (calc.pos) obs.pos = try sim.ensemble.pos(gpa);
 
-            if (calc.ekin) obs.ekin = csys.ensemble.ekin();
-            if (calc.epot) obs.epot = try csys.ensemble.epot(csys.pot, time, csys.adiabatic, gpa);
+            if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), gpa);
+
+            if (calc.ekin) {
+                obs.ekin = sim.ensemble.ekin();
+            }
+
+            if (calc.epot) {
+                obs.epot = try sim.ensemble.epot(sim.elpoten, time, sim.gb.adia, gpa);
+            }
 
             return obs;
         }
@@ -380,42 +390,37 @@ fn Observables(comptime T: type) type {
 
 fn History(comptime T: type) type {
     return struct {
-        pos: ?Matrix(T),
-        mom: ?Matrix(T),
-        pop: ?Matrix(T),
+        pos: ?Matrix(T) = null,
+        mom: ?Matrix(T) = null,
+        pop: ?Matrix(T) = null,
 
-        epot: ?Matrix(T),
-        ekin: ?Matrix(T),
-        etot: ?Matrix(T),
+        epot: ?Matrix(T) = null,
+        ekin: ?Matrix(T) = null,
+        etot: ?Matrix(T) = null,
 
         index: usize = 0,
 
         pub fn init(ndim: usize, nstate: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
-            const store_epot = write.potential_energy != null or write.total_energy != null;
-            const store_ekin = write.kinetic_energy != null or write.total_energy != null;
+            var hist = @This(){};
+            errdefer hist.deinit(gpa);
+
+            var store_ekin, var store_epot = .{ write.kinetic_energy != null, write.potential_energy != null };
+
+            store_epot = store_epot or write.total_energy != null;
+            store_ekin = store_ekin or write.total_energy != null;
 
             const store_etot = write.total_energy != null;
 
-            var self = @This(){
-                .pos = null,
-                .mom = null,
-                .pop = null,
+            if (write.position != null) hist.pos = try Matrix(T).init(iters, ndim, gpa);
+            if (write.momentum != null) hist.mom = try Matrix(T).init(iters, ndim, gpa);
 
-                .ekin = null,
-                .epot = null,
-                .etot = null,
-            };
-            errdefer self.deinit(gpa);
+            if (write.population != null) hist.pop = try Matrix(T).init(iters, nstate, gpa);
 
-            if (write.position != null) self.pos = try Matrix(T).init(iters, ndim, gpa);
-            if (write.momentum != null) self.mom = try Matrix(T).init(iters, ndim, gpa);
-            if (write.population != null) self.pop = try Matrix(T).init(iters, nstate, gpa);
+            if (store_ekin) hist.ekin = try Matrix(T).init(iters, 1, gpa);
+            if (store_epot) hist.epot = try Matrix(T).init(iters, 1, gpa);
+            if (store_etot) hist.etot = try Matrix(T).init(iters, 1, gpa);
 
-            if (store_ekin) self.ekin = try Matrix(T).init(iters, 1, gpa);
-            if (store_epot) self.epot = try Matrix(T).init(iters, 1, gpa);
-            if (store_etot) self.etot = try Matrix(T).init(iters, 1, gpa);
-
-            return self;
+            return hist;
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -461,12 +466,29 @@ fn History(comptime T: type) type {
         pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, write: Write) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
-            if (write.position) |path| try writeMatrixLspace(T, io, path, self.pos.?, 0, end);
-            if (write.momentum) |path| try writeMatrixLspace(T, io, path, self.mom.?, 0, end);
-            if (write.population) |path| try writeMatrixLspace(T, io, path, self.pop.?, 0, end);
-            if (write.potential_energy) |path| try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
-            if (write.kinetic_energy) |path| try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
-            if (write.total_energy) |path| try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
+            if (write.position) |path| {
+                try writeMatrixLspace(T, io, path, self.pos.?, 0, end);
+            }
+
+            if (write.momentum) |path| {
+                try writeMatrixLspace(T, io, path, self.mom.?, 0, end);
+            }
+
+            if (write.population) |path| {
+                try writeMatrixLspace(T, io, path, self.pop.?, 0, end);
+            }
+
+            if (write.potential_energy) |path| {
+                try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
+            }
+
+            if (write.kinetic_energy) |path| {
+                try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
+            }
+
+            if (write.total_energy) |path| {
+                try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
+            }
         }
     };
 }
@@ -551,36 +573,19 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
     timer.* = std.Io.Timestamp.now(io, .real);
 }
 
-// CLASSICAL SYSTEM ====================================================================================================
-
-fn ClassicalSystem(comptime T: type) type {
-    return struct {
-        ensemble: Ensemble(T),
-        pot: Potential(T),
-
-        adiabatic: bool,
-
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.ensemble.deinit(gpa);
-
-            self.pot.deinit(gpa);
-        }
-    };
-}
-
 // RUN =================================================================================================================
 
 fn SimulationState(comptime T: type) type {
     return struct {
-        csys: ClassicalSystem(T),
-        prop: Propagator(T),
+        ensemble: Ensemble(T),
         gb: GradientBuffer(T),
+        elpoten: Potential(T),
+        propag: Propagator(T),
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.csys.deinit(gpa);
-            self.prop.deinit(gpa);
-
-            self.gb.deinit(gpa);
+            inline for (@typeInfo(@This()).@"struct".fields) |field| {
+                @field(self, field.name).deinit(gpa);
+            }
         }
     };
 }
@@ -592,48 +597,43 @@ fn SolveContext(comptime T: type) type {
 fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     const pot = Potential(T).init(opt.potential);
 
-    const nstate = pot.nstate();
-    const ntraj = opt.trajectories;
-    const istate = opt.initial_conditions.state;
-    const adia = opt.adiabatic;
-
     var sh: ?SurfaceHopping(T) = null;
     errdefer if (sh) |*s| s.deinit(gpa);
 
+    const istate = opt.initial_conditions.state;
+
     if (opt.surface_hopping) |shopt| {
-        sh = try SurfaceHopping(T).init(shopt, nstate, ntraj, istate, adia, gpa);
+        sh = try SurfaceHopping(T).init(shopt, pot.nstate(), opt.trajectories, istate, opt.adiabatic, gpa);
     }
 
-    var ensemble = try Ensemble(T).init(pot.ndim(), nstate, ntraj, opt.mass, gpa);
+    var ensemble = try Ensemble(T).init(pot.ndim(), opt.trajectories, opt.mass, gpa);
     errdefer ensemble.deinit(gpa);
 
-    var gb = try GradientBuffer(T).init(pot.ndim(), nstate, ntraj, gpa);
+    var gb = try GradientBuffer(T).init(pot.ndim(), pot.nstate(), opt.trajectories, opt.adiabatic, gpa);
     errdefer gb.deinit(gpa);
 
-    var prop = Propagator(T).init(opt.time_step, opt.adiabatic, sh);
+    var prop = Propagator(T).init(opt.time_step, sh);
     errdefer prop.deinit(gpa);
 
     ensemble.setGaussian(opt.initial_conditions);
 
-    try gb.update(ensemble.r, pot, 0, opt.adiabatic);
+    try gb.update(ensemble.r, pot, 0);
 
     if (sh != null) {
         sh.?.update(if (opt.adiabatic) gb.W else gb.V, gb.U);
     }
 
-    gb.apply(&ensemble, pot, opt.adiabatic);
+    gb.apply(&ensemble, pot);
 
-    return .{ .csys = .{ .ensemble = ensemble, .pot = pot, .adiabatic = opt.adiabatic }, .prop = prop, .gb = gb };
+    return .{ .ensemble = ensemble, .elpoten = pot, .propag = prop, .gb = gb };
 }
 
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
-    const ndim = ctx.sim.csys.ensemble.r.ncol();
-    const nstate = ctx.sim.csys.ensemble.nstate;
-    const iters = ctx.opt.iterations;
+    const ndim, const nstate = .{ ctx.sim.elpoten.ndim(), ctx.sim.elpoten.nstate() };
 
-    if (ctx.log) try printHeader(io, ctx.sim.csys.pot.ndim(), ctx.sim.csys.pot.nstate());
+    if (ctx.log) try printHeader(io, ndim, nstate);
 
-    var hist = try History(T).init(ndim, nstate, iters + 1, ctx.opt.write, gpa);
+    var hist = try History(T).init(ndim, nstate, ctx.opt.iterations + 1, ctx.opt.write, gpa);
     defer hist.deinit(gpa);
 
     var timer = std.Io.Timestamp.now(io, .real);
@@ -642,12 +642,12 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
         const time = @as(T, @floatFromInt(i)) * ctx.opt.time_step;
 
         if (i > 0) {
-            try ctx.sim.prop.step(&ctx.sim.csys.ensemble, &ctx.sim.gb, ctx.sim.csys.pot, time);
+            try ctx.sim.propag.step(&ctx.sim.ensemble, &ctx.sim.gb, ctx.sim.elpoten, time);
         }
 
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
-        var obs = try Observables(T).init(ctx.sim.csys, time, ctx.opt.write, is_log_step, gpa);
+        var obs = try Observables(T).init(ctx.sim.*, time, ctx.opt.write, is_log_step, gpa);
         defer obs.deinit(gpa);
 
         hist.append(obs);
@@ -661,7 +661,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
 
     const end_time = @as(T, @floatFromInt(ctx.opt.iterations)) * ctx.opt.time_step;
 
-    return try Observables(T).init(ctx.sim.csys, end_time, ctx.opt.write, true, arena);
+    return try Observables(T).init(ctx.sim.*, end_time, ctx.opt.write, true, arena);
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator, arena: Allocator) !Observables(T) {

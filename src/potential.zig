@@ -128,12 +128,14 @@ pub fn TimeLinear(comptime T: type) type {
             const a = Value(U).fromFloat(self.a);
             const g = Value(U).fromFloat(self.g);
 
-            const V0 = Value(U).init(t).sub(a).mul(a);
+            const V00 = Value(U).init(t).sub(a).mul(a);
+            const V01 = g;
+            const V11 = V00.neg();
 
-            V[0] = V0.val;
-            V[1] = g.val;
-            V[2] = V[1];
-            V[3] = V0.neg().val;
+            V[0] = V00.val;
+            V[1] = V01.val;
+            V[2] = V01.val;
+            V[3] = V11.val;
         }
 
         pub fn ndim(_: @This()) usize {
@@ -165,13 +167,14 @@ pub fn Tully1(comptime T: type) type {
             const C = Value(U).fromFloat(self.C);
             const D = Value(U).fromFloat(self.D);
 
-            const v0 = r0.abs().mul(B).neg().exp().neg().adds(1).mul(A).mul(r0.sign());
-            const v1 = r0.mul(r0).mul(D).neg().exp().mul(C);
+            const V00 = r0.abs().mul(B).neg().exp().neg().adds(1).mul(A).mul(r0.sign());
+            const V01 = r0.mul(r0).mul(D).neg().exp().mul(C);
+            const V11 = V00.neg();
 
-            V[0] = v0.val;
-            V[1] = v1.val;
-            V[2] = V[1];
-            V[3] = v0.neg().val;
+            V[0] = V00.val;
+            V[1] = V01.val;
+            V[2] = V01.val;
+            V[3] = V11.val;
         }
 
         pub fn ndim(_: @This()) usize {

@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
+const DefaultPrng = std.Random.DefaultPrng;
 
 const Ensemble = @import("classical_dynamics.zig").Ensemble;
 const GradientBuffer = @import("classical_dynamics.zig").GradientBuffer;
@@ -32,13 +33,13 @@ pub const LandauZenerOptions = struct {
 
 pub fn SurfaceHopping(comptime T: type) type {
     return struct {
-        rng: std.Random.DefaultPrng,
-        probs: Matrix(T),
+        adia_alg: bool,
         method: Method,
+        nosteps: usize,
 
-        nstep: usize,
+        probs: Matrix(T),
         targets: []usize,
-        adia: bool,
+        rng: DefaultPrng,
 
         pub const Method = union(enum) {
             fewest_switches: FewestSwitches(T),
@@ -77,7 +78,7 @@ pub fn SurfaceHopping(comptime T: type) type {
             const probs = try Matrix(T).init(ntraj, nstate, gpa);
             errdefer probs.deinit(gpa);
 
-            return .{ .rng = rng, .probs = probs, .method = method, .nstep = nstep, .targets = targets, .adia = adia };
+            return .{ .rng = rng, .probs = probs, .method = method, .nosteps = nstep, .targets = targets, .adia_alg = adia };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -90,16 +91,16 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), dt: T) !void {
-            self.update(if (self.adia) W else V, U);
+            self.update(if (self.adia_alg) W else V, U);
 
-            const subdt = dt / @as(T, @floatFromInt(self.nstep));
+            const subdt = dt / @as(T, @floatFromInt(self.nosteps));
 
             for (0..self.targets.len) |i| {
                 self.targets[i] = ensemble.s.at(i);
             }
 
-            for (0..self.nstep) |_| {
-                try self.calcProbs(&self.probs, ensemble, self.nstep, subdt);
+            for (0..self.nosteps) |_| {
+                try self.calcProbs(ensemble, subdt);
 
                 self.calcTargetStates(ensemble);
             }
@@ -117,7 +118,7 @@ pub fn SurfaceHopping(comptime T: type) type {
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
 
-                if (self.adia and self.targets[i] != c) {
+                if (self.adia_alg and self.targets[i] != c) {
                     const E_new = W.at(i, self.targets[i]);
 
                     if (rescaleMomentumIsotropic(T, ensemble, i, E_new - W.at(i, c))) {
@@ -125,28 +126,28 @@ pub fn SurfaceHopping(comptime T: type) type {
                     }
                 }
 
-                if (!self.adia and self.targets[i] != c) {
+                if (!self.adia_alg and self.targets[i] != c) {
                     ensemble.s.ptr(i).* = self.targets[i];
                 }
             }
         }
 
-        fn calcProbs(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
+        fn calcProbs(self: *@This(), ensemble: *Ensemble(T), dt: T) !void {
             self.probs.zero();
 
-            if (self.adia) try self.calcProbsAdia(probs, ensemble, nstep, dt);
-            if (!self.adia) try self.calcProbsDia(probs, ensemble, nstep, dt);
+            if (self.adia_alg) try self.calcProbsAdia(ensemble, dt);
+            if (!self.adia_alg) try self.calcProbsDia(ensemble, dt);
         }
 
-        fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
+        fn calcProbsAdia(self: *@This(), ensemble: *Ensemble(T), dt: T) !void {
             switch (self.method) {
-                inline else => |*field| try field.calcProbsAdia(probs, ensemble, nstep, dt),
+                inline else => |*field| try field.calcProbsAdia(&self.probs, ensemble, self.nosteps, dt),
             }
         }
 
-        fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
+        fn calcProbsDia(self: *@This(), ensemble: *Ensemble(T), dt: T) !void {
             switch (self.method) {
-                inline else => |*field| try field.calcProbsDia(probs, ensemble, nstep, dt),
+                inline else => |*field| try field.calcProbsDia(&self.probs, ensemble, self.nosteps, dt),
             }
         }
 
@@ -155,11 +156,12 @@ pub fn SurfaceHopping(comptime T: type) type {
                 if (self.targets[i] != ensemble.s.at(i)) continue;
 
                 var sum: T = 0;
-                var accum: T = 0;
 
                 for (0..self.probs.ncol()) |j| {
                     sum += self.probs.at(i, j);
                 }
+
+                var accum: T = 0;
 
                 if (sum > 1) for (0..self.probs.ncol()) |j| {
                     self.probs.ptr(i, j).* /= sum;
@@ -172,6 +174,7 @@ pub fn SurfaceHopping(comptime T: type) type {
 
                     if (rv < accum) {
                         self.targets[i] = j;
+
                         break;
                     }
                 }
@@ -184,10 +187,11 @@ pub fn SurfaceHopping(comptime T: type) type {
 
 pub fn FewestSwitches(comptime T: type) type {
     return struct {
-        coef: Matrix(Complex(T)),
+        coefics: Matrix(Complex(T)),
         itg: Integrator(Complex(T)),
-        ham: Matrix(T),
-        sigma: Matrix(T),
+
+        hamilton: Matrix(T),
+        sigmatdc: Matrix(T),
         uhist: [2]Matrix(T),
 
         pub fn init(opt: anytype, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
@@ -226,13 +230,14 @@ pub fn FewestSwitches(comptime T: type) type {
             const itg = try Integrator(Complex(T)).init(itg_tag, nstate, gpa);
             errdefer itg.deinit(gpa);
 
-            return .{ .coef = coef, .ham = ham, .uhist = uhist, .sigma = sigma, .itg = itg };
+            return .{ .coefics = coef, .hamilton = ham, .uhist = uhist, .sigmatdc = sigma, .itg = itg };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.coef.deinit(gpa);
-            self.ham.deinit(gpa);
-            self.sigma.deinit(gpa);
+            self.coefics.deinit(gpa);
+
+            self.hamilton.deinit(gpa);
+            self.sigmatdc.deinit(gpa);
 
             self.uhist[0].deinit(gpa);
             self.uhist[1].deinit(gpa);
@@ -241,38 +246,37 @@ pub fn FewestSwitches(comptime T: type) type {
         }
 
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
-            if (std.math.isNan(self.uhist[0].at(0, 0))) return;
-
             std.debug.assert(probs.nrow() == ensemble.s.length());
-            std.debug.assert(probs.ncol() == ensemble.nstate);
-            std.debug.assert(self.sigma.nrow() == ensemble.s.length());
-            std.debug.assert(self.sigma.ncol() == ensemble.nstate * ensemble.nstate);
+            std.debug.assert(self.sigmatdc.nrow() == ensemble.s.length());
+            std.debug.assert(self.sigmatdc.ncol() == probs.ncol() * probs.ncol());
+
+            if (std.math.isNan(self.uhist[0].at(0, 0))) return;
 
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
 
-                const row_sigma = self.sigma.rowSlice(i);
+                const row_sigma = self.sigmatdc.rowSlice(i);
 
                 const row_u_new = self.uhist[1].rowSlice(i);
                 const row_u_old = self.uhist[0].rowSlice(i);
 
                 hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, dt * @as(T, @floatFromInt(nstep)));
 
-                const int_ctx = .{ .ham = self.ham.rowSlice(i), .sigma = row_sigma, .nstate = ensemble.nstate };
+                const int_ctx = .{ .ham = self.hamilton.rowSlice(i), .sigma = row_sigma };
 
-                self.itg.step(self.coef.rowSlice(i), dt, int_ctx, coefDerAdia);
+                self.itg.step(self.coefics.rowSlice(i), dt, int_ctx, coefDerAdia);
 
-                const rho_cc = self.coef.at(i, c).squaredMagnitude();
+                const rho_cc = self.coefics.at(i, c).squaredMagnitude();
 
                 if (rho_cc < 1e-14) continue;
 
-                for (0..ensemble.nstate) |j| {
+                for (0..probs.ncol()) |j| {
                     if (c == j) continue;
 
-                    const coef_c = self.coef.at(i, c);
-                    const coef_j = self.coef.at(i, j);
+                    const coef_c = self.coefics.at(i, c);
+                    const coef_j = self.coefics.at(i, j);
 
-                    const flux = self.sigma.at(i, c * ensemble.nstate + j) * coef_c.conjugate().mul(coef_j).re;
+                    const flux = self.sigmatdc.at(i, c * probs.ncol() + j) * coef_c.conjugate().mul(coef_j).re;
 
                     probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
                 }
@@ -281,28 +285,27 @@ pub fn FewestSwitches(comptime T: type) type {
 
         pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
             std.debug.assert(probs.nrow() == ensemble.s.length());
-            std.debug.assert(probs.ncol() == ensemble.nstate);
-            std.debug.assert(self.ham.nrow() == ensemble.s.length());
-            std.debug.assert(self.ham.ncol() == ensemble.nstate * ensemble.nstate);
+            std.debug.assert(self.hamilton.nrow() == ensemble.s.length());
+            std.debug.assert(self.hamilton.ncol() == probs.ncol() * probs.ncol());
 
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
 
-                const int_ctx = .{ .ham = self.ham.rowSlice(i), .nstate = ensemble.nstate };
+                const int_ctx = .{ .ham = self.hamilton.rowSlice(i) };
 
-                self.itg.step(self.coef.rowSlice(i), dt, int_ctx, coefDerDia);
+                self.itg.step(self.coefics.rowSlice(i), dt, int_ctx, coefDerDia);
 
-                const rho_cc = self.coef.at(i, c).squaredMagnitude();
+                const rho_cc = self.coefics.at(i, c).squaredMagnitude();
 
                 if (rho_cc < 1e-14) continue;
 
-                for (0..ensemble.nstate) |j| {
+                for (0..probs.ncol()) |j| {
                     if (c == j) continue;
 
-                    const coef_c = self.coef.at(i, c);
-                    const coef_j = self.coef.at(i, j);
+                    const coef_c = self.coefics.at(i, c);
+                    const coef_j = self.coefics.at(i, j);
 
-                    const flux = self.ham.at(i, c * ensemble.nstate + j) * coef_c.mul(coef_j.conjugate()).im;
+                    const flux = self.hamilton.at(i, c * probs.ncol() + j) * coef_c.mul(coef_j.conjugate()).im;
 
                     probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
                 }
@@ -311,7 +314,7 @@ pub fn FewestSwitches(comptime T: type) type {
 
         pub fn update(self: *@This(), H: Matrix(T), U: Matrix(T)) void {
             for (0..H.nrow()) |i| for (0..H.ncol()) |j| {
-                self.ham.ptr(i, j).* = H.at(i, j);
+                self.hamilton.ptr(i, j).* = H.at(i, j);
             };
 
             for (0..self.uhist[0].nrow()) |i| for (0..self.uhist[0].ncol()) |j| {
@@ -321,7 +324,7 @@ pub fn FewestSwitches(comptime T: type) type {
             };
 
             if (!std.math.isNan(self.uhist[0].at(0, 0))) {
-                const nstate = self.coef.ncol();
+                const nstate = self.coefics.ncol();
 
                 for (0..self.uhist[0].nrow()) |i| for (0..nstate) |j| {
                     var overlap: T = 0;
@@ -338,13 +341,11 @@ pub fn FewestSwitches(comptime T: type) type {
         }
 
         fn coefDerAdia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
-            const nstate = ctx.nstate;
-
-            for (0..nstate) |i| {
+            for (0..ctx.ham.len) |i| {
                 var sum_sigma = Complex(T).init(0, 0);
 
-                for (0..nstate) |j| {
-                    const sig = Complex(T).init(ctx.sigma[i * nstate + j], 0);
+                for (0..ctx.ham.len) |j| {
+                    const sig = Complex(T).init(ctx.sigma[i * ctx.ham.len + j], 0);
 
                     sum_sigma = sum_sigma.add(sig.mul(y[j]));
                 }
@@ -354,7 +355,7 @@ pub fn FewestSwitches(comptime T: type) type {
         }
 
         fn coefDerDia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
-            const nstate = ctx.nstate;
+            const nstate = std.math.sqrt(ctx.ham.len);
 
             for (0..nstate) |i| {
                 var sum = Complex(T).init(0, 0);
@@ -403,12 +404,11 @@ pub fn LandauZener(comptime T: type) type {
         }
 
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
-            if (std.math.isNan(self.history[0].at(0, 0))) return;
-
             std.debug.assert(probs.nrow() == ensemble.s.length());
-            std.debug.assert(probs.ncol() == ensemble.nstate);
             std.debug.assert(self.history[0].nrow() == ensemble.s.length());
-            std.debug.assert(self.history[0].ncol() == ensemble.nstate);
+            std.debug.assert(self.history[0].ncol() == probs.ncol());
+
+            if (std.math.isNan(self.history[0].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {
                 const c = ensemble.s.at(i);
@@ -444,23 +444,22 @@ pub fn LandauZener(comptime T: type) type {
         }
 
         pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
-            if (std.math.isNan(self.history[1].at(0, 0))) return;
-
             std.debug.assert(probs.nrow() == ensemble.s.length());
-            std.debug.assert(probs.ncol() == ensemble.nstate);
             std.debug.assert(self.history[0].nrow() == ensemble.s.length());
-            std.debug.assert(self.history[0].ncol() == ensemble.nstate * ensemble.nstate);
+            std.debug.assert(self.history[0].ncol() == probs.ncol() * probs.ncol());
+
+            if (std.math.isNan(self.history[1].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {
                 const c = ensemble.s.at(i);
 
-                for (0..ensemble.nstate) |j| {
+                for (0..probs.ncol()) |j| {
                     if (c == j) continue;
 
-                    const v_cc_old = self.history[1].at(i, c * ensemble.nstate + c);
-                    const v_cc_new = self.history[2].at(i, c * ensemble.nstate + c);
-                    const v_jj_old = self.history[1].at(i, j * ensemble.nstate + j);
-                    const v_jj_new = self.history[2].at(i, j * ensemble.nstate + j);
+                    const v_cc_old = self.history[1].at(i, c * probs.ncol() + c);
+                    const v_cc_new = self.history[2].at(i, c * probs.ncol() + c);
+                    const v_jj_old = self.history[1].at(i, j * probs.ncol() + j);
+                    const v_jj_new = self.history[2].at(i, j * probs.ncol() + j);
 
                     const gap_old = v_cc_old - v_jj_old;
                     const gap_new = v_cc_new - v_jj_new;
@@ -469,7 +468,7 @@ pub fn LandauZener(comptime T: type) type {
                         const d_gap = @abs(gap_new - gap_old) / dt;
 
                         if (d_gap > 1e-14) {
-                            const v_cj = @abs(self.history[2].at(i, c * ensemble.nstate + j));
+                            const v_cj = @abs(self.history[2].at(i, c * probs.ncol() + j));
 
                             probs.ptr(i, j).* = 1 - std.math.exp(-2 * std.math.pi * v_cj * v_cj / d_gap);
                         }

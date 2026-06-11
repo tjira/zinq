@@ -4,7 +4,6 @@ const Matrix = @import("tensor.zig").Matrix;
 
 pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     var buffer: [4096]u8 = undefined;
-
     var writer = std.Io.File.stdout().writer(io, &buffer);
 
     try writeAndFlush(&writer, format, args);
