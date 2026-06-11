@@ -12,7 +12,7 @@
     <a href="https://github.com/tjira/zinq/pulse">
         <img src="https://img.shields.io/github/last-commit/tjira/zinq?style=for-the-badge"/>
     </a>
-    <a href="https://github.com/tjira/zinq/blob/master/license">
+    <a href="https://github.com/tjira/zinq/blob/master/LICENSE">
         <img src="https://img.shields.io/github/license/tjira/zinq?style=for-the-badge"/>
     </a>
     <a href="https://github.com/tjira/zinq/actions/workflows/test.yml">
@@ -43,7 +43,26 @@ A lightweight Zig framework for electronic structure theory, quantum chemistry, 
 
 ## Features
 
-## Compilation
+Zinq provides tools for both time-independent and time-dependent quantum mechanical simulations.
+
+### Time-Independent Quantum Mechanics
+
+* **Integrals over Gaussian Basis Functions**  
+  Compute integrals over Gaussian basis functions from .xyz geometries and basis files.
+
+* **Hartree–Fock Methods**  
+  Perform restricted or generalized Hartree-Fock calculation with DIIS accelerator.
+
+* **Post-Hartree–Fock Methods**  
+  Use variety of selected perturbative or variational post-Hartree–Fock methods.
+
+### Time-Dependent Quantum Mechanics
+
+* **Quantum Dynamics**  
+  Simulate wavepacket dynamics in arbitrary dimensions and across multiple electronic states.
+
+* **Surface Hopping**  
+  Run nonadiabatic dynamics with various surface hopping algorithms.
 
 ## Citation
 

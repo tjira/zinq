@@ -36,6 +36,13 @@ for TARGET in "${TARGETS[@]}"; do
         -DEIGEN_BUILD_LAPACK=False
     )
 
+    # FFTW COMPILATION OPTIONS
+    MAKE_FFTW=(
+        --disable-fortran
+        --host=$HOST
+        --prefix=$PREFIX
+    )
+
     # LIBINT COMPILATION OPTIONS
     MAKE_LIBINT=(
         -B build
@@ -68,7 +75,7 @@ for TARGET in "${TARGETS[@]}"; do
     export CC="$PWD/zigcc"; export CXX="$PWD/zigcpp"; export AR="$PWD/zigar"; export RANLIB="$PWD/zigranlib"
 
     # COMPILE EIGEN
-    cd lib/eigen && cmake "${MAKE_EIGEN[@]}" && cmake --install build && cd ../..
+    cd lib/eigen && cmake "${MAKE_EIGEN[@]}" && cmake --install build --parallel $CORES --verbose && cd ../..
 
     # COMPILE LIBINT
     cd lib/libint && cmake "${MAKE_LIBINT[@]}" && cmake --build build --parallel $CORES --verbose && cmake --install build && cd ../..
@@ -80,7 +87,7 @@ for TARGET in "${TARGETS[@]}"; do
     cd lib/openblas && make "${MAKE_OPENBLAS[@]}" -j $CORES libs shared && make "${MAKE_OPENBLAS[@]}" install && cd ../..
 
     # COMPILE FFTW
-    cd lib/fftw && ./configure --host=$HOST --prefix=$PREFIX --disable-fortran && make -j $CORES && make install && cd ../..
+    cd lib/fftw && ./configure "${MAKE_FFTW[@]}" && make -j $CORES && make install && cd ../..
 
     # REMOVE COMPILER WRAPPERS
     rm -rf zigar zigcc zigcpp zigranlib

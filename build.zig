@@ -2,9 +2,8 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
-    const target = b.standardTargetOptions(.{});
 
-    const zinq_module = setupZinq(b, optimize, target);
+    const zinq_module = setupZinq(b, optimize, b.standardTargetOptions(.{}));
 
     setupTests(b, zinq_module);
 }
@@ -55,9 +54,17 @@ fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
 }
 
 fn linkDependencies(module: *std.Build.Module) void {
-    module.addLibraryPath(.{ .cwd_relative = "external-x86_64-linux/lib" });
-    module.addIncludePath(.{ .cwd_relative = "external-x86_64-linux/include" });
+    const dirs = [_][]const u8{ "lib", "include" };
 
-    module.linkSystemLibrary("fftw3", .{});
-    module.linkSystemLibrary("openblas", .{});
+    module.addLibraryPath(.{ .cwd_relative = "external-x86_64-linux/" ++ dirs[0] });
+    module.addIncludePath(.{ .cwd_relative = "external-x86_64-linux/" ++ dirs[1] });
+
+    const libs = [_][]const u8{
+        "fftw3",
+        "openblas",
+    };
+
+    for (libs) |lib| {
+        module.linkSystemLibrary(lib, .{});
+    }
 }

@@ -200,7 +200,7 @@ fn Wavefunction(comptime T: type) type {
             return value * grid.dr;
         }
 
-        pub fn fft(self: *@This(), comptime sign: i32) !void {
+        pub fn fft(self: *@This(), comptime sign: i32) void {
             for (0..self.W.nrow()) |i| {
                 const slice = self.W.rowSlice(i);
 
@@ -488,17 +488,20 @@ fn Propagator(comptime T: type) type {
         }
 
         fn applyK(self: @This(), wfn: *Wavefunction(T)) !void {
-            try wfn.fft(-1);
+            wfn.fft(-1);
+
+            defer {
+                wfn.fft(1);
+            }
 
             for (0..wfn.W.nrow()) |i| for (0..wfn.W.ncol()) |j| {
                 wfn.W.ptr(i, j).* = self.K.at(j).mul(wfn.W.at(i, j));
             };
-
-            try wfn.fft(1);
         }
 
         fn applyR(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), wfn.W.nrow());
+            defer gpa.free(temp);
 
             for (0..wfn.W.ncol()) |j| {
                 for (0..wfn.W.nrow()) |i| {
@@ -515,8 +518,6 @@ fn Propagator(comptime T: type) type {
                     wfn.W.ptr(i, j).* = temp[i];
                 }
             }
-
-            gpa.free(temp);
         }
     };
 }
@@ -580,7 +581,11 @@ fn Observables(comptime T: type) type {
             const needs_fft = calc.mom or calc.ekin;
 
             if (needs_fft) {
-                try sim.wfn.fft(-1);
+                sim.wfn.fft(-1);
+
+                defer {
+                    sim.wfn.fft(1);
+                }
 
                 if (calc.mom) {
                     obs.mom = try sim.wfn.mom(sim.wfn_kpgrids, gpa);
@@ -589,8 +594,6 @@ fn Observables(comptime T: type) type {
                 if (calc.ekin) {
                     obs.ekin = sim.wfn.ekin(sim.hams, sim.wfn_kpgrids);
                 }
-
-                try sim.wfn.fft(1);
             }
 
             return obs;
