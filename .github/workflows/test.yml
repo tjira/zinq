@@ -38,9 +38,6 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Install Dependencies
-        run: sudo apt update && sudo apt install libboost-all-dev
-
       - name: Compile Libraries
         run: ./script/library.sh
 

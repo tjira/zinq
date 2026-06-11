@@ -85,3 +85,6 @@ for TARGET in "${TARGETS[@]}"; do
     # REMOVE COMPILER WRAPPERS
     rm -rf zigar zigcc zigcpp zigranlib
 done
+
+# CLEAN LIBRARIES
+rm -rf lib
