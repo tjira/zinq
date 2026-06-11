@@ -15,9 +15,10 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
         .optimize = opt,
         .strip = opt == .ReleaseFast or opt == .ReleaseSmall,
         .link_libc = true,
+        .link_libcpp = true,
     });
 
-    linkDependencies(zinq_module);
+    linkDependencies(b, zinq_module);
 
     const exe_zinq = b.addExecutable(.{
         .name = "zinq",
@@ -40,6 +41,7 @@ fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
         .strip = zinq_module.strip,
         .optimize = zinq_module.optimize,
         .link_libc = zinq_module.link_libc,
+        .link_libcpp = true,
     });
 
     test_module.addImport("zinq", zinq_module);
@@ -53,14 +55,28 @@ fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
     b.step("test", "Run unit tests").dependOn(&run_exe_test.step);
 }
 
-fn linkDependencies(module: *std.Build.Module) void {
-    const dirs = [_][]const u8{ "lib", "include" };
+fn linkDependencies(b: *std.Build, module: *std.Build.Module) void {
+    const dirs = [_][]const u8{ "lib", "include", "include/eigen3" };
 
     module.addLibraryPath(.{ .cwd_relative = "external-x86_64-linux/" ++ dirs[0] });
     module.addIncludePath(.{ .cwd_relative = "external-x86_64-linux/" ++ dirs[1] });
+    module.addIncludePath(.{ .cwd_relative = "external-x86_64-linux/" ++ dirs[2] });
+
+    module.addCSourceFile(.{ .file = b.path("src/libint.cpp") });
+
+    const libint_translate = b.addTranslateC(.{
+        .root_source_file = b.path("src/libint.h"),
+        .target = module.resolved_target.?,
+        .optimize = module.optimize.?,
+    });
+
+    libint_translate.addIncludePath(.{ .cwd_relative = "external-x86_64-linux/" ++ dirs[1] });
+
+    module.addImport("libint", libint_translate.createModule());
 
     const libs = [_][]const u8{
         "fftw3",
+        "int2",
         "openblas",
     };
 

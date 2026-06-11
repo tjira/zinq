@@ -1,0 +1,16 @@
+{
+    "zinq" : [
+        {
+            "molecular_integrals" : {
+                "system" : "example/molecule/water.xyz",
+                "basis" : "sto-3g",
+                "write" : {
+                    "coulomb" : "J_AO.mat",
+                    "kinetic" : "T_AO.mat",
+                    "nuclear" : "V_AO.mat",
+                    "overlap" : "S_AO.mat"
+                }
+            }
+        }
+    ]
+}

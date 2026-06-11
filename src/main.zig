@@ -4,6 +4,8 @@ const Allocator = std.mem.Allocator;
 
 pub const ClassicalDynamicsOptions = @import("classical_dynamics.zig").Options;
 pub const classical_dynamics_run = @import("classical_dynamics.zig").run;
+pub const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
+pub const molecular_integrals_run = @import("molecular_integrals.zig").run;
 pub const QuantumDynamicsOptions = @import("quantum_dynamics.zig").Options;
 pub const quantum_dynamics_run = @import("quantum_dynamics.zig").run;
 pub const SurfaceHopping = @import("surface_hopping.zig").SurfaceHopping;
@@ -18,6 +20,7 @@ const printf = @import("read_write.zig").printf;
 const Options = struct {
     zinq: []union(enum) {
         classical_dynamics: ClassicalDynamicsOptions,
+        molecular_integrals: MolecularIntegralsOptions,
         quantum_dynamics: QuantumDynamicsOptions,
     },
 };
@@ -34,10 +37,11 @@ fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: A
     const inputs = (try parse(Options, io, fname, arena)).value.zinq;
 
     for (inputs, 0..) |e, i| {
-        try printf(io, "\nRUNNING TARGET: {s}/#{d}\n", .{fname, i + 1});
+        try printf(io, "\nRUNNING TARGET: {s}/#{d}\n", .{ fname, i + 1 });
 
         switch (e) {
             .classical_dynamics => |field| _ = try classical_dynamics_run(T, io, field, true, gpa, arena),
+            .molecular_integrals => |field| _ = try molecular_integrals_run(T, io, field, true, gpa, arena),
             .quantum_dynamics => |field| _ = try quantum_dynamics_run(T, io, field, true, gpa, arena),
         }
     }
