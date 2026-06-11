@@ -34,7 +34,7 @@ fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: A
     const inputs = (try parse(Options, io, fname, arena)).value.zinq;
 
     for (inputs, 0..) |e, i| {
-        try printf(io, "/#{d}\n", .{i + 1});
+        try printf(io, "\nRUNNING TARGET: {s}/#{d}\n", .{fname, i + 1});
 
         switch (e) {
             .classical_dynamics => |field| _ = try classical_dynamics_run(T, io, field, true, gpa, arena),
@@ -53,8 +53,6 @@ pub fn main(init: std.process.Init) !void {
     try std.Io.File.stdout().writeStreamingAll(init.io, "ZINQ\n");
 
     for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |e| {
-        try printf(init.io, "\nRUNNING TARGET: {s}", .{e});
-
         try run(f64, init.io, e, init.gpa, init.arena.allocator());
     }
 
