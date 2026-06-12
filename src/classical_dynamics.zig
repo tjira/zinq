@@ -628,7 +628,7 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     return .{ .ensemble = ensemble, .elpoten = pot, .propag = prop, .gb = gb };
 }
 
-fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
+fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: Allocator) !Observables(T) {
     const ndim, const nstate = .{ ctx.sim.elpoten.ndim(), ctx.sim.elpoten.nstate() };
 
     if (ctx.log) try printHeader(io, ndim, nstate);
@@ -661,10 +661,10 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
 
     const end_time = @as(T, @floatFromInt(ctx.opt.iterations)) * ctx.opt.time_step;
 
-    return try Observables(T).init(ctx.sim.*, end_time, ctx.opt.write, true, arena);
+    return try Observables(T).init(ctx.sim.*, end_time, ctx.opt.write, true, gpa);
 }
 
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator, arena: Allocator) !Observables(T) {
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Observables(T) {
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\nCLASSICAL DYNAMICS INIT: ");
 
     var timer = std.Io.Timestamp.now(io, .real);
@@ -674,7 +674,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 
-    const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .log = log }, gpa, arena);
+    const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .log = log }, gpa, gpa);
 
     if (log) {
         try printFinalPop(T, io, obs);

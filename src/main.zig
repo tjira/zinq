@@ -40,9 +40,14 @@ fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: A
         try printf(io, "\nRUNNING TARGET: {s}/#{d}\n", .{ fname, i + 1 });
 
         switch (e) {
-            .classical_dynamics => |field| _ = try classical_dynamics_run(T, io, field, true, gpa, arena),
-            .molecular_integrals => |field| _ = try molecular_integrals_run(T, io, field, true, gpa, arena),
-            .quantum_dynamics => |field| _ = try quantum_dynamics_run(T, io, field, true, gpa, arena),
+            inline else => |field, tag| {
+                var result = try @field(@This(), @tagName(tag) ++ "_run")(T, io, field, true, gpa);
+                defer result.deinit(gpa);
+
+                if (comptime @typeInfo(@TypeOf(result)) == .@"struct" and @hasField(@TypeOf(result), "items")) {
+                    for (result.items) |*item| item.deinit(gpa);
+                }
+            },
         }
     }
 }

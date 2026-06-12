@@ -1,5 +1,5 @@
-const std = @import("std");
 const libint = @import("libint");
+const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
@@ -11,8 +11,14 @@ pub fn MolecularSystem(comptime T: type) type {
 
         nbf: usize,
 
-        pub fn init(system_path: [:0]const u8, basis_name: [:0]const u8) !@This() {
-            const ptr = libint.init(system_path.ptr, basis_name.ptr) orelse {
+        pub fn init(system: []const u8, basis: []const u8, gpa: Allocator) !@This() {
+            const sys_c = try gpa.dupeSentinel(u8, system, 0);
+            defer gpa.free(sys_c);
+
+            const bas_c = try gpa.dupeSentinel(u8, basis, 0);
+            defer gpa.free(bas_c);
+
+            const ptr = libint.init(sys_c.ptr, bas_c.ptr) orelse {
                 return error.InitializationFailed;
             };
 
@@ -25,6 +31,7 @@ pub fn MolecularSystem(comptime T: type) type {
 
         pub fn overlap(self: @This(), gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
+            errdefer I.deinit(gpa);
 
             libint.overlap(I.data.ptr, self.ptr);
 
@@ -33,6 +40,7 @@ pub fn MolecularSystem(comptime T: type) type {
 
         pub fn kinetic(self: @This(), gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
+            errdefer I.deinit(gpa);
 
             libint.kinetic(I.data.ptr, self.ptr);
 
@@ -41,6 +49,7 @@ pub fn MolecularSystem(comptime T: type) type {
 
         pub fn nuclear(self: @This(), gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
+            errdefer I.deinit(gpa);
 
             libint.nuclear(I.data.ptr, self.ptr);
 
@@ -49,6 +58,7 @@ pub fn MolecularSystem(comptime T: type) type {
 
         pub fn coulomb(self: @This(), gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf * self.nbf, self.nbf * self.nbf, gpa);
+            errdefer I.deinit(gpa);
 
             libint.coulomb(I.data.ptr, self.ptr);
 

@@ -19,7 +19,8 @@ test "Adiabatic Landau--Zener on Tully's First Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.pos.?.at(0), 13.5131323261878540, TEST_TOLERANCE);
@@ -47,7 +48,8 @@ test "Diabatic Landau--Zener on Tully's First Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.pos.?.at(0), 13.6655776269540750, TEST_TOLERANCE);
@@ -75,7 +77,8 @@ test "Adiabatic Landau--Zener on Time-Linear Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.pos.?.at(0), -0.8878446095195264, TEST_TOLERANCE);
@@ -103,7 +106,8 @@ test "Diabatic Landau--Zener on Time-Linear Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.pos.?.at(0),  0.1908475272076625, TEST_TOLERANCE);
@@ -131,7 +135,8 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.pos.?.at(0), 13.4849803222532180, TEST_TOLERANCE);
@@ -159,7 +164,8 @@ test "Diabatic Fewest Switches on Tully's First Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.pos.?.at(0), 13.7651613977406570, TEST_TOLERANCE);
@@ -187,7 +193,8 @@ test "Adiabatic Fewest Switches on Time-Linear Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.pos.?.at(0),  1.6763424299984810, TEST_TOLERANCE);
@@ -215,7 +222,8 @@ test "Diabatic Fewest Switches on Time-Linear Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.pos.?.at(0),  0.1908475272076625, TEST_TOLERANCE);

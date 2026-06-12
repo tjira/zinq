@@ -1,9 +1,13 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    const optimize = b.standardOptimizeOption(.{});
+    const target = b.standardTargetOptions(.{
+        .default_target = .{
+            .abi = .musl,
+        },
+    });
 
-    const zinq_module = setupZinq(b, optimize, b.standardTargetOptions(.{}));
+    const zinq_module = setupZinq(b, b.standardOptimizeOption(.{}), target);
 
     setupTests(b, zinq_module);
 }

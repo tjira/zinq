@@ -3,7 +3,7 @@
         {
             "molecular_integrals" : {
                 "system" : "example/molecule/water.xyz",
-                "basis" : "sto-3g",
+                "basis" : "example/basis/sto-3g.g94",
                 "write" : {
                     "coulomb" : "J_AO.mat",
                     "kinetic" : "T_AO.mat",

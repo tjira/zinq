@@ -19,7 +19,12 @@ test "Adiabatic RTP on Tully's First Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer {
+        for (output.items) |*item| item.deinit(std.testing.allocator);
+
+        output.deinit(std.testing.allocator);
+    }
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.items[0].pos.?.at(0), 13.4112458739984250, TEST_TOLERANCE);
@@ -48,7 +53,12 @@ test "Diabatic RTP on Tully's First Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer {
+        for (output.items) |*item| item.deinit(std.testing.allocator);
+
+        output.deinit(std.testing.allocator);
+    }
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.items[0].pos.?.at(0), 13.4112458739984270, TEST_TOLERANCE);
@@ -77,7 +87,12 @@ test "Adiabatic RTP on Time-Linear Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer {
+        for (output.items) |*item| item.deinit(std.testing.allocator);
+
+        output.deinit(std.testing.allocator);
+    }
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.items[0].pos.?.at(0), -0.1600504125015748, TEST_TOLERANCE);
@@ -106,7 +121,12 @@ test "Diabatic RTP on Time-Linear Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer {
+        for (output.items) |*item| item.deinit(std.testing.allocator);
+
+        output.deinit(std.testing.allocator);
+    }
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.items[0].pos.?.at(0), -0.1600504125015565, TEST_TOLERANCE);
@@ -135,7 +155,12 @@ test "ITP on 1D HO Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer {
+        for (output.items) |*item| item.deinit(std.testing.allocator);
+
+        output.deinit(std.testing.allocator);
+    }
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.items[0].pos.?.at(0),  0.0000605355096521, TEST_TOLERANCE);
@@ -172,7 +197,12 @@ test "ITP on 2D HO Potential" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
 
-    const output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    defer {
+        for (output.items) |*item| item.deinit(std.testing.allocator);
+
+        output.deinit(std.testing.allocator);
+    }
 
     // zig fmt: off
     try std.testing.expectApproxEqAbs(output.items[0].pos.?.at(0),  0.0000605355096546, TEST_TOLERANCE);

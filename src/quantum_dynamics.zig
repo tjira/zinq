@@ -906,7 +906,7 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     return .{ .wfn_kpgrids = grid, .hams = ham, .wfn = wfn, .epoten = pot, .propg = prop, .orthw = .empty };
 }
 
-fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, arena: Allocator) !Observables(T) {
+fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: Allocator) !Observables(T) {
     const ndim, const nstate = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate() };
 
     const neig = if (ctx.opt.imaginary) |imag| imag.nstate else 1;
@@ -973,10 +973,10 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, are
 
     try hist.exportWrite(io, ctx.opt.time_step, ctx.sim.wfn_kpgrids, ctx.opt.write);
 
-    return try Observables(T).init(ctx.sim, ctx.opt.write, ctx.opt.adiabatic, true, arena);
+    return try Observables(T).init(ctx.sim, ctx.opt.write, ctx.opt.adiabatic, true, gpa);
 }
 
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator, arena: Allocator) !std.ArrayList(Observables(T)) {
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !std.ArrayList(Observables(T)) {
     var output: std.ArrayList(Observables(T)) = .empty;
 
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\nQUANTUM DYNAMICS INIT: ");
@@ -989,7 +989,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 
     for (0..if (opt.imaginary) |imag| imag.nstate else 1) |i| {
-        const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i, .log = log }, gpa, arena);
+        const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i, .log = log }, gpa, gpa);
 
         if (i < if (opt.imaginary) |imag| imag.nstate else 0) {
             var cloned = try sim.wfn.clone(gpa);
@@ -998,7 +998,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             try sim.orthw.append(gpa, cloned);
         }
 
-        try output.append(arena, obs);
+        try output.append(gpa, obs);
 
         if (log) {
             try printFinalPop(T, io, obs);

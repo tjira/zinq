@@ -1,4 +1,5 @@
 #include <libint2.hpp>
+
 #include <fstream>
 
 struct SystemData {
@@ -13,18 +14,22 @@ extern "C" {
 
         if (!file.is_open()) return nullptr;
 
-        std::vector<libint2::Atom> atoms = libint2::read_dotxyz(file);
+        std::vector<Atom> atoms = read_dotxyz(file);
 
-        return new SystemData{atoms, libint2::BasisSet(basis, atoms)};
+        return new SystemData{atoms, BasisSet(atoms, BasisSet::read_g94_basis_library(basis))};
     }
 
     void deinit(SystemData *sys) {
-        delete sys;
+        if (!sys) return; delete sys;
     }
 
     ulong nbf(SystemData *sys) {
-        return sys->obs.nbf();
+        if (!sys) return 0; return sys->obs.nbf();
     }
+}
+
+extern "C" {
+    using namespace libint2; typedef unsigned long ulong;
 
     void oneelec(double *I, libint2::Engine &engine, const BasisSet &obs) {
         std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
@@ -40,8 +45,10 @@ extern "C" {
 
                 for (size_t k = 0; k < obs.at(i).size(); k++) {
                     for (size_t l = 0; l < obs.at(j).size(); l++) {
-                        I[(k + sh2bf.at(i)) * nbf + (l + sh2bf.at(j))] = engines.at(id).results().at(0)[idx  ];
-                        I[(l + sh2bf.at(j)) * nbf + (k + sh2bf.at(i))] = engines.at(id).results().at(0)[idx++];
+                        double val = engines.at(id).results().at(0)[idx++];
+
+                        I[(k + sh2bf.at(i)) * nbf + (l + sh2bf.at(j))] = val;
+                        I[(l + sh2bf.at(j)) * nbf + (k + sh2bf.at(i))] = val;
                     }
                 }
             }
@@ -64,32 +71,27 @@ extern "C" {
                         if (engines.at(id).results().at(0) == nullptr) continue;
 
                         for (size_t m = 0; m < obs.at(i).size(); m++) {
-                            for (size_t n = 0; n < obs.at(j).size(); n++) {
-                                for (size_t o = 0; o < obs.at(k).size(); o++) {
-                                    for (size_t p = 0; p < obs.at(l).size(); p++) {
+                            size_t bf1 = m + sh2bf.at(i);
 
-                                        size_t bf1 = m + sh2bf.at(i);
-                                        size_t bf2 = n + sh2bf.at(j);
-                                        size_t bf3 = o + sh2bf.at(k);
+                            for (size_t n = 0; n < obs.at(j).size(); n++) {
+                                size_t bf2 = n + sh2bf.at(j);
+
+                                for (size_t o = 0; o < obs.at(k).size(); o++) {
+                                    size_t bf3 = o + sh2bf.at(k);
+
+                                    for (size_t p = 0; p < obs.at(l).size(); p++) {
                                         size_t bf4 = p + sh2bf.at(l);
 
-                                        size_t idx1 = bf1 * nbf * nbf * nbf + bf2 * nbf * nbf + bf3 * nbf + bf4;
-                                        size_t idx2 = bf1 * nbf * nbf * nbf + bf2 * nbf * nbf + bf4 * nbf + bf3;
-                                        size_t idx3 = bf2 * nbf * nbf * nbf + bf1 * nbf * nbf + bf3 * nbf + bf4;
-                                        size_t idx4 = bf2 * nbf * nbf * nbf + bf1 * nbf * nbf + bf4 * nbf + bf3;
-                                        size_t idx5 = bf3 * nbf * nbf * nbf + bf4 * nbf * nbf + bf1 * nbf + bf2;
-                                        size_t idx6 = bf3 * nbf * nbf * nbf + bf4 * nbf * nbf + bf2 * nbf + bf1;
-                                        size_t idx7 = bf4 * nbf * nbf * nbf + bf3 * nbf * nbf + bf1 * nbf + bf2;
-                                        size_t idx8 = bf4 * nbf * nbf * nbf + bf3 * nbf * nbf + bf2 * nbf + bf1;
+                                        double val = engines.at(id).results().at(0)[idx++];
 
-                                        I[idx1] = engines.at(id).results().at(0)[idx  ];
-                                        I[idx2] = engines.at(id).results().at(0)[idx  ];
-                                        I[idx3] = engines.at(id).results().at(0)[idx  ];
-                                        I[idx4] = engines.at(id).results().at(0)[idx  ];
-                                        I[idx5] = engines.at(id).results().at(0)[idx  ];
-                                        I[idx6] = engines.at(id).results().at(0)[idx  ];
-                                        I[idx7] = engines.at(id).results().at(0)[idx  ];
-                                        I[idx8] = engines.at(id).results().at(0)[idx++];
+                                        I[bf1 * nbf * nbf * nbf + bf2 * nbf * nbf + bf3 * nbf + bf4] = val;
+                                        I[bf1 * nbf * nbf * nbf + bf2 * nbf * nbf + bf4 * nbf + bf3] = val;
+                                        I[bf2 * nbf * nbf * nbf + bf1 * nbf * nbf + bf3 * nbf + bf4] = val;
+                                        I[bf2 * nbf * nbf * nbf + bf1 * nbf * nbf + bf4 * nbf + bf3] = val;
+                                        I[bf3 * nbf * nbf * nbf + bf4 * nbf * nbf + bf1 * nbf + bf2] = val;
+                                        I[bf3 * nbf * nbf * nbf + bf4 * nbf * nbf + bf2 * nbf + bf1] = val;
+                                        I[bf4 * nbf * nbf * nbf + bf3 * nbf * nbf + bf1 * nbf + bf2] = val;
+                                        I[bf4 * nbf * nbf * nbf + bf3 * nbf * nbf + bf2 * nbf + bf1] = val;
                                     }
                                 }
                             }
