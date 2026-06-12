@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const Tensor = @import("tensor.zig").Tensor;
 
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
@@ -41,7 +42,8 @@ fn Integrals(comptime T: type) type {
         S: ?Matrix(T) = null,
         K: ?Matrix(T) = null,
         V: ?Matrix(T) = null,
-        J: ?Matrix(T) = null,
+
+        J: ?Tensor(T, 4) = null,
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.S) |*S| S.deinit(gpa);
@@ -151,7 +153,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     if (opt.write.coulomb) |fname| {
         const J = ints.J orelse @panic("COULOMB MATRIX NOT CALCULATED");
 
-        try writeMatrix(T, io, fname, J);
+        try writeMatrix(T, io, fname, J.asMatrix());
 
         if (log) try printf(io, "COULOMB INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }

@@ -4,6 +4,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
+const Tensor = @import("tensor.zig").Tensor;
 
 pub fn MolecularSystem(comptime T: type) type {
     return struct {
@@ -56,8 +57,8 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
-        pub fn coulomb(self: @This(), gpa: Allocator) !Matrix(T) {
-            const I = try Matrix(T).initZero(self.nbf * self.nbf, self.nbf * self.nbf, gpa);
+        pub fn coulomb(self: @This(), gpa: Allocator) !Tensor(T, 4) {
+            const I = try Tensor(T, 4).initZero(.{ self.nbf, self.nbf, self.nbf, self.nbf }, gpa);
             errdefer I.deinit(gpa);
 
             libint.coulomb(I.data.ptr, self.ptr);

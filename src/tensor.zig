@@ -143,3 +143,55 @@ pub fn Vector(comptime T: type) type {
         }
     };
 }
+
+// TENSOR ==============================================================================================================
+
+pub fn Tensor(comptime T: type, comptime N: usize) type {
+    return struct {
+        data: []T,
+        shape: [N]usize,
+
+        pub fn init(shape: [N]usize, gpa: std.mem.Allocator) !@This() {
+            var size: usize = 1;
+
+            inline for (shape) |d| {
+                size *= d;
+            }
+
+            return .{ .data = try gpa.alloc(T, size), .shape = shape };
+        }
+
+        pub fn initZero(shape: [N]usize, gpa: std.mem.Allocator) !@This() {
+            var U = try @This().init(shape, gpa);
+
+            U.zero();
+
+            return U;
+        }
+
+        pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
+            gpa.free(self.data);
+        }
+
+        pub fn zero(self: *@This()) void {
+            for (self.data) |*e| {
+                e.* = std.mem.zeroes(T);
+            }
+        }
+
+        pub fn asMatrix(self: @This()) Matrix(T) {
+            var rows: usize = 1;
+            var cols: usize = 1;
+
+            for (self.shape[0 .. (N + 1) / 2]) |d| {
+                rows *= d;
+            }
+
+            for (self.shape[(N + 1) / 2 ..]) |d| {
+                cols *= d;
+            }
+
+            return .{ .data = self.data, .shape = .{ rows, cols } };
+        }
+    };
+}
