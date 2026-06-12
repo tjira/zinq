@@ -17,9 +17,7 @@ test "Adiabatic RTP on Tully's First Potential" {
         .adiabatic = true,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer {
         for (output.items) |*item| item.deinit(std.testing.allocator);
 
@@ -35,8 +33,6 @@ test "Adiabatic RTP on Tully's First Potential" {
     try std.testing.expectApproxEqAbs(output.items[0].ekin.?,       0.0647077026432969, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.items[0].norm.?,       1.0000000000004160, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Diabatic RTP on Tully's First Potential" {
@@ -51,9 +47,7 @@ test "Diabatic RTP on Tully's First Potential" {
         .adiabatic = false,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer {
         for (output.items) |*item| item.deinit(std.testing.allocator);
 
@@ -69,8 +63,6 @@ test "Diabatic RTP on Tully's First Potential" {
     try std.testing.expectApproxEqAbs(output.items[0].ekin.?,       0.0647077026432969, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.items[0].norm.?,       1.0000000000004168, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Adiabatic RTP on Time-Linear Potential" {
@@ -85,9 +77,7 @@ test "Adiabatic RTP on Time-Linear Potential" {
         .adiabatic = true,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer {
         for (output.items) |*item| item.deinit(std.testing.allocator);
 
@@ -103,8 +93,6 @@ test "Adiabatic RTP on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.items[0].ekin.?,       0.5000000000000960, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.items[0].norm.?,       1.0000000000002331, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Diabatic RTP on Time-Linear Potential" {
@@ -119,9 +107,7 @@ test "Diabatic RTP on Time-Linear Potential" {
         .adiabatic = false,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer {
         for (output.items) |*item| item.deinit(std.testing.allocator);
 
@@ -137,8 +123,6 @@ test "Diabatic RTP on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.items[0].ekin.?,       0.5000000000000941, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.items[0].norm.?,       1.0000000000002260, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "ITP on 1D HO Potential" {
@@ -153,9 +137,7 @@ test "ITP on 1D HO Potential" {
         .time_step = 0.01,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer {
         for (output.items) |*item| item.deinit(std.testing.allocator);
 
@@ -179,8 +161,6 @@ test "ITP on 1D HO Potential" {
     try std.testing.expectApproxEqAbs(output.items[1].ekin.?,       0.7500093748913406, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.items[1].norm.?,       1.0000000000000004, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "ITP on 2D HO Potential" {
@@ -195,9 +175,7 @@ test "ITP on 2D HO Potential" {
         .time_step = 0.01,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer {
         for (output.items) |*item| item.deinit(std.testing.allocator);
 
@@ -221,6 +199,4 @@ test "ITP on 2D HO Potential" {
     try std.testing.expectApproxEqAbs(output.items[1].ekin.?,       1.0000124994137694, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.items[1].norm.?,       1.0000000000000016, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }

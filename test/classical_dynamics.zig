@@ -17,9 +17,7 @@ test "Adiabatic Landau--Zener on Tully's First Potential" {
         .adiabatic = true,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -30,8 +28,6 @@ test "Adiabatic Landau--Zener on Tully's First Potential" {
     try std.testing.expectApproxEqAbs(output.epot.?,       0.0007999958390219, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.ekin.?,       0.0657445231400523, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Diabatic Landau--Zener on Tully's First Potential" {
@@ -46,9 +42,7 @@ test "Diabatic Landau--Zener on Tully's First Potential" {
         .adiabatic = false,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -59,8 +53,6 @@ test "Diabatic Landau--Zener on Tully's First Potential" {
     try std.testing.expectApproxEqAbs(output.epot.?,      -0.0005999997545603, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.ekin.?,       0.0672098969720091, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Adiabatic Landau--Zener on Time-Linear Potential" {
@@ -75,9 +67,7 @@ test "Adiabatic Landau--Zener on Time-Linear Potential" {
         .adiabatic = true,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -88,8 +78,6 @@ test "Adiabatic Landau--Zener on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.epot.?,      38.0075992401519700, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.ekin.?,       1.6941659415406718, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Diabatic Landau--Zener on Time-Linear Potential" {
@@ -104,9 +92,7 @@ test "Diabatic Landau--Zener on Time-Linear Potential" {
         .adiabatic = false,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -117,8 +103,6 @@ test "Diabatic Landau--Zener on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.epot.?,      44.0000000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.ekin.?,       0.4526169090816229, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Adiabatic Fewest Switches on Tully's First Potential" {
@@ -133,9 +117,7 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
         .adiabatic = true,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -146,8 +128,6 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
     try std.testing.expectApproxEqAbs(output.epot.?,       0.0011999958406232, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.ekin.?,       0.0653446603416648, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Diabatic Fewest Switches on Tully's First Potential" {
@@ -162,9 +142,7 @@ test "Diabatic Fewest Switches on Tully's First Potential" {
         .adiabatic = false,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -175,8 +153,6 @@ test "Diabatic Fewest Switches on Tully's First Potential" {
     try std.testing.expectApproxEqAbs(output.epot.?,       0.0034000002314440, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.ekin.?,       0.0680141209505341, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Adiabatic Fewest Switches on Time-Linear Potential" {
@@ -191,9 +167,7 @@ test "Adiabatic Fewest Switches on Time-Linear Potential" {
         .adiabatic = true,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -204,8 +178,6 @@ test "Adiabatic Fewest Switches on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.epot.?,      28.0055994401119800, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.ekin.?,       2.4083820506614500, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }
 
 test "Diabatic Fewest Switches on Time-Linear Potential" {
@@ -220,9 +192,7 @@ test "Diabatic Fewest Switches on Time-Linear Potential" {
         .adiabatic = false,
     };
 
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator, arena.allocator());
+    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -233,6 +203,4 @@ test "Diabatic Fewest Switches on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.epot.?,      56.0000000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.ekin.?,       0.4526169090816229, TEST_TOLERANCE);
     // zig fmt: on
-
-    arena.deinit();
 }

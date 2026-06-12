@@ -3,7 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
-const MolecularSystem = @import("libint.zig").MolecularSystem;
+const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;

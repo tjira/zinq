@@ -7,7 +7,7 @@ const Vector = @import("tensor.zig").Vector;
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Value = @import("value.zig").Value;
 
-const eighSlice = @import("openblas.zig").eighSlice;
+const eighSlice = @import("linear_algebra.zig").eighSlice;
 
 // OPTIONS =============================================================================================================
 

@@ -10,8 +10,8 @@ const SurfaceHopping = @import("surface_hopping.zig").SurfaceHopping;
 const SurfaceHoppingOptions = @import("surface_hopping.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 
-const eighBatch = @import("openblas.zig").eighBatch;
-const eighSlice = @import("openblas.zig").eighSlice;
+const eighBatch = @import("linear_algebra.zig").eighBatch;
+const eighSlice = @import("linear_algebra.zig").eighSlice;
 const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;

@@ -5,13 +5,13 @@ const fftw = @cImport(@cInclude("fftw3.h"));
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
-const FftPlan = @import("fftw.zig").FftPlan;
+const FftPlan = @import("fourier_transform.zig").FftPlan;
 const Matrix = @import("tensor.zig").Matrix;
 const Potential = @import("potential.zig").Potential;
 const PotentialOptions = @import("potential.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 
-const eighBatch = @import("openblas.zig").eighBatch;
+const eighBatch = @import("linear_algebra.zig").eighBatch;
 const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
