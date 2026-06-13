@@ -39,7 +39,7 @@ jobs:
           version: 0.16.0
 
       - name: Compile Libraries
-        run: ./script/library.sh
+        run: ./script/library.pl
 
       - name: Run Tests in ${{matrix.mode_name}} Mode
         run: zig build ${{matrix.build_flags}} test
