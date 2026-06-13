@@ -87,6 +87,75 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        pub fn overlapSpin(self: @This(), gpa: Allocator) !Matrix(T) {
+            var S = try self.overlap(gpa);
+            defer S.deinit(gpa);
+
+            var I = try Matrix(T).initZero(2 * self.nbf, 2 * self.nbf, gpa);
+            errdefer I.deinit(gpa);
+
+            for (0..self.nbf) |i| for (0..self.nbf) |j| {
+                I.ptr(i, j).* = S.at(i, j);
+
+                I.ptr(i + self.nbf, j + self.nbf).* = I.at(i, j);
+            };
+
+            return I;
+        }
+
+        pub fn kineticSpin(self: @This(), gpa: Allocator) !Matrix(T) {
+            var K = try self.kinetic(gpa);
+            defer K.deinit(gpa);
+
+            var I = try Matrix(T).initZero(2 * self.nbf, 2 * self.nbf, gpa);
+            errdefer I.deinit(gpa);
+
+            for (0..self.nbf) |i| for (0..self.nbf) |j| {
+                I.ptr(i, j).* = K.at(i, j);
+
+                I.ptr(i + self.nbf, j + self.nbf).* = I.at(i, j);
+            };
+
+            return I;
+        }
+
+        pub fn nuclearSpin(self: @This(), gpa: Allocator) !Matrix(T) {
+            var V = try self.nuclear(gpa);
+            defer V.deinit(gpa);
+
+            var I = try Matrix(T).initZero(2 * self.nbf, 2 * self.nbf, gpa);
+            errdefer I.deinit(gpa);
+
+            for (0..self.nbf) |i| for (0..self.nbf) |j| {
+                I.ptr(i, j).* = V.at(i, j);
+
+                I.ptr(i + self.nbf, j + self.nbf).* = I.at(i, j);
+            };
+
+            return I;
+        }
+
+        pub fn coulombSpin(self: @This(), gpa: Allocator) !Tensor(T, 4) {
+            var J = try self.coulomb(gpa);
+            defer J.deinit(gpa);
+
+            var I = try Tensor(T, 4).initZero(.{ 2 * self.nbf, 2 * self.nbf, 2 * self.nbf, 2 * self.nbf }, gpa);
+            errdefer I.deinit(gpa);
+
+            for (0..self.nbf) |ma| for (0..self.nbf) |mb| for (0..self.nbf) |mc| for (0..self.nbf) |md| {
+                const val = J.at(.{ ma, mb, mc, md });
+
+                I.ptr(.{ ma, mb, mc, md }).* = val;
+
+                I.ptr(.{ ma + self.nbf, mb, mc + self.nbf, md }).* = val;
+                I.ptr(.{ ma, mb + self.nbf, mc, md + self.nbf }).* = val;
+
+                I.ptr(.{ ma + self.nbf, mb + self.nbf, mc + self.nbf, md + self.nbf }).* = val;
+            };
+
+            return I;
+        }
+
         pub fn nrep(self: @This()) !T {
             if (self.atoms.len == 0) return 0;
 

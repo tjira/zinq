@@ -31,6 +31,7 @@ pub const Options = struct {
 
     calculate: Calculate = .{},
     write: Write = .{},
+    spin: bool = false,
 };
 
 // INTEGRALS ===========================================================================================================
@@ -79,7 +80,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.overlap) {
-        ints.S = try ints.sys.overlap(gpa);
+        ints.S = if (opt.spin) try ints.sys.overlapSpin(gpa) else try ints.sys.overlap(gpa);
 
         if (log) try printf(io, "OVERLAP INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -87,7 +88,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.kinetic) {
-        ints.K = try ints.sys.kinetic(gpa);
+        ints.K = if (opt.spin) try ints.sys.kineticSpin(gpa) else try ints.sys.kinetic(gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -95,7 +96,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.nuclear) {
-        ints.V = try ints.sys.nuclear(gpa);
+        ints.V = if (opt.spin) try ints.sys.nuclearSpin(gpa) else try ints.sys.nuclear(gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -103,7 +104,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.coulomb) {
-        ints.J = try ints.sys.coulomb(gpa);
+        ints.J = if (opt.spin) try ints.sys.coulombSpin(gpa) else try ints.sys.coulomb(gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }

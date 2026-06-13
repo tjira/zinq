@@ -187,6 +187,20 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             return self.data[idx];
         }
 
+        pub fn ptr(self: *@This(), indices: [N]usize) *T {
+            var idx: usize = 0;
+            var str: usize = 1;
+
+            inline for (indices, self.shape) |i, dimensi| {
+                std.debug.assert(i < dimensi);
+
+                idx += i * str;
+                str *= dimensi;
+            }
+
+            return &self.data[idx];
+        }
+
         pub fn asMatrix(self: @This()) Matrix(T) {
             var rows: usize = 1;
             var cols: usize = 1;

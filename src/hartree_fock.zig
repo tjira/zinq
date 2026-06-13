@@ -28,12 +28,13 @@ pub const Options = struct {
 
     write: Write = .{},
     iterations: usize = 100,
+    generalized: bool = false,
     threshold: f64 = 1e-8,
 };
 
 // HARTREE-FOCK FUNCTIONS===============================================================================================
 
-pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), J: Tensor(T, 4)) !void {
+pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), J: Tensor(T, 4), generalized: bool) !void {
     std.debug.assert(F.shape[0] == H.shape[0]);
     std.debug.assert(F.shape[1] == H.shape[1]);
     std.debug.assert(P.shape[0] == H.shape[0]);
@@ -47,8 +48,10 @@ pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), J: T
         F.ptr(i, j).* = H.at(i, j);
     };
 
+    const exch_factor: T = if (generalized) 1.0 else 0.5;
+
     for (0..J.shape[0]) |i| for (0..J.shape[1]) |j| for (0..J.shape[2]) |k| for (0..J.shape[3]) |l| {
-        F.ptr(k, l).* += P.at(i, j) * (J.at(.{ i, k, j, l }) - 0.5 * J.at(.{ i, j, k, l }));
+        F.ptr(k, l).* += P.at(i, j) * (J.at(.{ i, k, j, l }) - exch_factor * J.at(.{ i, j, k, l }));
     };
 
     for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
@@ -59,25 +62,27 @@ pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), J: T
     };
 }
 
-pub fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize) void {
+pub fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) void {
     std.debug.assert(C.shape[0] == P.shape[0]);
     std.debug.assert(C.shape[1] == P.shape[1]);
+
+    const factor: T = if (generalized) 1 else 2;
 
     for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
         var sum: T = 0;
 
         for (0..nocc) |k| {
-            sum += 2 * C.at(i, k) * C.at(j, k);
+            sum += factor * C.at(i, k) * C.at(j, k);
         }
 
         P.ptr(i, j).* = sum;
     };
 }
 
-pub fn getDensityAlloc(comptime T: type, C: Matrix(T), nocc: usize, gpa: Allocator) !Matrix(T) {
+pub fn getDensityAlloc(comptime T: type, C: Matrix(T), nocc: usize, generalized: bool, gpa: Allocator) !Matrix(T) {
     var P = try Matrix(T).initZero(C.shape[0], C.shape[1], gpa);
 
-    getDensity(T, &P, C, nocc);
+    getDensity(T, &P, C, nocc, generalized);
 
     return P;
 }
@@ -137,6 +142,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
+        .spin = opt.generalized,
     };
 
     var ints = try molecular_integrals_run(T, io, molopts, log, gpa);
@@ -144,32 +150,36 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     const VN = try ints.sys.nrep();
 
-    if (ints.sys.nel % 2 != 0) {
-        @panic("ONLY CLOSED-SHELL SYSTEMS ARE SUPPORTED IN THIS IMPLEMENTATION");
-    }
+    const nocc = if (opt.generalized) ints.sys.nel else blk: {
+        if (ints.sys.nel % 2 != 0) {
+            @panic("ONLY CLOSED-SHELL SYSTEMS ARE SUPPORTED IN RESTRICTED HARTREE-FOCK CALCULATIONS");
+        }
 
-    const nocc = ints.sys.nel / 2;
+        break :blk ints.sys.nel / 2;
+    };
+
+    const nbf = if (opt.generalized) 2 * ints.sys.nbf else ints.sys.nbf;
 
     if (log) {
-        try printf(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ ints.sys.nbf, nocc });
+        try printf(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ nbf, nocc });
     }
 
-    var H = try Matrix(T).init(ints.sys.nbf, ints.sys.nbf, gpa);
+    var H = try Matrix(T).init(nbf, nbf, gpa);
     defer H.deinit(gpa);
 
-    var B = try Matrix(T).init(ints.sys.nbf, ints.sys.nbf, gpa);
+    var B = try Matrix(T).init(nbf, nbf, gpa);
     defer B.deinit(gpa);
 
-    var C = try Matrix(T).init(ints.sys.nbf, ints.sys.nbf, gpa);
+    var C = try Matrix(T).init(nbf, nbf, gpa);
     errdefer C.deinit(gpa);
 
-    var F = try Matrix(T).init(ints.sys.nbf, ints.sys.nbf, gpa);
+    var F = try Matrix(T).init(nbf, nbf, gpa);
     errdefer F.deinit(gpa);
 
-    var e = try Vector(T).init(ints.sys.nbf, gpa);
+    var e = try Vector(T).init(nbf, gpa);
     errdefer e.deinit(gpa);
 
-    for (0..ints.sys.nbf) |i| for (0..ints.sys.nbf) |j| {
+    for (0..nbf) |i| for (0..nbf) |j| {
         H.ptr(i, j).* = ints.K.?.at(i, j) + ints.V.?.at(i, j);
     };
 
@@ -177,10 +187,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try printf(io, "\nNUCLEAR REPULSION ENERGY: {d:.14} Eh\n", .{VN});
     }
 
-    var P_old = try Matrix(T).initZero(ints.sys.nbf, ints.sys.nbf, gpa);
+    var P_old = try Matrix(T).initZero(nbf, nbf, gpa);
     defer P_old.deinit(gpa);
 
-    var P_new = try Matrix(T).initZero(ints.sys.nbf, ints.sys.nbf, gpa);
+    var P_new = try Matrix(T).initZero(nbf, nbf, gpa);
     errdefer P_new.deinit(gpa);
 
     var e_old: T = VN;
@@ -191,7 +201,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
         try geigh(T, &e, &C, H, &B);
 
-        getDensity(T, &P_old, C, nocc);
+        getDensity(T, &P_old, C, nocc, opt.generalized);
     }
 
     if (opt.iterations > 0 and log) {
@@ -203,14 +213,15 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     for (0..opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
-        try getFock(T, &F, H, P_old, ints.J.?);
+        try getFock(T, &F, H, P_old, ints.J.?, opt.generalized);
+
         e_new = getEnergy(T, H, F, P_old) + VN;
 
         @memcpy(B.data, ints.S.?.data);
 
         try geigh(T, &e, &C, F, &B);
 
-        getDensity(T, &P_new, C, nocc);
+        getDensity(T, &P_new, C, nocc, opt.generalized);
 
         const p_rm = getDensRms(T, P_old, P_new);
         const delta_energy = @abs(e_new - e_old);
