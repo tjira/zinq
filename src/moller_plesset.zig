@@ -78,7 +78,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var hfres = try hartree_fock_run(T, io, opt.hartree_fock, log, gpa);
     errdefer hfres.deinit(gpa);
 
-    const corr_energy = switch(opt.order) {
+    const corr_energy = switch (opt.order) {
         2 => try mp2(T, hfres, opt.hartree_fock.generalized, gpa),
         else => unreachable,
     };
@@ -89,4 +89,3 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     return Result(T){ .hartree_fock = hfres, .correlation_energy = corr_energy };
 }
-

@@ -173,29 +173,33 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             gpa.free(self.data);
         }
 
-        pub fn at(self: @This(), indices: [N]usize) T {
+        pub fn at(self: @This(), indx: [N]usize) T {
             var idx: usize = 0;
             var str: usize = 1;
 
-            inline for (indices, self.shape) |i, dimensi| {
-                std.debug.assert(i < dimensi);
+            inline for (0..N) |k| {
+                const j = N - 1 - k;
 
-                idx += i * str;
-                str *= dimensi;
+                std.debug.assert(indx[j] < self.shape[j]);
+
+                idx += indx[j] * str;
+                str *= self.shape[j];
             }
 
             return self.data[idx];
         }
 
-        pub fn ptr(self: *@This(), indices: [N]usize) *T {
+        pub fn ptr(self: *@This(), indx: [N]usize) *T {
             var idx: usize = 0;
             var str: usize = 1;
 
-            inline for (indices, self.shape) |i, dimensi| {
-                std.debug.assert(i < dimensi);
+            inline for (0..N) |k| {
+                const j = N - 1 - k;
 
-                idx += i * str;
-                str *= dimensi;
+                std.debug.assert(indx[j] < self.shape[j]);
+
+                idx += indx[j] * str;
+                str *= self.shape[j];
             }
 
             return &self.data[idx];

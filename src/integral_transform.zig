@@ -31,44 +31,20 @@ pub fn ao2mo_oovv(comptime T: type, g_xxxx: Tensor(T, 4), C: Matrix(T), nocc: us
     var g_oovv = try Tensor(T, 4).initZero(.{ nocc, nocc, nvir, nvir }, gpa);
     errdefer g_oovv.deinit(gpa);
 
-    for (0..N) |sigma| for (0..N) |nu| for (0..N) |lambda| for (0..nocc) |i| {
-        var sum: T = 0;
-
-        for (0..N) |mu| {
-            sum += C.at(mu, i) * g_xxxx.at(.{ mu, lambda, nu, sigma });
-        }
-
-        g_oxxx.ptr(.{ i, lambda, nu, sigma }).* = sum;
+    for (0..nocc) |i| for (0..N) |lambda| for (0..N) |nu| for (0..N) |mu| for (0..N) |sigma| {
+        g_oxxx.ptr(.{ i, lambda, nu, sigma }).* += C.at(mu, i) * g_xxxx.at(.{ mu, lambda, nu, sigma });
     };
 
-    for (0..N) |sigma| for (0..N) |nu| for (0..nocc) |j| for (0..nocc) |i| {
-        var sum: T = 0;
-
-        for (0..N) |lambda| {
-            sum += C.at(lambda, j) * g_oxxx.at(.{ i, lambda, nu, sigma });
-        }
-
-        g_ooxx.ptr(.{ i, j, nu, sigma }).* = sum;
+    for (0..nocc) |i| for (0..nocc) |j| for (0..N) |nu| for (0..N) |lambda| for (0..N) |sigma| {
+        g_ooxx.ptr(.{ i, j, nu, sigma }).* += C.at(lambda, j) * g_oxxx.at(.{ i, lambda, nu, sigma });
     };
 
-    for (0..N) |sigma| for (nocc..N) |a| for (0..nocc) |j| for (0..nocc) |i| {
-        var sum: T = 0;
-
-        for (0..N) |nu| {
-            sum += C.at(nu, a) * g_ooxx.at(.{ i, j, nu, sigma });
-        }
-
-        g_oovx.ptr(.{ i, j, a - nocc, sigma }).* = sum;
+    for (0..nocc) |i| for (0..nocc) |j| for (nocc..N) |a| for (0..N) |nu| for (0..N) |sigma| {
+        g_oovx.ptr(.{ i, j, a - nocc, sigma }).* += C.at(nu, a) * g_ooxx.at(.{ i, j, nu, sigma });
     };
 
-    for (nocc..N) |b| for (0..nvir) |a| for (0..nocc) |j| for (0..nocc) |i| {
-        var sum: T = 0;
-
-        for (0..N) |sigma| {
-            sum += C.at(sigma, b) * g_oovx.at(.{ i, j, a, sigma });
-        }
-
-        g_oovv.ptr(.{ i, j, a, b - nocc }).* = sum;
+    for (0..nocc) |i| for (0..nocc) |j| for (0..nvir) |a| for (0..N) |sigma| for (nocc..N) |b| {
+        g_oovv.ptr(.{ i, j, a, b - nocc }).* += C.at(sigma, b) * g_oovx.at(.{ i, j, a, sigma });
     };
 
     return g_oovv;

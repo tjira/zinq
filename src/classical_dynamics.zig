@@ -195,7 +195,7 @@ pub fn Ensemble(comptime T: type) type {
 
 // GRADIENT BUFFER =====================================================================================================
 
-pub fn GradientBuffer(comptime T: type) type {
+fn GradientBuffer(comptime T: type) type {
     return struct {
         adia: bool,
 
@@ -293,14 +293,22 @@ pub fn GradientBuffer(comptime T: type) type {
 
 // PROPAGATOR ==========================================================================================================
 
-pub fn Propagator(comptime T: type) type {
+fn Propagator(comptime T: type) type {
     return struct {
         sh: ?SurfaceHopping(T),
 
         dt: T,
 
-        pub fn init(dt: T, sh: ?SurfaceHopping(T)) @This() {
-            return .{ .dt = dt, .sh = sh };
+        pub fn init(opt: Options, nstate: usize, gpa: Allocator) !@This() {
+            const istate = opt.initial_conditions.state;
+
+            var sh: ?SurfaceHopping(T) = null;
+
+            if (opt.surface_hopping) |shopt| {
+                sh = try SurfaceHopping(T).init(shopt, nstate, opt.trajectories, istate, opt.adiabatic, gpa);
+            }
+
+            return .{ .dt = @floatCast(opt.time_step), .sh = sh };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -611,30 +619,21 @@ fn SolveContext(comptime T: type) type {
 fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     const pot = Potential(T).init(opt.potential);
 
-    var sh: ?SurfaceHopping(T) = null;
-    errdefer if (sh) |*s| s.deinit(gpa);
-
-    const istate = opt.initial_conditions.state;
-
-    if (opt.surface_hopping) |shopt| {
-        sh = try SurfaceHopping(T).init(shopt, pot.nstate(), opt.trajectories, istate, opt.adiabatic, gpa);
-    }
-
     var ensemble = try Ensemble(T).init(pot.ndim(), opt.trajectories, opt.mass, gpa);
     errdefer ensemble.deinit(gpa);
 
     var gb = try GradientBuffer(T).init(pot.ndim(), pot.nstate(), opt.trajectories, opt.adiabatic, gpa);
     errdefer gb.deinit(gpa);
 
-    var prop = Propagator(T).init(opt.time_step, sh);
+    var prop = try Propagator(T).init(opt, pot.nstate(), gpa);
     errdefer prop.deinit(gpa);
 
     ensemble.setGaussian(opt.initial_conditions);
 
     try gb.update(ensemble.r, pot, 0);
 
-    if (sh != null) {
-        sh.?.update(if (opt.adiabatic) gb.W else gb.V, gb.U);
+    if (prop.sh) |*sh| {
+        sh.update(if (opt.adiabatic) gb.W else gb.V, gb.U);
     }
 
     gb.apply(&ensemble, pot);
@@ -688,7 +687,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 
-    const obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .log = log }, gpa, gpa);
+    var obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .log = log }, gpa, gpa);
+    errdefer obs.deinit(gpa);
 
     if (log) {
         try printFinalPop(T, io, obs);
