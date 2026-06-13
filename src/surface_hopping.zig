@@ -246,10 +246,6 @@ pub fn FewestSwitches(comptime T: type) type {
         }
 
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
-            std.debug.assert(probs.nrow() == ensemble.s.length());
-            std.debug.assert(self.sigmatdc.nrow() == ensemble.s.length());
-            std.debug.assert(self.sigmatdc.ncol() == probs.ncol() * probs.ncol());
-
             if (std.math.isNan(self.uhist[0].at(0, 0))) return;
 
             for (0..ensemble.s.length()) |i| {
@@ -284,10 +280,6 @@ pub fn FewestSwitches(comptime T: type) type {
         }
 
         pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
-            std.debug.assert(probs.nrow() == ensemble.s.length());
-            std.debug.assert(self.hamilton.nrow() == ensemble.s.length());
-            std.debug.assert(self.hamilton.ncol() == probs.ncol() * probs.ncol());
-
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
 
@@ -404,10 +396,6 @@ pub fn LandauZener(comptime T: type) type {
         }
 
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
-            std.debug.assert(probs.nrow() == ensemble.s.length());
-            std.debug.assert(self.history[0].nrow() == ensemble.s.length());
-            std.debug.assert(self.history[0].ncol() == probs.ncol());
-
             if (std.math.isNan(self.history[0].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {
@@ -444,10 +432,6 @@ pub fn LandauZener(comptime T: type) type {
         }
 
         pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
-            std.debug.assert(probs.nrow() == ensemble.s.length());
-            std.debug.assert(self.history[0].nrow() == ensemble.s.length());
-            std.debug.assert(self.history[0].ncol() == probs.ncol() * probs.ncol());
-
             if (std.math.isNan(self.history[1].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {

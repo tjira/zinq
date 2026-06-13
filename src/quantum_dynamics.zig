@@ -857,6 +857,20 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
     timer.* = std.Io.Timestamp.now(io, .real);
 }
 
+// RESULT STRUCT =======================================================================================================
+
+pub fn Result(comptime T: type) type {
+    return struct {
+        observables: std.ArrayList(Observables(T)),
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            for (self.observables.items) |*e| e.deinit(gpa);
+
+            self.observables.deinit(gpa);
+        }
+    };
+}
+
 // RUN =================================================================================================================
 
 fn SimulationState(comptime T: type) type {
@@ -980,7 +994,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
     return try Observables(T).init(ctx.sim, ctx.opt.write, ctx.opt.adiabatic, true, gpa);
 }
 
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !std.ArrayList(Observables(T)) {
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     var output: std.ArrayList(Observables(T)) = .empty;
 
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\nQUANTUM DYNAMICS INIT: ");
@@ -1011,5 +1025,5 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (log) try printFinalEnergies(T, io, output);
 
-    return output;
+    return .{ .observables = output };
 }

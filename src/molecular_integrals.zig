@@ -44,13 +44,13 @@ pub fn Integrals(comptime T: type) type {
         K: ?Matrix(T) = null,
         V: ?Matrix(T) = null,
 
-        J: ?Tensor(T, 4) = null,
+        g: ?Tensor(T, 4) = null,
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.S) |*S| S.deinit(gpa);
             if (self.K) |*K| K.deinit(gpa);
             if (self.V) |*V| V.deinit(gpa);
-            if (self.J) |*J| J.deinit(gpa);
+            if (self.g) |*g| g.deinit(gpa);
 
             self.sys.deinit(gpa);
         }
@@ -104,7 +104,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.coulomb) {
-        ints.J = if (opt.spin) try ints.sys.coulombSpin(gpa) else try ints.sys.coulomb(gpa);
+        ints.g = if (opt.spin) try ints.sys.coulombSpin(gpa) else try ints.sys.coulomb(gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -152,9 +152,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb) |fname| {
-        const J = ints.J orelse @panic("COULOMB MATRIX NOT CALCULATED");
+        const g = ints.g orelse @panic("COULOMB MATRIX NOT CALCULATED");
 
-        try writeMatrix(T, io, fname, J.asMatrix());
+        try writeMatrix(T, io, fname, g.asMatrix());
 
         if (log) try printf(io, "COULOMB INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }

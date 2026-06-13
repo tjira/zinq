@@ -575,6 +575,18 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
     timer.* = std.Io.Timestamp.now(io, .real);
 }
 
+// RESULT STRUCT =======================================================================================================
+
+pub fn Result(comptime T: type) type {
+    return struct {
+        observables: Observables(T),
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.observables.deinit(gpa);
+        }
+    };
+}
+
 // RUN =================================================================================================================
 
 fn SimulationState(comptime T: type) type {
@@ -666,7 +678,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
     return try Observables(T).init(ctx.sim.*, end_time, ctx.opt.write, true, gpa);
 }
 
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Observables(T) {
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\nCLASSICAL DYNAMICS INIT: ");
 
     var timer = std.Io.Timestamp.now(io, .real);
@@ -682,5 +694,5 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try printFinalPop(T, io, obs);
     }
 
-    return obs;
+    return .{ .observables = obs };
 }

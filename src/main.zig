@@ -8,6 +8,8 @@ pub const HartreeFockOptions = @import("hartree_fock.zig").Options;
 pub const hartree_fock_run = @import("hartree_fock.zig").run;
 pub const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
 pub const molecular_integrals_run = @import("molecular_integrals.zig").run;
+pub const MollerPlessetOptions = @import("moller_plesset.zig").Options;
+pub const moller_plesset_run = @import("moller_plesset.zig").run;
 pub const QuantumDynamicsOptions = @import("quantum_dynamics.zig").Options;
 pub const quantum_dynamics_run = @import("quantum_dynamics.zig").run;
 pub const SurfaceHopping = @import("surface_hopping.zig").SurfaceHopping;
@@ -24,6 +26,7 @@ const Options = struct {
         classical_dynamics: ClassicalDynamicsOptions,
         hartree_fock: HartreeFockOptions,
         molecular_integrals: MolecularIntegralsOptions,
+        moller_plesset: MollerPlessetOptions,
         quantum_dynamics: QuantumDynamicsOptions,
     },
 };
@@ -46,10 +49,6 @@ fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: A
             inline else => |field, tag| {
                 var result = try @field(@This(), @tagName(tag) ++ "_run")(T, io, field, true, gpa);
                 defer result.deinit(gpa);
-
-                if (comptime @typeInfo(@TypeOf(result)) == .@"struct" and @hasField(@TypeOf(result), "items")) {
-                    for (result.items) |*item| item.deinit(gpa);
-                }
             },
         }
     }

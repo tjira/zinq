@@ -32,17 +32,17 @@ pub const Options = struct {
     threshold: f64 = 1e-8,
 };
 
-// HARTREE-FOCK FUNCTIONS===============================================================================================
+// HARTREE-FOCK FUNCTIONS ==============================================================================================
 
-pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), J: Tensor(T, 4), generalized: bool) !void {
+pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), g: Tensor(T, 4), generalized: bool) !void {
     std.debug.assert(F.shape[0] == H.shape[0]);
     std.debug.assert(F.shape[1] == H.shape[1]);
     std.debug.assert(P.shape[0] == H.shape[0]);
     std.debug.assert(P.shape[1] == H.shape[1]);
-    std.debug.assert(J.shape[0] == H.shape[0]);
-    std.debug.assert(J.shape[1] == H.shape[0]);
-    std.debug.assert(J.shape[2] == H.shape[0]);
-    std.debug.assert(J.shape[3] == H.shape[0]);
+    std.debug.assert(g.shape[0] == H.shape[0]);
+    std.debug.assert(g.shape[1] == H.shape[0]);
+    std.debug.assert(g.shape[2] == H.shape[0]);
+    std.debug.assert(g.shape[3] == H.shape[0]);
 
     for (0..F.shape[0]) |i| for (0..F.shape[1]) |j| {
         F.ptr(i, j).* = H.at(i, j);
@@ -50,8 +50,8 @@ pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), J: T
 
     const exch_factor: T = if (generalized) 1.0 else 0.5;
 
-    for (0..J.shape[0]) |i| for (0..J.shape[1]) |j| for (0..J.shape[2]) |k| for (0..J.shape[3]) |l| {
-        F.ptr(k, l).* += P.at(i, j) * (J.at(.{ i, k, j, l }) - exch_factor * J.at(.{ i, j, k, l }));
+    for (0..g.shape[0]) |i| for (0..g.shape[1]) |j| for (0..g.shape[2]) |k| for (0..g.shape[3]) |l| {
+        F.ptr(k, l).* += P.at(i, j) * (g.at(.{ i, k, j, l }) - exch_factor * g.at(.{ i, j, k, l }));
     };
 
     for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
@@ -213,7 +213,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     for (0..opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
-        try getFock(T, &F, H, P_old, ints.J.?, opt.generalized);
+        try getFock(T, &F, H, P_old, ints.g.?, opt.generalized);
 
         e_new = getEnergy(T, H, F, P_old) + VN;
 
@@ -246,7 +246,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     if (log) {
-        try printf(io, "\nFINAL SINGLE POINT ENERGY: {d:.14} Eh\n", .{e_new});
+        try printf(io, "\nFINAL HARTREE-FOCK ENERGY: {d:.14} Eh\n", .{e_new});
     }
 
     if (opt.write.coefficients) |fname| {

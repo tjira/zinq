@@ -25,9 +25,9 @@ pub fn writeMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T)
     try writer.interface.print("{d} {d}\n", .{ A.nrow(), ncol });
 
     for (0..A.nrow()) |i| for (0..A.ncol()) |j| {
-            try writeElement(&writer, A.at(i, j));
+        try writeElement(&writer, A.at(i, j));
 
-            try writer.interface.print("{s}", .{if (j == A.ncol() - 1) "\n" else " "});
+        try writer.interface.print("{s}", .{if (j == A.ncol() - 1) "\n" else " "});
     };
 
     try writer.interface.flush();
@@ -96,6 +96,6 @@ fn writeElement(writer: anytype, val: anytype) !void {
     }
 
     if (comptime !isComplex(@TypeOf(val))) {
-        try writer.interface.print("{d:20.14}", .{ val });
+        try writer.interface.print("{d:20.14}", .{val});
     }
 }
