@@ -68,11 +68,11 @@ pub fn Result(comptime T: type) type {
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     if (opt.order < 2) {
-        @panic("MOLLER-PLESSET ORDER LOWER THAN 2 IS RIDICULOUS");
+        return error.MollerPlessetOrderTooLow;
     }
 
     if (opt.order > 2) {
-        @panic("MOLLER-PLESSET ORDER HIGHER THAN 2 IS NOT SUPPORTED");
+        return error.MollerPlessetOrderNotSupported;
     }
 
     var hfres = try hartree_fock_run(T, io, opt.hartree_fock, log, gpa);

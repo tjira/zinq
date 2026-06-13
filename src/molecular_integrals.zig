@@ -122,7 +122,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.overlap) |fname| {
-        const S = ints.S orelse @panic("OVERLAP MATRIX NOT CALCULATED");
+        const S = ints.S orelse return error.OverlapMatrixNotCalculated;
 
         try writeMatrix(T, io, fname, S);
 
@@ -132,7 +132,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.kinetic) |fname| {
-        const K = ints.K orelse @panic("KINETIC MATRIX NOT CALCULATED");
+        const K = ints.K orelse return error.KineticMatrixNotCalculated;
 
         try writeMatrix(T, io, fname, K);
 
@@ -142,7 +142,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.nuclear) |fname| {
-        const V = ints.V orelse @panic("NUCLEAR MATRIX NOT CALCULATED");
+        const V = ints.V orelse return error.NuclearMatrixNotCalculated;
 
         try writeMatrix(T, io, fname, V);
 
@@ -152,7 +152,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb) |fname| {
-        const g = ints.g orelse @panic("COULOMB MATRIX NOT CALCULATED");
+        const g = ints.g orelse return error.CoulombMatrixNotCalculated;
 
         try writeMatrix(T, io, fname, g.asMatrix());
 

@@ -152,7 +152,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     const nocc = if (opt.generalized) ints.sys.nel else blk: {
         if (ints.sys.nel % 2 != 0) {
-            @panic("ONLY CLOSED-SHELL SYSTEMS ARE SUPPORTED IN RESTRICTED HARTREE-FOCK CALCULATIONS");
+            return error.OnlyClosedShellSupported;
         }
 
         break :blk ints.sys.nel / 2;
@@ -241,7 +241,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         }
 
         if (i == opt.iterations - 1) {
-            @panic("SCF DID NOT CONVERGE WITHIN THE SPECIFIED NUMBER OF ITERATIONS");
+            return error.ScfDidNotConverge;
         }
     }
 

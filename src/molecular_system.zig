@@ -23,14 +23,16 @@ pub fn MolecularSystem(comptime T: type) type {
             const bas_c = try gpa.dupeSentinel(u8, basis, 0);
             defer gpa.free(bas_c);
 
-            const ptr = libint.init(sys_c.ptr, bas_c.ptr) orelse {
-                return error.InitializationFailed;
-            };
+            const ptr = libint.init(sys_c.ptr, bas_c.ptr) orelse return error.InitializationFailed;
+            errdefer libint.deinit(ptr);
 
             const nat = libint.nat(ptr);
 
             const atoms = try gpa.alloc(i32, 1 * nat);
+            errdefer gpa.free(atoms);
+
             const coors = try gpa.alloc(f64, 3 * nat);
+            errdefer gpa.free(coors);
 
             libint.atoms(atoms.ptr, ptr);
             libint.coors(coors.ptr, ptr);
