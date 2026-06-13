@@ -1,0 +1,240 @@
+const std = @import("std");
+
+const Allocator = std.mem.Allocator;
+
+const Integrals = @import("molecular_integrals.zig").Integrals;
+const Matrix = @import("tensor.zig").Matrix;
+const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
+const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const Tensor = @import("tensor.zig").Tensor;
+const Vector = @import("tensor.zig").Vector;
+
+const molecular_integrals_run = @import("molecular_integrals.zig").run;
+const geigh = @import("linear_algebra.zig").geigh;
+const printf = @import("read_write.zig").printf;
+const writeMatrix = @import("read_write.zig").writeMatrix;
+
+// OPTIONS =============================================================================================================
+
+const Write = struct {
+    density: ?[]const u8 = null,
+};
+
+pub const Options = struct {
+    system: []const u8,
+    basis: []const u8,
+
+    write: Write = .{},
+    iterations: usize = 100,
+    threshold: f64 = 1e-8,
+};
+
+// HARTREE-FOCK FUNCTIONS===============================================================================================
+
+pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), J: Tensor(T, 4)) !void {
+    std.debug.assert(F.shape[0] == H.shape[0]);
+    std.debug.assert(F.shape[1] == H.shape[1]);
+    std.debug.assert(P.shape[0] == H.shape[0]);
+    std.debug.assert(P.shape[1] == H.shape[1]);
+    std.debug.assert(J.shape[0] == H.shape[0]);
+    std.debug.assert(J.shape[1] == H.shape[0]);
+    std.debug.assert(J.shape[2] == H.shape[0]);
+    std.debug.assert(J.shape[3] == H.shape[0]);
+
+    for (0..F.shape[0]) |i| for (0..F.shape[1]) |j| {
+        F.ptr(i, j).* = H.at(i, j);
+    };
+
+    for (0..J.shape[0]) |i| for (0..J.shape[1]) |j| for (0..J.shape[2]) |k| for (0..J.shape[3]) |l| {
+        F.ptr(k, l).* += P.at(i, j) * (J.at(.{ i, j, k, l }) - 0.5 * J.at(.{ i, k, j, l }));
+    };
+
+    for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
+        const avg = (F.at(i, j) + F.at(j, i)) / 2;
+
+        F.ptr(i, j).* = avg;
+        F.ptr(j, i).* = avg;
+    };
+}
+
+pub fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize) void {
+    std.debug.assert(C.shape[0] == P.shape[0]);
+    std.debug.assert(C.shape[1] == P.shape[1]);
+
+    for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
+        var sum: T = 0;
+
+        for (0..nocc) |k| {
+            sum += 2 * C.at(i, k) * C.at(j, k);
+        }
+
+        P.ptr(i, j).* = sum;
+    };
+}
+
+pub fn getDensityAlloc(comptime T: type, C: Matrix(T), nocc: usize, gpa: Allocator) !Matrix(T) {
+    var P = try Matrix(T).initZero(C.shape[0], C.shape[1], gpa);
+
+    getDensity(T, &P, C, nocc);
+
+    return P;
+}
+
+pub fn getEnergy(comptime T: type, H: Matrix(T), F: Matrix(T), P: Matrix(T)) T {
+    var energy: T = 0;
+
+    for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
+        energy += 0.5 * P.at(i, j) * (H.at(i, j) + F.at(i, j));
+    };
+
+    return energy;
+}
+
+pub fn getDensRms(comptime T: type, P_old: Matrix(T), P_new: Matrix(T)) T {
+    std.debug.assert(P_old.shape[0] == P_new.shape[0]);
+    std.debug.assert(P_old.shape[1] == P_new.shape[1]);
+
+    var sum_sq_diff: T = 0;
+
+    for (0..P_old.shape[0]) |i| for (0..P_old.shape[1]) |j| {
+        const diff = P_new.at(i, j) - P_old.at(i, j);
+
+        sum_sq_diff += diff * diff;
+    };
+
+    return @sqrt(sum_sq_diff / @as(T, @floatFromInt(P_old.shape[0] * P_old.shape[1])));
+}
+
+// RESULT STRUCT =======================================================================================================
+
+pub fn Result(comptime T: type) type {
+    return struct {
+        ints: Integrals(T),
+
+        C: Matrix(T),
+        P: Matrix(T),
+        F: Matrix(T),
+        e: Vector(T),
+
+        energy: T,
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.C.deinit(gpa);
+            self.P.deinit(gpa);
+            self.F.deinit(gpa);
+            self.e.deinit(gpa);
+
+            self.ints.deinit(gpa);
+        }
+    };
+}
+
+// RUN =================================================================================================================
+
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    const molopts = MolecularIntegralsOptions{
+        .system = opt.system,
+        .basis = opt.basis,
+    };
+
+    var ints = try molecular_integrals_run(T, io, molopts, log, gpa);
+    errdefer ints.deinit(gpa);
+
+    const VN = try ints.sys.nrep();
+
+    if (ints.sys.nel % 2 != 0) {
+        @panic("ONLY CLOSED-SHELL SYSTEMS ARE SUPPORTED IN THIS IMPLEMENTATION");
+    }
+
+    const nocc = ints.sys.nel / 2;
+
+    if (log) {
+        try printf(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ ints.sys.nbf, nocc });
+    }
+
+    var H = try Matrix(T).init(ints.sys.nbf, ints.sys.nbf, gpa);
+    defer H.deinit(gpa);
+
+    var B = try Matrix(T).init(ints.sys.nbf, ints.sys.nbf, gpa);
+    defer B.deinit(gpa);
+
+    var C = try Matrix(T).init(ints.sys.nbf, ints.sys.nbf, gpa);
+    errdefer C.deinit(gpa);
+
+    var F = try Matrix(T).init(ints.sys.nbf, ints.sys.nbf, gpa);
+    errdefer F.deinit(gpa);
+
+    var e = try Vector(T).init(ints.sys.nbf, gpa);
+    errdefer e.deinit(gpa);
+
+    for (0..ints.sys.nbf) |i| for (0..ints.sys.nbf) |j| {
+        H.ptr(i, j).* = ints.K.?.at(i, j) + ints.V.?.at(i, j);
+    };
+
+    if (log) {
+        try printf(io, "\nNUCLEAR REPULSION ENERGY: {d:.14} Eh\n", .{VN});
+    }
+
+    var P_old = try Matrix(T).initZero(ints.sys.nbf, ints.sys.nbf, gpa);
+    defer P_old.deinit(gpa);
+
+    var P_new = try Matrix(T).initZero(ints.sys.nbf, ints.sys.nbf, gpa);
+    errdefer P_new.deinit(gpa);
+
+    var e_old: T = VN;
+    var e_new: T = VN;
+
+    {
+        @memcpy(B.data, ints.S.?.data);
+
+        try geigh(T, &e, &C, H, &B);
+
+        getDensity(T, &P_old, C, nocc);
+    }
+
+    if (opt.iterations > 0 and log) {
+        const fmt = "\nSELF CONSISTENT FIELD\n{s:4} {s:20} {s:9} {s:9} {s:4}\n";
+
+        try printf(io, fmt, .{ "ITER", "TOTAL ENERGY", "|DE|", "RMS(DP)", "TIME" });
+    }
+
+    for (0..opt.iterations) |i| {
+        var timer = std.Io.Timestamp.now(io, .real);
+
+        try getFock(T, &F, H, P_old, ints.J.?);
+        e_new = getEnergy(T, H, F, P_old) + VN;
+
+        @memcpy(B.data, ints.S.?.data);
+
+        try geigh(T, &e, &C, F, &B);
+
+        getDensity(T, &P_new, C, nocc);
+
+        const p_rm = getDensRms(T, P_old, P_new);
+        const delta_energy = @abs(e_new - e_old);
+
+        if (log) {
+            const fmt = "{d:4} {d:20.14} {e:9.3} {e:9.3} {f}\n";
+
+            try printf(io, fmt, .{ i + 1, e_new, if (i > 0) delta_energy else 0, p_rm, timer.untilNow(io, .real) });
+        }
+
+        @memcpy(P_old.data, P_new.data);
+
+        e_old = e_new;
+
+        if (i > 0 and delta_energy < opt.threshold and p_rm < opt.threshold) {
+            break;
+        }
+
+        if (i == opt.iterations - 1) {
+            @panic("SCF DID NOT CONVERGE WITHIN THE SPECIFIED NUMBER OF ITERATIONS");
+        }
+    }
+
+    if (log) {
+        try printf(io, "\nFINAL SINGLE POINT ENERGY: {d:.14} Eh\n", .{e_new});
+    }
+
+    return Result(T){ .ints = ints, .P = P_new, .C = C, .F = F, .e = e, .energy = e_new };
+}

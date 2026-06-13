@@ -35,7 +35,7 @@ pub const Options = struct {
 
 // INTEGRALS ===========================================================================================================
 
-fn Integrals(comptime T: type) type {
+pub fn Integrals(comptime T: type) type {
     return struct {
         sys: MolecularSystem(T),
 
@@ -51,7 +51,7 @@ fn Integrals(comptime T: type) type {
             if (self.V) |*V| V.deinit(gpa);
             if (self.J) |*J| J.deinit(gpa);
 
-            self.sys.deinit();
+            self.sys.deinit(gpa);
         }
     };
 }

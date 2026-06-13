@@ -23,8 +23,30 @@ extern "C" {
         if (!sys) return; delete sys;
     }
 
+    ulong nat(SystemData *sys) {
+        if (!sys) return 0; return sys->atoms.size();
+    }
+
     ulong nbf(SystemData *sys) {
         if (!sys) return 0; return sys->obs.nbf();
+    }
+
+    void atoms(int *atoms, SystemData *sys) {
+        if (!sys) return;
+
+        for (size_t i = 0; i < sys->atoms.size(); ++i) {
+            atoms[i] = sys->atoms[i].atomic_number;
+        }
+    }
+
+    void coors(double *coords, SystemData *sys) {
+        if (!sys) return;
+
+        for (size_t i = 0; i < sys->atoms.size(); i++) {
+            coords[3 * i + 0] = sys->atoms[i].x;
+            coords[3 * i + 1] = sys->atoms[i].y;
+            coords[3 * i + 2] = sys->atoms[i].z;
+        }
     }
 }
 

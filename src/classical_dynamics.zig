@@ -496,6 +496,8 @@ fn History(comptime T: type) type {
 // LOGGERS =============================================================================================================
 
 fn printHeader(io: std.Io, ndim: usize, nstate: usize) !void {
+    try std.Io.File.stdout().writeStreamingAll(io, "\nREAL-TIME PROPAGATION");
+
     const fmt = "\n{[0]s:8} {[1]s:12} {[2]s:12} {[3]s:12} {[4]s:[5]} {[6]s:[7]} {[8]s:[9]} {[10]s:4}\n";
 
     const tuple = .{

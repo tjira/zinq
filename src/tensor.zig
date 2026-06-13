@@ -173,10 +173,18 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             gpa.free(self.data);
         }
 
-        pub fn zero(self: *@This()) void {
-            for (self.data) |*e| {
-                e.* = std.mem.zeroes(T);
+        pub fn at(self: @This(), indices: [N]usize) T {
+            var idx: usize = 0;
+            var str: usize = 1;
+
+            inline for (indices, self.shape) |i, dimensi| {
+                std.debug.assert(i < dimensi);
+
+                idx += i * str;
+                str *= dimensi;
             }
+
+            return self.data[idx];
         }
 
         pub fn asMatrix(self: @This()) Matrix(T) {
@@ -192,6 +200,12 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             }
 
             return .{ .data = self.data, .shape = .{ rows, cols } };
+        }
+
+        pub fn zero(self: *@This()) void {
+            for (self.data) |*e| {
+                e.* = std.mem.zeroes(T);
+            }
         }
     };
 }

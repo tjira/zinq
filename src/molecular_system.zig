@@ -10,7 +10,11 @@ pub fn MolecularSystem(comptime T: type) type {
     return struct {
         ptr: *libint.SystemData,
 
+        atoms: []i32,
+        coors: []f64,
+
         nbf: usize,
+        nel: usize,
 
         pub fn init(system: []const u8, basis: []const u8, gpa: Allocator) !@This() {
             const sys_c = try gpa.dupeSentinel(u8, system, 0);
@@ -23,10 +27,27 @@ pub fn MolecularSystem(comptime T: type) type {
                 return error.InitializationFailed;
             };
 
-            return .{ .ptr = ptr, .nbf = libint.nbf(ptr) };
+            const nat = libint.nat(ptr);
+
+            const atoms = try gpa.alloc(i32, 1 * nat);
+            const coors = try gpa.alloc(f64, 3 * nat);
+
+            libint.atoms(atoms.ptr, ptr);
+            libint.coors(coors.ptr, ptr);
+
+            var nel: usize = 0;
+
+            for (atoms) |z| {
+                nel += @intCast(z);
+            }
+
+            return .{ .ptr = ptr, .nbf = libint.nbf(ptr), .atoms = atoms, .coors = coors, .nel = nel };
         }
 
-        pub fn deinit(self: *@This()) void {
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            gpa.free(self.atoms);
+            gpa.free(self.coors);
+
             libint.deinit(self.ptr);
         }
 
@@ -64,6 +85,36 @@ pub fn MolecularSystem(comptime T: type) type {
             libint.coulomb(I.data.ptr, self.ptr);
 
             return I;
+        }
+
+        pub fn nrep(self: @This()) !T {
+            if (self.atoms.len == 0) return 0;
+
+            var energy: T = 0;
+
+            for (0..self.atoms.len) |i| {
+                const Zi = @as(T, @floatFromInt(self.atoms[i]));
+
+                const xi = self.coors[3 * i + 0];
+                const yi = self.coors[3 * i + 1];
+                const zi = self.coors[3 * i + 2];
+
+                for (0..i) |j| {
+                    const Zj = @as(T, @floatFromInt(self.atoms[j]));
+
+                    const xj = self.coors[3 * j + 0];
+                    const yj = self.coors[3 * j + 1];
+                    const zj = self.coors[3 * j + 2];
+
+                    const dx = xi - xj;
+                    const dy = yi - yj;
+                    const dz = zi - zj;
+
+                    energy += (Zi * Zj) / std.math.sqrt(dx * dx + dy * dy + dz * dz);
+                }
+            }
+
+            return energy;
         }
     };
 }

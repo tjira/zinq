@@ -758,6 +758,10 @@ fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize)
         try printf(io, "\nITP OF STATE {d}/{d}", .{ eigs + 1, neig });
     }
 
+    if (neig == 1) {
+        try printf(io, "\nREAL-TIME PROPAGATION", .{});
+    }
+
     const fmt = "\n{[0]s:8} {[1]s:12} {[2]s:12} {[3]s:12} {[4]s:[5]} {[6]s:[7]} {[8]s:[9]} {[10]s:10} {[11]s:4}\n";
 
     const tuple = .{
