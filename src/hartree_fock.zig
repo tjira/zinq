@@ -48,7 +48,7 @@ pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), J: T
     };
 
     for (0..J.shape[0]) |i| for (0..J.shape[1]) |j| for (0..J.shape[2]) |k| for (0..J.shape[3]) |l| {
-        F.ptr(k, l).* += P.at(i, j) * (J.at(.{ i, j, k, l }) - 0.5 * J.at(.{ i, k, j, l }));
+        F.ptr(k, l).* += P.at(i, j) * (J.at(.{ i, k, j, l }) - 0.5 * J.at(.{ i, j, k, l }));
     };
 
     for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {

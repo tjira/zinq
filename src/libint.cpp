@@ -106,14 +106,14 @@ extern "C" {
 
                                         double val = engines.at(id).results().at(0)[idx++];
 
-                                        I[bf1 * nbf * nbf * nbf + bf2 * nbf * nbf + bf3 * nbf + bf4] = val;
-                                        I[bf1 * nbf * nbf * nbf + bf2 * nbf * nbf + bf4 * nbf + bf3] = val;
-                                        I[bf2 * nbf * nbf * nbf + bf1 * nbf * nbf + bf3 * nbf + bf4] = val;
-                                        I[bf2 * nbf * nbf * nbf + bf1 * nbf * nbf + bf4 * nbf + bf3] = val;
-                                        I[bf3 * nbf * nbf * nbf + bf4 * nbf * nbf + bf1 * nbf + bf2] = val;
-                                        I[bf3 * nbf * nbf * nbf + bf4 * nbf * nbf + bf2 * nbf + bf1] = val;
-                                        I[bf4 * nbf * nbf * nbf + bf3 * nbf * nbf + bf1 * nbf + bf2] = val;
-                                        I[bf4 * nbf * nbf * nbf + bf3 * nbf * nbf + bf2 * nbf + bf1] = val;
+                                        I[bf1 * nbf * nbf * nbf + bf3 * nbf * nbf + bf2 * nbf + bf4] = val;
+                                        I[bf1 * nbf * nbf * nbf + bf4 * nbf * nbf + bf2 * nbf + bf3] = val;
+                                        I[bf2 * nbf * nbf * nbf + bf3 * nbf * nbf + bf1 * nbf + bf4] = val;
+                                        I[bf2 * nbf * nbf * nbf + bf4 * nbf * nbf + bf1 * nbf + bf3] = val;
+                                        I[bf3 * nbf * nbf * nbf + bf1 * nbf * nbf + bf4 * nbf + bf2] = val;
+                                        I[bf3 * nbf * nbf * nbf + bf2 * nbf * nbf + bf4 * nbf + bf1] = val;
+                                        I[bf4 * nbf * nbf * nbf + bf1 * nbf * nbf + bf3 * nbf + bf2] = val;
+                                        I[bf4 * nbf * nbf * nbf + bf2 * nbf * nbf + bf3 * nbf + bf1] = val;
                                     }
                                 }
                             }
