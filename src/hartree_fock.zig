@@ -17,7 +17,9 @@ const writeMatrix = @import("read_write.zig").writeMatrix;
 // OPTIONS =============================================================================================================
 
 const Write = struct {
+    coefficients: ?[]const u8 = null,
     density: ?[]const u8 = null,
+    fock: ?[]const u8 = null,
 };
 
 pub const Options = struct {
@@ -234,6 +236,18 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (log) {
         try printf(io, "\nFINAL SINGLE POINT ENERGY: {d:.14} Eh\n", .{e_new});
+    }
+
+    if (opt.write.coefficients) |fname| {
+        try writeMatrix(T, io, fname, C);
+    }
+
+    if (opt.write.density) |fname| {
+        try writeMatrix(T, io, fname, P_new);
+    }
+
+    if (opt.write.fock) |fname| {
+        try writeMatrix(T, io, fname, F);
     }
 
     return Result(T){ .ints = ints, .P = P_new, .C = C, .F = F, .e = e, .energy = e_new };
