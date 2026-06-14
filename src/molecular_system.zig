@@ -89,6 +89,50 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        pub fn overlapD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
+            const shape = .{ 3 * libint.nat(self.ptr), self.nbf, self.nbf };
+
+            const I = try Tensor(T, 3).initZero(shape, gpa);
+            errdefer I.deinit(gpa);
+
+            libint.overlap_deriv(I.data.ptr, self.ptr);
+
+            return I;
+        }
+
+        pub fn kineticD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
+            const shape = .{ 3 * libint.nat(self.ptr), self.nbf, self.nbf };
+
+            const I = try Tensor(T, 3).initZero(shape, gpa);
+            errdefer I.deinit(gpa);
+
+            libint.kinetic_deriv(I.data.ptr, self.ptr);
+
+            return I;
+        }
+
+        pub fn nuclearD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
+            const shape = .{ 3 * libint.nat(self.ptr), self.nbf, self.nbf };
+
+            const I = try Tensor(T, 3).initZero(shape, gpa);
+            errdefer I.deinit(gpa);
+
+            libint.nuclear_deriv(I.data.ptr, self.ptr);
+
+            return I;
+        }
+
+        pub fn coulombD1(self: @This(), gpa: Allocator) !Tensor(T, 5) {
+            const shape = .{ 3 * libint.nat(self.ptr), self.nbf, self.nbf, self.nbf, self.nbf };
+
+            const I = try Tensor(T, 5).initZero(shape, gpa);
+            errdefer I.deinit(gpa);
+
+            libint.coulomb_deriv(I.data.ptr, self.ptr);
+
+            return I;
+        }
+
         pub fn overlapSpin(self: @This(), gpa: Allocator) !Matrix(T) {
             var S = try self.overlap(gpa);
             defer S.deinit(gpa);

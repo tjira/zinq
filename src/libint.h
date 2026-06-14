@@ -14,5 +14,10 @@ void kinetic(double *I, SystemData *sys);
 void nuclear(double *I, SystemData *sys);
 void overlap(double *I, SystemData *sys);
 
+void coulomb_deriv(double *I, SystemData *sys);
+void kinetic_deriv(double *I, SystemData *sys);
+void nuclear_deriv(double *I, SystemData *sys);
+void overlap_deriv(double *I, SystemData *sys);
+
 void atoms(int    *atoms, SystemData *sys);
 void coors(double *coors, SystemData *sys);
