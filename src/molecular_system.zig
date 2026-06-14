@@ -185,18 +185,97 @@ pub fn MolecularSystem(comptime T: type) type {
             var J = try self.coulomb(gpa);
             defer J.deinit(gpa);
 
-            var I = try Tensor(T, 4).initZero(.{ 2 * self.nbf, 2 * self.nbf, 2 * self.nbf, 2 * self.nbf }, gpa);
+            const shape = .{ 2 * self.nbf, 2 * self.nbf, 2 * self.nbf, 2 * self.nbf };
+
+            var I = try Tensor(T, 4).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            for (0..self.nbf) |ma| for (0..self.nbf) |mb| for (0..self.nbf) |mc| for (0..self.nbf) |md| {
-                const val = J.at(.{ ma, mb, mc, md });
+            for (0..self.nbf) |i| for (0..self.nbf) |j| for (0..self.nbf) |k| for (0..self.nbf) |l| {
+                const val = J.at(.{ i, j, k, l });
 
-                I.ptr(.{ ma, mb, mc, md }).* = val;
+                I.ptr(.{ i, j, k, l }).* = val;
 
-                I.ptr(.{ ma + self.nbf, mb, mc + self.nbf, md }).* = val;
-                I.ptr(.{ ma, mb + self.nbf, mc, md + self.nbf }).* = val;
+                I.ptr(.{ i + self.nbf, j, k + self.nbf, l }).* = val;
+                I.ptr(.{ i, j + self.nbf, k, l + self.nbf }).* = val;
 
-                I.ptr(.{ ma + self.nbf, mb + self.nbf, mc + self.nbf, md + self.nbf }).* = val;
+                I.ptr(.{ i + self.nbf, j + self.nbf, k + self.nbf, l + self.nbf }).* = val;
+            };
+
+            return I;
+        }
+
+        pub fn overlapD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 3) {
+            var S = try self.overlapD1(gpa);
+            defer S.deinit(gpa);
+
+            const shape = .{ 3 * libint.nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
+
+            var I = try Tensor(T, 3).initZero(shape, gpa);
+            errdefer I.deinit(gpa);
+
+            for (0..I.shape[0]) |c| for (0..self.nbf) |i| for (0..self.nbf) |j| {
+                I.ptr(.{ c, i, j }).* = S.at(.{ c, i, j });
+
+                I.ptr(.{ c, i + self.nbf, j + self.nbf }).* = I.at(.{ c, i, j });
+            };
+
+            return I;
+        }
+
+        pub fn kineticD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 3) {
+            var K = try self.kineticD1(gpa);
+            defer K.deinit(gpa);
+
+            const shape = .{ 3 * libint.nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
+
+            var I = try Tensor(T, 3).initZero(shape, gpa);
+            errdefer I.deinit(gpa);
+
+            for (0..I.shape[0]) |c| for (0..self.nbf) |i| for (0..self.nbf) |j| {
+                I.ptr(.{ c, i, j }).* = K.at(.{ c, i, j });
+
+                I.ptr(.{ c, i + self.nbf, j + self.nbf }).* = I.at(.{ c, i, j });
+            };
+
+            return I;
+        }
+
+        pub fn nuclearD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 3) {
+            var V = try self.nuclearD1(gpa);
+            defer V.deinit(gpa);
+
+            const shape = .{ 3 * libint.nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
+
+            var I = try Tensor(T, 3).initZero(shape, gpa);
+            errdefer I.deinit(gpa);
+
+            for (0..I.shape[0]) |c| for (0..self.nbf) |i| for (0..self.nbf) |j| {
+                I.ptr(.{ c, i, j }).* = V.at(.{ c, i, j });
+
+                I.ptr(.{ c, i + self.nbf, j + self.nbf }).* = I.at(.{ c, i, j });
+            };
+
+            return I;
+        }
+
+        pub fn coulombD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 5) {
+            var J = try self.coulombD1(gpa);
+            defer J.deinit(gpa);
+
+            const shape = .{ 3 * libint.nat(self.ptr), 2 * self.nbf, 2 * self.nbf, 2 * self.nbf, 2 * self.nbf };
+
+            var I = try Tensor(T, 5).initZero(shape, gpa);
+            errdefer I.deinit(gpa);
+
+            for (0..I.shape[0]) |c| for (0..self.nbf) |i| for (0..self.nbf) |j| for (0..self.nbf) |k| for (0..self.nbf) |l| {
+                const val = J.at(.{ c, i, j, k, l });
+
+                I.ptr(.{ c, i, j, k, l }).* = val;
+
+                I.ptr(.{ c, i + self.nbf, j, k + self.nbf, l }).* = val;
+                I.ptr(.{ c, i, j + self.nbf, k, l + self.nbf }).* = val;
+
+                I.ptr(.{ c, i + self.nbf, j + self.nbf, k + self.nbf, l + self.nbf }).* = val;
             };
 
             return I;

@@ -145,7 +145,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.overlap_d1) {
-        ints.dS = try ints.sys.overlapD1(gpa);
+        ints.dS = if (opt.spin) try ints.sys.overlapD1Spin(gpa) else try ints.sys.overlapD1(gpa);
 
         if (log) try printf(io, "OVERLAP INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -153,7 +153,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.kinetic_d1) {
-        ints.dK = try ints.sys.kineticD1(gpa);
+        ints.dK = if (opt.spin) try ints.sys.kineticD1Spin(gpa) else try ints.sys.kineticD1(gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -161,7 +161,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.nuclear_d1) {
-        ints.dV = try ints.sys.nuclearD1(gpa);
+        ints.dV = if (opt.spin) try ints.sys.nuclearD1Spin(gpa) else try ints.sys.nuclearD1(gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -169,7 +169,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.coulomb_d1) {
-        ints.dg = try ints.sys.coulombD1(gpa);
+        ints.dg = if (opt.spin) try ints.sys.coulombD1Spin(gpa) else try ints.sys.coulombD1(gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }

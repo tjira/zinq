@@ -30,6 +30,7 @@ pub const Options = struct {
     iterations: usize = 100,
     generalized: bool = false,
     threshold: f64 = 1e-8,
+    gradient: bool = false,
 };
 
 // HARTREE-FOCK FUNCTIONS ==============================================================================================
@@ -112,6 +113,78 @@ pub fn getDensRms(comptime T: type, P_old: Matrix(T), P_new: Matrix(T)) T {
     return @sqrt(sum_sq_diff / @as(T, @floatFromInt(P_old.shape[0] * P_old.shape[1])));
 }
 
+pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
+    const dS = ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated;
+    const dK = ints.dK orelse return error.KineticDerivativeMatrixNotCalculated;
+    const dV = ints.dV orelse return error.NuclearDerivativeMatrixNotCalculated;
+    const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
+
+    const nocc = if (generalized) ints.sys.nel else ints.sys.nel / 2;
+
+    var G = try Matrix(T).initZero(ints.sys.atoms.len, 3, gpa);
+    errdefer G.deinit(gpa);
+
+    var W = try Matrix(T).initZero(P.shape[0], P.shape[0], gpa);
+    defer W.deinit(gpa);
+
+    const factor: T = if (generalized) 1 else 2;
+
+    for (0..W.nrow()) |i| for (0..W.ncol()) |j| {
+        var sum: T = 0;
+
+        for (0..nocc) |k| {
+            sum += factor * e.at(k) * C.at(i, k) * C.at(j, k);
+        }
+
+        W.ptr(i, j).* = sum;
+    };
+
+    const exch_factor: T = if (generalized) 1 else 0.5;
+
+    for (0..ints.sys.atoms.len) |A| for (0..3) |c| {
+        var n_G: T = 0;
+        var h_G: T = 0;
+        var s_G: T = 0;
+        var g_G: T = 0;
+
+        for (0..ints.sys.atoms.len) |B| {
+            if (B == A) continue;
+
+            const Zi = @as(T, @floatFromInt(ints.sys.atoms[A]));
+            const Zj = @as(T, @floatFromInt(ints.sys.atoms[B]));
+
+            const dx = ints.sys.coors[3 * A + 0] - ints.sys.coors[3 * B + 0];
+            const dy = ints.sys.coors[3 * A + 1] - ints.sys.coors[3 * B + 1];
+            const dz = ints.sys.coors[3 * A + 2] - ints.sys.coors[3 * B + 2];
+
+            const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            n_G -= Zi * Zj * (ints.sys.coors[3 * A + c] - ints.sys.coors[3 * B + c]) / (dist * dist * dist);
+        }
+
+        for (0..dS.shape[1]) |i| for (0..dS.shape[2]) |j| {
+            const dk_val = dK.at(.{ 3 * A + c, i, j });
+            const dv_val = dV.at(.{ 3 * A + c, i, j });
+            const ds_val = dS.at(.{ 3 * A + c, i, j });
+
+            h_G += P.at(i, j) * (dk_val + dv_val);
+
+            s_G -= W.at(i, j) * ds_val;
+        };
+
+        for (0..dg.shape[1]) |i| for (0..dg.shape[2]) |j| for (0..dg.shape[3]) |k| for (0..dg.shape[4]) |l| {
+            const dg1 = dg.at(.{ 3 * A + c, i, k, j, l });
+            const dg2 = dg.at(.{ 3 * A + c, i, j, k, l });
+
+            g_G += 0.5 * P.at(i, j) * P.at(k, l) * (dg1 - exch_factor * dg2);
+        };
+
+        G.ptr(A, c).* = h_G + g_G + s_G + n_G;
+    };
+
+    return G;
+}
+
 // RESULT STRUCT =======================================================================================================
 
 pub fn Result(comptime T: type) type {
@@ -125,11 +198,15 @@ pub fn Result(comptime T: type) type {
 
         energy: T,
 
+        G: ?Matrix(T) = null,
+
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.C.deinit(gpa);
             self.P.deinit(gpa);
             self.F.deinit(gpa);
             self.e.deinit(gpa);
+
+            if (self.G) |*G| G.deinit(gpa);
 
             self.ints.deinit(gpa);
         }
@@ -143,6 +220,12 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         .system = opt.system,
         .basis = opt.basis,
         .spin = opt.generalized,
+        .calculate = .{
+            .kinetic_d1 = opt.gradient,
+            .overlap_d1 = opt.gradient,
+            .coulomb_d1 = opt.gradient,
+            .nuclear_d1 = opt.gradient,
+        },
     };
 
     var ints = try molecular_integrals_run(T, io, molopts, log, gpa);
@@ -261,5 +344,15 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try writeMatrix(T, io, fname, F);
     }
 
-    return Result(T){ .ints = ints, .P = P_new, .C = C, .F = F, .e = e, .energy = e_new };
+    const grad = if (opt.gradient) try gradient(T, ints, C, P_new, e, opt.generalized, gpa) else null;
+
+    if (log) if (grad) |G| {
+        try std.Io.File.stdout().writeStreamingAll(io, "\nNUCLEAR ENERGY GRADIENT\n");
+
+        for (0..G.shape[0]) |i| for (0..G.shape[1]) |j| {
+            try printf(io, "{d:20.14}{s}", .{ G.at(i, j), if (j == 2) "\n" else " " });
+        };
+    };
+
+    return Result(T){ .ints = ints, .P = P_new, .C = C, .F = F, .e = e, .energy = e_new, .G = grad };
 }

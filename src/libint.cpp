@@ -188,36 +188,20 @@ extern "C" {
                     for (size_t l = 0; l < obs.at(j).size(); l++) {
                         size_t bf2 = l + sh2bf.at(j);
 
-                        if (is_nuclear) for (size_t c = 0; c < nat; c++) for (size_t d = 0; d < 3; d++) {
-                            double val = res.at(6 + 3 * c + d)[idx];
+                        for (size_t c = 0; c < nat; c++) for (size_t d = 0; d < 3; d++) {
+                            double val = 0;
+
+                            if (is_nuclear) {
+                                val += res.at(6 + 3 * c + d)[idx];
+                            }
 
                             if (atom_i == c) val += res.at(d + 0)[idx];
                             if (atom_j == c) val += res.at(d + 3)[idx];
 
-                            I[(3 * c + d) * nbf * nbf + bf1 * nbf + bf2] += val;
+                            I[(3 * c + d) * nbf * nbf + bf1 * nbf + bf2] = val;
 
                             if (bf1 != bf2) {
-                                I[(3 * c + d) * nbf * nbf + bf2 * nbf + bf1] += val;
-                            }
-                        }
-
-                        if (!is_nuclear) for (size_t d = 0; d < 3; d++) {
-                            double val = res.at(d)[idx];
-
-                            I[(3 * atom_i + d) * nbf * nbf + bf1 * nbf + bf2] += val;
-
-                            if (bf1 != bf2) {
-                                I[(3 * atom_i + d) * nbf * nbf + bf2 * nbf + bf1] += val;
-                            }
-                        }
-
-                        if (!is_nuclear) for (size_t d = 0; d < 3; d++) {
-                            double val = res.at(3 + d)[idx];
-
-                            I[(3 * atom_j + d) * nbf * nbf + bf1 * nbf + bf2] += val;
-
-                            if (bf1 != bf2) {
-                                I[(3 * atom_j + d) * nbf * nbf + bf2 * nbf + bf1] += val;
+                                I[(3 * c + d) * nbf * nbf + bf2 * nbf + bf1] = val;
                             }
                         }
 
@@ -257,11 +241,15 @@ extern "C" {
                         auto apply = [&](size_t p, size_t q, size_t r, size_t s) {
                             size_t base_idx = p * nbf * nbf * nbf + q * nbf * nbf + r * nbf + s;
 
-                            for (size_t d = 0; d < 3; d++) {
-                                I[(3 * atom_i + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 0)[idx];
-                                I[(3 * atom_j + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 3)[idx];
-                                I[(3 * atom_k + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 6)[idx];
-                                I[(3 * atom_l + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 9)[idx];
+                            for (size_t c = 0; c < nat; c++) for (size_t d = 0; d < 3; d++) {
+                                double val = 0;
+
+                                if (atom_i == c) val += res.at(d + 0)[idx];
+                                if (atom_j == c) val += res.at(d + 3)[idx];
+                                if (atom_k == c) val += res.at(d + 6)[idx];
+                                if (atom_l == c) val += res.at(d + 9)[idx];
+
+                                I[(3 * c + d) * nbf * nbf * nbf * nbf + base_idx] = val;
                             }
                         };
 
