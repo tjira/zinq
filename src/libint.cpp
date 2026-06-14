@@ -201,7 +201,7 @@ extern "C" {
                             }
                         }
 
-                        if (is_nuclear) for (size_t d = 0; d < 3; d++) {
+                        if (!is_nuclear) for (size_t d = 0; d < 3; d++) {
                             double val = res.at(d)[idx];
 
                             I[(3 * atom_i + d) * nbf * nbf + bf1 * nbf + bf2] += val;
@@ -211,7 +211,7 @@ extern "C" {
                             }
                         }
 
-                        if (is_nuclear) for (size_t d = 0; d < 3; d++) {
+                        if (!is_nuclear) for (size_t d = 0; d < 3; d++) {
                             double val = res.at(3 + d)[idx];
 
                             I[(3 * atom_j + d) * nbf * nbf + bf1 * nbf + bf2] += val;
@@ -254,14 +254,14 @@ extern "C" {
 
                         if (res.at(0) == nullptr) continue;
 
-                        auto apply = [&](size_t p, size_t q, size_t r, size_t s, size_t ap, size_t aq, size_t ar, size_t as) {
+                        auto apply = [&](size_t p, size_t q, size_t r, size_t s) {
                             size_t base_idx = p * nbf * nbf * nbf + q * nbf * nbf + r * nbf + s;
 
                             for (size_t d = 0; d < 3; d++) {
-                                I[(3 * ap + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 0)[idx];
-                                I[(3 * ar + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 3)[idx];
-                                I[(3 * aq + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 6)[idx];
-                                I[(3 * as + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 9)[idx];
+                                I[(3 * atom_i + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 0)[idx];
+                                I[(3 * atom_j + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 3)[idx];
+                                I[(3 * atom_k + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 6)[idx];
+                                I[(3 * atom_l + d) * nbf * nbf * nbf * nbf + base_idx] += res.at(d + 9)[idx];
                             }
                         };
 
@@ -277,34 +277,34 @@ extern "C" {
                                     for (size_t p_val = 0; p_val < obs.at(l).size(); p_val++) {
                                         size_t bf4 = p_val + sh2bf.at(l);
 
-                                        apply(bf1, bf3, bf2, bf4, atom_i, atom_k, atom_j, atom_l); 
+                                        apply(bf1, bf3, bf2, bf4); 
                                         
                                         if (bf3 != bf4) {
-                                            apply(bf1, bf4, bf2, bf3, atom_i, atom_l, atom_j, atom_k); 
+                                            apply(bf1, bf4, bf2, bf3); 
                                         }
                                         
                                         if (bf1 != bf2) {
-                                            apply(bf2, bf3, bf1, bf4, atom_j, atom_k, atom_i, atom_l); 
+                                            apply(bf2, bf3, bf1, bf4); 
                                         }
                                         
                                         if (bf1 != bf2 && bf3 != bf4) {
-                                            apply(bf2, bf4, bf1, bf3, atom_j, atom_l, atom_i, atom_k); 
+                                            apply(bf2, bf4, bf1, bf3); 
                                         }
 
                                         if (!(bf1 == bf3 && bf2 == bf4) && !(bf1 == bf4 && bf2 == bf3)) {
                                             
-                                            apply(bf3, bf1, bf4, bf2, atom_k, atom_i, atom_l, atom_j); 
+                                            apply(bf3, bf1, bf4, bf2); 
                                             
                                             if (bf3 != bf4) {
-                                                apply(bf4, bf1, bf3, bf2, atom_l, atom_i, atom_k, atom_j); 
+                                                apply(bf4, bf1, bf3, bf2); 
                                             }
                                             
                                             if (bf1 != bf2) {
-                                                apply(bf3, bf2, bf4, bf1, atom_k, atom_j, atom_l, atom_i); 
+                                                apply(bf3, bf2, bf4, bf1); 
                                             }
                                             
                                             if (bf1 != bf2 && bf3 != bf4) {
-                                                apply(bf4, bf2, bf3, bf1, atom_l, atom_j, atom_k, atom_i); 
+                                                apply(bf4, bf2, bf3, bf1); 
                                             }
                                         }
 
