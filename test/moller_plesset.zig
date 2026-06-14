@@ -33,4 +33,3 @@ test "Generalized MP2 on Water (STO-3G)" {
 
     try std.testing.expectApproxEqAbs(-0.03895384005710, res.correlation_energy, TEST_TOLERANCE);
 }
-
