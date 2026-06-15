@@ -3,6 +3,7 @@
 dist/
 external-x86_64-linux/
 lib/
+orca/
 zig-out/
 
 /*.data

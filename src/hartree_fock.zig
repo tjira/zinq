@@ -9,8 +9,10 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
-const molecular_integrals_run = @import("molecular_integrals.zig").run;
+const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
 const geigh = @import("linear_algebra.zig").geigh;
+const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
+const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 
@@ -124,6 +126,8 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
     var G = try Matrix(T).initZero(ints.sys.atoms.len, 3, gpa);
     errdefer G.deinit(gpa);
 
+    const exch_factor: T = if (generalized) 1 else 0.5;
+
     var W = try Matrix(T).initZero(P.shape[0], P.shape[0], gpa);
     defer W.deinit(gpa);
 
@@ -138,8 +142,6 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
 
         W.ptr(i, j).* = sum;
     };
-
-    const exch_factor: T = if (generalized) 1 else 0.5;
 
     for (0..ints.sys.atoms.len) |A| for (0..3) |c| {
         var n_G: T = 0;
@@ -183,6 +185,132 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
     };
 
     return G;
+}
+
+pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Tensor(T, 3) {
+    const dS = ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated;
+    const dK = ints.dK orelse return error.KineticDerivativeMatrixNotCalculated;
+    const dV = ints.dV orelse return error.NuclearDerivativeMatrixNotCalculated;
+    const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
+
+    const nbf = C.shape[0];
+
+    var dC = try Tensor(T, 3).initZero(.{ 3 * ints.sys.atoms.len, nbf, nbf }, gpa);
+    errdefer dC.deinit(gpa);
+
+    const exch_factor: T = if (generalized) 1 else 0.5;
+
+    var F_x = try Matrix(T).init(nbf, nbf, gpa);
+    defer F_x.deinit(gpa);
+
+    var S_x = try Matrix(T).init(nbf, nbf, gpa);
+    defer S_x.deinit(gpa);
+
+    var F_x_MO = try Matrix(T).init(nbf, nbf, gpa);
+    defer F_x_MO.deinit(gpa);
+
+    var S_x_MO = try Matrix(T).init(nbf, nbf, gpa);
+    defer S_x_MO.deinit(gpa);
+
+    var U_x = try Matrix(T).init(nbf, nbf, gpa);
+    defer U_x.deinit(gpa);
+
+    for (0..3 * ints.sys.atoms.len) |x| {
+        F_x.zero();
+        U_x.zero();
+
+        for (0..nbf) |k| for (0..nbf) |l| {
+            F_x.ptr(k, l).* = dK.at(.{ x, k, l }) + dV.at(.{ x, k, l });
+        };
+
+        for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
+            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ x, i, k, j, l }) - exch_factor * dg.at(.{ x, i, j, k, l }));
+        };
+
+        for (0..nbf) |k| for (k + 1..nbf) |l| {
+            const avg = (F_x.at(k, l) + F_x.at(l, k)) / 2;
+
+            F_x.ptr(k, l).* = avg;
+            F_x.ptr(l, k).* = avg;
+        };
+
+        for (0..nbf) |mu| for (0..nbf) |nu| {
+            S_x.ptr(mu, nu).* = dS.at(.{ x, mu, nu });
+        };
+
+        ao2mo_pp(T, &F_x_MO, F_x, C);
+        ao2mo_pp(T, &S_x_MO, S_x, C);
+
+        for (0..nbf) |p| for (0..nbf) |q| {
+            const diff = e.at(q) - e.at(p);
+
+            U_x.ptr(p, q).* = if (@abs(diff) > 1e-12) (F_x_MO.at(p, q) - e.at(q) * S_x_MO.at(p, q)) / diff else -0.5 * S_x_MO.at(p, q);
+        };
+
+        var dC_x = Matrix(T){ .data = dC.data[x * nbf * nbf .. (x + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
+
+        mo2ao_xx(T, &dC_x, U_x, C);
+    }
+
+    return dC;
+}
+
+pub fn gradientOrben(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
+    const dS = ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated;
+    const dK = ints.dK orelse return error.KineticDerivativeMatrixNotCalculated;
+    const dV = ints.dV orelse return error.NuclearDerivativeMatrixNotCalculated;
+    const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
+
+    const nbf = C.shape[0];
+
+    var de = try Matrix(T).initZero(3 * ints.sys.atoms.len, nbf, gpa);
+    errdefer de.deinit(gpa);
+
+    const exch_factor: T = if (generalized) 1.0 else 0.5;
+
+    var F_x = try Matrix(T).init(nbf, nbf, gpa);
+    defer F_x.deinit(gpa);
+
+    var S_x = try Matrix(T).init(nbf, nbf, gpa);
+    defer S_x.deinit(gpa);
+
+    var F_x_MO = try Matrix(T).init(nbf, nbf, gpa);
+    defer F_x_MO.deinit(gpa);
+
+    var S_x_MO = try Matrix(T).init(nbf, nbf, gpa);
+    defer S_x_MO.deinit(gpa);
+
+    for (0..3 * ints.sys.atoms.len) |x| {
+        F_x.zero();
+
+        for (0..nbf) |k| for (0..nbf) |l| {
+            F_x.ptr(k, l).* = dK.at(.{ x, k, l }) + dV.at(.{ x, k, l });
+        };
+
+        for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
+            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ x, i, k, j, l }) - exch_factor * dg.at(.{ x, i, j, k, l }));
+        };
+
+        for (0..nbf) |k| for (k + 1..nbf) |l| {
+            const avg = (F_x.at(k, l) + F_x.at(l, k)) / 2;
+
+            F_x.ptr(k, l).* = avg;
+            F_x.ptr(l, k).* = avg;
+        };
+
+        for (0..nbf) |mu| for (0..nbf) |nu| {
+            S_x.ptr(mu, nu).* = dS.at(.{ x, mu, nu });
+        };
+
+        ao2mo_pp(T, &F_x_MO, F_x, C);
+        ao2mo_pp(T, &S_x_MO, S_x, C);
+
+        for (0..nbf) |p| {
+            de.ptr(x, p).* = F_x_MO.at(p, p) - e.at(p) * S_x_MO.at(p, p);
+        }
+    }
+
+    return de;
 }
 
 // RESULT STRUCT =======================================================================================================
@@ -363,7 +491,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     if (log) for (grad) |G| {
-        try std.Io.File.stdout().writeStreamingAll(io, "\nNUCLEAR ENERGY GRADIENT\n");
+        try std.Io.File.stdout().writeStreamingAll(io, "\nHARTREE-FOCK NUCLEAR ENERGY GRADIENT\n");
 
         for (0..G.shape[0]) |i| for (0..G.shape[1]) |j| {
             try printf(io, "{d:20.14}{s}", .{ G.at(i, j), if (j == 2) "\n" else " " });
