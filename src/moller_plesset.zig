@@ -18,6 +18,7 @@ pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
     order: u32 = 2,
+    gradient: bool = false,
 };
 
 // MOLLER-PLESSET FUNCTIONS=============================================================================================
@@ -56,10 +57,20 @@ pub fn Result(comptime T: type) type {
     return struct {
         hartree_fock: HartreeFockResult(T),
 
-        correlation_energy: T,
+        energy: []T,
+
+        gradient: []Matrix(T),
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.hartree_fock.deinit(gpa);
+
+            gpa.free(self.energy);
+
+            for (self.gradient) |*G| {
+                G.deinit(gpa);
+            }
+
+            gpa.free(self.gradient);
         }
     };
 }
@@ -78,14 +89,22 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var hfres = try hartree_fock_run(T, io, opt.hartree_fock, log, gpa);
     errdefer hfres.deinit(gpa);
 
+    var energy = try gpa.alloc(T, 1);
+    errdefer gpa.free(energy);
+
+    const grad = try gpa.alloc(Matrix(T), if (opt.gradient) 1 else 0);
+    errdefer if (opt.gradient) gpa.free(grad);
+
     const corr_energy = switch (opt.order) {
         2 => try mp2(T, hfres, opt.hartree_fock.generalized, gpa),
         else => unreachable,
     };
 
+    energy[0] = hfres.energy[0] + corr_energy;
+
     if (log) try printf(io, "\nMP{d} CORRELATION ENERGY: {d:.14}\n", .{ opt.order, corr_energy });
 
-    if (log) try printf(io, "\nFINAL MP{d} ENERGY: {d:.14}\n", .{ opt.order, hfres.energy + corr_energy });
+    if (log) try printf(io, "\nFINAL MP{d} ENERGY: {d:.14}\n", .{ opt.order, energy[0] });
 
-    return Result(T){ .hartree_fock = hfres, .correlation_energy = corr_energy };
+    return Result(T){ .hartree_fock = hfres, .energy = energy, .gradient = grad };
 }

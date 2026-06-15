@@ -15,7 +15,7 @@ test "Restricted MP2 on Water (STO-3G)" {
     var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(-0.03895383980891, res.correlation_energy, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-75.0048550571061800, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Generalized MP2 on Water (STO-3G)" {
@@ -31,5 +31,5 @@ test "Generalized MP2 on Water (STO-3G)" {
     var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(-0.03895384005710, res.correlation_energy, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-75.0048550573543900, res.energy[0], TEST_TOLERANCE);
 }

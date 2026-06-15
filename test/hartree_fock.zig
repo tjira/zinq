@@ -21,17 +21,17 @@ test "Restricted Hartree-Fock on Water (STO-3G)" {
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-74.96590121729727, hf.energy, 1e-12);
+    try std.testing.expectApproxEqAbs(-74.9659012172972700, hf.energy[0], TEST_TOLERANCE);
 
-    try std.testing.expectApproxEqAbs(expected_grad[0], hf.G.?.at(0, 0), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[1], hf.G.?.at(0, 1), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[2], hf.G.?.at(0, 2), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[3], hf.G.?.at(1, 0), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[4], hf.G.?.at(1, 1), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[5], hf.G.?.at(1, 2), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[6], hf.G.?.at(2, 0), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[7], hf.G.?.at(2, 1), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[8], hf.G.?.at(2, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[0], hf.gradient[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], hf.gradient[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], hf.gradient[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], hf.gradient[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], hf.gradient[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], hf.gradient[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], hf.gradient[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], hf.gradient[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], hf.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
 test "Generalized Hartree-Fock on Water (STO-3G)" {
@@ -53,15 +53,15 @@ test "Generalized Hartree-Fock on Water (STO-3G)" {
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-74.96590121729730, hf.energy, 1e-12);
+    try std.testing.expectApproxEqAbs(-74.9659012172973000, hf.energy[0], TEST_TOLERANCE);
 
-    try std.testing.expectApproxEqAbs(expected_grad[0], hf.G.?.at(0, 0), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[1], hf.G.?.at(0, 1), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[2], hf.G.?.at(0, 2), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[3], hf.G.?.at(1, 0), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[4], hf.G.?.at(1, 1), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[5], hf.G.?.at(1, 2), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[6], hf.G.?.at(2, 0), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[7], hf.G.?.at(2, 1), TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(expected_grad[8], hf.G.?.at(2, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[0], hf.gradient[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], hf.gradient[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], hf.gradient[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], hf.gradient[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], hf.gradient[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], hf.gradient[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], hf.gradient[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], hf.gradient[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], hf.gradient[0].at(2, 2), TEST_TOLERANCE);
 }

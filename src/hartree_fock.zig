@@ -196,19 +196,25 @@ pub fn Result(comptime T: type) type {
         F: Matrix(T),
         e: Vector(T),
 
-        energy: T,
+        energy: []T,
 
-        G: ?Matrix(T) = null,
+        gradient: []Matrix(T) = &.{},
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.ints.deinit(gpa);
+
             self.C.deinit(gpa);
             self.P.deinit(gpa);
             self.F.deinit(gpa);
             self.e.deinit(gpa);
 
-            if (self.G) |*G| G.deinit(gpa);
+            gpa.free(self.energy);
 
-            self.ints.deinit(gpa);
+            for (self.gradient) |*G| {
+                G.deinit(gpa);
+            }
+
+            gpa.free(self.gradient);
         }
     };
 }
@@ -242,6 +248,12 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     };
 
     const nbf = if (opt.generalized) 2 * ints.sys.nbf else ints.sys.nbf;
+
+    var energy = try gpa.alloc(T, 1);
+    errdefer gpa.free(energy);
+
+    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) 1 else 0);
+    errdefer if (opt.gradient) gpa.free(grad);
 
     if (log) {
         try printf(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ nbf, nocc });
@@ -328,8 +340,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         }
     }
 
+    energy[0] = e_new;
+
     if (log) {
-        try printf(io, "\nFINAL HARTREE-FOCK ENERGY: {d:.14} Eh\n", .{e_new});
+        try printf(io, "\nFINAL HARTREE-FOCK ENERGY: {d:.14} Eh\n", .{energy[0]});
     }
 
     if (opt.write.coefficients) |fname| {
@@ -344,9 +358,11 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try writeMatrix(T, io, fname, F);
     }
 
-    const grad = if (opt.gradient) try gradient(T, ints, C, P_new, e, opt.generalized, gpa) else null;
+    if (opt.gradient) {
+        grad[0] = try gradient(T, ints, C, P_new, e, opt.generalized, gpa);
+    }
 
-    if (log) if (grad) |G| {
+    if (log) for (grad) |G| {
         try std.Io.File.stdout().writeStreamingAll(io, "\nNUCLEAR ENERGY GRADIENT\n");
 
         for (0..G.shape[0]) |i| for (0..G.shape[1]) |j| {
@@ -354,5 +370,5 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         };
     };
 
-    return Result(T){ .ints = ints, .P = P_new, .C = C, .F = F, .e = e, .energy = e_new, .G = grad };
+    return Result(T){ .ints = ints, .P = P_new, .C = C, .F = F, .e = e, .energy = energy, .gradient = grad };
 }
