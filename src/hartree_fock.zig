@@ -115,6 +115,8 @@ pub fn getDensRms(comptime T: type, P_old: Matrix(T), P_new: Matrix(T)) T {
     return @sqrt(sum_sq_diff / @as(T, @floatFromInt(P_old.shape[0] * P_old.shape[1])));
 }
 
+// GRADIENT FUNCTIONS ==================================================================================================
+
 pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
     const dS = ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated;
     const dK = ints.dK orelse return error.KineticDerivativeMatrixNotCalculated;
