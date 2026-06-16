@@ -6,6 +6,52 @@ const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 
+pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), gpa: Allocator) !void {
+    const N = g_xxxx.shape[0];
+
+    std.debug.assert(g_xxxx.shape[1] == N);
+    std.debug.assert(g_xxxx.shape[2] == N);
+    std.debug.assert(g_xxxx.shape[3] == N);
+
+    std.debug.assert(C.shape[0] == N);
+    std.debug.assert(C.shape[1] == N);
+
+    var g_pxxx = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
+    defer g_pxxx.deinit(gpa);
+
+    var g_ppxx = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
+    defer g_ppxx.deinit(gpa);
+
+    var g_pppx = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
+    defer g_pppx.deinit(gpa);
+
+    g_pppp.zero();
+
+    const addTo = struct {
+        pub fn addTo(ptr: *T, c: T, val: T) void {
+            const val_c = Value(T).init(c);
+            const val_val = Value(T).init(val);
+            ptr.* = Value(T).init(ptr.*).add(val_c.mul(val_val)).val;
+        }
+    }.addTo;
+
+    for (0..N) |i| for (0..N) |lambda| for (0..N) |nu| for (0..N) |mu| for (0..N) |sigma| {
+        addTo(g_pxxx.ptr(.{ i, lambda, nu, sigma }), C.at(mu, i), g_xxxx.at(.{ mu, lambda, nu, sigma }));
+    };
+
+    for (0..N) |i| for (0..N) |j| for (0..N) |nu| for (0..N) |lambda| for (0..N) |sigma| {
+        addTo(g_ppxx.ptr(.{ i, j, nu, sigma }), C.at(lambda, j), g_pxxx.at(.{ i, lambda, nu, sigma }));
+    };
+
+    for (0..N) |i| for (0..N) |j| for (0..N) |a| for (0..N) |nu| for (0..N) |sigma| {
+        addTo(g_pppx.ptr(.{ i, j, a, sigma }), C.at(nu, a), g_ppxx.at(.{ i, j, nu, sigma }));
+    };
+
+    for (0..N) |i| for (0..N) |j| for (0..N) |a| for (0..N) |sigma| for (0..N) |b| {
+        addTo(g_pppp.ptr(.{ i, j, a, b }), C.at(sigma, b), g_pppx.at(.{ i, j, a, sigma }));
+    };
+}
+
 pub fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), nocc: usize, gpa: Allocator) !void {
     const N = g_xxxx.shape[0];
 

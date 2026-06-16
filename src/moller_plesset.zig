@@ -9,6 +9,7 @@ const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_oovv = @import("integral_transform.zig").ao2mo_oovv;
+const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
 const gradientCoef = @import("hartree_fock.zig").gradientCoef;
 const gradientOrben = @import("hartree_fock.zig").gradientOrben;
 const hartree_fock_run = @import("hartree_fock.zig").run;
@@ -30,6 +31,13 @@ pub const Options = struct {
 
 // MOLLER-PLESSET FUNCTIONS ============================================================================================
 
+pub fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) !T {
+    return switch (order) {
+        2 => try mp2(T, g, C, e, nocc, generalized, gpa),
+        else => error.MollerPlessetInvalidOrder,
+    };
+}
+
 pub fn mp2(comptime T: type, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) !T {
     var g_oovv = try Tensor(T, 4).initZero(.{ nocc, nocc, C.shape[1] - nocc, C.shape[1] - nocc }, gpa);
     defer g_oovv.deinit(gpa);
@@ -47,27 +55,26 @@ pub fn mp2(comptime T: type, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: 
 
         const denom = e_i.add(e_j).sub(e_a).sub(e_b);
 
-        if (generalized) {
-            const term1 = Value(T).init(g_oovv.at(.{ i, j, a, b }));
-            const term2 = Value(T).init(g_oovv.at(.{ i, j, b, a }));
+        const term1 = Value(T).init(g_oovv.at(.{ i, j, a, b }));
+        const term2 = Value(T).init(g_oovv.at(.{ i, j, b, a }));
 
+        if (generalized) {
             const term = term1.sub(term2);
 
             energy = energy.add(term.mul(term).div(denom));
         }
 
         if (!generalized) {
-            const term1 = Value(T).init(g_oovv.at(.{ i, j, a, b }));
-            const term2 = Value(T).init(g_oovv.at(.{ i, j, b, a }));
+            const term = term1.muls(2).sub(term2);
 
-            energy = energy.add(term1.mul(term1.muls(2).sub(term2)).div(denom));
+            energy = energy.add(term1.mul(term).div(denom));
         }
     };
 
     return (if (generalized) energy.muls(0.25) else energy).val;
 }
 
-pub fn gradient(comptime T: type, func: anytype, hfres: HartreeFockResult(T), generalized: bool, gpa: Allocator) !Matrix(T) {
+pub fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), generalized: bool, gpa: Allocator) !Matrix(T) {
     const nbf = hfres.C.shape[0];
 
     var G = try Matrix(T).initZero(hfres.ints.sys.atoms.len, 3, gpa);
@@ -85,10 +92,8 @@ pub fn gradient(comptime T: type, func: anytype, hfres: HartreeFockResult(T), ge
         var C_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
         defer C_d.deinit(gpa);
 
-        const dC_x = Matrix(T){ .data = dC.data[x * nbf * nbf .. (x + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
-
         for (0..nbf) |mu| for (0..nbf) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C.at(mu, p), dC_x.at(mu, p));
+            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C.at(mu, p), dC.at(.{ x, mu, p }));
         };
 
         var e_d = try Vector(ScalarDual(T)).init(nbf, gpa);
@@ -107,7 +112,7 @@ pub fn gradient(comptime T: type, func: anytype, hfres: HartreeFockResult(T), ge
             g_d.ptr(.{ mu, lambda, nu, sigma }).* = ScalarDual(T).init(hfres.ints.g.?.at(.{ mu, lambda, nu, sigma }), dg_x);
         };
 
-        const corr_energy_d = try func(ScalarDual(T), g_d, C_d, e_d, nocc, generalized, gpa);
+        const corr_energy_d = try mp(ScalarDual(T), order, g_d, C_d, e_d, nocc, generalized, gpa);
 
         G.ptr(x / 3, x % 3).* = corr_energy_d.der;
     }
@@ -144,10 +149,6 @@ pub fn Result(comptime T: type) type {
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     const generalized = opt.hartree_fock.generalized;
 
-    if (opt.order < 2 or opt.order > 2) {
-        return error.MollerPlessetInvalidOrder;
-    }
-
     var hf_opt = opt.hartree_fock;
 
     if (opt.gradient) {
@@ -169,38 +170,37 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         grad[0] = try hfres.gradient[0].clone(gpa);
     }
 
+    errdefer {
+        if (opt.gradient) grad[0].deinit(gpa);
+    }
+
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
 
-    if (log) try std.Io.File.stdout().writeStreamingAll(io, "\n");
-
     for (2..(opt.order + 1)) |current_order| {
-        const func = switch (current_order) {
-            2 => mp2,
-            else => unreachable,
-        };
+        const step_energy = try mp(T, current_order, hfres.ints.g.?, hfres.C, hfres.e, nocc, generalized, gpa);
 
-        energy[0] += try func(T, hfres.ints.g.?, hfres.C, hfres.e, nocc, generalized, gpa);
+        energy[0] += step_energy;
 
         if (log) {
-            try printf(io, "MP{d} TOTAL ENERGY: {d:20.14}\n", .{ current_order, energy[0] });
+            try printf(io, "\nMP{d} TOTAL ENERGY: {d:20.14}\n", .{ current_order, energy[0] });
         }
 
         if (opt.gradient) {
-            var step_grad = try gradient(T, func, hfres, generalized, gpa);
+            var step_grad = try gradient(T, current_order, hfres, generalized, gpa);
             defer step_grad.deinit(gpa);
 
             for (0..grad[0].nrow()) |i| for (0..grad[0].ncol()) |j| {
                 grad[0].ptr(i, j).* += step_grad.at(i, j);
             };
         }
-    }
 
-    if (log and opt.gradient) {
-        try printf(io, "\nMP{d} NUCLEAR ENERGY GRADIENT\n", .{opt.order});
+        if (log) {
+            try printf(io, "\nMP{d} NUCLEAR ENERGY GRADIENT\n", .{current_order});
 
-        for (0..grad[0].nrow()) |i| for (0..grad[0].ncol()) |j| {
-            try printf(io, "{d:20.14}{s}", .{ grad[0].at(i, j), if (j == 2) "\n" else " " });
-        };
+            for (0..grad[0].nrow()) |i| for (0..grad[0].ncol()) |j| {
+                try printf(io, "{d:20.14}{s}", .{ grad[0].at(i, j), if (j == 2) "\n" else " " });
+            };
+        }
     }
 
     return Result(T){ .hartree_fock = hfres, .energy = energy, .gradient = grad };

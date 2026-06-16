@@ -130,7 +130,7 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
 
     const exch_factor: T = if (generalized) 1 else 0.5;
 
-    var W = try Matrix(T).initZero(P.shape[0], P.shape[0], gpa);
+    var W = try Matrix(T).init(P.shape[0], P.shape[0], gpa);
     defer W.deinit(gpa);
 
     const factor: T = if (generalized) 1 else 2;
@@ -205,9 +205,6 @@ pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matri
     var F_x = try Matrix(T).init(nbf, nbf, gpa);
     defer F_x.deinit(gpa);
 
-    var S_x = try Matrix(T).init(nbf, nbf, gpa);
-    defer S_x.deinit(gpa);
-
     var F_x_MO = try Matrix(T).init(nbf, nbf, gpa);
     defer F_x_MO.deinit(gpa);
 
@@ -236,9 +233,7 @@ pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matri
             F_x.ptr(l, k).* = avg;
         };
 
-        for (0..nbf) |mu| for (0..nbf) |nu| {
-            S_x.ptr(mu, nu).* = dS.at(.{ x, mu, nu });
-        };
+        const S_x = Matrix(T){ .data = dS.data[x * nbf * nbf .. (x + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
 
         ao2mo_pp(T, &F_x_MO, F_x, C);
         ao2mo_pp(T, &S_x_MO, S_x, C);
@@ -273,9 +268,6 @@ pub fn gradientOrben(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matr
     var F_x = try Matrix(T).init(nbf, nbf, gpa);
     defer F_x.deinit(gpa);
 
-    var S_x = try Matrix(T).init(nbf, nbf, gpa);
-    defer S_x.deinit(gpa);
-
     var F_x_MO = try Matrix(T).init(nbf, nbf, gpa);
     defer F_x_MO.deinit(gpa);
 
@@ -300,9 +292,7 @@ pub fn gradientOrben(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matr
             F_x.ptr(l, k).* = avg;
         };
 
-        for (0..nbf) |mu| for (0..nbf) |nu| {
-            S_x.ptr(mu, nu).* = dS.at(.{ x, mu, nu });
-        };
+        const S_x = Matrix(T){ .data = dS.data[x * nbf * nbf .. (x + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
 
         ao2mo_pp(T, &F_x_MO, F_x, C);
         ao2mo_pp(T, &S_x_MO, S_x, C);
@@ -490,6 +480,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (opt.gradient) {
         grad[0] = try gradient(T, ints, C, P_new, e, opt.generalized, gpa);
+    }
+
+    errdefer {
+        if (opt.gradient) grad[0].deinit(gpa);
     }
 
     if (log) for (grad) |G| {
