@@ -8,6 +8,7 @@ test "Restricted Hartree-Fock on Water (STO-3G)" {
         .system = "example/molecule/water.xyz",
         .basis = "example/basis/sto-3g.g94",
         .gradient = true,
+        .diis = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -40,6 +41,7 @@ test "Generalized Hartree-Fock on Water (STO-3G)" {
         .basis = "example/basis/sto-3g.g94",
         .generalized = true,
         .gradient = true,
+        .diis = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);

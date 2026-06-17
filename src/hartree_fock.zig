@@ -11,6 +11,8 @@ const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
 const geigh = @import("linear_algebra.zig").geigh;
+const luFactorize = @import("linear_algebra.zig").luFactorize;
+const luSolve = @import("linear_algebra.zig").luSolve;
 const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
 const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const printf = @import("read_write.zig").printf;
@@ -29,10 +31,11 @@ pub const Options = struct {
     basis: []const u8,
 
     write: Write = .{},
-    iterations: usize = 100,
+    diis: ?u32 = 8,
     generalized: bool = false,
-    threshold: f64 = 1e-8,
     gradient: bool = false,
+    iterations: usize = 100,
+    threshold: f64 = 1e-8,
 };
 
 // HARTREE-FOCK FUNCTIONS ==============================================================================================
@@ -115,13 +118,109 @@ pub fn getDensRms(comptime T: type, P_old: Matrix(T), P_new: Matrix(T)) T {
     return @sqrt(sum_sq_diff / @as(T, @floatFromInt(P_old.shape[0] * P_old.shape[1])));
 }
 
+// DIIS FUNCTIONS ======================================================================================================
+
+pub fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !void {
+    const nbf = F.shape[0];
+
+    std.debug.assert(F.shape[1] == nbf);
+    std.debug.assert(P.shape[0] == nbf);
+    std.debug.assert(P.shape[1] == nbf);
+    std.debug.assert(S.shape[0] == nbf);
+    std.debug.assert(S.shape[1] == nbf);
+
+    std.debug.assert(err.shape[0] == nbf);
+    std.debug.assert(err.shape[1] == nbf);
+
+    var FP = try Matrix(T).init(nbf, nbf, gpa);
+    defer FP.deinit(gpa);
+
+    var FPS = try Matrix(T).init(nbf, nbf, gpa);
+    defer FPS.deinit(gpa);
+
+    for (0..nbf) |r| for (0..nbf) |c| {
+        var sum: T = 0;
+
+        for (0..nbf) |k| {
+            sum += F.at(r, k) * P.at(k, c);
+        }
+
+        FP.ptr(r, c).* = sum;
+    };
+
+    for (0..nbf) |r| for (0..nbf) |c| {
+        var sum: T = 0;
+
+        for (0..nbf) |k| {
+            sum += FP.at(r, k) * S.at(k, c);
+        }
+
+        FPS.ptr(r, c).* = sum;
+    };
+
+    for (0..nbf) |r| for (0..nbf) |c| {
+        err.ptr(r, c).* = FPS.at(r, c) - FPS.at(c, r);
+    };
+}
+
+pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), gpa: Allocator) !void {
+    if (fck_hist.len < 2) return;
+
+    var B = try Matrix(T).initZero(fck_hist.len + 1, fck_hist.len + 1, gpa);
+    defer B.deinit(gpa);
+
+    var b = try Matrix(T).initZero(fck_hist.len + 1, 1, gpa);
+    defer b.deinit(gpa);
+
+    for (0..fck_hist.len) |i| for (i..fck_hist.len) |j| {
+        var sum: T = 0;
+
+        const ei = err_hist[i];
+        const ej = err_hist[j];
+
+        for (ei.data, ej.data) |val_i, val_j| {
+            sum += val_i * val_j;
+        }
+
+        B.ptr(i, j).* = sum;
+        B.ptr(j, i).* = sum;
+    };
+
+    for (0..fck_hist.len) |i| {
+        B.ptr(i, fck_hist.len).* = -1.0;
+        B.ptr(fck_hist.len, i).* = -1.0;
+    }
+
+    for (0..fck_hist.len) |i| {
+        b.ptr(i, 0).* = 0.0;
+    }
+
+    b.ptr(fck_hist.len, 0).* = -1.0;
+
+    const ipiv = try gpa.alloc(i32, fck_hist.len + 1);
+    defer gpa.free(ipiv);
+
+    try luFactorize(T, &B, ipiv);
+
+    var c = try Matrix(T).init(fck_hist.len + 1, 1, gpa);
+    defer c.deinit(gpa);
+
+    try luSolve(T, &c, B, ipiv, b);
+
+    F.zero();
+
+    for (0..fck_hist.len) |i| for (0..F.shape[0]) |r| for (0..F.shape[1]) |l| {
+        F.ptr(r, l).* += c.at(i, 0) * fck_hist[i].at(r, l);
+    };
+}
+
 // GRADIENT FUNCTIONS ==================================================================================================
 
 pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
-    const dS = ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated;
-    const dK = ints.dK orelse return error.KineticDerivativeMatrixNotCalculated;
-    const dV = ints.dV orelse return error.NuclearDerivativeMatrixNotCalculated;
-    const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
+    const dS = ints.dS orelse unreachable;
+    const dK = ints.dK orelse unreachable;
+    const dV = ints.dV orelse unreachable;
+    const dg = ints.dg orelse unreachable;
 
     const nocc = if (generalized) ints.sys.nel else ints.sys.nel / 2;
 
@@ -190,10 +289,10 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
 }
 
 pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Tensor(T, 3) {
-    const dS = ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated;
-    const dK = ints.dK orelse return error.KineticDerivativeMatrixNotCalculated;
-    const dV = ints.dV orelse return error.NuclearDerivativeMatrixNotCalculated;
-    const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
+    const dS = ints.dS orelse unreachable;
+    const dK = ints.dK orelse unreachable;
+    const dV = ints.dV orelse unreachable;
+    const dg = ints.dg orelse unreachable;
 
     const nbf = C.shape[0];
 
@@ -253,10 +352,10 @@ pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matri
 }
 
 pub fn gradientOrben(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
-    const dS = ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated;
-    const dK = ints.dK orelse return error.KineticDerivativeMatrixNotCalculated;
-    const dV = ints.dV orelse return error.NuclearDerivativeMatrixNotCalculated;
-    const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
+    const dS = ints.dS orelse unreachable;
+    const dK = ints.dK orelse unreachable;
+    const dV = ints.dV orelse unreachable;
+    const dg = ints.dg orelse unreachable;
 
     const nbf = C.shape[0];
 
@@ -357,6 +456,12 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var ints = try molecular_integrals_run(T, io, molopts, log, gpa);
     errdefer ints.deinit(gpa);
 
+    var energy = try gpa.alloc(T, 1);
+    errdefer gpa.free(energy);
+
+    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) 1 else 0);
+    errdefer if (opt.gradient) gpa.free(grad);
+
     const VN = try ints.sys.nrep();
 
     const nocc = if (opt.generalized) ints.sys.nel else blk: {
@@ -368,12 +473,6 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     };
 
     const nbf = if (opt.generalized) 2 * ints.sys.nbf else ints.sys.nbf;
-
-    var energy = try gpa.alloc(T, 1);
-    errdefer gpa.free(energy);
-
-    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) 1 else 0);
-    errdefer if (opt.gradient) gpa.free(grad);
 
     if (log) {
         try printf(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ nbf, nocc });
@@ -420,9 +519,25 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     if (opt.iterations > 0 and log) {
-        const fmt = "\nSELF CONSISTENT FIELD\n{s:4} {s:20} {s:9} {s:9} {s:4}\n";
+        const fmt = "\nSELF CONSISTENT FIELD\n{s:4} {s:20} {s:9} {s:9} {s:9}\n";
 
         try printf(io, fmt, .{ "ITER", "TOTAL ENERGY", "|DE|", "RMS(DP)", "TIME" });
+    }
+
+    var fck_hist = std.ArrayList(Matrix(T)).empty;
+
+    defer {
+        for (fck_hist.items) |*mat| mat.deinit(gpa);
+
+        fck_hist.deinit(gpa);
+    }
+
+    var err_hist = std.ArrayList(Matrix(T)).empty;
+
+    defer {
+        for (err_hist.items) |*mat| mat.deinit(gpa);
+
+        err_hist.deinit(gpa);
     }
 
     for (0..opt.iterations) |i| {
@@ -431,6 +546,51 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try getFock(T, &F, H, P_old, ints.g.?, opt.generalized);
 
         e_new = getEnergy(T, H, F, P_old) + VN;
+
+        if (opt.diis != null and opt.diis.? > 0) {
+            var f_diis = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer f_diis.deinit(gpa);
+
+            var e_diis = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer e_diis.deinit(gpa);
+
+            for (0..nbf) |j| for (0..nbf) |k| {
+                f_diis.ptr(j, k).* = F.at(j, k);
+            };
+
+            try getError(T, &e_diis, F, P_old, ints.S.?, gpa);
+
+            if (fck_hist.items.len >= opt.diis.?) {
+                var old_f = fck_hist.orderedRemove(0);
+                var old_e = err_hist.orderedRemove(0);
+
+                old_f.deinit(gpa);
+                old_e.deinit(gpa);
+            }
+
+            try fck_hist.append(gpa, f_diis);
+            try err_hist.append(gpa, e_diis);
+
+            diis(T, fck_hist.items, err_hist.items, &F, gpa) catch {
+                for (fck_hist.items) |*mat| mat.deinit(gpa);
+                for (err_hist.items) |*mat| mat.deinit(gpa);
+
+                fck_hist.clearRetainingCapacity();
+                err_hist.clearRetainingCapacity();
+
+                var f_retry = try Matrix(T).init(nbf, nbf, gpa);
+                var e_retry = try Matrix(T).init(nbf, nbf, gpa);
+
+                for (0..nbf) |j| for (0..nbf) |k| {
+                    f_retry.ptr(j, k).* = F.at(j, k);
+                };
+
+                try getError(T, &e_retry, F, P_old, ints.S.?, gpa);
+
+                try fck_hist.append(gpa, f_retry);
+                try err_hist.append(gpa, e_retry);
+            };
+        }
 
         @memcpy(B.data, ints.S.?.data);
 
@@ -441,10 +601,17 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         const p_rm = getDensRms(T, P_old, P_new);
         const delta_energy = @abs(e_new - e_old);
 
-        if (log) {
-            const fmt = "{d:4} {d:20.14} {e:9.3} {e:9.3} {f}\n";
+        const elapsed = timer.untilNow(io, .real);
 
-            try printf(io, fmt, .{ i + 1, e_new, if (i > 0) delta_energy else 0, p_rm, timer.untilNow(io, .real) });
+        if (log) {
+            const fmt = "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9} {s}\n";
+
+            const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
+            defer gpa.free(time_str);
+
+            const de = if (i == 0) 0 else delta_energy;
+
+            try printf(io, fmt, .{ i + 1, e_new, de, p_rm, time_str, if (err_hist.items.len >= 2) "DIIS" else "" });
         }
 
         @memcpy(P_old.data, P_new.data);

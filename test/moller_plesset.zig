@@ -8,6 +8,7 @@ test "Restricted MP2 on Water (STO-3G)" {
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "example/basis/sto-3g.g94",
+            .diis = null,
         },
         .order = 2,
         .gradient = true,
@@ -43,6 +44,7 @@ test "Generalized MP2 on Water (STO-3G)" {
             .system = "example/molecule/water.xyz",
             .basis = "example/basis/sto-3g.g94",
             .generalized = true,
+            .diis = null,
         },
         .order = 2,
         .gradient = true,
