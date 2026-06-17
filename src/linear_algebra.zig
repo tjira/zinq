@@ -69,7 +69,7 @@ pub fn geighSlice(comptime T: type, W: []T, U: []T, V: []T, B: []T) !void {
     if (info != 0) return error.LapackError;
 }
 
-pub fn luFactorize(comptime T: type, A: *Matrix(T), ipiv: []lapacke.lapack_int) !void {
+pub fn luFactorize(comptime T: type, A: *Matrix(T), ipiv: []i32) !void {
     std.debug.assert(A.nrow() == A.ncol());
     std.debug.assert(ipiv.len == A.nrow());
 
