@@ -24,7 +24,7 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
-    excitations: []const u32 = &.{1},
+    excitations: []const u32 = &.{ 1, 2 },
 };
 
 // CONFIGURATION INTERACTION FUNCTIONS =================================================================================
