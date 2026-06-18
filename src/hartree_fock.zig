@@ -548,6 +548,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         e_new = getEnergy(T, H, F, P_old) + VN;
 
         if (opt.diis != null and opt.diis.? > 0) {
+            try fck_hist.ensureUnusedCapacity(gpa, 1);
+            try err_hist.ensureUnusedCapacity(gpa, 1);
+
             var f_diis = try Matrix(T).init(nbf, nbf, gpa);
             errdefer f_diis.deinit(gpa);
 
@@ -568,8 +571,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
                 old_e.deinit(gpa);
             }
 
-            try fck_hist.append(gpa, f_diis);
-            try err_hist.append(gpa, e_diis);
+            fck_hist.appendAssumeCapacity(f_diis);
+            err_hist.appendAssumeCapacity(e_diis);
 
             diis(T, fck_hist.items, err_hist.items, &F, gpa) catch {
                 for (0..fck_hist.items.len) |j| fck_hist.items[j].deinit(gpa);
@@ -577,6 +580,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
                 fck_hist.clearRetainingCapacity();
                 err_hist.clearRetainingCapacity();
+
+                try fck_hist.ensureUnusedCapacity(gpa, 1);
+                try err_hist.ensureUnusedCapacity(gpa, 1);
 
                 var f_retry = try Matrix(T).init(nbf, nbf, gpa);
                 errdefer f_retry.deinit(gpa);
@@ -590,8 +596,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
                 try getError(T, &e_retry, F, P_old, ints.S.?, gpa);
 
-                try fck_hist.append(gpa, f_retry);
-                try err_hist.append(gpa, e_retry);
+                fck_hist.appendAssumeCapacity(f_retry);
+                err_hist.appendAssumeCapacity(e_retry);
             };
         }
 

@@ -96,7 +96,7 @@ pub fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4),
     };
 
     for (0..nocc) |i| for (0..nocc) |j| for (0..N) |nu| for (0..N) |lambda| for (0..N) |sigma| {
-        addTo(g_ooxx.ptr(.{ i, j, nu, sigma }), C.at(lambda, i), g_oxxx.at(.{ j, lambda, nu, sigma }));
+        addTo(g_ooxx.ptr(.{ i, j, nu, sigma }), C.at(lambda, j), g_oxxx.at(.{ i, lambda, nu, sigma }));
     };
 
     for (0..nocc) |i| for (0..nocc) |j| for (nocc..N) |a| for (0..N) |nu| for (0..N) |sigma| {
