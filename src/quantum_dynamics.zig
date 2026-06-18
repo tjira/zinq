@@ -88,9 +88,9 @@ fn Grid(comptime T: type) type {
 
             var dr: T = 1;
 
-            for (bounds) |e| {
-                const min = e[0];
-                const max = e[1];
+            for (0..bounds.len) |i| {
+                const min = bounds[i][0];
+                const max = bounds[i][1];
 
                 dr *= (max - min) / @as(T, @floatFromInt(npoint));
             }
@@ -144,8 +144,8 @@ fn Wavefunction(comptime T: type) type {
             const shape = try gpa.alloc(i32, ndim);
             defer gpa.free(shape);
 
-            for (shape) |*e| {
-                e.* = @as(i32, @intCast(npoint));
+            for (0..shape.len) |i| {
+                shape[i] = @as(i32, @intCast(npoint));
             }
 
             const ffft = try FftPlan(Complex(T)).init(W.rowSlice(0), shape, -1, plan_mode);
@@ -180,8 +180,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn ekin(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
             var value: T = 0;
 
-            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |e, j| {
-                value += e.squaredMagnitude() * ham.K.at(j);
+            for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| {
+                value += self.W.rowSlice(i)[j].squaredMagnitude() * ham.K.at(j);
             };
 
             return value * grid.dk;
@@ -211,12 +211,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn mom(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
-            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |e, j| {
-                const mag = e.squaredMagnitude();
-
-                for (0..grid.r.ncol()) |k| {
-                    value.ptr(k).* += mag * grid.k.at(j, k);
-                }
+            for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
+                value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * grid.k.at(j, k);
             };
 
             value.muls(grid.dk);
@@ -227,8 +223,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn norm(self: @This(), grid: Grid(T)) T {
             var value: T = 0;
 
-            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i)) |e| {
-                value += e.squaredMagnitude();
+            for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| {
+                value += self.W.rowSlice(i)[j].squaredMagnitude();
             };
 
             return value * grid.dr;
@@ -241,8 +237,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn overlap(self: @This(), other: @This(), grid: Grid(T)) Complex(T) {
             var value = Complex(T).init(0, 0);
 
-            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), other.W.rowSlice(i)) |s, o| {
-                value = value.add(s.conjugate().mul(o));
+            for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| {
+                value = value.add(self.W.rowSlice(i)[j].conjugate().mul(other.W.rowSlice(i)[j]));
             };
 
             return value.mul(Complex(T).init(grid.dr, 0));
@@ -254,8 +250,8 @@ fn Wavefunction(comptime T: type) type {
             for (0..self.W.nrow()) |i| {
                 var sum: T = 0;
 
-                for (self.W.rowSlice(i)) |e| {
-                    sum += e.squaredMagnitude();
+                for (0..self.W.rowSlice(i).len) |j| {
+                    sum += self.W.rowSlice(i)[j].squaredMagnitude();
                 }
 
                 value.ptr(i).* = sum;
@@ -293,12 +289,8 @@ fn Wavefunction(comptime T: type) type {
         pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
-            for (0..self.W.nrow()) |i| for (self.W.rowSlice(i), 0..) |e, j| {
-                const mag = e.squaredMagnitude();
-
-                for (0..grid.r.ncol()) |k| {
-                    value.ptr(k).* += mag * grid.r.at(j, k);
-                }
+            for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
+                value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * grid.r.at(j, k);
             };
 
             value.muls(grid.dr);
@@ -444,8 +436,8 @@ fn Propagator(comptime T: type) type {
             var K = try Vector(Complex(T)).initZero(ham.K.length(), gpa);
             errdefer K.deinit(gpa);
 
-            for (ham.K.data, 0..) |e, i| {
-                K.data[i] = std.math.complex.exp(Complex(T).init(0, -e).mul(dt));
+            for (0..ham.K.data.len) |i| {
+                K.data[i] = std.math.complex.exp(Complex(T).init(0, -ham.K.data[i]).mul(dt));
             }
 
             var prop = @This(){ .R = R, .K = K, .dt = dt };
@@ -790,9 +782,9 @@ fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize)
 fn printFinalEnergies(comptime T: type, io: std.Io, obs: std.ArrayList(Observables(T))) !void {
     try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
-    for (obs.items, 0..) |e, i| {
-        const ekin = e.ekin orelse std.math.nan(T);
-        const epot = e.epot orelse std.math.nan(T);
+    for (0..obs.items.len) |i| {
+        const ekin = obs.items[i].ekin orelse std.math.nan(T);
+        const epot = obs.items[i].epot orelse std.math.nan(T);
 
         const etot = ekin + epot;
 
@@ -864,7 +856,9 @@ pub fn Result(comptime T: type) type {
         observables: std.ArrayList(Observables(T)),
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            for (self.observables.items) |*e| e.deinit(gpa);
+            for (0..self.observables.items.len) |i| {
+                self.observables.items[i].deinit(gpa);
+            }
 
             self.observables.deinit(gpa);
         }
@@ -884,7 +878,7 @@ fn SimulationState(comptime T: type) type {
         orthw: std.ArrayList(Wavefunction(T)),
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            for (self.orthw.items) |*e| e.deinit(gpa);
+            for (0..self.orthw.items.len) |i| self.orthw.items[i].deinit(gpa);
 
             inline for (@typeInfo(@This()).@"struct".fields) |field| {
                 @field(self, field.name).deinit(gpa);
@@ -953,11 +947,11 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
 
         if (i > 0) try ctx.sim.propg.step(&ctx.sim.wfn, gpa);
 
-        if (ctx.opt.imaginary != null) for (ctx.sim.orthw.items) |e| {
-            const overlap = e.overlap(ctx.sim.wfn, ctx.sim.wfn_kpgrids);
+        if (ctx.opt.imaginary != null) for (0..ctx.sim.orthw.items.len) |j| {
+            const overlap = ctx.sim.orthw.items[j].overlap(ctx.sim.wfn, ctx.sim.wfn_kpgrids);
 
             for (0..ctx.sim.wfn.W.data.len) |k| {
-                ctx.sim.wfn.W.data[k] = ctx.sim.wfn.W.data[k].sub(overlap.mul(e.W.data[k]));
+                ctx.sim.wfn.W.data[k] = ctx.sim.wfn.W.data[k].sub(overlap.mul(ctx.sim.orthw.items[j].W.data[k]));
             }
         };
 

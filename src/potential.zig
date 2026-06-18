@@ -98,8 +98,8 @@ pub fn Harmonic(comptime T: type) type {
         pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
             var sum = Value(U).fromFloat(0);
 
-            for (r, 0..) |e, i| {
-                sum = sum.add(Value(U).init(e).mul(Value(U).init(e)).muls(0.5 * self.k[i]));
+            for (0..r.len) |i| {
+                sum = sum.add(Value(U).init(r[i]).mul(Value(U).init(r[i])).muls(0.5 * self.k[i]));
             }
 
             V[0] = sum.val;

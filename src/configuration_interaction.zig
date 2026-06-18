@@ -39,30 +39,30 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MO: Matrix
     var common = std.ArrayList(usize).empty;
     defer common.deinit(gpa);
 
-    var i: usize = 0;
-    var j: usize = 0;
+    var idx_a: usize = 0;
+    var idx_b: usize = 0;
 
-    while (i < A.len and j < B.len) switch (std.math.order(A[i], B[j])) {
+    while (idx_a < A.len and idx_b < B.len) switch (std.math.order(A[idx_a], B[idx_b])) {
         .lt => {
-            try diff_A.append(gpa, A[i]);
+            try diff_A.append(gpa, A[idx_a]);
 
-            i += 1;
+            idx_a += 1;
         },
         .gt => {
-            try diff_B.append(gpa, B[j]);
+            try diff_B.append(gpa, B[idx_b]);
 
-            j += 1;
+            idx_b += 1;
         },
         .eq => {
-            try common.append(gpa, A[i]);
+            try common.append(gpa, A[idx_a]);
 
-            i += 1;
-            j += 1;
+            idx_a += 1;
+            idx_b += 1;
         },
     };
 
-    try diff_A.appendSlice(gpa, A[i..]);
-    try diff_B.appendSlice(gpa, B[j..]);
+    try diff_A.appendSlice(gpa, A[idx_a..]);
+    try diff_B.appendSlice(gpa, B[idx_b..]);
 
     if (diff_A.items.len > 2) {
         return 0;
@@ -74,13 +74,13 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MO: Matrix
     if (diff_A.items.len == 0) {
         var sum: T = 0;
 
-        for (A) |idx_i| {
-            sum += H_MO.at(idx_i, idx_i);
+        for (0..A.len) |i| {
+            sum += H_MO.at(A[i], A[i]);
         }
 
-        for (0..A.len) |ii| for (ii + 1..A.len) |jj| {
-            const idx_i = A[ii];
-            const idx_j = A[jj];
+        for (0..A.len) |i| for (i + 1..A.len) |j| {
+            const idx_i = A[i];
+            const idx_j = A[j];
 
             sum += g_MO.at(.{ idx_i, idx_j, idx_i, idx_j }) - g_MO.at(.{ idx_i, idx_j, idx_j, idx_i });
         };
@@ -94,8 +94,8 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MO: Matrix
 
         var term = H_MO.at(m, p);
 
-        for (common.items) |idx_i| {
-            term += g_MO.at(.{ m, idx_i, p, idx_i }) - g_MO.at(.{ m, idx_i, idx_i, p });
+        for (0..common.items.len) |i| {
+            term += g_MO.at(.{ m, common.items[i], p, common.items[i] }) - g_MO.at(.{ m, common.items[i], common.items[i], p });
         }
 
         return @as(T, @floatFromInt(s_A * s_B)) * term;
@@ -119,7 +119,7 @@ pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Alloc
     var dets = std.ArrayList([]const usize).empty;
 
     errdefer {
-        for (dets.items) |det| gpa.free(det);
+        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
 
         dets.deinit(gpa);
     }
@@ -127,20 +127,22 @@ pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Alloc
     {
         const ref_det = try gpa.alloc(usize, nel);
 
-        for (0..nel) |idx| {
-            ref_det[idx] = idx;
+        for (0..nel) |i| {
+            ref_det[i] = i;
         }
 
         try dets.append(gpa, ref_det);
     }
 
-    for (excitations) |k| {
+    for (0..excitations.len) |i| {
+        const k = excitations[i];
+
         if (k == 0 or k > nel or k > nsp - nel) continue;
 
         var occ_combs = try generateCombinations(nel, k, 0, gpa);
 
         defer {
-            for (occ_combs.items) |comb| gpa.free(comb);
+            for (0..occ_combs.items.len) |j| gpa.free(occ_combs.items[j]);
 
             occ_combs.deinit(gpa);
         }
@@ -148,20 +150,20 @@ pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Alloc
         var vir_combs = try generateCombinations(nsp - nel, k, nel, gpa);
 
         defer {
-            for (vir_combs.items) |comb| gpa.free(comb);
+            for (0..vir_combs.items.len) |j| gpa.free(vir_combs.items[j]);
 
             vir_combs.deinit(gpa);
         }
 
-        for (occ_combs.items) |occ_indices| for (vir_combs.items) |vir_indices| {
+        for (0..occ_combs.items.len) |j| for (0..vir_combs.items.len) |l| {
             var list = try std.ArrayList(usize).initCapacity(gpa, nel);
             errdefer list.deinit(gpa);
 
-            for (0..nel) |occ| if (std.mem.indexOfScalar(usize, occ_indices, occ) == null) {
-                list.appendAssumeCapacity(occ);
+            for (0..nel) |p| if (std.mem.indexOfScalar(usize, occ_combs.items[j], p) == null) {
+                list.appendAssumeCapacity(p);
             };
 
-            list.appendSliceAssumeCapacity(vir_indices);
+            list.appendSliceAssumeCapacity(vir_combs.items[l]);
 
             std.mem.sort(usize, list.items, {}, std.sort.asc(usize));
 
@@ -176,7 +178,7 @@ fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.
     var results: std.ArrayList([]const usize) = .empty;
 
     errdefer {
-        for (results.items) |comb| gpa.free(comb);
+        for (0..results.items.len) |i| gpa.free(results.items[i]);
 
         results.deinit(gpa);
     }
@@ -224,8 +226,8 @@ fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.
 fn signOfExcitations(S: []const usize, U: []const usize) i2 {
     var exp: usize = 0;
 
-    for (U, 0..) |u, j| {
-        exp += std.mem.indexOfScalar(usize, S, u).? - j;
+    for (0..U.len) |j| {
+        exp += std.mem.indexOfScalar(usize, S, U[j]).? - j;
     }
 
     return if (exp % 2 == 0) 1 else -1;
@@ -327,7 +329,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var dets = try generateDets(hfres.ints.sys.nel, nsp, opt.excitations, gpa);
 
     defer {
-        for (dets.items) |det| gpa.free(det);
+        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
 
         dets.deinit(gpa);
     }
@@ -339,11 +341,11 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var H_CI = try Matrix(T).initZero(dets.items.len, dets.items.len, gpa);
     defer H_CI.deinit(gpa);
 
-    for (0..dets.items.len) |r| for (r..dets.items.len) |c| {
-        const val = try slater(T, dets.items[r], dets.items[c], H_MO, g_MO, gpa);
+    for (0..dets.items.len) |i| for (i..dets.items.len) |j| {
+        const val = try slater(T, dets.items[i], dets.items[j], H_MO, g_MO, gpa);
 
-        H_CI.ptr(r, c).* = val;
-        H_CI.ptr(c, r).* = val;
+        H_CI.ptr(i, j).* = val;
+        H_CI.ptr(j, i).* = val;
     };
 
     const W = try gpa.alloc(T, dets.items.len);
@@ -356,8 +358,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     const VN = try hfres.ints.sys.nrep();
 
-    for (W) |*val| {
-        val.* += VN;
+    for (0..W.len) |i| {
+        W[i] += VN;
     }
 
     if (log) {

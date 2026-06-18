@@ -35,9 +35,9 @@ pub fn FftPlan(comptime T: type) type {
 
             fftw.fftw_execute_dft(self.plan, ptr, ptr);
 
-            if (self.sign == 1) for (arr) |*e| {
-                e.*.re /= @as(f64, @floatFromInt(arr.len));
-                e.*.im /= @as(f64, @floatFromInt(arr.len));
+            if (self.sign == 1) for (0..arr.len) |i| {
+                arr[i].re /= @as(f64, @floatFromInt(arr.len));
+                arr[i].im /= @as(f64, @floatFromInt(arr.len));
             };
         }
     };

@@ -81,8 +81,8 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {
             std.debug.assert(self.tmp.len == y.len);
 
-            for (self.k) |ki| {
-                std.debug.assert(ki.len == y.len);
+            for (0..self.k.len) |i| {
+                std.debug.assert(self.k[i].len == y.len);
             }
 
             inline for (0..self.k.len) |i| {

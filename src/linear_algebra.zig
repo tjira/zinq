@@ -31,8 +31,8 @@ pub fn eighSlice(comptime T: type, W: []T, U: []T, V: []T) !void {
 
     const n: i32 = @intCast(W.len);
 
-    for (V, 0..) |e, i| {
-        U[i] = e;
+    for (0..V.len) |i| {
+        U[i] = V[i];
     }
 
     const info = lapacke.LAPACKE_dsyevd(lapacke.LAPACK_ROW_MAJOR, 'V', 'U', n, U.ptr, n, W.ptr);
@@ -60,8 +60,8 @@ pub fn geighSlice(comptime T: type, W: []T, U: []T, V: []T, B: []T) !void {
 
     const n: i32 = @intCast(W.len);
 
-    for (V, 0..) |e, i| {
-        U[i] = e;
+    for (0..V.len) |i| {
+        U[i] = V[i];
     }
 
     const info = lapacke.LAPACKE_dsygvd(lapacke.LAPACK_ROW_MAJOR, 1, 'V', 'U', n, U.ptr, n, B.ptr, n, W.ptr);
@@ -108,8 +108,8 @@ pub fn luSolveSlice(comptime T: type, X: []T, LU: []const T, ipiv: []const i32, 
     const n: i32 = @intCast(std.math.sqrt(LU.len));
     const nofrhs: i32 = @intCast(B.len / ipiv.len);
 
-    for (B, 0..) |e, i| {
-        X[i] = e;
+    for (0..B.len) |i| {
+        X[i] = B[i];
     }
 
     const info = lapacke.LAPACKE_dgetrs(lapacke.LAPACK_ROW_MAJOR, 'N', n, nofrhs, LU.ptr, n, ipiv.ptr, X.ptr, nofrhs);

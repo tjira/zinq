@@ -39,8 +39,8 @@ pub fn MolecularSystem(comptime T: type) type {
 
             var nel: usize = 0;
 
-            for (atoms) |z| {
-                nel += @intCast(z);
+            for (0..atoms.len) |i| {
+                nel += @intCast(atoms[i]);
             }
 
             return .{ .ptr = ptr, .nbf = libint.nbf(ptr), .atoms = atoms, .coors = coors, .nel = nel };
@@ -213,10 +213,10 @@ pub fn MolecularSystem(comptime T: type) type {
             var I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            for (0..I.shape[0]) |c| for (0..self.nbf) |i| for (0..self.nbf) |j| {
-                I.ptr(.{ c, i, j }).* = S.at(.{ c, i, j });
+            for (0..I.shape[0]) |k| for (0..self.nbf) |i| for (0..self.nbf) |j| {
+                I.ptr(.{ k, i, j }).* = S.at(.{ k, i, j });
 
-                I.ptr(.{ c, i + self.nbf, j + self.nbf }).* = I.at(.{ c, i, j });
+                I.ptr(.{ k, i + self.nbf, j + self.nbf }).* = I.at(.{ k, i, j });
             };
 
             return I;
@@ -231,10 +231,10 @@ pub fn MolecularSystem(comptime T: type) type {
             var I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            for (0..I.shape[0]) |c| for (0..self.nbf) |i| for (0..self.nbf) |j| {
-                I.ptr(.{ c, i, j }).* = K.at(.{ c, i, j });
+            for (0..I.shape[0]) |k| for (0..self.nbf) |i| for (0..self.nbf) |j| {
+                I.ptr(.{ k, i, j }).* = K.at(.{ k, i, j });
 
-                I.ptr(.{ c, i + self.nbf, j + self.nbf }).* = I.at(.{ c, i, j });
+                I.ptr(.{ k, i + self.nbf, j + self.nbf }).* = I.at(.{ k, i, j });
             };
 
             return I;
@@ -249,10 +249,10 @@ pub fn MolecularSystem(comptime T: type) type {
             var I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            for (0..I.shape[0]) |c| for (0..self.nbf) |i| for (0..self.nbf) |j| {
-                I.ptr(.{ c, i, j }).* = V.at(.{ c, i, j });
+            for (0..I.shape[0]) |k| for (0..self.nbf) |i| for (0..self.nbf) |j| {
+                I.ptr(.{ k, i, j }).* = V.at(.{ k, i, j });
 
-                I.ptr(.{ c, i + self.nbf, j + self.nbf }).* = I.at(.{ c, i, j });
+                I.ptr(.{ k, i + self.nbf, j + self.nbf }).* = I.at(.{ k, i, j });
             };
 
             return I;
@@ -267,15 +267,15 @@ pub fn MolecularSystem(comptime T: type) type {
             var I = try Tensor(T, 5).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            for (0..I.shape[0]) |c| for (0..self.nbf) |i| for (0..self.nbf) |j| for (0..self.nbf) |k| for (0..self.nbf) |l| {
-                const val = J.at(.{ c, i, j, k, l });
+            for (0..I.shape[0]) |p| for (0..self.nbf) |i| for (0..self.nbf) |j| for (0..self.nbf) |k| for (0..self.nbf) |l| {
+                const val = J.at(.{ p, i, j, k, l });
 
-                I.ptr(.{ c, i, j, k, l }).* = val;
+                I.ptr(.{ p, i, j, k, l }).* = val;
 
-                I.ptr(.{ c, i + self.nbf, j, k + self.nbf, l }).* = val;
-                I.ptr(.{ c, i, j + self.nbf, k, l + self.nbf }).* = val;
+                I.ptr(.{ p, i + self.nbf, j, k + self.nbf, l }).* = val;
+                I.ptr(.{ p, i, j + self.nbf, k, l + self.nbf }).* = val;
 
-                I.ptr(.{ c, i + self.nbf, j + self.nbf, k + self.nbf, l + self.nbf }).* = val;
+                I.ptr(.{ p, i + self.nbf, j + self.nbf, k + self.nbf, l + self.nbf }).* = val;
             };
 
             return I;

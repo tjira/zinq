@@ -45,10 +45,10 @@ fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !std
 fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
     const inputs = (try parse(Options, io, fname, arena)).value.zinq;
 
-    for (inputs, 0..) |e, i| {
+    for (0..inputs.len) |i| {
         try printf(io, "\nRUNNING TARGET: {s}/#{d}\n", .{ fname, i + 1 });
 
-        switch (e) {
+        switch (inputs[i]) {
             inline else => |field, tag| {
                 var result = try @field(@This(), @tagName(tag) ++ "_run")(T, io, field, true, gpa);
                 defer result.deinit(gpa);

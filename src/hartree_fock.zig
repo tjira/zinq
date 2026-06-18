@@ -138,28 +138,28 @@ pub fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S
     var FPS = try Matrix(T).init(nbf, nbf, gpa);
     defer FPS.deinit(gpa);
 
-    for (0..nbf) |r| for (0..nbf) |c| {
+    for (0..nbf) |i| for (0..nbf) |j| {
         var sum: T = 0;
 
         for (0..nbf) |k| {
-            sum += F.at(r, k) * P.at(k, c);
+            sum += F.at(i, k) * P.at(k, j);
         }
 
-        FP.ptr(r, c).* = sum;
+        FP.ptr(i, j).* = sum;
     };
 
-    for (0..nbf) |r| for (0..nbf) |c| {
+    for (0..nbf) |i| for (0..nbf) |j| {
         var sum: T = 0;
 
         for (0..nbf) |k| {
-            sum += FP.at(r, k) * S.at(k, c);
+            sum += FP.at(i, k) * S.at(k, j);
         }
 
-        FPS.ptr(r, c).* = sum;
+        FPS.ptr(i, j).* = sum;
     };
 
-    for (0..nbf) |r| for (0..nbf) |c| {
-        err.ptr(r, c).* = FPS.at(r, c) - FPS.at(c, r);
+    for (0..nbf) |i| for (0..nbf) |j| {
+        err.ptr(i, j).* = FPS.at(i, j) - FPS.at(j, i);
     };
 }
 
@@ -178,8 +178,8 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
         const ei = err_hist[i];
         const ej = err_hist[j];
 
-        for (ei.data, ej.data) |val_i, val_j| {
-            sum += val_i * val_j;
+        for (0..ei.data.len) |k| {
+            sum += ei.data[k] * ej.data[k];
         }
 
         B.ptr(i, j).* = sum;
@@ -209,8 +209,8 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
 
     F.zero();
 
-    for (0..fck_hist.len) |i| for (0..F.shape[0]) |r| for (0..F.shape[1]) |l| {
-        F.ptr(r, l).* += c.at(i, 0) * fck_hist[i].at(r, l);
+    for (0..fck_hist.len) |i| for (0..F.shape[0]) |j| for (0..F.shape[1]) |k| {
+        F.ptr(j, k).* += c.at(i, 0) * fck_hist[i].at(j, k);
     };
 }
 
@@ -244,45 +244,45 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
         W.ptr(i, j).* = sum;
     };
 
-    for (0..ints.sys.atoms.len) |A| for (0..3) |c| {
+    for (0..ints.sys.atoms.len) |i| for (0..3) |j| {
         var n_G: T = 0;
         var h_G: T = 0;
         var s_G: T = 0;
         var g_G: T = 0;
 
-        for (0..ints.sys.atoms.len) |B| {
-            if (B == A) continue;
+        for (0..ints.sys.atoms.len) |k| {
+            if (k == i) continue;
 
-            const Zi = @as(T, @floatFromInt(ints.sys.atoms[A]));
-            const Zj = @as(T, @floatFromInt(ints.sys.atoms[B]));
+            const Zi = @as(T, @floatFromInt(ints.sys.atoms[i]));
+            const Zj = @as(T, @floatFromInt(ints.sys.atoms[k]));
 
-            const dx = ints.sys.coors[3 * A + 0] - ints.sys.coors[3 * B + 0];
-            const dy = ints.sys.coors[3 * A + 1] - ints.sys.coors[3 * B + 1];
-            const dz = ints.sys.coors[3 * A + 2] - ints.sys.coors[3 * B + 2];
+            const dx = ints.sys.coors[3 * i + 0] - ints.sys.coors[3 * k + 0];
+            const dy = ints.sys.coors[3 * i + 1] - ints.sys.coors[3 * k + 1];
+            const dz = ints.sys.coors[3 * i + 2] - ints.sys.coors[3 * k + 2];
 
             const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
 
-            n_G -= Zi * Zj * (ints.sys.coors[3 * A + c] - ints.sys.coors[3 * B + c]) / (dist * dist * dist);
+            n_G -= Zi * Zj * (ints.sys.coors[3 * i + j] - ints.sys.coors[3 * k + j]) / (dist * dist * dist);
         }
 
-        for (0..dS.shape[1]) |i| for (0..dS.shape[2]) |j| {
-            const dk_val = dK.at(.{ 3 * A + c, i, j });
-            const dv_val = dV.at(.{ 3 * A + c, i, j });
-            const ds_val = dS.at(.{ 3 * A + c, i, j });
+        for (0..dS.shape[1]) |p| for (0..dS.shape[2]) |q| {
+            const dk_val = dK.at(.{ 3 * i + j, p, q });
+            const dv_val = dV.at(.{ 3 * i + j, p, q });
+            const ds_val = dS.at(.{ 3 * i + j, p, q });
 
-            h_G += P.at(i, j) * (dk_val + dv_val);
+            h_G += P.at(p, q) * (dk_val + dv_val);
 
-            s_G -= W.at(i, j) * ds_val;
+            s_G -= W.at(p, q) * ds_val;
         };
 
-        for (0..dg.shape[1]) |i| for (0..dg.shape[2]) |j| for (0..dg.shape[3]) |k| for (0..dg.shape[4]) |l| {
-            const dg1 = dg.at(.{ 3 * A + c, i, k, j, l });
-            const dg2 = dg.at(.{ 3 * A + c, i, j, k, l });
+        for (0..dg.shape[1]) |p| for (0..dg.shape[2]) |q| for (0..dg.shape[3]) |r| for (0..dg.shape[4]) |s| {
+            const dg1 = dg.at(.{ 3 * i + j, p, r, q, s });
+            const dg2 = dg.at(.{ 3 * i + j, p, q, r, s });
 
-            g_G += 0.5 * P.at(i, j) * P.at(k, l) * (dg1 - exch_factor * dg2);
+            g_G += 0.5 * P.at(p, q) * P.at(r, s) * (dg1 - exch_factor * dg2);
         };
 
-        G.ptr(A, c).* = h_G + g_G + s_G + n_G;
+        G.ptr(i, j).* = h_G + g_G + s_G + n_G;
     };
 
     return G;
@@ -313,16 +313,16 @@ pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matri
     var U_x = try Matrix(T).init(nbf, nbf, gpa);
     defer U_x.deinit(gpa);
 
-    for (0..3 * ints.sys.atoms.len) |x| {
+    for (0..3 * ints.sys.atoms.len) |p| {
         F_x.zero();
         U_x.zero();
 
         for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* = dK.at(.{ x, k, l }) + dV.at(.{ x, k, l });
+            F_x.ptr(k, l).* = dK.at(.{ p, k, l }) + dV.at(.{ p, k, l });
         };
 
         for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ x, i, k, j, l }) - exch_factor * dg.at(.{ x, i, j, k, l }));
+            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ p, i, k, j, l }) - exch_factor * dg.at(.{ p, i, j, k, l }));
         };
 
         for (0..nbf) |k| for (k + 1..nbf) |l| {
@@ -332,18 +332,18 @@ pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matri
             F_x.ptr(l, k).* = avg;
         };
 
-        const S_x = Matrix(T){ .data = dS.data[x * nbf * nbf .. (x + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
+        const S_x = Matrix(T){ .data = dS.data[p * nbf * nbf .. (p + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
 
         ao2mo_pp(T, &F_x_MO, F_x, C);
         ao2mo_pp(T, &S_x_MO, S_x, C);
 
-        for (0..nbf) |p| for (0..nbf) |q| {
-            const diff = e.at(q) - e.at(p);
+        for (0..nbf) |i| for (0..nbf) |j| {
+            const diff = e.at(j) - e.at(i);
 
-            U_x.ptr(p, q).* = if (@abs(diff) > 1e-12) (F_x_MO.at(p, q) - e.at(q) * S_x_MO.at(p, q)) / diff else -0.5 * S_x_MO.at(p, q);
+            U_x.ptr(i, j).* = if (@abs(diff) > 1e-12) (F_x_MO.at(i, j) - e.at(j) * S_x_MO.at(i, j)) / diff else -0.5 * S_x_MO.at(i, j);
         };
 
-        var dC_x = Matrix(T){ .data = dC.data[x * nbf * nbf .. (x + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
+        var dC_x = Matrix(T){ .data = dC.data[p * nbf * nbf .. (p + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
 
         mo2ao_xx(T, &dC_x, U_x, C);
     }
@@ -373,15 +373,15 @@ pub fn gradientOrben(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matr
     var S_x_MO = try Matrix(T).init(nbf, nbf, gpa);
     defer S_x_MO.deinit(gpa);
 
-    for (0..3 * ints.sys.atoms.len) |x| {
+    for (0..3 * ints.sys.atoms.len) |p| {
         F_x.zero();
 
         for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* = dK.at(.{ x, k, l }) + dV.at(.{ x, k, l });
+            F_x.ptr(k, l).* = dK.at(.{ p, k, l }) + dV.at(.{ p, k, l });
         };
 
         for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ x, i, k, j, l }) - exch_factor * dg.at(.{ x, i, j, k, l }));
+            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ p, i, k, j, l }) - exch_factor * dg.at(.{ p, i, j, k, l }));
         };
 
         for (0..nbf) |k| for (k + 1..nbf) |l| {
@@ -391,13 +391,13 @@ pub fn gradientOrben(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matr
             F_x.ptr(l, k).* = avg;
         };
 
-        const S_x = Matrix(T){ .data = dS.data[x * nbf * nbf .. (x + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
+        const S_x = Matrix(T){ .data = dS.data[p * nbf * nbf .. (p + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
 
         ao2mo_pp(T, &F_x_MO, F_x, C);
         ao2mo_pp(T, &S_x_MO, S_x, C);
 
-        for (0..nbf) |p| {
-            de.ptr(x, p).* = F_x_MO.at(p, p) - e.at(p) * S_x_MO.at(p, p);
+        for (0..nbf) |i| {
+            de.ptr(p, i).* = F_x_MO.at(i, i) - e.at(i) * S_x_MO.at(i, i);
         }
     }
 
@@ -429,8 +429,8 @@ pub fn Result(comptime T: type) type {
 
             gpa.free(self.energy);
 
-            for (self.gradient) |*G| {
-                G.deinit(gpa);
+            for (0..self.gradient.len) |i| {
+                self.gradient[i].deinit(gpa);
             }
 
             gpa.free(self.gradient);
@@ -527,7 +527,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var fck_hist = std.ArrayList(Matrix(T)).empty;
 
     defer {
-        for (fck_hist.items) |*mat| mat.deinit(gpa);
+        for (0..fck_hist.items.len) |i| fck_hist.items[i].deinit(gpa);
 
         fck_hist.deinit(gpa);
     }
@@ -535,7 +535,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var err_hist = std.ArrayList(Matrix(T)).empty;
 
     defer {
-        for (err_hist.items) |*mat| mat.deinit(gpa);
+        for (0..err_hist.items.len) |i| err_hist.items[i].deinit(gpa);
 
         err_hist.deinit(gpa);
     }
@@ -572,8 +572,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             try err_hist.append(gpa, e_diis);
 
             diis(T, fck_hist.items, err_hist.items, &F, gpa) catch {
-                for (fck_hist.items) |*mat| mat.deinit(gpa);
-                for (err_hist.items) |*mat| mat.deinit(gpa);
+                for (0..fck_hist.items.len) |j| fck_hist.items[j].deinit(gpa);
+                for (0..err_hist.items.len) |j| err_hist.items[j].deinit(gpa);
 
                 fck_hist.clearRetainingCapacity();
                 err_hist.clearRetainingCapacity();
@@ -656,11 +656,11 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         if (opt.gradient) grad[0].deinit(gpa);
     }
 
-    if (log) for (grad) |G| {
+    if (log) for (0..grad.len) |i| {
         try std.Io.File.stdout().writeStreamingAll(io, "\nHARTREE-FOCK NUCLEAR ENERGY GRADIENT\n");
 
-        for (0..G.shape[0]) |i| for (0..G.shape[1]) |j| {
-            try printf(io, "{d:20.14}{s}", .{ G.at(i, j), if (j == 2) "\n" else " " });
+        for (0..grad[i].shape[0]) |j| for (0..grad[i].shape[1]) |k| {
+            try printf(io, "{d:20.14}{s}", .{ grad[i].at(j, k), if (k == 2) "\n" else " " });
         };
     };
 

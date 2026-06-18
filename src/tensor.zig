@@ -28,8 +28,8 @@ pub fn Matrix(comptime T: type) type {
         pub fn clone(self: @This(), gpa: std.mem.Allocator) !@This() {
             var A = try @This().init(self.shape[0], self.shape[1], gpa);
 
-            for (self.data, 0..) |e, i| {
-                A.data[i] = e;
+            for (0..self.data.len) |i| {
+                A.data[i] = self.data[i];
             }
 
             return A;
@@ -43,14 +43,14 @@ pub fn Matrix(comptime T: type) type {
         }
 
         pub fn divs(self: *@This(), scalar: T) void {
-            for (self.data) |*e| {
-                e.* = Value(T).init(e.*).div(Value(T).init(scalar)).val;
+            for (0..self.data.len) |i| {
+                self.data[i] = Value(T).init(self.data[i]).div(Value(T).init(scalar)).val;
             }
         }
 
         pub fn fill(self: *@This(), scalar: T) void {
-            for (self.data) |*e| {
-                e.* = scalar;
+            for (0..self.data.len) |i| {
+                self.data[i] = scalar;
             }
         }
 
@@ -115,8 +115,8 @@ pub fn Vector(comptime T: type) type {
         }
 
         pub fn divs(self: *@This(), scalar: T) void {
-            for (self.data) |*e| {
-                e.* = Value(T).init(e.*).div(Value(T).init(scalar)).val;
+            for (0..self.data.len) |i| {
+                self.data[i] = Value(T).init(self.data[i]).div(Value(T).init(scalar)).val;
             }
         }
 
@@ -125,8 +125,8 @@ pub fn Vector(comptime T: type) type {
         }
 
         pub fn muls(self: *@This(), scalar: T) void {
-            for (self.data) |*e| {
-                e.* = Value(T).init(e.*).mul(Value(T).init(scalar)).val;
+            for (0..self.data.len) |i| {
+                self.data[i] = Value(T).init(self.data[i]).mul(Value(T).init(scalar)).val;
             }
         }
 
@@ -137,8 +137,8 @@ pub fn Vector(comptime T: type) type {
         }
 
         pub fn zero(self: *@This()) void {
-            for (self.data) |*e| {
-                e.* = std.mem.zeroes(T);
+            for (0..self.data.len) |i| {
+                self.data[i] = std.mem.zeroes(T);
             }
         }
     };
@@ -154,8 +154,8 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
         pub fn init(shape: [N]usize, gpa: std.mem.Allocator) !@This() {
             var size: usize = 1;
 
-            inline for (shape) |d| {
-                size *= d;
+            inline for (0..N) |i| {
+                size *= shape[i];
             }
 
             return .{ .data = try gpa.alloc(T, size), .shape = shape };
@@ -209,20 +209,20 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             var rows: usize = 1;
             var cols: usize = 1;
 
-            for (self.shape[0 .. (N + 1) / 2]) |d| {
-                rows *= d;
+            for (0..(N + 1) / 2) |i| {
+                rows *= self.shape[i];
             }
 
-            for (self.shape[(N + 1) / 2 ..]) |d| {
-                cols *= d;
+            for ((N + 1) / 2..N) |i| {
+                cols *= self.shape[i];
             }
 
             return .{ .data = self.data, .shape = .{ rows, cols } };
         }
 
         pub fn zero(self: *@This()) void {
-            for (self.data) |*e| {
-                e.* = std.mem.zeroes(T);
+            for (0..self.data.len) |i| {
+                self.data[i] = std.mem.zeroes(T);
             }
         }
     };
