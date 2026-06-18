@@ -29,49 +29,55 @@ pub const Options = struct {
 
 // CONFIGURATION INTERACTION FUNCTIONS =================================================================================
 
-pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MO: Matrix(T), g_MO: Tensor(T, 4), gpa: Allocator) !T {
-    var diff_A = std.ArrayList(usize).empty;
-    defer diff_A.deinit(gpa);
+pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MO: Matrix(T), g_MO: Tensor(T, 4)) T {
+    var diff_A: [2]usize = undefined;
+    var diff_B: [2]usize = undefined;
 
-    var diff_B = std.ArrayList(usize).empty;
-    defer diff_B.deinit(gpa);
-
-    var common = std.ArrayList(usize).empty;
-    defer common.deinit(gpa);
+    var diff_a_len: usize = 0;
+    var diff_b_len: usize = 0;
 
     var idx_a: usize = 0;
     var idx_b: usize = 0;
 
-    while (idx_a < A.len and idx_b < B.len) switch (std.math.order(A[idx_a], B[idx_b])) {
-        .lt => {
-            try diff_A.append(gpa, A[idx_a]);
+    while (idx_a < A.len and idx_b < B.len) {
+        switch (std.math.order(A[idx_a], B[idx_b])) {
+            .lt => {
+                if (diff_a_len == 2) return 0;
+                diff_A[diff_a_len] = A[idx_a];
 
-            idx_a += 1;
-        },
-        .gt => {
-            try diff_B.append(gpa, B[idx_b]);
+                diff_a_len, idx_a = .{ diff_a_len + 1, idx_a + 1 };
+            },
+            .gt => {
+                if (diff_b_len == 2) return 0;
+                diff_B[diff_b_len] = B[idx_b];
 
-            idx_b += 1;
-        },
-        .eq => {
-            try common.append(gpa, A[idx_a]);
-
-            idx_a += 1;
-            idx_b += 1;
-        },
-    };
-
-    try diff_A.appendSlice(gpa, A[idx_a..]);
-    try diff_B.appendSlice(gpa, B[idx_b..]);
-
-    if (diff_A.items.len > 2) {
-        return 0;
+                diff_b_len, idx_b = .{ diff_b_len + 1, idx_b + 1 };
+            },
+            .eq => {
+                idx_a += 1;
+                idx_b += 1;
+            },
+        }
     }
 
-    const s_A = signOfExcitations(A, diff_A.items);
-    const s_B = signOfExcitations(B, diff_B.items);
+    while (idx_a < A.len) : (idx_a += 1) {
+        if (diff_a_len == 2) return 0;
+        diff_A[diff_a_len] = A[idx_a];
 
-    if (diff_A.items.len == 0) {
+        diff_a_len += 1;
+    }
+
+    while (idx_b < B.len) : (idx_b += 1) {
+        if (diff_b_len == 2) return 0;
+        diff_B[diff_b_len] = B[idx_b];
+
+        diff_b_len += 1;
+    }
+
+    const s_A = signOfExcitations(A, diff_A[0..diff_a_len]);
+    const s_B = signOfExcitations(B, diff_B[0..diff_b_len]);
+
+    if (diff_a_len == 0) {
         var sum: T = 0;
 
         for (0..A.len) |i| {
@@ -88,24 +94,24 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MO: Matrix
         return sum;
     }
 
-    if (diff_A.items.len == 1) {
-        const m = diff_A.items[0];
-        const p = diff_B.items[0];
+    if (diff_a_len == 1) {
+        const m = diff_A[0];
+        const p = diff_B[0];
 
         var term = H_MO.at(m, p);
 
-        for (0..common.items.len) |i| {
-            term += g_MO.at(.{ m, common.items[i], p, common.items[i] }) - g_MO.at(.{ m, common.items[i], common.items[i], p });
-        }
+        for (0..A.len) |i| if (A[i] != m) {
+            term += g_MO.at(.{ m, A[i], p, A[i] }) - g_MO.at(.{ m, A[i], A[i], p });
+        };
 
         return @as(T, @floatFromInt(s_A * s_B)) * term;
     }
 
-    if (diff_A.items.len == 2) {
-        const m = diff_A.items[0];
-        const n = diff_A.items[1];
-        const p = diff_B.items[0];
-        const q = diff_B.items[1];
+    if (diff_a_len == 2) {
+        const m = diff_A[0];
+        const n = diff_A[1];
+        const p = diff_B[0];
+        const q = diff_B[1];
 
         const term = g_MO.at(.{ m, n, p, q }) - g_MO.at(.{ m, n, q, p });
 
@@ -342,7 +348,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     defer H_CI.deinit(gpa);
 
     for (0..dets.items.len) |i| for (i..dets.items.len) |j| {
-        const val = try slater(T, dets.items[i], dets.items[j], H_MO, g_MO, gpa);
+        const val = slater(T, dets.items[i], dets.items[j], H_MO, g_MO);
 
         H_CI.ptr(i, j).* = val;
         H_CI.ptr(j, i).* = val;
