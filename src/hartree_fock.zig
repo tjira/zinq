@@ -579,7 +579,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
                 err_hist.clearRetainingCapacity();
 
                 var f_retry = try Matrix(T).init(nbf, nbf, gpa);
+                errdefer f_retry.deinit(gpa);
+
                 var e_retry = try Matrix(T).init(nbf, nbf, gpa);
+                errdefer e_retry.deinit(gpa);
 
                 for (0..nbf) |j| for (0..nbf) |k| {
                     f_retry.ptr(j, k).* = F.at(j, k);

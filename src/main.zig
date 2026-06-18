@@ -4,6 +4,8 @@ const Allocator = std.mem.Allocator;
 
 pub const ClassicalDynamicsOptions = @import("classical_dynamics.zig").Options;
 pub const classical_dynamics_run = @import("classical_dynamics.zig").run;
+pub const ConfigurationInteractionOptions = @import("configuration_interaction.zig").Options;
+pub const configuration_interaction_run = @import("configuration_interaction.zig").run;
 pub const HartreeFockOptions = @import("hartree_fock.zig").Options;
 pub const hartree_fock_run = @import("hartree_fock.zig").run;
 pub const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
@@ -24,6 +26,7 @@ const printf = @import("read_write.zig").printf;
 const Options = struct {
     zinq: []union(enum) {
         classical_dynamics: ClassicalDynamicsOptions,
+        configuration_interaction: ConfigurationInteractionOptions,
         hartree_fock: HartreeFockOptions,
         molecular_integrals: MolecularIntegralsOptions,
         moller_plesset: MollerPlessetOptions,
