@@ -16,11 +16,13 @@ const Calculate = struct {
     overlap: bool = true,
     coulomb: bool = true,
     nuclear: bool = true,
+    hmatrix: bool = true,
 
     kinetic_d1: bool = false,
     overlap_d1: bool = false,
     coulomb_d1: bool = false,
     nuclear_d1: bool = false,
+    hmatrix_d1: bool = false,
 };
 
 const Write = struct {
@@ -28,11 +30,13 @@ const Write = struct {
     overlap: ?[]const u8 = null,
     coulomb: ?[]const u8 = null,
     nuclear: ?[]const u8 = null,
+    hmatrix: ?[]const u8 = null,
 
     kinetic_d1: ?[]const u8 = null,
     overlap_d1: ?[]const u8 = null,
     coulomb_d1: ?[]const u8 = null,
     nuclear_d1: ?[]const u8 = null,
+    hmatrix_d1: ?[]const u8 = null,
 };
 
 pub const Options = struct {
@@ -53,12 +57,14 @@ pub fn Integrals(comptime T: type) type {
         S: ?Matrix(T) = null,
         K: ?Matrix(T) = null,
         V: ?Matrix(T) = null,
+        H: ?Matrix(T) = null,
 
         g: ?Tensor(T, 4) = null,
 
         dS: ?Tensor(T, 3) = null,
         dK: ?Tensor(T, 3) = null,
         dV: ?Tensor(T, 3) = null,
+        dH: ?Tensor(T, 3) = null,
 
         dg: ?Tensor(T, 5) = null,
 
@@ -67,10 +73,12 @@ pub fn Integrals(comptime T: type) type {
             if (self.K) |*K| K.deinit(gpa);
             if (self.V) |*V| V.deinit(gpa);
             if (self.g) |*g| g.deinit(gpa);
+            if (self.H) |*H| H.deinit(gpa);
 
             if (self.dS) |*dS| dS.deinit(gpa);
             if (self.dK) |*dK| dK.deinit(gpa);
             if (self.dV) |*dV| dV.deinit(gpa);
+            if (self.dH) |*dH| dH.deinit(gpa);
             if (self.dg) |*dg| dg.deinit(gpa);
 
             self.sys.deinit(gpa);
@@ -108,7 +116,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    if (opt.calculate.kinetic) {
+    if (opt.calculate.kinetic or opt.calculate.hmatrix) {
         ints.K = if (opt.spin) try ints.sys.kineticSpin(gpa) else try ints.sys.kinetic(gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
@@ -116,7 +124,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    if (opt.calculate.nuclear) {
+    if (opt.calculate.nuclear or opt.calculate.hmatrix) {
         ints.V = if (opt.spin) try ints.sys.nuclearSpin(gpa) else try ints.sys.nuclear(gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
@@ -128,6 +136,14 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         ints.g = if (opt.spin) try ints.sys.coulombSpin(gpa) else try ints.sys.coulomb(gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    if (opt.calculate.hmatrix) {
+        ints.H = try Matrix(T).init(ints.K.?.nrow(), ints.K.?.ncol(), gpa);
+
+        for (0..ints.H.?.nrow()) |i| for (0..ints.H.?.ncol()) |j| {
+            ints.H.?.ptr(i, j).* = ints.K.?.at(i, j) + ints.V.?.at(i, j);
+        };
     }
 
     const any_deriv_calc = blk: {
@@ -152,7 +168,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    if (opt.calculate.kinetic_d1) {
+    if (opt.calculate.kinetic_d1 or opt.calculate.hmatrix_d1) {
         ints.dK = if (opt.spin) try ints.sys.kineticD1Spin(gpa) else try ints.sys.kineticD1(gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
@@ -160,7 +176,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    if (opt.calculate.nuclear_d1) {
+    if (opt.calculate.nuclear_d1 or opt.calculate.hmatrix_d1) {
         ints.dV = if (opt.spin) try ints.sys.nuclearD1Spin(gpa) else try ints.sys.nuclearD1(gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
@@ -172,6 +188,14 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         ints.dg = if (opt.spin) try ints.sys.coulombD1Spin(gpa) else try ints.sys.coulombD1(gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    if (opt.calculate.hmatrix_d1) {
+        ints.dH = try Tensor(T, 3).init(ints.dK.?.shape, gpa);
+
+        for (0..ints.dH.?.shape[0]) |k| for (0..ints.dH.?.shape[1]) |i| for (0..ints.dH.?.shape[2]) |j| {
+            ints.dH.?.ptr(.{ k, i, j }).* = ints.dK.?.at(.{ k, i, j }) + ints.dV.?.at(.{ k, i, j });
+        };
     }
 
     const any_write = blk: {
@@ -224,6 +248,14 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         if (log) try printf(io, "COULOMB INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
+    if (opt.write.hmatrix) |fname| {
+        const H = ints.H orelse return error.hmatrixMatrixNotCalculated;
+
+        try writeMatrix(T, io, fname, H);
+
+        if (log) try printf(io, "HMATRIX INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
     const any_deriv_write = blk: {
         inline for (std.meta.fields(@TypeOf(opt.write))) |f| {
             if (comptime std.mem.endsWith(u8, f.name, "_d1")) {
@@ -274,6 +306,14 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try writeMatrix(T, io, fname, dg.asMatrix());
 
         if (log) try printf(io, "COULOMB DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    if (opt.write.hmatrix_d1) |fname| {
+        const dH = ints.dH orelse return error.hmatrixDerivativeMatrixNotCalculated;
+
+        try writeMatrix(T, io, fname, dH.asMatrix());
+
+        if (log) try printf(io, "HMATRIX DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
     return ints;

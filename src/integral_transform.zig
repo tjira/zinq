@@ -145,3 +145,63 @@ pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T
         A_xx.ptr(mu, p).* = sum;
     };
 }
+
+pub fn ao2so_coef(comptime T: type, C_so: *Matrix(T), C_ao: Matrix(T)) void {
+    const nbf = C_ao.shape[0];
+
+    std.debug.assert(C_so.shape[0] == 2 * nbf);
+    std.debug.assert(C_so.shape[1] == 2 * nbf);
+
+    C_so.zero();
+
+    for (0..nbf) |i| {
+        const col_a = 2 * i + 0;
+        const col_b = 2 * i + 1;
+
+        for (0..nbf) |mu| {
+            const indmu0, const indmu1 = .{ mu, mu + nbf };
+
+            C_so.ptr(indmu0, col_a).* = C_ao.at(mu, i);
+            C_so.ptr(indmu1, col_b).* = C_ao.at(mu, i);
+        }
+    }
+}
+
+pub fn ao2so_pppp(comptime T: type, g_so: *Tensor(T, 4), g_ao: Tensor(T, 4)) void {
+    const nbf = g_ao.shape[0];
+
+    std.debug.assert(g_ao.shape[1] == nbf);
+    std.debug.assert(g_ao.shape[2] == nbf);
+    std.debug.assert(g_ao.shape[3] == nbf);
+
+    std.debug.assert(g_so.shape[0] == 2 * nbf);
+    std.debug.assert(g_so.shape[1] == 2 * nbf);
+    std.debug.assert(g_so.shape[2] == 2 * nbf);
+    std.debug.assert(g_so.shape[3] == 2 * nbf);
+
+    g_so.zero();
+
+    for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
+        g_so.ptr(.{ i, j, k, l }).* = g_ao.at(.{ i, j, k, l });
+
+        g_so.ptr(.{ i + nbf, j, k + nbf, l }).* = g_ao.at(.{ i, j, k, l });
+        g_so.ptr(.{ i, j + nbf, k, l + nbf }).* = g_ao.at(.{ i, j, k, l });
+
+        g_so.ptr(.{ i + nbf, j + nbf, k + nbf, l + nbf }).* = g_ao.at(.{ i, j, k, l });
+    };
+}
+
+pub fn ao2so_pp(comptime T: type, A_so: *Matrix(T), A_ao: Matrix(T)) void {
+    const nbf = A_ao.shape[0];
+
+    std.debug.assert(A_so.shape[0] == 2 * nbf);
+    std.debug.assert(A_so.shape[1] == 2 * nbf);
+
+    A_so.zero();
+
+    for (0..nbf) |i| for (0..nbf) |j| {
+        A_so.ptr(i, j).* = A_ao.at(i, j);
+
+        A_so.ptr(i + nbf, j + nbf).* = A_ao.at(i, j);
+    };
+}

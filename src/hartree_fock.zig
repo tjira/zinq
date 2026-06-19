@@ -218,8 +218,7 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
 
 pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
     const dS = ints.dS orelse unreachable;
-    const dK = ints.dK orelse unreachable;
-    const dV = ints.dV orelse unreachable;
+    const dH = ints.dH orelse unreachable;
     const dg = ints.dg orelse unreachable;
 
     const nocc = if (generalized) ints.sys.nel else ints.sys.nel / 2;
@@ -266,12 +265,10 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
         }
 
         for (0..dS.shape[1]) |p| for (0..dS.shape[2]) |q| {
-            const dk_val = dK.at(.{ 3 * i + j, p, q });
-            const dv_val = dV.at(.{ 3 * i + j, p, q });
+            const dh_val = dH.at(.{ 3 * i + j, p, q });
             const ds_val = dS.at(.{ 3 * i + j, p, q });
 
-            h_G += P.at(p, q) * (dk_val + dv_val);
-
+            h_G += P.at(p, q) * dh_val;
             s_G -= W.at(p, q) * ds_val;
         };
 
@@ -290,8 +287,7 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
 
 pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Tensor(T, 3) {
     const dS = ints.dS orelse unreachable;
-    const dK = ints.dK orelse unreachable;
-    const dV = ints.dV orelse unreachable;
+    const dH = ints.dH orelse unreachable;
     const dg = ints.dg orelse unreachable;
 
     const nbf = C.shape[0];
@@ -318,7 +314,7 @@ pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matri
         U_x.zero();
 
         for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* = dK.at(.{ p, k, l }) + dV.at(.{ p, k, l });
+            F_x.ptr(k, l).* = dH.at(.{ p, k, l });
         };
 
         for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
@@ -353,8 +349,7 @@ pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matri
 
 pub fn gradientOrben(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
     const dS = ints.dS orelse unreachable;
-    const dK = ints.dK orelse unreachable;
-    const dV = ints.dV orelse unreachable;
+    const dH = ints.dH orelse unreachable;
     const dg = ints.dg orelse unreachable;
 
     const nbf = C.shape[0];
@@ -377,7 +372,7 @@ pub fn gradientOrben(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matr
         F_x.zero();
 
         for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* = dK.at(.{ p, k, l }) + dV.at(.{ p, k, l });
+            F_x.ptr(k, l).* = dH.at(.{ p, k, l });
         };
 
         for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
@@ -450,6 +445,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             .overlap_d1 = opt.gradient,
             .coulomb_d1 = opt.gradient,
             .nuclear_d1 = opt.gradient,
+            .hmatrix_d1 = opt.gradient,
         },
     };
 
@@ -478,9 +474,6 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try printf(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ nbf, nocc });
     }
 
-    var H = try Matrix(T).init(nbf, nbf, gpa);
-    defer H.deinit(gpa);
-
     var B = try Matrix(T).init(nbf, nbf, gpa);
     defer B.deinit(gpa);
 
@@ -492,10 +485,6 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     var e = try Vector(T).init(nbf, gpa);
     errdefer e.deinit(gpa);
-
-    for (0..nbf) |i| for (0..nbf) |j| {
-        H.ptr(i, j).* = ints.K.?.at(i, j) + ints.V.?.at(i, j);
-    };
 
     if (log) {
         try printf(io, "\nNUCLEAR REPULSION ENERGY: {d:.14} Eh\n", .{VN});
@@ -513,7 +502,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     {
         @memcpy(B.data, ints.S.?.data);
 
-        try geigh(T, &e, &C, H, &B);
+        try geigh(T, &e, &C, ints.H.?, &B);
 
         getDensity(T, &P_old, C, nocc, opt.generalized);
     }
@@ -543,9 +532,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     for (0..opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
-        try getFock(T, &F, H, P_old, ints.g.?, opt.generalized);
+        try getFock(T, &F, ints.H.?, P_old, ints.g.?, opt.generalized);
 
-        e_new = getEnergy(T, H, F, P_old) + VN;
+        e_new = getEnergy(T, ints.H.?, F, P_old) + VN;
 
         if (opt.diis != null and opt.diis.? > 0) {
             try fck_hist.ensureUnusedCapacity(gpa, 1);
