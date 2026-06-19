@@ -8,7 +8,6 @@ test "Restricted Hartree-Fock on Water (STO-3G)" {
         .system = "example/molecule/water.xyz",
         .basis = "example/basis/sto-3g.g94",
         .gradient = true,
-        .diis = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -16,13 +15,13 @@ test "Restricted Hartree-Fock on Water (STO-3G)" {
 
     // zig fmt: off
     const expected_grad = [_]f64{
-         0.0000002231697467, -0.0000014871958312,  0.0000005408963109,
-        -0.0000007203022483,  0.0000006261685166, -0.0000005408894763,
-         0.0000004971324895,  0.0000008610273134, -0.0000000000068363,
+         0.0000002178410248, -0.0000014890494290,  0.0000005387672022,
+        -0.0000007176761931,  0.0000006273176250, -0.0000005399082537,
+         0.0000004998351610,  0.0000008617318090,  0.0000000011410497,
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-74.9659012172972700, hf.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.9659012172971900, hf.energy[0], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_grad[0], hf.gradient[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[1], hf.gradient[0].at(0, 1), TEST_TOLERANCE);
@@ -41,7 +40,6 @@ test "Generalized Hartree-Fock on Water (STO-3G)" {
         .basis = "example/basis/sto-3g.g94",
         .generalized = true,
         .gradient = true,
-        .diis = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -49,13 +47,13 @@ test "Generalized Hartree-Fock on Water (STO-3G)" {
 
     // zig fmt: off
     const expected_grad = [_]f64{
-         0.0000002299250568, -0.0000014848555010,  0.0000005435981549,
-        -0.0000007236326030,  0.0000006247526345, -0.0000005421458191,
-         0.0000004937075367,  0.0000008601028569, -0.0000000014523428,
+         0.0000002178410003, -0.0000014890494329,  0.0000005387672015,
+        -0.0000007176761749,  0.0000006273176159, -0.0000005399082350,
+         0.0000004998351675,  0.0000008617318237,  0.0000000011410507,
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-74.9659012172973000, hf.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.9659012172972300, hf.energy[0], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_grad[0], hf.gradient[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[1], hf.gradient[0].at(0, 1), TEST_TOLERANCE);
@@ -66,4 +64,21 @@ test "Generalized Hartree-Fock on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[6], hf.gradient[0].at(2, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[7], hf.gradient[0].at(2, 1), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[8], hf.gradient[0].at(2, 2), TEST_TOLERANCE);
+}
+
+test "Restricted Kohn-Sham DFT on Water (STO-3G)" {
+    const opt = zinq.HartreeFockOptions{
+        .system = "example/molecule/water.xyz",
+        .basis = "example/basis/sto-3g.g94",
+        .gradient = false,
+        .dft = .{
+            .exchange = "lda_x",
+            .correlation = "lda_c_vwn",
+        },
+    };
+
+    var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer hf.deinit(std.testing.allocator);
+
+    try std.testing.expectApproxEqAbs(-74.7399385581956500, hf.energy[0], TEST_TOLERANCE);
 }

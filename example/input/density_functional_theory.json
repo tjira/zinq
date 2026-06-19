@@ -1,0 +1,14 @@
+{
+    "zinq" : [
+        {
+            "hartree_fock" : {
+                "system" : "example/molecule/water.xyz",
+                "basis" : "example/basis/sto-3g.g94",
+                "dft": {
+                    "exchange": "lda_x",
+                    "correlation": "lda_c_vwn"
+                }
+            }
+        }
+    ]
+}

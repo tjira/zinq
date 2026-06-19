@@ -25,7 +25,7 @@ test "Adiabatic RTP on Tully's First Potential" {
     try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), 16.0101963477170000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),  0.4103851968095453, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),  0.5896148031908718, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,       0.0017922958069610, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,       0.0017922958069609, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,       0.0647077026432969, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,       1.0000000000004160, TEST_TOLERANCE);
     // zig fmt: on
@@ -77,7 +77,7 @@ test "Adiabatic RTP on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), -0.0000000000000497, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),  0.2846081266515837, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),  0.7153918733486487, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,      43.0869894832452600, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,      43.0869894832450560, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,       0.5000000000000960, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,       1.0000000000002331, TEST_TOLERANCE);
     // zig fmt: on

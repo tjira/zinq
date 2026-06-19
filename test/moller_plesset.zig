@@ -8,7 +8,6 @@ test "Restricted MP2 on Water (STO-3G)" {
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "example/basis/sto-3g.g94",
-            .diis = null,
         },
         .order = 2,
         .gradient = true,
@@ -19,13 +18,13 @@ test "Restricted MP2 on Water (STO-3G)" {
 
     // zig fmt: off
     const expected_grad = [_]f64{
-         0.0338122848682972,  0.0117126486109987,  0.0135239632538169,
-        -0.0195946613792386,  0.0081070975543568, -0.0121370688145914,
-        -0.0142176234890707, -0.0198197461653566, -0.0013868944392272,
+         0.0338122794133439,  0.0117126467140770,  0.0135239610741029,
+        -0.0195946586449228,  0.0081070984905233, -0.0121370677177705,
+        -0.0142176207684284, -0.0198197452045953, -0.0013868933563342,
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-75.0048550571061800, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-75.0048550569061500, res.energy[0], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_grad[0], res.gradient[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[1], res.gradient[0].at(0, 1), TEST_TOLERANCE);
@@ -44,7 +43,6 @@ test "Generalized MP2 on Water (STO-3G)" {
             .system = "example/molecule/water.xyz",
             .basis = "example/basis/sto-3g.g94",
             .generalized = true,
-            .diis = null,
         },
         .order = 2,
         .gradient = true,
@@ -55,13 +53,13 @@ test "Generalized MP2 on Water (STO-3G)" {
 
     // zig fmt: off
     const expected_grad = [_]f64{
-         0.0338122917730514,  0.0117126510031038,  0.0135239660154323,
-        -0.0195946648406953,  0.0081070964054774, -0.0121370702135587,
-        -0.0142176269323655, -0.0198197474085908, -0.0013868958018807,
+         0.0338122794133231,  0.0117126467140746,  0.0135239610741036,
+        -0.0195946586449066,  0.0081070984905145, -0.0121370677177529,
+        -0.0142176207684237, -0.0198197452045824, -0.0013868933563335,
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-75.0048550573543900, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-75.0048550569062000, res.energy[0], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_grad[0], res.gradient[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[1], res.gradient[0].at(0, 1), TEST_TOLERANCE);

@@ -161,6 +161,10 @@ extern "C" {
 
         oneelec(I, engine, sys->obs); libint2::finalize();
     }
+}
+
+extern "C" {
+    using namespace libint2; typedef unsigned long ulong;
 
     void oneelec_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms) {
         std::vector<Engine> engines(1, engine); bool is_nuclear = engine.oper() == Operator::nuclear;
@@ -339,5 +343,74 @@ extern "C" {
         engine.set_params(make_point_charges(sys->atoms));
 
         oneelec_deriv(I, engine, sys->obs, sys->atoms); libint2::finalize();
+    }
+}
+
+extern "C" {
+    using namespace libint2; using namespace libint2::solidharmonics;
+
+    void evaluate_basis(double *phi, double x, double y, double z, SystemData *sys) {
+        if (!sys) return;
+
+        size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();
+
+        std::vector<double> px(sys->obs.max_l() + 1);
+        std::vector<double> py(sys->obs.max_l() + 1);
+        std::vector<double> pz(sys->obs.max_l() + 1);
+
+        int max_ncart = (sys->obs.max_l() + 1) * (sys->obs.max_l() + 2) / 2;
+
+        std::vector<double> exp_vals(max_nprim);
+        std::vector<double> crt_vals(max_ncart);
+
+        for (const auto& shell : sys->obs) {
+            double dx = x - shell.O[0];
+            double dy = y - shell.O[1];
+            double dz = z - shell.O[2];
+
+            double r2 = dx * dx + dy * dy + dz * dz;
+
+            for (size_t i = 0; i < shell.alpha.size(); i++) {
+                exp_vals[i] = std::exp(-shell.alpha[i] * r2);
+            }
+
+            for (size_t i = 0; i < shell.contr.size(); i++) {
+                int L = shell.contr[i].l; double sum = 0;
+
+                for (size_t j = 0; j < shell.alpha.size(); j++) {
+                    sum += shell.contr[i].coeff[j] * exp_vals[j];
+                }
+
+                px[0] = 1; py[0] = 1; pz[0] = 1;
+
+                for (int j = 1; j <= L; j++) {
+                    px[j] = px[j - 1] * dx;
+                    py[j] = py[j - 1] * dy;
+                    pz[j] = pz[j - 1] * dz;
+                }
+
+                for (int j = L, c = 0; j >= 0; j--) for (int k = L - j; k >= 0; k--) {
+                    crt_vals[c++] = sum * px[j] * py[k] * pz[L - j - k];
+                }
+
+                if (shell.contr[i].pure) {
+                    const auto& coefs = SolidHarmonicsCoefficients<double>::instance(L);
+
+                    for (int j = 0; j < 2 * L + 1; j++) {
+                        double val = 0.0;
+
+                        for (unsigned int k = 0; k < coefs.nnz(j); k++) {
+                            val += coefs.row_values(j)[k] * crt_vals[coefs.row_idx(j)[k]];
+                        }
+
+                        phi[bf_idx++] = val;
+                    }
+                }
+
+                else for (int j = 0; j < (L + 1) * (L + 2) / 2; j++) {
+                    phi[bf_idx++] = crt_vals[j];
+                }
+            }
+        }
     }
 }

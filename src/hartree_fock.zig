@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
+const DftPotential = @import("density_functional_theory.zig").DftPotential;
 const Integrals = @import("molecular_integrals.zig").Integrals;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
@@ -36,29 +37,53 @@ pub const Options = struct {
     gradient: bool = false,
     iterations: usize = 100,
     threshold: f64 = 1e-8,
-};
 
+    dft: ?struct {
+        exchange: []const u8,
+        correlation: []const u8,
+
+        grid: struct {
+            radial: usize,
+            angular: usize,
+        } = .{ .radial = 50, .angular = 302 },
+    } = null,
+};
 // HARTREE-FOCK FUNCTIONS ==============================================================================================
 
-pub fn getFock(comptime T: type, F: *Matrix(T), H: Matrix(T), P: Matrix(T), g: Tensor(T, 4), generalized: bool) !void {
-    std.debug.assert(F.shape[0] == H.shape[0]);
-    std.debug.assert(F.shape[1] == H.shape[1]);
-    std.debug.assert(P.shape[0] == H.shape[0]);
-    std.debug.assert(P.shape[1] == H.shape[1]);
-    std.debug.assert(g.shape[0] == H.shape[0]);
-    std.debug.assert(g.shape[1] == H.shape[0]);
-    std.debug.assert(g.shape[2] == H.shape[0]);
-    std.debug.assert(g.shape[3] == H.shape[0]);
+pub fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), generalized: bool, dft: ?*DftPotential(T), gpa: Allocator) !void {
+    std.debug.assert(F.shape[0] == ints.H.?.shape[0]);
+    std.debug.assert(F.shape[1] == ints.H.?.shape[1]);
+    std.debug.assert(P.shape[0] == ints.H.?.shape[0]);
+    std.debug.assert(P.shape[1] == ints.H.?.shape[1]);
+
+    std.debug.assert(ints.g.?.shape[0] == ints.H.?.shape[0]);
+    std.debug.assert(ints.g.?.shape[1] == ints.H.?.shape[0]);
+    std.debug.assert(ints.g.?.shape[2] == ints.H.?.shape[0]);
+    std.debug.assert(ints.g.?.shape[3] == ints.H.?.shape[0]);
 
     for (0..F.shape[0]) |i| for (0..F.shape[1]) |j| {
-        F.ptr(i, j).* = H.at(i, j);
+        F.ptr(i, j).* = ints.H.?.at(i, j);
     };
 
-    const exch_factor: T = if (generalized) 1.0 else 0.5;
+    if (dft) |pot| {
+        for (0..ints.g.?.shape[0]) |j| for (0..ints.g.?.shape[1]) |k| for (0..ints.g.?.shape[2]) |l| for (0..ints.g.?.shape[3]) |m| {
+            F.ptr(l, m).* += P.at(j, k) * ints.g.?.at(.{ j, l, k, m });
+        };
 
-    for (0..g.shape[0]) |i| for (0..g.shape[1]) |j| for (0..g.shape[2]) |k| for (0..g.shape[3]) |l| {
-        F.ptr(k, l).* += P.at(i, j) * (g.at(.{ i, k, j, l }) - exch_factor * g.at(.{ i, j, k, l }));
-    };
+        try pot.evaluate(ints.sys, P, gpa);
+
+        for (0..F.shape[0]) |j| for (0..F.shape[1]) |k| {
+            F.ptr(j, k).* += pot.Vxc.at(j, k);
+        };
+    }
+
+    if (dft == null) {
+        const exch_factor: T = if (generalized) 1.0 else 0.5;
+
+        for (0..ints.g.?.shape[0]) |i| for (0..ints.g.?.shape[1]) |j| for (0..ints.g.?.shape[2]) |k| for (0..ints.g.?.shape[3]) |l| {
+            F.ptr(k, l).* += P.at(i, j) * (ints.g.?.at(.{ i, k, j, l }) - exch_factor * ints.g.?.at(.{ i, j, k, l }));
+        };
+    }
 
     for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
         const avg = (F.at(i, j) + F.at(j, i)) / 2;
@@ -93,11 +118,15 @@ pub fn getDensityAlloc(comptime T: type, C: Matrix(T), nocc: usize, generalized:
     return P;
 }
 
-pub fn getEnergy(comptime T: type, H: Matrix(T), F: Matrix(T), P: Matrix(T)) T {
-    var energy: T = 0;
+pub fn getEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), dft: ?*DftPotential(T)) T {
+    var energy: T = if (dft) |pot| pot.Exc else 0;
 
-    for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
-        energy += 0.5 * P.at(i, j) * (H.at(i, j) + F.at(i, j));
+    if (dft) |pot| for (0..P.shape[0]) |j| for (0..P.shape[1]) |k| {
+        energy += 0.5 * P.at(j, k) * (ints.H.?.at(j, k) + F.at(j, k) - pot.Vxc.at(j, k));
+    };
+
+    if (dft == null) for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
+        energy += 0.5 * P.at(i, j) * (ints.H.?.at(i, j) + F.at(i, j));
     };
 
     return energy;
@@ -211,6 +240,13 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
 
     for (0..fck_hist.len) |i| for (0..F.shape[0]) |j| for (0..F.shape[1]) |k| {
         F.ptr(j, k).* += c.at(i, 0) * fck_hist[i].at(j, k);
+    };
+
+    for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
+        const avg = (F.at(i, j) + F.at(j, i)) / 2;
+
+        F.ptr(i, j).* = avg;
+        F.ptr(j, i).* = avg;
     };
 }
 
@@ -499,6 +535,18 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var e_old: T = VN;
     var e_new: T = VN;
 
+    var dft: ?DftPotential(T) = null;
+
+    if (opt.dft) |dft_opt| {
+        const n_rad, const n_leb = .{ dft_opt.grid.radial, dft_opt.grid.angular };
+
+        dft = try DftPotential(T).init(ints.sys, dft_opt.exchange, dft_opt.correlation, n_rad, n_leb, gpa);
+    }
+
+    defer if (dft) |*pot| {
+        pot.deinit(gpa);
+    };
+
     {
         @memcpy(B.data, ints.S.?.data);
 
@@ -532,9 +580,17 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     for (0..opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
-        try getFock(T, &F, ints.H.?, P_old, ints.g.?, opt.generalized);
+        if (dft) |*pot| {
+            try getFock(T, &F, ints, P_old, opt.generalized, pot, gpa);
 
-        e_new = getEnergy(T, ints.H.?, F, P_old) + VN;
+            e_new = getEnergy(T, ints, F, P_old, pot) + VN;
+        }
+
+        if (dft == null) {
+            try getFock(T, &F, ints, P_old, opt.generalized, null, gpa);
+
+            e_new = getEnergy(T, ints, F, P_old, null) + VN;
+        }
 
         if (opt.diis != null and opt.diis.? > 0) {
             try fck_hist.ensureUnusedCapacity(gpa, 1);

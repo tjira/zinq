@@ -8,7 +8,6 @@ test "Restricted CIS on Water (STO-3G)" {
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "example/basis/sto-3g.g94",
-            .diis = null,
         },
         .excitations = &.{1},
     };
@@ -16,11 +15,11 @@ test "Restricted CIS on Water (STO-3G)" {
     var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(-74.9659012172972300, res.energy[0], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5822026780456800, res.energy[1], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5822026780456800, res.energy[2], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5822026780456300, res.energy[3], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5070515339216000, res.energy[4], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.9659012172972900, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5822026772564000, res.energy[1], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5822026772563200, res.energy[2], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5822026772562900, res.energy[3], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5070515329961900, res.energy[4], TEST_TOLERANCE);
 }
 
 test "Generalized CIS on Water (STO-3G)" {
@@ -29,7 +28,6 @@ test "Generalized CIS on Water (STO-3G)" {
             .system = "example/molecule/water.xyz",
             .basis = "example/basis/sto-3g.g94",
             .generalized = true,
-            .diis = null,
         },
         .excitations = &.{1},
     };
@@ -37,11 +35,11 @@ test "Generalized CIS on Water (STO-3G)" {
     var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
-    try std.testing.expectApproxEqAbs(-74.9659012172973600, res.energy[0], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5822026789910200, res.energy[1], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5822026789910100, res.energy[2], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5822026789909400, res.energy[3], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5070515350373600, res.energy[4], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.9659012172973100, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5822026772563600, res.energy[1], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5822026772563500, res.energy[2], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5822026772562800, res.energy[3], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5070515329962000, res.energy[4], TEST_TOLERANCE);
 }
 
 test "Restricted CISD on Water (STO-3G)" {

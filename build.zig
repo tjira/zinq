@@ -82,6 +82,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) void {
         "fftw3",
         "int2",
         "openblas",
+        "xc",
     };
 
     for (libs) |lib| {
