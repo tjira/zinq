@@ -39,13 +39,14 @@ pub const Options = struct {
     threshold: f64 = 1e-8,
 
     dft: ?struct {
-        exchange: []const u8,
-        correlation: []const u8,
+        exchange: ?[]const u8 = null,
+        correlation: ?[]const u8 = null,
+        exchange_correlation: ?[]const u8 = null,
 
         grid: struct {
-            radial: usize,
-            angular: usize,
-        } = .{ .radial = 50, .angular = 302 },
+            radial: usize = 50,
+            angular: usize = 302,
+        } = .{},
     } = null,
 };
 // HARTREE-FOCK FUNCTIONS ==============================================================================================
@@ -540,7 +541,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     if (opt.dft) |dft_opt| {
         const n_rad, const n_leb = .{ dft_opt.grid.radial, dft_opt.grid.angular };
 
-        dft = try DftPotential(T).init(ints.sys, dft_opt.exchange, dft_opt.correlation, n_rad, n_leb, opt.generalized, gpa);
+        const funcs = .{ dft_opt.exchange, dft_opt.correlation, dft_opt.exchange_correlation };
+
+        dft = try DftPotential(T).init(ints.sys, funcs, n_rad, n_leb, opt.generalized, gpa);
     }
 
     defer if (dft) |*pot| {

@@ -19,8 +19,9 @@ const A2BOHR = @import("constant.zig").A2BOHR;
 
 pub fn DftPotential(comptime T: type) type {
     return struct {
-        exch: libxc.xc_func_type,
-        corr: libxc.xc_func_type,
+        exch: ?libxc.xc_func_type,
+        corr: ?libxc.xc_func_type,
+        exco: ?libxc.xc_func_type,
 
         pts: Matrix(T),
         wgh: Vector(T),
@@ -30,43 +31,119 @@ pub fn DftPotential(comptime T: type) type {
 
         polarized: bool,
 
-        pub fn init(sys: MolecularSystem(T), exch: []const u8, corr: []const u8, n_rad: usize, n_leb: usize, polarized: bool, gpa: Allocator) !@This() {
-            const grid = try (Becke(T){ .n_rad = n_rad, .n_leb = n_leb }).get(sys, gpa);
+        pub fn init(sys: MolecularSystem(T), funcs: anytype, n_rad: usize, n_leb: usize, polarized: bool, gpa: Allocator) !@This() {
+            var grid = try (Becke(T){ .n_rad = n_rad, .n_leb = n_leb }).get(sys, gpa);
+
+            errdefer grid[0].deinit(gpa);
+            errdefer grid[1].deinit(gpa);
 
             const nbf = if (polarized) 2 * sys.nbf else sys.nbf;
 
-            const exch_nt = try gpa.dupeSentinel(u8, exch, 0);
-            defer gpa.free(exch_nt);
-
-            const corr_nt = try gpa.dupeSentinel(u8, corr, 0);
-            defer gpa.free(corr_nt);
-
-            const id_exch = libxc.xc_functional_get_number(exch_nt.ptr);
-            const id_corr = libxc.xc_functional_get_number(corr_nt.ptr);
-
-            if (id_exch < 0) return error.ExchFuncNotFound;
-            if (id_corr < 0) return error.CorrFuncNotFound;
-
-            var exch_func: libxc.xc_func_type = undefined;
-            var corr_func: libxc.xc_func_type = undefined;
+            var exch_func: ?libxc.xc_func_type = null;
+            var corr_func: ?libxc.xc_func_type = null;
+            var exco_func: ?libxc.xc_func_type = null;
 
             const mode = if (polarized) libxc.XC_POLARIZED else libxc.XC_UNPOLARIZED;
 
-            if (libxc.xc_func_init(&exch_func, id_exch, mode) != 0) return error.LibxcInitFailed;
-            errdefer libxc.xc_func_end(&exch_func);
+            if (funcs[0]) |name| {
+                const exch_nt = try gpa.dupeSentinel(u8, name, 0);
+                defer gpa.free(exch_nt);
 
-            if (libxc.xc_func_init(&corr_func, id_corr, mode) != 0) return error.LibxcInitFailed;
-            errdefer libxc.xc_func_end(&corr_func);
+                const id = libxc.xc_functional_get_number(exch_nt.ptr);
+
+                if (id < 0) return error.ExchFuncNotFound;
+
+                var func: libxc.xc_func_type = undefined;
+
+                if (libxc.xc_func_init(&func, id, mode) != 0) {
+                    return error.LibxcInitFailed;
+                }
+
+                if (func.info.*.kind != libxc.XC_EXCHANGE) {
+                    libxc.xc_func_end(&func);
+
+                    return error.InvalidExchangeFunctional;
+                }
+
+                exch_func = func;
+            }
+
+            errdefer {
+                if (exch_func) |*f| libxc.xc_func_end(f);
+            }
+
+            if (funcs[1]) |name| {
+                const corr_nt = try gpa.dupeSentinel(u8, name, 0);
+                defer gpa.free(corr_nt);
+
+                const id = libxc.xc_functional_get_number(corr_nt.ptr);
+
+                if (id < 0) return error.CorrFuncNotFound;
+
+                var func: libxc.xc_func_type = undefined;
+
+                if (libxc.xc_func_init(&func, id, mode) != 0) {
+                    return error.LibxcInitFailed;
+                }
+
+                if (func.info.*.kind != libxc.XC_CORRELATION) {
+                    libxc.xc_func_end(&func);
+
+                    return error.InvalidCorrelationFunctional;
+                }
+
+                corr_func = func;
+            }
+
+            errdefer {
+                if (corr_func) |*f| libxc.xc_func_end(f);
+            }
+
+            if (funcs[2]) |name| {
+                const exco_nt = try gpa.dupeSentinel(u8, name, 0);
+                defer gpa.free(exco_nt);
+
+                const id = libxc.xc_functional_get_number(exco_nt.ptr);
+
+                if (id < 0) return error.XcFuncNotFound;
+
+                var func: libxc.xc_func_type = undefined;
+
+                if (libxc.xc_func_init(&func, id, mode) != 0) {
+                    return error.LibxcInitFailed;
+                }
+
+                if (func.info.*.kind != libxc.XC_EXCHANGE_CORRELATION) {
+                    libxc.xc_func_end(&func);
+
+                    return error.InvalidExchangeCorrelationFunctional;
+                }
+
+                exco_func = func;
+            }
+
+            errdefer {
+                if (exco_func) |*f| libxc.xc_func_end(f);
+            }
+
+            if (exco_func != null and (exch_func != null or corr_func != null)) {
+                return error.InvalidFunctionalCombination;
+            }
+
+            if (exch_func == null and corr_func == null and exco_func == null) {
+                return error.NoFunctionalSpecified;
+            }
 
             var Vxc = try Matrix(T).init(nbf, nbf, gpa);
             errdefer Vxc.deinit(gpa);
 
-            return .{ .exch = exch_func, .corr = corr_func, .pts = grid[0], .wgh = grid[1], .Vxc = Vxc, .polarized = polarized };
+            return .{ .exch = exch_func, .corr = corr_func, .exco = exco_func, .pts = grid[0], .wgh = grid[1], .Vxc = Vxc, .polarized = polarized };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            libxc.xc_func_end(&self.exch);
-            libxc.xc_func_end(&self.corr);
+            if (self.exch) |*func| libxc.xc_func_end(func);
+            if (self.corr) |*func| libxc.xc_func_end(func);
+            if (self.exco) |*func| libxc.xc_func_end(func);
 
             self.pts.deinit(gpa);
             self.wgh.deinit(gpa);
@@ -132,9 +209,9 @@ pub fn DftPotential(comptime T: type) type {
                 }
             }
 
-            inline for (.{ self.exch, self.corr }) |name| {
-                evaluateXCFunctional(T, name, self.polarized, rho, exc, vrho);
-            }
+            if (self.exch) |func| evaluateXCFunctional(T, func, self.polarized, rho, exc, vrho);
+            if (self.corr) |func| evaluateXCFunctional(T, func, self.polarized, rho, exc, vrho);
+            if (self.exco) |func| evaluateXCFunctional(T, func, self.polarized, rho, exc, vrho);
 
             var energy_exc: f64 = 0.0;
 
