@@ -66,15 +66,33 @@ test "Generalized Hartree-Fock on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], hf.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Restricted Kohn-Sham DFT on Water (STO-3G)" {
+test "Restricted Kohn-Sham DFT with LDA Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
         .basis = "example/basis/sto-3g.g94",
-        .gradient = false,
         .dft = .{
             .exchange = "lda_x",
             .correlation = "lda_c_vwn",
         },
+        .gradient = false,
+    };
+
+    var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer hf.deinit(std.testing.allocator);
+
+    try std.testing.expectApproxEqAbs(-74.7399385581956500, hf.energy[0], TEST_TOLERANCE);
+}
+
+test "Generalized Kohn-Sham DFT with LDA Functional on Water (STO-3G)" {
+    const opt = zinq.HartreeFockOptions{
+        .system = "example/molecule/water.xyz",
+        .basis = "example/basis/sto-3g.g94",
+        .dft = .{
+            .exchange = "lda_x",
+            .correlation = "lda_c_vwn",
+        },
+        .generalized = true,
+        .gradient = false,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);

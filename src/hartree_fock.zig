@@ -540,7 +540,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     if (opt.dft) |dft_opt| {
         const n_rad, const n_leb = .{ dft_opt.grid.radial, dft_opt.grid.angular };
 
-        dft = try DftPotential(T).init(ints.sys, dft_opt.exchange, dft_opt.correlation, n_rad, n_leb, gpa);
+        dft = try DftPotential(T).init(ints.sys, dft_opt.exchange, dft_opt.correlation, n_rad, n_leb, opt.generalized, gpa);
     }
 
     defer if (dft) |*pot| {

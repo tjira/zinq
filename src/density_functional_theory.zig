@@ -7,9 +7,11 @@ const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
 const getLebedevGrid = @import("lebedev_quadrature_nodes.zig").getLebedevGrid;
+const primType = @import("value.zig").primType;
 
 const A2BOHR = @import("constant.zig").A2BOHR;
 
@@ -26,8 +28,12 @@ pub fn DftPotential(comptime T: type) type {
         Vxc: Matrix(T),
         Exc: T = 0.000,
 
-        pub fn init(sys: MolecularSystem(T), exch: []const u8, corr: []const u8, n_rad: usize, n_leb: usize, gpa: Allocator) !@This() {
+        polarized: bool,
+
+        pub fn init(sys: MolecularSystem(T), exch: []const u8, corr: []const u8, n_rad: usize, n_leb: usize, polarized: bool, gpa: Allocator) !@This() {
             const grid = try (Becke(T){ .n_rad = n_rad, .n_leb = n_leb }).get(sys, gpa);
+
+            const nbf = if (polarized) 2 * sys.nbf else sys.nbf;
 
             const exch_nt = try gpa.dupeSentinel(u8, exch, 0);
             defer gpa.free(exch_nt);
@@ -44,16 +50,18 @@ pub fn DftPotential(comptime T: type) type {
             var exch_func: libxc.xc_func_type = undefined;
             var corr_func: libxc.xc_func_type = undefined;
 
-            if (libxc.xc_func_init(&exch_func, id_exch, libxc.XC_UNPOLARIZED) != 0) return error.LibxcInitFailed;
+            const mode = if (polarized) libxc.XC_POLARIZED else libxc.XC_UNPOLARIZED;
+
+            if (libxc.xc_func_init(&exch_func, id_exch, mode) != 0) return error.LibxcInitFailed;
             errdefer libxc.xc_func_end(&exch_func);
 
-            if (libxc.xc_func_init(&corr_func, id_corr, libxc.XC_UNPOLARIZED) != 0) return error.LibxcInitFailed;
+            if (libxc.xc_func_init(&corr_func, id_corr, mode) != 0) return error.LibxcInitFailed;
             errdefer libxc.xc_func_end(&corr_func);
 
-            var Vxc = try Matrix(T).init(sys.nbf, sys.nbf, gpa);
+            var Vxc = try Matrix(T).init(nbf, nbf, gpa);
             errdefer Vxc.deinit(gpa);
 
-            return .{ .exch = exch_func, .corr = corr_func, .pts = grid[0], .wgh = grid[1], .Vxc = Vxc };
+            return .{ .exch = exch_func, .corr = corr_func, .pts = grid[0], .wgh = grid[1], .Vxc = Vxc, .polarized = polarized };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -68,20 +76,22 @@ pub fn DftPotential(comptime T: type) type {
         pub fn evaluate(self: *@This(), sys: MolecularSystem(T), P: Matrix(T), gpa: Allocator) !void {
             self.Vxc.zero();
 
-            const rho = try gpa.alloc(T, self.pts.shape[0]);
+            const size_factor: usize = if (self.polarized) 2 else 1;
+
+            const rho = try gpa.alloc(T, self.pts.shape[0] * size_factor);
             defer gpa.free(rho);
 
-            @memset(rho, 0.0);
+            @memset(rho, 0);
 
             const exc = try gpa.alloc(T, self.pts.shape[0]);
             defer gpa.free(exc);
 
-            @memset(exc, 0.0);
+            @memset(exc, 0);
 
-            const vrho = try gpa.alloc(T, self.pts.shape[0]);
+            const vrho = try gpa.alloc(T, self.pts.shape[0] * size_factor);
             defer gpa.free(vrho);
 
-            @memset(vrho, 0.0);
+            @memset(vrho, 0);
 
             var phi = try Matrix(T).init(self.pts.shape[0], sys.nbf, gpa);
             defer phi.deinit(gpa);
@@ -93,26 +103,73 @@ pub fn DftPotential(comptime T: type) type {
 
                 libint.evaluate_basis(phi.rowSlice(i).ptr, x, y, z, sys.ptr);
 
-                for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
-                    rho[i] += P.at(mu, nu) * phi.at(i, mu) * phi.at(i, nu);
-                };
+                if (self.polarized) {
+                    var rho_a: T = 0;
+                    var rho_b: T = 0;
+
+                    for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
+                        const b = sys.nbf;
+
+                        const p_val_a = P.at(mu + 0, nu + 0);
+                        const p_val_b = P.at(mu + b, nu + b);
+
+                        rho_a += p_val_a * phi.at(i, mu) * phi.at(i, nu);
+                        rho_b += p_val_b * phi.at(i, mu) * phi.at(i, nu);
+                    };
+
+                    rho[2 * i + 0] = rho_a;
+                    rho[2 * i + 1] = rho_b;
+                }
+
+                if (!self.polarized) {
+                    var rho_tot: T = 0;
+
+                    for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
+                        rho_tot += P.at(mu, nu) * phi.at(i, mu) * phi.at(i, nu);
+                    };
+
+                    rho[i] = rho_tot;
+                }
             }
 
             inline for (.{ self.exch, self.corr }) |name| {
-                evaluateXCFunctional(name, rho, exc, vrho);
+                evaluateXCFunctional(T, name, self.polarized, rho, exc, vrho);
             }
 
-            self.Exc = 0.0;
+            var energy_exc: f64 = 0.0;
 
             for (0..self.pts.shape[0]) |i| {
                 const w = self.wgh.at(i);
 
-                self.Exc += rho[i] * exc[i] * w;
+                if (self.polarized) {
+                    const rho_tot = rho[2 * i] + rho[2 * i + 1];
 
-                for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
-                    self.Vxc.ptr(mu, nu).* += vrho[i] * phi.at(i, mu) * phi.at(i, nu) * w;
-                };
+                    energy_exc += rho_tot * exc[i] * w;
+
+                    const v_a = vrho[2 * i + 0];
+                    const v_b = vrho[2 * i + 1];
+
+                    for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
+                        const phi_mu = phi.at(i, mu);
+                        const phi_nu = phi.at(i, nu);
+
+                        const b = sys.nbf;
+
+                        self.Vxc.ptr(mu + 0, nu + 0).* += v_a * phi_mu * phi_nu * w;
+                        self.Vxc.ptr(mu + b, nu + b).* += v_b * phi_mu * phi_nu * w;
+                    };
+                }
+
+                if (!self.polarized) {
+                    energy_exc += rho[i] * exc[i] * w;
+
+                    for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
+                        self.Vxc.ptr(mu, nu).* += vrho[i] * phi.at(i, mu) * phi.at(i, nu) * w;
+                    };
+                }
             }
+
+            self.Exc = @floatCast(energy_exc);
         }
     };
 }
@@ -285,30 +342,48 @@ fn getBraggSlaterRadius(comptime T: type, Z: usize) T {
     return @as(T, @floatCast(r_f64 * A2BOHR));
 }
 
-fn evaluateXCFunctional(func: libxc.xc_func_type, rho: []const f64, exc: []f64, vrh: []f64) void {
+fn evaluateXCFunctional(comptime T: type, func: libxc.xc_func_type, polarized: bool, rho: []const T, exc: []T, vrh: []T) void {
     const CHUNK_SIZE = 512;
 
-    var exc_tmp: [CHUNK_SIZE]f64 = undefined;
-    var vrh_tmp: [CHUNK_SIZE]f64 = undefined;
+    if (primType(T) != f64) @compileError("FUNCTIONAL EVALUATION NOW ONLY SUPPORTS F64 NUMBERS");
+
+    const EXC_CHUNK_SIZE = 1 * CHUNK_SIZE;
+    const VRH_CHUNK_SIZE = 2 * CHUNK_SIZE;
+
+    var exc_tmp: [EXC_CHUNK_SIZE]T = undefined;
+    var vrh_tmp: [VRH_CHUNK_SIZE]T = undefined;
 
     var i: usize = 0;
 
-    while (i < rho.len) {
-        const batch_len = @min(CHUNK_SIZE, rho.len - i);
+    while (i < exc.len) : (i += @min(CHUNK_SIZE, exc.len - i)) {
+        const batch_len = @min(CHUNK_SIZE, exc.len - i);
 
-        const exc_batch = exc_tmp[0..batch_len];
-        const vrh_batch = vrh_tmp[0..batch_len];
+        const exc_size, const vrh_size = .{ batch_len, batch_len * (if (polarized) @as(usize, 2) else 1) };
 
-        @memset(exc_batch, 0.0);
-        @memset(vrh_batch, 0.0);
+        const exc_batch = exc_tmp[0..exc_size];
+        const vrh_batch = vrh_tmp[0..vrh_size];
 
-        libxc.xc_lda_exc_vxc(&func, batch_len, rho[i .. i + batch_len].ptr, exc_batch.ptr, vrh_batch.ptr);
+        @memset(exc_batch, 0);
+        @memset(vrh_batch, 0);
 
-        for (0..batch_len) |j| {
-            exc[i + j] += exc_batch[j];
-            vrh[i + j] += vrh_batch[j];
+        if (polarized) {
+            libxc.xc_lda_exc_vxc(&func, batch_len, rho[2 * i ..].ptr, exc_batch.ptr, vrh_batch.ptr);
+
+            for (0..batch_len) |j| {
+                exc[i + j] += exc_batch[j];
+
+                vrh[2 * (i + j) + 0] += vrh_batch[2 * j + 0];
+                vrh[2 * (i + j) + 1] += vrh_batch[2 * j + 1];
+            }
         }
 
-        i += batch_len;
+        if (!polarized) {
+            libxc.xc_lda_exc_vxc(&func, batch_len, rho[i..].ptr, exc_batch.ptr, vrh_batch.ptr);
+
+            for (0..batch_len) |j| {
+                exc[i + j] += exc_batch[j];
+                vrh[i + j] += vrh_batch[j];
+            }
+        }
     }
 }
