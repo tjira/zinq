@@ -4,9 +4,27 @@
 use strict; use warnings;
 
 # IMPORT FUNCTIONS
-use File::Path qw(make_path rmtree);
-use Cwd        qw(getcwd          );
-use File::Copy qw(move            );
+use File::Path   qw(make_path rmtree);
+use Cwd          qw(getcwd          );
+use File::Copy   qw(move            );
+use Getopt::Long qw(GetOptions      );
+
+# DEFINE VARIABLES FOR BUILD OPTIONS
+my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw);
+
+# PARSE COMMAND-LINE OPTIONS
+GetOptions(
+    "eigen"    =>    \$build_eigen,
+    "libint"   =>   \$build_libint,
+    "libxc"    =>    \$build_libxc,
+    "openblas" => \$build_openblas,
+    "fftw"     =>     \$build_fftw,
+);
+
+# IF NO FLAGS ARE PROVIDED, BUILD EVERYTHING
+if (!$build_eigen && !$build_libint && !$build_libxc && !$build_openblas && !$build_fftw) {
+    $build_eigen = $build_libint = $build_libxc = $build_openblas = $build_fftw = 1;
+}
 
 # TARGETS TO BUILD FOR
 my @targets = ("x86_64-linux-musl");
@@ -23,8 +41,10 @@ foreach my $target (@targets) {
     # EXTRACT OS AND ARCH FROM TARGET TO NAME INSTALLATION DIRECTORY
     my $ext_dir = "external-" . ($target =~ /^([^-]+-[^-]+)/)[0];
 
-    # CLEAN PREVIOUS INSTALLATION
-    rmtree($ext_dir) if -d $ext_dir;
+    # CLEAN PREVIOUS INSTALLATION ONLY IF BUILDING EVERYTHING
+    if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_fftw) {
+        rmtree($ext_dir) if -d $ext_dir;
+    }
 
     # GET THE NUMBER OF CPU CORES
     my $cores = qx(nproc --all); chomp $cores; $cores ||= 1;
@@ -36,11 +56,11 @@ foreach my $target (@targets) {
     create_compiler_wrappers($target, $pwd);
 
     # COMPILE EACH PROGRAM
-    compile_eigen   ($prefix, $cores,        $pwd);
-    compile_libint  ($prefix, $cores,        $pwd);
-    compile_libxc   ($prefix, $cores, $host, $pwd);
-    compile_openblas($prefix, $cores,        $pwd);
-    compile_fftw    ($prefix, $cores, $host, $pwd);
+    compile_eigen   ($prefix, $cores,        $pwd) if    $build_eigen;
+    compile_libint  ($prefix, $cores,        $pwd) if   $build_libint;
+    compile_libxc   ($prefix, $cores, $host, $pwd) if    $build_libxc;
+    compile_openblas($prefix, $cores,        $pwd) if $build_openblas;
+    compile_fftw    ($prefix, $cores, $host, $pwd) if     $build_fftw;
 
     # REMOVE COMPILER WRAPPERS
     clean_compiler_wrappers();

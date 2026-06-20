@@ -354,14 +354,18 @@ extern "C" {
 
         size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();
 
-        std::vector<double> px(sys->obs.max_l() + 1);
-        std::vector<double> py(sys->obs.max_l() + 1);
-        std::vector<double> pz(sys->obs.max_l() + 1);
+        thread_local std::vector<double> px, py, pz;
+
+        px.resize(sys->obs.max_l() + 1);
+        py.resize(sys->obs.max_l() + 1);
+        pz.resize(sys->obs.max_l() + 1);
 
         int max_ncart = (sys->obs.max_l() + 1) * (sys->obs.max_l() + 2) / 2;
 
-        std::vector<double> exp_vals(max_nprim);
-        std::vector<double> crt_vals(max_ncart);
+        thread_local std::vector<double> exp_vals, crt_vals;
+
+        exp_vals.resize(max_nprim);
+        crt_vals.resize(max_ncart);
 
         for (const auto& shell : sys->obs) {
             double dx = x - shell.O[0];

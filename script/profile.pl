@@ -12,7 +12,7 @@ if (@ARGV < 1) {
 system('perf', 'record', '-g', '--', @ARGV);
 
 # CREATE THE ANALYSIS PIPELINE
-my $pipeline = 'perf script | gprof2dot -e 1 -f perf -n 5 -z "start.main" | dot -T svg -o profile.svg';
+my $pipeline = 'perf script | gprof2dot -e 1 -f perf -n 5 -z "main.main" | dot -T svg -o profile.svg';
 
 # RUN THE PIPELINE
 system($pipeline);
