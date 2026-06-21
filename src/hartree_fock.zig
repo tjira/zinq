@@ -481,6 +481,10 @@ pub fn Result(comptime T: type) type {
 // RUN =================================================================================================================
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    if (opt.dft != null and opt.gradient) {
+        return error.DftGradientNotSupported;
+    }
+
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
@@ -694,7 +698,14 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     energy[0] = e_new;
 
-    if (log) {
+    if (log) if (dft) |*pot| {
+        const names = try pot.getFunctionalNames(gpa);
+        defer gpa.free(names);
+
+        try printf(io, "\nFINAL DFT ENERGY ({s}): {d:.14} Eh\n", .{ names, energy[0] });
+    };
+
+    if (log and dft == null) {
         try printf(io, "\nFINAL HARTREE-FOCK ENERGY: {d:.14} Eh\n", .{energy[0]});
     }
 

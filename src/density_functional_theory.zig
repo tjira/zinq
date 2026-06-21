@@ -163,6 +163,25 @@ pub fn DftPotential(comptime T: type) type {
             self.Vxc.deinit(gpa);
         }
 
+        pub fn getFunctionalNames(self: @This(), gpa: Allocator) ![]const u8 {
+            if (self.exco) |func| {
+                return try gpa.dupe(u8, std.mem.span(func.info.*.name));
+            }
+
+            var parts = std.ArrayList([]const u8).empty;
+            defer parts.deinit(gpa);
+
+            if (self.exch) |func| {
+                try parts.append(gpa, std.mem.span(func.info.*.name));
+            }
+
+            if (self.corr) |func| {
+                try parts.append(gpa, std.mem.span(func.info.*.name));
+            }
+
+            return try std.mem.join(gpa, " + ", parts.items);
+        }
+
         pub fn evaluate(self: *@This(), sys: MolecularSystem(T), P: Matrix(T), gpa: Allocator) !void {
             self.Vxc.zero();
 
