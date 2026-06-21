@@ -20,4 +20,6 @@ void overlap_deriv(double *I, SystemData *sys);
 void atoms(int    *atoms, SystemData *sys);
 void coors(double *coors, SystemData *sys);
 
-void evaluate_basis(double *phi, double x, double y, double z, SystemData *sys);
+void evaluate_basis           (double *phi,                                                    double x, double y, double z, SystemData *sys);
+void evaluate_basis_derivative(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double x, double y, double z, SystemData *sys);
+

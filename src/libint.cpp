@@ -401,7 +401,7 @@ extern "C" {
                     const auto& coefs = SolidHarmonicsCoefficients<double>::instance(L);
 
                     for (int j = 0; j < 2 * L + 1; j++) {
-                        double val = 0.0;
+                        double val = 0;
 
                         for (unsigned int k = 0; k < coefs.nnz(j); k++) {
                             val += coefs.row_values(j)[k] * crt_vals[coefs.row_idx(j)[k]];
@@ -417,4 +417,106 @@ extern "C" {
             }
         }
     }
+
+    void evaluate_basis_derivative(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double x, double y, double z, SystemData *sys) {
+        if (!sys) return;
+
+        size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();
+
+        thread_local std::vector<double> px, py, pz;
+
+        px.resize(sys->obs.max_l() + 1);
+        py.resize(sys->obs.max_l() + 1);
+        pz.resize(sys->obs.max_l() + 1);
+
+        int max_ncart = (sys->obs.max_l() + 1) * (sys->obs.max_l() + 2) / 2;
+
+        thread_local std::vector<double> exp_vals, crt_vals, crt_dx, crt_dy, crt_dz;
+
+        exp_vals.resize(max_nprim);
+        crt_vals.resize(max_ncart);
+
+        crt_dx.resize(max_ncart);
+        crt_dy.resize(max_ncart);
+        crt_dz.resize(max_ncart);
+
+        for (const auto& shell : sys->obs) {
+            double dx = x - shell.O[0];
+            double dy = y - shell.O[1];
+            double dz = z - shell.O[2];
+
+            double r2 = dx * dx + dy * dy + dz * dz;
+
+            for (size_t j = 0; j < shell.alpha.size(); j++) {
+                exp_vals[j] = std::exp(-shell.alpha[j] * r2);
+            }
+
+            for (size_t i = 0; i < shell.contr.size(); i++) {
+                int L = shell.contr[i].l; double sum = 0; double sum_alpha = 0;
+
+                for (size_t j = 0; j < shell.alpha.size(); j++) {
+                    double term = shell.contr[i].coeff[j] * exp_vals[j];
+
+                    sum += term; sum_alpha += term * shell.alpha[j];
+                }
+
+                double dS_dx = -2 * dx * sum_alpha;
+                double dS_dy = -2 * dy * sum_alpha;
+                double dS_dz = -2 * dz * sum_alpha;
+
+                px[0] = 1; py[0] = 1; pz[0] = 1;
+
+                for (int j = 1; j <= L; j++) {
+                    px[j] = px[j - 1] * dx;
+                    py[j] = py[j - 1] * dy;
+                    pz[j] = pz[j - 1] * dz;
+                }
+
+                for (int j = L, c = 0; j >= 0; j--) for (int k = L - j; k >= 0; k--) {
+                    int l = L - j - k; double S_px_py_pz = px[j] * py[k] * pz[l];
+
+                    crt_vals[c] = sum * S_px_py_pz;
+
+                    crt_dx[c  ] = dS_dx * S_px_py_pz + (j > 0 ? sum * j * px[j - 1] * py[k] * pz[l] : 0);
+                    crt_dy[c  ] = dS_dy * S_px_py_pz + (k > 0 ? sum * px[j] * k * py[k - 1] * pz[l] : 0);
+                    crt_dz[c++] = dS_dz * S_px_py_pz + (l > 0 ? sum * px[j] * py[k] * l * pz[l - 1] : 0);
+                }
+
+                if (shell.contr[i].pure) {
+                    const auto& coefs = SolidHarmonicsCoefficients<double>::instance(L);
+
+                    for (int j = 0; j < 2 * L + 1; j++) {
+                        double val = 0; double val_x = 0; double val_y = 0; double val_z = 0;
+
+                        for (unsigned int k = 0; k < coefs.nnz(j); k++) {
+                            double coef = coefs.row_values(j)[k];
+
+                            val += coef * crt_vals[coefs.row_idx(j)[k]];
+
+                            val_x += coef * crt_dx[coefs.row_idx(j)[k]];
+                            val_y += coef * crt_dy[coefs.row_idx(j)[k]];
+                            val_z += coef * crt_dz[coefs.row_idx(j)[k]];
+                        }
+
+                        phi[bf_idx] = val;
+
+                        dphi_dx[bf_idx  ] = val_x;
+                        dphi_dy[bf_idx  ] = val_y;
+                        dphi_dz[bf_idx++] = val_z;
+                    }
+                }
+
+                else {
+                    for (int j = 0; j < (L + 1) * (L + 2) / 2; j++) {
+                        phi[bf_idx] = crt_vals[j];
+
+                        dphi_dx[bf_idx  ] = crt_dx[j];
+                        dphi_dy[bf_idx  ] = crt_dy[j];
+                        dphi_dz[bf_idx++] = crt_dz[j];
+                    }
+                }
+            }
+        }
+    }
 }
+

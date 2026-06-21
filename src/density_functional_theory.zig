@@ -153,22 +153,84 @@ pub fn DftPotential(comptime T: type) type {
         pub fn evaluate(self: *@This(), sys: MolecularSystem(T), P: Matrix(T), gpa: Allocator) !void {
             self.Vxc.zero();
 
+            const is_exch_sgga = self.exch != null and self.exch.?.info.*.family == libxc.XC_FAMILY_GGA;
+            const is_corr_sgga = self.corr != null and self.corr.?.info.*.family == libxc.XC_FAMILY_GGA;
+            const is_exco_sgga = self.exco != null and self.exco.?.info.*.family == libxc.XC_FAMILY_GGA;
+
+            const is_exch_mgga = self.exch != null and self.exch.?.info.*.family == libxc.XC_FAMILY_MGGA;
+            const is_corr_mgga = self.corr != null and self.corr.?.info.*.family == libxc.XC_FAMILY_MGGA;
+            const is_exco_mgga = self.exco != null and self.exco.?.info.*.family == libxc.XC_FAMILY_MGGA;
+
+            const has_sgga = is_exch_sgga or is_corr_sgga or is_exco_sgga;
+            const has_mgga = is_exch_mgga or is_corr_mgga or is_exco_mgga;
+
             const size_factor: usize = if (self.polarized) 2 else 1;
 
-            const rho = try gpa.alloc(T, self.pts.shape[0] * size_factor);
-            defer gpa.free(rho);
+            var exc = try Vector(T).initZero(self.pts.shape[0], gpa);
+            defer exc.deinit(gpa);
 
-            @memset(rho, 0);
+            var rho_val = try Matrix(T).initZero(self.pts.shape[0], size_factor, gpa);
+            defer rho_val.deinit(gpa);
 
-            const exc = try gpa.alloc(T, self.pts.shape[0]);
-            defer gpa.free(exc);
+            var rho_pot = try Matrix(T).initZero(self.pts.shape[0], size_factor, gpa);
+            defer rho_pot.deinit(gpa);
 
-            @memset(exc, 0);
+            var sig_val: ?Matrix(T) = null;
+            var sig_pot: ?Matrix(T) = null;
 
-            const vrho = try gpa.alloc(T, self.pts.shape[0] * size_factor);
-            defer gpa.free(vrho);
+            var tau_val: ?Matrix(T) = null;
+            var tau_pot: ?Matrix(T) = null;
 
-            @memset(vrho, 0);
+            var del_rho: ?Matrix(T) = null;
+
+            var dphi_dx: ?Matrix(T) = null;
+            var dphi_dy: ?Matrix(T) = null;
+            var dphi_dz: ?Matrix(T) = null;
+
+            var X_a: ?Vector(T) = null;
+            var X_b: ?Vector(T) = null;
+
+            const needs_deriv = has_sgga or has_mgga;
+
+            if (needs_deriv) {
+                const sigma_cols: usize = if (self.polarized) 3 else 1;
+
+                sig_val = try Matrix(T).initZero(self.pts.shape[0], sigma_cols, gpa);
+                sig_pot = try Matrix(T).initZero(self.pts.shape[0], sigma_cols, gpa);
+
+                const grad_cols: usize = if (self.polarized) 6 else 3;
+
+                del_rho = try Matrix(T).initZero(self.pts.shape[0], grad_cols, gpa);
+
+                dphi_dx = try Matrix(T).init(self.pts.shape[0], sys.nbf, gpa);
+                dphi_dy = try Matrix(T).init(self.pts.shape[0], sys.nbf, gpa);
+                dphi_dz = try Matrix(T).init(self.pts.shape[0], sys.nbf, gpa);
+
+                X_a = try Vector(T).init(sys.nbf, gpa);
+
+                if (self.polarized) {
+                    X_b = try Vector(T).init(sys.nbf, gpa);
+                }
+            }
+
+            if (has_mgga) {
+                tau_val = try Matrix(T).initZero(self.pts.shape[0], size_factor, gpa);
+                tau_pot = try Matrix(T).initZero(self.pts.shape[0], size_factor, gpa);
+            }
+
+            defer {
+                if (sig_val) |*s| s.deinit(gpa);
+                if (sig_pot) |*s| s.deinit(gpa);
+                if (del_rho) |*g| g.deinit(gpa);
+                if (tau_val) |*t| t.deinit(gpa);
+                if (tau_pot) |*t| t.deinit(gpa);
+                if (dphi_dx) |*d| d.deinit(gpa);
+                if (dphi_dy) |*d| d.deinit(gpa);
+                if (dphi_dz) |*d| d.deinit(gpa);
+
+                if (X_a) |*x| x.deinit(gpa);
+                if (X_b) |*x| x.deinit(gpa);
+            }
 
             var phi = try Matrix(T).init(self.pts.shape[0], sys.nbf, gpa);
             defer phi.deinit(gpa);
@@ -178,11 +240,31 @@ pub fn DftPotential(comptime T: type) type {
                 const y = self.pts.at(i, 1);
                 const z = self.pts.at(i, 2);
 
-                libint.evaluate_basis(phi.rowSlice(i).ptr, x, y, z, sys.ptr);
+                if (needs_deriv) {
+                    const dx_row = dphi_dx.?.rowSlice(i);
+                    const dy_row = dphi_dy.?.rowSlice(i);
+                    const dz_row = dphi_dz.?.rowSlice(i);
+
+                    libint.evaluate_basis_derivative(phi.rowSlice(i).ptr, dx_row.ptr, dy_row.ptr, dz_row.ptr, x, y, z, sys.ptr);
+                }
+
+                if (!needs_deriv) {
+                    libint.evaluate_basis(phi.rowSlice(i).ptr, x, y, z, sys.ptr);
+                }
 
                 if (self.polarized) {
                     var rho_a: T = 0;
                     var rho_b: T = 0;
+
+                    var del_rho_a_x: T = 0;
+                    var del_rho_a_y: T = 0;
+                    var del_rho_a_z: T = 0;
+                    var del_rho_b_x: T = 0;
+                    var del_rho_b_y: T = 0;
+                    var del_rho_b_z: T = 0;
+
+                    var tau_a: T = 0;
+                    var tau_b: T = 0;
 
                     for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
                         const b = sys.nbf;
@@ -190,58 +272,267 @@ pub fn DftPotential(comptime T: type) type {
                         const p_val_a = P.at(mu + 0, nu + 0);
                         const p_val_b = P.at(mu + b, nu + b);
 
-                        rho_a += p_val_a * phi.at(i, mu) * phi.at(i, nu);
-                        rho_b += p_val_b * phi.at(i, mu) * phi.at(i, nu);
+                        const phi_mu = phi.at(i, mu);
+                        const phi_nu = phi.at(i, nu);
+
+                        rho_a += p_val_a * phi_mu * phi_nu;
+                        rho_b += p_val_b * phi_mu * phi_nu;
+
+                        if (needs_deriv) {
+                            const dphi_dx_mu = dphi_dx.?.at(i, mu);
+                            const dphi_dy_mu = dphi_dy.?.at(i, mu);
+                            const dphi_dz_mu = dphi_dz.?.at(i, mu);
+
+                            const term_a = p_val_a * phi_nu;
+                            const term_b = p_val_b * phi_nu;
+
+                            del_rho_a_x += term_a * dphi_dx_mu;
+                            del_rho_a_y += term_a * dphi_dy_mu;
+                            del_rho_a_z += term_a * dphi_dz_mu;
+
+                            del_rho_b_x += term_b * dphi_dx_mu;
+                            del_rho_b_y += term_b * dphi_dy_mu;
+                            del_rho_b_z += term_b * dphi_dz_mu;
+
+                            if (has_mgga) {
+                                const dphi_dx_nu = dphi_dx.?.at(i, nu);
+                                const dphi_dy_nu = dphi_dy.?.at(i, nu);
+                                const dphi_dz_nu = dphi_dz.?.at(i, nu);
+
+                                const dphi_dot = dphi_dx_mu * dphi_dx_nu + dphi_dy_mu * dphi_dy_nu + dphi_dz_mu * dphi_dz_nu;
+
+                                tau_a += p_val_a * dphi_dot;
+                                tau_b += p_val_b * dphi_dot;
+                            }
+                        }
                     };
 
-                    rho[2 * i + 0] = rho_a;
-                    rho[2 * i + 1] = rho_b;
+                    rho_val.ptr(i, 0).* = rho_a;
+                    rho_val.ptr(i, 1).* = rho_b;
+
+                    if (needs_deriv) {
+                        del_rho_a_x *= 2;
+                        del_rho_a_y *= 2;
+                        del_rho_a_z *= 2;
+                        del_rho_b_x *= 2;
+                        del_rho_b_y *= 2;
+                        del_rho_b_z *= 2;
+
+                        del_rho.?.ptr(i, 0).* = del_rho_a_x;
+                        del_rho.?.ptr(i, 1).* = del_rho_a_y;
+                        del_rho.?.ptr(i, 2).* = del_rho_a_z;
+                        del_rho.?.ptr(i, 3).* = del_rho_b_x;
+                        del_rho.?.ptr(i, 4).* = del_rho_b_y;
+                        del_rho.?.ptr(i, 5).* = del_rho_b_z;
+
+                        sig_val.?.ptr(i, 0).* = del_rho_a_x * del_rho_a_x + del_rho_a_y * del_rho_a_y + del_rho_a_z * del_rho_a_z;
+                        sig_val.?.ptr(i, 1).* = del_rho_a_x * del_rho_b_x + del_rho_a_y * del_rho_b_y + del_rho_a_z * del_rho_b_z;
+                        sig_val.?.ptr(i, 2).* = del_rho_b_x * del_rho_b_x + del_rho_b_y * del_rho_b_y + del_rho_b_z * del_rho_b_z;
+                    }
+
+                    if (has_mgga) {
+                        tau_val.?.ptr(i, 0).* = 0.5 * tau_a;
+                        tau_val.?.ptr(i, 1).* = 0.5 * tau_b;
+                    }
                 }
 
                 if (!self.polarized) {
                     var rho_tot: T = 0;
+                    var tau_tot: T = 0;
 
-                    for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
-                        rho_tot += P.at(mu, nu) * phi.at(i, mu) * phi.at(i, nu);
-                    };
-
-                    rho[i] = rho_tot;
-                }
-            }
-
-            if (self.exch) |func| evaluateXCFunctional(T, func, self.polarized, rho, exc, vrho);
-            if (self.corr) |func| evaluateXCFunctional(T, func, self.polarized, rho, exc, vrho);
-            if (self.exco) |func| evaluateXCFunctional(T, func, self.polarized, rho, exc, vrho);
-
-            var energy_exc: f64 = 0.0;
-
-            for (0..self.pts.shape[0]) |i| {
-                const w = self.wgh.at(i);
-
-                if (self.polarized) {
-                    const rho_tot = rho[2 * i] + rho[2 * i + 1];
-
-                    energy_exc += rho_tot * exc[i] * w;
-
-                    const v_a = vrho[2 * i + 0];
-                    const v_b = vrho[2 * i + 1];
+                    var del_rho_x: T = 0;
+                    var del_rho_y: T = 0;
+                    var del_rho_z: T = 0;
 
                     for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
                         const phi_mu = phi.at(i, mu);
                         const phi_nu = phi.at(i, nu);
 
-                        const b = sys.nbf;
+                        rho_tot += P.at(mu, nu) * phi_mu * phi_nu;
 
-                        self.Vxc.ptr(mu + 0, nu + 0).* += v_a * phi_mu * phi_nu * w;
-                        self.Vxc.ptr(mu + b, nu + b).* += v_b * phi_mu * phi_nu * w;
+                        if (needs_deriv) {
+                            const dphi_dx_mu = dphi_dx.?.at(i, mu);
+                            const dphi_dy_mu = dphi_dy.?.at(i, mu);
+                            const dphi_dz_mu = dphi_dz.?.at(i, mu);
+
+                            const term = P.at(mu, nu) * phi_nu;
+
+                            del_rho_x += term * dphi_dx_mu;
+                            del_rho_y += term * dphi_dy_mu;
+                            del_rho_z += term * dphi_dz_mu;
+
+                            if (has_mgga) {
+                                const dphi_dx_nu = dphi_dx.?.at(i, nu);
+                                const dphi_dy_nu = dphi_dy.?.at(i, nu);
+                                const dphi_dz_nu = dphi_dz.?.at(i, nu);
+
+                                const dphi_dot = dphi_dx_mu * dphi_dx_nu + dphi_dy_mu * dphi_dy_nu + dphi_dz_mu * dphi_dz_nu;
+
+                                tau_tot += P.at(mu, nu) * dphi_dot;
+                            }
+                        }
                     };
+
+                    rho_val.ptr(i, 0).* = rho_tot;
+
+                    if (needs_deriv) {
+                        del_rho_x *= 2;
+                        del_rho_y *= 2;
+                        del_rho_z *= 2;
+
+                        del_rho.?.ptr(i, 0).* = del_rho_x;
+                        del_rho.?.ptr(i, 1).* = del_rho_y;
+                        del_rho.?.ptr(i, 2).* = del_rho_z;
+
+                        sig_val.?.ptr(i, 0).* = del_rho_x * del_rho_x + del_rho_y * del_rho_y + del_rho_z * del_rho_z;
+                    }
+
+                    if (has_mgga) {
+                        tau_val.?.ptr(i, 0).* = 0.5 * tau_tot;
+                    }
+                }
+            }
+
+            const inp = XCInput(T){
+                .rho_val = rho_val.data,
+
+                .sig_val = if (sig_val) |s| s.data else null,
+                .tau_val = if (tau_val) |t| t.data else null,
+            };
+
+            const out = XCOutput(T){
+                .exc = exc.data,
+
+                .sig_pot = if (sig_pot) |s| s.data else null,
+                .tau_pot = if (tau_pot) |t| t.data else null,
+
+                .rho_pot = rho_pot.data,
+            };
+
+            if (self.exch) |func| evaluateXCFunctional(T, out, func, self.polarized, inp);
+            if (self.corr) |func| evaluateXCFunctional(T, out, func, self.polarized, inp);
+            if (self.exco) |func| evaluateXCFunctional(T, out, func, self.polarized, inp);
+
+            var energy_exc: T = 0;
+
+            for (0..self.pts.shape[0]) |i| {
+                const w = self.wgh.at(i);
+
+                if (self.polarized) {
+                    const rho_tot = rho_val.at(i, 0) + rho_val.at(i, 1);
+
+                    energy_exc += rho_tot * exc.at(i) * w;
+
+                    const v_a = rho_pot.at(i, 0);
+                    const v_b = rho_pot.at(i, 1);
+
+                    if (needs_deriv) {
+                        const g_a_x = del_rho.?.at(i, 0);
+                        const g_a_y = del_rho.?.at(i, 1);
+                        const g_a_z = del_rho.?.at(i, 2);
+
+                        const g_b_x = del_rho.?.at(i, 3);
+                        const g_b_y = del_rho.?.at(i, 4);
+                        const g_b_z = del_rho.?.at(i, 5);
+
+                        const v_sig_aa = sig_pot.?.at(i, 0);
+                        const v_sig_ab = sig_pot.?.at(i, 1);
+                        const v_sig_bb = sig_pot.?.at(i, 2);
+
+                        const w_a_x = 2 * v_sig_aa * g_a_x + v_sig_ab * g_b_x;
+                        const w_a_y = 2 * v_sig_aa * g_a_y + v_sig_ab * g_b_y;
+                        const w_a_z = 2 * v_sig_aa * g_a_z + v_sig_ab * g_b_z;
+
+                        const w_b_x = 2 * v_sig_bb * g_b_x + v_sig_ab * g_a_x;
+                        const w_b_y = 2 * v_sig_bb * g_b_y + v_sig_ab * g_a_y;
+                        const w_b_z = 2 * v_sig_bb * g_b_z + v_sig_ab * g_a_z;
+
+                        for (0..sys.nbf) |mu| {
+                            const d_dx = dphi_dx.?.at(i, mu);
+                            const d_dy = dphi_dy.?.at(i, mu);
+                            const d_dz = dphi_dz.?.at(i, mu);
+
+                            X_a.?.data[mu] = w_a_x * d_dx + w_a_y * d_dy + w_a_z * d_dz;
+                            X_b.?.data[mu] = w_b_x * d_dx + w_b_y * d_dy + w_b_z * d_dz;
+                        }
+
+                        const v_tau_a = if (has_mgga) tau_pot.?.at(i, 0) else 0.0;
+                        const v_tau_b = if (has_mgga) tau_pot.?.at(i, 1) else 0.0;
+
+                        for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
+                            const phi_mu = phi.at(i, mu);
+                            const phi_nu = phi.at(i, nu);
+
+                            const b = sys.nbf;
+
+                            var val_a = v_a * phi_mu * phi_nu + X_a.?.data[mu] * phi_nu + phi_mu * X_a.?.data[nu];
+                            var val_b = v_b * phi_mu * phi_nu + X_b.?.data[mu] * phi_nu + phi_mu * X_b.?.data[nu];
+
+                            if (has_mgga) {
+                                const dx_mu_nu = dphi_dx.?.at(i, mu) * dphi_dx.?.at(i, nu);
+                                const dy_mu_nu = dphi_dy.?.at(i, mu) * dphi_dy.?.at(i, nu);
+                                const dz_mu_nu = dphi_dz.?.at(i, mu) * dphi_dz.?.at(i, nu);
+
+                                const dphi_dot = dx_mu_nu + dy_mu_nu + dz_mu_nu;
+
+                                val_a += 0.5 * v_tau_a * dphi_dot;
+                                val_b += 0.5 * v_tau_b * dphi_dot;
+                            }
+
+                            self.Vxc.ptr(mu + 0, nu + 0).* += val_a * w;
+                            self.Vxc.ptr(mu + b, nu + b).* += val_b * w;
+                        };
+                    }
+
+                    if (!needs_deriv) {
+                        for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
+                            const phi_mu = phi.at(i, mu);
+                            const phi_nu = phi.at(i, nu);
+
+                            const b = sys.nbf;
+
+                            self.Vxc.ptr(mu + 0, nu + 0).* += v_a * phi_mu * phi_nu * w;
+                            self.Vxc.ptr(mu + b, nu + b).* += v_b * phi_mu * phi_nu * w;
+                        };
+                    }
                 }
 
                 if (!self.polarized) {
-                    energy_exc += rho[i] * exc[i] * w;
+                    energy_exc += rho_val.at(i, 0) * exc.at(i) * w;
 
-                    for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
-                        self.Vxc.ptr(mu, nu).* += vrho[i] * phi.at(i, mu) * phi.at(i, nu) * w;
+                    if (needs_deriv) {
+                        const v_sigma = sig_pot.?.at(i, 0);
+
+                        const w_x = 2 * v_sigma * del_rho.?.at(i, 0);
+                        const w_y = 2 * v_sigma * del_rho.?.at(i, 1);
+                        const w_z = 2 * v_sigma * del_rho.?.at(i, 2);
+
+                        for (0..sys.nbf) |mu| {
+                            X_a.?.data[mu] = w_x * dphi_dx.?.at(i, mu) + w_y * dphi_dy.?.at(i, mu) + w_z * dphi_dz.?.at(i, mu);
+                        }
+
+                        const v_tau = if (has_mgga) tau_pot.?.at(i, 0) else 0.0;
+
+                        for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
+                            const phi_mu = phi.at(i, mu);
+                            const phi_nu = phi.at(i, nu);
+
+                            var val = rho_pot.at(i, 0) * phi_mu * phi_nu + X_a.?.data[mu] * phi_nu + phi_mu * X_a.?.data[nu];
+
+                            if (has_mgga) {
+                                const dx_mu_nu = dphi_dx.?.at(i, mu) * dphi_dx.?.at(i, nu);
+                                const dy_mu_nu = dphi_dy.?.at(i, mu) * dphi_dy.?.at(i, nu);
+                                const dz_mu_nu = dphi_dz.?.at(i, mu) * dphi_dz.?.at(i, nu);
+
+                                val += 0.5 * v_tau * (dx_mu_nu + dy_mu_nu + dz_mu_nu);
+                            }
+
+                            self.Vxc.ptr(mu, nu).* += val * w;
+                        };
+                    }
+
+                    if (!needs_deriv) for (0..sys.nbf) |mu| for (0..sys.nbf) |nu| {
+                        self.Vxc.ptr(mu, nu).* += rho_pot.at(i, 0) * phi.at(i, mu) * phi.at(i, nu) * w;
                     };
                 }
             }
@@ -392,7 +683,7 @@ pub fn Becke(comptime T: type) type {
 // HELPER FUNCTIONS ====================================================================================================
 
 fn getBraggSlaterRadius(comptime T: type, Z: usize) T {
-    const r_f64: T = switch (Z) {
+    const r: T = switch (Z) {
         1 => 0.35,
         2 => 0.32,
         3 => 1.45,
@@ -416,50 +707,255 @@ fn getBraggSlaterRadius(comptime T: type, Z: usize) T {
         else => 1.50,
     };
 
-    return @as(T, @floatCast(r_f64 * A2BOHR));
+    return r * A2BOHR;
 }
 
-fn evaluateXCFunctional(comptime T: type, func: libxc.xc_func_type, polarized: bool, rho: []const T, exc: []T, vrh: []T) void {
-    const CHUNK_SIZE = 512;
+fn XCInput(comptime T: type) type {
+    return struct {
+        rho_val: []const T,
 
+        sig_val: ?[]const T = null,
+        tau_val: ?[]const T = null,
+    };
+}
+
+fn XCOutput(comptime T: type) type {
+    return struct {
+        exc: []T,
+
+        rho_pot: []T,
+
+        sig_pot: ?[]T = null,
+        tau_pot: ?[]T = null,
+    };
+}
+
+fn evaluateXCFunctional(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, polarized: bool, inp: XCInput(T)) void {
     if (primType(T) != f64) @compileError("FUNCTIONAL EVALUATION NOW ONLY SUPPORTS F64 NUMBERS");
 
-    const EXC_CHUNK_SIZE = 1 * CHUNK_SIZE;
-    const VRH_CHUNK_SIZE = 2 * CHUNK_SIZE;
+    if (func.info.*.family == libxc.XC_FAMILY_LDA) {
+        return evaluateXCLDA(T, out, func, polarized, inp);
+    }
 
-    var exc_tmp: [EXC_CHUNK_SIZE]T = undefined;
-    var vrh_tmp: [VRH_CHUNK_SIZE]T = undefined;
+    if (func.info.*.family == libxc.XC_FAMILY_GGA) {
+        return evaluateXCGGA(T, out, func, polarized, inp);
+    }
+
+    if (func.info.*.family == libxc.XC_FAMILY_MGGA) {
+        return evaluateXCMGGA(T, out, func, polarized, inp);
+    }
+
+    unreachable;
+}
+
+fn evaluateXCLDA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, polarized: bool, inp: XCInput(T)) void {
+    const CHUNK_SIZE = 512;
+
+    var e_xc_tmp: [1 * CHUNK_SIZE]T = undefined;
+    var vrho_tmp: [2 * CHUNK_SIZE]T = undefined;
 
     var i: usize = 0;
 
-    while (i < exc.len) : (i += @min(CHUNK_SIZE, exc.len - i)) {
-        const batch_len = @min(CHUNK_SIZE, exc.len - i);
+    while (i < out.exc.len) : (i += @min(CHUNK_SIZE, out.exc.len - i)) {
+        const batch_len = @min(CHUNK_SIZE, out.exc.len - i);
 
         const exc_size, const vrh_size = .{ batch_len, batch_len * (if (polarized) @as(usize, 2) else 1) };
 
-        const exc_batch = exc_tmp[0..exc_size];
-        const vrh_batch = vrh_tmp[0..vrh_size];
+        const exc_batch = e_xc_tmp[0..exc_size];
+        const vrh_batch = vrho_tmp[0..vrh_size];
 
         @memset(exc_batch, 0);
         @memset(vrh_batch, 0);
 
         if (polarized) {
-            libxc.xc_lda_exc_vxc(&func, batch_len, rho[2 * i ..].ptr, exc_batch.ptr, vrh_batch.ptr);
+            libxc.xc_lda_exc_vxc(&func, batch_len, inp.rho_val[2 * i ..].ptr, exc_batch.ptr, vrh_batch.ptr);
 
             for (0..batch_len) |j| {
-                exc[i + j] += exc_batch[j];
+                out.exc[i + j] += exc_batch[j];
 
-                vrh[2 * (i + j) + 0] += vrh_batch[2 * j + 0];
-                vrh[2 * (i + j) + 1] += vrh_batch[2 * j + 1];
+                out.rho_pot[2 * (i + j) + 0] += vrh_batch[2 * j + 0];
+                out.rho_pot[2 * (i + j) + 1] += vrh_batch[2 * j + 1];
             }
         }
 
         if (!polarized) {
-            libxc.xc_lda_exc_vxc(&func, batch_len, rho[i..].ptr, exc_batch.ptr, vrh_batch.ptr);
+            libxc.xc_lda_exc_vxc(&func, batch_len, inp.rho_val[i..].ptr, exc_batch.ptr, vrh_batch.ptr);
 
             for (0..batch_len) |j| {
-                exc[i + j] += exc_batch[j];
-                vrh[i + j] += vrh_batch[j];
+                out.exc[i + j] += exc_batch[j];
+
+                out.rho_pot[i + j] += vrh_batch[j];
+            }
+        }
+    }
+}
+
+fn evaluateXCGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, polarized: bool, inp: XCInput(T)) void {
+    const CHUNK_SIZE = 512;
+
+    const sig_val_unwrapped = inp.sig_val.?;
+    const sig_pot_unwrapped = out.sig_pot.?;
+
+    var e_xc_tmp: [1 * CHUNK_SIZE]T = undefined;
+    var vrho_tmp: [2 * CHUNK_SIZE]T = undefined;
+    var vsig_tmp: [3 * CHUNK_SIZE]T = undefined;
+
+    var i: usize = 0;
+
+    while (i < out.exc.len) : (i += @min(CHUNK_SIZE, out.exc.len - i)) {
+        const batch_len = @min(CHUNK_SIZE, out.exc.len - i);
+
+        const vrho_factor: usize = if (polarized) 2 else 1;
+        const vsig_factor: usize = if (polarized) 3 else 1;
+
+        const e_xc_size, const vrho_size = .{ batch_len, batch_len * vrho_factor };
+
+        const e_xc_batch = e_xc_tmp[0..e_xc_size];
+        const vrho_batch = vrho_tmp[0..vrho_size];
+
+        @memset(e_xc_batch, 0);
+        @memset(vrho_batch, 0);
+
+        const vsig_batch = vsig_tmp[0 .. batch_len * vsig_factor];
+
+        @memset(vsig_batch, 0);
+
+        if (polarized) {
+            const p1, const p2 = .{ inp.rho_val[2 * i ..].ptr, sig_val_unwrapped[3 * i ..].ptr };
+
+            const p3 = e_xc_batch.ptr;
+            const p4 = vrho_batch.ptr;
+            const p5 = vsig_batch.ptr;
+
+            libxc.xc_gga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5);
+
+            for (0..batch_len) |j| {
+                out.exc[i + j] += e_xc_batch[j];
+
+                out.rho_pot[2 * (i + j) + 0] += vrho_batch[2 * j + 0];
+                out.rho_pot[2 * (i + j) + 1] += vrho_batch[2 * j + 1];
+
+                sig_pot_unwrapped[3 * (i + j) + 0] += vsig_batch[3 * j + 0];
+                sig_pot_unwrapped[3 * (i + j) + 1] += vsig_batch[3 * j + 1];
+                sig_pot_unwrapped[3 * (i + j) + 2] += vsig_batch[3 * j + 2];
+            }
+        }
+
+        if (!polarized) {
+            const p1, const p2 = .{ inp.rho_val[i..].ptr, sig_val_unwrapped[i..].ptr };
+
+            const p3 = e_xc_batch.ptr;
+            const p4 = vrho_batch.ptr;
+            const p5 = vsig_batch.ptr;
+
+            libxc.xc_gga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5);
+
+            for (0..batch_len) |j| {
+                out.exc[i + j], out.rho_pot[i + j] = .{ out.exc[i + j] + e_xc_batch[j], out.rho_pot[i + j] + vrho_batch[j] };
+
+                sig_pot_unwrapped[i + j] += vsig_batch[j];
+            }
+        }
+    }
+}
+
+fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, polarized: bool, inp: XCInput(T)) void {
+    const CHUNK_SIZE = 512;
+
+    const sig_val_unwrapped = inp.sig_val.?;
+    const sig_pot_unwrapped = out.sig_pot.?;
+    const tau_val_unwrapped = inp.tau_val.?;
+    const tau_pot_unwrapped = out.tau_pot.?;
+
+    var e_xc_tmp: [1 * CHUNK_SIZE]T = undefined;
+    var vrho_tmp: [2 * CHUNK_SIZE]T = undefined;
+    var vsig_tmp: [3 * CHUNK_SIZE]T = undefined;
+    var vtau_tmp: [2 * CHUNK_SIZE]T = undefined;
+    var lapl_tmp: [2 * CHUNK_SIZE]T = undefined;
+    var vlap_tmp: [2 * CHUNK_SIZE]T = undefined;
+
+    var i: usize = 0;
+
+    while (i < out.exc.len) : (i += @min(CHUNK_SIZE, out.exc.len - i)) {
+        const batch_len = @min(CHUNK_SIZE, out.exc.len - i);
+
+        const vrho_factor: usize = if (polarized) 2 else 1;
+        const vtau_factor: usize = if (polarized) 2 else 1;
+        const vsig_factor: usize = if (polarized) 3 else 1;
+
+        const e_xc_size, const vrho_size = .{ batch_len, batch_len * vrho_factor };
+
+        const vsig_size = batch_len * vsig_factor;
+        const vtau_size = batch_len * vtau_factor;
+
+        const e_xc_batch = e_xc_tmp[0..e_xc_size];
+        const vrho_batch = vrho_tmp[0..vrho_size];
+
+        @memset(e_xc_batch, 0);
+        @memset(vrho_batch, 0);
+
+        const vsig_batch = vsig_tmp[0..vsig_size];
+        const vtau_batch = vtau_tmp[0..vtau_size];
+
+        @memset(vsig_batch, 0);
+        @memset(vtau_batch, 0);
+
+        const lapl_batch = lapl_tmp[0..vrho_size];
+        const vlap_batch = vlap_tmp[0..vrho_size];
+
+        @memset(lapl_batch, 0);
+        @memset(vlap_batch, 0);
+
+        if (polarized) {
+            const p1 = inp.rho_val[2 * i ..].ptr;
+
+            const p2 = sig_val_unwrapped[3 * i ..].ptr;
+            const p4 = tau_val_unwrapped[2 * i ..].ptr;
+
+            const p3 = lapl_batch.ptr;
+            const p5 = e_xc_batch.ptr;
+            const p6 = vrho_batch.ptr;
+            const p7 = vsig_batch.ptr;
+            const p8 = vlap_batch.ptr;
+            const p9 = vtau_batch.ptr;
+
+            libxc.xc_mgga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5, p6, p7, p8, p9);
+
+            for (0..batch_len) |j| {
+                out.exc[i + j] += e_xc_batch[j];
+
+                out.rho_pot[2 * (i + j) + 0] += vrho_batch[2 * j + 0];
+                out.rho_pot[2 * (i + j) + 1] += vrho_batch[2 * j + 1];
+
+                sig_pot_unwrapped[3 * (i + j) + 0] += vsig_batch[3 * j + 0];
+                sig_pot_unwrapped[3 * (i + j) + 1] += vsig_batch[3 * j + 1];
+                sig_pot_unwrapped[3 * (i + j) + 2] += vsig_batch[3 * j + 2];
+
+                tau_pot_unwrapped[2 * (i + j) + 0] += vtau_batch[2 * j + 0];
+                tau_pot_unwrapped[2 * (i + j) + 1] += vtau_batch[2 * j + 1];
+            }
+        }
+
+        if (!polarized) {
+            const p1 = inp.rho_val[i..].ptr;
+
+            const p2 = sig_val_unwrapped[i..].ptr;
+            const p4 = tau_val_unwrapped[i..].ptr;
+
+            const p3 = lapl_batch.ptr;
+            const p5 = e_xc_batch.ptr;
+            const p6 = vrho_batch.ptr;
+            const p7 = vsig_batch.ptr;
+            const p8 = vlap_batch.ptr;
+            const p9 = vtau_batch.ptr;
+
+            libxc.xc_mgga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5, p6, p7, p8, p9);
+
+            for (0..batch_len) |j| {
+                out.exc[i + j], out.rho_pot[i + j] = .{ out.exc[i + j] + e_xc_batch[j], out.rho_pot[i + j] + vrho_batch[j] };
+
+                sig_pot_unwrapped[i + j] += vsig_batch[j];
+                tau_pot_unwrapped[i + j] += vtau_batch[j];
             }
         }
     }
