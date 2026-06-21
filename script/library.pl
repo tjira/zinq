@@ -12,6 +12,12 @@ use Getopt::Long qw(GetOptions      );
 # DEFINE VARIABLES FOR BUILD OPTIONS
 my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw);
 
+# DEFINE DEFAULT TARGET
+my $target = "x86_64-linux-musl";
+
+# GET THE NUMBER OF CPU CORES
+my $cores = qx(nproc --all); chomp $cores; $cores ||= 1;
+
 # PARSE COMMAND-LINE OPTIONS
 GetOptions(
     "eigen"    =>    \$build_eigen,
@@ -19,6 +25,8 @@ GetOptions(
     "libxc"    =>    \$build_libxc,
     "openblas" => \$build_openblas,
     "fftw"     =>     \$build_fftw,
+    "target=s" =>         \$target,
+    "cores|j=i"=>          \$cores,
 );
 
 # IF NO FLAGS ARE PROVIDED, BUILD EVERYTHING
@@ -26,45 +34,35 @@ if (!$build_eigen && !$build_libint && !$build_libxc && !$build_openblas && !$bu
     $build_eigen = $build_libint = $build_libxc = $build_openblas = $build_fftw = 1;
 }
 
-# TARGETS TO BUILD FOR
-my @targets = ("x86_64-linux-musl");
-
 # HOST TRIPLE FOR CONFIGURING CROSS-COMPILE
-my $host = "x86_64-linux-musl";
+my $host = $target;
 
 # GET CURRENT WORKING DIRECTORY
 my $pwd = getcwd();
 
-# LOOP OVER TARGETS
-foreach my $target (@targets) {
+# EXTRACT OS AND ARCH FROM TARGET TO NAME INSTALLATION DIRECTORY
+my $ext_dir = "external-" . ($target =~ /^([^-]+-[^-]+)/)[0];
 
-    # EXTRACT OS AND ARCH FROM TARGET TO NAME INSTALLATION DIRECTORY
-    my $ext_dir = "external-" . ($target =~ /^([^-]+-[^-]+)/)[0];
-
-    # CLEAN PREVIOUS INSTALLATION ONLY IF BUILDING EVERYTHING
-    if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_fftw) {
-        rmtree($ext_dir) if -d $ext_dir;
-    }
-
-    # GET THE NUMBER OF CPU CORES
-    my $cores = qx(nproc --all); chomp $cores; $cores ||= 1;
-
-    # DEFINE INSTALL PREFIX
-    my $prefix = "$pwd/$ext_dir";
-
-    # CREATE COMPILER WRAPPERS AND EXPORT ENVIRONMENT VARIABLES
-    create_compiler_wrappers($target, $pwd);
-
-    # COMPILE EACH PROGRAM
-    compile_eigen   ($prefix, $cores,        $pwd) if    $build_eigen;
-    compile_libint  ($prefix, $cores,        $pwd) if   $build_libint;
-    compile_libxc   ($prefix, $cores, $host, $pwd) if    $build_libxc;
-    compile_openblas($prefix, $cores,        $pwd) if $build_openblas;
-    compile_fftw    ($prefix, $cores, $host, $pwd) if     $build_fftw;
-
-    # REMOVE COMPILER WRAPPERS
-    clean_compiler_wrappers();
+# CLEAN PREVIOUS INSTALLATION ONLY IF BUILDING EVERYTHING
+if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_fftw) {
+    rmtree($ext_dir) if -d $ext_dir;
 }
+
+# DEFINE INSTALL PREFIX
+my $prefix = "$pwd/$ext_dir";
+
+# CREATE COMPILER WRAPPERS AND EXPORT ENVIRONMENT VARIABLES
+create_compiler_wrappers($target, $pwd);
+
+# COMPILE EACH PROGRAM
+compile_eigen   ($prefix, $cores,        $pwd) if    $build_eigen;
+compile_libint  ($prefix, $cores,        $pwd) if   $build_libint;
+compile_libxc   ($prefix, $cores, $host, $pwd) if    $build_libxc;
+compile_openblas($prefix, $cores,        $pwd) if $build_openblas;
+compile_fftw    ($prefix, $cores, $host, $pwd) if     $build_fftw;
+
+# REMOVE COMPILER WRAPPERS
+clean_compiler_wrappers();
 
 # CLEAN LIBRARIES
 rmtree("lib") if -d "lib";
