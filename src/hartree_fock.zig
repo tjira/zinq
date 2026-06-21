@@ -71,6 +71,14 @@ pub fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T)
             F.ptr(l, m).* += P.at(j, k) * ints.g.?.at(.{ j, l, k, m });
         };
 
+        if (pot.exx_coef > 0) {
+            const factor: T = if (generalized) 1 else 0.5;
+
+            for (0..ints.g.?.shape[0]) |i| for (0..ints.g.?.shape[1]) |j| for (0..ints.g.?.shape[2]) |k| for (0..ints.g.?.shape[3]) |l| {
+                F.ptr(k, l).* -= factor * pot.exx_coef * P.at(i, j) * ints.g.?.at(.{ i, j, k, l });
+            };
+        }
+
         try pot.evaluate(ints.sys, P, gpa);
 
         for (0..F.shape[0]) |j| for (0..F.shape[1]) |k| {

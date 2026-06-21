@@ -206,4 +206,35 @@ test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G
     try std.testing.expectApproxEqAbs(-75.3019962449716, hf.energy[0], TEST_TOLERANCE);
 }
 
+test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO-3G)" {
+    const opt = zinq.HartreeFockOptions{
+        .system = "example/molecule/water.xyz",
+        .basis = "example/basis/sto-3g.g94",
+        .dft = .{
+            .exchange_correlation = "hyb_gga_xc_b3lyp",
+        },
+        .gradient = false,
+    };
 
+    var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer hf.deinit(std.testing.allocator);
+
+    try std.testing.expectApproxEqAbs(-75.32009990219437, hf.energy[0], TEST_TOLERANCE);
+}
+
+test "Generalized Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO-3G)" {
+    const opt = zinq.HartreeFockOptions{
+        .system = "example/molecule/water.xyz",
+        .basis = "example/basis/sto-3g.g94",
+        .dft = .{
+            .exchange_correlation = "hyb_gga_xc_b3lyp",
+        },
+        .generalized = true,
+        .gradient = false,
+    };
+
+    var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer hf.deinit(std.testing.allocator);
+
+    try std.testing.expectApproxEqAbs(-75.32009990219433, hf.energy[0], TEST_TOLERANCE);
+}

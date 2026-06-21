@@ -30,6 +30,7 @@ pub fn DftPotential(comptime T: type) type {
         Exc: T = 0.000,
 
         polarized: bool,
+        exx_coef: T = 0,
 
         pub fn init(sys: MolecularSystem(T), funcs: anytype, n_rad: usize, n_leb: usize, polarized: bool, gpa: Allocator) !@This() {
             var grid = try (Becke(T){ .n_rad = n_rad, .n_leb = n_leb }).get(sys, gpa);
@@ -134,10 +135,22 @@ pub fn DftPotential(comptime T: type) type {
                 return error.NoFunctionalSpecified;
             }
 
+            var exx: T = 0.0;
+
+            if (exch_func) |*func| {
+                exx = @floatCast(libxc.xc_hyb_exx_coef(func));
+            }
+
+            if (exco_func) |*func| {
+                exx = @floatCast(libxc.xc_hyb_exx_coef(func));
+            }
+
             var Vxc = try Matrix(T).init(nbf, nbf, gpa);
             errdefer Vxc.deinit(gpa);
 
-            return .{ .exch = exch_func, .corr = corr_func, .exco = exco_func, .pts = grid[0], .wgh = grid[1], .Vxc = Vxc, .polarized = polarized };
+            const fcts = .{ exch_func, corr_func, exco_func };
+
+            return .{ .exch = fcts[0], .corr = fcts[1], .exco = fcts[2], .pts = grid[0], .wgh = grid[1], .Vxc = Vxc, .polarized = polarized, .exx_coef = exx };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -153,13 +166,17 @@ pub fn DftPotential(comptime T: type) type {
         pub fn evaluate(self: *@This(), sys: MolecularSystem(T), P: Matrix(T), gpa: Allocator) !void {
             self.Vxc.zero();
 
-            const is_exch_sgga = self.exch != null and self.exch.?.info.*.family == libxc.XC_FAMILY_GGA;
-            const is_corr_sgga = self.corr != null and self.corr.?.info.*.family == libxc.XC_FAMILY_GGA;
-            const is_exco_sgga = self.exco != null and self.exco.?.info.*.family == libxc.XC_FAMILY_GGA;
+            const exch_fam = if (self.exch) |func| func.info.*.family else null;
+            const corr_fam = if (self.corr) |func| func.info.*.family else null;
+            const exco_fam = if (self.exco) |func| func.info.*.family else null;
 
-            const is_exch_mgga = self.exch != null and self.exch.?.info.*.family == libxc.XC_FAMILY_MGGA;
-            const is_corr_mgga = self.corr != null and self.corr.?.info.*.family == libxc.XC_FAMILY_MGGA;
-            const is_exco_mgga = self.exco != null and self.exco.?.info.*.family == libxc.XC_FAMILY_MGGA;
+            const is_exch_sgga = self.exch != null and (exch_fam == libxc.XC_FAMILY_GGA or exch_fam == libxc.XC_FAMILY_HYB_GGA);
+            const is_corr_sgga = self.corr != null and (corr_fam == libxc.XC_FAMILY_GGA or corr_fam == libxc.XC_FAMILY_HYB_GGA);
+            const is_exco_sgga = self.exco != null and (exco_fam == libxc.XC_FAMILY_GGA or exco_fam == libxc.XC_FAMILY_HYB_GGA);
+
+            const is_exch_mgga = self.exch != null and (exch_fam == libxc.XC_FAMILY_MGGA or exch_fam == libxc.XC_FAMILY_HYB_MGGA);
+            const is_corr_mgga = self.corr != null and (corr_fam == libxc.XC_FAMILY_MGGA or corr_fam == libxc.XC_FAMILY_HYB_MGGA);
+            const is_exco_mgga = self.exco != null and (exco_fam == libxc.XC_FAMILY_MGGA or exco_fam == libxc.XC_FAMILY_HYB_MGGA);
 
             const has_sgga = is_exch_sgga or is_corr_sgga or is_exco_sgga;
             const has_mgga = is_exch_mgga or is_corr_mgga or is_exco_mgga;
@@ -733,15 +750,15 @@ fn XCOutput(comptime T: type) type {
 fn evaluateXCFunctional(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, polarized: bool, inp: XCInput(T)) void {
     if (primType(T) != f64) @compileError("FUNCTIONAL EVALUATION NOW ONLY SUPPORTS F64 NUMBERS");
 
-    if (func.info.*.family == libxc.XC_FAMILY_LDA) {
+    if (func.info.*.family == libxc.XC_FAMILY_LDA or func.info.*.family == libxc.XC_FAMILY_HYB_LDA) {
         return evaluateXCLDA(T, out, func, polarized, inp);
     }
 
-    if (func.info.*.family == libxc.XC_FAMILY_GGA) {
+    if (func.info.*.family == libxc.XC_FAMILY_GGA or func.info.*.family == libxc.XC_FAMILY_HYB_GGA) {
         return evaluateXCGGA(T, out, func, polarized, inp);
     }
 
-    if (func.info.*.family == libxc.XC_FAMILY_MGGA) {
+    if (func.info.*.family == libxc.XC_FAMILY_MGGA or func.info.*.family == libxc.XC_FAMILY_HYB_MGGA) {
         return evaluateXCMGGA(T, out, func, polarized, inp);
     }
 
