@@ -66,13 +66,9 @@ fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
 fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     const dirs = [_][]const u8{ "lib", "include", "include/eigen3" };
 
-    const triple, var archos: []const u8 = .{ try getTriple(b, module.resolved_target.?), undefined };
+    const triple = try getTriple(b, module.resolved_target.?);
 
-    if (std.mem.lastIndexOfScalar(u8, triple, '-')) |i| {
-        archos = triple[0..i];
-    }
-
-    const ext = try std.fmt.allocPrint(b.allocator, "external-{s}", .{archos});
+    const ext = try std.fmt.allocPrint(b.allocator, "external-{s}", .{triple});
 
     std.Io.Dir.cwd().access(b.graph.io, ext, .{}) catch |err| {
         if (err == error.FileNotFound) {

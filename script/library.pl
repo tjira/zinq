@@ -12,8 +12,8 @@ use Getopt::Long qw(GetOptions      );
 # DEFINE VARIABLES FOR BUILD OPTIONS
 my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw, $static);
 
-# DEFINE DEFAULT TARGET
-my $target = "x86_64-linux";
+# DEFINE DEFAULT TARGET AND HOST
+my $target = "x86_64-linux"; my $host = "x86_64-linux";
 
 # GET THE NUMBER OF CPU CORES
 my $cores = qx(nproc --all); chomp $cores; $cores ||= 1;
@@ -30,9 +30,6 @@ GetOptions(
     "static"   =>         \$static,
 );
 
-# REMOVE ANY EXISTING ABI SUFFIX FROM TARGET
-$target =~ s/-(gnu|musl)$//;
-
 # APPEND THE ABI TO TARGET BASED ON STATIC OR DYNAMIC REQUEST
 $target .= $static ? "-musl" : "-gnu";
 
@@ -41,22 +38,13 @@ if (!$build_eigen && !$build_libint && !$build_libxc && !$build_openblas && !$bu
     $build_eigen = $build_libint = $build_libxc = $build_openblas = $build_fftw = 1;
 }
 
-# HOST TRIPLE FOR CONFIGURING CROSS-COMPILE
-my $host = $target;
-
-# GET CURRENT WORKING DIRECTORY
-my $pwd = getcwd();
-
-# EXTRACT OS AND ARCH FROM TARGET TO NAME INSTALLATION DIRECTORY
-my $ext_dir = "external-" . ($target =~ /^([^-]+-[^-]+)/)[0];
+# GET CWD AND PREFIX
+my $pwd = getcwd(); my $prefix = "$pwd/external-$target";
 
 # CLEAN PREVIOUS INSTALLATION ONLY IF BUILDING EVERYTHING
 if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_fftw) {
-    rmtree($ext_dir) if -d $ext_dir;
+    rmtree($prefix) if -d $prefix;
 }
-
-# DEFINE INSTALL PREFIX
-my $prefix = "$pwd/$ext_dir";
 
 # CREATE COMPILER WRAPPERS AND EXPORT ENVIRONMENT VARIABLES
 create_compiler_wrappers($target, $pwd);
@@ -114,12 +102,15 @@ sub create_compiler_wrappers {
     # EXTRACT ARGUMENTS
     my ($target, $pwd) = @_;
 
+    # DEFINE ADDITIONAL TARGET FLAGS FOR COMPILERS
+    my $flags = "-Wl,-s -Wl,--gc-sections";
+
     # DEFINE WRAPPER CONTENTS
     my %wrappers = (
-        zigar     => "#!/usr/bin/env bash\n\nzig ar                      \"\$@\"\n",
-        zigcc     => "#!/usr/bin/env bash\n\nzig cc     --target=$target \"\$@\"\n",
-        zigcpp    => "#!/usr/bin/env bash\n\nzig c++    --target=$target \"\$@\"\n",
-        zigranlib => "#!/usr/bin/env bash\n\nzig ranlib                  \"\$@\"\n",
+        zigar     => "#!/usr/bin/env bash\n\nzig ar                             \"\$@\"\n",
+        zigcc     => "#!/usr/bin/env bash\n\nzig cc     --target=$target $flags \"\$@\"\n",
+        zigcpp    => "#!/usr/bin/env bash\n\nzig c++    --target=$target $flags \"\$@\"\n",
+        zigranlib => "#!/usr/bin/env bash\n\nzig ranlib                         \"\$@\"\n",
     );
 
     # LOOP OVER WRAPPERS
