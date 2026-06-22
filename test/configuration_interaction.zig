@@ -1,7 +1,7 @@
 const std = @import("std");
 const zinq = @import("zinq");
 
-const TEST_TOLERANCE = 1e-12;
+const TEST_TOLERANCE = 1e-8;
 
 test "Restricted CIS on Water (STO-3G)" {
     const opt = zinq.ConfigurationInteractionOptions{

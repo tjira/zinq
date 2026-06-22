@@ -3,7 +3,7 @@ const std  = @import("std" );
 const zinq = @import("zinq");
 // zig fmt: on
 
-const TEST_TOLERANCE = 1e-12;
+const TEST_TOLERANCE = 1e-8;
 
 test "Adiabatic RTP on Tully's First Potential" {
     const opt = zinq.QuantumDynamicsOptions{

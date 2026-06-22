@@ -110,7 +110,9 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     };
 
     for (libs) |lib| {
-        module.linkSystemLibrary(lib, .{});
+        const is_musl = module.resolved_target.?.result.abi == .musl;
+
+        module.linkSystemLibrary(lib, .{ .preferred_link_mode = if (is_musl) .static else .dynamic });
     }
 }
 
