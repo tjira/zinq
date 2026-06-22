@@ -275,7 +275,8 @@ sub compile_openblas {
         "NOFORTRAN=1",
         "NO_SHARED=1",
         "NUM_THREADS=128",
-        "PREFIX=$prefix"
+        "PREFIX=$prefix",
+        "TARGET=GENERIC"
     );
 
     # RUN MAKE

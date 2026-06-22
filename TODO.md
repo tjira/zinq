@@ -4,3 +4,6 @@
 - [x] Try to join the eval and evalDual methods into one method that can handle both cases.
 - [x] Implement better integrators for the FSSH coefficients.
 - [x] Generalize the Runge-Kutta integrators.
+- [ ] Use CPHF for MP2 gradients.
+- [ ] Implement gradients for DFT calculations.
+- [ ] Add ab initio potential to classical MD.
