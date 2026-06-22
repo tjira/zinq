@@ -103,7 +103,7 @@ sub create_compiler_wrappers {
     my ($target, $pwd) = @_;
 
     # DEFINE ADDITIONAL TARGET FLAGS FOR COMPILERS
-    my $flags = "-Wl,-s -Wl,--gc-sections";
+    my $flags = "-Wl,--gc-sections -Wl,--strip-debug";
 
     # DEFINE WRAPPER CONTENTS
     my %wrappers = (
