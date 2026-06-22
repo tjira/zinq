@@ -190,7 +190,7 @@ sub compile_eigen {
     system(@args) == 0 or die "EIGEN CONFIGURE FAILED";
 
     # INSTALL THE LIBRARY
-    system("cmake", "--install", "build", "--parallel", $cores, "--verbose") == 0 or die "EIGEN INSTALL FAILED";
+    system("cmake", "--install", "build", "--verbose") == 0 or die "EIGEN INSTALL FAILED";
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
