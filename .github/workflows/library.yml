@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  compile:
     name: ${{matrix.os}} / ${{matrix.target}}-${{matrix.suffix}}
     runs-on: ${{matrix.os}}
 
