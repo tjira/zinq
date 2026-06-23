@@ -37,6 +37,10 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
 
     const run_exe_zinq = b.addRunArtifact(exe_zinq);
 
+    if (b.args) |args| {
+        run_exe_zinq.addArgs(args);
+    }
+
     b.step("run", "Run the application").dependOn(&run_exe_zinq.step);
 
     return zinq_module;
