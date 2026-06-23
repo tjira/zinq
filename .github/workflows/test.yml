@@ -31,7 +31,7 @@ jobs:
             build_flags: "--release=small"
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2

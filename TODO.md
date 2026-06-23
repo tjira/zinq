@@ -7,3 +7,4 @@
 - [ ] Use CPHF for MP2 gradients.
 - [ ] Implement gradients for DFT calculations.
 - [ ] Add ab initio potential to classical MD.
+- [ ] Remove the library workflow and replace it with release.
