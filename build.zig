@@ -20,6 +20,12 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
 
     try linkDependencies(b, zinq_module);
 
+    const options = b.addOptions();
+
+    options.addOption([]const u8, "version", try getVersion(b));
+
+    zinq_module.addOptions("config", options);
+
     const exe_zinq = b.addExecutable(.{
         .name = "zinq",
         .root_module = zinq_module,
@@ -120,4 +126,35 @@ fn getTriple(b: *std.Build, target: std.Build.ResolvedTarget) ![]const u8 {
     const triple = .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), @tagName(target.result.abi) };
 
     return try std.fmt.allocPrint(b.allocator, "{s}-{s}-{s}", triple);
+}
+
+fn getVersion(b: *std.Build) ![]const u8 {
+    const command = .{ "git", "describe", "--tags" };
+
+    const args: std.process.RunOptions = .{ .argv = &command, .cwd = .{ .dir = std.Io.Dir.cwd() } };
+
+    const result = std.process.run(b.allocator, b.graph.io, args) catch {
+        return "UNKNOWN";
+    };
+
+    defer {
+        b.allocator.free(result.stdout);
+        b.allocator.free(result.stderr);
+    }
+
+    if (result.term.exited != 0) {
+        return "UNKNOWN";
+    }
+
+    const version = b.allocator.dupe(u8, std.mem.trim(u8, result.stdout, " \n\r\t")) catch return "UNKNOWN";
+
+    if (std.mem.indexOfScalar(u8, version, '-')) |i| {
+        version[i] = '+';
+
+        if (std.mem.indexOfScalarPos(u8, version, i + 1, '-')) |j| {
+            version[j] = '.';
+        }
+    }
+
+    return version;
 }

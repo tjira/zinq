@@ -1,3 +1,5 @@
+const builtin = @import("builtin");
+const config = @import("config");
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -36,19 +38,27 @@ const Options = struct {
 
 // INIT FUNCTIONS ======================================================================================================
 
-fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !std.json.Parsed(T) {
-    const fcontent = try std.Io.Dir.cwd().readFileAlloc(io, fname, arena, .unlimited);
+fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !?std.json.Parsed(T) {
+    const fcontent = std.Io.Dir.cwd().readFileAlloc(io, fname, arena, .unlimited) catch |err| {
+        if (err == error.FileNotFound) {
+            try printf(io, "\nINPUT FILE '{s}' NOT FOUND\n", .{fname});
+
+            return null;
+        }
+
+        return err;
+    };
 
     return try std.json.parseFromSlice(T, arena, fcontent, .{});
 }
 
 fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
-    const inputs = (try parse(Options, io, fname, arena)).value.zinq;
+    const parsed = try parse(Options, io, fname, arena) orelse return;
 
-    for (0..inputs.len) |i| {
+    for (0..parsed.value.zinq.len) |i| {
         try printf(io, "\nRUNNING TARGET: {s}/#{d}\n", .{ fname, i + 1 });
 
-        switch (inputs[i]) {
+        switch (parsed.value.zinq[i]) {
             inline else => |field, tag| {
                 var result = try @field(@This(), @tagName(tag) ++ "_run")(T, io, field, true, gpa);
                 defer result.deinit(gpa);
@@ -64,7 +74,11 @@ fn targets(args: []const []const u8) []const []const u8 {
 pub fn main(init: std.process.Init) !void {
     var timer = std.Io.Timestamp.now(init.io, .real);
 
-    try std.Io.File.stdout().writeStreamingAll(init.io, "ZINQ\n");
+    const v_major = builtin.zig_version.major;
+    const v_minor = builtin.zig_version.minor;
+    const v_patch = builtin.zig_version.patch;
+
+    try printf(init.io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}\n", .{ v_major, v_minor, v_patch, config.version });
 
     for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |e| {
         try run(f64, init.io, e, init.gpa, init.arena.allocator());

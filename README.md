@@ -56,6 +56,9 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 * **Post-Hartree–Fock Methods**  
   Use variety of selected perturbative or variational post-Hartree–Fock methods.
 
+* **Density Functional Theory**  
+  Use variety of exchange-correlation functionals for density functional theory calculations.
+
 ### Time-Dependent Quantum Mechanics
 
 * **Quantum Dynamics**  

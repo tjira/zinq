@@ -1,9 +1,6 @@
 name: Library
 
-on:
-  push:
-    branches:
-      - '*'
+on: workflow_dispatch
 
 permissions:
   contents: read

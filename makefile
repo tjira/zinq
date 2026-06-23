@@ -1,6 +1,6 @@
 DEBUG ?= 0
 
-.PHONY: all zinq run test clean
+.PHONY: all zinq run test
 
 all: zinq
 
@@ -12,6 +12,3 @@ run:
 
 test:
 	@zig build $(if $(filter 0,$(DEBUG)),--release=fast) test
-
-clean:
-	@git clean -dffx

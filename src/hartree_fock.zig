@@ -535,10 +535,6 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var e = try Vector(T).init(nbf, gpa);
     errdefer e.deinit(gpa);
 
-    if (log) {
-        try printf(io, "\nNUCLEAR REPULSION ENERGY: {d:.14} Eh\n", .{VN});
-    }
-
     var P_old = try Matrix(T).initZero(nbf, nbf, gpa);
     defer P_old.deinit(gpa);
 
@@ -697,6 +693,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     energy[0] = e_new;
+
+    if (log) {
+        try printf(io, "\nNUCLEAR REPULSION ENERGY: {d:.14} Eh\n", .{VN});
+    }
 
     if (log) if (dft) |*pot| {
         const names = try pot.getFunctionalNames(gpa);

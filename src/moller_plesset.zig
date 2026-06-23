@@ -182,7 +182,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         energy[0] += step_energy;
 
         if (log) {
-            try printf(io, "\nMP{d} TOTAL ENERGY: {d:.14}\n", .{ i, energy[0] });
+            try printf(io, "\nMP{d} TOTAL ENERGY: {d:.14} Eh\n", .{ i, energy[0] });
         }
 
         if (opt.gradient) {
