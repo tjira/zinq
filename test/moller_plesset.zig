@@ -10,7 +10,7 @@ test "Restricted MP2 on Water (STO-3G)" {
             .basis = "example/basis/sto-3g.g94",
         },
         .order = 2,
-        .gradient = true,
+        .gradient = .{ .analytic = .{} },
     };
 
     var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -18,9 +18,9 @@ test "Restricted MP2 on Water (STO-3G)" {
 
     // zig fmt: off
     const expected_grad = [_]f64{
-         0.0338122794133439,  0.0117126467140770,  0.0135239610741029,
-        -0.0195946586449228,  0.0081070984905233, -0.0121370677177705,
-        -0.0142176207684284, -0.0198197452045953, -0.0013868933563342,
+         0.0338613302971151,  0.0117296326295283,  0.0135435816121511,
+        -0.0195068891589080,  0.0075152397256791, -0.0119223300334759,
+        -0.0143544411382030, -0.0192448723551982, -0.0016212515786747,
     };
     // zig fmt: on
 
@@ -45,7 +45,7 @@ test "Generalized MP2 on Water (STO-3G)" {
             .generalized = true,
         },
         .order = 2,
-        .gradient = true,
+        .gradient = .{ .analytic = .{} },
     };
 
     var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -53,9 +53,9 @@ test "Generalized MP2 on Water (STO-3G)" {
 
     // zig fmt: off
     const expected_grad = [_]f64{
-         0.0338122794133231,  0.0117126467140746,  0.0135239610741036,
-        -0.0195946586449066,  0.0081070984905145, -0.0121370677177529,
-        -0.0142176207684237, -0.0198197452045824, -0.0013868933563335,
+         0.0338613302577487,  0.0117296326231899,  0.0135435815942967,
+        -0.0195068891388165,  0.0075152397035204, -0.0119223300170307,
+        -0.0143544411189378, -0.0192448723267111, -0.0016212515772662,
     };
     // zig fmt: on
 

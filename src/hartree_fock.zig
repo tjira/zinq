@@ -34,9 +34,17 @@ pub const Options = struct {
     write: Write = .{},
     diis: ?u32 = 8,
     generalized: bool = false,
-    gradient: bool = false,
-    iterations: usize = 100,
+    iterations: u32 = 100,
     threshold: f64 = 1e-8,
+
+    gradient: ?union(enum) {
+        analytic: struct {},
+    } = null,
+
+    response: ?struct {
+        iterations: u32 = 100,
+        threshold: f64 = 1e-8,
+    } = null,
 
     dft: ?struct {
         exchange: ?[]const u8 = null,
@@ -102,11 +110,11 @@ pub fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T)
     };
 }
 
-pub fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) void {
+pub fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) T {
     std.debug.assert(C.shape[0] == P.shape[0]);
     std.debug.assert(C.shape[1] == P.shape[1]);
 
-    const factor: T = if (generalized) 1 else 2;
+    const factor: T, var sum_sq_dp: T = .{ if (generalized) 1 else 2, 0 };
 
     for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
         var sum: T = 0;
@@ -115,16 +123,12 @@ pub fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, ge
             sum += factor * C.at(i, k) * C.at(j, k);
         }
 
+        sum_sq_dp += (sum - P.at(i, j)) * (sum - P.at(i, j));
+
         P.ptr(i, j).* = sum;
     };
-}
 
-pub fn getDensityAlloc(comptime T: type, C: Matrix(T), nocc: usize, generalized: bool, gpa: Allocator) !Matrix(T) {
-    var P = try Matrix(T).initZero(C.shape[0], C.shape[1], gpa);
-
-    getDensity(T, &P, C, nocc, generalized);
-
-    return P;
+    return @sqrt(sum_sq_dp / @as(T, @floatFromInt(P.shape[0] * P.shape[1])));
 }
 
 pub fn getEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), dft: ?*DftPotential(T)) T {
@@ -139,21 +143,6 @@ pub fn getEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T
     };
 
     return energy;
-}
-
-pub fn getDensRms(comptime T: type, P_old: Matrix(T), P_new: Matrix(T)) T {
-    std.debug.assert(P_old.shape[0] == P_new.shape[0]);
-    std.debug.assert(P_old.shape[1] == P_new.shape[1]);
-
-    var sum_sq_diff: T = 0;
-
-    for (0..P_old.shape[0]) |i| for (0..P_old.shape[1]) |j| {
-        const diff = P_new.at(i, j) - P_old.at(i, j);
-
-        sum_sq_diff += diff * diff;
-    };
-
-    return @sqrt(sum_sq_diff / @as(T, @floatFromInt(P_old.shape[0] * P_old.shape[1])));
 }
 
 // DIIS FUNCTIONS ======================================================================================================
@@ -330,20 +319,36 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
     return G;
 }
 
-pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Tensor(T, 3) {
-    const dS = ints.dS orelse unreachable;
-    const dH = ints.dH orelse unreachable;
-    const dg = ints.dg orelse unreachable;
+pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anytype, log: bool, gpa: Allocator) !struct { Tensor(T, 3), Matrix(T) } {
+    const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
 
-    const nbf = C.shape[0];
+    const dS = hfres.ints.dS orelse unreachable;
+    const dH = hfres.ints.dH orelse unreachable;
+    const dg = hfres.ints.dg orelse unreachable;
 
-    var dC = try Tensor(T, 3).initZero(.{ 3 * ints.sys.atoms.len, nbf, nbf }, gpa);
+    const C = hfres.C;
+    const P = hfres.P;
+    const e = hfres.e;
+
+    const nocc, const nbf = .{ if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2, C.shape[0] };
+
+    var dC = try Tensor(T, 3).initZero(.{ 3 * hfres.ints.sys.atoms.len, nbf, nbf }, gpa);
     errdefer dC.deinit(gpa);
 
-    const exch_factor: T = if (generalized) 1 else 0.5;
+    var de = try Matrix(T).initZero(3 * hfres.ints.sys.atoms.len, nbf, gpa);
+    errdefer de.deinit(gpa);
 
     var F_x = try Matrix(T).init(nbf, nbf, gpa);
     defer F_x.deinit(gpa);
+
+    var P_x = try Matrix(T).init(nbf, nbf, gpa);
+    defer P_x.deinit(gpa);
+
+    var U_x = try Matrix(T).init(nbf, nbf, gpa);
+    defer U_x.deinit(gpa);
+
+    var V_x = try Matrix(T).init(nbf, nbf, gpa);
+    defer V_x.deinit(gpa);
 
     var F_x_MO = try Matrix(T).init(nbf, nbf, gpa);
     defer F_x_MO.deinit(gpa);
@@ -351,97 +356,149 @@ pub fn gradientCoef(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matri
     var S_x_MO = try Matrix(T).init(nbf, nbf, gpa);
     defer S_x_MO.deinit(gpa);
 
-    var U_x = try Matrix(T).init(nbf, nbf, gpa);
-    defer U_x.deinit(gpa);
+    var V_x_MO = try Matrix(T).init(nbf, nbf, gpa);
+    defer V_x_MO.deinit(gpa);
 
-    for (0..3 * ints.sys.atoms.len) |p| {
+    var dC_x = try Matrix(T).init(nbf, nbf, gpa);
+    defer dC_x.deinit(gpa);
+
+    const exch_factor: T = if (generalized) 1 else 0.5;
+    const dens_factor: T = if (generalized) 1 else 2.0;
+
+    for (0..3 * hfres.ints.sys.atoms.len) |c| {
+        if (log) {
+            try printf(io, "\nSOLVING CPHF FOR COORDINATE {d}\n", .{c + 1});
+        }
+
+        if (log) {
+            try printf(io, "{s:4} {s:9} {s:9} {s:9}\n", .{ "ITER", "RMS(DU)", "RMS(DP)", "TIME" });
+        }
+
         F_x.zero();
-        U_x.zero();
 
-        for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* = dH.at(.{ p, k, l });
+        for (0..nbf) |i| for (0..nbf) |j| {
+            F_x.ptr(i, j).* = dH.at(.{ c, i, j });
         };
 
         for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ p, i, k, j, l }) - exch_factor * dg.at(.{ p, i, j, k, l }));
+            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ c, i, k, j, l }) - exch_factor * dg.at(.{ c, i, j, k, l }));
         };
 
-        for (0..nbf) |k| for (k + 1..nbf) |l| {
-            const avg = (F_x.at(k, l) + F_x.at(l, k)) / 2;
+        for (0..nbf) |i| for (i + 1..nbf) |j| {
+            const avg = (F_x.at(i, j) + F_x.at(j, i)) / 2;
 
-            F_x.ptr(k, l).* = avg;
-            F_x.ptr(l, k).* = avg;
+            F_x.ptr(i, j).* = avg;
+            F_x.ptr(j, i).* = avg;
         };
 
-        const S_x = Matrix(T){ .data = dS.data[p * nbf * nbf .. (p + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
+        const S_x = Matrix(T){ .data = dS.data[c * nbf * nbf .. (c + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
 
         ao2mo_pp(T, &F_x_MO, F_x, C);
         ao2mo_pp(T, &S_x_MO, S_x, C);
 
         for (0..nbf) |i| for (0..nbf) |j| {
-            const diff = e.at(j) - e.at(i);
-
-            U_x.ptr(i, j).* = if (@abs(diff) > 1e-12) (F_x_MO.at(i, j) - e.at(j) * S_x_MO.at(i, j)) / diff else -0.5 * S_x_MO.at(i, j);
+            U_x.ptr(i, j).* = -0.5 * S_x_MO.at(i, j);
         };
 
-        var dC_x = Matrix(T){ .data = dC.data[p * nbf * nbf .. (p + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
+        for (nocc..nbf) |a| for (0..nocc) |i| {
+            const diff = e.at(a) - e.at(i);
+
+            if (@abs(diff) > 1e-12) {
+                const u_ai = (e.at(i) * S_x_MO.at(a, i) - F_x_MO.at(a, i)) / diff;
+
+                U_x.ptr(a, i).*, U_x.ptr(i, a).* = .{ u_ai, -S_x_MO.at(i, a) - u_ai };
+            }
+        };
+
+        P_x.zero();
+
+        for (0..opt.iterations) |i| {
+            var timer = std.Io.Timestamp.now(io, .real);
+
+            mo2ao_xx(T, &dC_x, U_x, C);
+
+            V_x.zero();
+
+            var sum_sq_dp: T = 0;
+            var sum_sq_du: T = 0;
+
+            for (0..nbf) |mu| for (0..nbf) |nu| {
+                var sum: T = 0;
+
+                for (0..nocc) |j| {
+                    sum += dens_factor * (dC_x.at(mu, j) * C.at(nu, j) + C.at(mu, j) * dC_x.at(nu, j));
+                }
+
+                sum_sq_dp += (sum - P_x.at(mu, nu)) * (sum - P_x.at(mu, nu));
+
+                P_x.ptr(mu, nu).* = sum;
+            };
+
+            const rms_dp = @sqrt(sum_sq_dp / @as(T, @floatFromInt(nbf * nbf)));
+
+            for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
+                const g_mlns = hfres.ints.g.?.at(.{ mu, lambda, nu, sigma });
+                const g_mnls = hfres.ints.g.?.at(.{ mu, nu, lambda, sigma });
+
+                V_x.ptr(lambda, sigma).* += P_x.at(mu, nu) * (g_mlns - exch_factor * g_mnls);
+            };
+
+            ao2mo_pp(T, &V_x_MO, V_x, C);
+
+            for (nocc..nbf) |a| for (0..nocc) |j| {
+                const prev, const delta_e = .{ U_x.at(a, j), e.at(a) - e.at(j) };
+
+                U_x.ptr(a, j).* = if (@abs(delta_e) > 1e-12)
+                    (e.at(j) * S_x_MO.at(a, j) - F_x_MO.at(a, j) - V_x_MO.at(a, j)) / delta_e
+                else
+                    -0.5 * S_x_MO.at(a, j);
+
+                sum_sq_du += (U_x.at(a, j) - prev) * (U_x.at(a, j) - prev);
+            };
+
+            const rms_du = @sqrt(sum_sq_du / @as(T, @floatFromInt((nbf - nocc) * nocc)));
+
+            for (0..nocc) |j| for (nocc..nbf) |a| {
+                U_x.ptr(j, a).* = -S_x_MO.at(j, a) - U_x.at(a, j);
+            };
+
+            const elapsed = timer.untilNow(io, .real);
+
+            if (log) {
+                const fmt = "{d:4} {e:9.3} {e:9.3} {s}\n";
+
+                const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
+                defer gpa.free(time_str);
+
+                try printf(io, fmt, .{ i + 1, rms_du, rms_dp, time_str });
+            }
+
+            if (rms_du < opt.threshold and rms_dp < opt.threshold) {
+                break;
+            }
+        } else return error.CphfDidNotConverge;
+
+        for (0..nbf) |i| for (0..nbf) |j| {
+            const delta_e = e.at(j) - e.at(i);
+
+            U_x.ptr(i, j).* = if (@abs(delta_e) > 1e-12)
+                (F_x_MO.at(i, j) + V_x_MO.at(i, j) - e.at(j) * S_x_MO.at(i, j)) / delta_e
+            else
+                -0.5 * S_x_MO.at(i, j);
+        };
 
         mo2ao_xx(T, &dC_x, U_x, C);
-    }
 
-    return dC;
-}
-
-pub fn gradientOrben(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
-    const dS = ints.dS orelse unreachable;
-    const dH = ints.dH orelse unreachable;
-    const dg = ints.dg orelse unreachable;
-
-    const nbf = C.shape[0];
-
-    var de = try Matrix(T).initZero(3 * ints.sys.atoms.len, nbf, gpa);
-    errdefer de.deinit(gpa);
-
-    const exch_factor: T = if (generalized) 1.0 else 0.5;
-
-    var F_x = try Matrix(T).init(nbf, nbf, gpa);
-    defer F_x.deinit(gpa);
-
-    var F_x_MO = try Matrix(T).init(nbf, nbf, gpa);
-    defer F_x_MO.deinit(gpa);
-
-    var S_x_MO = try Matrix(T).init(nbf, nbf, gpa);
-    defer S_x_MO.deinit(gpa);
-
-    for (0..3 * ints.sys.atoms.len) |p| {
-        F_x.zero();
-
-        for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* = dH.at(.{ p, k, l });
+        for (0..nbf) |mu| for (0..nbf) |q| {
+            dC.ptr(.{ c, mu, q }).* = dC_x.at(mu, q);
         };
 
-        for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ p, i, k, j, l }) - exch_factor * dg.at(.{ p, i, j, k, l }));
-        };
-
-        for (0..nbf) |k| for (k + 1..nbf) |l| {
-            const avg = (F_x.at(k, l) + F_x.at(l, k)) / 2;
-
-            F_x.ptr(k, l).* = avg;
-            F_x.ptr(l, k).* = avg;
-        };
-
-        const S_x = Matrix(T){ .data = dS.data[p * nbf * nbf .. (p + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
-
-        ao2mo_pp(T, &F_x_MO, F_x, C);
-        ao2mo_pp(T, &S_x_MO, S_x, C);
-
-        for (0..nbf) |i| {
-            de.ptr(p, i).* = F_x_MO.at(i, i) - e.at(i) * S_x_MO.at(i, i);
+        for (0..nbf) |q| {
+            de.ptr(c, q).* = F_x_MO.at(q, q) + V_x_MO.at(q, q) - S_x_MO.at(q, q) * e.at(q);
         }
     }
 
-    return de;
+    return .{ dC, de };
 }
 
 // RESULT STRUCT =======================================================================================================
@@ -459,6 +516,10 @@ pub fn Result(comptime T: type) type {
 
         gradient: []Matrix(T) = &.{},
 
+        dC: ?Tensor(T, 3) = null,
+
+        de: ?Matrix(T) = null,
+
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.ints.deinit(gpa);
 
@@ -474,6 +535,10 @@ pub fn Result(comptime T: type) type {
             }
 
             gpa.free(self.gradient);
+
+            if (self.dC) |*dC| dC.deinit(gpa);
+
+            if (self.de) |*de| de.deinit(gpa);
         }
     };
 }
@@ -481,7 +546,7 @@ pub fn Result(comptime T: type) type {
 // RUN =================================================================================================================
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
-    if (opt.dft != null and opt.gradient) {
+    if (opt.dft != null and opt.gradient != null) {
         return error.DftGradientNotSupported;
     }
 
@@ -490,11 +555,11 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         .basis = opt.basis,
         .spin = opt.generalized,
         .calculate = .{
-            .kinetic_d1 = opt.gradient,
-            .overlap_d1 = opt.gradient,
-            .coulomb_d1 = opt.gradient,
-            .nuclear_d1 = opt.gradient,
-            .hmatrix_d1 = opt.gradient,
+            .kinetic_d1 = opt.gradient != null,
+            .overlap_d1 = opt.gradient != null,
+            .coulomb_d1 = opt.gradient != null,
+            .nuclear_d1 = opt.gradient != null,
+            .hmatrix_d1 = opt.gradient != null,
         },
     };
 
@@ -504,8 +569,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var energy = try gpa.alloc(T, 1);
     errdefer gpa.free(energy);
 
-    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) 1 else 0);
-    errdefer if (opt.gradient) gpa.free(grad);
+    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
+    errdefer if (opt.gradient) |_| gpa.free(grad);
 
     const VN = try ints.sys.nrep();
 
@@ -529,17 +594,14 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var C = try Matrix(T).init(nbf, nbf, gpa);
     errdefer C.deinit(gpa);
 
+    var P = try Matrix(T).initZero(nbf, nbf, gpa);
+    errdefer P.deinit(gpa);
+
     var F = try Matrix(T).init(nbf, nbf, gpa);
     errdefer F.deinit(gpa);
 
     var e = try Vector(T).init(nbf, gpa);
     errdefer e.deinit(gpa);
-
-    var P_old = try Matrix(T).initZero(nbf, nbf, gpa);
-    defer P_old.deinit(gpa);
-
-    var P_new = try Matrix(T).initZero(nbf, nbf, gpa);
-    errdefer P_new.deinit(gpa);
 
     var e_old: T = VN;
     var e_new: T = VN;
@@ -563,7 +625,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
         try geigh(T, &e, &C, ints.H.?, &B);
 
-        getDensity(T, &P_old, C, nocc, opt.generalized);
+        _ = getDensity(T, &P, C, nocc, opt.generalized);
     }
 
     if (opt.iterations > 0 and log) {
@@ -592,15 +654,15 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         var timer = std.Io.Timestamp.now(io, .real);
 
         if (dft) |*pot| {
-            try getFock(T, &F, ints, P_old, opt.generalized, pot, gpa);
+            try getFock(T, &F, ints, P, opt.generalized, pot, gpa);
 
-            e_new = getEnergy(T, ints, F, P_old, pot) + VN;
+            e_new = getEnergy(T, ints, F, P, pot) + VN;
         }
 
         if (dft == null) {
-            try getFock(T, &F, ints, P_old, opt.generalized, null, gpa);
+            try getFock(T, &F, ints, P, opt.generalized, null, gpa);
 
-            e_new = getEnergy(T, ints, F, P_old, null) + VN;
+            e_new = getEnergy(T, ints, F, P, null) + VN;
         }
 
         if (opt.diis != null and opt.diis.? > 0) {
@@ -617,7 +679,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
                 f_diis.ptr(j, k).* = F.at(j, k);
             };
 
-            try getError(T, &e_diis, F, P_old, ints.S.?, gpa);
+            try getError(T, &e_diis, F, P, ints.S.?, gpa);
 
             if (fck_hist.items.len >= opt.diis.?) {
                 var old_f = fck_hist.orderedRemove(0);
@@ -650,7 +712,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
                     f_retry.ptr(j, k).* = F.at(j, k);
                 };
 
-                try getError(T, &e_retry, F, P_old, ints.S.?, gpa);
+                try getError(T, &e_retry, F, P, ints.S.?, gpa);
 
                 fck_hist.appendAssumeCapacity(f_retry);
                 err_hist.appendAssumeCapacity(e_retry);
@@ -661,9 +723,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
         try geigh(T, &e, &C, F, &B);
 
-        getDensity(T, &P_new, C, nocc, opt.generalized);
+        const p_rm = getDensity(T, &P, C, nocc, opt.generalized);
 
-        const p_rm = getDensRms(T, P_old, P_new);
         const delta_energy = @abs(e_new - e_old);
 
         const elapsed = timer.untilNow(io, .real);
@@ -679,18 +740,12 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             try printf(io, fmt, .{ i + 1, e_new, de, p_rm, time_str, if (err_hist.items.len >= 2) "DIIS" else "" });
         }
 
-        @memcpy(P_old.data, P_new.data);
-
         e_old = e_new;
 
         if (i > 0 and delta_energy < opt.threshold and p_rm < opt.threshold) {
             break;
         }
-
-        if (i == opt.iterations - 1) {
-            return error.ScfDidNotConverge;
-        }
-    }
+    } else return error.ScfDidNotConverge;
 
     energy[0] = e_new;
 
@@ -714,19 +769,19 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     if (opt.write.density) |fname| {
-        try writeMatrix(T, io, fname, P_new);
+        try writeMatrix(T, io, fname, P);
     }
 
     if (opt.write.fock) |fname| {
         try writeMatrix(T, io, fname, F);
     }
 
-    if (opt.gradient) {
-        grad[0] = try gradient(T, ints, C, P_new, e, opt.generalized, gpa);
+    if (opt.gradient) |_| {
+        grad[0] = try gradient(T, ints, C, P, e, opt.generalized, gpa);
     }
 
     errdefer {
-        if (opt.gradient) grad[0].deinit(gpa);
+        if (opt.gradient) |_| grad[0].deinit(gpa);
     }
 
     if (log) for (0..grad.len) |i| {
@@ -737,5 +792,11 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         };
     };
 
-    return Result(T){ .ints = ints, .P = P_new, .C = C, .F = F, .e = e, .energy = energy, .gradient = grad };
+    var result: Result(T) = .{ .ints = ints, .P = P, .C = C, .F = F, .e = e, .energy = energy, .gradient = grad };
+
+    if (opt.response) |response| {
+        result.dC, result.de = try orbitalResponse(T, io, result, response, log, gpa);
+    }
+
+    return result;
 }

@@ -10,8 +10,7 @@ const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_oovv = @import("integral_transform.zig").ao2mo_oovv;
 const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
-const gradientCoef = @import("hartree_fock.zig").gradientCoef;
-const gradientOrben = @import("hartree_fock.zig").gradientOrben;
+const gradientResponse = @import("hartree_fock.zig").gradientResponse;
 const hartree_fock_run = @import("hartree_fock.zig").run;
 const printf = @import("read_write.zig").printf;
 
@@ -26,7 +25,10 @@ pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
     order: u32 = 2,
-    gradient: bool = false,
+
+    gradient: ?union(enum) {
+        analytic: struct {},
+    } = null,
 };
 
 // MOLLER-PLESSET FUNCTIONS ============================================================================================
@@ -74,17 +76,11 @@ pub fn mp2(comptime T: type, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: 
     return (if (generalized) energy.muls(0.25) else energy).val;
 }
 
-pub fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), generalized: bool, gpa: Allocator) !Matrix(T) {
-    const nbf = hfres.C.shape[0];
+pub fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Allocator) !Matrix(T) {
+    const nbf, const generalized = .{ hfres.C.shape[0], hfres.ints.sys.nbf != hfres.C.shape[0] };
 
     var G = try Matrix(T).initZero(hfres.ints.sys.atoms.len, 3, gpa);
     errdefer G.deinit(gpa);
-
-    var dC = try gradientCoef(T, hfres.ints, hfres.C, hfres.P, hfres.e, generalized, gpa);
-    defer dC.deinit(gpa);
-
-    var de = try gradientOrben(T, hfres.ints, hfres.C, hfres.P, hfres.e, generalized, gpa);
-    defer de.deinit(gpa);
 
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
 
@@ -93,14 +89,14 @@ pub fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gen
         defer C_d.deinit(gpa);
 
         for (0..nbf) |mu| for (0..nbf) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C.at(mu, p), dC.at(.{ i, mu, p }));
+            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C.at(mu, p), hfres.dC.?.at(.{ i, mu, p }));
         };
 
         var e_d = try Vector(ScalarDual(T)).init(nbf, gpa);
         defer e_d.deinit(gpa);
 
         for (0..nbf) |j| {
-            e_d.ptr(j).* = ScalarDual(T).init(hfres.e.at(j), de.at(i, j));
+            e_d.ptr(j).* = ScalarDual(T).init(hfres.e.at(j), hfres.de.?.at(i, j));
         }
 
         var g_d = try Tensor(ScalarDual(T), 4).init(hfres.ints.g.?.shape, gpa);
@@ -151,8 +147,12 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     var hf_opt = opt.hartree_fock;
 
-    if (opt.gradient) {
-        hf_opt.gradient = true;
+    if (opt.gradient != null) {
+        hf_opt.gradient = .{ .analytic = .{} };
+    }
+
+    if (hf_opt.response == null) {
+        hf_opt.response = .{};
     }
 
     var hfres = try hartree_fock_run(T, io, hf_opt, log, gpa);
@@ -161,17 +161,17 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var energy = try gpa.alloc(T, 1);
     errdefer gpa.free(energy);
 
-    const grad = try gpa.alloc(Matrix(T), if (opt.gradient) 1 else 0);
-    errdefer if (opt.gradient) gpa.free(grad);
+    const grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
+    errdefer if (opt.gradient) |_| gpa.free(grad);
 
     energy[0] = hfres.energy[0];
 
-    if (opt.gradient) {
+    if (opt.gradient) |_| {
         grad[0] = try hfres.gradient[0].clone(gpa);
     }
 
     errdefer {
-        if (opt.gradient) grad[0].deinit(gpa);
+        if (opt.gradient) |_| grad[0].deinit(gpa);
     }
 
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
@@ -185,8 +185,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             try printf(io, "\nMP{d} TOTAL ENERGY: {d:.14} Eh\n", .{ i, energy[0] });
         }
 
-        if (opt.gradient) {
-            var step_grad = try gradient(T, i, hfres, generalized, gpa);
+        if (opt.gradient) |_| {
+            var step_grad = try gradient(T, i, hfres, gpa);
             defer step_grad.deinit(gpa);
 
             for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {

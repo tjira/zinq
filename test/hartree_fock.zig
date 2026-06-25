@@ -7,7 +7,7 @@ test "Restricted Hartree-Fock on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
         .basis = "example/basis/sto-3g.g94",
-        .gradient = true,
+        .gradient = .{ .analytic = .{} },
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -39,7 +39,7 @@ test "Generalized Hartree-Fock on Water (STO-3G)" {
         .system = "example/molecule/water.xyz",
         .basis = "example/basis/sto-3g.g94",
         .generalized = true,
-        .gradient = true,
+        .gradient = .{ .analytic = .{} },
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -74,7 +74,7 @@ test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
             .exchange = "lda_x",
             .correlation = "lda_c_vwn",
         },
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -92,7 +92,7 @@ test "Generalized Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
             .correlation = "lda_c_vwn",
         },
         .generalized = true,
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -109,7 +109,7 @@ test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
             .exchange = "gga_x_pbe",
             .correlation = "gga_c_pbe",
         },
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -127,7 +127,7 @@ test "Generalized Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
             .correlation = "gga_c_pbe",
         },
         .generalized = true,
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -144,7 +144,7 @@ test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G)
             .exchange = "mgga_x_tpss",
             .correlation = "mgga_c_tpss",
         },
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -162,7 +162,7 @@ test "Generalized Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G
             .correlation = "mgga_c_tpss",
         },
         .generalized = true,
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -179,7 +179,7 @@ test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G)
             .exchange = "mgga_x_scan",
             .correlation = "mgga_c_scan",
         },
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -197,7 +197,7 @@ test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G
             .correlation = "mgga_c_scan",
         },
         .generalized = true,
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -213,7 +213,7 @@ test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO-
         .dft = .{
             .exchange_correlation = "hyb_gga_xc_b3lyp",
         },
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
@@ -230,7 +230,7 @@ test "Generalized Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO
             .exchange_correlation = "hyb_gga_xc_b3lyp",
         },
         .generalized = true,
-        .gradient = false,
+        .gradient = null,
     };
 
     var hf = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
