@@ -7,10 +7,11 @@
 - [x] Use CPHF for MP2 gradients.
 - [ ] Implement gradients for DFT calculations.
 - [ ] Add ab initio potential to classical MD.
-- [ ] Add spectrum calculation to the QD code.
+- [x] Add spectrum calculation to the QD code.
 - [ ] Add complex absorbing potential to the QD code.
 - [ ] Implement adbitrary order Moller-Plesset perturbation theory.
 - [ ] Implement gradients for the CI methods.
 - [ ] Print version of all the libraries at the beginning of the output.
 - [ ] Add citations from the XC library to the output.
 - [x] Add the docs target.
+- [ ] Move the gauge fixing from FSSH sctruct to the potential calculation.
