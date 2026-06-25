@@ -27,6 +27,9 @@ jobs:
         with:
           ruby-version: 3.4
 
+      - name: Compile Libraries
+        run: ./script/library.pl
+
       - name: Compile Code Documentation
         run: zig build docs
 
