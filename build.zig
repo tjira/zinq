@@ -18,6 +18,8 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
         .link_libcpp = true,
     });
 
+    const docs = b.addLibrary(.{ .name = "main", .root_module = zinq_module }).getEmittedDocs();
+
     try linkDependencies(b, zinq_module);
 
     const options = b.addOptions();
@@ -48,6 +50,10 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
     }
 
     b.step("run", "Run the application").dependOn(&run_exe_zinq.step);
+
+    const docs_zinq = b.addInstallDirectory(.{ .source_dir = docs, .install_dir = .prefix, .install_subdir = "../docs/code" });
+
+    b.step("docs", "Generate documentation").dependOn(&docs_zinq.step);
 
     return zinq_module;
 }
