@@ -44,6 +44,7 @@ pub const Options = struct {
     response: ?struct {
         iterations: u32 = 100,
         threshold: f64 = 1e-8,
+        diis: ?u32 = 8,
     } = null,
 
     dft: ?struct {
@@ -190,7 +191,7 @@ pub fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S
     };
 }
 
-pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), gpa: Allocator) !void {
+pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
     if (fck_hist.len < 2) return;
 
     var B = try Matrix(T).initZero(fck_hist.len + 1, fck_hist.len + 1, gpa);
@@ -240,7 +241,7 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
         F.ptr(j, k).* += c.at(i, 0) * fck_hist[i].at(j, k);
     };
 
-    for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
+    if (symmetric) for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
         const avg = (F.at(i, j) + F.at(j, i)) / 2;
 
         F.ptr(i, j).* = avg;
@@ -319,7 +320,7 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
     return G;
 }
 
-pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anytype, log: bool, gpa: Allocator) !struct { Tensor(T, 3), Matrix(T) } {
+pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T), hfres: Result(T), opt: anytype, log: bool, gpa: Allocator) !void {
     const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
 
     const dS = hfres.ints.dS orelse unreachable;
@@ -332,12 +333,6 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anyt
 
     const nocc, const nbf = .{ if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2, C.shape[0] };
 
-    var dC = try Tensor(T, 3).initZero(.{ 3 * hfres.ints.sys.atoms.len, nbf, nbf }, gpa);
-    errdefer dC.deinit(gpa);
-
-    var de = try Matrix(T).initZero(3 * hfres.ints.sys.atoms.len, nbf, gpa);
-    errdefer de.deinit(gpa);
-
     var F_x = try Matrix(T).init(nbf, nbf, gpa);
     defer F_x.deinit(gpa);
 
@@ -346,6 +341,9 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anyt
 
     var U_x = try Matrix(T).init(nbf, nbf, gpa);
     defer U_x.deinit(gpa);
+
+    var U_p = try Matrix(T).init(nbf, nbf, gpa);
+    defer U_p.deinit(gpa);
 
     var V_x = try Matrix(T).init(nbf, nbf, gpa);
     defer V_x.deinit(gpa);
@@ -372,6 +370,22 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anyt
 
         if (log) {
             try printf(io, "{s:4} {s:9} {s:9} {s:9}\n", .{ "ITER", "RMS(DU)", "RMS(DP)", "TIME" });
+        }
+
+        var uxm_hist = std.ArrayList(Matrix(T)).empty;
+
+        defer {
+            for (0..uxm_hist.items.len) |i| uxm_hist.items[i].deinit(gpa);
+
+            uxm_hist.deinit(gpa);
+        }
+
+        var err_hist = std.ArrayList(Matrix(T)).empty;
+
+        defer {
+            for (0..err_hist.items.len) |i| err_hist.items[i].deinit(gpa);
+
+            err_hist.deinit(gpa);
         }
 
         F_x.zero();
@@ -415,6 +429,10 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anyt
         for (0..opt.iterations) |i| {
             var timer = std.Io.Timestamp.now(io, .real);
 
+            if (opt.diis != null and opt.diis.? > 0) for (0..nbf) |j| for (0..nbf) |k| {
+                U_p.ptr(j, k).* = U_x.at(j, k);
+            };
+
             mo2ao_xx(T, &dC_x, U_x, C);
 
             V_x.zero();
@@ -448,10 +466,11 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anyt
             for (nocc..nbf) |a| for (0..nocc) |j| {
                 const prev, const delta_e = .{ U_x.at(a, j), e.at(a) - e.at(j) };
 
-                U_x.ptr(a, j).* = if (@abs(delta_e) > 1e-12)
-                    (e.at(j) * S_x_MO.at(a, j) - F_x_MO.at(a, j) - V_x_MO.at(a, j)) / delta_e
-                else
-                    -0.5 * S_x_MO.at(a, j);
+                const f = F_x_MO.at(a, j);
+                const v = V_x_MO.at(a, j);
+                const s = S_x_MO.at(a, j);
+
+                U_x.ptr(a, j).* = if (@abs(delta_e) > 1e-12) (e.at(j) * s - f - v) / delta_e else -0.5 * s;
 
                 sum_sq_du += (U_x.at(a, j) - prev) * (U_x.at(a, j) - prev);
             };
@@ -462,15 +481,72 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anyt
                 U_x.ptr(j, a).* = -S_x_MO.at(j, a) - U_x.at(a, j);
             };
 
+            if (opt.diis != null and opt.diis.? > 0) {
+                try uxm_hist.ensureUnusedCapacity(gpa, 1);
+                try err_hist.ensureUnusedCapacity(gpa, 1);
+
+                var u_diis_opt: ?Matrix(T) = try Matrix(T).init(nbf, nbf, gpa);
+                errdefer if (u_diis_opt) |*m| m.deinit(gpa);
+
+                var e_diis_opt: ?Matrix(T) = try Matrix(T).init(nbf, nbf, gpa);
+                errdefer if (e_diis_opt) |*m| m.deinit(gpa);
+
+                for (0..nbf) |j| for (0..nbf) |k| {
+                    u_diis_opt.?.ptr(j, k).* = U_x.at(j, k);
+                    e_diis_opt.?.ptr(j, k).* = U_x.at(j, k) - U_p.at(j, k);
+                };
+
+                if (uxm_hist.items.len >= opt.diis.?) {
+                    var old_u = uxm_hist.orderedRemove(0);
+                    var old_e = err_hist.orderedRemove(0);
+
+                    old_u.deinit(gpa);
+                    old_e.deinit(gpa);
+                }
+
+                uxm_hist.appendAssumeCapacity(u_diis_opt.?);
+                err_hist.appendAssumeCapacity(e_diis_opt.?);
+
+                diis(T, uxm_hist.items, err_hist.items, &U_x, false, gpa) catch {
+                    var u_retry = try Matrix(T).init(nbf, nbf, gpa);
+                    errdefer u_retry.deinit(gpa);
+
+                    var e_retry = try Matrix(T).init(nbf, nbf, gpa);
+                    errdefer e_retry.deinit(gpa);
+
+                    @memcpy(u_retry.data, U_x.data);
+
+                    for (0..nbf) |j| for (0..nbf) |k| {
+                        e_retry.ptr(j, k).* = err_hist.items[err_hist.items.len - 1].at(j, k);
+                    };
+
+                    for (0..uxm_hist.items.len) |j| uxm_hist.items[j].deinit(gpa);
+                    for (0..err_hist.items.len) |j| err_hist.items[j].deinit(gpa);
+
+                    uxm_hist.clearRetainingCapacity();
+                    err_hist.clearRetainingCapacity();
+
+                    try uxm_hist.ensureUnusedCapacity(gpa, 1);
+                    try err_hist.ensureUnusedCapacity(gpa, 1);
+
+                    uxm_hist.appendAssumeCapacity(u_retry);
+                    err_hist.appendAssumeCapacity(e_retry);
+                };
+
+                for (0..nocc) |j| for (nocc..nbf) |a| {
+                    U_x.ptr(j, a).* = -S_x_MO.at(j, a) - U_x.at(a, j);
+                };
+            }
+
             const elapsed = timer.untilNow(io, .real);
 
             if (log) {
-                const fmt = "{d:4} {e:9.3} {e:9.3} {s}\n";
+                const fmt = "{d:4} {e:9.3} {e:9.3} {s:9} {s}\n";
 
                 const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
                 defer gpa.free(time_str);
 
-                try printf(io, fmt, .{ i + 1, rms_du, rms_dp, time_str });
+                try printf(io, fmt, .{ i + 1, rms_du, rms_dp, time_str, if (err_hist.items.len >= 2) "DIIS" else "" });
             }
 
             if (rms_du < opt.threshold and rms_dp < opt.threshold) {
@@ -481,10 +557,11 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anyt
         for (0..nbf) |i| for (0..nbf) |j| {
             const delta_e = e.at(j) - e.at(i);
 
-            U_x.ptr(i, j).* = if (@abs(delta_e) > 1e-12)
-                (F_x_MO.at(i, j) + V_x_MO.at(i, j) - e.at(j) * S_x_MO.at(i, j)) / delta_e
-            else
-                -0.5 * S_x_MO.at(i, j);
+            const f = F_x_MO.at(i, j);
+            const v = V_x_MO.at(i, j);
+            const s = S_x_MO.at(i, j);
+
+            U_x.ptr(i, j).* = if (@abs(delta_e) > 1e-12) (f + v - e.at(j) * s) / delta_e else -0.5 * s;
         };
 
         mo2ao_xx(T, &dC_x, U_x, C);
@@ -497,6 +574,18 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anyt
             de.ptr(c, q).* = F_x_MO.at(q, q) + V_x_MO.at(q, q) - S_x_MO.at(q, q) * e.at(q);
         }
     }
+}
+
+pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: Result(T), opt: anytype, log: bool, gpa: Allocator) !struct { Tensor(T, 3), Matrix(T) } {
+    const nbf = hfres.C.shape[0];
+
+    var dC = try Tensor(T, 3).initZero(.{ 3 * hfres.ints.sys.atoms.len, nbf, nbf }, gpa);
+    errdefer dC.deinit(gpa);
+
+    var de = try Matrix(T).initZero(3 * hfres.ints.sys.atoms.len, nbf, gpa);
+    errdefer de.deinit(gpa);
+
+    try solveCPHF(T, io, &dC, &de, hfres, opt, log, gpa);
 
     return .{ dC, de };
 }
@@ -692,7 +781,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             fck_hist.appendAssumeCapacity(f_diis);
             err_hist.appendAssumeCapacity(e_diis);
 
-            diis(T, fck_hist.items, err_hist.items, &F, gpa) catch {
+            diis(T, fck_hist.items, err_hist.items, &F, true, gpa) catch {
                 for (0..fck_hist.items.len) |j| fck_hist.items[j].deinit(gpa);
                 for (0..err_hist.items.len) |j| err_hist.items[j].deinit(gpa);
 

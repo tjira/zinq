@@ -149,10 +149,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (opt.gradient != null) {
         hf_opt.gradient = .{ .analytic = .{} };
-    }
 
-    if (hf_opt.response == null) {
-        hf_opt.response = .{};
+        if (hf_opt.response == null) {
+            hf_opt.response = .{};
+        }
     }
 
     var hfres = try hartree_fock_run(T, io, hf_opt, log, gpa);
@@ -192,14 +192,14 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
                 grad[0].ptr(j, k).* += step_grad.at(j, k);
             };
-        }
 
-        if (log) {
-            try printf(io, "\nMP{d} NUCLEAR ENERGY GRADIENT\n", .{i});
+            if (log) {
+                try printf(io, "\nMP{d} NUCLEAR ENERGY GRADIENT\n", .{i});
 
-            for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-                try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
-            };
+                for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
+                    try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
+                };
+            }
         }
     }
 
