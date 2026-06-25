@@ -8,10 +8,10 @@
 - [ ] Implement gradients for DFT calculations.
 - [ ] Add ab initio potential to classical MD.
 - [x] Add spectrum calculation to the QD code.
-- [ ] Add complex absorbing potential to the QD code.
-- [ ] Implement adbitrary order Moller-Plesset perturbation theory.
+- [x] Add complex absorbing potential to the QD code.
+- [ ] Implement arbitrary order Moller-Plesset perturbation theory.
 - [ ] Implement gradients for the CI methods.
 - [ ] Print version of all the libraries at the beginning of the output.
 - [ ] Add citations from the XC library to the output.
 - [x] Add the docs target.
-- [ ] Move the gauge fixing from FSSH sctruct to the potential calculation.
+- [ ] Add population tracking so that the CAP would not eat the population of the wavefunction.

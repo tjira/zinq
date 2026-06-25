@@ -32,20 +32,11 @@ pub const Options = struct {
     basis: []const u8,
 
     write: Write = .{},
+
     diis: ?u32 = 8,
     generalized: bool = false,
     iterations: u32 = 100,
     threshold: f64 = 1e-8,
-
-    gradient: ?union(enum) {
-        analytic: struct {},
-    } = null,
-
-    response: ?struct {
-        iterations: u32 = 100,
-        threshold: f64 = 1e-8,
-        diis: ?u32 = 8,
-    } = null,
 
     dft: ?struct {
         exchange: ?[]const u8 = null,
@@ -56,6 +47,16 @@ pub const Options = struct {
             radial: usize = 50,
             angular: usize = 302,
         } = .{},
+    } = null,
+
+    gradient: ?union(enum) {
+        analytic: struct {},
+    } = null,
+
+    response: ?struct {
+        iterations: u32 = 100,
+        threshold: f64 = 1e-8,
+        diis: ?u32 = 8,
     } = null,
 };
 // HARTREE-FOCK FUNCTIONS ==============================================================================================

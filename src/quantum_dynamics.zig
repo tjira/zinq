@@ -27,20 +27,6 @@ const InitialConditions = struct {
     adiabatic: bool = false,
 };
 
-const Imaginary = struct {
-    nstate: u32 = 1,
-};
-
-const Spectrum = struct {
-    padding: u32 = 0,
-    threshold: f64 = 1e-6,
-
-    write: struct {
-        acf: ?[]const u8 = null,
-        spectrum: ?[]const u8 = null,
-    } = .{},
-};
-
 const Write = struct {
     acf: ?[]const u8 = null,
     kinetic_energy: ?[]const u8 = null,
@@ -54,15 +40,6 @@ const Write = struct {
 };
 
 pub const Options = struct {
-    const FftOpt = struct {
-        plan: enum { estimate, measure, patient, exhaustive } = .measure,
-    };
-    const GridOpt = struct {
-        bounds: []const [2]f64,
-        npoint: u32,
-    };
-
-    grid: GridOpt,
     initial_conditions: InitialConditions,
     potential: PotentialOptions,
 
@@ -70,13 +47,38 @@ pub const Options = struct {
     iterations: u32,
     mass: f64,
 
-    fft: FftOpt = .{},
-    imaginary: ?Imaginary = null,
-    spectrum: ?Spectrum = null,
     write: Write = .{},
 
     adiabatic: bool = false,
     log_interval: u32 = 1,
+
+    absorbing_potential: ?struct {
+        bounds: []const [2]f64,
+        exponent: f64 = 0.001,
+    } = null,
+
+    fft: struct {
+        plan: enum { estimate, measure, patient, exhaustive } = .measure,
+    } = .{},
+
+    grid: struct {
+        bounds: []const [2]f64,
+        npoint: u32,
+    },
+
+    imaginary: ?struct {
+        nstate: u32 = 1,
+    } = null,
+
+    spectrum: ?struct {
+        padding: u32 = 0,
+        threshold: f64 = 1e-6,
+
+        write: struct {
+            acf: ?[]const u8 = null,
+            spectrum: ?[]const u8 = null,
+        } = .{},
+    } = null,
 };
 
 // GRID ================================================================================================================
@@ -428,6 +430,18 @@ fn Hamiltonian(comptime T: type) type {
             pot.evalBatch(T, &self.V, grid.r, t);
 
             try eighBatch(T, &self.W, &self.U, self.V);
+
+            if (grid.r.ncol() == 1) for (1..grid.r.nrow()) |i| for (0..pot.nstate()) |j| {
+                var overlap: T = 0;
+
+                for (0..pot.nstate()) |k| {
+                    overlap += self.U.at(i, k * pot.nstate() + j) * self.U.at(i - 1, k * pot.nstate() + j);
+                }
+
+                if (overlap < 0) for (0..pot.nstate()) |k| {
+                    self.U.ptr(i, k * pot.nstate() + j).* = -self.U.at(i, k * pot.nstate() + j);
+                };
+            };
         }
     };
 }
@@ -441,7 +455,7 @@ fn Propagator(comptime T: type) type {
 
         dt: Complex(T),
 
-        pub fn init(ham: Hamiltonian(T), dt: Complex(T), gpa: Allocator) !@This() {
+        pub fn init(grid: Grid(T), ham: Hamiltonian(T), capopt: anytype, dt: Complex(T), gpa: Allocator) !@This() {
             var R = try Matrix(Complex(T)).init(ham.V.nrow(), ham.V.ncol(), gpa);
             errdefer R.deinit(gpa);
 
@@ -454,7 +468,7 @@ fn Propagator(comptime T: type) type {
 
             var prop = @This(){ .R = R, .K = K, .dt = dt };
 
-            prop.update(ham);
+            prop.update(grid, ham, capopt);
 
             return prop;
         }
@@ -472,23 +486,42 @@ fn Propagator(comptime T: type) type {
             try self.applyR(wfn, gpa);
         }
 
-        pub fn update(self: *@This(), ham: Hamiltonian(T)) void {
+        pub fn update(self: *@This(), grid: Grid(T), ham: Hamiltonian(T), capopt: anytype) void {
             const nstate = std.math.sqrt(ham.V.ncol());
 
-            for (0..self.R.nrow()) |i| for (0..nstate) |k| for (0..nstate) |j| {
-                var sum = Complex(T).init(0, 0);
+            for (0..self.R.nrow()) |i| {
+                var cap_sum: T = 0;
 
-                for (0..nstate) |m| {
-                    const U_km = ham.U.at(i, k * nstate + m);
-                    const U_jm = ham.U.at(i, j * nstate + m);
+                if (capopt) |cap| for (0..grid.r.ncol()) |j| {
+                    const r_val = grid.r.at(i, j);
 
-                    const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * ham.W.at(i, m)).mul(self.dt));
+                    const min_bound = cap.bounds[j][0];
+                    const max_bound = cap.bounds[j][1];
 
-                    sum = sum.add(Complex(T).init(phase.re * U_km * U_jm, phase.im * U_km * U_jm));
-                }
+                    const dist = @max(0, @max(min_bound - r_val, r_val - max_bound));
 
-                self.R.ptr(i, k * nstate + j).* = sum;
-            };
+                    if (dist > 0) {
+                        cap_sum += std.math.exp(cap.exponent * dist) - 1;
+                    }
+                };
+
+                const cap_decay = std.math.exp(-0.5 * cap_sum * self.dt.magnitude());
+
+                for (0..nstate) |k| for (0..nstate) |j| {
+                    var sum = Complex(T).init(0, 0);
+
+                    for (0..nstate) |m| {
+                        const U_km = ham.U.at(i, k * nstate + m);
+                        const U_jm = ham.U.at(i, j * nstate + m);
+
+                        const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * ham.W.at(i, m)).mul(self.dt));
+
+                        sum = sum.add(Complex(T).init(phase.re * U_km * U_jm, phase.im * U_km * U_jm));
+                    }
+
+                    self.R.ptr(i, k * nstate + j).* = sum.mul(Complex(T).init(cap_decay, 0));
+                };
+            }
         }
 
         fn applyK(self: @This(), wfn: *Wavefunction(T)) !void {
@@ -734,7 +767,7 @@ fn History(comptime T: type) type {
             self.index += 1;
         }
 
-        pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write, spectrum: ?Spectrum, gpa: Allocator) !void {
+        pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write, spectrum: anytype, gpa: Allocator) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
             if (write.acf) |path| {
@@ -786,7 +819,7 @@ fn History(comptime T: type) type {
                 }
 
                 if (spec.write.spectrum) |path| {
-                    const nyquist, const nt = .{std.math.pi / dt, @as(T, @floatFromInt(sigma.length()))};
+                    const nyquist, const nt = .{ std.math.pi / dt, @as(T, @floatFromInt(sigma.length())) };
 
                     try writeMatrixLspace(T, io, path, sigma.asMatrix(), -nyquist, nyquist * (nt - 2) / nt);
                 }
@@ -999,7 +1032,7 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     var ham = try Hamiltonian(T).init(grid, pot, opt.mass, gpa);
     errdefer ham.deinit(gpa);
 
-    const prop = try Propagator(T).init(ham, dt, gpa);
+    const prop = try Propagator(T).init(grid, ham, opt.absorbing_potential, dt, gpa);
     errdefer prop.deinit(gpa);
 
     return .{ .wfn_kpgrids = grid, .hams = ham, .wfn = wfn, .epoten = pot, .propg = prop, .orthw = .empty };
@@ -1034,7 +1067,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
         if (i > 0 and ctx.sim.epoten.isTd()) {
             try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, time);
 
-            ctx.sim.propg.update(ctx.sim.hams);
+            ctx.sim.propg.update(ctx.sim.wfn_kpgrids, ctx.sim.hams, ctx.opt.absorbing_potential);
         }
 
         if (i > 0) try ctx.sim.propg.step(&ctx.sim.wfn, gpa);

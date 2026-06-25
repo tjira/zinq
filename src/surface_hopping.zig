@@ -13,20 +13,20 @@ const Vector = @import("tensor.zig").Vector;
 
 // OPTIONS =============================================================================================================
 
-pub const Options = union(enum) {
-    fewest_switches: FewestSwitchesOptions,
-    landau_zener: LandauZenerOptions,
-};
-
-pub const FewestSwitchesOptions = struct {
+const FewestSwitchesOptions = struct {
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
 
     seed: u32 = 1,
     nstep: u32 = 10,
 };
 
-pub const LandauZenerOptions = struct {
+const LandauZenerOptions = struct {
     seed: u32 = 1,
+};
+
+pub const Options = union(enum) {
+    fewest_switches: FewestSwitchesOptions,
+    landau_zener: LandauZenerOptions,
 };
 
 // GENERIC SURFACE HOPPING =============================================================================================
@@ -185,7 +185,7 @@ pub fn SurfaceHopping(comptime T: type) type {
 
 // SPECIFIC METHODS ====================================================================================================
 
-pub fn FewestSwitches(comptime T: type) type {
+fn FewestSwitches(comptime T: type) type {
     return struct {
         coefics: Matrix(Complex(T)),
         itg: Integrator(Complex(T)),
@@ -364,7 +364,7 @@ pub fn FewestSwitches(comptime T: type) type {
     };
 }
 
-pub fn LandauZener(comptime T: type) type {
+fn LandauZener(comptime T: type) type {
     return struct {
         history: [3]Matrix(T),
 
@@ -474,7 +474,7 @@ pub fn LandauZener(comptime T: type) type {
 
 // TIME DERIVATIVE COUPLINGS ===========================================================================================
 
-pub fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T) void {
+fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T) void {
     const nstate = std.math.sqrt(sigma.len);
 
     for (0..nstate) |i| for (0..nstate) |j| {
