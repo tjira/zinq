@@ -31,7 +31,18 @@ const Imaginary = struct {
     nstate: u32 = 1,
 };
 
+const Spectrum = struct {
+    padding: u32 = 0,
+    threshold: f64 = 1e-6,
+
+    write: struct {
+        acf: ?[]const u8 = null,
+        spectrum: ?[]const u8 = null,
+    } = .{},
+};
+
 const Write = struct {
+    acf: ?[]const u8 = null,
     kinetic_energy: ?[]const u8 = null,
     momentum: ?[]const u8 = null,
     norm: ?[]const u8 = null,
@@ -61,6 +72,7 @@ pub const Options = struct {
 
     fft: FftOpt = .{},
     imaginary: ?Imaginary = null,
+    spectrum: ?Spectrum = null,
     write: Write = .{},
 
     adiabatic: bool = false,
@@ -522,11 +534,13 @@ fn Observables(comptime T: type) type {
         mom: ?Vector(T) = null,
         pop: ?Vector(T) = null,
 
+        acf: ?Complex(T) = null,
+
         epot: ?T = null,
         ekin: ?T = null,
         norm: ?T = null,
 
-        pub fn init(sim: *SimulationState(T), write: Write, adia: bool, log: bool, gpa: Allocator) !@This() {
+        pub fn init(sim: *SimulationState(T), wfn0: ?Wavefunction(T), write: Write, adia: bool, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
             errdefer obs.deinit(gpa);
 
@@ -544,6 +558,10 @@ fn Observables(comptime T: type) type {
                 .ekin = log or calc_ekin,
                 .epot = log or calc_epot,
             };
+
+            if (wfn0 != null) {
+                obs.acf = wfn0.?.overlap(sim.wfn, sim.wfn_kpgrids);
+            }
 
             calc.ekin = calc.ekin or write.total_energy != null;
             calc.epot = calc.epot or write.total_energy != null;
@@ -603,6 +621,8 @@ fn Observables(comptime T: type) type {
 
 fn History(comptime T: type) type {
     return struct {
+        acf: ?Vector(Complex(T)) = null,
+
         pos: ?Matrix(T) = null,
         mom: ?Matrix(T) = null,
         pop: ?Matrix(T) = null,
@@ -616,7 +636,7 @@ fn History(comptime T: type) type {
 
         index: usize = 0,
 
-        pub fn init(ndim: usize, nstate: usize, npoint: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
+        pub fn init(ndim: usize, nstate: usize, npoint: usize, iters: usize, write: Write, spectrum: bool, gpa: Allocator) !@This() {
             var hist = @This(){};
             errdefer hist.deinit(gpa);
 
@@ -650,10 +670,15 @@ fn History(comptime T: type) type {
             if (store_ekin) hist.ekin = try Matrix(T).init(iters, 1, gpa);
             if (store_epot) hist.epot = try Matrix(T).init(iters, 1, gpa);
 
+            if (spectrum) {
+                hist.acf = try Vector(Complex(T)).init(iters, gpa);
+            }
+
             return hist;
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
+            if (self.acf) |*acf| acf.deinit(gpa);
             if (self.pos) |*pos| pos.deinit(gpa);
             if (self.mom) |*mom| mom.deinit(gpa);
             if (self.pop) |*pop| pop.deinit(gpa);
@@ -702,11 +727,19 @@ fn History(comptime T: type) type {
                 etot.ptr(step_idx, 0).* = obs.ekin.? + obs.epot.?;
             }
 
+            if (self.acf) |*acf| {
+                acf.ptr(step_idx).* = obs.acf.?;
+            }
+
             self.index += 1;
         }
 
-        pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write) !void {
+        pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write, spectrum: ?Spectrum, gpa: Allocator) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
+
+            if (write.acf) |path| {
+                try writeMatrixLspace(Complex(T), io, path, self.acf.?.asMatrix(), 0, end);
+            }
 
             if (write.position) |path| {
                 try writeMatrixLspace(T, io, path, self.pos.?, 0, end);
@@ -738,6 +771,25 @@ fn History(comptime T: type) type {
 
             if (write.wavefunction) |path| {
                 try writeMatrixHjoin(T, io, path, grid.r, self.wfn.?);
+            }
+
+            if (spectrum) |spec| {
+                var acfpd, var sigma = try calcSpectrum(T, self.acf.?, dt, spec.padding, spec.threshold, gpa);
+
+                defer {
+                    acfpd.deinit(gpa);
+                    sigma.deinit(gpa);
+                }
+
+                if (spec.write.acf) |path| {
+                    try writeMatrixLspace(Complex(T), io, path, acfpd.asMatrix(), 0, end + dt * @as(T, @floatFromInt(spec.padding)));
+                }
+
+                if (spec.write.spectrum) |path| {
+                    const nyquist, const nt = .{std.math.pi / dt, @as(T, @floatFromInt(sigma.length()))};
+
+                    try writeMatrixLspace(T, io, path, sigma.asMatrix(), -nyquist, nyquist * (nt - 2) / nt);
+                }
             }
         }
     };
@@ -849,6 +901,41 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
     timer.* = std.Io.Timestamp.now(io, .real);
 }
 
+// SPECTRUM FUNCTIONS ==================================================================================================
+
+fn calcSpectrum(comptime T: type, acf: Vector(Complex(T)), dt: T, padding: usize, thresh: T, gpa: Allocator) !struct { Vector(Complex(T)), Vector(T) } {
+    const flags, const decay = .{ fftw.FFTW_ESTIMATE | fftw.FFTW_PRESERVE_INPUT, -@log(thresh) };
+
+    var acfp = try Vector(Complex(T)).initZero(acf.length() + padding, gpa);
+    errdefer acfp.deinit(gpa);
+
+    var spec = try Vector(T).init((acfp.length() - 1) * 2, gpa);
+    errdefer spec.deinit(gpa);
+
+    const inptr = @as([*c]fftw.fftw_complex, @ptrCast(acfp.data.ptr));
+
+    const plan = fftw.fftw_plan_dft_c2r_1d(@intCast(spec.length()), inptr, spec.data.ptr, flags);
+    defer fftw.fftw_destroy_plan(plan);
+
+    for (0..acf.length()) |i| {
+        const x = @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(acf.length()));
+
+        const window = std.math.exp(-decay * x * x);
+
+        acfp.ptr(i).* = Complex(T).init(acf.at(i).re * window, acf.at(i).im * window);
+    }
+
+    fftw.fftw_execute(plan);
+
+    for (0..spec.length() / 2) |i| {
+        const j, const temp = .{ i + spec.length() / 2, spec.at(i) };
+
+        spec.ptr(i).*, spec.ptr(j).* = .{ spec.at(j) * dt, temp * dt };
+    }
+
+    return .{ acfp, spec };
+}
+
 // RESULT STRUCT =======================================================================================================
 
 pub fn Result(comptime T: type) type {
@@ -927,12 +1014,17 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
 
     ctx.sim.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.wfn_kpgrids);
 
-    var hist = try History(T).init(ndim, nstate, ctx.opt.grid.npoint, ctx.opt.iterations + 1, ctx.opt.write, gpa);
+    const calc_acf = ctx.opt.spectrum != null or ctx.opt.write.acf != null;
+
+    var hist = try History(T).init(ndim, nstate, ctx.opt.grid.npoint, ctx.opt.iterations + 1, ctx.opt.write, calc_acf, gpa);
     defer hist.deinit(gpa);
 
     if (ctx.opt.initial_conditions.adiabatic) {
         try ctx.sim.wfn.toDia(ctx.sim.hams, gpa);
     }
+
+    var wfn0 = if (calc_acf) try ctx.sim.wfn.clone(gpa) else null;
+    defer if (wfn0) |*w| w.deinit(gpa);
 
     var timer = std.Io.Timestamp.now(io, .real);
 
@@ -965,7 +1057,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
             try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, t);
         }
 
-        var obs = try Observables(T).init(ctx.sim, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
+        var obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
         defer obs.deinit(gpa);
 
         if (ctx.opt.write.wavefunction != null and ctx.opt.adiabatic) {
@@ -983,9 +1075,9 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
         }
     }
 
-    try hist.exportWrite(io, ctx.opt.time_step, ctx.sim.wfn_kpgrids, ctx.opt.write);
+    try hist.exportWrite(io, ctx.opt.time_step, ctx.sim.wfn_kpgrids, ctx.opt.write, ctx.opt.spectrum, gpa);
 
-    return try Observables(T).init(ctx.sim, ctx.opt.write, ctx.opt.adiabatic, true, gpa);
+    return try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, gpa);
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {

@@ -108,6 +108,10 @@ pub fn Vector(comptime T: type) type {
             gpa.free(self.data);
         }
 
+        pub fn asMatrix(self: @This()) Matrix(T) {
+            return .{ .data = self.data, .shape = .{ self.shape[0], 1 } };
+        }
+
         pub fn at(self: @This(), i: usize) T {
             std.debug.assert(i < self.shape[0]);
 
