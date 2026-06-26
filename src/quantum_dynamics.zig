@@ -53,6 +53,7 @@ pub const Options = struct {
     log_interval: u32 = 1,
 
     absorbing_potential: ?struct {
+        track_population: bool = true,
         bounds: []const [2]f64,
         exponent: f64 = 0.001,
     } = null,
@@ -452,6 +453,7 @@ fn Propagator(comptime T: type) type {
     return struct {
         R: Matrix(Complex(T)),
         K: Vector(Complex(T)),
+        cap_weight: Vector(T),
 
         dt: Complex(T),
 
@@ -462,11 +464,14 @@ fn Propagator(comptime T: type) type {
             var K = try Vector(Complex(T)).initZero(ham.K.length(), gpa);
             errdefer K.deinit(gpa);
 
+            var cap_weight = try Vector(T).initZero(ham.K.length(), gpa);
+            errdefer cap_weight.deinit(gpa);
+
             for (0..ham.K.data.len) |i| {
                 K.data[i] = std.math.complex.exp(Complex(T).init(0, -ham.K.data[i]).mul(dt));
             }
 
-            var prop = @This(){ .R = R, .K = K, .dt = dt };
+            var prop = @This(){ .R = R, .K = K, .cap_weight = cap_weight, .dt = dt };
 
             prop.update(grid, ham, capopt);
 
@@ -476,14 +481,20 @@ fn Propagator(comptime T: type) type {
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.R.deinit(gpa);
             self.K.deinit(gpa);
+
+            self.cap_weight.deinit(gpa);
         }
 
-        pub fn step(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
-            try self.applyR(wfn, gpa);
+        pub fn step(self: @This(), sim: *SimulationState(T), adia: bool, track_pop: bool, gpa: Allocator) !void {
+            if (track_pop) self.accumAbsorbed(sim, adia);
 
-            try self.applyK(wfn);
+            try self.applyR(&sim.wfn, gpa);
 
-            try self.applyR(wfn, gpa);
+            try self.applyK(&sim.wfn);
+
+            if (track_pop) self.accumAbsorbed(sim, adia);
+
+            try self.applyR(&sim.wfn, gpa);
         }
 
         pub fn update(self: *@This(), grid: Grid(T), ham: Hamiltonian(T), capopt: anytype) void {
@@ -507,6 +518,8 @@ fn Propagator(comptime T: type) type {
 
                 const cap_decay = std.math.exp(-0.5 * cap_sum * self.dt.magnitude());
 
+                self.cap_weight.ptr(i).* = 1 - cap_decay * cap_decay;
+
                 for (0..nstate) |k| for (0..nstate) |j| {
                     var sum = Complex(T).init(0, 0);
 
@@ -521,6 +534,36 @@ fn Propagator(comptime T: type) type {
 
                     self.R.ptr(i, k * nstate + j).* = sum.mul(Complex(T).init(cap_decay, 0));
                 };
+            }
+        }
+
+        fn accumAbsorbed(self: @This(), sim: *SimulationState(T), adia: bool) void {
+            for (0..sim.wfn.W.nrow()) |i| {
+                var sum: T = 0;
+
+                for (0..sim.wfn.W.ncol()) |j| {
+                    const w = self.cap_weight.at(j);
+
+                    if (adia) {
+                        var adia_re: T = 0;
+                        var adia_im: T = 0;
+
+                        for (0..sim.wfn.W.nrow()) |k| {
+                            const u = sim.hams.U.at(j, k * sim.wfn.W.nrow() + i);
+
+                            adia_re += sim.wfn.W.at(k, j).re * u;
+                            adia_im += sim.wfn.W.at(k, j).im * u;
+                        }
+
+                        sum += w * (adia_re * adia_re + adia_im * adia_im);
+                    }
+
+                    if (!adia) {
+                        sum += w * sim.wfn.W.at(i, j).squaredMagnitude();
+                    }
+                }
+
+                sim.pop_apabs.ptr(i).* += sum * sim.wfn_kpgrids.dr;
             }
         }
 
@@ -619,6 +662,10 @@ fn Observables(comptime T: type) type {
                 if (adia != true) {
                     obs.pop = try sim.wfn.pop(sim.wfn_kpgrids, gpa);
                 }
+
+                if (obs.pop) |*pop| for (0..pop.length()) |j| {
+                    pop.ptr(j).* += sim.pop_apabs.at(j);
+                };
             }
 
             const needs_fft = calc.mom or calc.ekin;
@@ -994,6 +1041,7 @@ fn SimulationState(comptime T: type) type {
         epoten: Potential(T),
         wfn: Wavefunction(T),
         propg: Propagator(T),
+        pop_apabs: Vector(T),
 
         orthw: std.ArrayList(Wavefunction(T)),
 
@@ -1032,10 +1080,13 @@ fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
     var ham = try Hamiltonian(T).init(grid, pot, opt.mass, gpa);
     errdefer ham.deinit(gpa);
 
-    const prop = try Propagator(T).init(grid, ham, opt.absorbing_potential, dt, gpa);
+    var prop = try Propagator(T).init(grid, ham, opt.absorbing_potential, dt, gpa);
     errdefer prop.deinit(gpa);
 
-    return .{ .wfn_kpgrids = grid, .hams = ham, .wfn = wfn, .epoten = pot, .propg = prop, .orthw = .empty };
+    var pop_apabs = try Vector(T).initZero(pot.nstate(), gpa);
+    errdefer pop_apabs.deinit(gpa);
+
+    return .{ .wfn_kpgrids = grid, .hams = ham, .wfn = wfn, .epoten = pot, .propg = prop, .pop_apabs = pop_apabs, .orthw = .empty };
 }
 
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Observables(T) {
@@ -1047,6 +1098,8 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
 
     ctx.sim.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.wfn_kpgrids);
 
+    ctx.sim.pop_apabs.zero();
+
     const calc_acf = ctx.opt.spectrum != null or ctx.opt.write.acf != null;
 
     var hist = try History(T).init(ndim, nstate, ctx.opt.grid.npoint, ctx.opt.iterations + 1, ctx.opt.write, calc_acf, gpa);
@@ -1055,6 +1108,8 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
     if (ctx.opt.initial_conditions.adiabatic) {
         try ctx.sim.wfn.toDia(ctx.sim.hams, gpa);
     }
+
+    const track_cap_pop = ctx.opt.absorbing_potential != null and ctx.opt.absorbing_potential.?.track_population;
 
     var wfn0 = if (calc_acf) try ctx.sim.wfn.clone(gpa) else null;
     defer if (wfn0) |*w| w.deinit(gpa);
@@ -1070,7 +1125,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
             ctx.sim.propg.update(ctx.sim.wfn_kpgrids, ctx.sim.hams, ctx.opt.absorbing_potential);
         }
 
-        if (i > 0) try ctx.sim.propg.step(&ctx.sim.wfn, gpa);
+        if (i > 0) try ctx.sim.propg.step(ctx.sim, ctx.opt.adiabatic, track_cap_pop, gpa);
 
         if (ctx.opt.imaginary != null) for (0..ctx.sim.orthw.items.len) |j| {
             const overlap = ctx.sim.orthw.items[j].overlap(ctx.sim.wfn, ctx.sim.wfn_kpgrids);

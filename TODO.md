@@ -14,4 +14,4 @@
 - [ ] Print version of all the libraries at the beginning of the output.
 - [ ] Add citations from the XC library to the output.
 - [x] Add the docs target.
-- [ ] Add population tracking so that the CAP would not eat the population of the wavefunction.
+- [x] Add population tracking so that the CAP would not eat the population of the wavefunction.
