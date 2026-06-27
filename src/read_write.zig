@@ -34,7 +34,7 @@ pub fn writeMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T)
     try writer.interface.flush();
 }
 
-pub fn writeMatrixHjoin(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), B: Matrix(T)) !void {
+pub fn writeMatrixHjoin(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), nca: ?usize, B: Matrix(T), ncb: ?usize) !void {
     std.debug.assert(A.nrow() == B.nrow());
 
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
@@ -43,22 +43,25 @@ pub fn writeMatrixHjoin(comptime T: type, io: std.Io, fname: []const u8, A: Matr
     var buffer: [65536]u8 = undefined;
     var writer = file.writer(io, &buffer);
 
-    const ncolA = if (comptime isComplex(T)) 2 * A.ncol() else A.ncol();
-    const ncolB = if (comptime isComplex(T)) 2 * B.ncol() else B.ncol();
+    const cols_A = if (nca) |limit| limit else (if (comptime isComplex(T)) 2 * A.ncol() else A.ncol());
+    const cols_B = if (ncb) |limit| limit else (if (comptime isComplex(T)) 2 * B.ncol() else B.ncol());
 
-    try writer.interface.print("{d} {d}\n", .{ A.nrow(), ncolA + ncolB });
+    try writer.interface.print("{d} {d}\n", .{ A.nrow(), cols_A + cols_B });
+
+    const a_cols = if (comptime isComplex(T)) cols_A / 2 else cols_A;
+    const b_cols = if (comptime isComplex(T)) cols_B / 2 else cols_B;
 
     for (0..A.nrow()) |i| {
-        for (0..A.ncol()) |j| {
+        for (0..a_cols) |j| {
             try writeElement(&writer, A.at(i, j));
 
             try writer.interface.print(" ", .{});
         }
 
-        for (0..B.ncol()) |j| {
+        for (0..b_cols) |j| {
             try writeElement(&writer, B.at(i, j));
 
-            try writer.interface.print("{s}", .{if (j == B.ncol() - 1) "\n" else " "});
+            try writer.interface.print("{s}", .{if (j == b_cols - 1) "\n" else " "});
         }
     }
 

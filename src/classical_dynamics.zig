@@ -13,7 +13,6 @@ const Vector = @import("tensor.zig").Vector;
 const eighBatch = @import("linear_algebra.zig").eighBatch;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 const printf = @import("read_write.zig").printf;
-const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
 // OPTIONS =============================================================================================================
@@ -475,27 +474,27 @@ fn History(comptime T: type) type {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
             if (write.position) |path| {
-                try writeMatrixLspace(T, io, path, self.pos.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.pos.?.takeRows(self.index), 0, end);
             }
 
             if (write.momentum) |path| {
-                try writeMatrixLspace(T, io, path, self.mom.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.mom.?.takeRows(self.index), 0, end);
             }
 
             if (write.population) |path| {
-                try writeMatrixLspace(T, io, path, self.pop.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.pop.?.takeRows(self.index), 0, end);
             }
 
             if (write.potential_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.epot.?.takeRows(self.index), 0, end);
             }
 
             if (write.kinetic_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.ekin.?.takeRows(self.index), 0, end);
             }
 
             if (write.total_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.etot.?.takeRows(self.index), 0, end);
             }
         }
     };

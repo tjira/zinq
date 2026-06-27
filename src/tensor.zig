@@ -79,6 +79,12 @@ pub fn Matrix(comptime T: type) type {
             return self.data[start..end];
         }
 
+        pub fn takeRows(self: @This(), n: usize) @This() {
+            std.debug.assert(n <= self.shape[0]);
+
+            return .{ .data = self.data[0 .. n * self.shape[1]], .shape = .{ n, self.shape[1] } };
+        }
+
         pub fn zero(self: *@This()) void {
             self.fill(std.mem.zeroes(T));
         }
@@ -138,6 +144,12 @@ pub fn Vector(comptime T: type) type {
             std.debug.assert(i < self.shape[0]);
 
             return &self.data[i];
+        }
+
+        pub fn takeRows(self: @This(), n: usize) @This() {
+            std.debug.assert(n <= self.shape[0]);
+
+            return .{ .data = self.data[0..n], .shape = .{n} };
         }
 
         pub fn zero(self: *@This()) void {

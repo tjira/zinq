@@ -53,9 +53,10 @@ pub const Options = struct {
     log_interval: u32 = 1,
 
     absorbing_potential: ?struct {
-        track_population: bool = true,
+        track_population: bool = false,
         bounds: []const [2]f64,
         exponent: f64 = 0.001,
+        stop_norm: ?f64 = null,
     } = null,
 
     fft: struct {
@@ -814,47 +815,47 @@ fn History(comptime T: type) type {
             self.index += 1;
         }
 
-        pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, grid: Grid(T), write: Write, spectrum: anytype, gpa: Allocator) !void {
+        pub fn exportWrite(self: *@This(), io: std.Io, dt: T, grid: Grid(T), write: Write, spectrum: anytype, nstate: usize, gpa: Allocator) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
             if (write.acf) |path| {
-                try writeMatrixLspace(Complex(T), io, path, self.acf.?.asMatrix(), 0, end);
+                try writeMatrixLspace(Complex(T), io, path, self.acf.?.takeRows(self.index).asMatrix(), 0, end);
             }
 
             if (write.position) |path| {
-                try writeMatrixLspace(T, io, path, self.pos.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.pos.?.takeRows(self.index), 0, end);
             }
 
             if (write.momentum) |path| {
-                try writeMatrixLspace(T, io, path, self.mom.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.mom.?.takeRows(self.index), 0, end);
             }
 
             if (write.population) |path| {
-                try writeMatrixLspace(T, io, path, self.pop.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.pop.?.takeRows(self.index), 0, end);
             }
 
             if (write.potential_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.epot.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.epot.?.takeRows(self.index), 0, end);
             }
 
             if (write.kinetic_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.ekin.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.ekin.?.takeRows(self.index), 0, end);
             }
 
             if (write.norm) |path| {
-                try writeMatrixLspace(T, io, path, self.norm.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.norm.?.takeRows(self.index), 0, end);
             }
 
             if (write.total_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.etot.?, 0, end);
+                try writeMatrixLspace(T, io, path, self.etot.?.takeRows(self.index), 0, end);
             }
 
             if (write.wavefunction) |path| {
-                try writeMatrixHjoin(T, io, path, grid.r, self.wfn.?);
+                try writeMatrixHjoin(T, io, path, grid.r, null, self.wfn.?, 2 * nstate * self.index);
             }
 
             if (spectrum) |spec| {
-                var acfpd, var sigma = try calcSpectrum(T, self.acf.?, dt, spec.padding, spec.threshold, gpa);
+                var acfpd, var sigma = try calcSpectrum(T, self.acf.?.takeRows(self.index), dt, spec.padding, spec.threshold, gpa);
 
                 defer {
                     acfpd.deinit(gpa);
@@ -862,7 +863,9 @@ fn History(comptime T: type) type {
                 }
 
                 if (spec.write.acf) |path| {
-                    try writeMatrixLspace(Complex(T), io, path, acfpd.asMatrix(), 0, end + dt * @as(T, @floatFromInt(spec.padding)));
+                    const pad = dt * @as(T, @floatFromInt(spec.padding));
+
+                    try writeMatrixLspace(Complex(T), io, path, acfpd.asMatrix(), 0, end + pad);
                 }
 
                 if (spec.write.spectrum) |path| {
@@ -1161,9 +1164,22 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
         }
+
+        if (ctx.opt.absorbing_potential) |ap| if (ap.stop_norm) |stop_norm| {
+            const norm = ctx.sim.wfn.norm(ctx.sim.wfn_kpgrids);
+
+            if (norm < stop_norm) {
+                var stop_obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, gpa);
+                defer stop_obs.deinit(gpa);
+
+                if (!is_log_step) try printIteration(T, io, stop_obs, i, &timer);
+
+                break;
+            }
+        };
     }
 
-    try hist.exportWrite(io, ctx.opt.time_step, ctx.sim.wfn_kpgrids, ctx.opt.write, ctx.opt.spectrum, gpa);
+    try hist.exportWrite(io, ctx.opt.time_step, ctx.sim.wfn_kpgrids, ctx.opt.write, ctx.opt.spectrum, nstate, gpa);
 
     return try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, gpa);
 }
