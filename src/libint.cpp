@@ -357,7 +357,7 @@ extern "C" {
 extern "C" {
     using namespace libint2; using namespace libint2::solidharmonics;
 
-    void evaluate_basis_d0(double *phi, double x, double y, double z, SystemData *sys) {
+    void evaluate_basis_v(double *phi, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
         size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();
@@ -426,7 +426,7 @@ extern "C" {
         }
     }
 
-    void evaluate_basis_d1(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double x, double y, double z, SystemData *sys) {
+    void evaluate_basis_vg(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
         size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();
@@ -527,7 +527,7 @@ extern "C" {
         }
     }
 
-    void evaluate_basis_d2(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double *lapl_phi, double x, double y, double z, SystemData *sys) {
+    void evaluate_basis_vgl(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double *lapl_phi, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
         size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();
@@ -648,5 +648,3 @@ extern "C" {
         }
     }
 }
-
-
