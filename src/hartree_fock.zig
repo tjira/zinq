@@ -656,6 +656,10 @@ pub fn Result(comptime T: type) type {
 // RUN =================================================================================================================
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    if (opt.gradient != null and opt.dft != null) {
+        return error.GradientForDftNotSupported;
+    }
+
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
