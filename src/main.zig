@@ -2,6 +2,11 @@ const builtin = @import("builtin");
 const config = @import("config");
 const std = @import("std");
 
+const libint = @cImport(@cInclude("libint2/config.h"));
+const fftw = @cImport(@cInclude("fftw3.h"));
+const libxc = @cImport(@cInclude("xc.h"));
+const openblas = @cImport(@cInclude("openblas_config.h"));
+
 const Allocator = std.mem.Allocator;
 
 pub const ClassicalDynamicsOptions = @import("classical_dynamics.zig").Options;
@@ -78,7 +83,17 @@ pub fn main(init: std.process.Init) !void {
     const v_minor = builtin.zig_version.minor;
     const v_patch = builtin.zig_version.patch;
 
-    try printf(init.io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}\n", .{ v_major, v_minor, v_patch, config.version });
+    try printf(init.io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}\n\n", .{ v_major, v_minor, v_patch, config.version });
+
+    const openblas_v = std.mem.trim(u8, openblas.OPENBLAS_VERSION, "OpenBLAS ");
+
+    try printf(init.io, "OPENBLAS: v{s}, ", .{ openblas_v });
+
+    const fftw_v = std.mem.trim(u8, std.mem.span(fftw.fftw_version), "fftw-");
+
+    try printf(init.io, "FFTW: v{s}, ", .{fftw_v});
+
+    try printf(init.io, "LIBINT: v{s}, LIBXC: v{s}\n", .{ libint.LIBINT_VERSION, libxc.xc_version_string() });
 
     for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |e| {
         try run(f64, init.io, e, init.gpa, init.arena.allocator());

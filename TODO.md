@@ -11,8 +11,8 @@
 - [x] Add complex absorbing potential to the QD code.
 - [ ] Implement arbitrary order Moller-Plesset perturbation theory.
 - [ ] Implement gradients for the CI methods.
-- [ ] Print version of all the libraries at the beginning of the output.
-- [ ] Add citations from the XC library to the output.
+- [x] Print version of all the libraries at the beginning of the output.
 - [x] Add the docs target.
 - [x] Add population tracking so that the CAP would not eat the population of the wavefunction.
 - [x] Implement stop_norm option for the QD code that stops the propagation when the norm of the wavefunction drops below a certain threshold.
+- [ ] Embed bases in the binary.
