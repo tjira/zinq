@@ -52,5 +52,31 @@ pub fn ScalarDual(comptime T: type) type {
         pub fn abs(self: @This()) @This() {
             return .{ .val = @abs(self.val), .der = if (self.val >= 0) self.der else -self.der };
         }
+
+        pub fn sqrt(self: @This()) @This() {
+            const val = @sqrt(self.val);
+
+            return .{ .val = val, .der = if (val == 0) 0 else self.der / (2 * val) };
+        }
+
+        pub fn cos(self: @This()) @This() {
+            return .{ .val = std.math.cos(self.val), .der = -self.der * std.math.sin(self.val) };
+        }
+
+        pub fn sin(self: @This()) @This() {
+            return .{ .val = std.math.sin(self.val), .der = self.der * std.math.cos(self.val) };
+        }
+
+        pub fn clamp(self: @This(), min_val: T, max_val: T) @This() {
+            if (self.val < min_val) {
+                return .{ .val = min_val, .der = 0 };
+            }
+
+            if (self.val > max_val) {
+                return .{ .val = max_val, .der = 0 };
+            }
+
+            return self;
+        }
     };
 }

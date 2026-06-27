@@ -1,7 +1,5 @@
 #include <libint2.hpp>
 
-#include <fstream>
-
 struct SystemData {
     std::vector<libint2::Atom> atoms; libint2::BasisSet obs;
 };
@@ -46,6 +44,16 @@ extern "C" {
             coords[3 * i + 0] = sys->atoms[i].x;
             coords[3 * i + 1] = sys->atoms[i].y;
             coords[3 * i + 2] = sys->atoms[i].z;
+        }
+    }
+
+    void bf2at(int *map, SystemData *sys) {
+        if (!sys) return;
+
+        auto sh2bf = sys->obs.shell2bf(); auto sh2at = sys->obs.shell2atom(sys->atoms);
+
+        for (size_t i = 0; i < sys->obs.size(); i++) for (size_t j = 0; j < sys->obs.at(i).size(); j++) {
+            map[sh2bf.at(i) + j] = sh2at.at(i);
         }
     }
 }
@@ -349,7 +357,7 @@ extern "C" {
 extern "C" {
     using namespace libint2; using namespace libint2::solidharmonics;
 
-    void evaluate_basis(double *phi, double x, double y, double z, SystemData *sys) {
+    void evaluate_basis_d0(double *phi, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
         size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();
@@ -418,7 +426,7 @@ extern "C" {
         }
     }
 
-    void evaluate_basis_derivative(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double x, double y, double z, SystemData *sys) {
+    void evaluate_basis_d1(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
         size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();

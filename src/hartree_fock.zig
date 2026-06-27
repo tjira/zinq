@@ -287,7 +287,7 @@ pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: 
     return dVN;
 }
 
-pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
+pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, dft: ?*DftPotential(T), gpa: Allocator) !Matrix(T) {
     const dS = ints.dS orelse unreachable;
     const dH = ints.dH orelse unreachable;
     const dg = ints.dg orelse unreachable;
@@ -314,6 +314,8 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
         W.ptr(i, j).* = sum;
     };
 
+    const exx_val = if (dft) |d| d.exx_coef else 1;
+
     for (0..ints.sys.atoms.len) |i| for (0..3) |j| {
         var h_G: T = 0;
         var s_G: T = 0;
@@ -331,7 +333,7 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
             const dg1 = dg.at(.{ 3 * i + j, p, r, q, s });
             const dg2 = dg.at(.{ 3 * i + j, p, q, r, s });
 
-            g_G += 0.5 * P.at(p, q) * P.at(r, s) * (dg1 - exch_factor * dg2);
+            g_G += 0.5 * P.at(p, q) * P.at(r, s) * (dg1 - exx_val * exch_factor * dg2);
         };
 
         G.ptr(i, j).* += h_G + g_G + s_G;
@@ -646,7 +648,6 @@ pub fn Result(comptime T: type) type {
             gpa.free(self.gradient);
 
             if (self.dC) |*dC| dC.deinit(gpa);
-
             if (self.de) |*de| de.deinit(gpa);
         }
     };
@@ -655,10 +656,6 @@ pub fn Result(comptime T: type) type {
 // RUN =================================================================================================================
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
-    if (opt.dft != null and opt.gradient != null) {
-        return error.DftGradientNotSupported;
-    }
-
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
@@ -886,7 +883,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     if (opt.gradient) |_| {
-        grad[0] = try gradient(T, ints, C, P, e, opt.generalized, gpa);
+        grad[0] = try gradient(T, ints, C, P, e, opt.generalized, if (dft) |*d| d else null, gpa);
     }
 
     errdefer {

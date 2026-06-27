@@ -12,6 +12,7 @@ pub fn MolecularSystem(comptime T: type) type {
 
         atoms: []i32,
         coors: []f64,
+        bf2at: []i32,
 
         nbf: usize,
         nel: usize,
@@ -27,6 +28,7 @@ pub fn MolecularSystem(comptime T: type) type {
             errdefer libint.deinit(ptr);
 
             const nat = libint.nat(ptr);
+            const nbf = libint.nbf(ptr);
 
             const atoms = try gpa.alloc(i32, 1 * nat);
             errdefer gpa.free(atoms);
@@ -34,8 +36,12 @@ pub fn MolecularSystem(comptime T: type) type {
             const coors = try gpa.alloc(f64, 3 * nat);
             errdefer gpa.free(coors);
 
+            const bf2at = try gpa.alloc(i32, nbf);
+            errdefer gpa.free(bf2at);
+
             libint.atoms(atoms.ptr, ptr);
             libint.coors(coors.ptr, ptr);
+            libint.bf2at(bf2at.ptr, ptr);
 
             var nel: usize = 0;
 
@@ -43,12 +49,13 @@ pub fn MolecularSystem(comptime T: type) type {
                 nel += @intCast(atoms[i]);
             }
 
-            return .{ .ptr = ptr, .nbf = libint.nbf(ptr), .atoms = atoms, .coors = coors, .nel = nel };
+            return .{ .ptr = ptr, .nbf = nbf, .atoms = atoms, .coors = coors, .bf2at = bf2at, .nel = nel };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             gpa.free(self.atoms);
             gpa.free(self.coors);
+            gpa.free(self.bf2at);
 
             libint.deinit(self.ptr);
         }
