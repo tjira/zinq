@@ -9,7 +9,7 @@
 - [ ] Add ab initio potential to classical MD.
 - [x] Add spectrum calculation to the QD code.
 - [x] Add complex absorbing potential to the QD code.
-- [ ] Implement arbitrary order Moller-Plesset perturbation theory.
+- [x] Implement arbitrary order Moller-Plesset perturbation theory.
 - [ ] Implement gradients for the CI methods.
 - [x] Print version of all the libraries at the beginning of the output.
 - [x] Add the docs target.

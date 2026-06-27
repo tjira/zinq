@@ -15,6 +15,7 @@ const ao2so_pp = @import("integral_transform.zig").ao2so_pp;
 const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 const hartree_fock_run = @import("hartree_fock.zig").run;
+const primType = @import("value.zig").primType;
 const printf = @import("read_write.zig").printf;
 
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
@@ -44,13 +45,19 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
     while (idx_a < A.len and idx_b < B.len) {
         switch (std.math.order(A[idx_a], B[idx_b])) {
             .lt => {
-                if (diff_a_len == 2) return 0;
+                if (diff_a_len == 2) {
+                    return Value(T).fromFloat(0).val;
+                }
+
                 diff_A[diff_a_len] = A[idx_a];
 
                 diff_a_len, idx_a = .{ diff_a_len + 1, idx_a + 1 };
             },
             .gt => {
-                if (diff_b_len == 2) return 0;
+                if (diff_b_len == 2) {
+                    return Value(T).fromFloat(0).val;
+                }
+
                 diff_B[diff_b_len] = B[idx_b];
 
                 diff_b_len, idx_b = .{ diff_b_len + 1, idx_b + 1 };
@@ -63,14 +70,20 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
     }
 
     while (idx_a < A.len) : (idx_a += 1) {
-        if (diff_a_len == 2) return 0;
+        if (diff_a_len == 2) {
+            return Value(T).fromFloat(0).val;
+        }
+
         diff_A[diff_a_len] = A[idx_a];
 
         diff_a_len += 1;
     }
 
     while (idx_b < B.len) : (idx_b += 1) {
-        if (diff_b_len == 2) return 0;
+        if (diff_b_len == 2) {
+            return Value(T).fromFloat(0).val;
+        }
+
         diff_B[diff_b_len] = B[idx_b];
 
         diff_b_len += 1;
@@ -80,33 +93,39 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
     const s_B = signOfExcitations(B, diff_B[0..diff_b_len]);
 
     if (diff_a_len == 0) {
-        var sum: T = 0;
+        var sum = Value(T).fromFloat(0);
 
         for (0..A.len) |i| {
-            sum += H_MS.at(A[i], A[i]);
+            sum = sum.add(Value(T).init(H_MS.at(A[i], A[i])));
         }
 
         for (0..A.len) |i| for (i + 1..A.len) |j| {
             const idx_i = A[i];
             const idx_j = A[j];
 
-            sum += g_MS.at(.{ idx_i, idx_j, idx_i, idx_j }) - g_MS.at(.{ idx_i, idx_j, idx_j, idx_i });
+            const term1 = Value(T).init(g_MS.at(.{ idx_i, idx_j, idx_i, idx_j }));
+            const term2 = Value(T).init(g_MS.at(.{ idx_i, idx_j, idx_j, idx_i }));
+
+            sum = sum.add(term1.sub(term2));
         };
 
-        return sum;
+        return sum.val;
     }
 
     if (diff_a_len == 1) {
         const m = diff_A[0];
         const p = diff_B[0];
 
-        var term = H_MS.at(m, p);
+        var term = Value(T).init(H_MS.at(m, p));
 
         for (0..A.len) |i| if (A[i] != m) {
-            term += g_MS.at(.{ m, A[i], p, A[i] }) - g_MS.at(.{ m, A[i], A[i], p });
+            const term1 = Value(T).init(g_MS.at(.{ m, A[i], p, A[i] }));
+            const term2 = Value(T).init(g_MS.at(.{ m, A[i], A[i], p }));
+
+            term = term.add(term1.sub(term2));
         };
 
-        return @as(T, @floatFromInt(s_A * s_B)) * term;
+        return term.muls(@as(primType(T), @floatFromInt(s_A * s_B))).val;
     }
 
     if (diff_a_len == 2) {
@@ -115,12 +134,13 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
         const p = diff_B[0];
         const q = diff_B[1];
 
-        const term = g_MS.at(.{ m, n, p, q }) - g_MS.at(.{ m, n, q, p });
+        const term1 = Value(T).init(g_MS.at(.{ m, n, p, q }));
+        const term2 = Value(T).init(g_MS.at(.{ m, n, q, p }));
 
-        return @as(T, @floatFromInt(s_A * s_B)) * term;
+        return term1.sub(term2).muls(@as(primType(T), @floatFromInt(s_A * s_B))).val;
     }
 
-    return 0;
+    return Value(T).fromFloat(0).val;
 }
 
 pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Allocator) !std.ArrayList([]const usize) {

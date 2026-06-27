@@ -87,7 +87,7 @@ pub fn main(init: std.process.Init) !void {
 
     const openblas_v = std.mem.trim(u8, openblas.OPENBLAS_VERSION, "OpenBLAS ");
 
-    try printf(init.io, "OPENBLAS: v{s}, ", .{ openblas_v });
+    try printf(init.io, "OPENBLAS: v{s}, ", .{openblas_v});
 
     const fftw_v = std.mem.trim(u8, std.mem.span(fftw.fftw_version), "fftw-");
 

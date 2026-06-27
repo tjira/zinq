@@ -8,11 +8,14 @@ const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
-const ao2mo_oovv = @import("integral_transform.zig").ao2mo_oovv;
 const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
+const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
+const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
+const generateDets = @import("configuration_interaction.zig").generateDets;
 const gradientResponse = @import("hartree_fock.zig").gradientResponse;
 const hartree_fock_run = @import("hartree_fock.zig").run;
 const printf = @import("read_write.zig").printf;
+const slater = @import("configuration_interaction.zig").slater;
 
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Value = @import("value.zig").Value;
@@ -33,56 +36,166 @@ pub const Options = struct {
 
 // MOLLER-PLESSET FUNCTIONS ============================================================================================
 
-pub fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) !T {
-    return switch (order) {
-        2 => try mp2(T, g, C, e, nocc, generalized, gpa),
-        else => error.MollerPlessetInvalidOrder,
-    };
-}
+pub fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
+    const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
 
-pub fn mp2(comptime T: type, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) !T {
-    var g_oovv = try Tensor(T, 4).initZero(.{ nocc, nocc, C.shape[1] - nocc, C.shape[1] - nocc }, gpa);
-    defer g_oovv.deinit(gpa);
+    var C_SO = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_SO.deinit(gpa);
 
-    try ao2mo_oovv(T, &g_oovv, g, C, nocc, gpa);
+    if (!generalized) {
+        ao2so_coef(T, &C_SO, C);
+    }
 
-    var energy = Value(T).fromFloat(0);
+    var g_SO = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer if (!generalized) g_SO.deinit(gpa);
 
-    for (0..nocc) |i| for (0..nocc) |j| for (0..C.shape[1] - nocc) |a| for (0..C.shape[1] - nocc) |b| {
-        const e_i = Value(T).init(e.at(i));
-        const e_j = Value(T).init(e.at(j));
+    if (!generalized) {
+        ao2so_pppp(T, &g_SO, g);
+    }
 
-        const e_a = Value(T).init(e.at(a + nocc));
-        const e_b = Value(T).init(e.at(b + nocc));
+    var g_MS = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer g_MS.deinit(gpa);
 
-        const denom = e_i.add(e_j).sub(e_a).sub(e_b);
+    try ao2mo_pppp(T, &g_MS, g_SO, C_SO, gpa);
 
-        const term1 = Value(T).init(g_oovv.at(.{ i, j, a, b }));
-        const term2 = Value(T).init(g_oovv.at(.{ i, j, b, a }));
+    var H_MS = try Matrix(T).initZero(nsp, nsp, gpa);
+    defer H_MS.deinit(gpa);
 
-        if (generalized) {
-            const term = term1.sub(term2);
+    var e_SO = try Vector(T).init(nsp, gpa);
+    defer e_SO.deinit(gpa);
 
-            energy = energy.add(term.mul(term).div(denom));
-        }
-
-        if (!generalized) {
-            const term = term1.muls(2).sub(term2);
-
-            energy = energy.add(term1.mul(term).div(denom));
-        }
+    if (generalized) for (0..nsp) |p| {
+        e_SO.ptr(p).* = e.at(p);
     };
 
-    return (if (generalized) energy.muls(0.25) else energy).val;
+    if (!generalized) for (0..C.shape[0]) |i| {
+        e_SO.ptr(2 * i + 0).* = e.at(i);
+        e_SO.ptr(2 * i + 1).* = e.at(i);
+    };
+
+    for (0..nsp) |p| for (0..nsp) |q| {
+        var sum = Value(T).fromFloat(0);
+
+        for (0..nel) |i| {
+            const term1 = Value(T).init(g_MS.at(.{ p, i, q, i }));
+            const term2 = Value(T).init(g_MS.at(.{ p, i, i, q }));
+
+            sum = sum.add(term1.sub(term2));
+        }
+
+        H_MS.ptr(p, q).* = (if (p == q) Value(T).init(e_SO.at(p)) else Value(T).fromFloat(0)).sub(sum).val;
+    };
+
+    var excitations = try gpa.alloc(u32, @min(order, @min(nel, nsp - nel)));
+    defer gpa.free(excitations);
+
+    for (0..excitations.len) |i| {
+        excitations[i] = @intCast(i + 1);
+    }
+
+    var dets = try generateDets(nel, nsp, excitations, gpa);
+
+    defer {
+        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
+
+        dets.deinit(gpa);
+    }
+
+    var H_CI = try Matrix(T).init(dets.items.len, dets.items.len, gpa);
+    defer H_CI.deinit(gpa);
+
+    for (0..dets.items.len) |i| for (i..dets.items.len) |j| {
+        const val = slater(T, dets.items[i], dets.items[j], H_MS, g_MS);
+
+        H_CI.ptr(i, j).* = val;
+        H_CI.ptr(j, i).* = val;
+    };
+
+    var E0 = try gpa.alloc(Value(T), dets.items.len);
+    defer gpa.free(E0);
+
+    for (0..dets.items.len) |i| {
+        var sum = Value(T).fromFloat(0);
+
+        for (dets.items[i]) |p| {
+            sum = sum.add(Value(T).init(e_SO.at(p)));
+        }
+
+        E0[i] = sum;
+    }
+
+    var C_coeff = try gpa.alloc(Value(T), (order + 1) * dets.items.len);
+    defer gpa.free(C_coeff);
+
+    @memset(C_coeff, Value(T).fromFloat(0));
+
+    var E = try gpa.alloc(Value(T), order + 1);
+    defer gpa.free(E);
+
+    E[0], C_coeff[0] = .{ E0[0], Value(T).fromFloat(1) };
+
+    for (1..order + 1) |k| {
+        if (k == 1) {
+            E[1] = Value(T).init(H_CI.at(0, 0)).sub(E0[0]);
+        }
+
+        if (k > 1) {
+            var sum = Value(T).fromFloat(0);
+
+            for (1..dets.items.len) |j| {
+                sum = sum.add(Value(T).init(H_CI.at(0, j)).mul(C_coeff[(k - 1) * dets.items.len + j]));
+            }
+
+            E[k] = sum;
+        }
+
+        if (k == order) break;
+
+        for (1..dets.items.len) |i| {
+            var term1 = Value(T).fromFloat(0);
+            var term3 = Value(T).fromFloat(0);
+
+            for (0..dets.items.len) |j| {
+                term1 = term1.add(Value(T).init(H_CI.at(i, j)).mul(C_coeff[(k - 1) * dets.items.len + j]));
+            }
+
+            const term2 = E0[i].mul(C_coeff[(k - 1) * dets.items.len + i]);
+
+            for (1..k + 1) |j| {
+                term3 = term3.add(E[j].mul(C_coeff[(k - j) * dets.items.len + i]));
+            }
+
+            C_coeff[k * dets.items.len + i] = term1.sub(term2).sub(term3).div(E0[0].sub(E0[i]));
+        }
+    }
+
+    const energies = try gpa.alloc(T, order + 1);
+    errdefer gpa.free(energies);
+
+    for (0..order + 1) |k| {
+        energies[k] = E[k].val;
+    }
+
+    return energies;
 }
 
-pub fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Allocator) !Matrix(T) {
+pub fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Allocator) ![]Matrix(T) {
     const nbf, const generalized = .{ hfres.C.shape[0], hfres.ints.sys.nbf != hfres.C.shape[0] };
 
-    var G = try Matrix(T).initZero(hfres.ints.sys.atoms.len, 3, gpa);
-    errdefer G.deinit(gpa);
-
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
+
+    const grads = try gpa.alloc(Matrix(T), order + 1);
+    errdefer gpa.free(grads);
+
+    for (0..order + 1) |k| {
+        grads[k] = Matrix(T).initZero(hfres.ints.sys.atoms.len, 3, gpa) catch |err| {
+            for (0..k) |i| {
+                grads[i].deinit(gpa);
+            }
+
+            return err;
+        };
+    }
 
     for (0..3 * hfres.ints.sys.atoms.len) |i| {
         var C_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
@@ -108,12 +221,15 @@ pub fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa
             g_d.ptr(.{ mu, lambda, nu, sigma }).* = ScalarDual(T).init(hfres.ints.g.?.at(.{ mu, lambda, nu, sigma }), dg_x);
         };
 
-        const corr_energy_d = try mp(ScalarDual(T), order, g_d, C_d, e_d, nocc, generalized, gpa);
+        const corr_energies_d = try mp(ScalarDual(T), order, g_d, C_d, e_d, nocc, generalized, gpa);
+        defer gpa.free(corr_energies_d);
 
-        G.ptr(i / 3, i % 3).* = corr_energy_d.der;
+        for (2..order + 1) |k| {
+            grads[k].ptr(i / 3, i % 3).* = corr_energies_d[k].der;
+        }
     }
 
-    return G;
+    return grads;
 }
 
 // RESULT STRUCT =======================================================================================================
@@ -176,21 +292,29 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
 
-    for (2..(opt.order + 1)) |i| {
-        const step_energy = try mp(T, i, hfres.ints.g.?, hfres.C, hfres.e, nocc, generalized, gpa);
+    const energies = try mp(T, opt.order, hfres.ints.g.?, hfres.C, hfres.e, nocc, generalized, gpa);
+    defer gpa.free(energies);
 
-        energy[0] += step_energy;
+    const grads = if (opt.gradient) |_| try gradient(T, opt.order, hfres, gpa) else null;
+
+    defer if (grads != null) {
+        for (0..(opt.order + 1)) |i| {
+            grads.?[i].deinit(gpa);
+        }
+
+        gpa.free(grads.?);
+    };
+
+    for (2..(opt.order + 1)) |i| {
+        energy[0] += energies[i];
 
         if (log) {
             try printf(io, "\nMP{d} TOTAL ENERGY: {d:.14} Eh\n", .{ i, energy[0] });
         }
 
-        if (opt.gradient) |_| {
-            var step_grad = try gradient(T, i, hfres, gpa);
-            defer step_grad.deinit(gpa);
-
+        if (grads != null) {
             for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-                grad[0].ptr(j, k).* += step_grad.at(j, k);
+                grad[0].ptr(j, k).* += grads.?[i].at(j, k);
             };
 
             if (log) {
