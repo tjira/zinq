@@ -17,10 +17,12 @@
                     "tully_1" : {}
                 },
                 "absorbing_potential" : {
+                    "track_population" : true,
+                    "stop_norm" : 1e-8,
                     "bounds" : [[-24, 12]]
                 },
                 "mass" : 2000,
-                "iterations" : 6000,
+                "iterations" : 9000,
                 "time_step" : 1,
                 "adiabatic" : true,
                 "log_interval" : 500,
