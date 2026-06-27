@@ -216,14 +216,24 @@ pub fn DftPotential(comptime T: type) type {
         }
 
         pub fn evaluateBasis(self: @This(), sys: MolecularSystem(T), basis: BasisGrid(T)) void {
-            const needs_deriv = basis.dphi_dx != null;
+            const needs_d1, const needs_d2 = .{ basis.dphi_dx != null, basis.lapl != null };
 
             for (0..self.pts.shape[0]) |i| {
                 const x = self.pts.at(i, 0);
                 const y = self.pts.at(i, 1);
                 const z = self.pts.at(i, 2);
 
-                if (needs_deriv) {
+                if (needs_d2) {
+                    const dx_row = basis.dphi_dx.?.rowSlice(i);
+                    const dy_row = basis.dphi_dy.?.rowSlice(i);
+                    const dz_row = basis.dphi_dz.?.rowSlice(i);
+
+                    const lapl_row = basis.lapl.?.rowSlice(i);
+
+                    libint.evaluate_basis_d2(basis.phi.rowSlice(i).ptr, dx_row.ptr, dy_row.ptr, dz_row.ptr, lapl_row.ptr, x, y, z, sys.ptr);
+                }
+
+                if (needs_d1 and !needs_d2) {
                     const dx_row = basis.dphi_dx.?.rowSlice(i);
                     const dy_row = basis.dphi_dy.?.rowSlice(i);
                     const dz_row = basis.dphi_dz.?.rowSlice(i);
@@ -231,7 +241,7 @@ pub fn DftPotential(comptime T: type) type {
                     libint.evaluate_basis_d1(basis.phi.rowSlice(i).ptr, dx_row.ptr, dy_row.ptr, dz_row.ptr, x, y, z, sys.ptr);
                 }
 
-                if (!needs_deriv) {
+                if (!needs_d1 and !needs_d2) {
                     libint.evaluate_basis_d0(basis.phi.rowSlice(i).ptr, x, y, z, sys.ptr);
                 }
             }
@@ -252,6 +262,9 @@ pub fn DftPotential(comptime T: type) type {
 
                     var tau_a: T = 0;
                     var tau_b: T = 0;
+
+                    var lapl_sum_a: T = 0;
+                    var lapl_sum_b: T = 0;
 
                     for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
                         const b = ctx.sys.nbf;
@@ -290,6 +303,11 @@ pub fn DftPotential(comptime T: type) type {
 
                                 tau_a += p_val_a * dphi_dot;
                                 tau_b += p_val_b * dphi_dot;
+
+                                const lapl_mu = ctx.basisgrid.lapl.?.at(i, mu);
+
+                                lapl_sum_a += p_val_a * lapl_mu * phi_nu;
+                                lapl_sum_b += p_val_b * lapl_mu * phi_nu;
                             }
                         }
                     };
@@ -320,12 +338,17 @@ pub fn DftPotential(comptime T: type) type {
                     if (ctx.has_mgga) {
                         ctx.density.tau_val.?.ptr(i, 0).* = 0.5 * tau_a;
                         ctx.density.tau_val.?.ptr(i, 1).* = 0.5 * tau_b;
+
+                        ctx.density.lap_val.?.ptr(i, 0).* = 2 * (lapl_sum_a + tau_a);
+                        ctx.density.lap_val.?.ptr(i, 1).* = 2 * (lapl_sum_b + tau_b);
                     }
                 }
 
                 if (!self.polarized) {
                     var rho_tot: T = 0;
                     var tau_tot: T = 0;
+
+                    var lapl_sum_tot: T = 0;
 
                     var del_rho_x: T = 0;
                     var del_rho_y: T = 0;
@@ -356,6 +379,8 @@ pub fn DftPotential(comptime T: type) type {
                                 const dphi_dot = dphi_dx_mu * dphi_dx_nu + dphi_dy_mu * dphi_dy_nu + dphi_dz_mu * dphi_dz_nu;
 
                                 tau_tot += P.at(mu, nu) * dphi_dot;
+
+                                lapl_sum_tot += P.at(mu, nu) * ctx.basisgrid.lapl.?.at(i, mu) * phi_nu;
                             }
                         }
                     };
@@ -376,6 +401,8 @@ pub fn DftPotential(comptime T: type) type {
 
                     if (ctx.has_mgga) {
                         ctx.density.tau_val.?.ptr(i, 0).* = 0.5 * tau_tot;
+
+                        ctx.density.lap_val.?.ptr(i, 0).* = 2 * (lapl_sum_tot + tau_tot);
                     }
                 }
             }
@@ -443,6 +470,8 @@ pub fn DftPotential(comptime T: type) type {
 
                         const v_tau_a = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(i, 0) else 0.0;
                         const v_tau_b = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(i, 1) else 0.0;
+                        const v_lap_a = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(i, 0) else 0.0;
+                        const v_lap_b = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(i, 1) else 0.0;
 
                         for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
                             const phi_mu = ctx.basisgrid.phi.at(i, mu);
@@ -462,6 +491,14 @@ pub fn DftPotential(comptime T: type) type {
 
                                 val_a += 0.5 * v_tau_a * dphi_dot;
                                 val_b += 0.5 * v_tau_b * dphi_dot;
+
+                                const lapl_mu = ctx.basisgrid.lapl.?.at(i, mu);
+                                const lapl_nu = ctx.basisgrid.lapl.?.at(i, nu);
+
+                                const lapl_term = lapl_mu * phi_nu + 2 * dphi_dot + phi_mu * lapl_nu;
+
+                                val_a += v_lap_a * lapl_term;
+                                val_b += v_lap_b * lapl_term;
                             }
 
                             self.Vxc.ptr(mu + 0, nu + 0).* += val_a * w;
@@ -501,6 +538,7 @@ pub fn DftPotential(comptime T: type) type {
                         }
 
                         const v_tau = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(i, 0) else 0.0;
+                        const v_lap = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(i, 0) else 0.0;
 
                         for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
                             const phi_mu = ctx.basisgrid.phi.at(i, mu);
@@ -513,7 +551,15 @@ pub fn DftPotential(comptime T: type) type {
                                 const dy_mu_nu = ctx.basisgrid.dphi_dy.?.at(i, mu) * ctx.basisgrid.dphi_dy.?.at(i, nu);
                                 const dz_mu_nu = ctx.basisgrid.dphi_dz.?.at(i, mu) * ctx.basisgrid.dphi_dz.?.at(i, nu);
 
-                                val += 0.5 * v_tau * (dx_mu_nu + dy_mu_nu + dz_mu_nu);
+                                const dphi_dot = dx_mu_nu + dy_mu_nu + dz_mu_nu;
+
+                                val += 0.5 * v_tau * dphi_dot;
+
+                                const lapl_mu = ctx.basisgrid.lapl.?.at(i, mu);
+                                const lapl_nu = ctx.basisgrid.lapl.?.at(i, nu);
+                                const lapl_term = lapl_mu * phi_nu + 2 * dphi_dot + phi_mu * lapl_nu;
+
+                                val += v_lap * lapl_term;
                             }
 
                             self.Vxc.ptr(mu, nu).* += val * w;
@@ -534,7 +580,7 @@ pub fn DftPotential(comptime T: type) type {
 
             const size_factor: usize, const flags = .{ if (self.polarized) 2 else 1, self.getFamilyFlags() };
 
-            var basis = try BasisGrid(T).init(self.pts.shape[0], sys.nbf, flags.needs_deriv, gpa);
+            var basis = try BasisGrid(T).init(self.pts.shape[0], sys.nbf, flags.needs_deriv, flags.has_mgga, gpa);
             defer basis.deinit(gpa);
 
             var density = try DensityGrid(T).init(self.pts.shape[0], size_factor, flags.needs_deriv, flags.has_mgga, self.polarized, gpa);
@@ -565,6 +611,7 @@ pub fn DftPotential(comptime T: type) type {
 
                 .sig_val = if (ctx.density.sig_val) |s| s.data else null,
                 .tau_val = if (ctx.density.tau_val) |t| t.data else null,
+                .lap_val = if (ctx.density.lap_val) |l| l.data else null,
             };
 
             const out = XCOutput(T){
@@ -572,6 +619,7 @@ pub fn DftPotential(comptime T: type) type {
 
                 .sig_pot = if (ctx.potgd.sig_pot) |s| s.data else null,
                 .tau_pot = if (ctx.potgd.tau_pot) |t| t.data else null,
+                .lap_pot = if (ctx.potgd.lap_pot) |l| l.data else null,
 
                 .rho_pot = ctx.potgd.rho_pot.data,
             };
@@ -595,13 +643,17 @@ pub fn BasisGrid(comptime T: type) type {
         dphi_dy: ?Matrix(T) = null,
         dphi_dz: ?Matrix(T) = null,
 
-        pub fn init(n_grid: usize, nbf: usize, needs_deriv: bool, gpa: Allocator) !@This() {
+        lapl: ?Matrix(T) = null,
+
+        pub fn init(n_grid: usize, nbf: usize, needs_deriv: bool, has_mgga: bool, gpa: Allocator) !@This() {
             var phi = try Matrix(T).init(n_grid, nbf, gpa);
             errdefer phi.deinit(gpa);
 
             var dphi_dx: ?Matrix(T) = null;
             var dphi_dy: ?Matrix(T) = null;
             var dphi_dz: ?Matrix(T) = null;
+
+            var lapl: ?Matrix(T) = null;
 
             if (needs_deriv) {
                 dphi_dx = try Matrix(T).init(n_grid, nbf, gpa);
@@ -614,7 +666,11 @@ pub fn BasisGrid(comptime T: type) type {
                 errdefer if (dphi_dz) |*d| d.deinit(gpa);
             }
 
-            return .{ .phi = phi, .dphi_dx = dphi_dx, .dphi_dy = dphi_dy, .dphi_dz = dphi_dz };
+            if (has_mgga) {
+                lapl = try Matrix(T).init(n_grid, nbf, gpa);
+            }
+
+            return .{ .phi = phi, .dphi_dx = dphi_dx, .dphi_dy = dphi_dy, .dphi_dz = dphi_dz, .lapl = lapl };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -623,6 +679,8 @@ pub fn BasisGrid(comptime T: type) type {
             if (self.dphi_dx) |*d| d.deinit(gpa);
             if (self.dphi_dy) |*d| d.deinit(gpa);
             if (self.dphi_dz) |*d| d.deinit(gpa);
+
+            if (self.lapl) |*d| d.deinit(gpa);
         }
     };
 }
@@ -634,6 +692,7 @@ pub fn DensityGrid(comptime T: type) type {
         del_rho: ?Matrix(T) = null,
         sig_val: ?Matrix(T) = null,
         tau_val: ?Matrix(T) = null,
+        lap_val: ?Matrix(T) = null,
 
         pub fn init(n_g: usize, size_factor: usize, needs_deriv: bool, has_mgga: bool, pol: bool, gpa: Allocator) !@This() {
             var rho_val = try Matrix(T).initZero(n_g, size_factor, gpa);
@@ -642,6 +701,7 @@ pub fn DensityGrid(comptime T: type) type {
             var del_rho: ?Matrix(T) = null;
             var sig_val: ?Matrix(T) = null;
             var tau_val: ?Matrix(T) = null;
+            var lap_val: ?Matrix(T) = null;
 
             if (needs_deriv) {
                 sig_val = try Matrix(T).initZero(n_g, if (pol) 3 else 1, gpa);
@@ -653,9 +713,13 @@ pub fn DensityGrid(comptime T: type) type {
 
             if (has_mgga) {
                 tau_val = try Matrix(T).initZero(n_g, size_factor, gpa);
+                errdefer if (tau_val) |*t| t.deinit(gpa);
+
+                lap_val = try Matrix(T).initZero(n_g, size_factor, gpa);
+                errdefer if (lap_val) |*l| l.deinit(gpa);
             }
 
-            return .{ .rho_val = rho_val, .del_rho = del_rho, .sig_val = sig_val, .tau_val = tau_val };
+            return .{ .rho_val = rho_val, .del_rho = del_rho, .sig_val = sig_val, .tau_val = tau_val, .lap_val = lap_val };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -664,6 +728,7 @@ pub fn DensityGrid(comptime T: type) type {
             if (self.del_rho) |*g| g.deinit(gpa);
             if (self.sig_val) |*s| s.deinit(gpa);
             if (self.tau_val) |*t| t.deinit(gpa);
+            if (self.lap_val) |*l| l.deinit(gpa);
         }
     };
 }
@@ -676,6 +741,7 @@ pub fn PotentialGrid(comptime T: type) type {
 
         sig_pot: ?Matrix(T) = null,
         tau_pot: ?Matrix(T) = null,
+        lap_pot: ?Matrix(T) = null,
 
         pub fn init(n_g: usize, size_factor: usize, needs_deriv: bool, has_mgga: bool, pol: bool, gpa: Allocator) !@This() {
             var exc = try Vector(T).initZero(n_g, gpa);
@@ -686,6 +752,7 @@ pub fn PotentialGrid(comptime T: type) type {
 
             var sig_pot: ?Matrix(T) = null;
             var tau_pot: ?Matrix(T) = null;
+            var lap_pot: ?Matrix(T) = null;
 
             if (needs_deriv) {
                 sig_pot = try Matrix(T).initZero(n_g, if (pol) 3 else 1, gpa);
@@ -694,9 +761,13 @@ pub fn PotentialGrid(comptime T: type) type {
 
             if (has_mgga) {
                 tau_pot = try Matrix(T).initZero(n_g, size_factor, gpa);
+                errdefer if (tau_pot) |*t| t.deinit(gpa);
+
+                lap_pot = try Matrix(T).initZero(n_g, size_factor, gpa);
+                errdefer if (lap_pot) |*l| l.deinit(gpa);
             }
 
-            return .{ .exc = exc, .rho_pot = rho_pot, .sig_pot = sig_pot, .tau_pot = tau_pot };
+            return .{ .exc = exc, .rho_pot = rho_pot, .sig_pot = sig_pot, .tau_pot = tau_pot, .lap_pot = lap_pot };
         }
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -706,6 +777,7 @@ pub fn PotentialGrid(comptime T: type) type {
 
             if (self.sig_pot) |*s| s.deinit(gpa);
             if (self.tau_pot) |*t| t.deinit(gpa);
+            if (self.lap_pot) |*l| l.deinit(gpa);
         }
     };
 }
@@ -884,6 +956,7 @@ fn XCInput(comptime T: type) type {
 
         sig_val: ?[]const T = null,
         tau_val: ?[]const T = null,
+        lap_val: ?[]const T = null,
     };
 }
 
@@ -895,6 +968,7 @@ fn XCOutput(comptime T: type) type {
 
         sig_pot: ?[]T = null,
         tau_pot: ?[]T = null,
+        lap_pot: ?[]T = null,
     };
 }
 
@@ -1034,6 +1108,8 @@ fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, 
     const sig_pot_unwrapped = out.sig_pot.?;
     const tau_val_unwrapped = inp.tau_val.?;
     const tau_pot_unwrapped = out.tau_pot.?;
+    const lap_val_unwrapped = inp.lap_val.?;
+    const lap_pot_unwrapped = out.lap_pot.?;
 
     var e_xc_tmp: [1 * CHUNK_SIZE]T = undefined;
     var vrho_tmp: [2 * CHUNK_SIZE]T = undefined;
@@ -1071,7 +1147,6 @@ fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, 
         const lapl_batch = lapl_tmp[0..vrho_size];
         const vlap_batch = vlap_tmp[0..vrho_size];
 
-        @memset(lapl_batch, 0);
         @memset(vlap_batch, 0);
 
         if (polarized) {
@@ -1079,6 +1154,8 @@ fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, 
 
             const p2 = sig_val_unwrapped[3 * i ..].ptr;
             const p4 = tau_val_unwrapped[2 * i ..].ptr;
+
+            @memcpy(lapl_batch, lap_val_unwrapped[2 * i .. 2 * i + vrho_size]);
 
             const p3 = lapl_batch.ptr;
             const p5 = e_xc_batch.ptr;
@@ -1098,9 +1175,10 @@ fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, 
                 sig_pot_unwrapped[3 * (i + j) + 0] += vsig_batch[3 * j + 0];
                 sig_pot_unwrapped[3 * (i + j) + 1] += vsig_batch[3 * j + 1];
                 sig_pot_unwrapped[3 * (i + j) + 2] += vsig_batch[3 * j + 2];
-
                 tau_pot_unwrapped[2 * (i + j) + 0] += vtau_batch[2 * j + 0];
                 tau_pot_unwrapped[2 * (i + j) + 1] += vtau_batch[2 * j + 1];
+                lap_pot_unwrapped[2 * (i + j) + 0] += vlap_batch[2 * j + 0];
+                lap_pot_unwrapped[2 * (i + j) + 1] += vlap_batch[2 * j + 1];
             }
         }
 
@@ -1109,6 +1187,8 @@ fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, 
 
             const p2 = sig_val_unwrapped[i..].ptr;
             const p4 = tau_val_unwrapped[i..].ptr;
+
+            @memcpy(lapl_batch, lap_val_unwrapped[i .. i + vrho_size]);
 
             const p3 = lapl_batch.ptr;
             const p5 = e_xc_batch.ptr;
@@ -1124,6 +1204,7 @@ fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_type, 
 
                 sig_pot_unwrapped[i + j] += vsig_batch[j];
                 tau_pot_unwrapped[i + j] += vtau_batch[j];
+                lap_pot_unwrapped[i + j] += vlap_batch[j];
             }
         }
     }
