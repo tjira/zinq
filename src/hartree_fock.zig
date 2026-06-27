@@ -252,6 +252,41 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
 
 // GRADIENT FUNCTIONS ==================================================================================================
 
+pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: Allocator) !Matrix(T) {
+    var dVN = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
+    errdefer dVN.deinit(gpa);
+
+    for (0..sys.atoms.len) |i| {
+        const Zi = @as(T, @floatFromInt(sys.atoms[i]));
+
+        const xi = sys.coors[3 * i + 0];
+        const yi = sys.coors[3 * i + 1];
+        const zi = sys.coors[3 * i + 2];
+
+        for (0..sys.atoms.len) |k| {
+            if (k == i) continue;
+
+            const Zk = @as(T, @floatFromInt(sys.atoms[k]));
+
+            const xk = sys.coors[3 * k + 0];
+            const yk = sys.coors[3 * k + 1];
+            const zk = sys.coors[3 * k + 2];
+
+            const dx = xi - xk;
+            const dy = yi - yk;
+            const dz = zi - zk;
+
+            const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            dVN.ptr(i, 0).* -= Zi * Zk * dx / (dist * dist * dist);
+            dVN.ptr(i, 1).* -= Zi * Zk * dy / (dist * dist * dist);
+            dVN.ptr(i, 2).* -= Zi * Zk * dz / (dist * dist * dist);
+        }
+    }
+
+    return dVN;
+}
+
 pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !Matrix(T) {
     const dS = ints.dS orelse unreachable;
     const dH = ints.dH orelse unreachable;
@@ -259,7 +294,7 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
 
     const nocc = if (generalized) ints.sys.nel else ints.sys.nel / 2;
 
-    var G = try Matrix(T).initZero(ints.sys.atoms.len, 3, gpa);
+    var G = try nuclearRepulsionGradient(T, ints.sys, gpa);
     errdefer G.deinit(gpa);
 
     const exch_factor: T = if (generalized) 1 else 0.5;
@@ -280,25 +315,9 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
     };
 
     for (0..ints.sys.atoms.len) |i| for (0..3) |j| {
-        var n_G: T = 0;
         var h_G: T = 0;
         var s_G: T = 0;
         var g_G: T = 0;
-
-        for (0..ints.sys.atoms.len) |k| {
-            if (k == i) continue;
-
-            const Zi = @as(T, @floatFromInt(ints.sys.atoms[i]));
-            const Zj = @as(T, @floatFromInt(ints.sys.atoms[k]));
-
-            const dx = ints.sys.coors[3 * i + 0] - ints.sys.coors[3 * k + 0];
-            const dy = ints.sys.coors[3 * i + 1] - ints.sys.coors[3 * k + 1];
-            const dz = ints.sys.coors[3 * i + 2] - ints.sys.coors[3 * k + 2];
-
-            const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
-
-            n_G -= Zi * Zj * (ints.sys.coors[3 * i + j] - ints.sys.coors[3 * k + j]) / (dist * dist * dist);
-        }
 
         for (0..dS.shape[1]) |p| for (0..dS.shape[2]) |q| {
             const dh_val = dH.at(.{ 3 * i + j, p, q });
@@ -315,7 +334,7 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
             g_G += 0.5 * P.at(p, q) * P.at(r, s) * (dg1 - exch_factor * dg2);
         };
 
-        G.ptr(i, j).* = h_G + g_G + s_G + n_G;
+        G.ptr(i, j).* += h_G + g_G + s_G;
     };
 
     return G;

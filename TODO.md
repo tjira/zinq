@@ -10,7 +10,7 @@
 - [x] Add spectrum calculation to the QD code.
 - [x] Add complex absorbing potential to the QD code.
 - [x] Implement arbitrary order Moller-Plesset perturbation theory.
-- [ ] Implement gradients for the CI methods.
+- [x] Implement gradients for the CI methods.
 - [x] Print version of all the libraries at the beginning of the output.
 - [x] Add the docs target.
 - [x] Add population tracking so that the CAP would not eat the population of the wavefunction.

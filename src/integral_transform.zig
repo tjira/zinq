@@ -117,13 +117,16 @@ pub fn ao2mo_pp(comptime T: type, A_pp: *Matrix(T), A_xx: Matrix(T), C: Matrix(T
     std.debug.assert(A_xx.ncol() == N);
 
     for (0..N) |p| for (0..N) |q| {
-        var sum: T = 0;
+        var sum = Value(T).fromFloat(0);
 
         for (0..N) |mu| for (0..N) |nu| {
-            sum += C.at(mu, p) * C.at(nu, q) * A_xx.at(mu, nu);
+            const c_mu_p = Value(T).init(C.at(mu, p));
+            const c_nu_q = Value(T).init(C.at(nu, q));
+            const a_val = Value(T).init(A_xx.at(mu, nu));
+            sum = sum.add(c_mu_p.mul(c_nu_q).mul(a_val));
         };
 
-        A_pp.ptr(p, q).* = sum;
+        A_pp.ptr(p, q).* = sum.val;
     };
 }
 
@@ -136,13 +139,15 @@ pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T
     std.debug.assert(A_xx.ncol() == N);
 
     for (0..N) |mu| for (0..N) |p| {
-        var sum: T = 0;
+        var sum = Value(T).fromFloat(0);
 
         for (0..N) |q| {
-            sum += C.at(mu, q) * A_pp.at(q, p);
+            const c_val = Value(T).init(C.at(mu, q));
+            const a_val = Value(T).init(A_pp.at(q, p));
+            sum = sum.add(c_val.mul(a_val));
         }
 
-        A_xx.ptr(mu, p).* = sum;
+        A_xx.ptr(mu, p).* = sum.val;
     };
 }
 

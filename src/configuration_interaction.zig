@@ -15,10 +15,10 @@ const ao2so_pp = @import("integral_transform.zig").ao2so_pp;
 const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 const hartree_fock_run = @import("hartree_fock.zig").run;
+const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
 const primType = @import("value.zig").primType;
 const printf = @import("read_write.zig").printf;
 
-const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Value = @import("value.zig").Value;
 
@@ -28,6 +28,12 @@ pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
     excitations: []const u32 = &.{ 1, 2 },
+
+    gradient: ?union(enum) {
+        analytic: struct {
+            state: u32 = 0,
+        },
+    } = null,
 };
 
 // CONFIGURATION INTERACTION FUNCTIONS =================================================================================
@@ -262,28 +268,28 @@ fn signOfExcitations(S: []const usize, U: []const usize) i2 {
     return if (exp % 2 == 0) 1 else -1;
 }
 
-fn transformIntegrals(comptime T: type, hfres: HartreeFockResult(T), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
-    const nsp = 2 * hfres.ints.sys.nbf;
+fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+    const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
 
-    var C_SO = if (generalized) hfres.C else try Matrix(T).initZero(nsp, nsp, gpa);
+    var C_SO = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
     defer if (!generalized) C_SO.deinit(gpa);
 
     if (!generalized) {
-        ao2so_coef(T, &C_SO, hfres.C);
+        ao2so_coef(T, &C_SO, C);
     }
 
-    var H_SO = if (generalized) hfres.ints.H.? else try Matrix(T).initZero(nsp, nsp, gpa);
+    var H_SO = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
     defer if (!generalized) H_SO.deinit(gpa);
 
     if (!generalized) {
-        ao2so_pp(T, &H_SO, hfres.ints.H.?);
+        ao2so_pp(T, &H_SO, H);
     }
 
-    var g_SO = if (generalized) hfres.ints.g.? else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    var g_SO = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
     defer if (!generalized) g_SO.deinit(gpa);
 
     if (!generalized) {
-        ao2so_pppp(T, &g_SO, hfres.ints.g.?);
+        ao2so_pppp(T, &g_SO, g);
     }
 
     var H_MS = try Matrix(T).init(nsp, nsp, gpa);
@@ -315,6 +321,63 @@ fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocat
     return .{ E, C };
 }
 
+// GRADIENT FUNCTIONS ==================================================================================================
+
+pub fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: std.ArrayList([]const usize), state: usize, gpa: Allocator) !Matrix(T) {
+    const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
+
+    var grad = try nuclearRepulsionGradient(T, hfres.ints.sys, gpa);
+    errdefer grad.deinit(gpa);
+
+    var H_d = try Matrix(ScalarDual(T)).init(hfres.ints.H.?.nrow(), hfres.ints.H.?.ncol(), gpa);
+    defer H_d.deinit(gpa);
+
+    var g_d = try Tensor(ScalarDual(T), 4).init(hfres.ints.g.?.shape, gpa);
+    defer g_d.deinit(gpa);
+
+    var C_d = try Matrix(ScalarDual(T)).init(hfres.C.nrow(), hfres.C.ncol(), gpa);
+    defer C_d.deinit(gpa);
+
+    for (0..3 * hfres.ints.sys.atoms.len) |i| {
+        for (0..H_d.nrow()) |mu| for (0..H_d.ncol()) |nu| {
+            H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ i, mu, nu }));
+        };
+
+        for (0..g_d.shape[0]) |mu| for (0..g_d.shape[1]) |lambda| for (0..g_d.shape[2]) |nu| for (0..g_d.shape[3]) |sigma| {
+            const val = hfres.ints.g.?.at(.{ mu, lambda, nu, sigma });
+
+            g_d.ptr(.{ mu, lambda, nu, sigma }).* = ScalarDual(T).init(val, hfres.ints.dg.?.at(.{ i, mu, lambda, nu, sigma }));
+        };
+
+        for (0..C_d.nrow()) |mu| for (0..C_d.ncol()) |p| {
+            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C.at(mu, p), hfres.dC.?.at(.{ i, mu, p }));
+        };
+
+        var H_MS_d, var g_MS_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, generalized, gpa);
+
+        defer {
+            H_MS_d.deinit(gpa);
+            g_MS_d.deinit(gpa);
+        }
+
+        var H_CI_d = try Matrix(ScalarDual(T)).init(dets.items.len, dets.items.len, gpa);
+        defer H_CI_d.deinit(gpa);
+
+        for (0..dets.items.len) |a| for (a..dets.items.len) |b| {
+            const val = slater(ScalarDual(T), dets.items[a], dets.items[b], H_MS_d, g_MS_d);
+
+            H_CI_d.ptr(a, b).* = val;
+            H_CI_d.ptr(b, a).* = val;
+        };
+
+        for (0..dets.items.len) |a| for (0..dets.items.len) |b| {
+            grad.ptr(i / 3, i % 3).* += C.at(a, state) * C.at(b, state) * H_CI_d.at(a, b).der;
+        };
+    }
+
+    return grad;
+}
+
 // RESULT STRUCT =======================================================================================================
 
 pub fn Result(comptime T: type) type {
@@ -325,12 +388,20 @@ pub fn Result(comptime T: type) type {
 
         energy: []T,
 
+        gradient: []Matrix(T) = &.{},
+
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.hartree_fock.deinit(gpa);
 
             self.C.deinit(gpa);
 
             gpa.free(self.energy);
+
+            for (0..self.gradient.len) |i| {
+                self.gradient[i].deinit(gpa);
+            }
+
+            gpa.free(self.gradient);
         }
     };
 }
@@ -340,7 +411,15 @@ pub fn Result(comptime T: type) type {
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     const generalized = opt.hartree_fock.generalized;
 
-    const hf_opt = opt.hartree_fock;
+    var hf_opt = opt.hartree_fock;
+
+    if (opt.gradient != null) {
+        hf_opt.gradient = .{ .analytic = .{} };
+
+        if (hf_opt.response == null) {
+            hf_opt.response = .{};
+        }
+    }
 
     var timer = std.Io.Timestamp.now(io, .real);
 
@@ -359,7 +438,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    var H_MS, var g_MS = try transformIntegrals(T, hfres, generalized, gpa);
+    var H_MS, var g_MS = try transformInts(T, hfres.C, hfres.ints.H.?, hfres.ints.g.?, generalized, gpa);
 
     defer {
         H_MS.deinit(gpa);
@@ -417,5 +496,24 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try printf(io, "\nFINAL CI ENERGY: {d:.14} Eh\n", .{E.at(0)});
     }
 
-    return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C };
+    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
+    errdefer if (opt.gradient) |_| gpa.free(grad);
+
+    if (opt.gradient) |gradopt| {
+        grad[0] = try gradient(T, hfres, C, dets, gradopt.analytic.state, gpa);
+    }
+
+    errdefer {
+        if (opt.gradient) |_| grad[0].deinit(gpa);
+    }
+
+    if (log and opt.gradient != null) {
+        try printf(io, "\nCI STATE {d} NUCLEAR ENERGY GRADIENT\n", .{opt.gradient.?.analytic.state});
+
+        for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
+            try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
+        };
+    }
+
+    return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C, .gradient = grad };
 }
