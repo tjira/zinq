@@ -9,8 +9,6 @@ const Value = @import("value.zig").Value;
 
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 
-// OPTIONS =============================================================================================================
-
 pub const Options = union(enum) {
     harmonic: struct {
         k: []const f64 = &.{1},
@@ -26,8 +24,6 @@ pub const Options = union(enum) {
         D: f64 = 1.000,
     },
 };
-
-// GENERIC POTENTIAL ===================================================================================================
 
 pub fn Potential(comptime T: type) type {
     return union(enum) {
@@ -85,9 +81,7 @@ pub fn Potential(comptime T: type) type {
     };
 }
 
-// SPECIFIC POTENTIALS =================================================================================================
-
-pub fn Harmonic(comptime T: type) type {
+fn Harmonic(comptime T: type) type {
     return struct {
         k: []const T,
 
@@ -115,7 +109,7 @@ pub fn Harmonic(comptime T: type) type {
     };
 }
 
-pub fn TimeLinear(comptime T: type) type {
+fn TimeLinear(comptime T: type) type {
     return struct {
         a: T,
         g: T,
@@ -148,7 +142,7 @@ pub fn TimeLinear(comptime T: type) type {
     };
 }
 
-pub fn Tully1(comptime T: type) type {
+fn Tully1(comptime T: type) type {
     return struct {
         A: T,
         B: T,

@@ -2,8 +2,6 @@ const std = @import("std");
 
 const Value = @import("value.zig").Value;
 
-// MATRIX ==============================================================================================================
-
 pub fn Matrix(comptime T: type) type {
     return struct {
         data: []T,
@@ -13,16 +11,15 @@ pub fn Matrix(comptime T: type) type {
             return .{ .data = try gpa.alloc(T, rows * cols), .shape = .{ rows, cols } };
         }
 
-        pub fn initZero(rows: usize, cols: usize, gpa: std.mem.Allocator) !@This() {
-            var A = try @This().init(rows, cols, gpa);
-
-            A.zero();
-
-            return A;
-        }
-
         pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
             gpa.free(self.data);
+        }
+
+        pub fn at(self: @This(), i: usize, j: usize) T {
+            std.debug.assert(i < self.shape[0]);
+            std.debug.assert(j < self.shape[1]);
+
+            return self.data[i * self.shape[1] + j];
         }
 
         pub fn clone(self: @This(), gpa: std.mem.Allocator) !@This() {
@@ -35,13 +32,6 @@ pub fn Matrix(comptime T: type) type {
             return A;
         }
 
-        pub fn at(self: @This(), i: usize, j: usize) T {
-            std.debug.assert(i < self.shape[0]);
-            std.debug.assert(j < self.shape[1]);
-
-            return self.data[i * self.shape[1] + j];
-        }
-
         pub fn divs(self: *@This(), scalar: T) void {
             for (0..self.data.len) |i| {
                 self.data[i] = Value(T).init(self.data[i]).div(Value(T).init(scalar)).val;
@@ -52,6 +42,14 @@ pub fn Matrix(comptime T: type) type {
             for (0..self.data.len) |i| {
                 self.data[i] = scalar;
             }
+        }
+
+        pub fn initZero(rows: usize, cols: usize, gpa: std.mem.Allocator) !@This() {
+            var A = try @This().init(rows, cols, gpa);
+
+            A.zero();
+
+            return A;
         }
 
         pub fn ncol(self: @This()) usize {
@@ -75,10 +73,6 @@ pub fn Matrix(comptime T: type) type {
             return self.data[i * self.shape[1] .. (i + 1) * self.shape[1]];
         }
 
-        pub fn slice(self: @This(), start: usize, end: usize) []T {
-            return self.data[start..end];
-        }
-
         pub fn takeRows(self: @This(), n: usize) @This() {
             std.debug.assert(n <= self.shape[0]);
 
@@ -91,8 +85,6 @@ pub fn Matrix(comptime T: type) type {
     };
 }
 
-// VECTOR ==============================================================================================================
-
 pub fn Vector(comptime T: type) type {
     return struct {
         data: []T,
@@ -100,14 +92,6 @@ pub fn Vector(comptime T: type) type {
 
         pub fn init(size: usize, gpa: std.mem.Allocator) !@This() {
             return .{ .data = try gpa.alloc(T, size), .shape = .{size} };
-        }
-
-        pub fn initZero(size: usize, gpa: std.mem.Allocator) !@This() {
-            var v = try @This().init(size, gpa);
-
-            v.zero();
-
-            return v;
         }
 
         pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
@@ -128,6 +112,14 @@ pub fn Vector(comptime T: type) type {
             for (0..self.data.len) |i| {
                 self.data[i] = Value(T).init(self.data[i]).div(Value(T).init(scalar)).val;
             }
+        }
+
+        pub fn initZero(size: usize, gpa: std.mem.Allocator) !@This() {
+            var v = try @This().init(size, gpa);
+
+            v.zero();
+
+            return v;
         }
 
         pub fn length(self: @This()) usize {
@@ -160,8 +152,6 @@ pub fn Vector(comptime T: type) type {
     };
 }
 
-// TENSOR ==============================================================================================================
-
 pub fn Tensor(comptime T: type, comptime N: usize) type {
     return struct {
         data: []T,
@@ -177,16 +167,23 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             return .{ .data = try gpa.alloc(T, size), .shape = shape };
         }
 
-        pub fn initZero(shape: [N]usize, gpa: std.mem.Allocator) !@This() {
-            var U = try @This().init(shape, gpa);
-
-            U.zero();
-
-            return U;
-        }
-
         pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
             gpa.free(self.data);
+        }
+
+        pub fn asMatrix(self: @This()) Matrix(T) {
+            var rows: usize = 1;
+            var cols: usize = 1;
+
+            for (0..(N + 1) / 2) |i| {
+                rows *= self.shape[i];
+            }
+
+            for ((N + 1) / 2..N) |i| {
+                cols *= self.shape[i];
+            }
+
+            return .{ .data = self.data, .shape = .{ rows, cols } };
         }
 
         pub fn at(self: @This(), indx: [N]usize) T {
@@ -205,6 +202,14 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             return self.data[idx];
         }
 
+        pub fn initZero(shape: [N]usize, gpa: std.mem.Allocator) !@This() {
+            var U = try @This().init(shape, gpa);
+
+            U.zero();
+
+            return U;
+        }
+
         pub fn ptr(self: *@This(), indx: [N]usize) *T {
             var idx: usize = 0;
             var str: usize = 1;
@@ -219,21 +224,6 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             }
 
             return &self.data[idx];
-        }
-
-        pub fn asMatrix(self: @This()) Matrix(T) {
-            var rows: usize = 1;
-            var cols: usize = 1;
-
-            for (0..(N + 1) / 2) |i| {
-                rows *= self.shape[i];
-            }
-
-            for ((N + 1) / 2..N) |i| {
-                cols *= self.shape[i];
-            }
-
-            return .{ .data = self.data, .shape = .{ rows, cols } };
         }
 
         pub fn zero(self: *@This()) void {

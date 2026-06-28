@@ -6,15 +6,6 @@ const Value = @import("value.zig").Value;
 
 const primType = @import("value.zig").primType;
 
-pub fn ButcherTableau(comptime T: type, comptime STAGES: usize) type {
-    return struct {
-        a: [STAGES][STAGES]T,
-
-        b: [STAGES]T,
-        c: [STAGES]T,
-    };
-}
-
 pub fn Integrator(comptime T: type) type {
     const U = primType(T);
 
@@ -45,6 +36,15 @@ pub fn Integrator(comptime T: type) type {
                 inline else => |*method| method.step(y, dt, ctx, dFn),
             }
         }
+    };
+}
+
+fn ButcherTableau(comptime T: type, comptime STAGES: usize) type {
+    return struct {
+        a: [STAGES][STAGES]T,
+
+        b: [STAGES]T,
+        c: [STAGES]T,
     };
 }
 
@@ -116,6 +116,10 @@ fn Rk1(comptime T: type) type {
     return RungeKutta(T, rk1Tableau(primType(T)));
 }
 
+fn Rk4(comptime T: type) type {
+    return RungeKutta(T, rk4Tableau(primType(T)));
+}
+
 fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {
     return .{
         .a = .{
@@ -125,10 +129,6 @@ fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {
         .b = .{1.0},
         .c = .{0.0},
     };
-}
-
-fn Rk4(comptime T: type) type {
-    return RungeKutta(T, rk4Tableau(primType(T)));
 }
 
 fn rk4Tableau(comptime U: type) ButcherTableau(U, 4) {

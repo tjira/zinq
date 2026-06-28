@@ -9,8 +9,6 @@ const Tensor = @import("tensor.zig").Tensor;
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 
-// OPTIONS =============================================================================================================
-
 const Calculate = struct {
     kinetic: bool = true,
     overlap: bool = true,
@@ -48,8 +46,6 @@ pub const Options = struct {
     spin: bool = false,
 };
 
-// INTEGRALS ===========================================================================================================
-
 pub fn Integrals(comptime T: type) type {
     return struct {
         sys: MolecularSystem(T),
@@ -85,8 +81,6 @@ pub fn Integrals(comptime T: type) type {
         }
     };
 }
-
-// RUN =================================================================================================================
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Integrals(T) {
     var timer = std.Io.Timestamp.now(io, .real);

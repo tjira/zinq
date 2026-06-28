@@ -6,6 +6,28 @@ const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 
+pub fn ao2mo_pp(comptime T: type, A_pp: *Matrix(T), A_xx: Matrix(T), C: Matrix(T)) void {
+    const N = C.shape[0];
+
+    std.debug.assert(A_pp.nrow() == N);
+    std.debug.assert(A_pp.ncol() == N);
+    std.debug.assert(A_xx.nrow() == N);
+    std.debug.assert(A_xx.ncol() == N);
+
+    for (0..N) |p| for (0..N) |q| {
+        var sum = Value(T).fromFloat(0);
+
+        for (0..N) |mu| for (0..N) |nu| {
+            const c_mu_p = Value(T).init(C.at(mu, p));
+            const c_nu_q = Value(T).init(C.at(nu, q));
+            const a_val = Value(T).init(A_xx.at(mu, nu));
+            sum = sum.add(c_mu_p.mul(c_nu_q).mul(a_val));
+        };
+
+        A_pp.ptr(p, q).* = sum.val;
+    };
+}
+
 pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), gpa: Allocator) !void {
     const N = g_xxxx.shape[0];
 
@@ -52,7 +74,88 @@ pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4),
     };
 }
 
-pub fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), nocc: usize, gpa: Allocator) !void {
+pub fn ao2so_coef(comptime T: type, C_so: *Matrix(T), C_ao: Matrix(T)) void {
+    const nbf = C_ao.shape[0];
+
+    std.debug.assert(C_so.shape[0] == 2 * nbf);
+    std.debug.assert(C_so.shape[1] == 2 * nbf);
+
+    C_so.zero();
+
+    for (0..nbf) |i| {
+        const col_a = 2 * i + 0;
+        const col_b = 2 * i + 1;
+
+        for (0..nbf) |mu| {
+            const indmu0, const indmu1 = .{ mu, mu + nbf };
+
+            C_so.ptr(indmu0, col_a).* = C_ao.at(mu, i);
+            C_so.ptr(indmu1, col_b).* = C_ao.at(mu, i);
+        }
+    }
+}
+
+pub fn ao2so_pp(comptime T: type, A_so: *Matrix(T), A_ao: Matrix(T)) void {
+    const nbf = A_ao.shape[0];
+
+    std.debug.assert(A_so.shape[0] == 2 * nbf);
+    std.debug.assert(A_so.shape[1] == 2 * nbf);
+
+    A_so.zero();
+
+    for (0..nbf) |i| for (0..nbf) |j| {
+        A_so.ptr(i, j).* = A_ao.at(i, j);
+
+        A_so.ptr(i + nbf, j + nbf).* = A_ao.at(i, j);
+    };
+}
+
+pub fn ao2so_pppp(comptime T: type, g_so: *Tensor(T, 4), g_ao: Tensor(T, 4)) void {
+    const nbf = g_ao.shape[0];
+
+    std.debug.assert(g_ao.shape[1] == nbf);
+    std.debug.assert(g_ao.shape[2] == nbf);
+    std.debug.assert(g_ao.shape[3] == nbf);
+
+    std.debug.assert(g_so.shape[0] == 2 * nbf);
+    std.debug.assert(g_so.shape[1] == 2 * nbf);
+    std.debug.assert(g_so.shape[2] == 2 * nbf);
+    std.debug.assert(g_so.shape[3] == 2 * nbf);
+
+    g_so.zero();
+
+    for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
+        g_so.ptr(.{ i, j, k, l }).* = g_ao.at(.{ i, j, k, l });
+
+        g_so.ptr(.{ i + nbf, j, k + nbf, l }).* = g_ao.at(.{ i, j, k, l });
+        g_so.ptr(.{ i, j + nbf, k, l + nbf }).* = g_ao.at(.{ i, j, k, l });
+
+        g_so.ptr(.{ i + nbf, j + nbf, k + nbf, l + nbf }).* = g_ao.at(.{ i, j, k, l });
+    };
+}
+
+pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T)) void {
+    const N = C.shape[0];
+
+    std.debug.assert(A_pp.nrow() == N);
+    std.debug.assert(A_pp.ncol() == N);
+    std.debug.assert(A_xx.nrow() == N);
+    std.debug.assert(A_xx.ncol() == N);
+
+    for (0..N) |mu| for (0..N) |p| {
+        var sum = Value(T).fromFloat(0);
+
+        for (0..N) |q| {
+            const c_val = Value(T).init(C.at(mu, q));
+            const a_val = Value(T).init(A_pp.at(q, p));
+            sum = sum.add(c_val.mul(a_val));
+        }
+
+        A_xx.ptr(mu, p).* = sum.val;
+    };
+}
+
+fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), nocc: usize, gpa: Allocator) !void {
     const N = g_xxxx.shape[0];
 
     std.debug.assert(g_xxxx.shape[1] == N);
@@ -105,108 +208,5 @@ pub fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4),
 
     for (0..nocc) |i| for (0..nocc) |j| for (0..nvir) |a| for (0..N) |sigma| for (nocc..N) |b| {
         addTo(g_oovv.ptr(.{ i, j, a, b - nocc }), C.at(sigma, b), g_oovx.at(.{ i, j, a, sigma }));
-    };
-}
-
-pub fn ao2mo_pp(comptime T: type, A_pp: *Matrix(T), A_xx: Matrix(T), C: Matrix(T)) void {
-    const N = C.shape[0];
-
-    std.debug.assert(A_pp.nrow() == N);
-    std.debug.assert(A_pp.ncol() == N);
-    std.debug.assert(A_xx.nrow() == N);
-    std.debug.assert(A_xx.ncol() == N);
-
-    for (0..N) |p| for (0..N) |q| {
-        var sum = Value(T).fromFloat(0);
-
-        for (0..N) |mu| for (0..N) |nu| {
-            const c_mu_p = Value(T).init(C.at(mu, p));
-            const c_nu_q = Value(T).init(C.at(nu, q));
-            const a_val = Value(T).init(A_xx.at(mu, nu));
-            sum = sum.add(c_mu_p.mul(c_nu_q).mul(a_val));
-        };
-
-        A_pp.ptr(p, q).* = sum.val;
-    };
-}
-
-pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T)) void {
-    const N = C.shape[0];
-
-    std.debug.assert(A_pp.nrow() == N);
-    std.debug.assert(A_pp.ncol() == N);
-    std.debug.assert(A_xx.nrow() == N);
-    std.debug.assert(A_xx.ncol() == N);
-
-    for (0..N) |mu| for (0..N) |p| {
-        var sum = Value(T).fromFloat(0);
-
-        for (0..N) |q| {
-            const c_val = Value(T).init(C.at(mu, q));
-            const a_val = Value(T).init(A_pp.at(q, p));
-            sum = sum.add(c_val.mul(a_val));
-        }
-
-        A_xx.ptr(mu, p).* = sum.val;
-    };
-}
-
-pub fn ao2so_coef(comptime T: type, C_so: *Matrix(T), C_ao: Matrix(T)) void {
-    const nbf = C_ao.shape[0];
-
-    std.debug.assert(C_so.shape[0] == 2 * nbf);
-    std.debug.assert(C_so.shape[1] == 2 * nbf);
-
-    C_so.zero();
-
-    for (0..nbf) |i| {
-        const col_a = 2 * i + 0;
-        const col_b = 2 * i + 1;
-
-        for (0..nbf) |mu| {
-            const indmu0, const indmu1 = .{ mu, mu + nbf };
-
-            C_so.ptr(indmu0, col_a).* = C_ao.at(mu, i);
-            C_so.ptr(indmu1, col_b).* = C_ao.at(mu, i);
-        }
-    }
-}
-
-pub fn ao2so_pppp(comptime T: type, g_so: *Tensor(T, 4), g_ao: Tensor(T, 4)) void {
-    const nbf = g_ao.shape[0];
-
-    std.debug.assert(g_ao.shape[1] == nbf);
-    std.debug.assert(g_ao.shape[2] == nbf);
-    std.debug.assert(g_ao.shape[3] == nbf);
-
-    std.debug.assert(g_so.shape[0] == 2 * nbf);
-    std.debug.assert(g_so.shape[1] == 2 * nbf);
-    std.debug.assert(g_so.shape[2] == 2 * nbf);
-    std.debug.assert(g_so.shape[3] == 2 * nbf);
-
-    g_so.zero();
-
-    for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-        g_so.ptr(.{ i, j, k, l }).* = g_ao.at(.{ i, j, k, l });
-
-        g_so.ptr(.{ i + nbf, j, k + nbf, l }).* = g_ao.at(.{ i, j, k, l });
-        g_so.ptr(.{ i, j + nbf, k, l + nbf }).* = g_ao.at(.{ i, j, k, l });
-
-        g_so.ptr(.{ i + nbf, j + nbf, k + nbf, l + nbf }).* = g_ao.at(.{ i, j, k, l });
-    };
-}
-
-pub fn ao2so_pp(comptime T: type, A_so: *Matrix(T), A_ao: Matrix(T)) void {
-    const nbf = A_ao.shape[0];
-
-    std.debug.assert(A_so.shape[0] == 2 * nbf);
-    std.debug.assert(A_so.shape[1] == 2 * nbf);
-
-    A_so.zero();
-
-    for (0..nbf) |i| for (0..nbf) |j| {
-        A_so.ptr(i, j).* = A_ao.at(i, j);
-
-        A_so.ptr(i + nbf, j + nbf).* = A_ao.at(i, j);
     };
 }

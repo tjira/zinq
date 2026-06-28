@@ -11,8 +11,6 @@ const Matrix = @import("tensor.zig").Matrix;
 const Potential = @import("potential.zig").Potential;
 const Vector = @import("tensor.zig").Vector;
 
-// OPTIONS =============================================================================================================
-
 const FewestSwitchesOptions = struct {
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
 
@@ -28,8 +26,6 @@ pub const Options = union(enum) {
     fewest_switches: FewestSwitchesOptions,
     landau_zener: LandauZenerOptions,
 };
-
-// GENERIC SURFACE HOPPING =============================================================================================
 
 pub fn SurfaceHopping(comptime T: type) type {
     return struct {
@@ -182,8 +178,6 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
     };
 }
-
-// SPECIFIC METHODS ====================================================================================================
 
 fn FewestSwitches(comptime T: type) type {
     return struct {
@@ -472,8 +466,6 @@ fn LandauZener(comptime T: type) type {
     };
 }
 
-// TIME DERIVATIVE COUPLINGS ===========================================================================================
-
 fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T) void {
     const nstate = std.math.sqrt(sigma.len);
 
@@ -495,8 +487,6 @@ fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []
         sigma[i * nstate + j] = (S_ji - S_ij) / (2 * dt);
     };
 }
-
-// HELPER FUNCTIONS ====================================================================================================
 
 fn rescaleMomentumIsotropic(comptime T: type, ensemble: *Ensemble(T), i: usize, dE: T) bool {
     var ekin_old: T = 0;

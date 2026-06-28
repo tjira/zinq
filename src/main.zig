@@ -28,8 +28,6 @@ pub const PotentialOptions = @import("potential.zig").Options;
 
 const printf = @import("read_write.zig").printf;
 
-// OPTIONS =============================================================================================================
-
 const Options = struct {
     zinq: []union(enum) {
         classical_dynamics: ClassicalDynamicsOptions,
@@ -41,7 +39,31 @@ const Options = struct {
     },
 };
 
-// INIT FUNCTIONS ======================================================================================================
+pub fn main(init: std.process.Init) !void {
+    var timer = std.Io.Timestamp.now(init.io, .real);
+
+    const v_major = builtin.zig_version.major;
+    const v_minor = builtin.zig_version.minor;
+    const v_patch = builtin.zig_version.patch;
+
+    try printf(init.io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}\n\n", .{ v_major, v_minor, v_patch, config.version });
+
+    const openblas_v = std.mem.trim(u8, openblas.OPENBLAS_VERSION, "OpenBLAS ");
+
+    try printf(init.io, "OPENBLAS: v{s}, ", .{openblas_v});
+
+    const fftw_v = std.mem.trim(u8, std.mem.span(fftw.fftw_version), "fftw-");
+
+    try printf(init.io, "FFTW: v{s}, ", .{fftw_v});
+
+    try printf(init.io, "LIBINT: v{s}, LIBXC: v{s}\n", .{ libint.LIBINT_VERSION, libxc.xc_version_string() });
+
+    for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |e| {
+        try run(f64, init.io, e, init.gpa, init.arena.allocator());
+    }
+
+    try printf(init.io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.untilNow(init.io, .real)});
+}
 
 fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !?std.json.Parsed(T) {
     const fcontent = std.Io.Dir.cwd().readFileAlloc(io, fname, arena, .unlimited) catch |err| {
@@ -74,30 +96,4 @@ fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: A
 
 fn targets(args: []const []const u8) []const []const u8 {
     return if (args.len > 1) args[1..] else &[_][]const u8{"input.json"};
-}
-
-pub fn main(init: std.process.Init) !void {
-    var timer = std.Io.Timestamp.now(init.io, .real);
-
-    const v_major = builtin.zig_version.major;
-    const v_minor = builtin.zig_version.minor;
-    const v_patch = builtin.zig_version.patch;
-
-    try printf(init.io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}\n\n", .{ v_major, v_minor, v_patch, config.version });
-
-    const openblas_v = std.mem.trim(u8, openblas.OPENBLAS_VERSION, "OpenBLAS ");
-
-    try printf(init.io, "OPENBLAS: v{s}, ", .{openblas_v});
-
-    const fftw_v = std.mem.trim(u8, std.mem.span(fftw.fftw_version), "fftw-");
-
-    try printf(init.io, "FFTW: v{s}, ", .{fftw_v});
-
-    try printf(init.io, "LIBINT: v{s}, LIBXC: v{s}\n", .{ libint.LIBINT_VERSION, libxc.xc_version_string() });
-
-    for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |e| {
-        try run(f64, init.io, e, init.gpa, init.arena.allocator());
-    }
-
-    try printf(init.io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.untilNow(init.io, .real)});
 }

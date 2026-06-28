@@ -22,8 +22,6 @@ const printf = @import("read_write.zig").printf;
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Value = @import("value.zig").Value;
 
-// OPTIONS =============================================================================================================
-
 pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
@@ -36,7 +34,200 @@ pub const Options = struct {
     } = null,
 };
 
-// CONFIGURATION INTERACTION FUNCTIONS =================================================================================
+pub fn Result(comptime T: type) type {
+    return struct {
+        hartree_fock: HartreeFockResult(T),
+
+        C: Matrix(T),
+
+        energy: []T,
+
+        gradient: []Matrix(T) = &.{},
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.hartree_fock.deinit(gpa);
+
+            self.C.deinit(gpa);
+
+            gpa.free(self.energy);
+
+            for (0..self.gradient.len) |i| {
+                self.gradient[i].deinit(gpa);
+            }
+
+            gpa.free(self.gradient);
+        }
+    };
+}
+
+pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Allocator) !std.ArrayList([]const usize) {
+    var dets = std.ArrayList([]const usize).empty;
+
+    errdefer {
+        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
+
+        dets.deinit(gpa);
+    }
+
+    {
+        const ref_det = try gpa.alloc(usize, nel);
+
+        for (0..nel) |i| {
+            ref_det[i] = i;
+        }
+
+        try dets.append(gpa, ref_det);
+    }
+
+    for (0..excitations.len) |i| {
+        const k = excitations[i];
+
+        if (k == 0 or k > nel or k > nsp - nel) continue;
+
+        var occ_combs = try generateCombinations(nel, k, 0, gpa);
+
+        defer {
+            for (0..occ_combs.items.len) |j| gpa.free(occ_combs.items[j]);
+
+            occ_combs.deinit(gpa);
+        }
+
+        var vir_combs = try generateCombinations(nsp - nel, k, nel, gpa);
+
+        defer {
+            for (0..vir_combs.items.len) |j| gpa.free(vir_combs.items[j]);
+
+            vir_combs.deinit(gpa);
+        }
+
+        for (0..occ_combs.items.len) |j| for (0..vir_combs.items.len) |l| {
+            var list = try std.ArrayList(usize).initCapacity(gpa, nel);
+            errdefer list.deinit(gpa);
+
+            for (0..nel) |p| if (std.mem.indexOfScalar(usize, occ_combs.items[j], p) == null) {
+                list.appendAssumeCapacity(p);
+            };
+
+            list.appendSliceAssumeCapacity(vir_combs.items[l]);
+
+            std.mem.sort(usize, list.items, {}, std.sort.asc(usize));
+
+            try dets.append(gpa, try list.toOwnedSlice(gpa));
+        };
+    }
+
+    return dets;
+}
+
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    const generalized = opt.hartree_fock.generalized;
+
+    var hf_opt = opt.hartree_fock;
+
+    if (opt.gradient != null) {
+        hf_opt.gradient = .{ .analytic = .{} };
+
+        if (hf_opt.response == null) {
+            hf_opt.response = .{};
+        }
+    }
+
+    var timer = std.Io.Timestamp.now(io, .real);
+
+    var hfres = try hartree_fock_run(T, io, hf_opt, log, gpa);
+    errdefer hfres.deinit(gpa);
+
+    if (log) {
+        try printf(io, "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCI EXCITATIONS CONSIDERED: [", .{timer.untilNow(io, .real)});
+
+        for (0..opt.excitations.len) |i| {
+            try printf(io, "{d}{s}", .{ opt.excitations[i], if (i == opt.excitations.len - 1) "]\n" else ", " });
+        }
+
+        try printf(io, "\nORBITAL TRANSFORMS TIME:", .{});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    var H_MS, var g_MS = try transformInts(T, hfres.C, hfres.ints.H.?, hfres.ints.g.?, generalized, gpa);
+
+    defer {
+        H_MS.deinit(gpa);
+        g_MS.deinit(gpa);
+    }
+
+    if (log) {
+        try printf(io, " {f}\nSLATER DETERMINANT TIME:", .{timer.untilNow(io, .real)});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    var dets = try generateDets(hfres.ints.sys.nel, 2 * hfres.ints.sys.nbf, opt.excitations, gpa);
+
+    defer {
+        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
+
+        dets.deinit(gpa);
+    }
+
+    if (log) {
+        try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nCI MATRIX ASSEMBLY TIME:", .{ timer.untilNow(io, .real), dets.items.len });
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    var H_CI = try Matrix(T).init(dets.items.len, dets.items.len, gpa);
+    defer H_CI.deinit(gpa);
+
+    for (0..dets.items.len) |i| for (i..dets.items.len) |j| {
+        const val = slater(T, dets.items[i], dets.items[j], H_MS, g_MS);
+
+        H_CI.ptr(i, j).* = val;
+        H_CI.ptr(j, i).* = val;
+    };
+
+    if (log) {
+        try printf(io, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(io, .real)});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    var E, var C = try solveEigenvalueProblem(T, H_CI, try hfres.ints.sys.nrep(), gpa);
+
+    if (log) {
+        try printf(io, " {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    errdefer {
+        E.deinit(gpa);
+        C.deinit(gpa);
+    }
+
+    if (log) {
+        try printf(io, "\nFINAL CI ENERGY: {d:.14} Eh\n", .{E.at(0)});
+    }
+
+    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
+    errdefer if (opt.gradient) |_| gpa.free(grad);
+
+    if (opt.gradient) |gradopt| {
+        grad[0] = try gradient(T, hfres, C, dets, gradopt.analytic.state, gpa);
+    }
+
+    errdefer {
+        if (opt.gradient) |_| grad[0].deinit(gpa);
+    }
+
+    if (log and opt.gradient != null) {
+        try printf(io, "\nCI STATE {d} NUCLEAR ENERGY GRADIENT\n", .{opt.gradient.?.analytic.state});
+
+        for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
+            try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
+        };
+    }
+
+    return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C, .gradient = grad };
+}
 
 pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
     var diff_A: [2]usize = undefined;
@@ -149,65 +340,6 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
     return Value(T).fromFloat(0).val;
 }
 
-pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Allocator) !std.ArrayList([]const usize) {
-    var dets = std.ArrayList([]const usize).empty;
-
-    errdefer {
-        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
-
-        dets.deinit(gpa);
-    }
-
-    {
-        const ref_det = try gpa.alloc(usize, nel);
-
-        for (0..nel) |i| {
-            ref_det[i] = i;
-        }
-
-        try dets.append(gpa, ref_det);
-    }
-
-    for (0..excitations.len) |i| {
-        const k = excitations[i];
-
-        if (k == 0 or k > nel or k > nsp - nel) continue;
-
-        var occ_combs = try generateCombinations(nel, k, 0, gpa);
-
-        defer {
-            for (0..occ_combs.items.len) |j| gpa.free(occ_combs.items[j]);
-
-            occ_combs.deinit(gpa);
-        }
-
-        var vir_combs = try generateCombinations(nsp - nel, k, nel, gpa);
-
-        defer {
-            for (0..vir_combs.items.len) |j| gpa.free(vir_combs.items[j]);
-
-            vir_combs.deinit(gpa);
-        }
-
-        for (0..occ_combs.items.len) |j| for (0..vir_combs.items.len) |l| {
-            var list = try std.ArrayList(usize).initCapacity(gpa, nel);
-            errdefer list.deinit(gpa);
-
-            for (0..nel) |p| if (std.mem.indexOfScalar(usize, occ_combs.items[j], p) == null) {
-                list.appendAssumeCapacity(p);
-            };
-
-            list.appendSliceAssumeCapacity(vir_combs.items[l]);
-
-            std.mem.sort(usize, list.items, {}, std.sort.asc(usize));
-
-            try dets.append(gpa, try list.toOwnedSlice(gpa));
-        };
-    }
-
-    return dets;
-}
-
 fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.ArrayList([]const usize) {
     var results: std.ArrayList([]const usize) = .empty;
 
@@ -258,72 +390,7 @@ fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.
     return results;
 }
 
-fn signOfExcitations(S: []const usize, U: []const usize) i2 {
-    var exp: usize = 0;
-
-    for (0..U.len) |j| {
-        exp += std.mem.indexOfScalar(usize, S, U[j]).? - j;
-    }
-
-    return if (exp % 2 == 0) 1 else -1;
-}
-
-fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
-    const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
-
-    var C_SO = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) C_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_coef(T, &C_SO, C);
-    }
-
-    var H_SO = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) H_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_pp(T, &H_SO, H);
-    }
-
-    var g_SO = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
-    defer if (!generalized) g_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_pppp(T, &g_SO, g);
-    }
-
-    var H_MS = try Matrix(T).init(nsp, nsp, gpa);
-    errdefer H_MS.deinit(gpa);
-
-    ao2mo_pp(T, &H_MS, H_SO, C_SO);
-
-    var g_MS = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
-    errdefer g_MS.deinit(gpa);
-
-    try ao2mo_pppp(T, &g_MS, g_SO, C_SO, gpa);
-
-    return .{ H_MS, g_MS };
-}
-
-fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
-    var E = try Vector(T).init(H_CI.shape[0], gpa);
-    errdefer E.deinit(gpa);
-
-    var C = try Matrix(T).initZero(H_CI.shape[0], H_CI.shape[0], gpa);
-    errdefer C.deinit(gpa);
-
-    try eighSlice(T, E.data, C.data, H_CI.data);
-
-    for (0..E.length()) |i| {
-        E.ptr(i).* += VN;
-    }
-
-    return .{ E, C };
-}
-
-// GRADIENT FUNCTIONS ==================================================================================================
-
-pub fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: std.ArrayList([]const usize), state: usize, gpa: Allocator) !Matrix(T) {
+fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: std.ArrayList([]const usize), state: usize, gpa: Allocator) !Matrix(T) {
     const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
 
     var grad = try nuclearRepulsionGradient(T, hfres.ints.sys, gpa);
@@ -378,142 +445,65 @@ pub fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), det
     return grad;
 }
 
-// RESULT STRUCT =======================================================================================================
+fn signOfExcitations(S: []const usize, U: []const usize) i2 {
+    var exp: usize = 0;
 
-pub fn Result(comptime T: type) type {
-    return struct {
-        hartree_fock: HartreeFockResult(T),
+    for (0..U.len) |j| {
+        exp += std.mem.indexOfScalar(usize, S, U[j]).? - j;
+    }
 
-        C: Matrix(T),
-
-        energy: []T,
-
-        gradient: []Matrix(T) = &.{},
-
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.hartree_fock.deinit(gpa);
-
-            self.C.deinit(gpa);
-
-            gpa.free(self.energy);
-
-            for (0..self.gradient.len) |i| {
-                self.gradient[i].deinit(gpa);
-            }
-
-            gpa.free(self.gradient);
-        }
-    };
+    return if (exp % 2 == 0) 1 else -1;
 }
 
-// RUN =================================================================================================================
+fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+    var E = try Vector(T).init(H_CI.shape[0], gpa);
+    errdefer E.deinit(gpa);
 
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
-    const generalized = opt.hartree_fock.generalized;
+    var C = try Matrix(T).initZero(H_CI.shape[0], H_CI.shape[0], gpa);
+    errdefer C.deinit(gpa);
 
-    var hf_opt = opt.hartree_fock;
+    try eighSlice(T, E.data, C.data, H_CI.data);
 
-    if (opt.gradient != null) {
-        hf_opt.gradient = .{ .analytic = .{} };
-
-        if (hf_opt.response == null) {
-            hf_opt.response = .{};
-        }
+    for (0..E.length()) |i| {
+        E.ptr(i).* += VN;
     }
 
-    var timer = std.Io.Timestamp.now(io, .real);
+    return .{ E, C };
+}
 
-    var hfres = try hartree_fock_run(T, io, hf_opt, log, gpa);
-    errdefer hfres.deinit(gpa);
+fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+    const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
 
-    if (log) {
-        try printf(io, "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCI EXCITATIONS CONSIDERED: [", .{timer.untilNow(io, .real)});
+    var C_SO = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_SO.deinit(gpa);
 
-        for (0..opt.excitations.len) |i| {
-            try printf(io, "{d}{s}", .{ opt.excitations[i], if (i == opt.excitations.len - 1) "]\n" else ", " });
-        }
-
-        try printf(io, "\nORBITAL TRANSFORMS TIME:", .{});
+    if (!generalized) {
+        ao2so_coef(T, &C_SO, C);
     }
 
-    timer = std.Io.Timestamp.now(io, .real);
+    var H_SO = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) H_SO.deinit(gpa);
 
-    var H_MS, var g_MS = try transformInts(T, hfres.C, hfres.ints.H.?, hfres.ints.g.?, generalized, gpa);
-
-    defer {
-        H_MS.deinit(gpa);
-        g_MS.deinit(gpa);
+    if (!generalized) {
+        ao2so_pp(T, &H_SO, H);
     }
 
-    if (log) {
-        try printf(io, " {f}\nSLATER DETERMINANT TIME:", .{timer.untilNow(io, .real)});
+    var g_SO = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer if (!generalized) g_SO.deinit(gpa);
+
+    if (!generalized) {
+        ao2so_pppp(T, &g_SO, g);
     }
 
-    timer = std.Io.Timestamp.now(io, .real);
+    var H_MS = try Matrix(T).init(nsp, nsp, gpa);
+    errdefer H_MS.deinit(gpa);
 
-    var dets = try generateDets(hfres.ints.sys.nel, 2 * hfres.ints.sys.nbf, opt.excitations, gpa);
+    ao2mo_pp(T, &H_MS, H_SO, C_SO);
 
-    defer {
-        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
+    var g_MS = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
+    errdefer g_MS.deinit(gpa);
 
-        dets.deinit(gpa);
-    }
+    try ao2mo_pppp(T, &g_MS, g_SO, C_SO, gpa);
 
-    if (log) {
-        try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nCI MATRIX ASSEMBLY TIME:", .{ timer.untilNow(io, .real), dets.items.len });
-    }
-
-    timer = std.Io.Timestamp.now(io, .real);
-
-    var H_CI = try Matrix(T).init(dets.items.len, dets.items.len, gpa);
-    defer H_CI.deinit(gpa);
-
-    for (0..dets.items.len) |i| for (i..dets.items.len) |j| {
-        const val = slater(T, dets.items[i], dets.items[j], H_MS, g_MS);
-
-        H_CI.ptr(i, j).* = val;
-        H_CI.ptr(j, i).* = val;
-    };
-
-    if (log) {
-        try printf(io, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(io, .real)});
-    }
-
-    timer = std.Io.Timestamp.now(io, .real);
-
-    var E, var C = try solveEigenvalueProblem(T, H_CI, try hfres.ints.sys.nrep(), gpa);
-
-    if (log) {
-        try printf(io, " {f}\n", .{timer.untilNow(io, .real)});
-    }
-
-    errdefer {
-        E.deinit(gpa);
-        C.deinit(gpa);
-    }
-
-    if (log) {
-        try printf(io, "\nFINAL CI ENERGY: {d:.14} Eh\n", .{E.at(0)});
-    }
-
-    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
-    errdefer if (opt.gradient) |_| gpa.free(grad);
-
-    if (opt.gradient) |gradopt| {
-        grad[0] = try gradient(T, hfres, C, dets, gradopt.analytic.state, gpa);
-    }
-
-    errdefer {
-        if (opt.gradient) |_| grad[0].deinit(gpa);
-    }
-
-    if (log and opt.gradient != null) {
-        try printf(io, "\nCI STATE {d} NUCLEAR ENERGY GRADIENT\n", .{opt.gradient.?.analytic.state});
-
-        for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-            try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
-        };
-    }
-
-    return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C, .gradient = grad };
+    return .{ H_MS, g_MS };
 }
