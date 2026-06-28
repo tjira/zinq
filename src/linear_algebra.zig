@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const lapacke = @cImport(@cInclude("lapacke.h"));
+const lapacke = @import("cimport.zig").lapacke;
 
 const Matrix = @import("tensor.zig").Matrix;
 const Vector = @import("tensor.zig").Vector;
