@@ -904,6 +904,8 @@ fn Wavefunction(comptime T: type) type {
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    try checkInvalidInput(opt);
+
     var result: Result(T) = .{ .observables = .empty };
     errdefer result.deinit(gpa);
 
@@ -970,6 +972,106 @@ fn calcSpectrum(comptime T: type, acf: Vector(Complex(T)), dt: T, padding: usize
     }
 
     return .{ acfp, spec };
+}
+
+fn checkInvalidInput(opt: Options) !void {
+    if (opt.time_step <= 0) {
+        std.log.err("TIME STEP MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.mass <= 0) {
+        std.log.err("MASS MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log_interval == 0) {
+        std.log.err("LOG INTERVAL MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.grid.npoint == 0) {
+        std.log.err("GRID POINT COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.grid.bounds.len == 0) {
+        std.log.err("GRID BOUNDS MUST NOT BE EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+
+    for (opt.grid.bounds) |b| if (b[0] >= b[1]) {
+        std.log.err("GRID BOUNDS MIN MUST BE LESS THAN MAX", .{});
+
+        return error.InvalidInput;
+    };
+
+    if (opt.initial_conditions.position.len == 0) {
+        std.log.err("INITIAL POSITION VECTOR MUST NOT BE EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.initial_conditions.momentum.len != opt.initial_conditions.position.len) {
+        std.log.err("INITIAL MOMENTUM AND POSITION VECTORS MUST HAVE THE SAME LENGTH", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.initial_conditions.gamma.len != opt.initial_conditions.position.len) {
+        std.log.err("INITIAL GAMMA VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.initial_conditions.position.len != opt.grid.bounds.len) {
+        std.log.err("INITIAL CONDITIONS DIMENSION DOES NOT MATCH GRID DIMENSION", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.absorbing_potential) |cap| {
+        if (cap.bounds.len != opt.grid.bounds.len) {
+            std.log.err("ABSORBING POTENTIAL BOUNDS DIMENSION DOES NOT MATCH GRID DIMENSION", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (cap.bounds, opt.grid.bounds) |cb, gb| if (cb[0] < gb[0] or cb[1] > gb[1] or cb[0] >= cb[1]) {
+            std.log.err("ABSORBING POTENTIAL BOUNDS MUST LIE WITHIN GRID BOUNDS AND CB[0] < CB[1]", .{});
+
+            return error.InvalidInput;
+        };
+
+        if (cap.exponent <= 0) {
+            std.log.err("ABSORBING POTENTIAL EXPONENT MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (cap.stop_norm) |sn| if (sn <= 0 or sn >= 1) {
+            std.log.err("ABSORBING POTENTIAL STOP_NORM MUST BE BETWEEN 0 AND 1", .{});
+
+            return error.InvalidInput;
+        };
+    }
+
+    if (opt.imaginary) |imag| if (imag.nstate == 0) {
+        std.log.err("ITP TARGET STATE COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    };
+
+    if (opt.spectrum) |spec| if (spec.threshold <= 0 or spec.threshold >= 1) {
+        std.log.err("SPECTRUM THRESHOLD MUST BE BETWEEN 0 AND 1", .{});
+
+        return error.InvalidInput;
+    };
 }
 
 fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {

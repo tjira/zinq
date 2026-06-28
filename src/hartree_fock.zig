@@ -188,9 +188,7 @@ pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: 
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
-    if (opt.gradient != null and opt.dft != null) {
-        return error.GradientForDftNotSupported;
-    }
+    try checkInvalidInput(opt);
 
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
@@ -445,6 +443,84 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     return result;
+}
+
+fn checkInvalidInput(opt: Options) !void {
+    if (opt.system.len == 0) {
+        std.log.err("MOLECULAR SYSTEM XYZ PATH IS EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.basis.len == 0) {
+        std.log.err("BASIS SET G94 PATH IS EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.iterations == 0) {
+        std.log.err("SCF ITERATIONS MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.threshold <= 0) {
+        std.log.err("SCF CONVERGENCE THRESHOLD MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.dft) |d| {
+        if (opt.gradient != null) {
+            std.log.err("ANALYTIC GRADIENTS ARE NOT SUPPORTED FOR DFT CALCULATIONS", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (d.grid.radial == 0) {
+            std.log.err("DFT RADIAL GRID POINTS MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        }
+
+        const valid_angular_points = switch (d.grid.angular) {
+            50, 74, 110, 302, 590, 974 => true,
+
+            else => false,
+        };
+
+        if (!valid_angular_points) {
+            std.log.err("DFT ANGULAR GRID SIZE IS NOT SUPPORTED. USE 50, 74, 110, 302, 590, OR 974", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (d.exchange_correlation != null and (d.exchange != null or d.correlation != null)) {
+            std.log.err("CANNOT SPECIFY BOTH EXCHANGE_CORRELATION AND INDIVIDUAL FUNCTIONALS", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (d.exchange_correlation == null and d.exchange == null and d.correlation == null) {
+            std.log.err("MUST SPECIFY EITHER EXCHANGE_CORRELATION OR EXCHANGE AND/OR CORRELATION FUNCTIONALS", .{});
+
+            return error.InvalidInput;
+        }
+    }
+
+    if (opt.response) |r| {
+        if (r.iterations == 0) {
+            std.log.err("CPHF RESPONSE ITERATIONS MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (r.threshold <= 0) {
+            std.log.err("CPHF RESPONSE THRESHOLD MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        }
+    }
 }
 
 fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {

@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub const LebedevGrid = struct {
     nodes: []const [3]f64,
     nweights: []const f64,

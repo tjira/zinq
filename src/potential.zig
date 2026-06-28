@@ -3,11 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
-const Vector = @import("tensor.zig").Vector;
-const ScalarDual = @import("dual.zig").ScalarDual;
 const Value = @import("value.zig").Value;
-
-const eighSlice = @import("linear_algebra.zig").eighSlice;
 
 pub const Options = union(enum) {
     harmonic: struct {

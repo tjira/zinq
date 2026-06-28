@@ -12,15 +12,12 @@ const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
 const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
 const generateDets = @import("configuration_interaction.zig").generateDets;
-const gradientResponse = @import("hartree_fock.zig").gradientResponse;
 const hartree_fock_run = @import("hartree_fock.zig").run;
 const printf = @import("read_write.zig").printf;
 const slater = @import("configuration_interaction.zig").slater;
 
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Value = @import("value.zig").Value;
-const Integrals = @import("molecular_integrals.zig").Integrals;
-const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
 pub const Options = struct {
     hartree_fock: HartreeFockOptions,
@@ -55,6 +52,8 @@ pub fn Result(comptime T: type) type {
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    try checkInvalidInput(opt);
+
     const generalized = opt.hartree_fock.generalized;
 
     var hf_opt = opt.hartree_fock;
@@ -124,6 +123,14 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     return Result(T){ .hartree_fock = hfres, .energy = energy, .gradient = grad };
+}
+
+fn checkInvalidInput(opt: Options) !void {
+    if (opt.order < 2) {
+        std.log.err("MØLLER-PLESSET PERTURBATION ORDER MUST BE AT LEAST 2 (MP2)", .{});
+
+        return error.InvalidInput;
+    }
 }
 
 fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Allocator) ![]Matrix(T) {

@@ -519,6 +519,8 @@ fn SolveContext(comptime T: type) type {
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    try checkInvalidInput(opt);
+
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\nCLASSICAL DYNAMICS INIT: ");
 
     var timer = std.Io.Timestamp.now(io, .real);
@@ -536,6 +538,50 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     return .{ .observables = obs };
+}
+
+fn checkInvalidInput(opt: Options) !void {
+    if (opt.time_step <= 0) {
+        std.log.err("TIME STEP MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.mass <= 0) {
+        std.log.err("MASS MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.trajectories == 0) {
+        std.log.err("NUMBER OF TRAJECTORIES MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log_interval == 0) {
+        std.log.err("LOG INTERVAL MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.initial_conditions.position.len == 0) {
+        std.log.err("INITIAL POSITION VECTOR MUST NOT BE EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.initial_conditions.momentum.len != opt.initial_conditions.position.len) {
+        std.log.err("INITIAL MOMENTUM AND POSITION VECTORS MUST HAVE THE SAME LENGTH", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.initial_conditions.gamma.len != opt.initial_conditions.position.len) {
+        std.log.err("INITIAL GAMMA VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
+
+        return error.InvalidInput;
+    }
 }
 
 fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {

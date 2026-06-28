@@ -2,8 +2,6 @@ const std = @import("std");
 
 const Complex = std.math.Complex;
 
-const ScalarDual = @import("dual.zig").ScalarDual;
-
 pub fn Value(comptime T: type) type {
     const U = primType(T);
 

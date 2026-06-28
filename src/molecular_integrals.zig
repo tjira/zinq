@@ -83,6 +83,8 @@ pub fn Integrals(comptime T: type) type {
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Integrals(T) {
+    try checkInvalidInput(opt);
+
     var timer = std.Io.Timestamp.now(io, .real);
 
     var ints: Integrals(T) = .{ .sys = try MolecularSystem(T).init(opt.system, opt.basis, gpa) };
@@ -311,4 +313,18 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     return ints;
+}
+
+fn checkInvalidInput(opt: Options) !void {
+    if (opt.system.len == 0) {
+        std.log.err("MOLECULAR SYSTEM XYZ PATH IS EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.basis.len == 0) {
+        std.log.err("BASIS SET G94 PATH IS EMPTY", .{});
+
+        return error.InvalidInput;
+    }
 }

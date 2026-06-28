@@ -5,11 +5,8 @@ const Complex = std.math.Complex;
 const DefaultPrng = std.Random.DefaultPrng;
 
 const Ensemble = @import("classical_dynamics.zig").Ensemble;
-const GradientBuffer = @import("classical_dynamics.zig").GradientBuffer;
 const Integrator = @import("integrator.zig").Integrator;
 const Matrix = @import("tensor.zig").Matrix;
-const Potential = @import("potential.zig").Potential;
-const Vector = @import("tensor.zig").Vector;
 
 const FewestSwitchesOptions = struct {
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,

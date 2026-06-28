@@ -7,7 +7,6 @@ const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
-const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
 const getLebedevGrid = @import("lebedev_quadrature_nodes.zig").getLebedevGrid;

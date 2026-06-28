@@ -21,10 +21,6 @@ pub const MollerPlessetOptions = @import("moller_plesset.zig").Options;
 pub const moller_plesset_run = @import("moller_plesset.zig").run;
 pub const QuantumDynamicsOptions = @import("quantum_dynamics.zig").Options;
 pub const quantum_dynamics_run = @import("quantum_dynamics.zig").run;
-pub const SurfaceHopping = @import("surface_hopping.zig").SurfaceHopping;
-pub const SurfaceHoppingOptions = @import("surface_hopping.zig").Options;
-
-pub const PotentialOptions = @import("potential.zig").Options;
 
 const printf = @import("read_write.zig").printf;
 

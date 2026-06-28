@@ -120,6 +120,8 @@ pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Alloc
 }
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    try checkInvalidInput(opt);
+
     const generalized = opt.hartree_fock.generalized;
 
     var hf_opt = opt.hartree_fock;
@@ -338,6 +340,20 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
     }
 
     return Value(T).fromFloat(0).val;
+}
+
+fn checkInvalidInput(opt: Options) !void {
+    if (opt.excitations.len == 0) {
+        std.log.err("CI EXCITATIONS LIST MUST NOT BE EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+
+    for (opt.excitations) |k| if (k == 0) {
+        std.log.err("CI EXCITATION LEVEL MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    };
 }
 
 fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.ArrayList([]const usize) {
