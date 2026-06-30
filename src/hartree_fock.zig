@@ -11,6 +11,7 @@ const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
+const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const geigh = @import("linear_algebra.zig").geigh;
 const luFactorize = @import("linear_algebra.zig").luFactorize;
 const luSolve = @import("linear_algebra.zig").luSolve;
@@ -44,6 +45,9 @@ pub const Options = struct {
 
     gradient: ?union(enum) {
         analytic: struct {},
+        numeric: struct {
+            step: f64 = 1e-5,
+        },
     } = null,
 
     response: ?struct {
@@ -254,11 +258,11 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         .basis = opt.basis,
         .spin = opt.generalized,
         .calculate = .{
-            .kinetic_d1 = opt.gradient != null,
-            .overlap_d1 = opt.gradient != null,
-            .coulomb_d1 = opt.gradient != null,
-            .nuclear_d1 = opt.gradient != null,
-            .hmatrix_d1 = opt.gradient != null,
+            .kinetic_d1 = opt.gradient != null and opt.gradient.? == .analytic,
+            .overlap_d1 = opt.gradient != null and opt.gradient.? == .analytic,
+            .coulomb_d1 = opt.gradient != null and opt.gradient.? == .analytic,
+            .nuclear_d1 = opt.gradient != null and opt.gradient.? == .analytic,
+            .hmatrix_d1 = opt.gradient != null and opt.gradient.? == .analytic,
         },
     };
 
@@ -479,16 +483,21 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try writeMatrix(T, io, fname, F);
     }
 
-    if (opt.gradient) |_| {
-        grad[0] = try gradient(T, ints, C, P, e, opt.generalized, if (dft) |*d| d else null, gpa);
-    }
+    if (opt.gradient) |gradopt| switch (gradopt) {
+        .analytic => grad[0] = try gradient(T, ints, C, P, e, opt.generalized, if (dft) |*d| d else null, gpa),
+        .numeric => grad[0] = try calculateNumericalGradient(T, io, run, opt, log, gpa),
+    };
 
     errdefer {
         if (opt.gradient) |_| grad[0].deinit(gpa);
     }
 
     if (log) for (0..grad.len) |i| {
-        try std.Io.File.stdout().writeStreamingAll(io, "\nHARTREE-FOCK NUCLEAR ENERGY GRADIENT\n");
+        const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTICAL" else "NUMERICAL";
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printf(io, "\n{s} {s} NUCLEAR ENERGY GRADIENT\n", .{ method_str, grad_type_str });
 
         for (0..grad[i].shape[0]) |j| for (0..grad[i].shape[1]) |k| {
             try printf(io, "{d:20.14}{s}", .{ grad[i].at(j, k), if (k == 2) "\n" else " " });
@@ -530,7 +539,7 @@ fn checkInvalidInput(opt: Options) !void {
     }
 
     if (opt.dft) |d| {
-        if (opt.gradient != null) {
+        if (opt.gradient != null and opt.gradient.? == .analytic) {
             std.log.err("ANALYTIC GRADIENTS ARE NOT SUPPORTED FOR DFT CALCULATIONS", .{});
 
             return error.InvalidInput;

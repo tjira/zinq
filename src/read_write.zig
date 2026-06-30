@@ -2,8 +2,11 @@ const std = @import("std");
 
 const Matrix = @import("tensor.zig").Matrix;
 
+const AN2SM = @import("constant.zig").AN2SM;
 const isComplex = @import("value.zig").isComplex;
 const primType = @import("value.zig").primType;
+
+const A2BOHR = @import("constant.zig").A2BOHR;
 
 pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     var buffer: [4096]u8 = undefined;
@@ -89,6 +92,32 @@ pub fn writeMatrixLspace(comptime T: type, io: std.Io, fname: []const u8, A: Mat
 
             try writer.interface.print("{s}", .{if (j == A.ncol() - 1) "\n" else " "});
         }
+    }
+
+    try writer.interface.flush();
+}
+
+pub fn writeXyzFile(io: std.Io, fname: []const u8, atoms: []const i32, coors: []const f64) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
+    defer file.close(io);
+
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
+
+    try writer.interface.print("{d}\n\n", .{atoms.len});
+
+    for (0..atoms.len) |i| {
+        var sym: []const u8 = "X";
+
+        if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atoms[i])) |j| {
+            sym = AN2SM.kvs.keys[j];
+        }
+
+        const x = coors[3 * i + 0] / A2BOHR;
+        const y = coors[3 * i + 1] / A2BOHR;
+        const z = coors[3 * i + 2] / A2BOHR;
+
+        try writer.interface.print("{s} {d:12.8} {d:12.8} {d:12.8}\n", .{ sym, x, y, z });
     }
 
     try writer.interface.flush();

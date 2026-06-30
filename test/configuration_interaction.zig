@@ -3,7 +3,7 @@ const zinq = @import("zinq");
 
 const TEST_TOLERANCE = 1e-8;
 
-test "Restricted CIS on Water (STO-3G)" {
+test "Restricted CIS on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.ConfigurationInteractionOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
@@ -41,7 +41,7 @@ test "Restricted CIS on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Generalized CIS on Water (STO-3G)" {
+test "Generalized CIS on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.ConfigurationInteractionOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
@@ -80,7 +80,7 @@ test "Generalized CIS on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Restricted CISD on Water (STO-3G)" {
+test "Restricted CISD on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.ConfigurationInteractionOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
@@ -119,7 +119,7 @@ test "Restricted CISD on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Generalized CISD on Water (STO-3G)" {
+test "Generalized CISD on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.ConfigurationInteractionOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",

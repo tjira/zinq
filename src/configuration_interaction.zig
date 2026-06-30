@@ -13,6 +13,7 @@ const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
 const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const ao2so_pp = @import("integral_transform.zig").ao2so_pp;
 const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
+const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 const hartree_fock_run = @import("hartree_fock.zig").run;
 const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
@@ -30,6 +31,10 @@ pub const Options = struct {
     gradient: ?union(enum) {
         analytic: struct {
             state: u32 = 0,
+        },
+        numeric: struct {
+            state: u32 = 0,
+            step: f64 = 1e-5,
         },
     } = null,
 };
@@ -127,10 +132,12 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var hf_opt = opt.hartree_fock;
 
     if (opt.gradient != null) {
-        hf_opt.gradient = .{ .analytic = .{} };
+        if (opt.gradient.? == .analytic) {
+            hf_opt.gradient = .{ .analytic = .{} };
 
-        if (hf_opt.response == null) {
-            hf_opt.response = .{};
+            if (hf_opt.response == null) {
+                hf_opt.response = .{};
+            }
         }
     }
 
@@ -212,16 +219,23 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
     errdefer if (opt.gradient) |_| gpa.free(grad);
 
-    if (opt.gradient) |gradopt| {
-        grad[0] = try gradient(T, hfres, C, dets, gradopt.analytic.state, gpa);
-    }
+    if (opt.gradient) |gradopt| switch (gradopt) {
+        .analytic => |a| grad[0] = try gradient(T, hfres, C, dets, a.state, gpa),
+        .numeric => grad[0] = try calculateNumericalGradient(T, io, run, opt, log, gpa),
+    };
 
     errdefer {
         if (opt.gradient) |_| grad[0].deinit(gpa);
     }
 
     if (log and opt.gradient != null) {
-        try printf(io, "\nCI STATE {d} NUCLEAR ENERGY GRADIENT\n", .{opt.gradient.?.analytic.state});
+        const state = switch (opt.gradient.?) {
+            inline else => |g| g.state,
+        };
+
+        const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTIC" else "NUMERIC";
+
+        try printf(io, "\nCI STATE {d} {s} NUCLEAR ENERGY GRADIENT\n", .{ state, grad_type_str });
 
         for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
             try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });

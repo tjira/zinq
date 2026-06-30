@@ -3,7 +3,7 @@ const zinq = @import("zinq");
 
 const TEST_TOLERANCE = 1e-8;
 
-test "Restricted Hartree-Fock on Water (STO-3G)" {
+test "Restricted Hartree-Fock on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
@@ -34,7 +34,7 @@ test "Restricted Hartree-Fock on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], hf.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Generalized Hartree-Fock on Water (STO-3G)" {
+test "Generalized Hartree-Fock on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",

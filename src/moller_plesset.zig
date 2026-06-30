@@ -11,6 +11,7 @@ const Vector = @import("tensor.zig").Vector;
 const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
 const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
+const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const hartree_fock_run = @import("hartree_fock.zig").run;
 const printf = @import("read_write.zig").printf;
@@ -26,6 +27,9 @@ pub const Options = struct {
 
     gradient: ?union(enum) {
         analytic: struct {},
+        numeric: struct {
+            step: f64 = 1e-5,
+        },
     } = null,
 };
 
@@ -59,10 +63,12 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var hf_opt = opt.hartree_fock;
 
     if (opt.gradient != null) {
-        hf_opt.gradient = .{ .analytic = .{} };
+        if (opt.gradient.? == .analytic) {
+            hf_opt.gradient = .{ .analytic = .{} };
 
-        if (hf_opt.response == null) {
-            hf_opt.response = .{};
+            if (hf_opt.response == null) {
+                hf_opt.response = .{};
+            }
         }
     }
 
@@ -77,9 +83,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     energy[0] = hfres.energy[0];
 
-    if (opt.gradient) |_| {
+    if (opt.gradient) |gradopt| if (gradopt == .analytic) {
         grad[0] = try hfres.gradient[0].clone(gpa);
-    }
+    };
 
     errdefer {
         if (opt.gradient) |_| grad[0].deinit(gpa);
@@ -90,7 +96,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     const energies = try mp(T, opt.order, hfres.ints.g.?, hfres.C, hfres.e, nocc, generalized, gpa);
     defer gpa.free(energies);
 
-    const grads = if (opt.gradient) |_| try gradient(T, opt.order, hfres, gpa) else null;
+    const grads = if (opt.gradient != null and opt.gradient.? == .analytic) try gradient(T, opt.order, hfres, gpa) else null;
 
     defer if (grads != null) {
         for (0..(opt.order + 1)) |i| {
@@ -113,7 +119,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             };
 
             if (log) {
-                try printf(io, "\nMP{d} NUCLEAR ENERGY GRADIENT\n", .{i});
+                try printf(io, "\nMP{d} ANALYTICAL NUCLEAR ENERGY GRADIENT\n", .{i});
 
                 for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
                     try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
@@ -121,6 +127,18 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             }
         }
     }
+
+    if (opt.gradient) |gradopt| if (gradopt == .numeric) {
+        grad[0] = try calculateNumericalGradient(T, io, run, opt, log, gpa);
+
+        if (log) {
+            try printf(io, "\nMP{d} NUMERICAL NUCLEAR ENERGY GRADIENT\n", .{opt.order});
+
+            for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
+                try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
+            };
+        }
+    };
 
     return Result(T){ .hartree_fock = hfres, .energy = energy, .gradient = grad };
 }

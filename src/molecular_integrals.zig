@@ -340,7 +340,7 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
-fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
+pub fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
     if (std.mem.startsWith(u8, basis, "builtin:")) {
         var result = try gpa.alloc(u8, basis["builtin:".len..].len);
         defer gpa.free(result);

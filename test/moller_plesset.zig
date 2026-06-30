@@ -3,7 +3,7 @@ const zinq = @import("zinq");
 
 const TEST_TOLERANCE = 1e-8;
 
-test "Restricted MP2 on Water (STO-3G)" {
+test "Restricted MP2 on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
@@ -37,7 +37,7 @@ test "Restricted MP2 on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Generalized MP2 on Water (STO-3G)" {
+test "Generalized MP2 on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
@@ -72,7 +72,7 @@ test "Generalized MP2 on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Restricted MP3 on Water (STO-3G)" {
+test "Restricted MP3 on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
@@ -106,7 +106,7 @@ test "Restricted MP3 on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Generalized MP3 on Water (STO-3G)" {
+test "Generalized MP3 on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
@@ -141,7 +141,7 @@ test "Generalized MP3 on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Restricted MP4 on Water (STO-3G)" {
+test "Restricted MP4 on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
@@ -175,7 +175,7 @@ test "Restricted MP4 on Water (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.gradient[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Generalized MP4 on Water (STO-3G)" {
+test "Generalized MP4 on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
