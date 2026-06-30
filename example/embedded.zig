@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const names = [_][]const u8{
+const basis_names = [_][]const u8{
     "3-21g",
     "6-21g",
     "6-311g",
@@ -48,11 +48,11 @@ const names = [_][]const u8{
 
 pub const bases = std.StaticStringMap([]const u8).initComptime(buildBases());
 
-fn buildBases() [names.len]struct { []const u8, []const u8 } {
-    var result: [names.len]struct { []const u8, []const u8 } = undefined;
+fn buildBases() [basis_names.len]struct { []const u8, []const u8 } {
+    var result: [basis_names.len]struct { []const u8, []const u8 } = undefined;
 
-    inline for (names, 0..) |name, i| {
-        result[i] = .{ name, @embedFile(name ++ ".g94") };
+    inline for (basis_names, 0..) |name, i| {
+        result[i] = .{ name, @embedFile("basis/" ++ name ++ ".g94") };
     }
 
     return result;

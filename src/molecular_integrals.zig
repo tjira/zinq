@@ -1,5 +1,5 @@
+const embed = @import("embed");
 const std = @import("std");
-const bases = @import("bases");
 
 const Allocator = std.mem.Allocator;
 
@@ -354,7 +354,7 @@ fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
             }
         }
 
-        const content = bases.bases.get(result) orelse {
+        const content = embed.bases.get(result) orelse {
             std.log.err("BUILTIN BASIS SET '{s}' NOT FOUND", .{result});
 
             return error.InvalidInput;

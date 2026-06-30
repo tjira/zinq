@@ -18,11 +18,11 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
         .link_libcpp = true,
     });
 
-    const basis_module = b.createModule(.{
-        .root_source_file = b.path("example/basis/embedded.zig"),
+    const embed_module = b.createModule(.{
+        .root_source_file = b.path("example/embedded.zig"),
     });
 
-    zinq_module.addImport("bases", basis_module);
+    zinq_module.addImport("embed", embed_module);
 
     const docs = b.addLibrary(.{ .name = "main", .root_module = zinq_module }).getEmittedDocs();
 
