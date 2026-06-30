@@ -4,7 +4,7 @@
             "moller_plesset" : {
                 "hartree_fock" : {
                     "system" : "example/molecule/water.xyz",
-                    "basis" : "example/basis/sto-3g.g94"
+                    "basis" : "builtin:sto-3g"
                 },
                 "gradient" : {
                     "analytic" : {}

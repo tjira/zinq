@@ -7,7 +7,7 @@ test "Restricted CIS on Water (STO-3G)" {
     const opt = zinq.ConfigurationInteractionOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
         },
         .excitations = &.{1},
         .gradient = .{ .analytic = .{} },
@@ -45,7 +45,7 @@ test "Generalized CIS on Water (STO-3G)" {
     const opt = zinq.ConfigurationInteractionOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
             .generalized = true,
         },
         .excitations = &.{1},
@@ -84,7 +84,7 @@ test "Restricted CISD on Water (STO-3G)" {
     const opt = zinq.ConfigurationInteractionOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
             .diis = null,
         },
         .excitations = &.{ 1, 2 },
@@ -123,7 +123,7 @@ test "Generalized CISD on Water (STO-3G)" {
     const opt = zinq.ConfigurationInteractionOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
             .generalized = true,
             .diis = null,
         },

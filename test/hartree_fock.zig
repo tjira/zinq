@@ -6,7 +6,7 @@ const TEST_TOLERANCE = 1e-8;
 test "Restricted Hartree-Fock on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .gradient = .{ .analytic = .{} },
     };
 
@@ -37,7 +37,7 @@ test "Restricted Hartree-Fock on Water (STO-3G)" {
 test "Generalized Hartree-Fock on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .generalized = true,
         .gradient = .{ .analytic = .{} },
     };
@@ -69,7 +69,7 @@ test "Generalized Hartree-Fock on Water (STO-3G)" {
 test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange = "lda_x",
             .correlation = "lda_c_vwn",
@@ -86,7 +86,7 @@ test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
 test "Generalized Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange = "lda_x",
             .correlation = "lda_c_vwn",
@@ -104,7 +104,7 @@ test "Generalized Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
 test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange = "gga_x_pbe",
             .correlation = "gga_c_pbe",
@@ -121,7 +121,7 @@ test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
 test "Generalized Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange = "gga_x_pbe",
             .correlation = "gga_c_pbe",
@@ -139,7 +139,7 @@ test "Generalized Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
 test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange = "mgga_x_tpss",
             .correlation = "mgga_c_tpss",
@@ -156,7 +156,7 @@ test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G)
 test "Generalized Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange = "mgga_x_tpss",
             .correlation = "mgga_c_tpss",
@@ -174,7 +174,7 @@ test "Generalized Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G
 test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange = "mgga_x_scan",
             .correlation = "mgga_c_scan",
@@ -191,7 +191,7 @@ test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G)
 test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange = "mgga_x_scan",
             .correlation = "mgga_c_scan",
@@ -209,7 +209,7 @@ test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G
 test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange_correlation = "hyb_gga_xc_b3lyp",
         },
@@ -225,7 +225,7 @@ test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO-
 test "Generalized Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO-3G)" {
     const opt = zinq.HartreeFockOptions{
         .system = "example/molecule/water.xyz",
-        .basis = "example/basis/sto-3g.g94",
+        .basis = "builtin:sto-3g",
         .dft = .{
             .exchange_correlation = "hyb_gga_xc_b3lyp",
         },

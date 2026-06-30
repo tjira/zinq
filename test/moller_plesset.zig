@@ -7,7 +7,7 @@ test "Restricted MP2 on Water (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
         },
         .order = 2,
         .gradient = .{ .analytic = .{} },
@@ -41,7 +41,7 @@ test "Generalized MP2 on Water (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
             .generalized = true,
         },
         .order = 2,
@@ -76,7 +76,7 @@ test "Restricted MP3 on Water (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
         },
         .order = 3,
         .gradient = .{ .analytic = .{} },
@@ -110,7 +110,7 @@ test "Generalized MP3 on Water (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
             .generalized = true,
         },
         .order = 3,
@@ -145,7 +145,7 @@ test "Restricted MP4 on Water (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
         },
         .order = 4,
         .gradient = .{ .analytic = .{} },
@@ -179,7 +179,7 @@ test "Generalized MP4 on Water (STO-3G)" {
     const opt = zinq.MollerPlessetOptions{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "example/basis/sto-3g.g94",
+            .basis = "builtin:sto-3g",
             .generalized = true,
         },
         .order = 4,
