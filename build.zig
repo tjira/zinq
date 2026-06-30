@@ -18,6 +18,12 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
         .link_libcpp = true,
     });
 
+    const basis_module = b.createModule(.{
+        .root_source_file = b.path("example/basis/embedded.zig"),
+    });
+
+    zinq_module.addImport("bases", basis_module);
+
     const docs = b.addLibrary(.{ .name = "main", .root_module = zinq_module }).getEmittedDocs();
 
     try linkDependencies(b, zinq_module);

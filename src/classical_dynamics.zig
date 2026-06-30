@@ -15,24 +15,6 @@ const eighSlice = @import("linear_algebra.zig").eighSlice;
 const printf = @import("read_write.zig").printf;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
-const InitialConditions = struct {
-    position: []const f64,
-    momentum: []const f64,
-    gamma: []const f64,
-
-    state: u32 = 0,
-    seed: u32 = 1,
-};
-
-const Write = struct {
-    kinetic_energy: ?[]const u8 = null,
-    momentum: ?[]const u8 = null,
-    population: ?[]const u8 = null,
-    position: ?[]const u8 = null,
-    potential_energy: ?[]const u8 = null,
-    total_energy: ?[]const u8 = null,
-};
-
 pub const Options = struct {
     initial_conditions: InitialConditions,
     potential: PotentialOptions,
@@ -197,6 +179,24 @@ pub fn Result(comptime T: type) type {
         }
     };
 }
+
+const InitialConditions = struct {
+    position: []const f64,
+    momentum: []const f64,
+    gamma: []const f64,
+
+    state: u32 = 0,
+    seed: u32 = 1,
+};
+
+const Write = struct {
+    kinetic_energy: ?[]const u8 = null,
+    momentum: ?[]const u8 = null,
+    population: ?[]const u8 = null,
+    position: ?[]const u8 = null,
+    potential_energy: ?[]const u8 = null,
+    total_energy: ?[]const u8 = null,
+};
 
 fn GradientBuffer(comptime T: type) type {
     return struct {

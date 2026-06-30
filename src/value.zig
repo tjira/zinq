@@ -206,16 +206,16 @@ pub fn Value(comptime T: type) type {
     };
 }
 
+pub fn primType(comptime T: type) type {
+    return if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
+}
+
 pub fn isComplex(comptime T: type) bool {
     if (@typeInfo(T) == .@"struct") {
         return @hasField(T, "re") and @hasField(T, "im");
     }
 
     return false;
-}
-
-pub fn primType(comptime T: type) type {
-    return if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
 }
 
 fn isDual(comptime T: type) bool {

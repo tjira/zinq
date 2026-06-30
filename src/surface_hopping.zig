@@ -8,17 +8,6 @@ const Ensemble = @import("classical_dynamics.zig").Ensemble;
 const Integrator = @import("integrator.zig").Integrator;
 const Matrix = @import("tensor.zig").Matrix;
 
-const FewestSwitchesOptions = struct {
-    integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
-
-    seed: u32 = 1,
-    nstep: u32 = 10,
-};
-
-const LandauZenerOptions = struct {
-    seed: u32 = 1,
-};
-
 pub const Options = union(enum) {
     fewest_switches: FewestSwitchesOptions,
     landau_zener: LandauZenerOptions,
@@ -175,6 +164,17 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
     };
 }
+
+const FewestSwitchesOptions = struct {
+    integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
+
+    seed: u32 = 1,
+    nstep: u32 = 10,
+};
+
+const LandauZenerOptions = struct {
+    seed: u32 = 1,
+};
 
 fn FewestSwitches(comptime T: type) type {
     return struct {

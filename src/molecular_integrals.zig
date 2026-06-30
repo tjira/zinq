@@ -1,4 +1,5 @@
 const std = @import("std");
+const bases = @import("bases");
 
 const Allocator = std.mem.Allocator;
 
@@ -85,10 +86,20 @@ pub fn Integrals(comptime T: type) type {
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Integrals(T) {
     try checkInvalidInput(opt);
 
+    const basis_path = try exportIfBuiltin(io, opt.basis, gpa);
+
+    defer if (std.mem.startsWith(u8, opt.basis, "builtin:")) {
+        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
+    };
+
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var ints: Integrals(T) = .{ .sys = try MolecularSystem(T).init(opt.system, opt.basis, gpa) };
+    var ints: Integrals(T) = .{ .sys = try MolecularSystem(T).init(opt.system, basis_path, gpa) };
     errdefer ints.deinit(gpa);
+
+    if (std.mem.startsWith(u8, opt.basis, "builtin:")) {
+        try std.Io.Dir.cwd().deleteFile(io, basis_path);
+    }
 
     if (log) try printf(io, "\nSYSTEM INITIALIZATION: {f}\n", .{timer.untilNow(io, .real)});
 
@@ -327,4 +338,35 @@ fn checkInvalidInput(opt: Options) !void {
 
         return error.InvalidInput;
     }
+}
+
+fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
+    if (std.mem.startsWith(u8, basis, "builtin:")) {
+        var result = try gpa.alloc(u8, basis["builtin:".len..].len);
+        defer gpa.free(result);
+
+        for (basis["builtin:".len..], 0..) |char, i| {
+            if (char == '+') result[i] = 'p';
+            if (char == '*') result[i] = 's';
+
+            if (char != '+' and char != '*') {
+                result[i] = std.ascii.toLower(char);
+            }
+        }
+
+        const content = bases.bases.get(result) orelse {
+            std.log.err("BUILTIN BASIS SET '{s}' NOT FOUND", .{result});
+
+            return error.InvalidInput;
+        };
+
+        var file = try std.Io.Dir.cwd().createFile(io, "basis.g94", .{});
+        defer file.close(io);
+
+        try file.writeStreamingAll(io, content);
+
+        return "basis.g94";
+    }
+
+    return basis;
 }

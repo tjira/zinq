@@ -13,5 +13,5 @@
 - **Line Constraints:** Enforce a strict maximum line length of 120 characters.
 - **Function Signatures:** Never wrap function signatures to multiple lines. A function signature must remain on a single line regardless of length.
 - **Simplicity & Scope:** Minimize the number of function arguments (group related parameters into structs if necessary) and strictly limit the number of local variables defined in a given scope.
-- **File Organization:** Organize the contents of every file from top to bottom by defining public structs first, followed by private structs, then public functions, and finally private functions.
-- **Struct Organization:** Within any struct definition, you must place all public functions before any private functions.
+**File Organization:** Define all structs before any functions. The strict top-to-bottom order for the file level must be public structs, followed by private structs, then public functions, and finally private functions.
+**Struct Organization:** Within any struct definition, place all state and fields at the top, followed by all public functions, and finally all private functions.

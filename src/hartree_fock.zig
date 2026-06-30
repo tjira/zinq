@@ -20,12 +20,6 @@ const orbitalResponse = @import("cphf.zig").orbitalResponse;
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 
-const Write = struct {
-    coefficients: ?[]const u8 = null,
-    density: ?[]const u8 = null,
-    fock: ?[]const u8 = null,
-};
-
 pub const Options = struct {
     system: []const u8,
     basis: []const u8,
@@ -97,6 +91,12 @@ pub fn Result(comptime T: type) type {
         }
     };
 }
+
+const Write = struct {
+    coefficients: ?[]const u8 = null,
+    density: ?[]const u8 = null,
+    fock: ?[]const u8 = null,
+};
 
 pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
     if (fck_hist.len < 2) return;
