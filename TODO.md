@@ -24,4 +24,4 @@
 - [ ] Implement frequency analysis for the electronic structure methods.
 - [ ] Implement mulliken population analysis for the electronic structure methods.
 - [ ] Add support for more atoms in constant.zig.
-- [ ] Add tests for numerical gradients.
+- [x] Add tests for numerical gradients.
