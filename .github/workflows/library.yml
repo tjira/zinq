@@ -16,19 +16,19 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-linux
-            build_flags: ""
+            build_flags: "--shared"
             suffix: "gnu"
           - os: ubuntu-latest
             target: x86_64-linux
-            build_flags: "--static"
+            build_flags: ""
             suffix: "musl"
           - os: ubuntu-latest
             target: aarch64-linux
-            build_flags: ""
+            build_flags: "--shared"
             suffix: "gnu"
           - os: ubuntu-latest
             target: aarch64-linux
-            build_flags: "--static"
+            build_flags: ""
             suffix: "musl"
 
     steps:

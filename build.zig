@@ -1,7 +1,9 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) !void {
-    const target = b.standardTargetOptions(.{});
+    const target = b.standardTargetOptions(.{
+        .default_target = .{ .abi = .musl },
+    });
 
     const zinq_module = try setupZinq(b, b.standardOptimizeOption(.{}), target);
 
@@ -39,11 +41,11 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
         .root_module = zinq_module,
     });
 
-    if (target.query.isNative()) {
+    if (target.query.cpu_arch == null) {
         b.installArtifact(exe_zinq);
     }
 
-    if (!target.query.isNative()) {
+    if (target.query.cpu_arch != null) {
         const dest: std.Build.InstallDir = .{ .custom = try getTriple(b, target) };
 
         b.getInstallStep().dependOn(&b.addInstallArtifact(exe_zinq, .{ .dest_dir = .{ .override = dest } }).step);

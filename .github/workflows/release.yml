@@ -2,15 +2,15 @@ name: Release
 
 on:
   push:
-    branches:
-      - '*'
+    tags:
+      - 'v**'
 
 permissions:
   contents: write
 
 jobs:
   release:
-    name: ${{matrix.os}} / ${{matrix.target}}-${{matrix.suffix}}
+    name: ${{matrix.os}} / ${{matrix.target}}
     runs-on: ${{matrix.os}}
 
     strategy:
@@ -19,12 +19,8 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-linux
-            build_flags: "--static"
-            suffix: "musl"
           - os: ubuntu-latest
             target: aarch64-linux
-            build_flags: "--static"
-            suffix: "musl"
 
     steps:
       - uses: actions/checkout@v7
@@ -35,10 +31,10 @@ jobs:
           version: 0.16.0
 
       - name: Compile Libraries
-        run: ./script/library.pl --target ${{matrix.target}} ${{matrix.build_flags}}
+        run: ./script/library.pl --target ${{matrix.target}}
 
       - name: Compile Zinq
-        run: zig build --release=fast -Dtarget=${{matrix.target}}-${{matrix.suffix}}
+        run: zig build --release=fast -Dtarget=${{matrix.target}}-musl
 
       - name: Move Binary
         run: mkdir -p bin && cd zig-out && for FOLDER in *64*linux*; do mv $FOLDER/zinq ../bin/zinq-$FOLDER; done && cd -

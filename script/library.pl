@@ -10,7 +10,7 @@ use File::Copy   qw(move            );
 use Getopt::Long qw(GetOptions      );
 
 # DEFINE VARIABLES FOR BUILD OPTIONS
-my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw, $static);
+my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw, $shared);
 
 # DEFINE DEFAULT TARGET AND HOST
 my $target = "x86_64-linux"; my $host = "x86_64-linux";
@@ -27,11 +27,11 @@ GetOptions(
     "fftw"     =>     \$build_fftw,
     "target=s" =>         \$target,
     "cores|j=i"=>          \$cores,
-    "static"   =>         \$static,
+    "shared"   =>         \$shared,
 );
 
 # APPEND THE ABI TO TARGET BASED ON STATIC OR DYNAMIC REQUEST
-$target .= $static ? "-musl" : "-gnu";
+$target .= $shared ? "-gnu" : "-musl";
 
 # IF NO FLAGS ARE PROVIDED, BUILD EVERYTHING
 if (!$build_eigen && !$build_libint && !$build_libxc && !$build_openblas && !$build_fftw) {
@@ -50,11 +50,11 @@ if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_f
 create_compiler_wrappers($target, $pwd);
 
 # COMPILE EACH PROGRAM
-compile_eigen   ($prefix, $cores,        $pwd, $static) if    $build_eigen;
-compile_libint  ($prefix, $cores,        $pwd, $static) if   $build_libint;
-compile_libxc   ($prefix, $cores, $host, $pwd, $static) if    $build_libxc;
-compile_openblas($prefix, $cores,        $pwd, $static) if $build_openblas;
-compile_fftw    ($prefix, $cores, $host, $pwd, $static) if     $build_fftw;
+compile_eigen   ($prefix, $cores,        $pwd, $shared) if    $build_eigen;
+compile_libint  ($prefix, $cores,        $pwd, $shared) if   $build_libint;
+compile_libxc   ($prefix, $cores, $host, $pwd, $shared) if    $build_libxc;
+compile_openblas($prefix, $cores,        $pwd, $shared) if $build_openblas;
+compile_fftw    ($prefix, $cores, $host, $pwd, $shared) if     $build_fftw;
 
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
@@ -148,7 +148,7 @@ sub clean_compiler_wrappers {
 
 sub compile_eigen {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $pwd, $static) = @_;
+    my ($prefix, $cores, $pwd, $shared) = @_;
 
     # DEFINE THE URL FOR THE EIGEN SOURCE ARCHIVE
     my $url = "https://gitlab.com/libeigen/eigen/-/archive/5.0.0/eigen-5.0.0.tar.gz";
@@ -160,7 +160,7 @@ sub compile_eigen {
     chdir "lib/eigen" or die "CANNOT CHDIR TO 'lib/eigen': $!";
 
     # DETERMINE WHETHER TO BUILD SHARED OR STATIC LIBRARIES
-    my $build_shared = $static ? "False" : "True";
+    my $build_shared = $shared ? "True" : "False";
     
     # CONFIGURE COMMAND
     my @args = (
@@ -186,7 +186,7 @@ sub compile_eigen {
 
 sub compile_libint {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $pwd, $static) = @_;
+    my ($prefix, $cores, $pwd, $shared) = @_;
 
     # DEFINE THE URL FOR THE LIBINT SOURCE ARCHIVE
     my $url = "https://github.com/evaleev/libint/releases/download/v2.13.1/libint-2.13.1-mpqc4.tgz";
@@ -198,7 +198,7 @@ sub compile_libint {
     chdir "lib/libint" or die "CANNOT CHDIR TO 'lib/libint': $!";
 
     # DETERMINE WHETHER TO BUILD SHARED OR STATIC LIBRARIES
-    my $build_shared = $static ? "False" : "True";
+    my $build_shared = $shared ? "True" : "False";
 
     # CONFIGURE COMMAND
     my @args = (
@@ -223,7 +223,7 @@ sub compile_libint {
 
 sub compile_libxc {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $host, $pwd, $static) = @_;
+    my ($prefix, $cores, $host, $pwd, $shared) = @_;
 
     # DEFINE THE URL FOR THE LIBXC SOURCE ARCHIVE
     my $url = "https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.bz2";
@@ -246,10 +246,10 @@ sub compile_libxc {
     );
 
     # DETERMINE WHETHER TO BUILD SHARED OR STATIC LIBRARIES
-    if ($static) {
-        push @args, "--enable-static", "--disable-shared";
-    } else {
+    if ($shared) {
         push @args, "--disable-static", "--enable-shared";
+    } else {
+        push @args, "--enable-static", "--disable-shared";
     }
 
     # RUN CONFIGURE
@@ -267,7 +267,7 @@ sub compile_libxc {
 
 sub compile_openblas {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $pwd, $static) = @_;
+    my ($prefix, $cores, $pwd, $shared) = @_;
 
     # DEFINE THE URL FOR THE OPENBLAS SOURCE ARCHIVE
     my $url = "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.33/OpenBLAS-0.3.33.tar.gz";
@@ -282,7 +282,7 @@ sub compile_openblas {
     my @args = (
         "HOSTCC=gcc",
         "NOFORTRAN=1",
-        $static ? "NO_SHARED=1" : "NO_STATIC=1",
+        $shared ? "NO_STATIC=1" : "NO_SHARED=1",
         "NUM_THREADS=128",
         "PREFIX=$prefix",
         "TARGET=GENERIC"
@@ -300,7 +300,7 @@ sub compile_openblas {
 
 sub compile_fftw {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $host, $pwd, $static) = @_;
+    my ($prefix, $cores, $host, $pwd, $shared) = @_;
 
     # DEFINE THE URL FOR THE FFTW SOURCE ARCHIVE
     my $url = "https://www.fftw.org/fftw-3.3.11.tar.gz";
@@ -320,10 +320,10 @@ sub compile_fftw {
     );
 
     # DETERMINE WHETHER TO BUILD SHARED OR STATIC LIBRARIES
-    if ($static) {
-        push @args, "--enable-static", "--disable-shared";
-    } else {
+    if ($shared) {
         push @args, "--disable-static", "--enable-shared";
+    } else {
+        push @args, "--enable-static", "--disable-shared";
     }
 
     # RUN CONFIGURE
