@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - '*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: ${{matrix.os}} / ${{matrix.target}}-${{matrix.suffix}}
+    runs-on: ${{matrix.os}}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-linux
+            build_flags: ""
+            suffix: "gnu"
+          - os: ubuntu-latest
+            target: x86_64-linux
+            build_flags: "--static"
+            suffix: "musl"
+          - os: ubuntu-latest
+            target: aarch64-linux
+            build_flags: ""
+            suffix: "gnu"
+          - os: ubuntu-latest
+            target: aarch64-linux
+            build_flags: "--static"
+            suffix: "musl"
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Compile Libraries
+        run: ./script/library.pl --target ${{matrix.target}} ${{matrix.build_flags}}
+
+      - name: Compile Zinq
+        run: zig build --release=fast -Dtarget=${{matrix.target}}-${{matrix.suffix}}
+
+      - name: Move Binary
+        run: |
+          mkdir -p bin && cd zig-out && for FOLDER in *64*linux*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
+          mkdir -p bin && cd zig-out && for FOLDER in *64*macos*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
+          mkdir -p bin && cd zig-out && for FOLDER in *64*windows*; do mv $FOLDER/zinq.exe ../bin/zinq-$FOLDER.exe; done && cd -
+
+      - name: Release Zinq
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{secrets.GITHUB_TOKEN}}
+          file_glob: true
+          file: bin/zinq*
+          tag: ${{github.ref}}
