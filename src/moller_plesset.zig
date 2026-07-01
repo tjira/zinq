@@ -11,7 +11,9 @@ const Vector = @import("tensor.zig").Vector;
 const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
 const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
+const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
+const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const hartree_fock_run = @import("hartree_fock.zig").run;
 const printf = @import("read_write.zig").printf;
@@ -19,6 +21,8 @@ const slater = @import("configuration_interaction.zig").slater;
 
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Value = @import("value.zig").Value;
+
+const AU2CM = @import("constant.zig").AU2CM;
 
 pub const Options = struct {
     hartree_fock: HartreeFockOptions,
@@ -31,6 +35,12 @@ pub const Options = struct {
             step: f64 = 1e-5,
         },
     } = null,
+
+    hessian: ?union(enum) {
+        numeric: struct {
+            step: f64 = 1e-5,
+        },
+    } = null,
 };
 
 pub fn Result(comptime T: type) type {
@@ -39,18 +49,25 @@ pub fn Result(comptime T: type) type {
 
         energy: []T,
 
-        gradient: []Matrix(T),
+        grad: []Matrix(T),
+        hess: []Matrix(T),
 
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.hartree_fock.deinit(gpa);
 
             gpa.free(self.energy);
 
-            for (0..self.gradient.len) |i| {
-                self.gradient[i].deinit(gpa);
+            for (0..self.grad.len) |i| {
+                self.grad[i].deinit(gpa);
             }
 
-            gpa.free(self.gradient);
+            gpa.free(self.grad);
+
+            for (0..self.hess.len) |i| {
+                self.hess[i].deinit(gpa);
+            }
+
+            gpa.free(self.hess);
         }
     };
 }
@@ -84,7 +101,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     energy[0] = hfres.energy[0];
 
     if (opt.gradient) |gradopt| if (gradopt == .analytic) {
-        grad[0] = try hfres.gradient[0].clone(gpa);
+        grad[0] = try hfres.grad[0].clone(gpa);
     };
 
     errdefer {
@@ -140,7 +157,31 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         }
     };
 
-    return Result(T){ .hartree_fock = hfres, .energy = energy, .gradient = grad };
+    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
+    errdefer if (opt.hessian) |_| gpa.free(hess);
+
+    if (opt.hessian) |hessopt| switch (hessopt) {
+        .numeric => hess[0] = try calculateNumericalHessian(T, io, run, opt, log, gpa),
+    };
+
+    errdefer {
+        if (opt.hessian) |_| hess[0].deinit(gpa);
+    }
+
+    if (log and opt.hessian != null) {
+        var freqs = try calculateHarmonicFrequencies(T, hess[0], hfres.ints.sys.atoms, gpa);
+        defer freqs.deinit(gpa);
+
+        if (log) {
+            try printf(io, "\nMP{d} NUMERICAL HARMONIC VIBRATIONAL FREQUENCIES\n", .{opt.order});
+
+            for (0..freqs.length()) |i| {
+                try printf(io, "MODE {d:3}: {d:12.4} cm^-1\n", .{ i + 1, AU2CM * freqs.at(i) });
+            }
+        }
+    }
+
+    return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = hess };
 }
 
 fn checkInvalidInput(opt: Options) !void {

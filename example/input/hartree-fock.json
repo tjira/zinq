@@ -6,6 +6,9 @@
                 "basis" : "builtin:sto-3g",
                 "gradient" : {
                     "analytic" : {}
+                },
+                "hessian" : {
+                    "numeric" : {}
                 }
             }
         }

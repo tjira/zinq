@@ -8,6 +8,9 @@
                 },
                 "gradient" : {
                     "analytic" : {}
+                },
+                "hessian" : {
+                    "numeric" : {}
                 }
             }
         }

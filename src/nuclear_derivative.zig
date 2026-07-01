@@ -34,55 +34,81 @@ pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, 
     var grad = try Matrix(T).initZero(xyz.sym.len, 3, gpa);
     errdefer grad.deinit(gpa);
 
-    const h, var modified_opt = .{ @as(T, @floatCast(opt.gradient.?.numeric.step)), opt };
-
-    if (@hasField(@TypeOf(opt), "system")) {
-        modified_opt.system = "molecule.xyz";
-    }
-
-    if (!@hasField(@TypeOf(opt), "system")) {
-        modified_opt.hartree_fock.system = "molecule.xyz";
-    }
-
-    modified_opt.gradient = null;
+    const h = @as(T, @floatCast(opt.gradient.?.numeric.step));
 
     const state = if (@hasField(@TypeOf(opt.gradient.?.numeric), "state")) opt.gradient.?.numeric.state else 0;
 
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
     for (0..xyz.sym.len) |i| for (0..3) |j| {
-        const original_value = xyz.coords.at(i, j);
+        const d1, const d2 = .{ .{ i * 3 + j, h }, .{ i * 3 + j, -h } };
 
-        xyz.coords.ptr(i, j).* = original_value + h;
+        const ep = try getE(T, io, runFn, opt, &xyz, d1, state, gpa);
+        const em = try getE(T, io, runFn, opt, &xyz, d2, state, gpa);
 
-        try writeXyz(T, io, "molecule.xyz", xyz.sym, xyz.coords);
-
-        var res_plus = try runFn(T, io, modified_opt, false, gpa);
-        defer res_plus.deinit(gpa);
-
-        const E_plus = res_plus.energy[state];
-
-        xyz.coords.ptr(i, j).* = original_value - h;
-
-        try writeXyz(T, io, "molecule.xyz", xyz.sym, xyz.coords);
-
-        var res_minus = try runFn(T, io, modified_opt, false, gpa);
-        defer res_minus.deinit(gpa);
-
-        const E_minus = res_minus.energy[state];
-
-        xyz.coords.ptr(i, j).* = original_value;
-
-        grad.ptr(i, j).* = (E_plus - E_minus) / (2 * h);
+        grad.ptr(i, j).* = (ep - em) / (2 * h);
 
         if (log) {
             try printf(io, "DERIVATIVE OF ATOM {d:02} ({s:2}) IN DIRECTION {d}: {d:20.14}\n", .{ i, xyz.sym[i], j, grad.at(i, j) });
         }
     };
 
-    std.Io.Dir.cwd().deleteFile(io, "molecule.xyz") catch {};
-
     return grad;
+}
+
+pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, log: bool, gpa: Allocator) anyerror!Matrix(T) {
+    const sys_path = if (@hasField(@TypeOf(opt), "system")) opt.system else opt.hartree_fock.system;
+
+    var xyz = try readXyz(T, io, sys_path, gpa);
+    defer xyz.deinit(gpa);
+
+    var hess = try Matrix(T).initZero(3 * xyz.sym.len, 3 * xyz.sym.len, gpa);
+    errdefer hess.deinit(gpa);
+
+    const h = @as(T, @floatCast(opt.hessian.?.numeric.step));
+
+    const state = if (@hasField(@TypeOf(opt.hessian.?.numeric), "state")) opt.hessian.?.numeric.state else 0;
+
+    if (log) try std.Io.File.stdout().writeStreamingAll(io, "\n");
+
+    const er = try getE(T, io, runFn, opt, &xyz, .{}, state, gpa);
+
+    for (0..3 * xyz.sym.len) |a| {
+        const d1, const d2 = .{ .{ a, h }, .{ a, -h } };
+
+        const ep = try getE(T, io, runFn, opt, &xyz, d1, state, gpa);
+        const em = try getE(T, io, runFn, opt, &xyz, d2, state, gpa);
+
+        hess.ptr(a, a).* = (ep - 2 * er + em) / (h * h);
+
+        if (log) {
+            const params = .{ a / 3, xyz.sym[a / 3], a % 3, a % 3, hess.at(a, a) };
+
+            try printf(io, "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) IN DIRECTION {d} AND {d}: {d:20.14}\n", params);
+        }
+
+        for (a + 1..3 * xyz.sym.len) |b| {
+            const epp = try getE(T, io, runFn, opt, &xyz, .{ a, h, b, h }, state, gpa);
+
+            const epm = try getE(T, io, runFn, opt, &xyz, .{ a, h, b, -h }, state, gpa);
+            const emp = try getE(T, io, runFn, opt, &xyz, .{ a, -h, b, h }, state, gpa);
+
+            const emm = try getE(T, io, runFn, opt, &xyz, .{ a, -h, b, -h }, state, gpa);
+
+            const val = (epp - epm - emp + emm) / (4 * h * h);
+
+            hess.ptr(a, b).* = val;
+            hess.ptr(b, a).* = val;
+
+            if (log) {
+                const params = .{ a / 3, xyz.sym[a / 3], a % 3, b % 3, val };
+
+                try printf(io, "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) IN DIRECTION {d} AND {d}: {d:20.14}\n", params);
+            }
+        }
+    }
+
+    return hess;
 }
 
 pub fn readXyz(comptime T: type, io: std.Io, path: []const u8, gpa: Allocator) !XyzData(T) {
@@ -97,7 +123,7 @@ pub fn readXyz(comptime T: type, io: std.Io, path: []const u8, gpa: Allocator) !
 
     _ = line_it.next() orelse return error.InvalidFormat;
 
-    var sym, var i: usize = .{try gpa.alloc([]const u8, natoms), 0};
+    var sym, var i: usize = .{ try gpa.alloc([]const u8, natoms), 0 };
     errdefer gpa.free(sym);
 
     errdefer for (0..i) |j| {
@@ -142,4 +168,48 @@ pub fn writeXyz(comptime T: type, io: std.Io, path: []const u8, sym: [][]const u
     }
 
     try writer.interface.flush();
+}
+
+fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, xyz: *XyzData(T), perts: anytype, state: usize, gpa: Allocator) !T {
+    std.debug.assert(@typeInfo(@TypeOf(perts)).@"struct".fields.len % 2 == 0);
+
+    var modified_opt, const fname = .{ opt, "molecule.xyz" };
+
+    if (@hasField(@TypeOf(opt), "system")) {
+        modified_opt.system = fname;
+    }
+
+    if (!@hasField(@TypeOf(opt), "system")) {
+        modified_opt.hartree_fock.system = fname;
+    }
+
+    modified_opt.gradient, modified_opt.hessian = .{ null, null };
+
+    inline for (0..@typeInfo(@TypeOf(perts)).@"struct".fields.len / 2) |idx| {
+        const i_val = perts[idx * 2 + 0];
+        const v_val = perts[idx * 2 + 1];
+
+        const i = i_val / 3;
+        const j = i_val % 3;
+
+        xyz.coords.ptr(i, j).* += v_val;
+    }
+
+    try writeXyz(T, io, fname, xyz.sym, xyz.coords);
+    defer std.Io.Dir.cwd().deleteFile(io, fname) catch {};
+
+    var res = try runFn(T, io, modified_opt, false, gpa);
+    defer res.deinit(gpa);
+
+    inline for (0..@typeInfo(@TypeOf(perts)).@"struct".fields.len / 2) |idx| {
+        const i_val = perts[idx * 2 + 0];
+        const v_val = perts[idx * 2 + 1];
+
+        const i = i_val / 3;
+        const j = i_val % 3;
+
+        xyz.coords.ptr(i, j).* -= v_val;
+    }
+
+    return res.energy[state];
 }

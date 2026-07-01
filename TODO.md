@@ -20,8 +20,8 @@
 - [ ] Add potential that will read function values from a file.
 - [ ] Implement Bohmian dynamics for the QD code.
 - [x] Add support for numerical gradients for all electronic structure methods.
-- [ ] Add support for numerical Hessians for all electronic structure methods.
-- [ ] Implement frequency analysis for the electronic structure methods.
+- [x] Add support for numerical Hessians for all electronic structure methods.
+- [x] Implement frequency analysis for the electronic structure methods.
 - [ ] Implement mulliken population analysis for the electronic structure methods.
 - [ ] Add support for more atoms in constant.zig.
 - [x] Add tests for numerical gradients.
