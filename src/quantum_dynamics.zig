@@ -677,7 +677,7 @@ fn checkInvalidInput(opt: Options) !void {
 }
 
 fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
-    const pot = Potential(T).init(opt.potential);
+    const pot = try Potential(T).init(opt.potential, gpa);
 
     const dt = if (opt.imaginary) |_| Complex(T).init(0, -opt.time_step) else Complex(T).init(opt.time_step, 0);
 

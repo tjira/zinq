@@ -1,0 +1,36 @@
+{
+    "zinq" : [
+        {
+            "quantum_dynamics" : {
+                "grid" : {
+                    "bounds" : [[-24, 32]],
+                    "npoint" : 2048
+                },
+                "initial_conditions" : {
+                    "position" : [-10],
+                    "momentum" : [15],
+                    "gamma" : [2],
+                    "state" : 1,
+                    "adiabatic" : true
+                },
+                "potential" : {
+                    "custom" : {
+                        "ndim" : 1,
+                        "matrix" : [
+                            ["+sgn(r1) * 0.01 * (1.0 - exp(-1.6 * abs(r1)))", "0.005 * exp(-r1^2)"],
+                            ["0.005 * exp(-r1^2)", "-sgn(r1) * 0.01 * (1.0 - exp(-1.6 * abs(r1)))"]
+                        ]
+                    }
+                },
+                "mass" : 2000,
+                "iterations" : 3000,
+                "time_step" : 1,
+                "adiabatic" : true,
+                "log_interval" : 500,
+                "write" : {
+                    "population" : "POP_QD.mat"
+                }
+            }
+        }
+    ]
+}

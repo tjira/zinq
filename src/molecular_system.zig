@@ -1,5 +1,6 @@
-const libint = @import("libint");
 const std = @import("std");
+
+const libint = @import("cimport.zig").libint;
 
 const Allocator = std.mem.Allocator;
 
@@ -24,11 +25,11 @@ pub fn MolecularSystem(comptime T: type) type {
             const bas_c = try gpa.dupeSentinel(u8, basis, 0);
             defer gpa.free(bas_c);
 
-            const ptr = libint.init(sys_c.ptr, bas_c.ptr) orelse return error.InitializationFailed;
-            errdefer libint.deinit(ptr);
+            const ptr = libint.libint_init(sys_c.ptr, bas_c.ptr) orelse return error.InitializationFailed;
+            errdefer libint.libint_deinit(ptr);
 
-            const nat = libint.nat(ptr);
-            const nbf = libint.nbf(ptr);
+            const nat = libint.libint_nat(ptr);
+            const nbf = libint.libint_nbf(ptr);
 
             const atoms = try gpa.alloc(i32, 1 * nat);
             errdefer gpa.free(atoms);
@@ -39,9 +40,9 @@ pub fn MolecularSystem(comptime T: type) type {
             const bf2at = try gpa.alloc(i32, nbf);
             errdefer gpa.free(bf2at);
 
-            libint.atoms(atoms.ptr, ptr);
-            libint.coors(coors.ptr, ptr);
-            libint.bf2at(bf2at.ptr, ptr);
+            libint.libint_atoms(atoms.ptr, ptr);
+            libint.libint_coors(coors.ptr, ptr);
+            libint.libint_bf2at(bf2at.ptr, ptr);
 
             var nel: usize = 0;
 
@@ -57,25 +58,25 @@ pub fn MolecularSystem(comptime T: type) type {
             gpa.free(self.coors);
             gpa.free(self.bf2at);
 
-            libint.deinit(self.ptr);
+            libint.libint_deinit(self.ptr);
         }
 
         pub fn coulomb(self: @This(), gpa: Allocator) !Tensor(T, 4) {
             const I = try Tensor(T, 4).initZero(.{ self.nbf, self.nbf, self.nbf, self.nbf }, gpa);
             errdefer I.deinit(gpa);
 
-            libint.coulomb(I.data.ptr, self.ptr);
+            libint.libint_coulomb(I.data.ptr, self.ptr);
 
             return I;
         }
 
         pub fn coulombD1(self: @This(), gpa: Allocator) !Tensor(T, 5) {
-            const shape = .{ 3 * libint.nat(self.ptr), self.nbf, self.nbf, self.nbf, self.nbf };
+            const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf, self.nbf, self.nbf };
 
             const I = try Tensor(T, 5).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            libint.coulomb_deriv(I.data.ptr, self.ptr);
+            libint.libint_coulomb_deriv(I.data.ptr, self.ptr);
 
             return I;
         }
@@ -84,7 +85,7 @@ pub fn MolecularSystem(comptime T: type) type {
             var J = try self.coulombD1(gpa);
             defer J.deinit(gpa);
 
-            const shape = .{ 3 * libint.nat(self.ptr), 2 * self.nbf, 2 * self.nbf, 2 * self.nbf, 2 * self.nbf };
+            const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * self.nbf, 2 * self.nbf, 2 * self.nbf, 2 * self.nbf };
 
             var I = try Tensor(T, 5).initZero(shape, gpa);
             errdefer I.deinit(gpa);
@@ -130,18 +131,18 @@ pub fn MolecularSystem(comptime T: type) type {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
             errdefer I.deinit(gpa);
 
-            libint.kinetic(I.data.ptr, self.ptr);
+            libint.libint_kinetic(I.data.ptr, self.ptr);
 
             return I;
         }
 
         pub fn kineticD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
-            const shape = .{ 3 * libint.nat(self.ptr), self.nbf, self.nbf };
+            const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };
 
             const I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            libint.kinetic_deriv(I.data.ptr, self.ptr);
+            libint.libint_kinetic_deriv(I.data.ptr, self.ptr);
 
             return I;
         }
@@ -150,7 +151,7 @@ pub fn MolecularSystem(comptime T: type) type {
             var K = try self.kineticD1(gpa);
             defer K.deinit(gpa);
 
-            const shape = .{ 3 * libint.nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
+            const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
 
             var I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
@@ -214,18 +215,18 @@ pub fn MolecularSystem(comptime T: type) type {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
             errdefer I.deinit(gpa);
 
-            libint.nuclear(I.data.ptr, self.ptr);
+            libint.libint_nuclear(I.data.ptr, self.ptr);
 
             return I;
         }
 
         pub fn nuclearD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
-            const shape = .{ 3 * libint.nat(self.ptr), self.nbf, self.nbf };
+            const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };
 
             const I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            libint.nuclear_deriv(I.data.ptr, self.ptr);
+            libint.libint_nuclear_deriv(I.data.ptr, self.ptr);
 
             return I;
         }
@@ -234,7 +235,7 @@ pub fn MolecularSystem(comptime T: type) type {
             var V = try self.nuclearD1(gpa);
             defer V.deinit(gpa);
 
-            const shape = .{ 3 * libint.nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
+            const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
 
             var I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
@@ -268,18 +269,18 @@ pub fn MolecularSystem(comptime T: type) type {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
             errdefer I.deinit(gpa);
 
-            libint.overlap(I.data.ptr, self.ptr);
+            libint.libint_overlap(I.data.ptr, self.ptr);
 
             return I;
         }
 
         pub fn overlapD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
-            const shape = .{ 3 * libint.nat(self.ptr), self.nbf, self.nbf };
+            const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };
 
             const I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            libint.overlap_deriv(I.data.ptr, self.ptr);
+            libint.libint_overlap_deriv(I.data.ptr, self.ptr);
 
             return I;
         }
@@ -288,7 +289,7 @@ pub fn MolecularSystem(comptime T: type) type {
             var S = try self.overlapD1(gpa);
             defer S.deinit(gpa);
 
-            const shape = .{ 3 * libint.nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
+            const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
 
             var I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);

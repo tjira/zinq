@@ -585,7 +585,7 @@ fn checkInvalidInput(opt: Options) !void {
 }
 
 fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
-    const pot = Potential(T).init(opt.potential);
+    const pot = try Potential(T).init(opt.potential, gpa);
 
     var ensemble = try Ensemble(T).init(pot.ndim(), opt.trajectories, opt.mass, gpa);
     errdefer ensemble.deinit(gpa);

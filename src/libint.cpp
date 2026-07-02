@@ -5,9 +5,9 @@ struct SystemData {
 };
 
 extern "C" {
-    using namespace libint2; typedef unsigned long ulong;
+    using namespace libint2;
 
-    SystemData* init(const char *system, const char *basis) {
+    SystemData* libint_init(const char *system, const char *basis) {
         std::ifstream file(system);
 
         if (!file.is_open()) return nullptr;
@@ -17,19 +17,19 @@ extern "C" {
         return new SystemData{atoms, BasisSet(atoms, BasisSet::read_g94_basis_library(basis))};
     }
 
-    void deinit(SystemData *sys) {
+    void libint_deinit(SystemData *sys) {
         if (!sys) return; delete sys;
     }
 
-    ulong nat(SystemData *sys) {
+    size_t libint_nat(SystemData *sys) {
         if (!sys) return 0; return sys->atoms.size();
     }
 
-    ulong nbf(SystemData *sys) {
+    size_t libint_nbf(SystemData *sys) {
         if (!sys) return 0; return sys->obs.nbf();
     }
 
-    void atoms(int *atoms, SystemData *sys) {
+    void libint_atoms(int *atoms, SystemData *sys) {
         if (!sys) return;
 
         for (size_t i = 0; i < sys->atoms.size(); ++i) {
@@ -37,7 +37,7 @@ extern "C" {
         }
     }
 
-    void coors(double *coords, SystemData *sys) {
+    void libint_coors(double *coords, SystemData *sys) {
         if (!sys) return;
 
         for (size_t i = 0; i < sys->atoms.size(); i++) {
@@ -47,7 +47,7 @@ extern "C" {
         }
     }
 
-    void bf2at(int *map, SystemData *sys) {
+    void libint_bf2at(int *map, SystemData *sys) {
         if (!sys) return;
 
         auto sh2bf = sys->obs.shell2bf(); auto sh2at = sys->obs.shell2atom(sys->atoms);
@@ -59,7 +59,7 @@ extern "C" {
 }
 
 extern "C" {
-    using namespace libint2; typedef unsigned long ulong;
+    using namespace libint2;
 
     void oneelec(double *I, libint2::Engine &engine, const BasisSet &obs) {
         std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
@@ -136,7 +136,7 @@ extern "C" {
         }
     }
 
-    void coulomb(double *I, SystemData *sys) {
+    void libint_coulomb(double *I, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
@@ -144,7 +144,7 @@ extern "C" {
         twoelec(I, engine, sys->obs); libint2::finalize();
     }
 
-    void kinetic(double *I, SystemData *sys) {
+    void libint_kinetic(double *I, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::kinetic, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
@@ -152,7 +152,7 @@ extern "C" {
         oneelec(I, engine, sys->obs); libint2::finalize();
     }
 
-    void nuclear(double *I, SystemData *sys) {
+    void libint_nuclear(double *I, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::nuclear, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
@@ -162,7 +162,7 @@ extern "C" {
         oneelec(I, engine, sys->obs); libint2::finalize();
     }
 
-    void overlap(double *I, SystemData *sys) {
+    void libint_overlap(double *I, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::overlap, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
@@ -172,7 +172,7 @@ extern "C" {
 }
 
 extern "C" {
-    using namespace libint2; typedef unsigned long ulong;
+    using namespace libint2;
 
     void oneelec_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms) {
         std::vector<Engine> engines(1, engine); bool is_nuclear = engine.oper() == Operator::nuclear;
@@ -319,7 +319,7 @@ extern "C" {
         }
     }
 
-    void coulomb_deriv(double *I, SystemData *sys) {
+    void libint_coulomb_deriv(double *I, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
@@ -327,7 +327,7 @@ extern "C" {
         twoelec_deriv(I, engine, sys->obs, sys->atoms); libint2::finalize();
     }
 
-    void kinetic_deriv(double *I, SystemData *sys) {
+    void libint_kinetic_deriv(double *I, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::kinetic, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
@@ -335,7 +335,7 @@ extern "C" {
         oneelec_deriv(I, engine, sys->obs, sys->atoms); libint2::finalize();
     }
 
-    void overlap_deriv(double *I, SystemData *sys) {
+    void libint_overlap_deriv(double *I, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::overlap, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
@@ -343,7 +343,7 @@ extern "C" {
         oneelec_deriv(I, engine, sys->obs, sys->atoms); libint2::finalize();
     }
 
-    void nuclear_deriv(double *I, SystemData *sys) {
+    void libint_nuclear_deriv(double *I, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::nuclear, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
@@ -357,7 +357,7 @@ extern "C" {
 extern "C" {
     using namespace libint2; using namespace libint2::solidharmonics;
 
-    void evaluate_basis_v(double *phi, double x, double y, double z, SystemData *sys) {
+    void libint_evaluate_basis_v(double *phi, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
         size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();
@@ -426,7 +426,7 @@ extern "C" {
         }
     }
 
-    void evaluate_basis_vg(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double x, double y, double z, SystemData *sys) {
+    void libint_evaluate_basis_vg(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
         size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();
@@ -527,7 +527,7 @@ extern "C" {
         }
     }
 
-    void evaluate_basis_vgl(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double *lapl_phi, double x, double y, double z, SystemData *sys) {
+    void libint_evaluate_basis_vgl(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double *lapl_phi, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
         size_t bf_idx = 0; int max_nprim = sys->obs.max_nprim();

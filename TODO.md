@@ -16,7 +16,7 @@
 - [x] Add population tracking so that the CAP would not eat the population of the wavefunction.
 - [x] Implement stop_norm option for the QD code that stops the propagation when the norm of the wavefunction drops below a certain threshold.
 - [x] Embed bases in the binary.
-- [ ] Add custom potential that will utilize exprtk.hpp.
+- [x] Add custom potential that will utilize exprtk.hpp.
 - [ ] Add potential that will read function values from a file.
 - [ ] Implement Bohmian dynamics for the QD code.
 - [x] Add support for numerical gradients for all electronic structure methods.

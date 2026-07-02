@@ -218,7 +218,7 @@ pub fn isComplex(comptime T: type) bool {
     return false;
 }
 
-fn isDual(comptime T: type) bool {
+pub fn isDual(comptime T: type) bool {
     if (@typeInfo(T) == .@"struct") {
         return @hasField(T, "val") and @hasField(T, "der");
     }

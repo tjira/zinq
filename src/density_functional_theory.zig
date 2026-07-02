@@ -1,6 +1,6 @@
 const std = @import("std");
-const libint = @import("libint");
 
+const libint = @import("cimport.zig").libint;
 const libxc = @import("cimport.zig").libxc;
 
 const Allocator = std.mem.Allocator;
@@ -365,7 +365,7 @@ pub fn DftPotential(comptime T: type) type {
 
                     const lapl_row = basis.lapl.?.rowSlice(i);
 
-                    libint.evaluate_basis_vgl(basis.phi.rowSlice(i).ptr, dx_row.ptr, dy_row.ptr, dz_row.ptr, lapl_row.ptr, x, y, z, sys.ptr);
+                    libint.libint_evaluate_basis_vgl(basis.phi.rowSlice(i).ptr, dx_row.ptr, dy_row.ptr, dz_row.ptr, lapl_row.ptr, x, y, z, sys.ptr);
                 }
 
                 if (needs_d1 and !needs_d2) {
@@ -373,11 +373,11 @@ pub fn DftPotential(comptime T: type) type {
                     const dy_row = basis.dphi_dy.?.rowSlice(i);
                     const dz_row = basis.dphi_dz.?.rowSlice(i);
 
-                    libint.evaluate_basis_vg(basis.phi.rowSlice(i).ptr, dx_row.ptr, dy_row.ptr, dz_row.ptr, x, y, z, sys.ptr);
+                    libint.libint_evaluate_basis_vg(basis.phi.rowSlice(i).ptr, dx_row.ptr, dy_row.ptr, dz_row.ptr, x, y, z, sys.ptr);
                 }
 
                 if (!needs_d1 and !needs_d2) {
-                    libint.evaluate_basis_v(basis.phi.rowSlice(i).ptr, x, y, z, sys.ptr);
+                    libint.libint_evaluate_basis_v(basis.phi.rowSlice(i).ptr, x, y, z, sys.ptr);
                 }
             }
         }

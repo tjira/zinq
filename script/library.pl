@@ -6,11 +6,11 @@ use strict; use warnings;
 # IMPORT FUNCTIONS
 use File::Path   qw(make_path rmtree);
 use Cwd          qw(getcwd          );
-use File::Copy   qw(move            );
+use File::Copy   qw(move copy       );
 use Getopt::Long qw(GetOptions      );
 
 # DEFINE VARIABLES FOR BUILD OPTIONS
-my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw, $shared);
+my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw, $build_exprtk, $shared);
 
 # DEFINE DEFAULT TARGET AND HOST
 my $target = "x86_64-linux"; my $host = "x86_64-linux";
@@ -25,6 +25,7 @@ GetOptions(
     "libxc"    =>    \$build_libxc,
     "openblas" => \$build_openblas,
     "fftw"     =>     \$build_fftw,
+    "exprtk"   =>   \$build_exprtk,
     "target=s" =>         \$target,
     "cores|j=i"=>          \$cores,
     "shared"   =>         \$shared,
@@ -34,15 +35,15 @@ GetOptions(
 $target .= $shared ? "-gnu" : "-musl";
 
 # IF NO FLAGS ARE PROVIDED, BUILD EVERYTHING
-if (!$build_eigen && !$build_libint && !$build_libxc && !$build_openblas && !$build_fftw) {
-    $build_eigen = $build_libint = $build_libxc = $build_openblas = $build_fftw = 1;
+if (!$build_eigen && !$build_libint && !$build_libxc && !$build_openblas && !$build_fftw && !$build_exprtk) {
+    $build_eigen = $build_libint = $build_libxc = $build_openblas = $build_fftw = $build_exprtk = 1;
 }
 
 # GET CWD AND PREFIX
 my $pwd = getcwd(); my $prefix = "$pwd/external-$target";
 
 # CLEAN PREVIOUS INSTALLATION ONLY IF BUILDING EVERYTHING
-if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_fftw) {
+if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_fftw && $build_exprtk) {
     rmtree($prefix) if -d $prefix;
 }
 
@@ -55,6 +56,7 @@ compile_libint  ($prefix, $cores,        $pwd, $shared) if   $build_libint;
 compile_libxc   ($prefix, $cores, $host, $pwd, $shared) if    $build_libxc;
 compile_openblas($prefix, $cores,        $pwd, $shared) if $build_openblas;
 compile_fftw    ($prefix, $cores, $host, $pwd, $shared) if     $build_fftw;
+compile_exprtk  ($prefix,                $pwd         ) if   $build_exprtk;
 
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
@@ -78,7 +80,7 @@ sub download_library {
     my $tar_flags = $url =~ /\.tar\.bz2$|\.tbz2$/ ? '-xj' : '-xz';
 
     # COMMAND TO DOWNLOAD AND EXTRACT THE ARCHIVE
-    my $cmd = "curl -L '$url' | tar $tar_flags -C lib";
+    my $cmd = "curl -L -A 'Mozilla/5.0' '$url' | tar $tar_flags -C lib";
 
     # EXECUTE THE COMMAND AND CHECK FOR SUCCESS
     if (system($cmd) != 0) {
@@ -337,4 +339,36 @@ sub compile_fftw {
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
+}
+
+sub compile_exprtk {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $pwd) = @_;
+
+    # DEFINE THE URL OF THE EXPRTK SOURCE ZIP FILE
+    my $url = "https://www.partow.net/downloads/exprtk.zip";
+
+    # CREATE LIB DIRECTORY IF IT DOESN'T EXIST
+    make_path("lib") if ! -d "lib";
+
+    # DEFINE THE PATH TO THE ZIP FILE
+    my $zip_file = "lib/exprtk.zip";
+
+    # DOWNLOAD THE ZIP FILE WITH A USER-AGENT HEADER
+    system("curl", "-L", "-A", "Mozilla/5.0", "-o", $zip_file, $url) == 0 or die "FAILED TO DOWNLOAD EXPRTK";
+
+    # UNPACK THE ZIP FILE
+    system("unzip", "-q", "-d", "lib", $zip_file) == 0 or die "FAILED TO UNPACK EXPRTK";
+
+    # REMOVE THE ZIP FILE
+    unlink $zip_file or warn "COULD NOT REMOVE '$zip_file': $!";
+
+    # CREATE INCLUDE DIRECTORY IF IT DOESN'T EXIST
+    make_path("$prefix/include") if ! -d "$prefix/include";
+
+    # DEFINE SOURCE AND DESTINATION PATHS FOR THE HEADER FILE
+    my $src = "lib/exprtk/exprtk.hpp"; my $dst = "$prefix/include/exprtk.hpp";
+
+    # RUN COPY
+    copy($src, $dst) or die "FAILED TO COPY '$src' TO '$dst': $!";
 }

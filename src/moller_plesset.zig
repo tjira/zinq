@@ -104,9 +104,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         grad[0] = try hfres.grad[0].clone(gpa);
     };
 
-    errdefer {
-        if (opt.gradient) |_| grad[0].deinit(gpa);
-    }
+    errdefer if (opt.gradient != null and opt.gradient.? == .analytic) {
+        grad[0].deinit(gpa);
+    };
 
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
 
@@ -147,6 +147,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (opt.gradient) |gradopt| if (gradopt == .numeric) {
         grad[0] = try calculateNumericalGradient(T, io, run, opt, log, gpa);
+        errdefer grad[0].deinit(gpa);
 
         if (log) {
             try printf(io, "\nMP{d} NUMERICAL NUCLEAR ENERGY GRADIENT\n", .{opt.order});

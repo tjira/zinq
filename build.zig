@@ -39,6 +39,7 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
     const exe_zinq = b.addExecutable(.{
         .name = "zinq",
         .root_module = zinq_module,
+        .use_llvm = true,
     });
 
     if (target.query.cpu_arch == null) {
@@ -80,6 +81,7 @@ fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
 
     const exe_test = b.addTest(.{
         .root_module = test_module,
+        .use_llvm = true,
     });
 
     const run_exe_test = b.addRunArtifact(exe_test);
@@ -106,21 +108,14 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     const dir1 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[1] });
     const dir2 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[2] });
 
+    module.addIncludePath(b.path("src"));
+
     module.addLibraryPath(.{ .cwd_relative = dir0 });
     module.addIncludePath(.{ .cwd_relative = dir1 });
     module.addIncludePath(.{ .cwd_relative = dir2 });
 
     module.addCSourceFile(.{ .file = b.path("src/libint.cpp") });
-
-    const libint_translate = b.addTranslateC(.{
-        .root_source_file = b.path("src/libint.h"),
-        .target = module.resolved_target.?,
-        .optimize = module.optimize.?,
-    });
-
-    libint_translate.addIncludePath(.{ .cwd_relative = dir1 });
-
-    module.addImport("libint", libint_translate.createModule());
+    module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp") });
 
     const libs = [_][]const u8{
         "fftw3",
