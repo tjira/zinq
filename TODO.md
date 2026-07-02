@@ -23,5 +23,6 @@
 - [x] Add support for numerical Hessians for all electronic structure methods.
 - [x] Implement frequency analysis for the electronic structure methods.
 - [ ] Implement mulliken population analysis for the electronic structure methods.
-- [ ] Add support for more atoms in constant.zig.
+- [ ] Implement 1RDM for post-HF methods.
+- [x] Add support for more atoms in constant.zig.
 - [x] Add tests for numerical gradients.
