@@ -41,8 +41,12 @@ jobs:
 
       - name: Compile Libraries
         run: ./script/library.pl --target ${{matrix.target}} ${{matrix.build_flags}}
+
+      - name: Compress the Library Directory
+        run: tar -cJf external-${{matrix.target}}-${{matrix.suffix}}.tar.xz external-${{matrix.target}}-${{matrix.suffix}}
       
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
         with:
-          path: external-${{matrix.target}}-${{matrix.suffix}}
+          path: external-${{matrix.target}}-${{matrix.suffix}}.tar.xz
+          archive: false
