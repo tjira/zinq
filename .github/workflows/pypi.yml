@@ -1,0 +1,53 @@
+name: Pypi
+
+on:
+  push:
+    tags:
+      - 'v**'
+
+jobs:
+  pypi:
+    name: ${{matrix.target}}-musl
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-linux
+            plat_name: manylinux_2_17_x86_64
+          - target: aarch64-linux
+            plat_name: manylinux_2_17_aarch64
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
+      - name: Install Build Tools
+        run: pip install build
+
+      - name: Compile Libraries
+        run: ./script/library.pl --target ${{matrix.target}}
+
+      - name: Compile Zinq
+        run: zig build --release=fast -Dtarget=${{matrix.target}}-musl
+
+      - name: Copy Binary
+        run: mkdir -p zinq/bin && cp zig-out/${{matrix.target}}-musl/zinq zinq/bin/zinq
+
+      - name: Build Wheel
+        run: python -m build --wheel -C--build-option=--plat-name=${{matrix.plat_name}}
+
+      - name: Publish Package Distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

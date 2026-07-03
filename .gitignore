@@ -1,5 +1,6 @@
 /.antigravitycli/
 /.zig-cache/
+/build/
 /dist/
 /external-aarch64-linux-gnu/
 /external-aarch64-linux-musl/
@@ -10,6 +11,7 @@
 /lib/
 /orca/
 /zig-out/
+/zinq.egg-info/
 
 /zigar
 /zigcc
@@ -30,5 +32,6 @@
 
 /docs/_site/
 /docs/code/
+/zinq/bin/
 
 /docs/gems.locked
