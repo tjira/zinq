@@ -12,3 +12,6 @@ run:
 
 test:
 	@zig build $(if $(filter 0,$(DEBUG)),--release=fast) test
+
+clean:
+	@rm -rf .zig-cache build dist zig-out zinq.egg-info zinq/bin *.json *.mat *.tar.xz

@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zinq"
+dynamic = ["version"]
+description = "A lightweight Zig framework for electronic structure theory and quantum chemistry."
+readme = "README.md"
+license = "MIT"
+requires-python  = ">=3.8"
+authors = [{name = "Tomáš Jíra", email = "tom.jira@gmail.com"}]
+keywords = ["electronic-structure", "quantum-dynamics"]
+
+[project.urls]
+Homepage = "https://github.com/tjira/zinq"
+Documentation = "https://tjira.github.io/zinq"
+Repository = "https://github.com/tjira/zinq"
+
+[project.scripts]
+zinq = "zinq:main"
+
+[tool.setuptools]
+packages = ["zinq"]
+
+[tool.setuptools.package-data]
+zinq = ["bin/zinq"]
+
+[tool.setuptools_scm]
