@@ -355,7 +355,7 @@ sub compile_exprtk {
     my $zip_file = "lib/exprtk.zip";
 
     # DOWNLOAD THE ZIP FILE WITH A USER-AGENT HEADER
-    system("curl", "-L", "-A", "Mozilla/5.0", "-o", $zip_file, $url) == 0 or die "FAILED TO DOWNLOAD EXPRTK";
+    system("curl", "-L", "-A", "Mozilla/5.0", "--retry", "3", "-o", $zip_file, $url) == 0 or die "FAILED TO DOWNLOAD EXPRTK";
 
     # UNPACK THE ZIP FILE
     system("unzip", "-q", "-d", "lib", $zip_file) == 0 or die "FAILED TO UNPACK EXPRTK";

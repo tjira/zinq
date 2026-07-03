@@ -1,6 +1,8 @@
 name: Library
 
-on: workflow_dispatch
+on:
+  schedule:
+    - cron: "0 0 * * *"
 
 permissions:
   contents: read

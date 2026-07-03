@@ -38,8 +38,14 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Compile Libraries
-        run: ./script/library.pl
+      - name: Download Compiled Libraries
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: library.yml
+          name: external-x86_64-linux-musl.tar.xz
+
+      - name: Extract Compiled Libraries
+        run: tar -xJf external-x86_64-linux-musl.tar.xz
 
       - name: Run Tests in ${{matrix.mode_name}} Mode
         run: zig build ${{matrix.build_flags}} test
