@@ -43,6 +43,7 @@ jobs:
         with:
           workflow: library.yml
           name: external-x86_64-linux-musl.tar.xz
+          skip_unpack: true
 
       - name: Extract Compiled Libraries
         run: tar -xJf external-x86_64-linux-musl.tar.xz
