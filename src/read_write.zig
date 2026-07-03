@@ -17,6 +17,40 @@ pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     try writer.interface.flush();
 }
 
+pub fn readMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Matrix(T) {
+    var file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+
+    var buffer: [65536]u8 = undefined;
+    var reader = file.reader(io, &buffer);
+
+    var hdr_it = std.mem.tokenizeAny(u8, try reader.interface.takeDelimiterInclusive('\n'), " \t\r\n");
+
+    const nrow = try std.fmt.parseInt(usize, hdr_it.next() orelse return error.InvalidFormat, 10);
+    const ncol = try std.fmt.parseInt(usize, hdr_it.next() orelse return error.InvalidFormat, 10);
+
+    var A = try Matrix(T).init(nrow, ncol, allocator);
+    errdefer A.deinit(allocator);
+
+    var i: usize = 0;
+
+    while (true) {
+        const line = reader.interface.takeDelimiterExclusive('\n') catch {
+            break;
+        };
+
+        reader.interface.toss(1);
+
+        var line_iterator = std.mem.tokenizeAny(u8, line, " ");
+
+        while (line_iterator.next()) |element| : (i += 1) {
+            A.data[i] = try std.fmt.parseFloat(T, element);
+        }
+    }
+
+    return A;
+}
+
 pub fn writeMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T)) !void {
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);

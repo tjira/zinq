@@ -525,7 +525,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var sim = try init(T, opt, gpa);
+    var sim = try init(T, io, opt, gpa);
     defer sim.deinit(gpa);
 
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
@@ -584,8 +584,8 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
-fn init(comptime T: type, opt: Options, gpa: Allocator) !SimulationState(T) {
-    const pot = try Potential(T).init(opt.potential, gpa);
+fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationState(T) {
+    const pot = try Potential(T).init(io, opt.potential, gpa);
 
     var ensemble = try Ensemble(T).init(pot.ndim(), opt.trajectories, opt.mass, gpa);
     errdefer ensemble.deinit(gpa);

@@ -5,10 +5,16 @@ const Allocator = std.mem.Allocator;
 const Expression = @import("exprtk.zig").Expression;
 const Matrix = @import("tensor.zig").Matrix;
 const Value = @import("value.zig").Value;
+const Vector = @import("tensor.zig").Vector;
 
 const isDual = @import("value.zig").isDual;
+const readMatrix = @import("read_write.zig").readMatrix;
 
 pub const Options = union(enum) {
+    file: struct {
+        ndim: u32,
+        path: []const u8,
+    },
     harmonic: struct {
         k: []const f64 = &.{1},
     },
@@ -24,20 +30,22 @@ pub const Options = union(enum) {
     },
     custom: struct {
         matrix: []const []const []const u8,
-        ndim: usize,
+        ndim: u32,
         time_dependent: bool = false,
     },
 };
 
 pub fn Potential(comptime T: type) type {
     return union(enum) {
+        file: File(T),
         harmonic: Harmonic(T),
         time_linear: TimeLinear(T),
         tully_1: Tully1(T),
         custom: Custom(T),
 
-        pub fn init(options: Options, allocator: Allocator) !@This() {
+        pub fn init(io: std.Io, options: Options, allocator: Allocator) !@This() {
             return switch (options) {
+                .file => |f| .{ .file = try File(T).init(f.ndim, f.path, io, allocator) },
                 .harmonic => |f| .{ .harmonic = Harmonic(T).init(f.k) },
                 .time_linear => |f| .{ .time_linear = TimeLinear(T).init(f.a, f.g) },
                 .tully_1 => |f| .{ .tully_1 = Tully1(T).init(f.A, f.B, f.C, f.D) },
@@ -47,7 +55,7 @@ pub fn Potential(comptime T: type) type {
 
         pub fn deinit(self: *@This(), allocator: Allocator) void {
             switch (self.*) {
-                .custom => |*pot| pot.deinit(allocator),
+                inline .file, .custom => |*pot| pot.deinit(allocator),
 
                 inline else => {},
             }
@@ -289,4 +297,78 @@ fn Custom(comptime T: type) type {
             return std.math.sqrt(self.expressions.len);
         }
     };
+}
+
+fn File(comptime T: type) type {
+    return struct {
+        U: Matrix(T),
+        ndims: usize,
+
+        pub fn init(ndims: usize, path: []const u8, io: std.Io, gpa: Allocator) !@This() {
+            return .{ .U = try readMatrix(T, io, path, gpa), .ndims = ndims };
+        }
+
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.U.deinit(gpa);
+        }
+
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+            for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
+                const col = i * self.nstate() + j;
+
+                V[col] = lerp(T, U, self.U, self.ndim() + col, r);
+            };
+        }
+
+        pub fn isTd(_: @This()) bool {
+            return false;
+        }
+
+        pub fn ndim(self: @This()) usize {
+            return self.ndims;
+        }
+
+        pub fn nstate(self: @This()) usize {
+            return std.math.sqrt(self.U.ncol() - self.ndim());
+        }
+    };
+}
+
+fn lerp(comptime T: type, comptime U: type, grid: Matrix(T), column: usize, r: []const U) U {
+    std.debug.assert(column < grid.ncol());
+
+    const size: usize = @round(std.math.pow(T, @as(T, @floatFromInt(grid.nrow())), 1 / @as(T, @floatFromInt(r.len))));
+
+    var result = Value(U).fromFloat(0);
+
+    for (0..@as(usize, 1) << @as(u5, @intCast(r.len))) |i| {
+        var w, var j: usize = .{Value(U).fromFloat(1), 0};
+
+        for (0..r.len) |k| {
+            const stride = std.math.pow(usize, size, r.len - k - 1);
+
+            var low: usize, var high: usize, var mid: usize = .{ 0, size, size / 2 };
+
+            while (low < high) : (mid = (low + high) / 2) {
+                if (grid.at(mid * stride, k) <= if (comptime isDual(U)) r[k].val else r[k]) low = mid + 1 else high = mid;
+            }
+            
+            const idx = @min(@max(low, 1), size - 1);
+
+            const x0 = grid.at((idx - 1) * stride, k);
+            const x1 = grid.at((idx - 0) * stride, k);
+
+            const wgh = Value(U).init(r[k]).sub(Value(U).fromFloat(x0)).muls(1 / (x1 - x0));
+
+            const use_upper = ((i >> @as(u5, @intCast(r.len - k - 1))) & 1) == 1;
+
+            const wmul = if (use_upper) wgh else Value(U).fromFloat(1).sub(wgh);
+
+            w, j = .{ w.mul(wmul), j + (if (use_upper) idx else idx - 1) * stride };
+        }
+
+        result = result.add(w.muls(grid.at(j, column)));
+    }
+
+    return result.val;
 }

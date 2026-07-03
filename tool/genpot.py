@@ -13,7 +13,7 @@ def evaluate(expr, r):
 def getGrid(bounds, npoints):
     ndim = len(bounds)
 
-    grids_1d = [np.linspace(bounds[i][0], bounds[i][1], npoints[i], endpoint=True) for i in range(ndim)]
+    grids_1d = [np.linspace(bounds[i][0], bounds[i][1], npoints[i], endpoint=False) for i in range(ndim)]
 
     return np.column_stack([m.ravel() for m in np.meshgrid(*grids_1d, indexing="ij")])
 
@@ -49,6 +49,21 @@ def main():
     parser.add_argument("funcs", nargs="+", type=str, help="Potential matrix element functions")
 
     args = parser.parse_args()
+
+    if len(args.grid) % 2 != 0:
+        parser.error("The --grid argument requires an even number of values representing (min, max) pairs for each dimension.")
+
+    if next((i for i in range(len(args.grid) // 2) if args.grid[2 * i] >= args.grid[2 * i + 1]), None) is not None:
+        parser.error(f"Grid minimal values must be less than maximal values for each dimension. Check the --grid argument.")
+
+    if any(n <= 0 for n in args.npoint):
+        parser.error("All --npoint values must be positive integers.")
+
+    if len(args.npoint) != 1 and len(args.npoint) != len(args.grid) // 2:
+        parser.error(f"The --npoint argument must have exactly 1 value, or {len(args.grid) // 2} values to match the grid dimensions.")
+
+    if (N := (math.isqrt(1 + 8 * len(args.funcs)) - 1) // 2) * (N + 1) // 2 != len(args.funcs):
+        parser.error(f"Invalid number of functions. Must be a triangular number (1, 3, 6, 10, ...) to properly fill a symmetric matrix.")
 
     grid = getGrid(*getLimits(args.grid, args.npoint))
 
