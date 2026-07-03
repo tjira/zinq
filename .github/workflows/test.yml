@@ -46,11 +46,7 @@ jobs:
           skip_unpack: true
 
       - name: Extract Compiled Libraries
-        run: tar -xJf external-x86_64-linux-musl.tar.xz
+        run: tar -xJf external-x86_64-linux-musl.tar.xz.zip
 
       - name: Run Tests in ${{matrix.mode_name}} Mode
         run: zig build ${{matrix.build_flags}} test
-
-      - name: Setup Tmate Session
-        if: failure()
-        uses: mxschmitt/action-tmate/detached@v3

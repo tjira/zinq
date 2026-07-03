@@ -35,7 +35,7 @@ jobs:
           skip_unpack: true
 
       - name: Extract Compiled Libraries
-        run: tar -xJf external-x86_64-linux-musl.tar.xz
+        run: tar -xJf external-x86_64-linux-musl.tar.xz.zip
 
       - name: Compile Code Documentation
         run: zig build docs
