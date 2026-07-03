@@ -30,8 +30,15 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Compile Libraries
-        run: ./script/library.pl --target ${{matrix.target}}
+      - name: Download Compiled Libraries
+        uses: dawidd6/action-download-artifact@v3
+        with:
+          workflow: library.yml
+          name: external-x86_64-linux-musl.tar.xz
+          skip_unpack: true
+
+      - name: Extract Compiled Libraries
+        run: tar -xJf external-x86_64-linux-musl.tar.xz.zip
 
       - name: Compile Zinq
         run: zig build --release=fast -Dtarget=${{matrix.target}}-musl
