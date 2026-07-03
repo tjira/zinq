@@ -50,3 +50,7 @@ jobs:
 
       - name: Run Tests in ${{matrix.mode_name}} Mode
         run: zig build ${{matrix.build_flags}} test
+
+      - name: Setup Tmate Session
+        if: failure()
+        uses: mxschmitt/action-tmate/detached@v3
