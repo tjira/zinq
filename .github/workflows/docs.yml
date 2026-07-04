@@ -27,11 +27,16 @@ jobs:
         with:
           ruby-version: 3.4
 
-      - name: Download Compiled Libraries
-        uses: dawidd6/action-download-artifact@v3
+      - name: Cache Compiled Libraries
+        id: cache-libs
+        uses: actions/cache@v4
         with:
-          workflow: library.yml
-          name: external-x86_64-linux-musl
+          path: external-x86_64-linux-musl
+          key: libs-x86_64-linux-musl-${{hashFiles('script/library.pl')}}
+
+      - name: Compile Libraries
+        if: steps.cache-libs.outputs.cache-hit != 'true'
+        run: ./script/library.pl --target x86_64-linux
 
       - name: Compile Code Documentation
         run: zig build docs
