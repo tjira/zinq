@@ -34,11 +34,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v3
         with:
           workflow: library.yml
-          name: external-${{matrix.target}}-musl.tar.xz
-          skip_unpack: true
-
-      - name: Extract Compiled Libraries
-        run: tar -xJf external-${{matrix.target}}-musl.tar.xz.zip
+          name: external-${{matrix.target}}-musl
 
       - name: Compile Zinq
         run: zig build --release=fast -Dtarget=${{matrix.target}}-musl
