@@ -3,6 +3,7 @@ name: Library
 on:
   schedule:
     - cron: "0 0 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -51,9 +52,12 @@ jobs:
       - name: Remove Eigen Signature File
         working-directory: external-${{matrix.target}}-${{matrix.suffix}}
         run: rm -f include/eigen3/signature_of_eigen3_matrix_library
+
+      - name: Prepare Artifact Directory
+        run: mkdir -p staging && mv external-${{matrix.target}}-${{matrix.suffix}} staging
       
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
         with:
           name: external-${{matrix.target}}-${{matrix.suffix}}
-          path: external-${{matrix.target}}-${{matrix.suffix}}
+          path: staging
