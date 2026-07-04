@@ -1,8 +1,9 @@
 name: Library
 
 on:
-  schedule:
-    - cron: "0 0 * * *"
+  push:
+    branches:
+      - '*'
 
 permissions:
   contents: read
@@ -44,11 +45,15 @@ jobs:
       - name: Compile Libraries
         run: ./script/library.pl --target ${{matrix.target}} ${{matrix.build_flags}}
 
-      - name: Compress the Library Directory
-        run: tar -cJf external-${{matrix.target}}-${{matrix.suffix}}.tar.xz external-${{matrix.target}}-${{matrix.suffix}}
+      - name: Remove Unnecessary Files
+        working-directory: external-${{matrix.target}}-${{matrix.suffix}}
+        run: rm -rf bin share lib/cmake lib/pkgconfig include/*.bib include/*.f03 lib/*.la
+
+      - name: Remove Eigen Signature File
+        working-directory: external-${{matrix.target}}-${{matrix.suffix}}
+        run: rm -f include/eigen3/signature_of_eigen3_matrix_library
       
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
         with:
-          path: external-${{matrix.target}}-${{matrix.suffix}}.tar.xz
-          archive: false
+          path: external-${{matrix.target}}-${{matrix.suffix}}
