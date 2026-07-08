@@ -3,7 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const DftPotential = @import("density_functional_theory.zig").DftPotential;
-const Integrals = @import("molecular_integrals.zig").Integrals;
+const Integrals = @import("molecular_integrals.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;

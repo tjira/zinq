@@ -47,7 +47,7 @@ pub const Options = struct {
     spin: bool = false,
 };
 
-pub fn Integrals(comptime T: type) type {
+pub fn Result(comptime T: type) type {
     return struct {
         sys: MolecularSystem(T),
 
@@ -83,7 +83,7 @@ pub fn Integrals(comptime T: type) type {
     };
 }
 
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Integrals(T) {
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
     const basis_path = try exportIfBuiltin(io, opt.basis, gpa);
@@ -94,7 +94,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var ints: Integrals(T) = .{ .sys = try MolecularSystem(T).init(opt.system, basis_path, gpa) };
+    var ints: Result(T) = .{ .sys = try MolecularSystem(T).init(opt.system, basis_path, gpa) };
     errdefer ints.deinit(gpa);
 
     if (std.mem.startsWith(u8, opt.basis, "builtin:")) {
