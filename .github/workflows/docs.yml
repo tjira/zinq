@@ -28,7 +28,7 @@ jobs:
           version: 0.16.0
 
       - name: Install Build Tools
-        run: pip install mkdocs
+        run: pip install mkdocs-material
 
       - name: Cache Compiled Libraries
         id: cache-libs
