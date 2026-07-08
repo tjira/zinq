@@ -4,3 +4,5 @@ repo_url: https://github.com/tjira/zinq
 theme:
   name: material
   favicon: favicon.ico
+extra:
+  generator: false
