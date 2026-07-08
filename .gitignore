@@ -11,6 +11,7 @@
 /external-x86_64-linux-musl/
 /lib/
 /orca/
+/site/
 /zig-out/
 /zinq.egg-info/
 
@@ -30,7 +31,6 @@
 /*.txt
 /*.xz
 
-/docs/_site/
 /docs/code/
 /zinq/bin/
 

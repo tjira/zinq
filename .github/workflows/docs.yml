@@ -17,15 +17,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: 3.14
+
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:
           version: 0.16.0
 
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: 3.4
+      - name: Install Build Tools
+        run: pip install mkdocs
 
       - name: Cache Compiled Libraries
         id: cache-libs
@@ -41,18 +44,13 @@ jobs:
       - name: Compile Code Documentation
         run: zig build docs
 
-      - name: Install Jekyll Dependencies
-        working-directory: docs
-        run: bundle install
-
-      - name: Build Jekyll Site
-        working-directory: docs
-        run: bundle exec jekyll build
+      - name: Build MkDocs Site
+        run: mkdocs build
 
       - name: Upload Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/_site
+          path: site
 
   deploy:
     runs-on: ubuntu-latest

@@ -38,7 +38,7 @@
 </p>
 
 <p align="center">
-A lightweight Zig framework for electronic structure theory, quantum chemistry, and mathematical algorithms. Written from scratch, it favors simple design and transparent implementation while relying on efficient algorithms.
+Lightweight Zig framework for electronic structure theory, quantum chemistry, and mathematical algorithms. Written from scratch, it favors simple design and transparent implementation while relying on efficient algorithms.
 </p>
 
 ## Features

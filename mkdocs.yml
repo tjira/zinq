@@ -1,0 +1,6 @@
+site_name: Zinq
+site_url: https://tjira.github.io/zinq
+repo_url: https://github.com/tjira/zinq
+theme:
+  name: material
+  favicon: favicon.ico

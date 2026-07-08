@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "zinq"
 dynamic = ["version"]
-description = "A lightweight Zig framework for electronic structure theory and quantum chemistry."
+description = "Lightweight Zig framework for electronic structure theory and quantum chemistry."
 readme = "README.md"
 license = "MIT"
 requires-python  = ">=3.8"
