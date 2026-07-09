@@ -202,3 +202,19 @@ pub const AN2M = std.StaticStringMap(f64).initComptime(.{
     .{ "U",  238.050788 },
     // zig fmt: on
 });
+
+pub fn getMass(comptime T: type, atomic_number: i32) !T {
+    if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atomic_number)) |i| {
+        return AN2M.get(AN2SM.kvs.keys[i]) orelse return error.InvalidAtomicNumber;
+    }
+
+    return error.InvalidAtomicNumber;
+}
+
+pub fn getSymbol(atomic_number: i32) ![]const u8 {
+    if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atomic_number)) |i| {
+        return AN2SM.kvs.keys[i];
+    }
+
+    return error.InvalidAtomicNumber;
+}

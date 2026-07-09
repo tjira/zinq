@@ -16,6 +16,7 @@ const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNu
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const hartree_fock_run = @import("hartree_fock.zig").run;
+const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printf = @import("read_write.zig").printf;
 const slater = @import("configuration_interaction.zig").slater;
 
@@ -136,7 +137,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
             };
 
             if (log) {
-                try printf(io, "\nMP{d} ANALYTICAL NUCLEAR ENERGY GRADIENT\n", .{i});
+                try printf(io, "\nMP{d} ANALYTICAL NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{i});
 
                 for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
                     try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
@@ -150,7 +151,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         errdefer grad[0].deinit(gpa);
 
         if (log) {
-            try printf(io, "\nMP{d} NUMERICAL NUCLEAR ENERGY GRADIENT\n", .{opt.order});
+            try printf(io, "\nMP{d} NUMERICAL NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{opt.order});
 
             for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
                 try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
@@ -173,13 +174,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         var freqs = try calculateHarmonicFrequencies(T, hess[0], hfres.ints.sys.atoms, gpa);
         defer freqs.deinit(gpa);
 
-        if (log) {
-            try printf(io, "\nMP{d} NUMERICAL HARMONIC VIBRATIONAL FREQUENCIES\n", .{opt.order});
+        const method_str = try std.fmt.allocPrint(gpa, "MP{d} NUMERIC", .{opt.order});
+        defer gpa.free(method_str);
 
-            for (0..freqs.length()) |i| {
-                try printf(io, "MODE {d:3}: {d:12.4} cm^-1\n", .{ i + 1, AU2CM * freqs.at(i) });
-            }
-        }
+        try printHarmonicFrequencies(T, io, freqs, method_str);
     }
 
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = hess };

@@ -342,7 +342,7 @@ fn lerp(comptime T: type, comptime U: type, grid: Matrix(T), column: usize, r: [
     var result = Value(U).fromFloat(0);
 
     for (0..@as(usize, 1) << @as(u5, @intCast(r.len))) |i| {
-        var w, var j: usize = .{Value(U).fromFloat(1), 0};
+        var w, var j: usize = .{ Value(U).fromFloat(1), 0 };
 
         for (0..r.len) |k| {
             const stride = std.math.pow(usize, size, r.len - k - 1);
@@ -352,7 +352,7 @@ fn lerp(comptime T: type, comptime U: type, grid: Matrix(T), column: usize, r: [
             while (low < high) : (mid = (low + high) / 2) {
                 if (grid.at(mid * stride, k) <= if (comptime isDual(U)) r[k].val else r[k]) low = mid + 1 else high = mid;
             }
-            
+
             const idx = @min(@max(low, 1), size - 1);
 
             const x0 = grid.at((idx - 1) * stride, k);

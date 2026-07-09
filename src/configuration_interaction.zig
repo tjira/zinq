@@ -20,6 +20,7 @@ const eighSlice = @import("linear_algebra.zig").eighSlice;
 const hartree_fock_run = @import("hartree_fock.zig").run;
 const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
 const primType = @import("value.zig").primType;
+const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printf = @import("read_write.zig").printf;
 
 const ScalarDual = @import("dual.zig").ScalarDual;
@@ -253,7 +254,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
         const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTIC" else "NUMERIC";
 
-        try printf(io, "\nCI STATE {d} {s} NUCLEAR ENERGY GRADIENT\n", .{ state, grad_type_str });
+        try printf(io, "\nCI STATE {d} {s} NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{ state, grad_type_str });
 
         for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
             try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
@@ -275,13 +276,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         var freqs = try calculateHarmonicFrequencies(T, hess[0], hfres.ints.sys.atoms, gpa);
         defer freqs.deinit(gpa);
 
-        if (log) {
-            try printf(io, "\nCI STATE {d} NUMERICAL HARMONIC VIBRATIONAL FREQUENCIES\n", .{opt.hessian.?.numeric.state});
+        const method_str = try std.fmt.allocPrint(gpa, "CI STATE {d} NUMERIC", .{opt.hessian.?.numeric.state});
+        defer gpa.free(method_str);
 
-            for (0..freqs.length()) |i| {
-                try printf(io, "MODE {d:3}: {d:12.4} cm^-1\n", .{ i + 1, AU2CM * freqs.at(i) });
-            }
-        }
+        try printHarmonicFrequencies(T, io, freqs, method_str);
     }
 
     return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C, .grad = grad, .hess = hess };

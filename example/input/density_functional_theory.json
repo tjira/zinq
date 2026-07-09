@@ -6,7 +6,14 @@
                 "basis" : "builtin:sto-3g",
                 "dft": {
                     "exchange_correlation": "hyb_gga_xc_b3lyp"
-                }
+                },
+                "gradient" : {
+                    "numeric" : {}
+                },
+                "hessian" : {
+                    "numeric" : {}
+                },
+                "mulliken" : true
             }
         }
     ]

@@ -6,9 +6,12 @@ const Matrix = @import("tensor.zig").Matrix;
 const Vector = @import("tensor.zig").Vector;
 
 const eighSlice = @import("linear_algebra.zig").eighSlice;
+const getMass = @import("constant.zig").getMass;
+const printf = @import("read_write.zig").printf;
 
 const AN2M = @import("constant.zig").AN2M;
 const AN2SM = @import("constant.zig").AN2SM;
+const AU2CM = @import("constant.zig").AU2CM;
 
 pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), atoms: []const i32, gpa: Allocator) !Vector(T) {
     std.debug.assert(hessian.nrow() == atoms.len * 3);
@@ -41,10 +44,10 @@ pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), atoms:
     return w;
 }
 
-fn getMass(comptime T: type, atomic_number: i32) !T {
-    if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atomic_number)) |i| {
-        return AN2M.get(AN2SM.kvs.keys[i]).?;
-    }
+pub fn printHarmonicFrequencies(comptime T: type, io: std.Io, freqs: Vector(T), method_str: []const u8) !void {
+    try printf(io, "\n{s} HARMONIC VIBRATIONAL FREQUENCIES (cm^-1)\n", .{method_str});
 
-    return error.InvalidAtomicNumber;
+    for (0..freqs.length()) |i| {
+        try printf(io, "MODE {d:3}: {d:12.4}\n", .{ i + 1, AU2CM * freqs.at(i) });
+    }
 }

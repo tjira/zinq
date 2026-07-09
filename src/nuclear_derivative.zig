@@ -185,6 +185,18 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, xyz: *XyzDat
 
     modified_opt.gradient, modified_opt.hessian = .{ null, null };
 
+    if (comptime @hasField(@TypeOf(modified_opt), "hartree_fock")) {
+        modified_opt.hartree_fock.gradient, modified_opt.hartree_fock.hessian = .{ null, null };
+    }
+
+    if (comptime @hasField(@TypeOf(modified_opt), "mulliken")) {
+        modified_opt.mulliken = false;
+    }
+
+    if (comptime @hasField(@TypeOf(modified_opt), "hartree_fock")) {
+        modified_opt.hartree_fock.mulliken = false;
+    }
+
     inline for (0..@typeInfo(@TypeOf(perts)).@"struct".fields.len / 2) |idx| {
         const i_val = perts[idx * 2 + 0];
         const v_val = perts[idx * 2 + 1];

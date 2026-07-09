@@ -15,14 +15,19 @@ const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculate
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
 const geigh = @import("linear_algebra.zig").geigh;
+const getSymbol = @import("constant.zig").getSymbol;
 const luFactorize = @import("linear_algebra.zig").luFactorize;
 const luSolve = @import("linear_algebra.zig").luSolve;
 const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
 const molecular_integrals_run = @import("molecular_integrals.zig").run;
+const mulliken = @import("population_analysis.zig").mulliken;
 const orbitalResponse = @import("cphf.zig").orbitalResponse;
+const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
+const printMullikenCharges = @import("population_analysis.zig").printMullikenCharges;
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 
+const AN2SM = @import("constant.zig").AN2SM;
 const AU2CM = @import("constant.zig").AU2CM;
 
 pub const Options = struct {
@@ -35,6 +40,7 @@ pub const Options = struct {
     generalized: bool = false,
     iterations: u32 = 100,
     threshold: f64 = 1e-8,
+    mulliken: bool = false,
 
     dft: ?struct {
         exchange: ?[]const u8 = null,
@@ -469,6 +475,15 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     energy[0] = e_new;
 
+    if (log and opt.mulliken) {
+        var charges = try mulliken(T, ints.sys, P, ints.S.?, gpa);
+        defer charges.deinit(gpa);
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printMullikenCharges(T, io, ints.sys, charges, method_str);
+    }
+
     if (log) {
         try printf(io, "\nNUCLEAR REPULSION ENERGY: {d:.14} Eh\n", .{VN});
     }
@@ -514,7 +529,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
         const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
 
-        try printf(io, "\n{s} {s} NUCLEAR ENERGY GRADIENT\n", .{ method_str, grad_type_str });
+        try printf(io, "\n{s} {s} NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{ method_str, grad_type_str });
 
         for (0..grad[i].shape[0]) |j| for (0..grad[i].shape[1]) |k| {
             try printf(io, "{d:20.14}{s}", .{ grad[i].at(j, k), if (k == 2) "\n" else " " });
@@ -536,15 +551,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         var freqs = try calculateHarmonicFrequencies(T, hess[0], ints.sys.atoms, gpa);
         defer freqs.deinit(gpa);
 
-        if (log) {
-            const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+        const method_str = if (dft) |_| "DFT NUMERIC" else "HARTREE-FOCK NUMERIC";
 
-            try printf(io, "\n{s} NUMERICAL HARMONIC VIBRATIONAL FREQUENCIES\n", .{method_str});
-
-            for (0..freqs.length()) |i| {
-                try printf(io, "MODE {d:3}: {d:12.4} cm^-1\n", .{ i + 1, AU2CM * freqs.at(i) });
-            }
-        }
+        try printHarmonicFrequencies(T, io, freqs, method_str);
     }
 
     var result: Result(T) = .{ .ints = ints, .P = P, .C = C, .F = F, .e = e, .energy = energy, .grad = grad, .hess = hess };
