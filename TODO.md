@@ -22,10 +22,10 @@
 - [x] Add support for numerical gradients for all electronic structure methods.
 - [x] Add support for numerical Hessians for all electronic structure methods.
 - [x] Implement frequency analysis for the electronic structure methods.
-- [ ] Implement mulliken population analysis for the electronic structure methods.
+- [x] Implement mulliken population analysis for the electronic structure methods.
 - [ ] Implement 1RDM for post-HF methods.
 - [x] Add support for more atoms in constant.zig.
 - [x] Add tests for numerical gradients.
 - [ ] Implement the ability to optimize the geometry of a molecule.
-- [ ] Add charge and multiplicity to the input file for electronic structure calculations.
+- [x] Add charge and multiplicity to the input file for electronic structure calculations.
 - [ ] Implement providing guess density for electronic structure calculations.
