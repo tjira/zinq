@@ -45,6 +45,8 @@ pub const Options = struct {
     calculate: Calculate = .{},
     write: Write = .{},
     spin: bool = false,
+    charge: i32 = 0,
+    multiplicity: u32 = 1,
 };
 
 pub fn Result(comptime T: type) type {
@@ -94,7 +96,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var ints: Result(T) = .{ .sys = try MolecularSystem(T).init(opt.system, basis_path, gpa) };
+    const sys = try MolecularSystem(T).init(opt.system, basis_path, opt.charge, opt.multiplicity, gpa);
+
+    var ints: Result(T) = .{ .sys = sys };
     errdefer ints.deinit(gpa);
 
     if (std.mem.startsWith(u8, opt.basis, "builtin:")) {

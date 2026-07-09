@@ -38,6 +38,8 @@ pub const Options = struct {
 
     diis: ?u32 = 8,
     generalized: bool = false,
+    charge: i32 = 0,
+    multiplicity: u32 = 1,
     iterations: u32 = 100,
     threshold: f64 = 1e-8,
     mulliken: bool = false,
@@ -280,6 +282,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         .system = opt.system,
         .basis = opt.basis,
         .spin = opt.generalized,
+        .charge = opt.charge,
+        .multiplicity = opt.multiplicity,
         .calculate = .{
             .kinetic_d1 = opt.gradient != null and opt.gradient.? == .analytic,
             .overlap_d1 = opt.gradient != null and opt.gradient.? == .analytic,
@@ -566,6 +570,18 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 }
 
 fn checkInvalidInput(opt: Options) !void {
+    if (opt.multiplicity == 0) {
+        std.log.err("MULTIPLICITY MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.multiplicity > 1 and !opt.generalized) {
+        std.log.err("OPEN SHELL IS NOT SUPPORTED UNLESS GENERALIZED HARTREE-FOCK IS ENABLED", .{});
+
+        return error.OnlyClosedShellSupported;
+    }
+
     if (opt.system.len == 0) {
         std.log.err("MOLECULAR SYSTEM XYZ PATH IS EMPTY", .{});
 

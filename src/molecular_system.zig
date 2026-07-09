@@ -18,7 +18,7 @@ pub fn MolecularSystem(comptime T: type) type {
         nbf: usize,
         nel: usize,
 
-        pub fn init(system: []const u8, basis: []const u8, gpa: Allocator) !@This() {
+        pub fn init(system: []const u8, basis: []const u8, charge: i32, multiplicity: u32, gpa: Allocator) !@This() {
             const sys_c = try gpa.dupeSentinel(u8, system, 0);
             defer gpa.free(sys_c);
 
@@ -48,6 +48,26 @@ pub fn MolecularSystem(comptime T: type) type {
 
             for (0..atoms.len) |i| {
                 nel += @intCast(atoms[i]);
+            }
+
+            if (@as(i32, @intCast(nel)) - charge <= 0) {
+                std.log.err("NUMBER OF ELECTRONS MUST BE GREATER THAN 0", .{});
+
+                return error.InvalidInput;
+            }
+
+            nel = @intCast(@as(i32, @intCast(nel)) - charge);
+
+            if ((nel + multiplicity - 1) % 2 != 0) {
+                std.log.err("CHARGE AND MULTIPLICITY ARE INCOMPATIBLE WITH THE NUMBER OF ELECTRONS", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (nel + 1 < multiplicity) {
+                std.log.err("MULTIPLICITY IS INCOMPATIBLE WITH THE NUMBER OF ELECTRONS", .{});
+
+                return error.InvalidInput;
             }
 
             return .{ .ptr = ptr, .nbf = nbf, .atoms = atoms, .coors = coors, .bf2at = bf2at, .nel = nel };
