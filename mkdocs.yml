@@ -1,8 +1,23 @@
 site_name: Zinq
 site_url: https://tjira.github.io/zinq
 repo_url: https://github.com/tjira/zinq
+
 theme:
   name: material
   favicon: favicon.ico
+
 extra:
   generator: false
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
+
+markdown_extensions:
+  - pymdownx.arithmatex:
+      generic: true
+
+nav:
+  - Home: index.md
+  - Mixed Quantum-Classical Dynamics:
+      - Fewest Switches Surface Hopping: fssh.md
