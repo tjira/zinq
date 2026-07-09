@@ -112,7 +112,7 @@ pub fn Hamiltonian(comptime T: type) type {
 
             var ham = @This(){ .V = V, .W = W, .U = U, .K = K };
 
-            try ham.update(grid, pot, 0);
+            try ham.update(grid, pot, 0, gpa);
 
             return ham;
         }
@@ -124,7 +124,10 @@ pub fn Hamiltonian(comptime T: type) type {
             self.K.deinit(gpa);
         }
 
-        pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T) !void {
+        pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T, gpa: Allocator) !void {
+            var U_prev = if (pot.isTd() and t > 0) try self.U.clone(gpa) else null;
+            defer if (U_prev) |*u| u.deinit(gpa);
+
             pot.evalBatch(T, &self.V, grid.r, t);
 
             try eighBatch(T, &self.W, &self.U, self.V);
@@ -137,6 +140,18 @@ pub fn Hamiltonian(comptime T: type) type {
                 }
 
                 if (overlap < 0) for (0..pot.nstate()) |k| {
+                    self.U.ptr(i, k * pot.nstate() + j).* = -self.U.at(i, k * pot.nstate() + j);
+                };
+            };
+
+            if (U_prev) |prev| for (0..pot.nstate()) |j| {
+                var total_overlap: T = 0;
+
+                for (0..grid.r.nrow()) |i| for (0..pot.nstate()) |k| {
+                    total_overlap += self.U.at(i, k * pot.nstate() + j) * prev.at(i, k * pot.nstate() + j);
+                };
+
+                if (total_overlap < 0) for (0..grid.r.nrow()) |i| for (0..pot.nstate()) |k| {
                     self.U.ptr(i, k * pot.nstate() + j).* = -self.U.at(i, k * pot.nstate() + j);
                 };
             };

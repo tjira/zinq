@@ -841,7 +841,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
         const time = (@as(T, @floatFromInt(i)) - 0.5) * ctx.opt.time_step;
 
         if (i > 0 and ctx.sim.epoten.isTd()) {
-            try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, time);
+            try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, time, gpa);
 
             ctx.sim.propg.update(ctx.sim.wfn_kpgrids, ctx.sim.hams, ctx.opt.absorbing_potential);
         }
@@ -863,7 +863,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
         if (ctx.sim.epoten.isTd()) {
             const t = @as(T, @floatFromInt(i)) * ctx.opt.time_step;
 
-            try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, t);
+            try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, t, gpa);
         }
 
         var obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
