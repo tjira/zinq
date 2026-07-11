@@ -92,25 +92,23 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try std.Io.Dir.cwd().deleteFile(io, basis_path);
     }
 
-    return try runFromSystem(T, io, opt, &sys, log, gpa);
+    return try runFromSystem(T, io, opt, &sys, null, log, gpa);
 }
 
-pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
+pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
     const generalized, var hf_opt = .{ opt.hartree_fock.generalized, opt.hartree_fock };
 
-    if (opt.gradient != null) {
-        if (opt.gradient.? == .analytic) {
-            hf_opt.gradient = .{ .analytic = .{} };
+    if (opt.gradient != null and opt.gradient.? == .analytic) {
+        hf_opt.gradient = .{ .analytic = .{} };
 
-            if (hf_opt.response == null) {
-                hf_opt.response = .{};
-            }
+        if (hf_opt.response == null) {
+            hf_opt.response = .{};
         }
     }
 
-    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, log, gpa);
+    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, Pg, log, gpa);
     errdefer hfres.deinit(gpa);
 
     var energy = try gpa.alloc(T, 1);

@@ -14,6 +14,8 @@ const printf = @import("read_write.zig").printf;
 const A2BOHR = @import("constant.zig").A2BOHR;
 
 pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
+    const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
+
     var grad = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
     errdefer grad.deinit(gpa);
 
@@ -23,11 +25,18 @@ pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, 
 
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
+    const nbf = if (generalized) 2 * sys.nbf else sys.nbf;
+
+    var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
+    defer Pg.deinit(gpa);
+
+    _ = try getE(T, io, runFn, opt, sys, .{}, null, &Pg, state, gpa);
+
     for (0..sys.atoms.len) |i| for (0..3) |j| {
         const d1, const d2 = .{ .{ i * 3 + j, h }, .{ i * 3 + j, -h } };
 
-        const ep = try getE(T, io, runFn, opt, sys, d1, state, gpa);
-        const em = try getE(T, io, runFn, opt, sys, d2, state, gpa);
+        const ep = try getE(T, io, runFn, opt, sys, d1, Pg, null, state, gpa);
+        const em = try getE(T, io, runFn, opt, sys, d2, Pg, null, state, gpa);
 
         grad.ptr(i, j).* = (ep - em) / (2 * h);
 
@@ -42,6 +51,8 @@ pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, 
 }
 
 pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
+    const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
+
     var hess = try Matrix(T).initZero(3 * sys.atoms.len, 3 * sys.atoms.len, gpa);
     errdefer hess.deinit(gpa);
 
@@ -51,13 +62,18 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
 
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
-    const er = try getE(T, io, runFn, opt, sys, .{}, state, gpa);
+    const nbf = if (generalized) 2 * sys.nbf else sys.nbf;
+
+    var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
+    defer Pg.deinit(gpa);
+
+    const er = try getE(T, io, runFn, opt, sys, .{}, null, &Pg, state, gpa);
 
     for (0..3 * sys.atoms.len) |a| {
         const d1, const d2 = .{ .{ a, h }, .{ a, -h } };
 
-        const ep = try getE(T, io, runFn, opt, sys, d1, state, gpa);
-        const em = try getE(T, io, runFn, opt, sys, d2, state, gpa);
+        const ep = try getE(T, io, runFn, opt, sys, d1, Pg, null, state, gpa);
+        const em = try getE(T, io, runFn, opt, sys, d2, Pg, null, state, gpa);
 
         hess.ptr(a, a).* = (ep - 2 * er + em) / (h * h);
 
@@ -70,12 +86,12 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
         }
 
         for (a + 1..3 * sys.atoms.len) |b| {
-            const epp = try getE(T, io, runFn, opt, sys, .{ a, h, b, h }, state, gpa);
+            const epp = try getE(T, io, runFn, opt, sys, .{ a, h, b, h }, Pg, null, state, gpa);
 
-            const epm = try getE(T, io, runFn, opt, sys, .{ a, h, b, -h }, state, gpa);
-            const emp = try getE(T, io, runFn, opt, sys, .{ a, -h, b, h }, state, gpa);
+            const epm = try getE(T, io, runFn, opt, sys, .{ a, h, b, -h }, Pg, null, state, gpa);
+            const emp = try getE(T, io, runFn, opt, sys, .{ a, -h, b, h }, Pg, null, state, gpa);
 
-            const emm = try getE(T, io, runFn, opt, sys, .{ a, -h, b, -h }, state, gpa);
+            const emm = try getE(T, io, runFn, opt, sys, .{ a, -h, b, -h }, Pg, null, state, gpa);
 
             const val = (epp - epm - emp + emm) / (4 * h * h);
 
@@ -95,7 +111,7 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
     return hess;
 }
 
-fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), perts: anytype, state: usize, gpa: Allocator) !T {
+fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), perts: anytype, Pg: ?Matrix(T), P: ?*Matrix(T), state: usize, gpa: Allocator) !T {
     std.debug.assert(@typeInfo(@TypeOf(perts)).@"struct".fields.len % 2 == 0);
 
     var modified_opt = opt;
@@ -131,8 +147,12 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
         libint.libint_update_coords(sys.ptr, sys.coors.ptr);
     }
 
-    var res = try runFn(T, io, modified_opt, sys, false, gpa);
+    var res = try runFn(T, io, modified_opt, sys, Pg, false, gpa);
     defer res.deinit(gpa);
+
+    if (P) |out| {
+        @memcpy(out.data, (if (@hasField(@TypeOf(res), "hartree_fock")) res.hartree_fock.P else res.P).data);
+    }
 
     if (res.energy.len <= state) {
         std.log.err("STATE REQUESTED FOR NUMERICAL DERIVATIVE IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION", .{});

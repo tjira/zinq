@@ -293,10 +293,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         try std.Io.Dir.cwd().deleteFile(io, basis_path);
     }
 
-    return try runFromSystem(T, io, opt, &sys, log, gpa);
+    return try runFromSystem(T, io, opt, &sys, null, log, gpa);
 }
 
-pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
+pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
@@ -369,7 +369,11 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         pot.deinit(gpa);
     };
 
-    {
+    if (Pg) |guess| {
+        @memcpy(P.data, guess.data);
+    }
+
+    if (Pg == null) {
         @memcpy(B.data, ints.S.?.data);
 
         try geigh(T, &e, &C, ints.H.?, &B);

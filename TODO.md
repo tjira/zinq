@@ -28,4 +28,4 @@
 - [x] Add tests for numerical gradients.
 - [ ] Implement the ability to optimize the geometry of a molecule.
 - [x] Add charge and multiplicity to the input file for electronic structure calculations.
-- [ ] Implement providing guess density for electronic structure calculations.
+- [x] Implement providing guess density for electronic structure calculations.
