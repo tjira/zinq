@@ -14,6 +14,7 @@ const Vector = @import("tensor.zig").Vector;
 const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
 const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
+const bfgs = @import("molecular_optimization.zig").bfgs;
 const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
@@ -42,11 +43,19 @@ pub const Options = struct {
 
     gradient: ?GradientOptions = null,
 
-    optimize: ?struct {
-        gradient: GradientOptions,
-        threshold: f64 = 1e-4,
-        iterations: u32 = 100,
-        step: f64 = 1e-1,
+    optimize: ?union(enum) {
+        steepest_descent: struct {
+            gradient: GradientOptions = .analytic,
+            threshold: f64 = 1e-4,
+            iterations: u32 = 100,
+            step: f64 = 1e-1,
+        },
+        bfgs: struct {
+            gradient: GradientOptions = .analytic,
+            threshold: f64 = 1e-4,
+            iterations: u32 = 100,
+            step: f64 = 1,
+        },
     } = null,
 
     hessian: ?union(enum) {
@@ -105,11 +114,16 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 }
 
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
+    try checkInvalidInput(opt);
+
     var final_Pg: ?Matrix(T) = null;
     defer if (final_Pg) |*p| p.deinit(gpa);
 
-    if (opt.optimize) |_| {
-        final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa);
+    if (opt.optimize) |o| {
+        switch (o) {
+            .steepest_descent => final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa),
+            .bfgs => final_Pg = try bfgs(T, io, runFromSystem, opt, sys, Pg, log, gpa),
+        }
     }
 
     try checkInvalidInput(opt);
@@ -191,6 +205,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
                 try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
             };
         }
+    };
+
+    errdefer if (opt.gradient != null and opt.gradient.? == .numeric) {
+        grad[0].deinit(gpa);
     };
 
     var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);

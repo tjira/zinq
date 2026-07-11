@@ -26,6 +26,8 @@
 - [ ] Implement 1RDM for post-HF methods.
 - [x] Add support for more atoms in constant.zig.
 - [x] Add tests for numerical gradients.
-- [ ] Implement the ability to optimize the geometry of a molecule.
+- [x] Implement the ability to optimize the geometry of a molecule.
 - [x] Add charge and multiplicity to the input file for electronic structure calculations.
 - [x] Implement providing guess density for electronic structure calculations.
+- [ ] Implement Wolfe conditions for BFGS optimization.
+- [ ] Add an option to specify path oto export molecule.

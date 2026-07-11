@@ -11,8 +11,9 @@ pub fn MolecularSystem(comptime T: type) type {
     return struct {
         ptr: *libint.SystemData,
 
+        coors: []T,
+
         atoms: []i32,
-        coors: []f64,
         bf2at: []i32,
 
         nbf: usize,
@@ -34,7 +35,7 @@ pub fn MolecularSystem(comptime T: type) type {
             const atoms = try gpa.alloc(i32, 1 * nat);
             errdefer gpa.free(atoms);
 
-            const coors = try gpa.alloc(f64, 3 * nat);
+            const coors = try gpa.alloc(T, 3 * nat);
             errdefer gpa.free(coors);
 
             const bf2at = try gpa.alloc(i32, nbf);

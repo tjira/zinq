@@ -7,6 +7,13 @@
                 "dft": {
                     "exchange_correlation": "hyb_gga_xc_b3lyp"
                 },
+                "optimize" : {
+                    "bfgs" : {
+                        "gradient" : {
+                            "numeric" : {}
+                        }
+                    }
+                },
                 "gradient" : {
                     "numeric" : {}
                 },
