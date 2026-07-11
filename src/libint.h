@@ -21,6 +21,8 @@ void libint_atoms(int    *atoms, SystemData *sys);
 void libint_coors(double *coors, SystemData *sys);
 void libint_bf2at(int    *bf2at, SystemData *sys);
 
+void libint_update_coords(SystemData *sys, const double *coords);
+
 void libint_evaluate_basis_v  (double *phi,                                                                      double x, double y, double z, SystemData *sys);
 void libint_evaluate_basis_vg (double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz,                   double x, double y, double z, SystemData *sys);
 void libint_evaluate_basis_vgl(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double *lapl_phi, double x, double y, double z, SystemData *sys);

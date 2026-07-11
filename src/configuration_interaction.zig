@@ -5,7 +5,10 @@ const Allocator = std.mem.Allocator;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
+const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
+const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
@@ -17,14 +20,13 @@ const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculate
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
+const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const hartree_fock_run = @import("hartree_fock.zig").run;
+const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
 const primType = @import("value.zig").primType;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printf = @import("read_write.zig").printf;
-
-const ScalarDual = @import("dual.zig").ScalarDual;
-const Value = @import("value.zig").Value;
 
 const AU2CM = @import("constant.zig").AU2CM;
 
@@ -146,23 +148,38 @@ pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Alloc
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
-    const generalized = opt.hartree_fock.generalized;
+    const basis_path = try exportIfBuiltin(io, opt.hartree_fock.basis, gpa);
 
-    var hf_opt = opt.hartree_fock;
+    defer if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
+        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
+    };
 
-    if (opt.gradient != null) {
-        if (opt.gradient.? == .analytic) {
-            hf_opt.gradient = .{ .analytic = .{} };
+    var sys = try MolecularSystem(T).init(opt.hartree_fock.system, basis_path, opt.hartree_fock.charge, opt.hartree_fock.multiplicity, gpa);
+    defer sys.deinit(gpa);
 
-            if (hf_opt.response == null) {
-                hf_opt.response = .{};
-            }
+    if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
+        try std.Io.Dir.cwd().deleteFile(io, basis_path);
+    }
+
+    return try runFromSystem(T, io, opt, &sys, log, gpa);
+}
+
+pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
+    try checkInvalidInput(opt);
+
+    const generalized, var hf_opt = .{ opt.hartree_fock.generalized, opt.hartree_fock };
+
+    if (opt.gradient != null and opt.gradient.? == .analytic) {
+        hf_opt.gradient = .{ .analytic = .{} };
+
+        if (hf_opt.response == null) {
+            hf_opt.response = .{};
         }
     }
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var hfres = try hartree_fock_run(T, io, hf_opt, log, gpa);
+    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, log, gpa);
     errdefer hfres.deinit(gpa);
 
     if (log) {
@@ -240,7 +257,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (opt.gradient) |gradopt| switch (gradopt) {
         .analytic => |a| grad[0] = try gradient(T, hfres, C, dets, a.state, gpa),
-        .numeric => grad[0] = try calculateNumericalGradient(T, io, run, opt, log, gpa),
+        .numeric => grad[0] = try calculateNumericalGradient(T, io, runFromSystem, opt, sys, log, gpa),
     };
 
     errdefer {
@@ -265,7 +282,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     errdefer if (opt.hessian) |_| gpa.free(hess);
 
     if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, run, opt, log, gpa),
+        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFromSystem, opt, sys, log, gpa),
     };
 
     errdefer {

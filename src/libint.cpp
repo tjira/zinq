@@ -56,6 +56,24 @@ extern "C" {
             map[sh2bf.at(i) + j] = sh2at.at(i);
         }
     }
+
+    void libint_update_coords(SystemData *sys, const double *coords) {
+        if (!sys) return;
+
+        auto sh2at = sys->obs.shell2atom(sys->atoms);
+
+        for (size_t i = 0; i < sys->atoms.size(); i++) {
+            sys->atoms[i].x = coords[3 * i + 0];
+            sys->atoms[i].y = coords[3 * i + 1];
+            sys->atoms[i].z = coords[3 * i + 2];
+        }
+
+        for (size_t i = 0; i < sys->obs.size(); i++) {
+            const_cast<double&>(sys->obs[i].O[0]) = sys->atoms[sh2at[i]].x;
+            const_cast<double&>(sys->obs[i].O[1]) = sys->atoms[sh2at[i]].y;
+            const_cast<double&>(sys->obs[i].O[2]) = sys->atoms[sh2at[i]].z;
+        }
+    }
 }
 
 extern "C" {

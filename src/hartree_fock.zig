@@ -19,7 +19,9 @@ const getSymbol = @import("constant.zig").getSymbol;
 const luFactorize = @import("linear_algebra.zig").luFactorize;
 const luSolve = @import("linear_algebra.zig").luSolve;
 const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
+const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const molecular_integrals_run = @import("molecular_integrals.zig").run;
+const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").runFromSystem;
 const mulliken = @import("population_analysis.zig").mulliken;
 const orbitalResponse = @import("cphf.zig").orbitalResponse;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
@@ -278,6 +280,23 @@ pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
+    const basis_path = try exportIfBuiltin(io, opt.basis, gpa);
+
+    defer if (std.mem.startsWith(u8, opt.basis, "builtin:")) {
+        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
+    };
+
+    var sys = try MolecularSystem(T).init(opt.system, basis_path, opt.charge, opt.multiplicity, gpa);
+    defer sys.deinit(gpa);
+
+    if (std.mem.startsWith(u8, opt.basis, "builtin:")) {
+        try std.Io.Dir.cwd().deleteFile(io, basis_path);
+    }
+
+    return try runFromSystem(T, io, opt, &sys, log, gpa);
+}
+
+pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
@@ -293,7 +312,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         },
     };
 
-    var ints = try molecular_integrals_run(T, io, molopts, log, gpa);
+    var ints = try molecular_integrals_runFromSystem(T, io, molopts, sys.*, log, gpa);
     errdefer ints.deinit(gpa);
 
     var energy = try gpa.alloc(T, 1);
@@ -302,17 +321,17 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
     errdefer if (opt.gradient) |_| gpa.free(grad);
 
-    const VN = try ints.sys.nrep();
+    const VN = try sys.nrep();
 
-    const nocc = if (opt.generalized) ints.sys.nel else blk: {
-        if (ints.sys.nel % 2 != 0) {
+    const nocc = if (opt.generalized) sys.nel else blk: {
+        if (sys.nel % 2 != 0) {
             return error.OnlyClosedShellSupported;
         }
 
-        break :blk ints.sys.nel / 2;
+        break :blk sys.nel / 2;
     };
 
-    const nbf = if (opt.generalized) 2 * ints.sys.nbf else ints.sys.nbf;
+    const nbf = if (opt.generalized) 2 * sys.nbf else sys.nbf;
 
     if (log) {
         try printf(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ nbf, nocc });
@@ -343,7 +362,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
         const funcs = .{ dft_opt.exchange, dft_opt.correlation, dft_opt.exchange_correlation };
 
-        dft = try DftPotential(T).init(ints.sys, funcs, n_rad, n_leb, opt.generalized, gpa);
+        dft = try DftPotential(T).init(sys.*, funcs, n_rad, n_leb, opt.generalized, gpa);
     }
 
     defer if (dft) |*pot| {
@@ -480,12 +499,12 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     energy[0] = e_new;
 
     if (log and opt.mulliken) {
-        var charges = try mulliken(T, ints.sys, P, ints.S.?, gpa);
+        var charges = try mulliken(T, sys.*, P, ints.S.?, gpa);
         defer charges.deinit(gpa);
 
         const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
 
-        try printMullikenCharges(T, io, ints.sys, charges, method_str);
+        try printMullikenCharges(T, io, sys.*, charges, method_str);
     }
 
     if (log) {
@@ -521,7 +540,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     if (opt.gradient) |gradopt| switch (gradopt) {
         .analytic => grad[0] = try gradient(T, ints, C, P, e, opt.generalized, if (dft) |*d| d else null, gpa),
-        .numeric => grad[0] = try calculateNumericalGradient(T, io, run, opt, log, gpa),
+        .numeric => grad[0] = try calculateNumericalGradient(T, io, runFromSystem, opt, sys, log, gpa),
     };
 
     errdefer {
@@ -544,7 +563,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     errdefer if (opt.hessian) |_| gpa.free(hess);
 
     if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, run, opt, log, gpa),
+        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFromSystem, opt, sys, log, gpa),
     };
 
     errdefer {
@@ -552,7 +571,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     if (log and opt.hessian != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], ints.sys.atoms, gpa);
+        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.atoms, gpa);
         defer freqs.deinit(gpa);
 
         const method_str = if (dft) |_| "DFT NUMERIC" else "HARTREE-FOCK NUMERIC";

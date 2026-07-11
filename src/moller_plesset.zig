@@ -14,8 +14,11 @@ const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
 const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
+const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const hartree_fock_run = @import("hartree_fock.zig").run;
+const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
+const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printf = @import("read_write.zig").printf;
 const slater = @import("configuration_interaction.zig").slater;
@@ -76,9 +79,26 @@ pub fn Result(comptime T: type) type {
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
-    const generalized = opt.hartree_fock.generalized;
+    const basis_path = try exportIfBuiltin(io, opt.hartree_fock.basis, gpa);
 
-    var hf_opt = opt.hartree_fock;
+    defer if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
+        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
+    };
+
+    var sys = try MolecularSystem(T).init(opt.hartree_fock.system, basis_path, opt.hartree_fock.charge, opt.hartree_fock.multiplicity, gpa);
+    defer sys.deinit(gpa);
+
+    if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
+        try std.Io.Dir.cwd().deleteFile(io, basis_path);
+    }
+
+    return try runFromSystem(T, io, opt, &sys, log, gpa);
+}
+
+pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
+    try checkInvalidInput(opt);
+
+    const generalized, var hf_opt = .{ opt.hartree_fock.generalized, opt.hartree_fock };
 
     if (opt.gradient != null) {
         if (opt.gradient.? == .analytic) {
@@ -90,7 +110,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         }
     }
 
-    var hfres = try hartree_fock_run(T, io, hf_opt, log, gpa);
+    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, log, gpa);
     errdefer hfres.deinit(gpa);
 
     var energy = try gpa.alloc(T, 1);
@@ -147,7 +167,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     }
 
     if (opt.gradient) |gradopt| if (gradopt == .numeric) {
-        grad[0] = try calculateNumericalGradient(T, io, run, opt, log, gpa);
+        grad[0] = try calculateNumericalGradient(T, io, runFromSystem, opt, sys, log, gpa);
         errdefer grad[0].deinit(gpa);
 
         if (log) {
@@ -163,7 +183,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     errdefer if (opt.hessian) |_| gpa.free(hess);
 
     if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, run, opt, log, gpa),
+        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFromSystem, opt, sys, log, gpa),
     };
 
     errdefer {
