@@ -116,18 +116,21 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
 
     var modified_opt = opt;
 
-    modified_opt.gradient, modified_opt.hessian = .{ null, null };
-
-    if (comptime @hasField(@TypeOf(modified_opt), "hartree_fock")) {
-        modified_opt.hartree_fock.gradient, modified_opt.hartree_fock.hessian = .{ null, null };
-    }
+    modified_opt.gradient, modified_opt.hessian, modified_opt.optimize = .{ null, null, null };
 
     if (comptime @hasField(@TypeOf(modified_opt), "mulliken")) {
         modified_opt.mulliken = false;
     }
 
+    if (comptime @hasField(@TypeOf(modified_opt), "response")) {
+        modified_opt.response = null;
+    }
+
     if (comptime @hasField(@TypeOf(modified_opt), "hartree_fock")) {
-        modified_opt.hartree_fock.mulliken = false;
+        modified_opt.hartree_fock.gradient = null;
+        modified_opt.hartree_fock.response = null;
+
+        modified_opt.hartree_fock.hessian, modified_opt.hartree_fock.mulliken = .{ null, false };
     }
 
     var original_coors: [@typeInfo(@TypeOf(perts)).@"struct".fields.len / 2]T = undefined;

@@ -52,6 +52,20 @@ pub fn Matrix(comptime T: type) type {
             return A;
         }
 
+        pub fn max(self: @This()) T {
+            var max_val: T = 0;
+
+            for (self.data) |x| {
+                const abs_val = Value(T).init(x).abs().val;
+
+                if (abs_val > max_val) {
+                    max_val = abs_val;
+                }
+            }
+
+            return max_val;
+        }
+
         pub fn ncol(self: @This()) usize {
             return self.shape[1];
         }
@@ -71,6 +85,18 @@ pub fn Matrix(comptime T: type) type {
             std.debug.assert(i < self.shape[0]);
 
             return self.data[i * self.shape[1] .. (i + 1) * self.shape[1]];
+        }
+
+        pub fn rms(self: @This()) T {
+            var sum_sq: T = 0;
+
+            for (self.data) |x| {
+                const abs_val = Value(T).init(x).abs().val;
+
+                sum_sq += abs_val * abs_val;
+            }
+
+            return @sqrt(sum_sq / @as(T, @floatFromInt(self.data.len)));
         }
 
         pub fn takeRows(self: @This(), n: usize) @This() {

@@ -14,12 +14,12 @@ const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
 const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
+const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const geigh = @import("linear_algebra.zig").geigh;
 const getSymbol = @import("constant.zig").getSymbol;
 const luFactorize = @import("linear_algebra.zig").luFactorize;
 const luSolve = @import("linear_algebra.zig").luSolve;
 const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
-const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").runFromSystem;
 const mulliken = @import("population_analysis.zig").mulliken;
@@ -27,10 +27,18 @@ const orbitalResponse = @import("cphf.zig").orbitalResponse;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printMullikenCharges = @import("population_analysis.zig").printMullikenCharges;
 const printf = @import("read_write.zig").printf;
+const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 
 const AN2SM = @import("constant.zig").AN2SM;
 const AU2CM = @import("constant.zig").AU2CM;
+
+pub const GradientOptions = union(enum) {
+    analytic: struct {},
+    numeric: struct {
+        step: f64 = 1e-5,
+    },
+};
 
 pub const Options = struct {
     system: []const u8,
@@ -57,11 +65,13 @@ pub const Options = struct {
         } = .{},
     } = null,
 
-    gradient: ?union(enum) {
-        analytic: struct {},
-        numeric: struct {
-            step: f64 = 1e-5,
-        },
+    gradient: ?GradientOptions = null,
+
+    optimize: ?struct {
+        gradient: GradientOptions,
+        threshold: f64 = 1e-4,
+        iterations: u32 = 100,
+        step: f64 = 1e-1,
     } = null,
 
     hessian: ?union(enum) {
@@ -297,6 +307,13 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 }
 
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
+    var final_Pg: ?Matrix(T) = null;
+    defer if (final_Pg) |*p| p.deinit(gpa);
+
+    if (opt.optimize) |_| {
+        final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa);
+    }
+
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
@@ -369,11 +386,13 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         pot.deinit(gpa);
     };
 
-    if (Pg) |guess| {
+    const guess_p = final_Pg orelse Pg;
+
+    if (guess_p) |guess| {
         @memcpy(P.data, guess.data);
     }
 
-    if (Pg == null) {
+    if (guess_p == null) {
         @memcpy(B.data, ints.S.?.data);
 
         try geigh(T, &e, &C, ints.H.?, &B);

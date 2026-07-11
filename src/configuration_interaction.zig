@@ -27,22 +27,32 @@ const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGra
 const primType = @import("value.zig").primType;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printf = @import("read_write.zig").printf;
+const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 
 const AU2CM = @import("constant.zig").AU2CM;
+
+pub const GradientOptions = union(enum) {
+    analytic: struct {
+        state: u32 = 0,
+    },
+    numeric: struct {
+        state: u32 = 0,
+        step: f64 = 1e-5,
+    },
+};
 
 pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
     excitations: []const u32 = &.{ 1, 2 },
 
-    gradient: ?union(enum) {
-        analytic: struct {
-            state: u32 = 0,
-        },
-        numeric: struct {
-            state: u32 = 0,
-            step: f64 = 1e-5,
-        },
+    gradient: ?GradientOptions = null,
+
+    optimize: ?struct {
+        gradient: GradientOptions,
+        threshold: f64 = 1e-4,
+        iterations: u32 = 100,
+        step: f64 = 1e-1,
     } = null,
 
     hessian: ?union(enum) {
@@ -165,6 +175,13 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 }
 
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
+    var final_Pg: ?Matrix(T) = null;
+    defer if (final_Pg) |*p| p.deinit(gpa);
+
+    if (opt.optimize) |_| {
+        final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa);
+    }
+
     try checkInvalidInput(opt);
 
     const generalized, var hf_opt = .{ opt.hartree_fock.generalized, opt.hartree_fock };
@@ -179,7 +196,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, Pg, log, gpa);
+    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, final_Pg orelse Pg, log, gpa);
     errdefer hfres.deinit(gpa);
 
     if (log) {

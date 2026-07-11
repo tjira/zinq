@@ -5,7 +5,10 @@ const Allocator = std.mem.Allocator;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
+const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
+const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
@@ -18,26 +21,32 @@ const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const hartree_fock_run = @import("hartree_fock.zig").run;
 const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
-const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printf = @import("read_write.zig").printf;
 const slater = @import("configuration_interaction.zig").slater;
-
-const ScalarDual = @import("dual.zig").ScalarDual;
-const Value = @import("value.zig").Value;
+const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 
 const AU2CM = @import("constant.zig").AU2CM;
+
+pub const GradientOptions = union(enum) {
+    analytic: struct {},
+    numeric: struct {
+        step: f64 = 1e-5,
+    },
+};
 
 pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
     order: u32 = 2,
 
-    gradient: ?union(enum) {
-        analytic: struct {},
-        numeric: struct {
-            step: f64 = 1e-5,
-        },
+    gradient: ?GradientOptions = null,
+
+    optimize: ?struct {
+        gradient: GradientOptions,
+        threshold: f64 = 1e-4,
+        iterations: u32 = 100,
+        step: f64 = 1e-1,
     } = null,
 
     hessian: ?union(enum) {
@@ -96,6 +105,13 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 }
 
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
+    var final_Pg: ?Matrix(T) = null;
+    defer if (final_Pg) |*p| p.deinit(gpa);
+
+    if (opt.optimize) |_| {
+        final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa);
+    }
+
     try checkInvalidInput(opt);
 
     const generalized, var hf_opt = .{ opt.hartree_fock.generalized, opt.hartree_fock };
@@ -108,7 +124,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         }
     }
 
-    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, Pg, log, gpa);
+    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, final_Pg orelse Pg, log, gpa);
     errdefer hfres.deinit(gpa);
 
     var energy = try gpa.alloc(T, 1);
