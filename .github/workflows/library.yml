@@ -40,7 +40,7 @@ jobs:
           version: 0.16.0
 
       - name: Compile Libraries
-        run: ./script/library.pl --target ${{matrix.target}} ${{matrix.build_flags}}
+        run: ./script/library.pl --target ${{matrix.target}} ${{matrix.build_flags}} --generic
 
       - name: Remove Unnecessary Files
         working-directory: external-${{matrix.target}}-${{matrix.suffix}}

@@ -39,7 +39,7 @@ jobs:
 
       - name: Compile Libraries
         if: steps.cache-libs.outputs.cache-hit != 'true'
-        run: ./script/library.pl --target x86_64-linux
+        run: ./script/library.pl --target x86_64-linux --generic
 
       - name: Compile Code Documentation
         run: zig build docs

@@ -10,10 +10,10 @@ use File::Copy   qw(move copy       );
 use Getopt::Long qw(GetOptions      );
 
 # DEFINE VARIABLES FOR BUILD OPTIONS
-my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw, $build_exprtk, $shared);
+my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw, $build_exprtk, $shared, $generic);
 
 # DEFINE DEFAULT TARGET AND HOST
-my $target = "x86_64-linux"; my $host = "x86_64-linux";
+my $target = qx(uname -m); chomp $target; $target .= "-$^O"; my $host = $target;
 
 # GET THE NUMBER OF CPU CORES
 my $cores = qx(nproc --all); chomp $cores; $cores ||= 1;
@@ -29,6 +29,7 @@ GetOptions(
     "target=s" =>         \$target,
     "cores|j=i"=>          \$cores,
     "shared"   =>         \$shared,
+    "generic"  =>        \$generic,
 );
 
 # APPEND THE ABI TO TARGET BASED ON STATIC OR DYNAMIC REQUEST
@@ -51,12 +52,12 @@ if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_f
 create_compiler_wrappers($target, $pwd);
 
 # COMPILE EACH PROGRAM
-compile_eigen   ($prefix, $cores,        $pwd, $shared) if    $build_eigen;
-compile_libint  ($prefix, $cores,        $pwd, $shared) if   $build_libint;
-compile_libxc   ($prefix, $cores, $host, $pwd, $shared) if    $build_libxc;
-compile_openblas($prefix, $cores,        $pwd, $shared) if $build_openblas;
-compile_fftw    ($prefix, $cores, $host, $pwd, $shared) if     $build_fftw;
-compile_exprtk  ($prefix,                $pwd         ) if   $build_exprtk;
+compile_eigen   ($prefix, $cores,        $pwd, $shared          ) if    $build_eigen;
+compile_libint  ($prefix, $cores,        $pwd, $shared          ) if   $build_libint;
+compile_libxc   ($prefix, $cores, $host, $pwd, $shared          ) if    $build_libxc;
+compile_openblas($prefix, $cores,        $pwd, $shared, $generic) if $build_openblas;
+compile_fftw    ($prefix, $cores, $host, $pwd, $shared          ) if     $build_fftw;
+compile_exprtk  ($prefix,                $pwd                   ) if   $build_exprtk;
 
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
@@ -269,7 +270,7 @@ sub compile_libxc {
 
 sub compile_openblas {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $pwd, $shared) = @_;
+    my ($prefix, $cores, $pwd, $shared, $generic) = @_;
 
     # DEFINE THE URL FOR THE OPENBLAS SOURCE ARCHIVE
     my $url = "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.33/OpenBLAS-0.3.33.tar.gz";
@@ -287,7 +288,7 @@ sub compile_openblas {
         $shared ? "NO_STATIC=1" : "NO_SHARED=1",
         "NUM_THREADS=128",
         "PREFIX=$prefix",
-        "TARGET=GENERIC"
+        $generic ? "TARGET=GENERIC" : "DYNAMIC_ARCH=1"
     );
 
     # RUN MAKE

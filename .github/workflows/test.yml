@@ -46,7 +46,7 @@ jobs:
 
       - name: Compile Libraries
         if: steps.cache-libs.outputs.cache-hit != 'true'
-        run: ./script/library.pl --target x86_64-linux
+        run: ./script/library.pl --target x86_64-linux --generic
 
       - name: Run Tests in ${{matrix.mode_name}} Mode
         run: zig build ${{matrix.build_flags}} test
