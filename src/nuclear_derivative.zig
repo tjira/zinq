@@ -41,9 +41,13 @@ pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, 
         grad.ptr(i, j).* = (ep - em) / (2 * h);
 
         if (log) {
+            const fmt = "DERIVATIVE OF ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
+
             const sym = try getSymbol(sys.atoms[i]);
 
-            try printf(io, "DERIVATIVE OF ATOM {d:02} ({s:2}) IN DIRECTION {d}: {d:20.14}\n", .{ i, sym, j, grad.at(i, j) });
+            const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
+
+            try printf(io, fmt, .{ i, sym, dirs[j], grad.at(i, j) });
         }
     };
 
@@ -78,11 +82,13 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
         hess.ptr(a, a).* = (ep - 2 * er + em) / (h * h);
 
         if (log) {
+            const fmt = "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
+
             const sym = try getSymbol(sys.atoms[a / 3]);
 
-            const params = .{ a / 3, sym, a % 3, a % 3, hess.at(a, a) };
+            const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
 
-            try printf(io, "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) IN DIRECTION {d} AND {d}: {d:20.14}\n", params);
+            try printf(io, fmt, .{ a / 3, sym, dirs[a % 3], a / 3, sym, dirs[a % 3], hess.at(a, a) });
         }
 
         for (a + 1..3 * sys.atoms.len) |b| {
@@ -99,11 +105,14 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
             hess.ptr(b, a).* = val;
 
             if (log) {
-                const sym = try getSymbol(sys.atoms[a / 3]);
+                const fmt = "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
-                const params = .{ a / 3, sym, a % 3, b % 3, val };
+                const sym_a = try getSymbol(sys.atoms[a / 3]);
+                const sym_b = try getSymbol(sys.atoms[b / 3]);
 
-                try printf(io, "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) IN DIRECTION {d} AND {d}: {d:20.14}\n", params);
+                const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
+
+                try printf(io, fmt, .{ a / 3, sym_a, dirs[a % 3], b / 3, sym_b, dirs[b % 3], val });
             }
         }
     }

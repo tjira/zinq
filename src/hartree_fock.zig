@@ -532,6 +532,12 @@ fn checkInvalidInput(opt: Options) !void {
             return error.InvalidInput;
         }
 
+        if (opt.response != null) {
+            std.log.err("CPKS RESPONSE PROPERTIES ARE NOT SUPPORTED FOR DFT CALCULATIONS", .{});
+
+            return error.InvalidInput;
+        }
+
         if (d.grid.radial == 0) {
             std.log.err("DFT RADIAL GRID POINTS MUST BE GREATER THAN 0", .{});
 
