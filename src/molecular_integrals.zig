@@ -83,6 +83,37 @@ pub fn Result(comptime T: type) type {
     };
 }
 
+pub fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
+    if (std.mem.startsWith(u8, basis, "builtin:")) {
+        var result = try gpa.alloc(u8, basis["builtin:".len..].len);
+        defer gpa.free(result);
+
+        for (basis["builtin:".len..], 0..) |char, i| {
+            if (char == '+') result[i] = 'p';
+            if (char == '*') result[i] = 's';
+
+            if (char != '+' and char != '*') {
+                result[i] = std.ascii.toLower(char);
+            }
+        }
+
+        const content = embed.bases.get(result) orelse {
+            std.log.err("BUILTIN BASIS SET '{s}' NOT FOUND", .{result});
+
+            return error.InvalidInput;
+        };
+
+        var file = try std.Io.Dir.cwd().createFile(io, "basis.g94", .{});
+        defer file.close(io);
+
+        try file.writeStreamingAll(io, content);
+
+        return "basis.g94";
+    }
+
+    return basis;
+}
+
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -212,6 +243,26 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
         };
     }
 
+    try writeIntegralsToFiles(T, io, opt, ints, log);
+
+    return ints;
+}
+
+fn checkInvalidInput(opt: Options) !void {
+    if (opt.system.len == 0) {
+        std.log.err("MOLECULAR SYSTEM XYZ PATH IS EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.basis.len == 0) {
+        std.log.err("BASIS SET G94 PATH IS EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+}
+
+fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Result(T), log: bool) !void {
     const any_write = blk: {
         inline for (std.meta.fields(@TypeOf(opt.write))) |f| {
             if (@field(opt.write, f.name) != null) break :blk true;
@@ -222,7 +273,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
     if (log and any_write) try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
-    timer = std.Io.Timestamp.now(io, .real);
+    var timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.overlap) |fname| {
         const S = ints.S orelse return error.OverlapMatrixNotCalculated;
@@ -329,51 +380,4 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
         if (log) try printf(io, "HMATRIX DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
-
-    return ints;
-}
-
-fn checkInvalidInput(opt: Options) !void {
-    if (opt.system.len == 0) {
-        std.log.err("MOLECULAR SYSTEM XYZ PATH IS EMPTY", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.basis.len == 0) {
-        std.log.err("BASIS SET G94 PATH IS EMPTY", .{});
-
-        return error.InvalidInput;
-    }
-}
-
-pub fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
-    if (std.mem.startsWith(u8, basis, "builtin:")) {
-        var result = try gpa.alloc(u8, basis["builtin:".len..].len);
-        defer gpa.free(result);
-
-        for (basis["builtin:".len..], 0..) |char, i| {
-            if (char == '+') result[i] = 'p';
-            if (char == '*') result[i] = 's';
-
-            if (char != '+' and char != '*') {
-                result[i] = std.ascii.toLower(char);
-            }
-        }
-
-        const content = embed.bases.get(result) orelse {
-            std.log.err("BUILTIN BASIS SET '{s}' NOT FOUND", .{result});
-
-            return error.InvalidInput;
-        };
-
-        var file = try std.Io.Dir.cwd().createFile(io, "basis.g94", .{});
-        defer file.close(io);
-
-        try file.writeStreamingAll(io, content);
-
-        return "basis.g94";
-    }
-
-    return basis;
 }

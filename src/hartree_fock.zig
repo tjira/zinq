@@ -142,6 +142,15 @@ pub fn Result(comptime T: type) type {
     };
 }
 
+fn ScfWorkspace(comptime T: type) type {
+    return struct {
+        P: *Matrix(T),
+        F: *Matrix(T),
+        C: *Matrix(T),
+        e: *Vector(T),
+    };
+}
+
 const Write = struct {
     coefficients: ?[]const u8 = null,
     density: ?[]const u8 = null,
@@ -383,9 +392,6 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     var e = try Vector(T).init(nbf, gpa);
     errdefer e.deinit(gpa);
 
-    var e_old: T = VN;
-    var e_new: T = VN;
-
     var dft: ?DftPotential(T) = null;
 
     if (opt.dft) |dft_opt| {
@@ -414,126 +420,9 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         _ = getDensity(T, &P, C, nocc, opt.generalized);
     }
 
-    if (opt.iterations > 0 and log) {
-        const fmt = "\nSELF CONSISTENT FIELD\n{s:4} {s:20} {s:9} {s:9} {s:9}\n";
+    const ws: ScfWorkspace(T) = .{ .P = &P, .F = &F, .C = &C, .e = &e };
 
-        try printf(io, fmt, .{ "ITER", "TOTAL ENERGY", "|DE|", "RMS(DP)", "TIME" });
-    }
-
-    var fck_hist = std.ArrayList(Matrix(T)).empty;
-
-    defer {
-        for (0..fck_hist.items.len) |i| fck_hist.items[i].deinit(gpa);
-
-        fck_hist.deinit(gpa);
-    }
-
-    var err_hist = std.ArrayList(Matrix(T)).empty;
-
-    defer {
-        for (0..err_hist.items.len) |i| err_hist.items[i].deinit(gpa);
-
-        err_hist.deinit(gpa);
-    }
-
-    for (0..opt.iterations) |i| {
-        var timer = std.Io.Timestamp.now(io, .real);
-
-        if (dft) |*pot| {
-            try getFock(T, &F, ints, P, opt.generalized, pot, gpa);
-
-            e_new = getEnergy(T, ints, F, P, pot) + VN;
-        }
-
-        if (dft == null) {
-            try getFock(T, &F, ints, P, opt.generalized, null, gpa);
-
-            e_new = getEnergy(T, ints, F, P, null) + VN;
-        }
-
-        if (opt.diis != null and opt.diis.? > 0) {
-            try fck_hist.ensureUnusedCapacity(gpa, 1);
-            try err_hist.ensureUnusedCapacity(gpa, 1);
-
-            var f_diis = try Matrix(T).init(nbf, nbf, gpa);
-            errdefer f_diis.deinit(gpa);
-
-            var e_diis = try Matrix(T).init(nbf, nbf, gpa);
-            errdefer e_diis.deinit(gpa);
-
-            for (0..nbf) |j| for (0..nbf) |k| {
-                f_diis.ptr(j, k).* = F.at(j, k);
-            };
-
-            try getError(T, &e_diis, F, P, ints.S.?, gpa);
-
-            if (fck_hist.items.len >= opt.diis.?) {
-                var old_f = fck_hist.orderedRemove(0);
-                var old_e = err_hist.orderedRemove(0);
-
-                old_f.deinit(gpa);
-                old_e.deinit(gpa);
-            }
-
-            fck_hist.appendAssumeCapacity(f_diis);
-            err_hist.appendAssumeCapacity(e_diis);
-
-            diis(T, fck_hist.items, err_hist.items, &F, true, gpa) catch {
-                for (0..fck_hist.items.len) |j| fck_hist.items[j].deinit(gpa);
-                for (0..err_hist.items.len) |j| err_hist.items[j].deinit(gpa);
-
-                fck_hist.clearRetainingCapacity();
-                err_hist.clearRetainingCapacity();
-
-                try fck_hist.ensureUnusedCapacity(gpa, 1);
-                try err_hist.ensureUnusedCapacity(gpa, 1);
-
-                var f_retry = try Matrix(T).init(nbf, nbf, gpa);
-                errdefer f_retry.deinit(gpa);
-
-                var e_retry = try Matrix(T).init(nbf, nbf, gpa);
-                errdefer e_retry.deinit(gpa);
-
-                for (0..nbf) |j| for (0..nbf) |k| {
-                    f_retry.ptr(j, k).* = F.at(j, k);
-                };
-
-                try getError(T, &e_retry, F, P, ints.S.?, gpa);
-
-                fck_hist.appendAssumeCapacity(f_retry);
-                err_hist.appendAssumeCapacity(e_retry);
-            };
-        }
-
-        @memcpy(B.data, ints.S.?.data);
-
-        try geigh(T, &e, &C, F, &B);
-
-        const p_rm = getDensity(T, &P, C, nocc, opt.generalized);
-
-        const delta_energy = @abs(e_new - e_old);
-
-        const elapsed = timer.untilNow(io, .real);
-
-        if (log) {
-            const fmt = "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9} {s}\n";
-
-            const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
-            defer gpa.free(time_str);
-
-            const de = if (i == 0) 0 else delta_energy;
-
-            try printf(io, fmt, .{ i + 1, e_new, de, p_rm, time_str, if (err_hist.items.len >= 2) "DIIS" else "" });
-        }
-
-        e_old = e_new;
-
-        if (i > 0 and delta_energy < opt.threshold and p_rm < opt.threshold) {
-            break;
-        }
-    } else return error.ScfDidNotConverge;
-
-    energy[0] = e_new;
+    energy[0] = try scf(T, io, opt, ints, ws, if (dft) |*d| d else null, log, gpa);
 
     if (log and opt.mulliken) {
         var charges = try mulliken(T, sys.*, P, ints.S.?, gpa);
@@ -559,21 +448,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         try printf(io, "\nFINAL HARTREE-FOCK ENERGY: {d:.14} Eh\n", .{energy[0]});
     }
 
-    if (opt.write.coefficients) |fname| {
-        try writeMatrix(T, io, fname, C);
-    }
-
-    if (opt.write.coefficients) |fname| {
-        try writeMatrix(T, io, fname, C);
-    }
-
-    if (opt.write.density) |fname| {
-        try writeMatrix(T, io, fname, P);
-    }
-
-    if (opt.write.fock) |fname| {
-        try writeMatrix(T, io, fname, F);
-    }
+    try exportMatrices(T, io, opt.write, C, P, F);
 
     if (opt.gradient) |gradopt| switch (gradopt) {
         .analytic => grad[0] = try gradient(T, ints, C, P, e, opt.generalized, if (dft) |*d| d else null, gpa),
@@ -596,24 +471,12 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         };
     };
 
-    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
-    errdefer if (opt.hessian) |_| gpa.free(hess);
-
-    if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFromSystem, opt, sys, log, gpa),
-    };
+    const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, log, gpa);
 
     errdefer {
         if (opt.hessian) |_| hess[0].deinit(gpa);
-    }
 
-    if (log and opt.hessian != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.atoms, gpa);
-        defer freqs.deinit(gpa);
-
-        const method_str = if (dft) |_| "DFT NUMERIC" else "HARTREE-FOCK NUMERIC";
-
-        try printHarmonicFrequencies(T, io, freqs, method_str);
+        gpa.free(hess);
     }
 
     var result: Result(T) = .{ .ints = ints, .P = P, .C = C, .F = F, .e = e, .energy = energy, .grad = grad, .hess = hess };
@@ -842,4 +705,179 @@ fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), ge
         F.ptr(i, j).* = avg;
         F.ptr(j, i).* = avg;
     };
+}
+
+fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWorkspace(T), dft: ?*DftPotential(T), log: bool, gpa: Allocator) !T {
+    const VN = try ints.sys.nrep();
+
+    const nocc = if (opt.generalized) ints.sys.nel else blk: {
+        if (ints.sys.nel % 2 != 0) {
+            return error.OnlyClosedShellSupported;
+        }
+
+        break :blk ints.sys.nel / 2;
+    };
+
+    const nbf = if (opt.generalized) 2 * ints.sys.nbf else ints.sys.nbf;
+
+    var e_old: T = VN;
+    var e_new: T = VN;
+
+    var B = try Matrix(T).init(nbf, nbf, gpa);
+    defer B.deinit(gpa);
+
+    if (opt.iterations > 0 and log) {
+        const fmt = "\nSELF CONSISTENT FIELD\n{s:4} {s:20} {s:9} {s:9} {s:9}\n";
+
+        try printf(io, fmt, .{ "ITER", "TOTAL ENERGY", "|DE|", "RMS(DP)", "TIME" });
+    }
+
+    var fck_hist = std.ArrayList(Matrix(T)).empty;
+
+    defer {
+        for (0..fck_hist.items.len) |i| fck_hist.items[i].deinit(gpa);
+
+        fck_hist.deinit(gpa);
+    }
+
+    var err_hist = std.ArrayList(Matrix(T)).empty;
+
+    defer {
+        for (0..err_hist.items.len) |i| err_hist.items[i].deinit(gpa);
+
+        err_hist.deinit(gpa);
+    }
+
+    for (0..opt.iterations) |i| {
+        var timer = std.Io.Timestamp.now(io, .real);
+
+        if (dft) |pot| {
+            try getFock(T, ws.F, ints, ws.P.*, opt.generalized, pot, gpa);
+
+            e_new = getEnergy(T, ints, ws.F.*, ws.P.*, pot) + VN;
+        }
+
+        if (dft == null) {
+            try getFock(T, ws.F, ints, ws.P.*, opt.generalized, null, gpa);
+
+            e_new = getEnergy(T, ints, ws.F.*, ws.P.*, null) + VN;
+        }
+
+        if (opt.diis != null and opt.diis.? > 0) {
+            try fck_hist.ensureUnusedCapacity(gpa, 1);
+            try err_hist.ensureUnusedCapacity(gpa, 1);
+
+            var f_diis = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer f_diis.deinit(gpa);
+
+            var e_diis = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer e_diis.deinit(gpa);
+
+            for (0..nbf) |j| for (0..nbf) |k| {
+                f_diis.ptr(j, k).* = ws.F.at(j, k);
+            };
+
+            try getError(T, &e_diis, ws.F.*, ws.P.*, ints.S.?, gpa);
+
+            if (fck_hist.items.len >= opt.diis.?) {
+                var old_f = fck_hist.orderedRemove(0);
+                var old_e = err_hist.orderedRemove(0);
+
+                old_f.deinit(gpa);
+                old_e.deinit(gpa);
+            }
+
+            fck_hist.appendAssumeCapacity(f_diis);
+            err_hist.appendAssumeCapacity(e_diis);
+
+            diis(T, fck_hist.items, err_hist.items, ws.F, true, gpa) catch {
+                for (0..fck_hist.items.len) |j| fck_hist.items[j].deinit(gpa);
+                for (0..err_hist.items.len) |j| err_hist.items[j].deinit(gpa);
+
+                fck_hist.clearRetainingCapacity();
+                err_hist.clearRetainingCapacity();
+
+                try fck_hist.ensureUnusedCapacity(gpa, 1);
+                try err_hist.ensureUnusedCapacity(gpa, 1);
+
+                var f_retry = try Matrix(T).init(nbf, nbf, gpa);
+                errdefer f_retry.deinit(gpa);
+
+                var e_retry = try Matrix(T).init(nbf, nbf, gpa);
+                errdefer e_retry.deinit(gpa);
+
+                for (0..nbf) |j| for (0..nbf) |k| {
+                    f_retry.ptr(j, k).* = ws.F.at(j, k);
+                };
+
+                try getError(T, &e_retry, ws.F.*, ws.P.*, ints.S.?, gpa);
+
+                fck_hist.appendAssumeCapacity(f_retry);
+                err_hist.appendAssumeCapacity(e_retry);
+            };
+        }
+
+        @memcpy(B.data, ints.S.?.data);
+
+        try geigh(T, ws.e, ws.C, ws.F.*, &B);
+
+        const delta_energy, const p_rm = .{ @abs(e_new - e_old), getDensity(T, ws.P, ws.C.*, nocc, opt.generalized) };
+
+        const elapsed = timer.untilNow(io, .real);
+
+        if (log) {
+            const fmt = "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9} {s}\n";
+
+            const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
+            defer gpa.free(time_str);
+
+            const de = if (i == 0) 0 else delta_energy;
+
+            try printf(io, fmt, .{ i + 1, e_new, de, p_rm, time_str, if (err_hist.items.len >= 2) "DIIS" else "" });
+        }
+
+        e_old = e_new;
+
+        if (i > 0 and delta_energy < opt.threshold and p_rm < opt.threshold) {
+            break;
+        }
+    } else return error.ScfDidNotConverge;
+
+    return e_new;
+}
+
+fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
+    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
+    errdefer if (opt.hessian) |_| gpa.free(hess);
+
+    if (opt.hessian) |hessopt| switch (hessopt) {
+        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFn, opt, sys, log, gpa),
+    };
+
+    errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
+
+    if (log and opt.hessian != null) {
+        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.atoms, gpa);
+        defer freqs.deinit(gpa);
+
+        const method_str = if (opt.dft != null) "DFT NUMERIC" else "HARTREE-FOCK NUMERIC";
+
+        try printHarmonicFrequencies(T, io, freqs, method_str);
+    }
+
+    return hess;
+}
+
+fn exportMatrices(comptime T: type, io: std.Io, write: Write, C: Matrix(T), P: Matrix(T), F: Matrix(T)) !void {
+    if (write.coefficients) |fname| {
+        try writeMatrix(T, io, fname, C);
+    }
+
+    if (write.density) |fname| {
+        try writeMatrix(T, io, fname, P);
+    }
+
+    if (write.fock) |fname| {
+        try writeMatrix(T, io, fname, F);
+    }
 }

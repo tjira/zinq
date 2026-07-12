@@ -217,23 +217,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         try printf(io, "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCI EXCITATIONS CONSIDERED: [", .{timer.untilNow(io, .real)});
 
         for (0..opt.excitations.len) |i| {
-            try printf(io, "{d}{s}", .{ opt.excitations[i], if (i == opt.excitations.len - 1) "]\n" else ", " });
+            try printf(io, "{d}{s}", .{ opt.excitations[i], if (i == opt.excitations.len - 1) "]" else ", " });
         }
 
-        try printf(io, "\nORBITAL TRANSFORMS TIME:", .{});
-    }
-
-    timer = std.Io.Timestamp.now(io, .real);
-
-    var H_MS, var g_MS = try transformInts(T, hfres.C, hfres.ints.H.?, hfres.ints.g.?, generalized, gpa);
-
-    defer {
-        H_MS.deinit(gpa);
-        g_MS.deinit(gpa);
-    }
-
-    if (log) {
-        try printf(io, " {f}\nSLATER DETERMINANT TIME:", .{timer.untilNow(io, .real)});
+        try printf(io, "\n\nSLATER DETERMINANT TIME:", .{});
     }
 
     timer = std.Io.Timestamp.now(io, .real);
@@ -247,32 +234,14 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (log) {
-        try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nCI MATRIX ASSEMBLY TIME:", .{ timer.untilNow(io, .real), dets.items.len });
+        try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nORBITAL TRANSFORMS TIME:", .{ timer.untilNow(io, .real), dets.items.len });
     }
 
-    timer = std.Io.Timestamp.now(io, .real);
+    var E, var C = blk: {
+        const res = try computeCiStates(T, if (log) io else null, generalized, hfres, dets.items, gpa);
 
-    var H_CI = try Matrix(T).init(dets.items.len, dets.items.len, gpa);
-    defer H_CI.deinit(gpa);
-
-    for (0..dets.items.len) |i| for (i..dets.items.len) |j| {
-        const val = slater(T, dets.items[i], dets.items[j], H_MS, g_MS);
-
-        H_CI.ptr(i, j).* = val;
-        H_CI.ptr(j, i).* = val;
+        break :blk .{ res[0], res[1] };
     };
-
-    if (log) {
-        try printf(io, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(io, .real)});
-    }
-
-    timer = std.Io.Timestamp.now(io, .real);
-
-    var E, var C = try solveEigenvalueProblem(T, H_CI, try hfres.ints.sys.nrep(), gpa);
-
-    if (log) {
-        try printf(io, " {f}\n", .{timer.untilNow(io, .real)});
-    }
 
     errdefer {
         E.deinit(gpa);
@@ -309,25 +278,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         };
     }
 
-    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
-    errdefer if (opt.hessian) |_| gpa.free(hess);
-
-    if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFromSystem, opt, sys, log, gpa),
-    };
+    const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, log, gpa);
 
     errdefer {
         if (opt.hessian) |_| hess[0].deinit(gpa);
-    }
-
-    if (log and opt.hessian != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], hfres.ints.sys.atoms, gpa);
-        defer freqs.deinit(gpa);
-
-        const method_str = try std.fmt.allocPrint(gpa, "CI STATE {d} NUMERIC", .{opt.hessian.?.numeric.state});
-        defer gpa.free(method_str);
-
-        try printHarmonicFrequencies(T, io, freqs, method_str);
     }
 
     return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C, .grad = grad, .hess = hess };
@@ -624,4 +578,77 @@ fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), 
     try ao2mo_pppp(T, &g_MS, g_SO, C_SO, gpa);
 
     return .{ H_MS, g_MS };
+}
+
+fn computeCiStates(comptime T: type, io: ?std.Io, generalized: bool, hfres: HartreeFockResult(T), dets: []const []const usize, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+    var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
+
+    var H_MS, var g_MS = try transformInts(T, hfres.C, hfres.ints.H.?, hfres.ints.g.?, generalized, gpa);
+
+    defer {
+        H_MS.deinit(gpa);
+        g_MS.deinit(gpa);
+    }
+
+    if (io) |out| {
+        try printf(out, " {f}\nCI MATRIX ASSEMBLY TIME:", .{timer.untilNow(out, .real)});
+    }
+
+    if (io) |out| {
+        timer = std.Io.Timestamp.now(out, .real);
+    }
+
+    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
+    defer H_CI.deinit(gpa);
+
+    for (0..dets.len) |i| for (i..dets.len) |j| {
+        const val = slater(T, dets[i], dets[j], H_MS, g_MS);
+
+        H_CI.ptr(i, j).* = val;
+        H_CI.ptr(j, i).* = val;
+    };
+
+    if (io) |out| {
+        try printf(out, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(out, .real)});
+    }
+
+    if (io) |out| {
+        timer = std.Io.Timestamp.now(out, .real);
+    }
+
+    var E, var C = try solveEigenvalueProblem(T, H_CI, try hfres.ints.sys.nrep(), gpa);
+
+    errdefer {
+        E.deinit(gpa);
+        C.deinit(gpa);
+    }
+
+    if (io) |out| {
+        try printf(out, " {f}\n", .{timer.untilNow(out, .real)});
+    }
+
+    return .{ E, C };
+}
+
+fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
+    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
+    errdefer if (opt.hessian) |_| gpa.free(hess);
+
+    if (opt.hessian) |hessopt| switch (hessopt) {
+        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFn, opt, sys, log, gpa),
+    };
+
+    errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
+
+    if (log and opt.hessian != null) {
+        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.atoms, gpa);
+        defer freqs.deinit(gpa);
+
+        const method_str = try std.fmt.allocPrint(gpa, "CI STATE {d} NUMERIC", .{opt.hessian.?.numeric.state});
+        defer gpa.free(method_str);
+
+        try printHarmonicFrequencies(T, io, freqs, method_str);
+    }
+
+    return hess;
 }

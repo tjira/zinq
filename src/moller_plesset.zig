@@ -211,25 +211,12 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         grad[0].deinit(gpa);
     };
 
-    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
-    errdefer if (opt.hessian) |_| gpa.free(hess);
-
-    if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFromSystem, opt, sys, log, gpa),
-    };
+    const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, log, gpa);
 
     errdefer {
         if (opt.hessian) |_| hess[0].deinit(gpa);
-    }
 
-    if (log and opt.hessian != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], hfres.ints.sys.atoms, gpa);
-        defer freqs.deinit(gpa);
-
-        const method_str = try std.fmt.allocPrint(gpa, "MP{d} NUMERIC", .{opt.order});
-        defer gpa.free(method_str);
-
-        try printHarmonicFrequencies(T, io, freqs, method_str);
+        gpa.free(hess);
     }
 
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = hess };
@@ -437,4 +424,27 @@ fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T
     }
 
     return energies;
+}
+
+fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
+    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
+    errdefer if (opt.hessian) |_| gpa.free(hess);
+
+    if (opt.hessian) |hessopt| switch (hessopt) {
+        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFn, opt, sys, log, gpa),
+    };
+
+    errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
+
+    if (log and opt.hessian != null) {
+        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.atoms, gpa);
+        defer freqs.deinit(gpa);
+
+        const method_str = try std.fmt.allocPrint(gpa, "MP{d} NUMERIC", .{opt.order});
+        defer gpa.free(method_str);
+
+        try printHarmonicFrequencies(T, io, freqs, method_str);
+    }
+
+    return hess;
 }
