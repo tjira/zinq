@@ -1,3 +1,5 @@
+//! Numerical nuclear gradients and Hessians via finite differences for molecular geometry optimization.
+
 const std = @import("std");
 
 const libint = @import("cimport.zig").libint;
@@ -13,6 +15,7 @@ const printf = @import("read_write.zig").printf;
 
 const A2BOHR = @import("constant.zig").A2BOHR;
 
+/// Computes the nuclear gradient of the electronic energy using central finite differences.
 pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
     const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
 
@@ -54,6 +57,7 @@ pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, 
     return grad;
 }
 
+/// Computes the nuclear Hessian matrix of the electronic energy using finite differences of energies.
 pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
     const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
 
@@ -120,6 +124,7 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
     return hess;
 }
 
+/// Evaluates the electronic energy for a perturbed molecular geometry.
 fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), perts: anytype, Pg: ?Matrix(T), P: ?*Matrix(T), state: usize, gpa: Allocator) !T {
     std.debug.assert(@typeInfo(@TypeOf(perts)).@"struct".fields.len % 2 == 0);
 

@@ -1,8 +1,12 @@
+//! Precomputed Lebedev angular quadrature grid nodes and weights for spherical integration.
+
+/// Represents an angular quadrature grid on a unit sphere, storing node coordinates and integration weights.
 pub const LebedevGrid = struct {
     nodes: []const [3]f64,
     nweights: []const f64,
 };
 
+/// Retrieves the Lebedev quadrature grid containing the requested number of angular points.
 pub fn getLebedevGrid(points: usize) !LebedevGrid {
     return switch (points) {
         50 => points_50,

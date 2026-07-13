@@ -1,3 +1,5 @@
+//! Computes absorption or emission spectra from wavefunction autocorrelation functions via Fourier transform.
+
 const std = @import("std");
 
 const fftw = @import("cimport.zig").fftw;
@@ -7,6 +9,7 @@ const Complex = std.math.Complex;
 
 const Vector = @import("tensor.zig").Vector;
 
+/// Calculates the spectrum by Fourier transforming a windowed and zero-padded autocorrelation function.
 pub fn calcSpectrum(comptime T: type, acf: Vector(Complex(T)), dt: T, padding: usize, thresh: T, gpa: Allocator) !struct { Vector(Complex(T)), Vector(T) } {
     const flags, const decay = .{ fftw.FFTW_ESTIMATE | fftw.FFTW_PRESERVE_INPUT, -@log(thresh) };
 

@@ -1,3 +1,5 @@
+//! Solves the Coupled-Perturbed Hartree-Fock equations to obtain the first-order orbital response to perturbations.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -12,6 +14,7 @@ const diis = @import("hartree_fock.zig").diis;
 const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
 const printf = @import("read_write.zig").printf;
 
+/// Computes the first-order derivative of molecular orbital coefficients and energies using CPHF.
 pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: HartreeFockResult(T), opt: anytype, log: bool, gpa: Allocator) !struct { Tensor(T, 3), Matrix(T) } {
     const nbf = hfres.C.shape[0];
 
@@ -26,6 +29,7 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: HartreeFockResult(T)
     return .{ dC, de };
 }
 
+/// Iteratively solves the CPHF linear equations to determine the first-order orbital response matrix.
 pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T), hfres: HartreeFockResult(T), opt: anytype, log: bool, gpa: Allocator) !void {
     const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
 

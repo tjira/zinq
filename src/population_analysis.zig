@@ -1,3 +1,5 @@
+//! Implements Mulliken population analysis to calculate partial atomic charges from the density and overlap matrices.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -10,6 +12,7 @@ const dot = @import("linear_algebra.zig").dot;
 const getSymbol = @import("constant.zig").getSymbol;
 const printf = @import("read_write.zig").printf;
 
+/// Computes Mulliken net atomic charges by partitioning the electronic density matrix using the overlap matrix.
 pub fn mulliken(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !Vector(T) {
     var net_populations = try gpa.alloc(T, sys.atoms.len);
     defer gpa.free(net_populations);
@@ -30,6 +33,7 @@ pub fn mulliken(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matr
     return charges;
 }
 
+/// Formats and prints the calculated Mulliken atomic charges to the output.
 pub fn printMullikenCharges(comptime T: type, io: std.Io, sys: MolecularSystem(T), charges: Vector(T), method_str: []const u8) !void {
     try printf(io, "\n{s} MULLIKEN POPULATION ANALYSIS\n", .{method_str});
 

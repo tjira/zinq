@@ -1,3 +1,5 @@
+//! Implements transformations of one- and two-electron integrals between atomic, spin, and molecular orbital bases.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -6,6 +8,7 @@ const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 
+/// Transforms a symmetric one-electron operator matrix from the atomic orbital basis to the molecular orbital basis.
 pub fn ao2mo_pp(comptime T: type, A_pp: *Matrix(T), A_xx: Matrix(T), C: Matrix(T)) void {
     const N = C.shape[0];
 
@@ -30,6 +33,7 @@ pub fn ao2mo_pp(comptime T: type, A_pp: *Matrix(T), A_xx: Matrix(T), C: Matrix(T
     };
 }
 
+/// Transforms two-electron repulsion integrals from the atomic orbital basis to the molecular orbital basis.
 pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), gpa: Allocator) !void {
     const N = g_xxxx.shape[0];
 
@@ -74,6 +78,7 @@ pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4),
     };
 }
 
+/// Expands atomic orbital coefficients into a spin-orbital representation block matrix.
 pub fn ao2so_coef(comptime T: type, C_so: *Matrix(T), C_ao: Matrix(T)) void {
     const nbf = C_ao.shape[0];
 
@@ -95,6 +100,7 @@ pub fn ao2so_coef(comptime T: type, C_so: *Matrix(T), C_ao: Matrix(T)) void {
     }
 }
 
+/// Transforms a one-electron operator from the atomic orbital representation to a spin-orbital representation.
 pub fn ao2so_pp(comptime T: type, A_so: *Matrix(T), A_ao: Matrix(T)) void {
     const nbf = A_ao.shape[0];
 
@@ -110,6 +116,7 @@ pub fn ao2so_pp(comptime T: type, A_so: *Matrix(T), A_ao: Matrix(T)) void {
     };
 }
 
+/// Transforms two-electron integrals from spatial atomic orbitals to spin-orbitals.
 pub fn ao2so_pppp(comptime T: type, g_so: *Tensor(T, 4), g_ao: Tensor(T, 4)) void {
     const nbf = g_ao.shape[0];
 
@@ -134,6 +141,7 @@ pub fn ao2so_pppp(comptime T: type, g_so: *Tensor(T, 4), g_ao: Tensor(T, 4)) voi
     };
 }
 
+/// Transforms a one-electron operator matrix from the molecular orbital basis back to the atomic orbital basis.
 pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T)) void {
     const N = C.shape[0];
 
@@ -153,6 +161,7 @@ pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T
     };
 }
 
+/// Transforms atomic orbital integrals to a restricted molecular orbital subset of occupied and virtual orbitals.
 fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), nocc: usize, gpa: Allocator) !void {
     const N = g_xxxx.shape[0];
 

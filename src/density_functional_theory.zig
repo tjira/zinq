@@ -1,3 +1,5 @@
+//! Implements density functional theory (DFT) numerical integration grids and exchange-correlation potential evaluation.
+
 const std = @import("std");
 
 const libint = @import("cimport.zig").libint;
@@ -17,6 +19,7 @@ const XCOutput = @import("xc_functional.zig").XCOutput;
 
 const evaluateXCFunctional = @import("xc_functional.zig").evaluateXCFunctional;
 
+/// Factory function returning a struct representing the DFT exchange-correlation potential and numerical integration grid.
 pub fn DftPotential(comptime T: type) type {
     return struct {
         exch: ?libxc.xc_func_type,
@@ -32,6 +35,7 @@ pub fn DftPotential(comptime T: type) type {
         polarized: bool,
         exx_coef: T = 0,
 
+        /// Initializes the DFT potential, setting up the molecular grid and initializing libxc functionals.
         pub fn init(sys: MolecularSystem(T), funcs: anytype, n_rad: usize, n_leb: usize, polarized: bool, gpa: Allocator) !@This() {
             var grid = try (Becke(T){ .n_rad = n_rad, .n_leb = n_leb }).get(sys, gpa);
 
@@ -96,6 +100,7 @@ pub fn DftPotential(comptime T: type) type {
             return .{ .exch = fcts[0], .corr = fcts[1], .exco = fcts[2], .pts = grid[0], .wgh = grid[1], .Vxc = Vxc, .polarized = polarized, .exx_coef = exx };
         }
 
+        /// Frees all allocated grid arrays and libxc functional resources.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.exch) |*func| libxc.xc_func_end(func);
             if (self.corr) |*func| libxc.xc_func_end(func);
@@ -106,6 +111,7 @@ pub fn DftPotential(comptime T: type) type {
             self.Vxc.deinit(gpa);
         }
 
+        /// Evaluates the exchange-correlation potential matrix and energy contribution by grid integration.
         pub fn evaluate(self: *@This(), sys: MolecularSystem(T), P: Matrix(T), gpa: Allocator) !void {
             self.Vxc.zero();
 
@@ -162,6 +168,7 @@ pub fn DftPotential(comptime T: type) type {
             try self.integratePotential(ctx, gpa);
         }
 
+        /// Retrieves a formatted string of the active exchange and correlation functional names.
         pub fn getFunctionalNames(self: @This(), gpa: Allocator) ![]const u8 {
             if (self.exco) |func| {
                 return try gpa.dupe(u8, std.mem.span(func.info.*.name));
@@ -181,6 +188,7 @@ pub fn DftPotential(comptime T: type) type {
             return try std.mem.join(gpa, " + ", parts.items);
         }
 
+        /// Calculates the electronic density and its derivatives on the grid from the density matrix.
         fn computeDensity(self: @This(), P: Matrix(T), ctx: *DftEvaluationContext(T)) void {
             if (self.polarized) {
                 self.computeDensityPolarized(P, ctx);
@@ -189,6 +197,7 @@ pub fn DftPotential(comptime T: type) type {
             }
         }
 
+        /// Calculates the spin-polarized electronic density, its gradient, and kinetic energy density on the grid.
         fn computeDensityPolarized(self: @This(), P: Matrix(T), ctx: *DftEvaluationContext(T)) void {
             for (0..self.pts.shape[0]) |i| {
                 var rho_a: T = 0;
@@ -286,6 +295,7 @@ pub fn DftPotential(comptime T: type) type {
             }
         }
 
+        /// Calculates the spin-unpolarized electronic density, its gradient, and kinetic energy density on the grid.
         fn computeDensityUnpolarized(self: @This(), P: Matrix(T), ctx: *DftEvaluationContext(T)) void {
             for (0..self.pts.shape[0]) |i| {
                 var rho_tot: T = 0;
@@ -350,6 +360,7 @@ pub fn DftPotential(comptime T: type) type {
             }
         }
 
+        /// Evaluates atomic orbital basis functions and their spatial derivatives at all grid points.
         fn evaluateBasis(self: @This(), sys: MolecularSystem(T), basis: BasisGrid(T)) void {
             const needs_d1, const needs_d2 = .{ basis.dphi_dx != null, basis.lapl != null };
 
@@ -382,6 +393,7 @@ pub fn DftPotential(comptime T: type) type {
             }
         }
 
+        /// Analyzes the active functionals to determine GGA or meta-GGA classification and derivative requirements.
         fn getFamilyFlags(self: @This()) struct { has_sgga: bool, has_mgga: bool, needs_deriv: bool } {
             const exch_fam = if (self.exch) |func| func.info.*.family else null;
             const corr_fam = if (self.corr) |func| func.info.*.family else null;
@@ -401,6 +413,7 @@ pub fn DftPotential(comptime T: type) type {
             return .{ .has_sgga = has_sgga, .has_mgga = has_mgga, .needs_deriv = has_sgga or has_mgga };
         }
 
+        /// Allocates and initializes a libxc functional using its name and spin mode.
         fn initFunctional(name: []const u8, mode: c_int, expected_kind: c_int, gpa: Allocator) !libxc.xc_func_type {
             const name_nt = try gpa.dupeSentinel(u8, name, 0);
             defer gpa.free(name_nt);
@@ -431,6 +444,7 @@ pub fn DftPotential(comptime T: type) type {
             return func;
         }
 
+        /// Performs numerical integration of the exchange-correlation potential over grid points.
         fn integratePotential(self: *@This(), ctx: DftEvaluationContext(T), gpa: Allocator) !void {
             if (self.polarized) {
                 self.Exc = try self.integratePotentialPolarized(ctx, gpa);
@@ -441,6 +455,7 @@ pub fn DftPotential(comptime T: type) type {
             }
         }
 
+        /// Integrates the spin-polarized exchange-correlation potential to yield the energy and matrix.
         fn integratePotentialPolarized(self: *@This(), ctx: DftEvaluationContext(T), gpa: Allocator) !T {
             var energy_exc: T = 0;
 
@@ -548,6 +563,7 @@ pub fn DftPotential(comptime T: type) type {
             return energy_exc;
         }
 
+        /// Integrates the spin-unpolarized exchange-correlation potential to yield the energy and matrix.
         fn integratePotentialUnpolarized(self: *@This(), ctx: DftEvaluationContext(T), gpa: Allocator) !T {
             var energy_exc: T, var X_a: ?Vector(T) = .{ 0, null };
 
@@ -619,6 +635,7 @@ pub fn DftPotential(comptime T: type) type {
     };
 }
 
+/// Holds temporary arrays and grid metrics during DFT exchange-correlation potential evaluation.
 fn DftEvaluationContext(comptime T: type) type {
     return struct {
         sys: MolecularSystem(T),

@@ -1,3 +1,5 @@
+//! Represents a molecular system, managing its nuclear geometry, basis set information, and quantum chemical operators.
+
 const std = @import("std");
 
 const libint = @import("cimport.zig").libint;
@@ -7,7 +9,9 @@ const Allocator = std.mem.Allocator;
 const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 
+/// Generates a MolecularSystem struct type for the given floating-point coordinate precision type T.
 pub fn MolecularSystem(comptime T: type) type {
+    // Molecular system containing atom types, 3D coordinates, basis functions, and electron count.
     return struct {
         ptr: *libint.SystemData,
 
@@ -19,6 +23,7 @@ pub fn MolecularSystem(comptime T: type) type {
         nbf: usize,
         nel: usize,
 
+        /// Initializes the molecular system structure from geometry and basis inputs, calculating the net electron count.
         pub fn init(system: []const u8, basis: []const u8, charge: i32, multiplicity: u32, gpa: Allocator) !@This() {
             const sys_c = try gpa.dupeSentinel(u8, system, 0);
             defer gpa.free(sys_c);
@@ -74,6 +79,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return .{ .ptr = ptr, .nbf = nbf, .atoms = atoms, .coors = coors, .bf2at = bf2at, .nel = nel };
         }
 
+        /// Frees allocated memory for atoms, coordinates, basis functions, and the underlying Libint system data.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             gpa.free(self.atoms);
             gpa.free(self.coors);
@@ -82,6 +88,7 @@ pub fn MolecularSystem(comptime T: type) type {
             libint.libint_deinit(self.ptr);
         }
 
+        /// Calculates the four-center, two-electron Coulomb repulsion integrals over the basis functions.
         pub fn coulomb(self: @This(), gpa: Allocator) !Tensor(T, 4) {
             const I = try Tensor(T, 4).initZero(.{ self.nbf, self.nbf, self.nbf, self.nbf }, gpa);
             errdefer I.deinit(gpa);
@@ -91,6 +98,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the first-order derivatives of the two-electron Coulomb integrals with respect to nuclear coordinates.
         pub fn coulombD1(self: @This(), gpa: Allocator) !Tensor(T, 5) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf, self.nbf, self.nbf };
 
@@ -102,6 +110,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the first-order derivatives of spin-blocked two-electron Coulomb integrals.
         pub fn coulombD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 5) {
             var J = try self.coulombD1(gpa);
             defer J.deinit(gpa);
@@ -125,6 +134,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Constructs the spin-blocked four-center two-electron Coulomb repulsion integral tensor.
         pub fn coulombSpin(self: @This(), gpa: Allocator) !Tensor(T, 4) {
             var J = try self.coulomb(gpa);
             defer J.deinit(gpa);
@@ -148,6 +158,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the one-electron kinetic energy matrix elements in the molecular basis.
         pub fn kinetic(self: @This(), gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
             errdefer I.deinit(gpa);
@@ -157,6 +168,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the first-order derivative of the one-electron kinetic energy matrix with respect to nuclear coordinates.
         pub fn kineticD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };
 
@@ -168,6 +180,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the spin-blocked first-order derivative of the kinetic energy matrix.
         pub fn kineticD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 3) {
             var K = try self.kineticD1(gpa);
             defer K.deinit(gpa);
@@ -186,6 +199,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Constructs the spin-blocked one-electron kinetic energy matrix.
         pub fn kineticSpin(self: @This(), gpa: Allocator) !Matrix(T) {
             var K = try self.kinetic(gpa);
             defer K.deinit(gpa);
@@ -202,6 +216,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Calculates the classical nuclear-nuclear electrostatic repulsion energy of the molecular system.
         pub fn nrep(self: @This()) !T {
             if (self.atoms.len == 0) return 0;
 
@@ -232,6 +247,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return energy;
         }
 
+        /// Computes the one-electron nuclear-electron attraction potential matrix in the molecular basis.
         pub fn nuclear(self: @This(), gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
             errdefer I.deinit(gpa);
@@ -241,6 +257,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the first-order derivative of the nuclear attraction matrix with respect to nuclear coordinates.
         pub fn nuclearD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };
 
@@ -252,6 +269,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the spin-blocked first-order derivative of the nuclear attraction matrix.
         pub fn nuclearD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 3) {
             var V = try self.nuclearD1(gpa);
             defer V.deinit(gpa);
@@ -270,6 +288,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Constructs the spin-blocked nuclear-electron attraction potential matrix.
         pub fn nuclearSpin(self: @This(), gpa: Allocator) !Matrix(T) {
             var V = try self.nuclear(gpa);
             defer V.deinit(gpa);
@@ -286,6 +305,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the overlap matrix elements representing the non-orthogonality of the spatial basis functions.
         pub fn overlap(self: @This(), gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
             errdefer I.deinit(gpa);
@@ -295,6 +315,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the first-order derivative of the basis function overlap matrix with respect to nuclear coordinates.
         pub fn overlapD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };
 
@@ -306,6 +327,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the spin-blocked first-order derivative of the basis function overlap matrix.
         pub fn overlapD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 3) {
             var S = try self.overlapD1(gpa);
             defer S.deinit(gpa);
@@ -324,6 +346,7 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Constructs the spin-blocked basis function overlap matrix.
         pub fn overlapSpin(self: @This(), gpa: Allocator) !Matrix(T) {
             var S = try self.overlap(gpa);
             defer S.deinit(gpa);

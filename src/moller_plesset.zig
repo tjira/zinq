@@ -1,3 +1,5 @@
+//! Computes Møller-Plesset correlation energy corrections to a Hartree-Fock reference wavefunction.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -31,6 +33,7 @@ const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 
 const AU2CM = @import("constant.zig").AU2CM;
 
+/// Options for computing Moller-Plesset energy gradients analytically or numerically.
 pub const GradientOptions = union(enum) {
     analytic: struct {},
     numeric: struct {
@@ -38,6 +41,7 @@ pub const GradientOptions = union(enum) {
     },
 };
 
+/// Parameters governing the Møller-Plesset perturbation theory calculation and its derivatives.
 pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
@@ -69,6 +73,7 @@ pub const Options = struct {
     } = null,
 };
 
+/// Holds Moller-Plesset calculation outputs: HF reference result, perturbation energies, and derivatives.
 pub fn Result(comptime T: type) type {
     return struct {
         hartree_fock: HartreeFockResult(T),
@@ -78,6 +83,7 @@ pub fn Result(comptime T: type) type {
         grad: []Matrix(T),
         hess: []Matrix(T),
 
+        /// Frees all allocated resources associated with the Møller-Plesset result.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.hartree_fock.deinit(gpa);
 
@@ -98,12 +104,14 @@ pub fn Result(comptime T: type) type {
     };
 }
 
+/// Destination paths for outputting Moller-Plesset geometries, gradients, and Hessians.
 const Write = struct {
     geometry: ?[]const u8 = null,
     gradient: ?[]const u8 = null,
     hessian: ?[]const u8 = null,
 };
 
+/// Executes a Møller-Plesset calculation on a molecular system specified by file paths.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -123,6 +131,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     return try runFromSystem(T, io, opt, &sys, null, log, gpa);
 }
 
+/// Runs a Møller-Plesset calculation starting from an initialized MolecularSystem structure.
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -246,6 +255,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = hess };
 }
 
+/// Validates Moller-Plesset inputs for method requirements and minimum perturbation order.
 fn checkInvalidInput(opt: Options) !void {
     if (opt.write.gradient != null and opt.gradient == null) {
         std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
@@ -266,6 +276,7 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
+/// Computes the nuclear gradient of the Møller-Plesset energy corrections using dual number differentiation.
 fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Allocator) ![]Matrix(T) {
     const nbf, const generalized = .{ hfres.C.shape[0], hfres.ints.sys.nbf != hfres.C.shape[0] };
 
@@ -319,6 +330,7 @@ fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Al
     return grads;
 }
 
+/// Computes Møller-Plesset energy corrections up to the specified perturbation order.
 fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
     const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
 
@@ -462,6 +474,7 @@ fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T
     return energies;
 }
 
+/// Computes the nuclear Hessian of the MP energy numerically and performs harmonic frequency analysis.
 fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
     var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
     errdefer if (opt.hessian) |_| gpa.free(hess);

@@ -1,3 +1,5 @@
+//! Numerical integrators for solving ordinary differential equations using Runge-Kutta methods.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -6,6 +8,7 @@ const Value = @import("value.zig").Value;
 
 const primType = @import("value.zig").primType;
 
+/// Returns a generic ODE integrator type supporting various Runge-Kutta integration methods.
 pub fn Integrator(comptime T: type) type {
     const U = primType(T);
 
@@ -17,6 +20,7 @@ pub fn Integrator(comptime T: type) type {
             rk4: Rk4(T),
         };
 
+        /// Initializes the chosen numerical integration method, allocating necessary temporary state arrays.
         pub fn init(tag: std.meta.Tag(Method), nstate: usize, gpa: Allocator) !@This() {
             inline for (std.meta.fields(Method)) |field| if (tag == @field(std.meta.Tag(Method), field.name)) {
                 return .{ .method = @unionInit(Method, field.name, try field.type.init(nstate, gpa)) };
@@ -25,12 +29,14 @@ pub fn Integrator(comptime T: type) type {
             unreachable;
         }
 
+        /// Deallocates memory associated with the integrator's stage derivative storage.
         pub fn deinit(self: @This(), gpa: Allocator) void {
             switch (self.method) {
                 inline else => |*method| method.deinit(gpa),
             }
         }
 
+        /// Advances the system state variables forward in time by a step size dt using the configured method.
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {
             switch (self.method) {
                 inline else => |*method| method.step(y, dt, ctx, dFn),
@@ -39,6 +45,7 @@ pub fn Integrator(comptime T: type) type {
     };
 }
 
+/// Returns a type representing a Butcher Tableau, which encapsulates the algebraic coefficients of a Runge-Kutta method.
 fn ButcherTableau(comptime T: type, comptime STAGES: usize) type {
     return struct {
         a: [STAGES][STAGES]T,
@@ -48,6 +55,7 @@ fn ButcherTableau(comptime T: type, comptime STAGES: usize) type {
     };
 }
 
+/// Returns a generic Runge-Kutta stepper type for a given scalar type T and Butcher Tableau.
 fn RungeKutta(comptime T: type, comptime tab: anytype) type {
     const U = primType(T);
 
@@ -56,6 +64,7 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
 
         tmp: []T,
 
+        /// Allocates stage derivative storage and temporary vectors needed for Runge-Kutta steps.
         pub fn init(nstate: usize, gpa: Allocator) !@This() {
             var self: @This() = undefined;
 
@@ -72,12 +81,14 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
             return self;
         }
 
+        /// Frees stage derivative and temporary vectors from memory.
         pub fn deinit(self: @This(), gpa: Allocator) void {
             gpa.free(self.k[0].ptr[0 .. self.k.len * self.tmp.len]);
 
             gpa.free(self.tmp);
         }
 
+        /// Solves one integration step using the Runge-Kutta coefficients from the Butcher Tableau.
         pub fn step(self: *@This(), y: []T, dt: U, ctx: anytype, comptime dFn: anytype) void {
             std.debug.assert(self.tmp.len == y.len);
 
@@ -112,14 +123,17 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
     };
 }
 
+/// Returns a first-order Runge-Kutta (Euler's method) stepper type.
 fn Rk1(comptime T: type) type {
     return RungeKutta(T, rk1Tableau(primType(T)));
 }
 
+/// Returns the classical fourth-order Runge-Kutta (RK4) stepper type.
 fn Rk4(comptime T: type) type {
     return RungeKutta(T, rk4Tableau(primType(T)));
 }
 
+/// Generates the Butcher Tableau coefficients for the first-order Euler method.
 fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {
     return .{
         .a = .{
@@ -131,6 +145,7 @@ fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {
     };
 }
 
+/// Generates the Butcher Tableau coefficients for the classical fourth-order Runge-Kutta method.
 fn rk4Tableau(comptime U: type) ButcherTableau(U, 4) {
     return .{
         .a = .{

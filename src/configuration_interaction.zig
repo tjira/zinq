@@ -1,3 +1,5 @@
+//! Solves the Configuration Interaction (CI) equations by diagonalizing the Hamiltonian over a Slater determinant basis.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -34,6 +36,7 @@ const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 
 const AU2CM = @import("constant.zig").AU2CM;
 
+/// Options for computing CI energy gradients analytically or numerically for a specific electronic state.
 pub const GradientOptions = union(enum) {
     analytic: struct {
         state: u32 = 0,
@@ -44,6 +47,7 @@ pub const GradientOptions = union(enum) {
     },
 };
 
+/// Configurations for the CI calculation, excitation levels, optimization, and derivative settings.
 pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
@@ -76,6 +80,7 @@ pub const Options = struct {
     } = null,
 };
 
+/// Holds CI results: reference SCF results, state energies, wavefunctions, and optional nuclear derivatives.
 pub fn Result(comptime T: type) type {
     return struct {
         hartree_fock: HartreeFockResult(T),
@@ -87,6 +92,7 @@ pub fn Result(comptime T: type) type {
         grad: []Matrix(T) = &.{},
         hess: []Matrix(T) = &.{},
 
+        /// Frees all allocated memory associated with the CI results.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.hartree_fock.deinit(gpa);
 
@@ -109,12 +115,14 @@ pub fn Result(comptime T: type) type {
     };
 }
 
+/// Output file destinations for CI geometry, gradients, and Hessians.
 const Write = struct {
     geometry: ?[]const u8 = null,
     gradient: ?[]const u8 = null,
     hessian: ?[]const u8 = null,
 };
 
+/// Generates excited Slater determinants up to specified excitation levels from a Hartree-Fock reference.
 pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Allocator) !std.ArrayList([]const usize) {
     var dets = std.ArrayList([]const usize).empty;
 
@@ -174,6 +182,7 @@ pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Alloc
     return dets;
 }
 
+/// Performs a CI calculation on a molecular system specified by file paths.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -193,6 +202,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     return try runFromSystem(T, io, opt, &sys, null, log, gpa);
 }
 
+/// Runs a CI calculation starting from an initialized MolecularSystem structure.
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -313,6 +323,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C, .grad = grad, .hess = hess };
 }
 
+/// Computes the Hamiltonian matrix element between two Slater determinants using the Slater-Condon rules.
 pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
     var diff_A: [2]usize = undefined;
     var diff_B: [2]usize = undefined;
@@ -424,6 +435,7 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
     return Value(T).fromFloat(0).val;
 }
 
+/// Validates input options for physical consistency and method requirements.
 fn checkInvalidInput(opt: Options) !void {
     if (opt.write.gradient != null and opt.gradient == null) {
         std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
@@ -450,6 +462,7 @@ fn checkInvalidInput(opt: Options) !void {
     };
 }
 
+/// Generates all k-combinations from a set of size n, representing orbital indices.
 fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.ArrayList([]const usize) {
     var results: std.ArrayList([]const usize) = .empty;
 
@@ -500,6 +513,7 @@ fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.
     return results;
 }
 
+/// Computes the analytic nuclear gradient of a specific CI state energy using dual number differentiation.
 fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: std.ArrayList([]const usize), state: usize, gpa: Allocator) !Matrix(T) {
     const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
 
@@ -555,6 +569,7 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: s
     return grad;
 }
 
+/// Computes the permutation sign (+1 or -1) associated with mapping two determinants via orbital excitations.
 fn signOfExcitations(S: []const usize, U: []const usize) i2 {
     var exp: usize = 0;
 
@@ -565,6 +580,7 @@ fn signOfExcitations(S: []const usize, U: []const usize) i2 {
     return if (exp % 2 == 0) 1 else -1;
 }
 
+/// Diagonalizes the CI Hamiltonian matrix to yield state energies and coefficients.
 fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     var E = try Vector(T).init(H_CI.shape[0], gpa);
     errdefer E.deinit(gpa);
@@ -581,6 +597,7 @@ fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocat
     return .{ E, C };
 }
 
+/// Transforms one- and two-electron integrals from the atomic orbital basis to the molecular spin-orbital basis.
 fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
     const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
 
@@ -618,6 +635,7 @@ fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), 
     return .{ H_MS, g_MS };
 }
 
+/// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
 fn computeCiStates(comptime T: type, io: ?std.Io, generalized: bool, hfres: HartreeFockResult(T), dets: []const []const usize, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
 
@@ -668,6 +686,7 @@ fn computeCiStates(comptime T: type, io: ?std.Io, generalized: bool, hfres: Hart
     return .{ E, C };
 }
 
+/// Computes the nuclear Hessian of a CI state numerically and performs frequency analysis.
 fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
     var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
     errdefer if (opt.hessian) |_| gpa.free(hess);

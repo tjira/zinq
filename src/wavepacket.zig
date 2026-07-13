@@ -1,3 +1,5 @@
+//! Wavefunction and Hamiltonian representations for grid-based quantum wavepacket dynamics.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -10,6 +12,7 @@ const Vector = @import("tensor.zig").Vector;
 
 const eighBatch = @import("linear_algebra.zig").eighBatch;
 
+/// Initial parameters of the wavepacket including position, momentum, and Gaussian width.
 pub const InitialConditions = struct {
     position: []const f64,
     momentum: []const f64,
@@ -19,6 +22,7 @@ pub const InitialConditions = struct {
     adiabatic: bool = false,
 };
 
+/// Generates a multidimensional discrete coordinate and momentum space grid.
 pub fn Grid(comptime T: type) type {
     return struct {
         r: Matrix(T),
@@ -27,6 +31,7 @@ pub fn Grid(comptime T: type) type {
         dr: T,
         dk: T,
 
+        /// Allocates and initializes grid coordinates and momentum vectors.
         pub fn init(bounds: []const [2]T, npoint: u32, gpa: Allocator) !@This() {
             const ncol = std.math.pow(usize, npoint, bounds.len);
 
@@ -71,6 +76,7 @@ pub fn Grid(comptime T: type) type {
             return .{ .r = r, .k = k, .dr = dr, .dk = dk };
         }
 
+        /// Deallocates coordinate and momentum space grid matrices.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.r.deinit(gpa);
             self.k.deinit(gpa);
@@ -78,6 +84,7 @@ pub fn Grid(comptime T: type) type {
     };
 }
 
+/// Representation of kinetic energy and potential energy operators on the grid.
 pub fn Hamiltonian(comptime T: type) type {
     return struct {
         V: Matrix(T),
@@ -85,6 +92,7 @@ pub fn Hamiltonian(comptime T: type) type {
         U: Matrix(T),
         K: Vector(T),
 
+        /// Allocates and computes kinetic and potential operator matrix elements.
         pub fn init(grid: Grid(T), pot: Potential(T), m: T, gpa: Allocator) !@This() {
             var V = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
             errdefer V.deinit(gpa);
@@ -117,6 +125,7 @@ pub fn Hamiltonian(comptime T: type) type {
             return ham;
         }
 
+        /// Deallocates Hamiltonian operator matrices.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.V.deinit(gpa);
             self.W.deinit(gpa);
@@ -124,6 +133,7 @@ pub fn Hamiltonian(comptime T: type) type {
             self.K.deinit(gpa);
         }
 
+        /// Updates potential energy values and diagonalizes to get adiabatic states.
         pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T, gpa: Allocator) !void {
             var U_prev = if (pot.isTd() and t > 0) try self.U.clone(gpa) else null;
             defer if (U_prev) |*u| u.deinit(gpa);
@@ -159,6 +169,7 @@ pub fn Hamiltonian(comptime T: type) type {
     };
 }
 
+/// Representation of a multi-state wavepacket and its Fourier transform plans.
 pub fn Wavefunction(comptime T: type) type {
     return struct {
         W: Matrix(Complex(T)),
@@ -166,6 +177,7 @@ pub fn Wavefunction(comptime T: type) type {
         ffft: FftPlan(Complex(T)),
         ifft: FftPlan(Complex(T)),
 
+        /// Allocates wavefunction components and plans forward and backward FFTs.
         pub fn init(ndim: usize, nstate: usize, npoint: usize, plan_mode: u32, gpa: Allocator) !@This() {
             var W = try Matrix(Complex(T)).init(nstate, std.math.pow(usize, npoint, ndim), gpa);
             errdefer W.deinit(gpa);
@@ -186,6 +198,7 @@ pub fn Wavefunction(comptime T: type) type {
             return .{ .W = W, .ffft = ffft, .ifft = ifft };
         }
 
+        /// Deallocates wavefunction array and FFT plans.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.W.deinit(gpa);
 
@@ -193,6 +206,7 @@ pub fn Wavefunction(comptime T: type) type {
             self.ifft.deinit();
         }
 
+        /// Clones the wavefunction and its FFT plans into a new structure.
         pub fn clone(self: @This(), gpa: Allocator) !@This() {
             const ffft = try self.ffft.clone();
             errdefer ffft.deinit();
@@ -206,6 +220,7 @@ pub fn Wavefunction(comptime T: type) type {
             return .{ .W = W, .ffft = ffft, .ifft = ifft };
         }
 
+        /// Computes kinetic energy expectation value in momentum space.
         pub fn ekin(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
             var value: T = 0;
 
@@ -216,6 +231,7 @@ pub fn Wavefunction(comptime T: type) type {
             return value * grid.dk;
         }
 
+        /// Computes potential energy expectation value in coordinate space.
         pub fn epot(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
             var value: T = 0;
 
@@ -229,6 +245,7 @@ pub fn Wavefunction(comptime T: type) type {
             return value * grid.dr;
         }
 
+        /// Transforms the wavefunction between position and momentum space.
         pub fn fft(self: *@This(), comptime sign: i32) void {
             for (0..self.W.nrow()) |i| {
                 const slice = self.W.rowSlice(i);
@@ -237,6 +254,7 @@ pub fn Wavefunction(comptime T: type) type {
             }
         }
 
+        /// Computes momentum expectation value of the wavepacket.
         pub fn mom(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
@@ -249,6 +267,7 @@ pub fn Wavefunction(comptime T: type) type {
             return value;
         }
 
+        /// Computes spatial norm of the wavefunction.
         pub fn norm(self: @This(), grid: Grid(T)) T {
             var value: T = 0;
 
@@ -259,10 +278,12 @@ pub fn Wavefunction(comptime T: type) type {
             return value * grid.dr;
         }
 
+        /// Normalizes the wavefunction to unit norm.
         pub fn normalize(self: *@This(), grid: Grid(T)) void {
             self.W.divs(Complex(T).init(std.math.sqrt(self.norm(grid)), 0));
         }
 
+        /// Computes quantum mechanical overlap integral between two wavefunctions.
         pub fn overlap(self: @This(), other: @This(), grid: Grid(T)) Complex(T) {
             var value = Complex(T).init(0, 0);
 
@@ -273,6 +294,7 @@ pub fn Wavefunction(comptime T: type) type {
             return value.mul(Complex(T).init(grid.dr, 0));
         }
 
+        /// Computes diabatic populations of electronic states.
         pub fn pop(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(self.W.nrow(), gpa);
 
@@ -291,6 +313,7 @@ pub fn Wavefunction(comptime T: type) type {
             return value;
         }
 
+        /// Computes adiabatic populations of electronic states.
         pub fn popAdia(self: @This(), ham: Hamiltonian(T), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(self.W.nrow(), gpa);
 
@@ -315,6 +338,7 @@ pub fn Wavefunction(comptime T: type) type {
             return value;
         }
 
+        /// Computes position expectation value of the wavepacket.
         pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
@@ -327,6 +351,7 @@ pub fn Wavefunction(comptime T: type) type {
             return value;
         }
 
+        /// Sets the wavefunction to a Gaussian wavepacket with specified phase.
         pub fn setGaussian(self: *@This(), ic: InitialConditions, grid: Grid(T)) void {
             self.W.fill(Complex(T).init(0, 0));
 
@@ -345,6 +370,7 @@ pub fn Wavefunction(comptime T: type) type {
             self.normalize(grid);
         }
 
+        /// Transforms the wavepacket from diabatic to adiabatic representation.
         pub fn toAdia(self: *@This(), ham: Hamiltonian(T), gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), self.W.nrow());
             defer gpa.free(temp);
@@ -368,6 +394,7 @@ pub fn Wavefunction(comptime T: type) type {
             }
         }
 
+        /// Transforms the wavepacket from adiabatic to diabatic representation.
         pub fn toDia(self: *@This(), ham: Hamiltonian(T), gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), self.W.nrow());
             defer gpa.free(temp);

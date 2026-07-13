@@ -1,3 +1,5 @@
+//! Trajectory surface hopping algorithms for nonadiabatic molecular dynamics transitions.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -8,11 +10,13 @@ const Ensemble = @import("classical_dynamics.zig").Ensemble;
 const Integrator = @import("integrator.zig").Integrator;
 const Matrix = @import("tensor.zig").Matrix;
 
+/// Options for selecting Fewest Switches Tully hopping or Landau-Zener hopping models.
 pub const Options = union(enum) {
     fewest_switches: FewestSwitchesOptions,
     landau_zener: LandauZenerOptions,
 };
 
+/// Implements nonadiabatic state transitions via surface hopping algorithms.
 pub fn SurfaceHopping(comptime T: type) type {
     return struct {
         adia_alg: bool,
@@ -23,11 +27,13 @@ pub fn SurfaceHopping(comptime T: type) type {
         targets: []usize,
         rng: DefaultPrng,
 
+        /// Union type representing the specific surface hopping method used.
         pub const Method = union(enum) {
             fewest_switches: FewestSwitches(T),
             landau_zener: LandauZener(T),
         };
 
+        /// Initializes the surface hopping solver and the chosen transition probability method.
         pub fn init(options: Options, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
             const seed = switch (options) {
                 inline else => |field| field.seed,
@@ -63,6 +69,7 @@ pub fn SurfaceHopping(comptime T: type) type {
             return .{ .rng = rng, .probs = probs, .method = method, .nosteps = nstep, .targets = targets, .adia_alg = adia };
         }
 
+        /// Deallocates surface hopping state variables and method buffers.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.probs.deinit(gpa);
             gpa.free(self.targets);
@@ -72,6 +79,7 @@ pub fn SurfaceHopping(comptime T: type) type {
             }
         }
 
+        /// Executes a surface hopping step, calculating transition probabilities and updating states.
         pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), dt: T) !void {
             self.update(if (self.adia_alg) W else V, U);
 
@@ -90,12 +98,14 @@ pub fn SurfaceHopping(comptime T: type) type {
             self.applyTargets(ensemble, W);
         }
 
+        /// Updates Hamiltonian and unitary transformation histories for hopping evaluation.
         pub fn update(self: *@This(), H: Matrix(T), U: Matrix(T)) void {
             switch (self.method) {
                 inline else => |*field| field.update(H, U),
             }
         }
 
+        /// Applies state transitions with isotropic nuclear momentum rescaling for conservation.
         fn applyTargets(self: *@This(), ensemble: *Ensemble(T), W: Matrix(T)) void {
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
@@ -114,6 +124,7 @@ pub fn SurfaceHopping(comptime T: type) type {
             }
         }
 
+        /// Computes state transition probabilities at the current dynamics step.
         fn calcProbs(self: *@This(), ensemble: *Ensemble(T), dt: T) !void {
             self.probs.zero();
 
@@ -121,18 +132,21 @@ pub fn SurfaceHopping(comptime T: type) type {
             if (!self.adia_alg) try self.calcProbsDia(ensemble, dt);
         }
 
+        /// Computes adiabatic representation state transition probabilities.
         fn calcProbsAdia(self: *@This(), ensemble: *Ensemble(T), dt: T) !void {
             switch (self.method) {
                 inline else => |*field| try field.calcProbsAdia(&self.probs, ensemble, self.nosteps, dt),
             }
         }
 
+        /// Computes diabatic representation state transition probabilities.
         fn calcProbsDia(self: *@This(), ensemble: *Ensemble(T), dt: T) !void {
             switch (self.method) {
                 inline else => |*field| try field.calcProbsDia(&self.probs, ensemble, self.nosteps, dt),
             }
         }
 
+        /// Performs stochastic sampling to select potential target electronic states.
         fn calcTargetStates(self: *@This(), ensemble: *Ensemble(T)) void {
             for (0..ensemble.s.length()) |i| {
                 if (self.targets[i] != ensemble.s.at(i)) continue;
@@ -165,6 +179,7 @@ pub fn SurfaceHopping(comptime T: type) type {
     };
 }
 
+/// Options configuration for Tully's fewest switches surface hopping.
 const FewestSwitchesOptions = struct {
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
 
@@ -172,10 +187,12 @@ const FewestSwitchesOptions = struct {
     nstep: u32 = 10,
 };
 
+/// Options configuration for Landau-Zener surface hopping.
 const LandauZenerOptions = struct {
     seed: u32 = 1,
 };
 
+/// Implements Tully's fewest switches surface hopping algorithm.
 fn FewestSwitches(comptime T: type) type {
     return struct {
         coefics: Matrix(Complex(T)),
@@ -185,6 +202,7 @@ fn FewestSwitches(comptime T: type) type {
         sigmatdc: Matrix(T),
         uhist: [2]Matrix(T),
 
+        /// Allocates and initializes wavefunction coefficients and Tully integrator.
         pub fn init(opt: anytype, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
             const cols = if (adia) nstate else nstate * nstate;
 
@@ -224,6 +242,7 @@ fn FewestSwitches(comptime T: type) type {
             return .{ .coefics = coef, .hamilton = ham, .uhist = uhist, .sigmatdc = sigma, .itg = itg };
         }
 
+        /// Deallocates Tully fewest switches coefficients and integrator resources.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.coefics.deinit(gpa);
 
@@ -236,6 +255,7 @@ fn FewestSwitches(comptime T: type) type {
             self.itg.deinit(gpa);
         }
 
+        /// Computes adiabatic transition probabilities using Hammes-Schiffer-Tully coupling.
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
             if (std.math.isNan(self.uhist[0].at(0, 0))) return;
 
@@ -270,6 +290,7 @@ fn FewestSwitches(comptime T: type) type {
             }
         }
 
+        /// Computes diabatic transition probabilities using diabatic coupling elements.
         pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
@@ -295,6 +316,7 @@ fn FewestSwitches(comptime T: type) type {
             }
         }
 
+        /// Updates Hamiltonian history and aligns eigenvectors for phase consistency.
         pub fn update(self: *@This(), H: Matrix(T), U: Matrix(T)) void {
             for (0..H.nrow()) |i| for (0..H.ncol()) |j| {
                 self.hamilton.ptr(i, j).* = H.at(i, j);
@@ -323,6 +345,7 @@ fn FewestSwitches(comptime T: type) type {
             }
         }
 
+        /// Computes time derivative of electronic coefficients in the adiabatic basis.
         fn coefDerAdia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
             for (0..ctx.ham.len) |i| {
                 var sum_sigma = Complex(T).init(0, 0);
@@ -337,6 +360,7 @@ fn FewestSwitches(comptime T: type) type {
             }
         }
 
+        /// Computes time derivative of electronic coefficients in the diabatic basis.
         fn coefDerDia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
             const nstate = std.math.sqrt(ctx.ham.len);
 
@@ -355,10 +379,12 @@ fn FewestSwitches(comptime T: type) type {
     };
 }
 
+/// Implements the Landau-Zener model for nonadiabatic transition probabilities.
 fn LandauZener(comptime T: type) type {
     return struct {
         history: [3]Matrix(T),
 
+        /// Allocates history matrices for tracking energy levels.
         pub fn init(_: anytype, nstate: usize, ntraj: usize, _: usize, adia: bool, gpa: Allocator) !@This() {
             var history: [3]Matrix(T) = undefined;
 
@@ -380,12 +406,14 @@ fn LandauZener(comptime T: type) type {
             return .{ .history = history };
         }
 
+        /// Deallocates history matrices used in Landau-Zener calculations.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.history[0].deinit(gpa);
             self.history[1].deinit(gpa);
             self.history[2].deinit(gpa);
         }
 
+        /// Computes transition probabilities from adiabatic energy level curvatures.
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
             if (std.math.isNan(self.history[0].at(0, 0))) return;
 
@@ -422,6 +450,7 @@ fn LandauZener(comptime T: type) type {
             }
         }
 
+        /// Computes transition probabilities from diabatic energy level crossings.
         pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
             if (std.math.isNan(self.history[1].at(0, 0))) return;
 
@@ -452,6 +481,7 @@ fn LandauZener(comptime T: type) type {
             }
         }
 
+        /// Updates Hamiltonian history matrices.
         pub fn update(self: *@This(), H: Matrix(T), _: Matrix(T)) void {
             for (0..H.nrow()) |i| for (0..H.ncol()) |j| {
                 self.history[0].ptr(i, j).* = self.history[1].at(i, j);
@@ -463,6 +493,7 @@ fn LandauZener(comptime T: type) type {
     };
 }
 
+/// Calculates nonadiabatic coupling terms using Hammes-Schiffer-Tully approximation.
 fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T) void {
     const nstate = std.math.sqrt(sigma.len);
 
@@ -485,6 +516,7 @@ fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []
     };
 }
 
+/// Rescales nuclear momentum isotropically to conserve total energy after hopping.
 fn rescaleMomentumIsotropic(comptime T: type, ensemble: *Ensemble(T), i: usize, dE: T) bool {
     var ekin_old: T = 0;
 

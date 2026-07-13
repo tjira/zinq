@@ -1,3 +1,5 @@
+//! Harmonic vibrational frequency analysis from molecular Hessians.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -16,6 +18,7 @@ const AN2M = @import("constant.zig").AN2M;
 const AN2SM = @import("constant.zig").AN2SM;
 const AU2CM = @import("constant.zig").AU2CM;
 
+/// Calculates mass-weighted harmonic vibrational frequencies and projects out translations and rotations.
 pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), sys: MolecularSystem(T), gpa: Allocator) !Vector(T) {
     std.debug.assert(hessian.nrow() == sys.atoms.len * 3);
 
@@ -203,6 +206,7 @@ pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), sys: M
     return w;
 }
 
+/// Formats and prints harmonic frequencies in wavenumbers (cm^-1) to the output stream.
 pub fn printHarmonicFrequencies(comptime T: type, io: std.Io, freqs: Vector(T), method_str: []const u8) !void {
     try printf(io, "\n{s} HARMONIC VIBRATIONAL FREQUENCIES (cm^-1)\n", .{method_str});
 

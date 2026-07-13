@@ -1,3 +1,5 @@
+//! Defines potential energy surfaces (PES) including harmonic, time-linear coupling, Tully avoided crossing, custom, and file-interpolated types.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -10,6 +12,7 @@ const Vector = @import("tensor.zig").Vector;
 const isDual = @import("value.zig").isDual;
 const readMatrix = @import("read_write.zig").readMatrix;
 
+/// Parameter union for potential energy surfaces, supporting file, harmonic, time-dependent linear, Tully 1, and custom math expressions.
 pub const Options = union(enum) {
     file: struct {
         ndim: u32,
@@ -35,6 +38,7 @@ pub const Options = union(enum) {
     },
 };
 
+/// Returns a generic union representing a potential energy surface (PES) with coordinate and time evaluations.
 pub fn Potential(comptime T: type) type {
     return union(enum) {
         file: File(T),
@@ -43,6 +47,7 @@ pub fn Potential(comptime T: type) type {
         tully_1: Tully1(T),
         custom: Custom(T),
 
+        /// Initializes the selected potential energy surface based on configuration options.
         pub fn init(io: std.Io, options: Options, allocator: Allocator) !@This() {
             return switch (options) {
                 .file => |f| .{ .file = try File(T).init(f.ndim, f.path, io, allocator) },
@@ -53,6 +58,7 @@ pub fn Potential(comptime T: type) type {
             };
         }
 
+        /// Deallocates memory associated with the potential energy surface representation.
         pub fn deinit(self: *@This(), allocator: Allocator) void {
             switch (self.*) {
                 inline .file, .custom => |*pot| pot.deinit(allocator),
@@ -61,6 +67,7 @@ pub fn Potential(comptime T: type) type {
             }
         }
 
+        /// Evaluates the potential energy matrix elements at coordinates r and time t.
         pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) void {
             std.debug.assert(V.len == self.nstate() * self.nstate());
 
@@ -71,6 +78,7 @@ pub fn Potential(comptime T: type) type {
             }
         }
 
+        /// Evaluates the potential energy matrix elements for a batch of coordinate coordinates.
         pub fn evalBatch(self: @This(), comptime U: type, V: *Matrix(U), r: Matrix(U), t: T) void {
             const t_val = Value(U).fromFloat(t);
 
@@ -81,18 +89,21 @@ pub fn Potential(comptime T: type) type {
             }
         }
 
+        /// Returns true if the potential has explicit time dependence.
         pub fn isTd(self: @This()) bool {
             return switch (self) {
                 inline else => |field| field.isTd(),
             };
         }
 
+        /// Returns the number of spatial dimensions of the coordinates.
         pub fn ndim(self: @This()) usize {
             return switch (self) {
                 inline else => |field| field.ndim(),
             };
         }
 
+        /// Returns the number of electronic states in the potential representation.
         pub fn nstate(self: @This()) usize {
             return switch (self) {
                 inline else => |field| field.nstate(),
@@ -101,14 +112,17 @@ pub fn Potential(comptime T: type) type {
     };
 }
 
+/// Returns a harmonic potential energy surface type parameterized by force constants k.
 fn Harmonic(comptime T: type) type {
     return struct {
         k: []const T,
 
+        /// Initializes a harmonic potential with specified force constants.
         pub fn init(k: []const T) @This() {
             return .{ .k = k };
         }
 
+        /// Evaluates the harmonic potential energy: V = 0.5 * sum( k_i * r_i^2 ).
         pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
             var sum = Value(U).fromFloat(0);
 
@@ -133,15 +147,18 @@ fn Harmonic(comptime T: type) type {
     };
 }
 
+/// Returns a time-dependent linear two-state coupling potential.
 fn TimeLinear(comptime T: type) type {
     return struct {
         a: T,
         g: T,
 
+        /// Initializes the linear coupling potential with slope and coupling parameters.
         pub fn init(a: T, g: T) @This() {
             return .{ .a = a, .g = g };
         }
 
+        /// Evaluates the two-state time-dependent linear coupling potential matrix.
         pub fn eval(self: @This(), comptime U: type, V: []U, _: []const U, t: U) void {
             const a = Value(U).fromFloat(self.a);
             const g = Value(U).fromFloat(self.g);
@@ -170,6 +187,7 @@ fn TimeLinear(comptime T: type) type {
     };
 }
 
+/// Returns a Tully 1 simple avoided crossing potential model type.
 fn Tully1(comptime T: type) type {
     return struct {
         A: T,
@@ -177,10 +195,12 @@ fn Tully1(comptime T: type) type {
         C: T,
         D: T,
 
+        /// Initializes Tully 1 model parameters representing simple avoided crossing.
         pub fn init(A: T, B: T, C: T, D: T) @This() {
             return .{ .A = A, .B = B, .C = C, .D = D };
         }
 
+        /// Evaluates the Tully simple avoided crossing two-state potential matrix.
         pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
             const r0 = Value(U).init(r[0]);
 
@@ -213,6 +233,7 @@ fn Tully1(comptime T: type) type {
     };
 }
 
+/// Returns a custom potential type parsed from analytical string expressions.
 fn Custom(comptime T: type) type {
     return struct {
         expressions: []const Expression(T),
@@ -220,6 +241,7 @@ fn Custom(comptime T: type) type {
         is_td: bool,
         r_vals: []T,
 
+        /// Parses custom potential matrix expressions for a given coordinate dimension.
         pub fn init(dim: usize, matrix: []const []const []const u8, is_td: bool, allocator: Allocator) !@This() {
             for (0..matrix.len) |i| {
                 if (matrix[i].len != matrix.len) return error.NonSquareMatrix;
@@ -245,6 +267,7 @@ fn Custom(comptime T: type) type {
             return .{ .expressions = exprs, .r_vals = try allocator.alloc(T, dim), .is_td = is_td };
         }
 
+        /// Frees parsed expression resources and internal coordinate buffer.
         pub fn deinit(self: *@This(), allocator: Allocator) void {
             allocator.free(self.r_vals);
 
@@ -255,6 +278,7 @@ fn Custom(comptime T: type) type {
             allocator.free(self.expressions);
         }
 
+        /// Evaluates custom potentials by parsing expressions using ExprTk.
         pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) void {
             if (comptime U == T) for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
                 V[i * self.nstate() + j] = self.expressions[i * self.nstate() + j].evaluate_d0(r, t);
@@ -299,19 +323,23 @@ fn Custom(comptime T: type) type {
     };
 }
 
+/// Returns a potential type interpolated from grid data stored in a file.
 fn File(comptime T: type) type {
     return struct {
         U: Matrix(T),
         ndims: usize,
 
+        /// Reads the potential grid data from the given file path.
         pub fn init(ndims: usize, path: []const u8, io: std.Io, gpa: Allocator) !@This() {
             return .{ .U = try readMatrix(T, io, path, gpa), .ndims = ndims };
         }
 
+        /// Deallocates the stored potential grid matrix.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.U.deinit(gpa);
         }
 
+        /// Evaluates the potential via multilinear interpolation of grid values.
         pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
             for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
                 const col = i * self.nstate() + j;
@@ -334,6 +362,7 @@ fn File(comptime T: type) type {
     };
 }
 
+/// Performs multilinear interpolation on a rectangular coordinate grid.
 fn lerp(comptime T: type, comptime U: type, grid: Matrix(T), column: usize, r: []const U) U {
     std.debug.assert(column < grid.ncol());
 

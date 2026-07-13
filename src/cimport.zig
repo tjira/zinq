@@ -1,3 +1,5 @@
+//! Imports external C interfaces for numerical computations, Fourier transforms, and quantum chemical simulations.
+
 pub const cblas = @cImport(@cInclude("cblas.h"));
 pub const exprtk = @cImport(@cInclude("exprtk.h"));
 pub const fftw = @cImport(@cInclude("fftw3.h"));

@@ -1,3 +1,5 @@
+//! Calculates and exports molecular integrals including overlap, kinetic energy, nuclear attraction, and Coulomb repulsion.
+
 const embed = @import("embed");
 const std = @import("std");
 
@@ -10,6 +12,7 @@ const Tensor = @import("tensor.zig").Tensor;
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 
+/// Specifier of boolean flags to select which one-electron and two-electron molecular integrals and derivatives to compute.
 const Calculate = struct {
     kinetic: bool = true,
     overlap: bool = true,
@@ -24,6 +27,7 @@ const Calculate = struct {
     hmatrix_d1: bool = false,
 };
 
+/// Options specifying the output file paths for writing calculated molecular integrals and their derivatives.
 const Write = struct {
     kinetic: ?[]const u8 = null,
     overlap: ?[]const u8 = null,
@@ -38,6 +42,7 @@ const Write = struct {
     hmatrix_d1: ?[]const u8 = null,
 };
 
+/// Configuration parameters specifying molecular geometry, basis sets, spin properties, and task selectors for integral calculation.
 pub const Options = struct {
     system: []const u8,
     basis: []const u8,
@@ -49,6 +54,7 @@ pub const Options = struct {
     multiplicity: u32 = 1,
 };
 
+/// Returns a generic type representing the calculated molecular integrals and their first-order nuclear derivatives.
 pub fn Result(comptime T: type) type {
     return struct {
         sys: MolecularSystem(T),
@@ -67,6 +73,7 @@ pub fn Result(comptime T: type) type {
 
         dg: ?Tensor(T, 5) = null,
 
+        /// Deallocates the computed one-electron and two-electron molecular integral tensors stored in the Result struct.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.S) |*S| S.deinit(gpa);
             if (self.K) |*K| K.deinit(gpa);
@@ -83,6 +90,7 @@ pub fn Result(comptime T: type) type {
     };
 }
 
+/// Automatically extracts and writes a builtin basis set to a temporary file if specified.
 pub fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
     if (std.mem.startsWith(u8, basis, "builtin:")) {
         var result = try gpa.alloc(u8, basis["builtin:".len..].len);
@@ -114,6 +122,7 @@ pub fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u
     return basis;
 }
 
+/// Computes molecular integrals and nuclear derivatives from a geometry file and basis set path.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -137,6 +146,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     return try runFromSystem(T, io, opt, sys, log, gpa);
 }
 
+/// Evaluates molecular integrals and gradients directly on an initialized molecular system.
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
     var ints: Result(T) = .{ .sys = sys };
     errdefer ints.deinit(gpa);
@@ -248,6 +258,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     return ints;
 }
 
+/// Validates that required options such as geometry and basis file paths are not empty.
 fn checkInvalidInput(opt: Options) !void {
     if (opt.system.len == 0) {
         std.log.err("MOLECULAR SYSTEM XYZ PATH IS EMPTY", .{});
@@ -262,6 +273,7 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
+/// Exports calculated molecular integral and derivative tensors to target files specified in options.
 fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Result(T), log: bool) !void {
     const any_write = blk: {
         inline for (std.meta.fields(@TypeOf(opt.write))) |f| {

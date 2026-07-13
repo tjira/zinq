@@ -10,8 +10,9 @@
 - **Run tests:** `zig build --release=fast test` *(Note: Always use `--release=fast` to enable optimizations for test execution)*
 
 ## Code Style & Formatting
-- **Line Constraints:** Enforce a strict maximum line length of 120 characters.
-- **Function Signatures:** Never wrap function signatures to multiple lines. A function signature must remain on a single line regardless of length.
+- **Line Constraints:** Enforce a strict maximum line length of 120 characters, except where a single line is required (e.g., function signatures/calls).
+- **Function Signatures:** Never wrap function signatures or split function arguments across multiple lines. A function signature must remain on a single line regardless of length; if necessary, prefer a longer line.
+- **Docstrings:** Every new file, struct, or function must have a physically or mathematically motivated docstring of maximal 150 characters. For file-level docstrings, always leave exactly one empty line below it.
 - **Simplicity & Scope:** Minimize the number of function arguments (group related parameters into structs if necessary) and strictly limit the number of local variables defined in a given scope.
-**File Organization:** Define all structs before any functions. The strict top-to-bottom order for the file level must be public structs, followed by private structs, then public functions, and finally private functions.
-**Struct Organization:** Within any struct definition, place all state and fields at the top, followed by all public functions, and finally all private functions.
+- **File Organization:** Define all structs before any functions. The strict top-to-bottom order for the file level must be public structs, followed by private structs, then public functions, and finally private functions.
+- **Struct Organization:** Within any struct definition, place all state and fields at the top, followed by all public functions, and finally all private functions.

@@ -1,3 +1,5 @@
+//! Grid-based quantum dynamics propagation of molecular wavefunctions on coupled potential energy surfaces.
+
 const std = @import("std");
 
 const fftw = @import("cimport.zig").fftw;
@@ -19,6 +21,7 @@ const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
+/// Configuration options for split-operator quantum dynamics wavepacket propagation on a grid.
 pub const Options = struct {
     initial_conditions: InitialConditions,
     potential: PotentialOptions,
@@ -63,10 +66,12 @@ pub const Options = struct {
     } = null,
 };
 
+/// Stores accumulated quantum observables over the course of wavepacket propagation.
 pub fn Result(comptime T: type) type {
     return struct {
         observables: std.ArrayList(Observables(T)),
 
+        /// Deallocates memory associated with the quantum dynamics results.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             for (0..self.observables.items.len) |i| {
                 self.observables.items[i].deinit(gpa);
@@ -77,6 +82,7 @@ pub fn Result(comptime T: type) type {
     };
 }
 
+/// File paths for exporting time-dependent wavefunctions and expectation values to disk.
 const Write = struct {
     acf: ?[]const u8 = null,
     kinetic_energy: ?[]const u8 = null,
@@ -89,6 +95,7 @@ const Write = struct {
     wavefunction: ?[]const u8 = null,
 };
 
+/// Accumulates time-dependent wavefunctions, autocorrelation functions, and expectation values.
 fn History(comptime T: type) type {
     return struct {
         acf: ?Vector(Complex(T)) = null,
@@ -106,6 +113,7 @@ fn History(comptime T: type) type {
 
         index: usize = 0,
 
+        /// Allocates memory for wavefunctions and observables history arrays.
         pub fn init(ndim: usize, nstate: usize, npoint: usize, iters: usize, write: Write, spectrum: bool, gpa: Allocator) !@This() {
             var hist = @This(){};
             errdefer hist.deinit(gpa);
@@ -147,6 +155,7 @@ fn History(comptime T: type) type {
             return hist;
         }
 
+        /// Deallocates the wavefunction and observable history matrices.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.acf) |*acf| acf.deinit(gpa);
             if (self.pos) |*pos| pos.deinit(gpa);
@@ -161,6 +170,7 @@ fn History(comptime T: type) type {
             if (self.wfn) |*wfn| wfn.deinit(gpa);
         }
 
+        /// Appends the current wavefunction and observables to the propagation history.
         pub fn append(self: *@This(), wfn: Wavefunction(T), obs: Observables(T)) void {
             const step_idx = self.index;
 
@@ -204,6 +214,7 @@ fn History(comptime T: type) type {
             self.index += 1;
         }
 
+        /// Writes the accumulated history and calculated spectra to output files.
         pub fn exportWrite(self: *@This(), io: std.Io, dt: T, grid: Grid(T), write: Write, spectrum: anytype, nstate: usize, gpa: Allocator) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
@@ -267,6 +278,7 @@ fn History(comptime T: type) type {
     };
 }
 
+/// Computes and stores expectation values and autocorrelation overlap at a specific time.
 fn Observables(comptime T: type) type {
     return struct {
         pos: ?Vector(T) = null,
@@ -279,6 +291,7 @@ fn Observables(comptime T: type) type {
         ekin: ?T = null,
         norm: ?T = null,
 
+        /// Computes quantum expectation values and state populations from the current wavepacket.
         pub fn init(sim: *SimulationState(T), wfn0: ?Wavefunction(T), write: Write, adia: bool, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
             errdefer obs.deinit(gpa);
@@ -352,6 +365,7 @@ fn Observables(comptime T: type) type {
             return obs;
         }
 
+        /// Deallocates arrays stored in the quantum observables struct.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.pos) |*pos| pos.deinit(gpa);
             if (self.mom) |*mom| mom.deinit(gpa);
@@ -360,6 +374,7 @@ fn Observables(comptime T: type) type {
     };
 }
 
+/// Wavepacket propagator using the split-operator Fourier method with absorbing boundary potentials.
 fn Propagator(comptime T: type) type {
     return struct {
         R: Matrix(Complex(T)),
@@ -368,6 +383,7 @@ fn Propagator(comptime T: type) type {
 
         dt: Complex(T),
 
+        /// Initializes the kinetic and potential propagation operators and absorbing boundary weights.
         pub fn init(grid: Grid(T), ham: Hamiltonian(T), capopt: anytype, dt: Complex(T), gpa: Allocator) !@This() {
             var R = try Matrix(Complex(T)).init(ham.V.nrow(), ham.V.ncol(), gpa);
             errdefer R.deinit(gpa);
@@ -389,6 +405,7 @@ fn Propagator(comptime T: type) type {
             return prop;
         }
 
+        /// Deallocates split-operator propagation matrices.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.R.deinit(gpa);
             self.K.deinit(gpa);
@@ -396,6 +413,7 @@ fn Propagator(comptime T: type) type {
             self.cap_weight.deinit(gpa);
         }
 
+        /// Propagates the wavepacket by one time step using potential and kinetic operator splits.
         pub fn step(self: @This(), sim: *SimulationState(T), adia: bool, track_pop: bool, gpa: Allocator) !void {
             if (track_pop) self.accumAbsorbed(sim, adia);
 
@@ -408,6 +426,7 @@ fn Propagator(comptime T: type) type {
             try self.applyR(&sim.wfn, gpa);
         }
 
+        /// Updates the potential propagator matrix and absorbing boundary exponential decay.
         pub fn update(self: *@This(), grid: Grid(T), ham: Hamiltonian(T), capopt: anytype) void {
             const nstate = std.math.sqrt(ham.V.ncol());
 
@@ -448,6 +467,7 @@ fn Propagator(comptime T: type) type {
             }
         }
 
+        /// Computes and accumulates the population absorbed by the boundary potential.
         fn accumAbsorbed(self: @This(), sim: *SimulationState(T), adia: bool) void {
             for (0..sim.wfn.W.nrow()) |i| {
                 var sum: T = 0;
@@ -478,6 +498,7 @@ fn Propagator(comptime T: type) type {
             }
         }
 
+        /// Applies the kinetic energy propagator in momentum space using FFT.
         fn applyK(self: @This(), wfn: *Wavefunction(T)) !void {
             wfn.fft(-1);
 
@@ -490,6 +511,7 @@ fn Propagator(comptime T: type) type {
             };
         }
 
+        /// Applies the potential energy propagator in position space.
         fn applyR(self: @This(), wfn: *Wavefunction(T), gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), wfn.W.nrow());
             defer gpa.free(temp);
@@ -513,6 +535,7 @@ fn Propagator(comptime T: type) type {
     };
 }
 
+/// Bundles the grids, Hamiltonian, wavefunction, propagator, and boundaries for simulation.
 fn SimulationState(comptime T: type) type {
     return struct {
         wfn_kpgrids: Grid(T),
@@ -524,6 +547,7 @@ fn SimulationState(comptime T: type) type {
 
         orthw: std.ArrayList(Wavefunction(T)),
 
+        /// Deallocates all resources held in the quantum simulation state.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             for (0..self.orthw.items.len) |i| self.orthw.items[i].deinit(gpa);
 
@@ -534,10 +558,12 @@ fn SimulationState(comptime T: type) type {
     };
 }
 
+/// Bundles simulation options, state, target eigenvalue index, and logging flags.
 fn SolveContext(comptime T: type) type {
     return struct { opt: Options, sim: *SimulationState(T), eigs: usize, log: bool };
 }
 
+/// Executes the grid-based split-operator wavepacket propagation simulation.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -576,6 +602,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     return result;
 }
 
+/// Validates grid bounds, time step, and initial conditions for quantum dynamics.
 fn checkInvalidInput(opt: Options) !void {
     if (opt.time_step <= 0) {
         std.log.err("TIME STEP MUST BE GREATER THAN 0", .{});
@@ -676,6 +703,7 @@ fn checkInvalidInput(opt: Options) !void {
     };
 }
 
+/// Initializes the grid, wavefunction, Hamiltonian, and Fourier plans.
 fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationState(T) {
     const pot = try Potential(T).init(io, opt.potential, gpa);
 
@@ -706,6 +734,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     return .{ .wfn_kpgrids = grid, .hams = ham, .wfn = wfn, .epoten = pot, .propg = prop, .pop_apabs = pop_apabs, .orthw = .empty };
 }
 
+/// Prints final energies of target vibronic states to stdout.
 fn printFinalEnergies(comptime T: type, io: std.Io, obs: std.ArrayList(Observables(T))) !void {
     try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
@@ -719,6 +748,7 @@ fn printFinalEnergies(comptime T: type, io: std.Io, obs: std.ArrayList(Observabl
     }
 }
 
+/// Prints the final electronic state populations to stdout.
 fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
     if (obs.pop) |pop| {
         try std.Io.File.stdout().writeStreamingAll(io, "\n");
@@ -729,6 +759,7 @@ fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
     }
 }
 
+/// Prints column headers for real-time quantum dynamics logging.
 fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize) !void {
     if (neig > 1) {
         try printf(io, "\nITP OF STATE {d}/{d}", .{ eigs + 1, neig });
@@ -763,6 +794,7 @@ fn printHeader(io: std.Io, eigs: usize, ndim: usize, nstate: usize, neig: usize)
     try printf(io, fmt, tuple);
 }
 
+/// Prints the current time step's quantum observables and wall time.
 fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, timer: *std.Io.Timestamp) !void {
     const ekin = obs.ekin orelse std.math.nan(T);
     const epot = obs.epot orelse std.math.nan(T);
@@ -810,6 +842,7 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
     timer.* = std.Io.Timestamp.now(io, .real);
 }
 
+/// Propagates the wavepacket over the specified iterations using split-operator steps.
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Observables(T) {
     const ndim, const nstate = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate() };
 

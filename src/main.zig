@@ -1,3 +1,5 @@
+//! Command-line entry point for running molecular dynamics and quantum chemistry simulations.
+
 const builtin = @import("builtin");
 const config = @import("config");
 const std = @import("std");
@@ -43,6 +45,7 @@ pub const xc_functional = @import("xc_functional.zig");
 
 const printf = read_write.printf;
 
+/// Simulation runner handlers for classical dynamics, Hartree-Fock, and quantum dynamics.
 const Handlers = struct {
     pub const classical_dynamics = @import("classical_dynamics.zig");
     pub const configuration_interaction = @import("configuration_interaction.zig");
@@ -52,6 +55,7 @@ const Handlers = struct {
     pub const quantum_dynamics = @import("quantum_dynamics.zig");
 };
 
+/// Parsed configuration options representing target molecular dynamics or electronic structure jobs.
 const Options = struct {
     zinq: []union(enum) {
         classical_dynamics: classical_dynamics.Options,
@@ -63,7 +67,7 @@ const Options = struct {
     },
 };
 
-
+/// Main entry point printing library versions and executing molecular simulation targets.
 pub fn main(init: std.process.Init) !void {
     var timer = std.Io.Timestamp.now(init.io, .real);
 
@@ -90,6 +94,7 @@ pub fn main(init: std.process.Init) !void {
     try printf(init.io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.untilNow(init.io, .real)});
 }
 
+/// Reads and parses the JSON configuration file containing molecular simulation parameters.
 fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !?std.json.Parsed(T) {
     const fcontent = std.Io.Dir.cwd().readFileAlloc(io, fname, arena, .unlimited) catch |err| {
         if (err == error.FileNotFound) {
@@ -104,6 +109,7 @@ fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !?st
     return try std.json.parseFromSlice(T, arena, fcontent, .{});
 }
 
+/// Runs the specified electronic structure or molecular dynamics jobs.
 fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
     const parsed = try parse(Options, io, fname, arena) orelse return;
 
@@ -119,6 +125,7 @@ fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: A
     }
 }
 
+/// Resolves the molecular simulation input filenames from command line arguments.
 fn targets(args: []const []const u8) []const []const u8 {
     return if (args.len > 1) args[1..] else &[_][]const u8{"input.json"};
 }

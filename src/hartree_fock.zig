@@ -1,3 +1,5 @@
+//! Solves the Hartree-Fock self-consistent field equations to approximate the electronic wavefunction of a system.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -38,6 +40,7 @@ const writeXyzFile = @import("read_write.zig").writeXyzFile;
 const AN2SM = @import("constant.zig").AN2SM;
 const AU2CM = @import("constant.zig").AU2CM;
 
+/// Options for computing the nuclear gradient analytically or numerically.
 pub const GradientOptions = union(enum) {
     analytic: struct {},
     numeric: struct {
@@ -45,6 +48,7 @@ pub const GradientOptions = union(enum) {
     },
 };
 
+/// Parameters governing the self-consistent field (SCF) calculation convergence and method options.
 pub const Options = struct {
     system: []const u8,
     basis: []const u8,
@@ -100,6 +104,7 @@ pub const Options = struct {
     } = null,
 };
 
+/// Output molecular orbitals, density, Fock matrix, orbital energies, and gradients from an SCF calculation.
 pub fn Result(comptime T: type) type {
     return struct {
         ints: Integrals(T),
@@ -118,6 +123,7 @@ pub fn Result(comptime T: type) type {
 
         de: ?Matrix(T) = null,
 
+        /// Frees allocated memory associated with the Hartree-Fock or DFT result structure.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.ints.deinit(gpa);
 
@@ -146,6 +152,7 @@ pub fn Result(comptime T: type) type {
     };
 }
 
+/// Container for reference pointers to density, Fock, and orbital matrices updated during SCF iterations.
 fn ScfWorkspace(comptime T: type) type {
     return struct {
         P: *Matrix(T),
@@ -155,6 +162,7 @@ fn ScfWorkspace(comptime T: type) type {
     };
 }
 
+/// File paths for exporting computed SCF matrices and geometries.
 const Write = struct {
     coefficients: ?[]const u8 = null,
     density: ?[]const u8 = null,
@@ -164,6 +172,7 @@ const Write = struct {
     hessian: ?[]const u8 = null,
 };
 
+/// Direct Inversion in the Iterative Subspace (DIIS) to accelerate Fock matrix convergence via error minimization.
 pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
     if (fck_hist.len < 2) return;
 
@@ -217,6 +226,7 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
     };
 }
 
+/// Computes the nuclear gradient of the total energy with respect to atomic coordinates.
 pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, dft: ?*DftPotential(T), gpa: Allocator) !Matrix(T) {
     const dS = ints.dS orelse unreachable;
     const dH = ints.dH orelse unreachable;
@@ -267,6 +277,7 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
     return G;
 }
 
+/// Computes the classical Coulomb repulsion gradient between nuclei.
 pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: Allocator) !Matrix(T) {
     var dVN = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
     errdefer dVN.deinit(gpa);
@@ -302,6 +313,7 @@ pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: 
     return dVN;
 }
 
+/// Executes a Hartree-Fock or DFT calculation on a molecular system specified by file paths.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -321,6 +333,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     return try runFromSystem(T, io, opt, &sys, null, log, gpa);
 }
 
+/// Runs Hartree-Fock or DFT SCF starting from an initialized MolecularSystem structure.
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -499,6 +512,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     return result;
 }
 
+/// Validates input options for physical consistency and method compatibility.
 fn checkInvalidInput(opt: Options) !void {
     if (opt.write.gradient != null and opt.gradient == null) {
         std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
@@ -607,6 +621,7 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
+/// Computes the electronic density matrix from molecular orbital coefficients.
 fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) T {
     std.debug.assert(C.shape[0] == P.shape[0]);
     std.debug.assert(C.shape[1] == P.shape[1]);
@@ -628,6 +643,7 @@ fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, genera
     return @sqrt(sum_sq_dp / @as(T, @floatFromInt(P.shape[0] * P.shape[1])));
 }
 
+/// Computes the total electronic energy from the Fock and density matrices.
 fn getEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), dft: ?*DftPotential(T)) T {
     var energy: T = if (dft) |pot| pot.Exc else 0;
 
@@ -642,6 +658,7 @@ fn getEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), d
     return energy;
 }
 
+/// Computes the DIIS error matrix representing the commutator [F, P] in the overlap representation.
 fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !void {
     const nbf = F.shape[0];
 
@@ -669,6 +686,7 @@ fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Ma
     };
 }
 
+/// Constructs the Fock (or Kohn-Sham) matrix from core Hamiltonian and two-electron interactions.
 fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), generalized: bool, dft: ?*DftPotential(T), gpa: Allocator) !void {
     std.debug.assert(F.shape[0] == ints.H.?.shape[0]);
     std.debug.assert(F.shape[1] == ints.H.?.shape[1]);
@@ -720,6 +738,7 @@ fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), ge
     };
 }
 
+/// Solves the self-consistent field equations iteratively using a density-driven approach.
 fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWorkspace(T), dft: ?*DftPotential(T), log: bool, gpa: Allocator) !T {
     const VN = try ints.sys.nrep();
 
@@ -859,6 +878,7 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
     return e_new;
 }
 
+/// Computes the nuclear Hessian and performs harmonic frequency analysis.
 fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
     var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
     errdefer if (opt.hessian) |_| gpa.free(hess);
@@ -881,6 +901,7 @@ fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn
     return hess;
 }
 
+/// Exports SCF result matrices to files if corresponding paths are provided.
 fn exportMatrices(comptime T: type, io: std.Io, write: Write, C: Matrix(T), P: Matrix(T), F: Matrix(T)) !void {
     if (write.coefficients) |fname| {
         try writeMatrix(T, io, fname, C);

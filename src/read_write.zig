@@ -1,3 +1,5 @@
+//! Utility functions for reading and writing matrix data, printing formatted output, and exporting molecular geometries in XYZ format.
+
 const std = @import("std");
 
 const Matrix = @import("tensor.zig").Matrix;
@@ -8,6 +10,7 @@ const primType = @import("value.zig").primType;
 
 const A2BOHR = @import("constant.zig").A2BOHR;
 
+/// Formats and prints a string to standard output, flushing the writer buffer.
 pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     var buffer: [4096]u8 = undefined;
     var writer = std.Io.File.stdout().writer(io, &buffer);
@@ -17,6 +20,7 @@ pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     try writer.interface.flush();
 }
 
+/// Reads a matrix from a text file, parsing the header dimensions and space-separated floating-point elements.
 pub fn readMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Matrix(T) {
     var file = try std.Io.Dir.cwd().openFile(io, path, .{});
     defer file.close(io);
@@ -51,6 +55,7 @@ pub fn readMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std
     return A;
 }
 
+/// Writes matrix dimensions and space-separated elements to a file, handling real or complex numbers.
 pub fn writeMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T)) !void {
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
@@ -71,6 +76,7 @@ pub fn writeMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T)
     try writer.interface.flush();
 }
 
+/// Horizontally concatenates two matrices and writes the merged matrix to a file.
 pub fn writeMatrixHjoin(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), nca: ?usize, B: Matrix(T), ncb: ?usize) !void {
     std.debug.assert(A.nrow() == B.nrow());
 
@@ -105,6 +111,7 @@ pub fn writeMatrixHjoin(comptime T: type, io: std.Io, fname: []const u8, A: Matr
     try writer.interface.flush();
 }
 
+/// Writes a matrix to a file prepended with an evenly spaced coordinate/time grid column.
 pub fn writeMatrixLspace(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), start: primType(T), end: primType(T)) !void {
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
@@ -131,6 +138,7 @@ pub fn writeMatrixLspace(comptime T: type, io: std.Io, fname: []const u8, A: Mat
     try writer.interface.flush();
 }
 
+/// Writes atomic symbols and 3D nuclear coordinates to a file in standard XYZ format.
 pub fn writeXyzFile(comptime T: type, io: std.Io, fname: []const u8, atoms: []const i32, coors: []const T) !void {
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
@@ -157,6 +165,7 @@ pub fn writeXyzFile(comptime T: type, io: std.Io, fname: []const u8, atoms: []co
     try writer.interface.flush();
 }
 
+/// Writes a single real or complex floating-point element to the output writer stream.
 fn writeElement(writer: anytype, val: anytype) !void {
     if (comptime isComplex(@TypeOf(val))) {
         try writer.interface.print("{d:20.14} {d:20.14}", .{ val.re, val.im });

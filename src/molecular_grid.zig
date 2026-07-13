@@ -1,3 +1,5 @@
+//! Represents a molecular grid, managing radial and angular quadrature integration grids for density functional theory.
+
 const std = @import("std");
 const libint = @import("libint");
 
@@ -11,6 +13,7 @@ const getLebedevGrid = @import("lebedev_quadrature_nodes.zig").getLebedevGrid;
 
 const A2BOHR = @import("constant.zig").A2BOHR;
 
+/// Returns a generic type representing a molecular grid for basis function evaluation at grid points.
 pub fn BasisGrid(comptime T: type) type {
     return struct {
         phi: Matrix(T),
@@ -21,6 +24,7 @@ pub fn BasisGrid(comptime T: type) type {
 
         lapl: ?Matrix(T) = null,
 
+        /// Initializes a BasisGrid structure, allocating memory for basis functions and optional derivatives at grid points.
         pub fn init(n_grid: usize, nbf: usize, needs_deriv: bool, has_mgga: bool, gpa: Allocator) !@This() {
             var phi = try Matrix(T).init(n_grid, nbf, gpa);
             errdefer phi.deinit(gpa);
@@ -49,6 +53,7 @@ pub fn BasisGrid(comptime T: type) type {
             return .{ .phi = phi, .dphi_dx = dphi_dx, .dphi_dy = dphi_dy, .dphi_dz = dphi_dz, .lapl = lapl };
         }
 
+        /// Frees allocated memory for basis functions and derivative values at grid points.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.phi.deinit(gpa);
 
@@ -61,11 +66,13 @@ pub fn BasisGrid(comptime T: type) type {
     };
 }
 
+/// Returns a generic type implementing Becke multicenter integration partition schemes for molecular grids.
 pub fn Becke(comptime T: type) type {
     return struct {
         n_rad: usize,
         n_leb: usize,
 
+        /// Computes the Becke partition coordinate transform step function for atomic cell smoothing.
         fn beckeStep(mu: T) T {
             var p = 1.5 * mu - 0.5 * mu * mu * mu;
 
@@ -75,6 +82,7 @@ pub fn Becke(comptime T: type) type {
             return 0.5 * (1.0 - p);
         }
 
+        /// Generates Becke partitioned grid points and weights for multicenter molecular integration.
         pub fn get(self: @This(), sys: MolecularSystem(T), gpa: Allocator) !struct { Matrix(T), Vector(T) } {
             var centers = std.ArrayList([3]T).empty;
             defer centers.deinit(gpa);
@@ -181,6 +189,7 @@ pub fn Becke(comptime T: type) type {
             return .{ pts, wgh };
         }
 
+        /// Computes Chebyshev radial quadrature nodes and weights mapped to a physical atomic radius.
         fn getRadialNode(self: @This(), ir: usize, br: T) struct { T, T } {
             const nr = self.n_rad;
 
@@ -197,6 +206,7 @@ pub fn Becke(comptime T: type) type {
     };
 }
 
+/// Returns a generic type representing density values, gradients, laplacians, and kinetic energy density on the grid.
 pub fn DensityGrid(comptime T: type) type {
     return struct {
         rho_val: Matrix(T),
@@ -206,6 +216,7 @@ pub fn DensityGrid(comptime T: type) type {
         tau_val: ?Matrix(T) = null,
         lap_val: ?Matrix(T) = null,
 
+        /// Initializes a DensityGrid structure, allocating memory for density, gradient, and laplacian grids.
         pub fn init(n_g: usize, size_factor: usize, needs_deriv: bool, has_mgga: bool, pol: bool, gpa: Allocator) !@This() {
             var rho_val = try Matrix(T).initZero(n_g, size_factor, gpa);
             errdefer rho_val.deinit(gpa);
@@ -234,6 +245,7 @@ pub fn DensityGrid(comptime T: type) type {
             return .{ .rho_val = rho_val, .del_rho = del_rho, .sig_val = sig_val, .tau_val = tau_val, .lap_val = lap_val };
         }
 
+        /// Frees allocated memory for the grid density and derivative values.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.rho_val.deinit(gpa);
 
@@ -245,6 +257,7 @@ pub fn DensityGrid(comptime T: type) type {
     };
 }
 
+/// Returns a generic type representing DFT exchange-correlation potentials and their gradients on the grid.
 pub fn PotentialGrid(comptime T: type) type {
     return struct {
         exc: Vector(T),
@@ -255,6 +268,7 @@ pub fn PotentialGrid(comptime T: type) type {
         tau_pot: ?Matrix(T) = null,
         lap_pot: ?Matrix(T) = null,
 
+        /// Initializes a PotentialGrid, allocating memory for exchange-correlation potential terms on grid points.
         pub fn init(n_g: usize, size_factor: usize, needs_deriv: bool, has_mgga: bool, pol: bool, gpa: Allocator) !@This() {
             var exc = try Vector(T).initZero(n_g, gpa);
             errdefer exc.deinit(gpa);
@@ -282,6 +296,7 @@ pub fn PotentialGrid(comptime T: type) type {
             return .{ .exc = exc, .rho_pot = rho_pot, .sig_pot = sig_pot, .tau_pot = tau_pot, .lap_pot = lap_pot };
         }
 
+        /// Frees allocated memory for the grid potential terms.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.exc.deinit(gpa);
 
@@ -294,6 +309,7 @@ pub fn PotentialGrid(comptime T: type) type {
     };
 }
 
+/// Retrieves the Bragg-Slater radius in Bohr units for a given atomic number Z.
 pub fn getBraggSlaterRadius(comptime T: type, Z: usize) T {
     const r: T = switch (Z) {
         1 => 0.35,

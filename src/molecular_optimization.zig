@@ -1,3 +1,5 @@
+//! Algorithms for molecular geometry optimization, including BFGS and steepest descent.
+
 const std = @import("std");
 
 const libint = @import("cimport.zig").libint;
@@ -11,6 +13,7 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const mmv = @import("linear_algebra.zig").mmv;
 const printf = @import("read_write.zig").printf;
 
+/// Performs molecular geometry optimization using the Broyden-Fletcher-Goldfarb-Shanno (BFGS) quasi-Newton method.
 pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
     var run_opt, const is_hf = .{ opt, @hasField(@TypeOf(opt), "hartree_fock") };
 
@@ -166,6 +169,7 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
     return guess_density.?;
 }
 
+/// Optimizes molecular geometry by walking in the direction of the steepest descent negative energy gradient.
 pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
     var run_opt, const is_hf = .{ opt, @hasField(@TypeOf(opt), "hartree_fock") };
 

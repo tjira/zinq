@@ -1,4 +1,5 @@
-//! PHYSICAL CONSTANTS ACCORDING TO CODATA 2022
+//! Defines physical constants and atomic properties according to the CODATA 2022 recommendation.
+
 const std = @import("std");
 
 pub const c = 299792458.0; // SPEED OF LIGHT [m/s]
@@ -203,6 +204,7 @@ pub const AN2M = std.StaticStringMap(f64).initComptime(.{
     // zig fmt: on
 });
 
+/// Returns the isotope-averaged atomic mass of an element based on its atomic number.
 pub fn getMass(comptime T: type, atomic_number: i32) !T {
     if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atomic_number)) |i| {
         return AN2M.get(AN2SM.kvs.keys[i]) orelse return error.InvalidAtomicNumber;
@@ -211,6 +213,7 @@ pub fn getMass(comptime T: type, atomic_number: i32) !T {
     return error.InvalidAtomicNumber;
 }
 
+/// Returns the standard IUPAC chemical symbol corresponding to a given atomic number.
 pub fn getSymbol(atomic_number: i32) ![]const u8 {
     if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atomic_number)) |i| {
         return AN2SM.kvs.keys[i];

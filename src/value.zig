@@ -1,17 +1,22 @@
+//! Polymorphic value type wrapping floating-point, complex, and dual numbers for algebraic operations.
+
 const std = @import("std");
 
 const Complex = std.math.Complex;
 
+/// Returns a polymorphic value wrapper providing unified algebraic interfaces for multiple numeric types.
 pub fn Value(comptime T: type) type {
     const U = primType(T);
 
     return struct {
         val: T,
 
+        /// Initializes a Value wrapper with the given numeric data.
         pub fn init(val: T) @This() {
             return .{ .val = val };
         }
 
+        /// Computes the absolute value (modulus) of the wrapped value.
         pub fn abs(self: @This()) @This() {
             if (comptime isFloat(T)) {
                 return init(@abs(self.val));
@@ -28,6 +33,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Computes the sum of two values.
         pub fn add(self: @This(), other: @This()) @This() {
             if (comptime isFloat(T)) {
                 return init(self.val + other.val);
@@ -40,6 +46,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Adds a primitive scalar to the value.
         pub fn adds(self: @This(), scalar: U) @This() {
             if (comptime isFloat(T)) {
                 return init(self.val + scalar);
@@ -56,6 +63,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Divides the value by another value.
         pub fn div(self: @This(), other: @This()) @This() {
             if (comptime isFloat(T)) {
                 return init(self.val / other.val);
@@ -68,6 +76,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Divides the value by a primitive scalar.
         pub fn divs(self: @This(), scalar: U) @This() {
             if (comptime isFloat(T)) {
                 return init(self.val / scalar);
@@ -84,6 +93,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Computes the exponential of the value.
         pub fn exp(self: @This()) @This() {
             if (comptime isFloat(T)) {
                 return init(std.math.exp(self.val));
@@ -100,6 +110,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Promotes a primitive float to a Value wrapper of type T.
         pub fn fromFloat(val: U) @This() {
             if (comptime isFloat(T)) {
                 return init(val);
@@ -112,6 +123,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Computes the product of two values.
         pub fn mul(self: @This(), other: @This()) @This() {
             if (comptime isFloat(T)) {
                 return init(self.val * other.val);
@@ -124,6 +136,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Multiplies the value by a primitive scalar.
         pub fn muls(self: @This(), scalar: U) @This() {
             if (comptime isFloat(T)) {
                 return init(self.val * scalar);
@@ -140,6 +153,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Computes the additive inverse (negation) of the value.
         pub fn neg(self: @This()) @This() {
             if (comptime isFloat(T)) {
                 return init(-self.val);
@@ -156,6 +170,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Computes the sign or phase (normalized value) of the wrapped number.
         pub fn sign(self: @This()) @This() {
             if (comptime isFloat(T)) {
                 return init(std.math.sign(self.val));
@@ -176,6 +191,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Computes the difference between two values.
         pub fn sub(self: @This(), other: @This()) @This() {
             if (comptime isFloat(T)) {
                 return init(self.val - other.val);
@@ -188,6 +204,7 @@ pub fn Value(comptime T: type) type {
             @compileError("TYPE '" ++ @typeName(T) ++ "' UNSUPPORTED");
         }
 
+        /// Subtracts a primitive scalar from the value.
         pub fn subs(self: @This(), scalar: U) @This() {
             if (comptime isFloat(T)) {
                 return init(self.val - scalar);
@@ -206,10 +223,12 @@ pub fn Value(comptime T: type) type {
     };
 }
 
+/// Returns the underlying primitive float type (e.g. f64) of a scalar, complex, or dual number.
 pub fn primType(comptime T: type) type {
     return if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
 }
 
+/// Returns true if the type T is a complex number representation.
 pub fn isComplex(comptime T: type) bool {
     if (@typeInfo(T) == .@"struct") {
         return @hasField(T, "re") and @hasField(T, "im");
@@ -218,6 +237,7 @@ pub fn isComplex(comptime T: type) bool {
     return false;
 }
 
+/// Returns true if the type T is a dual number representation.
 pub fn isDual(comptime T: type) bool {
     if (@typeInfo(T) == .@"struct") {
         return @hasField(T, "val") and @hasField(T, "der");
@@ -226,6 +246,7 @@ pub fn isDual(comptime T: type) bool {
     return false;
 }
 
+/// Returns true if the type T is a native floating-point type.
 fn isFloat(comptime T: type) bool {
     return @typeInfo(T) == .float;
 }

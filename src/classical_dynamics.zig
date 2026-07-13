@@ -1,3 +1,5 @@
+//! Classical molecular dynamics trajectory simulation on adiabatic or diabatic potential energy surfaces.
+
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
@@ -16,6 +18,7 @@ const norm = @import("linear_algebra.zig").norm;
 const printf = @import("read_write.zig").printf;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
+/// Configuration options for the classical molecular dynamics simulation.
 pub const Options = struct {
     initial_conditions: InitialConditions,
     potential: PotentialOptions,
@@ -32,6 +35,7 @@ pub const Options = struct {
     log_interval: u32 = 1,
 };
 
+/// Generates a representation of a classical trajectory ensemble with positions, momenta, and active states.
 pub fn Ensemble(comptime T: type) type {
     return struct {
         r: Matrix(T),
@@ -42,6 +46,7 @@ pub fn Ensemble(comptime T: type) type {
 
         mass: T,
 
+        /// Initializes the ensemble trajectories with allocated memory for positions, momenta, and forces.
         pub fn init(ndim: usize, ntraj: usize, mass: T, gpa: Allocator) !@This() {
             var r = try Matrix(T).init(ntraj, ndim, gpa);
             errdefer r.deinit(gpa);
@@ -58,6 +63,7 @@ pub fn Ensemble(comptime T: type) type {
             return .{ .r = r, .p = p, .a = a, .s = s, .mass = mass };
         }
 
+        /// Deallocates the positions, momenta, and force vectors of the trajectory ensemble.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.r.deinit(gpa);
             self.p.deinit(gpa);
@@ -65,12 +71,14 @@ pub fn Ensemble(comptime T: type) type {
             self.s.deinit(gpa);
         }
 
+        /// Calculates the average classical kinetic energy of the ensemble trajectories.
         pub fn ekin(self: @This()) T {
             const p_norm = norm(T, self.p.asVector());
 
             return (p_norm * p_norm) / (2 * self.mass * @as(T, @floatFromInt(self.p.nrow())));
         }
 
+        /// Calculates the average potential energy of the ensemble based on active electronic states.
         pub fn epot(self: @This(), pot: Potential(T), time: T, adiabatic: bool, gpa: Allocator) !T {
             var sum: T = 0;
 
@@ -100,6 +108,7 @@ pub fn Ensemble(comptime T: type) type {
             return sum / @as(T, @floatFromInt(self.r.nrow()));
         }
 
+        /// Computes the mean momentum vector averaged over all trajectories in the ensemble.
         pub fn mom(self: @This(), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(self.p.ncol(), gpa);
 
@@ -112,6 +121,7 @@ pub fn Ensemble(comptime T: type) type {
             return value;
         }
 
+        /// Computes the population fraction of trajectories occupying each electronic state.
         pub fn pop(self: @This(), nstate: usize, gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(nstate, gpa);
 
@@ -124,6 +134,7 @@ pub fn Ensemble(comptime T: type) type {
             return value;
         }
 
+        /// Computes the mean position vector averaged over all trajectories in the ensemble.
         pub fn pos(self: @This(), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(self.r.ncol(), gpa);
 
@@ -136,6 +147,7 @@ pub fn Ensemble(comptime T: type) type {
             return value;
         }
 
+        /// Samples initial positions and momenta from a Wigner-like Gaussian distribution.
         pub fn setGaussian(self: *@This(), ic: InitialConditions) void {
             var split_mix = std.Random.SplitMix64.init(ic.seed);
             var rng = std.Random.DefaultPrng.init(split_mix.next());
@@ -161,16 +173,19 @@ pub fn Ensemble(comptime T: type) type {
     };
 }
 
+/// Container structure holding the results and observables computed during classical propagation.
 pub fn Result(comptime T: type) type {
     return struct {
         observables: Observables(T),
 
+        /// Deallocates memory associated with the trajectory simulation result observables.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.observables.deinit(gpa);
         }
     };
 }
 
+/// Initial phase space parameters and Gaussian width for trajectory sampling.
 const InitialConditions = struct {
     position: []const f64,
     momentum: []const f64,
@@ -180,6 +195,7 @@ const InitialConditions = struct {
     seed: u32 = 1,
 };
 
+/// Output paths for recording trajectory observables to disk during dynamics.
 const Write = struct {
     kinetic_energy: ?[]const u8 = null,
     momentum: ?[]const u8 = null,
@@ -189,6 +205,7 @@ const Write = struct {
     total_energy: ?[]const u8 = null,
 };
 
+/// Helper struct managing memory for potential energy gradients and wavefunctions.
 fn GradientBuffer(comptime T: type) type {
     return struct {
         adia: bool,
@@ -202,6 +219,7 @@ fn GradientBuffer(comptime T: type) type {
 
         grad_V: Matrix(T),
 
+        /// Allocates memory for dual numbers and gradients needed in force evaluations.
         pub fn init(ndim: usize, nstate: usize, ntraj: usize, adia: bool, gpa: Allocator) !@This() {
             var r_dual = try Matrix(ScalarDual(T)).init(ntraj, ndim, gpa);
             errdefer r_dual.deinit(gpa);
@@ -224,6 +242,7 @@ fn GradientBuffer(comptime T: type) type {
             return .{ .r_dual = r_dual, .V_dual = V_dual, .V = V, .W = W, .U = U, .grad_V = grad_V, .adia = adia };
         }
 
+        /// Deallocates gradient matrices, eigenvalues, and eigenvectors.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.r_dual.deinit(gpa);
             self.V_dual.deinit(gpa);
@@ -235,6 +254,7 @@ fn GradientBuffer(comptime T: type) type {
             self.grad_V.deinit(gpa);
         }
 
+        /// Computes and applies nuclear forces to trajectories based on potential gradients.
         pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T)) void {
             const nstate = pot.nstate();
 
@@ -263,6 +283,7 @@ fn GradientBuffer(comptime T: type) type {
             };
         }
 
+        /// Evaluates the potential and its gradients using automatic differentiation.
         pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T) !void {
             pot.evalBatch(T, &self.V, r, time);
 
@@ -285,6 +306,7 @@ fn GradientBuffer(comptime T: type) type {
     };
 }
 
+/// Accumulates time-dependent expectation values and dynamics trajectories.
 fn History(comptime T: type) type {
     return struct {
         pos: ?Matrix(T) = null,
@@ -297,6 +319,7 @@ fn History(comptime T: type) type {
 
         index: usize = 0,
 
+        /// Allocates memory for storing dynamics history of positions, momenta, and populations.
         pub fn init(ndim: usize, nstate: usize, iters: usize, write: Write, gpa: Allocator) !@This() {
             var hist = @This(){};
             errdefer hist.deinit(gpa);
@@ -322,6 +345,7 @@ fn History(comptime T: type) type {
             return hist;
         }
 
+        /// Deallocates history storage arrays.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.pos) |*pos| pos.deinit(gpa);
             if (self.mom) |*mom| mom.deinit(gpa);
@@ -332,6 +356,7 @@ fn History(comptime T: type) type {
             if (self.etot) |*etot| etot.deinit(gpa);
         }
 
+        /// Appends the current step's observables to the simulation history.
         pub fn append(self: *@This(), obs: Observables(T)) void {
             const step_idx = self.index;
 
@@ -362,6 +387,7 @@ fn History(comptime T: type) type {
             self.index += 1;
         }
 
+        /// Writes the accumulated history of dynamics observables to output files.
         pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, write: Write) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
@@ -392,6 +418,7 @@ fn History(comptime T: type) type {
     };
 }
 
+/// Holds physical observables evaluated at a specific time step of dynamics.
 fn Observables(comptime T: type) type {
     return struct {
         pos: ?Vector(T) = null,
@@ -401,6 +428,7 @@ fn Observables(comptime T: type) type {
         epot: ?T = null,
         ekin: ?T = null,
 
+        /// Computes the physical observables from the current simulation state.
         pub fn init(sim: SimulationState(T), time: T, write: Write, log: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
             errdefer obs.deinit(gpa);
@@ -436,6 +464,7 @@ fn Observables(comptime T: type) type {
             return obs;
         }
 
+        /// Deallocates arrays stored in the observables struct.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.pos) |*pos| pos.deinit(gpa);
             if (self.mom) |*mom| mom.deinit(gpa);
@@ -444,12 +473,14 @@ fn Observables(comptime T: type) type {
     };
 }
 
+/// Numerical integrator for classical trajectories and surface hopping updates.
 fn Propagator(comptime T: type) type {
     return struct {
         sh: ?SurfaceHopping(T),
 
         dt: T,
 
+        /// Initializes the time propagator and optional surface hopping solver.
         pub fn init(opt: Options, nstate: usize, gpa: Allocator) !@This() {
             const istate = opt.initial_conditions.state;
 
@@ -462,10 +493,12 @@ fn Propagator(comptime T: type) type {
             return .{ .dt = @floatCast(opt.time_step), .sh = sh };
         }
 
+        /// Deallocates surface hopping resources.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             if (self.sh) |*sh| sh.deinit(gpa);
         }
 
+        /// Integrates equations of motion using the Velocity Verlet algorithm.
         pub fn step(self: *@This(), ens: *Ensemble(T), gb: *GradientBuffer(T), pot: Potential(T), time: T) !void {
             for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
                 ens.p.ptr(i, j).* += 0.5 * ens.mass * ens.a.at(i, j) * self.dt;
@@ -490,6 +523,7 @@ fn Propagator(comptime T: type) type {
     };
 }
 
+/// Bundles the active ensemble, potential, propagator, and gradient buffers.
 fn SimulationState(comptime T: type) type {
     return struct {
         ensemble: Ensemble(T),
@@ -497,6 +531,7 @@ fn SimulationState(comptime T: type) type {
         elpoten: Potential(T),
         propag: Propagator(T),
 
+        /// Deallocates all resources held within the simulation state.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             inline for (@typeInfo(@This()).@"struct".fields) |field| {
                 @field(self, field.name).deinit(gpa);
@@ -505,10 +540,12 @@ fn SimulationState(comptime T: type) type {
     };
 }
 
+/// Bundles the simulation options, state, and logging flag for the solver.
 fn SolveContext(comptime T: type) type {
     return struct { opt: Options, sim: *SimulationState(T), log: bool };
 }
 
+/// Runs the classical dynamics simulation and returns the accumulated observables.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
@@ -531,6 +568,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     return .{ .observables = obs };
 }
 
+/// Validates simulation options to ensure positive mass, time step, and consistent dimensions.
 fn checkInvalidInput(opt: Options) !void {
     if (opt.time_step <= 0) {
         std.log.err("TIME STEP MUST BE GREATER THAN 0", .{});
@@ -575,6 +613,7 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
+/// Initializes the simulation state, potential, and initial ensemble.
 fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationState(T) {
     const pot = try Potential(T).init(io, opt.potential, gpa);
 
@@ -600,6 +639,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     return .{ .ensemble = ensemble, .elpoten = pot, .propag = prop, .gb = gb };
 }
 
+/// Prints the final population fractions of electronic states to stdout.
 fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
     if (obs.pop) |pop| {
         try std.Io.File.stdout().writeStreamingAll(io, "\n");
@@ -610,6 +650,7 @@ fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
     }
 }
 
+/// Prints the column headers for the real-time dynamics logging output.
 fn printHeader(io: std.Io, ndim: usize, nstate: usize) !void {
     try std.Io.File.stdout().writeStreamingAll(io, "\nREAL-TIME PROPAGATION");
 
@@ -637,6 +678,7 @@ fn printHeader(io: std.Io, ndim: usize, nstate: usize) !void {
     try printf(io, fmt, tuple);
 }
 
+/// Prints the current iteration step's physical observables and elapsed time.
 fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, timer: *std.Io.Timestamp) !void {
     const ekin = obs.ekin orelse std.math.nan(T);
     const epot = obs.epot orelse std.math.nan(T);
@@ -680,6 +722,7 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
     timer.* = std.Io.Timestamp.now(io, .real);
 }
 
+/// Propagates the classical equations of motion over the specified number of time steps.
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: Allocator) !Observables(T) {
     const ndim, const nstate = .{ ctx.sim.elpoten.ndim(), ctx.sim.elpoten.nstate() };
 
