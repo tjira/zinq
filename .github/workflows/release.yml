@@ -30,19 +30,10 @@ jobs:
         with:
           version: 0.16.0
 
-      - name: Cache Compiled Libraries
-        id: cache-libs
-        uses: actions/cache@v4
-        with:
-          path: external-${{matrix.target}}-musl
-          key: libs-${{matrix.target}}-musl-${{hashFiles('script/library.pl')}}
-
       - name: Install Boost
-        if: steps.cache-libs.outputs.cache-hit != 'true'
         run: sudo apt update && sudo apt install libboost-all-dev
 
       - name: Compile Libraries
-        if: steps.cache-libs.outputs.cache-hit != 'true'
         run: ./script/library.pl --target ${{matrix.target}} --generic
 
       - name: Compile Zinq

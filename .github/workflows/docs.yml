@@ -30,19 +30,10 @@ jobs:
       - name: Install Build Tools
         run: pip install mkdocs-material
 
-      - name: Cache Compiled Libraries
-        id: cache-libs
-        uses: actions/cache@v4
-        with:
-          path: external-x86_64-linux-musl
-          key: libs-x86_64-linux-musl-${{hashFiles('script/library.pl')}}
-
       - name: Install Boost
-        if: steps.cache-libs.outputs.cache-hit != 'true'
         run: sudo apt update && sudo apt install libboost-all-dev
 
       - name: Compile Libraries
-        if: steps.cache-libs.outputs.cache-hit != 'true'
         run: ./script/library.pl --target x86_64-linux --generic
 
       - name: Compile Code Documentation
