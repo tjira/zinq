@@ -8,6 +8,7 @@ const Matrix = @import("tensor.zig").Matrix;
 const Vector = @import("tensor.zig").Vector;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
+const mmSlice = @import("linear_algebra.zig").mmSlice;
 const printf = @import("read_write.zig").printf;
 
 pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
@@ -121,15 +122,7 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
                 var u = try Vector(T).init(s.length(), gpa);
                 defer u.deinit(gpa);
 
-                for (0..u.length()) |j| {
-                    var sum: T = 0;
-
-                    for (0..y.length()) |k| {
-                        sum += H.at(j, k) * y.at(k);
-                    }
-
-                    u.ptr(j).* = sum;
-                }
+                mmSlice(T, u.data, H.data, y.data, u.length(), 1, y.length());
 
                 var y_dot_u: T = 0;
 
@@ -155,14 +148,10 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
         var p = try Vector(T).init(3 * sys.atoms.len, gpa);
         defer p.deinit(gpa);
 
-        for (0..p.length()) |j| {
-            var sum: T = 0;
+        mmSlice(T, p.data, H.data, g_new.data, H.nrow(), 1, H.ncol());
 
-            for (0..g_new.nrow()) |row| for (0..g_new.ncol()) |col| {
-                sum += H.at(j, row * g_new.ncol() + col) * g_new.at(row, col);
-            };
-
-            p.ptr(j).* = -sum;
+        for (p.data) |*val| {
+            val.* = -val.*;
         }
 
         for (0..p.length()) |j| {

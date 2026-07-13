@@ -20,6 +20,7 @@ const geigh = @import("linear_algebra.zig").geigh;
 const getSymbol = @import("constant.zig").getSymbol;
 const luFactorize = @import("linear_algebra.zig").luFactorize;
 const luSolve = @import("linear_algebra.zig").luSolve;
+const mm = @import("linear_algebra.zig").mm;
 const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
 const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").runFromSystem;
@@ -634,28 +635,12 @@ fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Ma
     var FP = try Matrix(T).init(nbf, nbf, gpa);
     defer FP.deinit(gpa);
 
+    mm(T, &FP, F, P);
+
     var FPS = try Matrix(T).init(nbf, nbf, gpa);
     defer FPS.deinit(gpa);
 
-    for (0..nbf) |i| for (0..nbf) |j| {
-        var sum: T = 0;
-
-        for (0..nbf) |k| {
-            sum += F.at(i, k) * P.at(k, j);
-        }
-
-        FP.ptr(i, j).* = sum;
-    };
-
-    for (0..nbf) |i| for (0..nbf) |j| {
-        var sum: T = 0;
-
-        for (0..nbf) |k| {
-            sum += FP.at(i, k) * S.at(k, j);
-        }
-
-        FPS.ptr(i, j).* = sum;
-    };
+    mm(T, &FPS, FP, S);
 
     for (0..nbf) |i| for (0..nbf) |j| {
         err.ptr(i, j).* = FPS.at(i, j) - FPS.at(j, i);

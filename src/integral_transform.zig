@@ -20,7 +20,9 @@ pub fn ao2mo_pp(comptime T: type, A_pp: *Matrix(T), A_xx: Matrix(T), C: Matrix(T
         for (0..N) |mu| for (0..N) |nu| {
             const c_mu_p = Value(T).init(C.at(mu, p));
             const c_nu_q = Value(T).init(C.at(nu, q));
+
             const a_val = Value(T).init(A_xx.at(mu, nu));
+
             sum = sum.add(c_mu_p.mul(c_nu_q).mul(a_val));
         };
 
@@ -51,9 +53,7 @@ pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4),
 
     const addTo = struct {
         pub fn addTo(ptr: *T, c: T, val: T) void {
-            const val_c = Value(T).init(c);
-            const val_val = Value(T).init(val);
-            ptr.* = Value(T).init(ptr.*).add(val_c.mul(val_val)).val;
+            ptr.* = Value(T).init(ptr.*).add(Value(T).init(c).mul(Value(T).init(val))).val;
         }
     }.addTo;
 
@@ -146,9 +146,7 @@ pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T
         var sum = Value(T).fromFloat(0);
 
         for (0..N) |q| {
-            const c_val = Value(T).init(C.at(mu, q));
-            const a_val = Value(T).init(A_pp.at(q, p));
-            sum = sum.add(c_val.mul(a_val));
+            sum = sum.add(Value(T).init(C.at(mu, q)).mul(Value(T).init(A_pp.at(q, p))));
         }
 
         A_xx.ptr(mu, p).* = sum.val;
