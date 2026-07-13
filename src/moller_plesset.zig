@@ -24,6 +24,7 @@ const hartree_fock_run = @import("hartree_fock.zig").run;
 const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printf = @import("read_write.zig").printf;
+const writeXyzFile = @import("read_write.zig").writeXyzFile;
 const slater = @import("configuration_interaction.zig").slater;
 const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 
@@ -40,6 +41,8 @@ pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
     order: u32 = 2,
+
+    write: Write = .{},
 
     gradient: ?GradientOptions = null,
 
@@ -93,6 +96,10 @@ pub fn Result(comptime T: type) type {
         }
     };
 }
+
+const Write = struct {
+    geometry: ?[]const u8 = null,
+};
 
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
@@ -217,6 +224,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         if (opt.hessian) |_| hess[0].deinit(gpa);
 
         gpa.free(hess);
+    }
+
+    if (opt.write.geometry) |fname| {
+        try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
     }
 
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = hess };

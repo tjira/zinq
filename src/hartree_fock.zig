@@ -33,6 +33,7 @@ const printMullikenCharges = @import("population_analysis.zig").printMullikenCha
 const printf = @import("read_write.zig").printf;
 const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 const writeMatrix = @import("read_write.zig").writeMatrix;
+const writeXyzFile = @import("read_write.zig").writeXyzFile;
 
 const AN2SM = @import("constant.zig").AN2SM;
 const AU2CM = @import("constant.zig").AU2CM;
@@ -158,6 +159,7 @@ const Write = struct {
     coefficients: ?[]const u8 = null,
     density: ?[]const u8 = null,
     fock: ?[]const u8 = null,
+    geometry: ?[]const u8 = null,
 };
 
 pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
@@ -442,6 +444,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     try exportMatrices(T, io, opt.write, C, P, F);
+
+    if (opt.write.geometry) |fname| {
+        try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
+    }
 
     if (opt.gradient) |gradopt| switch (gradopt) {
         .analytic => grad[0] = try gradient(T, ints, C, P, e, opt.generalized, if (dft) |*d| d else null, gpa),

@@ -131,7 +131,7 @@ pub fn writeMatrixLspace(comptime T: type, io: std.Io, fname: []const u8, A: Mat
     try writer.interface.flush();
 }
 
-pub fn writeXyzFile(io: std.Io, fname: []const u8, atoms: []const i32, coors: []const f64) !void {
+pub fn writeXyzFile(comptime T: type, io: std.Io, fname: []const u8, atoms: []const i32, coors: []const T) !void {
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
 
@@ -151,7 +151,7 @@ pub fn writeXyzFile(io: std.Io, fname: []const u8, atoms: []const i32, coors: []
         const y = coors[3 * i + 1] / A2BOHR;
         const z = coors[3 * i + 2] / A2BOHR;
 
-        try writer.interface.print("{s} {d:12.8} {d:12.8} {d:12.8}\n", .{ sym, x, y, z });
+        try writer.interface.print("{s:2} {d:20.14} {d:20.14} {d:20.14}\n", .{ sym, x, y, z });
     }
 
     try writer.interface.flush();
