@@ -38,11 +38,14 @@ jobs:
           version: 0.16.0
 
       - name: Install Boost
+        id: install-boost
         uses: MarkusJx/install-boost@v2
         with:
           boost_version: 1.83.0
 
       - name: Compile Libraries
+        env:
+          BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
         run: ./script/library.pl --target x86_64-linux --generic
 
       - name: Run Tests in ${{matrix.mode_name}} Mode
