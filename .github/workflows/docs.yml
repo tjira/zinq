@@ -31,7 +31,9 @@ jobs:
         run: pip install mkdocs-material
 
       - name: Install Boost
-        run: sudo apt update && sudo apt install libboost-all-dev
+        uses: MarkusJx/install-boost@v2
+        with:
+          boost_version: 1.83.0
 
       - name: Compile Libraries
         run: ./script/library.pl --target x86_64-linux --generic

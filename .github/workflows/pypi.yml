@@ -35,11 +35,13 @@ jobs:
         with:
           version: 0.16.0
 
+      - name: Install Boost
+        uses: MarkusJx/install-boost@v2
+        with:
+          boost_version: 1.83.0
+
       - name: Install Build Tools
         run: pip install build
-
-      - name: Install Boost
-        run: sudo apt update && sudo apt install libboost-all-dev
 
       - name: Compile Libraries
         run: ./script/library.pl --target ${{matrix.target}} --generic

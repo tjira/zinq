@@ -40,7 +40,9 @@ jobs:
           version: 0.16.0
 
       - name: Install Boost
-        run: sudo apt update && sudo apt install libboost-all-dev
+        uses: MarkusJx/install-boost@v2
+        with:
+          boost_version: 1.83.0
 
       - name: Compile Libraries
         run: ./script/library.pl --target ${{matrix.target}} ${{matrix.build_flags}} --generic
