@@ -863,7 +863,7 @@ fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn
     errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
 
     if (log and opt.hessian != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.atoms, gpa);
+        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
         defer freqs.deinit(gpa);
 
         const method_str = if (opt.dft != null) "DFT NUMERIC" else "HARTREE-FOCK NUMERIC";
