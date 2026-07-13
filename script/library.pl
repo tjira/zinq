@@ -181,7 +181,7 @@ sub compile_eigen {
     system(@args) == 0 or die "EIGEN CONFIGURE FAILED";
 
     # INSTALL THE LIBRARY
-    system("cmake", "--install", "build", "--verbose") == 0 or die "EIGEN INSTALL FAILED";
+    system("cmake", "--install", "build") == 0 or die "EIGEN INSTALL FAILED";
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
@@ -192,7 +192,7 @@ sub compile_libint {
     my ($prefix, $cores, $pwd, $shared) = @_;
 
     # DEFINE THE URL FOR THE LIBINT SOURCE ARCHIVE
-    my $url = "https://github.com/evaleev/libint/releases/download/v2.13.1/libint-2.13.1-mpqc4.tgz";
+    my $url = "https://github.com/evaleev/libint/archive/refs/tags/v2.13.1.tar.gz";
 
     # DOWNLOAD AND EXTRACT THE LIBRARY
     download_library($url, "libint");
@@ -200,22 +200,74 @@ sub compile_libint {
     # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
     chdir "lib/libint" or die "CANNOT CHDIR TO 'lib/libint': $!";
 
+    # SAVE CURRENT ENVIRONMENT VARIABLES TO RESTORE LATER
+    my %saved_env; $saved_env{$_} = delete $ENV{$_} for grep { exists $ENV{$_} } qw(CC CXX AR RANLIB);
+
+    # CONFIGURE LIBINT COMPILER
+    my @compiler_args = (
+        "cmake",
+        "-B", "build",
+        "-DLIBINT2_ENABLE_ONEBODY=1",
+        "-DLIBINT2_ENABLE_ERI=1",
+        "-DLIBINT2_MAX_AM=4"
+    );
+    system(@compiler_args) == 0 or die "LIBINT COMPILER CONFIGURE FAILED";
+
+    # BUILD LIBINT COMPILER TARGET
+    system("cmake", "--build", "build", "--parallel", $cores, "--target", "build_libint") == 0 or die "LIBINT COMPILER BUILD FAILED";
+
+    # RUN EXPORT TARGET TO CREATE THE TGZ ARCHIVE
+    system("cmake", "--build", "build", "--target", "export") == 0 or die "LIBINT COMPILER EXPORT FAILED";
+
+    # RESTORE COMPILER ENVIRONMENT VARIABLES FOR TARGET BUILD
+    for my $var (keys %saved_env) {
+        $ENV{$var} = $saved_env{$var};
+    }
+
+    # CHANGE BACK TO ORIGINAL DIRECTORY
+    chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
+
+    # FIND THE EXPORTED TGZ ARCHIVE
+    my ($tgz_file) = glob("lib/libint/build/*.tgz");
+
+    # CHECK IF THE TGZ FILE WAS FOUND
+    die "LIBINT EXPORTED ARCHIVE NOT FOUND" unless $tgz_file;
+
+    # EXTRACT THE COMPILED LIBINT COMPILER PACKAGE
+    system("tar", "-xzvf", $tgz_file) == 0 or die "FAILED TO EXTRACT LIBINT COMPILER EXPORT";
+
+    # CLEAN UP ANY PREVIOUS COMPILATION DIRECTORY
+    rmtree("lib/clibint") if -d "lib/clibint";
+
+    # FIND THE EXTRACTED LIBINT DIRECTORY
+    my ($extracted_dir) = glob("libint*");
+
+    # CHECK IF THE EXTRACTED DIRECTORY WAS FOUND
+    die "EXTRACTED LIBINT DIRECTORY NOT FOUND" unless $extracted_dir;
+
+    # MOVE TO THE TARGET COMPILATION DIRECTORY
+    move($extracted_dir, "lib/clibint") or die "FAILED TO MOVE '$extracted_dir' TO 'lib/clibint': $!";
+
+    # CHANGE DIRECTORY TO THE TARGET BUILD PATH
+    chdir "lib/clibint" or die "CANNOT CHDIR TO 'lib/clibint': $!";
+
     # DETERMINE WHETHER TO BUILD SHARED OR STATIC LIBRARIES
     my $build_shared = $shared ? "True" : "False";
 
-    # CONFIGURE COMMAND
+    # CONFIGURE TARGET LIBINT LIBRARY
     my @args = (
         "cmake",
         "-B", "build",
         "-DCMAKE_INSTALL_PREFIX=$prefix",
-        "-DBUILD_SHARED_LIBS=$build_shared"
+        "-DBUILD_SHARED_LIBS=$build_shared",
+        "-DCMAKE_DISABLE_FIND_PACKAGE_Boost=True"
     );
 
     # RUN CONFIGURE
     system(@args) == 0 or die "LIBINT CONFIGURE FAILED";
 
     # RUN BUILD
-    system("cmake", "--build", "build", "--parallel", $cores, "--verbose") == 0 or die "LIBINT BUILD FAILED";
+    system("cmake", "--build", "build", "--parallel", $cores) == 0 or die "LIBINT BUILD FAILED";
 
     # INSTALL THE LIBRARY
     system("cmake", "--install", "build") == 0 or die "LIBINT INSTALL FAILED";
