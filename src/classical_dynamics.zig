@@ -12,6 +12,7 @@ const Vector = @import("tensor.zig").Vector;
 
 const eighBatch = @import("linear_algebra.zig").eighBatch;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
+const norm = @import("linear_algebra.zig").norm;
 const printf = @import("read_write.zig").printf;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
@@ -65,19 +66,9 @@ pub fn Ensemble(comptime T: type) type {
         }
 
         pub fn ekin(self: @This()) T {
-            var sum: T = 0;
+            const p_norm = norm(T, self.p.asVector());
 
-            for (0..self.p.nrow()) |i| {
-                var psq: T = 0;
-
-                for (0..self.p.ncol()) |j| {
-                    psq += self.p.at(i, j) * self.p.at(i, j);
-                }
-
-                sum += psq;
-            }
-
-            return sum / (2 * self.mass * @as(T, @floatFromInt(self.p.nrow())));
+            return (p_norm * p_norm) / (2 * self.mass * @as(T, @floatFromInt(self.p.nrow())));
         }
 
         pub fn epot(self: @This(), pot: Potential(T), time: T, adiabatic: bool, gpa: Allocator) !T {

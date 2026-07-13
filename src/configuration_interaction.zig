@@ -20,7 +20,7 @@ const bfgs = @import("molecular_optimization.zig").bfgs;
 const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
-const eighSlice = @import("linear_algebra.zig").eighSlice;
+const eigh = @import("linear_algebra.zig").eigh;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const hartree_fock_run = @import("hartree_fock.zig").run;
 const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
@@ -534,7 +534,7 @@ fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocat
     var C = try Matrix(T).initZero(H_CI.shape[0], H_CI.shape[0], gpa);
     errdefer C.deinit(gpa);
 
-    try eighSlice(T, E.data, C.data, H_CI.data);
+    try eigh(T, &E, &C, H_CI);
 
     for (0..E.length()) |i| {
         E.ptr(i).* += VN;

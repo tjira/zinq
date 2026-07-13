@@ -6,6 +6,7 @@ const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Vector = @import("tensor.zig").Vector;
 
+const eigh = @import("linear_algebra.zig").eigh;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 const getMass = @import("constant.zig").getMass;
 const mm = @import("linear_algebra.zig").mm;
@@ -183,8 +184,8 @@ pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), sys: M
         var H_temp = try Matrix(T).init(atoms.len * 3, atoms.len * 3, gpa);
         defer H_temp.deinit(gpa);
 
-        mm(T, &H_temp, P_mat, HM);
-        mm(T, &HM, H_temp, P_mat);
+        mm(T, &H_temp, P_mat, HM, 1, 0, false, false);
+        mm(T, &HM, H_temp, P_mat, 1, 0, false, false);
     }
 
     var w = try Vector(T).init(atoms.len * 3, gpa);
@@ -193,7 +194,7 @@ pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), sys: M
     var u = try Matrix(T).init(hessian.nrow(), hessian.nrow(), gpa);
     defer u.deinit(gpa);
 
-    try eighSlice(T, w.data, u.data, HM.data);
+    try eigh(T, &w, &u, HM);
 
     for (0..hessian.nrow()) |i| {
         w.ptr(i).* = std.math.sign(w.at(i)) * std.math.sqrt(@abs(w.at(i)));

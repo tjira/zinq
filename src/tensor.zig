@@ -11,8 +11,18 @@ pub fn Matrix(comptime T: type) type {
             return .{ .data = try gpa.alloc(T, rows * cols), .shape = .{ rows, cols } };
         }
 
+        pub fn fromSlice(rows: usize, cols: usize, data: []T) @This() {
+            std.debug.assert(data.len == rows * cols);
+
+            return .{ .data = data, .shape = .{ rows, cols } };
+        }
+
         pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {
             gpa.free(self.data);
+        }
+
+        pub fn asVector(self: @This()) Vector(T) {
+            return .{ .data = self.data, .shape = .{self.data.len} };
         }
 
         pub fn at(self: @This(), i: usize, j: usize) T {
@@ -81,6 +91,12 @@ pub fn Matrix(comptime T: type) type {
             return &self.data[i * self.shape[1] + j];
         }
 
+        pub fn row(self: @This(), i: usize) Vector(T) {
+            std.debug.assert(i < self.shape[0]);
+
+            return .{ .data = self.data[i * self.shape[1] .. (i + 1) * self.shape[1]], .shape = .{self.shape[1]} };
+        }
+
         pub fn rowSlice(self: @This(), i: usize) []T {
             std.debug.assert(i < self.shape[0]);
 
@@ -118,6 +134,10 @@ pub fn Vector(comptime T: type) type {
 
         pub fn init(size: usize, gpa: std.mem.Allocator) !@This() {
             return .{ .data = try gpa.alloc(T, size), .shape = .{size} };
+        }
+
+        pub fn fromSlice(data: []T) @This() {
+            return .{ .data = data, .shape = .{data.len} };
         }
 
         pub fn deinit(self: *@This(), gpa: std.mem.Allocator) void {

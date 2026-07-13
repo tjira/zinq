@@ -6,6 +6,7 @@ const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Vector = @import("tensor.zig").Vector;
 
+const dot = @import("linear_algebra.zig").dot;
 const getSymbol = @import("constant.zig").getSymbol;
 const printf = @import("read_write.zig").printf;
 
@@ -16,13 +17,7 @@ pub fn mulliken(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matr
     @memset(net_populations, 0);
 
     for (0..P.shape[0]) |u| {
-        var pop: T = 0;
-
-        for (0..P.shape[1]) |v| {
-            pop += P.at(u, v) * S.at(u, v);
-        }
-
-        net_populations[@intCast(sys.bf2at[u % sys.nbf])] += pop;
+        net_populations[@intCast(sys.bf2at[u % sys.nbf])] += dot(T, P.row(u), S.row(u));
     }
 
     var charges = try Vector(T).init(sys.atoms.len, gpa);

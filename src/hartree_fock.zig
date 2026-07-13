@@ -10,11 +10,13 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
+const addScaled = @import("linear_algebra.zig").addScaled;
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
 const bfgs = @import("molecular_optimization.zig").bfgs;
 const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
+const dot = @import("linear_algebra.zig").dot;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const geigh = @import("linear_algebra.zig").geigh;
 const getSymbol = @import("constant.zig").getSymbol;
@@ -168,14 +170,7 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
     defer b.deinit(gpa);
 
     for (0..fck_hist.len) |i| for (i..fck_hist.len) |j| {
-        var sum: T = 0;
-
-        const ei = err_hist[i];
-        const ej = err_hist[j];
-
-        for (0..ei.data.len) |k| {
-            sum += ei.data[k] * ej.data[k];
-        }
+        const sum = dot(T, err_hist[i].asVector(), err_hist[j].asVector());
 
         B.ptr(i, j).* = sum;
         B.ptr(j, i).* = sum;
@@ -204,9 +199,11 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
 
     F.zero();
 
-    for (0..fck_hist.len) |i| for (0..F.shape[0]) |j| for (0..F.shape[1]) |k| {
-        F.ptr(j, k).* += c.at(i, 0) * fck_hist[i].at(j, k);
-    };
+    for (0..fck_hist.len) |i| {
+        var f_vec = F.asVector();
+
+        addScaled(T, c.at(i, 0), fck_hist[i].asVector(), &f_vec);
+    }
 
     if (symmetric) for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
         const avg = (F.at(i, j) + F.at(j, i)) / 2;
@@ -246,17 +243,12 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
     const exx_val = if (dft) |d| d.exx_coef else 1;
 
     for (0..ints.sys.atoms.len) |i| for (0..3) |j| {
-        var h_G: T = 0;
-        var s_G: T = 0;
+        const offset = (3 * i + j) * dS.shape[1] * dS.shape[2];
+
+        const h_G = dot(T, P.asVector(), Vector(T).fromSlice(dH.data[offset .. offset + P.data.len]));
+        const s_G = dot(T, W.asVector(), Vector(T).fromSlice(dS.data[offset .. offset + W.data.len]));
+
         var g_G: T = 0;
-
-        for (0..dS.shape[1]) |p| for (0..dS.shape[2]) |q| {
-            const dh_val = dH.at(.{ 3 * i + j, p, q });
-            const ds_val = dS.at(.{ 3 * i + j, p, q });
-
-            h_G += P.at(p, q) * dh_val;
-            s_G -= W.at(p, q) * ds_val;
-        };
 
         for (0..dg.shape[1]) |p| for (0..dg.shape[2]) |q| for (0..dg.shape[3]) |r| for (0..dg.shape[4]) |s| {
             const dg1 = dg.at(.{ 3 * i + j, p, r, q, s });
@@ -265,7 +257,7 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
             g_G += 0.5 * P.at(p, q) * P.at(r, s) * (dg1 - exx_val * exch_factor * dg2);
         };
 
-        G.ptr(i, j).* += h_G + g_G + s_G;
+        G.ptr(i, j).* += h_G + g_G - s_G;
     };
 
     return G;
@@ -635,12 +627,12 @@ fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Ma
     var FP = try Matrix(T).init(nbf, nbf, gpa);
     defer FP.deinit(gpa);
 
-    mm(T, &FP, F, P);
+    mm(T, &FP, F, P, 1, 0, false, false);
 
     var FPS = try Matrix(T).init(nbf, nbf, gpa);
     defer FPS.deinit(gpa);
 
-    mm(T, &FPS, FP, S);
+    mm(T, &FPS, FP, S, 1, 0, false, false);
 
     for (0..nbf) |i| for (0..nbf) |j| {
         err.ptr(i, j).* = FPS.at(i, j) - FPS.at(j, i);
