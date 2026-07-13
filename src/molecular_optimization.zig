@@ -26,10 +26,16 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
         run_opt.response = null;
     }
 
+    if (comptime @hasField(@TypeOf(run_opt), "write")) {
+        run_opt.write = .{};
+    }
+
     if (comptime is_hf) {
         run_opt.hartree_fock.response = null;
 
         run_opt.hartree_fock.hessian, run_opt.hartree_fock.mulliken = .{ null, false };
+
+        run_opt.hartree_fock.write = .{};
     }
 
     if (bfgs_opt.iterations > 0 and log) {
@@ -175,10 +181,16 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
         run_opt.response = null;
     }
 
+    if (comptime @hasField(@TypeOf(run_opt), "write")) {
+        run_opt.write = .{};
+    }
+
     if (comptime is_hf) {
         run_opt.hartree_fock.response = null;
 
         run_opt.hartree_fock.hessian, run_opt.hartree_fock.mulliken = .{ null, false };
+
+        run_opt.hartree_fock.write = .{};
     }
 
     if (sd_opt.iterations > 0 and log) {

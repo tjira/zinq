@@ -135,11 +135,17 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
         modified_opt.response = null;
     }
 
+    if (comptime @hasField(@TypeOf(modified_opt), "write")) {
+        modified_opt.write = .{};
+    }
+
     if (comptime @hasField(@TypeOf(modified_opt), "hartree_fock")) {
         modified_opt.hartree_fock.gradient = null;
         modified_opt.hartree_fock.response = null;
 
         modified_opt.hartree_fock.hessian, modified_opt.hartree_fock.mulliken = .{ null, false };
+
+        modified_opt.hartree_fock.write = .{};
     }
 
     var original_coors: [@typeInfo(@TypeOf(perts)).@"struct".fields.len / 2]T = undefined;

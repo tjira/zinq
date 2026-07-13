@@ -160,6 +160,8 @@ const Write = struct {
     density: ?[]const u8 = null,
     fock: ?[]const u8 = null,
     geometry: ?[]const u8 = null,
+    gradient: ?[]const u8 = null,
+    hessian: ?[]const u8 = null,
 };
 
 pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
@@ -456,7 +458,13 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     errdefer {
         if (opt.gradient) |_| grad[0].deinit(gpa);
+
+        gpa.free(grad);
     }
+
+    if (opt.write.gradient) |fname| if (grad.len > 0) {
+        try writeMatrix(T, io, fname, grad[0]);
+    };
 
     if (log) for (0..grad.len) |i| {
         const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTICAL" else "NUMERICAL";
@@ -478,6 +486,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         gpa.free(hess);
     }
 
+    if (opt.write.hessian) |fname| if (hess.len > 0) {
+        try writeMatrix(T, io, fname, hess[0]);
+    };
+
     var result: Result(T) = .{ .ints = ints, .P = P, .C = C, .F = F, .e = e, .energy = energy, .grad = grad, .hess = hess };
 
     if (opt.response) |response| {
@@ -488,6 +500,18 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 }
 
 fn checkInvalidInput(opt: Options) !void {
+    if (opt.write.gradient != null and opt.gradient == null) {
+        std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.hessian != null and opt.hessian == null) {
+        std.log.err("HESSIAN WRITE REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.multiplicity == 0) {
         std.log.err("MULTIPLICITY MUST BE GREATER THAN 0", .{});
 

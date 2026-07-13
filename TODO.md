@@ -30,4 +30,4 @@
 - [x] Add charge and multiplicity to the input file for electronic structure calculations.
 - [x] Implement providing guess density for electronic structure calculations.
 - [ ] Implement Wolfe conditions for BFGS optimization.
-- [ ] Add an option to specify path oto export molecule.
+- [x] Add an option to specify path to export molecule.

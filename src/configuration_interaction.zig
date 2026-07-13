@@ -28,6 +28,7 @@ const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGra
 const primType = @import("value.zig").primType;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printf = @import("read_write.zig").printf;
+const writeMatrix = @import("read_write.zig").writeMatrix;
 const writeXyzFile = @import("read_write.zig").writeXyzFile;
 const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 
@@ -110,6 +111,8 @@ pub fn Result(comptime T: type) type {
 
 const Write = struct {
     geometry: ?[]const u8 = null,
+    gradient: ?[]const u8 = null,
+    hessian: ?[]const u8 = null,
 };
 
 pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Allocator) !std.ArrayList([]const usize) {
@@ -269,6 +272,8 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     errdefer {
         if (opt.gradient) |_| grad[0].deinit(gpa);
+
+        gpa.free(grad);
     }
 
     if (log and opt.gradient != null) {
@@ -289,7 +294,17 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     errdefer {
         if (opt.hessian) |_| hess[0].deinit(gpa);
+
+        gpa.free(hess);
     }
+
+    if (opt.write.gradient) |fname| if (grad.len > 0) {
+        try writeMatrix(T, io, fname, grad[0]);
+    };
+
+    if (opt.write.hessian) |fname| if (hess.len > 0) {
+        try writeMatrix(T, io, fname, hess[0]);
+    };
 
     if (opt.write.geometry) |fname| {
         try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
@@ -410,6 +425,18 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
 }
 
 fn checkInvalidInput(opt: Options) !void {
+    if (opt.write.gradient != null and opt.gradient == null) {
+        std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.hessian != null and opt.hessian == null) {
+        std.log.err("HESSIAN WRITE REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.excitations.len == 0) {
         std.log.err("CI EXCITATIONS LIST MUST NOT BE EMPTY", .{});
 
