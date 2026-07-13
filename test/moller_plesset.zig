@@ -4,7 +4,7 @@ const zinq = @import("zinq");
 const TEST_TOLERANCE = 1e-8;
 
 test "Restricted MP2 on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -13,7 +13,7 @@ test "Restricted MP2 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -38,7 +38,7 @@ test "Restricted MP2 on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Generalized MP2 on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -48,7 +48,7 @@ test "Generalized MP2 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -73,7 +73,7 @@ test "Generalized MP2 on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Restricted MP3 on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -82,7 +82,7 @@ test "Restricted MP3 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -107,7 +107,7 @@ test "Restricted MP3 on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Generalized MP3 on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -117,7 +117,7 @@ test "Generalized MP3 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -142,7 +142,7 @@ test "Generalized MP3 on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Restricted MP4 on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -151,7 +151,7 @@ test "Restricted MP4 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -176,7 +176,7 @@ test "Restricted MP4 on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Generalized MP4 on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -186,7 +186,7 @@ test "Generalized MP4 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -211,7 +211,7 @@ test "Generalized MP4 on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Restricted MP2 on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -220,7 +220,7 @@ test "Restricted MP2 on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -245,7 +245,7 @@ test "Restricted MP2 on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Generalized MP2 on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -255,7 +255,7 @@ test "Generalized MP2 on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -280,7 +280,7 @@ test "Generalized MP2 on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Restricted MP3 on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -289,7 +289,7 @@ test "Restricted MP3 on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -314,7 +314,7 @@ test "Restricted MP3 on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Generalized MP3 on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -324,7 +324,7 @@ test "Generalized MP3 on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -349,7 +349,7 @@ test "Generalized MP3 on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Restricted MP4 on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -358,7 +358,7 @@ test "Restricted MP4 on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -383,7 +383,7 @@ test "Restricted MP4 on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Generalized MP4 on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.MollerPlessetOptions{
+    const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -393,7 +393,7 @@ test "Generalized MP4 on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.moller_plesset_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off

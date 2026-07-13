@@ -4,13 +4,13 @@ const zinq = @import("zinq");
 const TEST_TOLERANCE = 1e-8;
 
 test "Restricted Hartree-Fock on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -35,14 +35,14 @@ test "Restricted Hartree-Fock on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Generalized Hartree-Fock on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .generalized = true,
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -67,7 +67,7 @@ test "Generalized Hartree-Fock on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -77,14 +77,14 @@ test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-74.7399385581956500, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Generalized Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -95,14 +95,14 @@ test "Generalized Kohn-Sham DFT with LDA (VWN5) Functional on Water (STO-3G)" {
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-74.7399385581956500, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -112,14 +112,14 @@ test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-75.23434062179214, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Generalized Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -130,14 +130,14 @@ test "Generalized Kohn-Sham DFT with GGA (PBE) Functional on Water (STO-3G)" {
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-75.23434062179214, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -147,14 +147,14 @@ test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G)
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-75.33570008867521, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Generalized Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -165,14 +165,14 @@ test "Generalized Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water (STO-3G
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-75.33570008867527, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -182,14 +182,14 @@ test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G)
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-75.30199624497159, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -200,14 +200,14 @@ test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water (STO-3G
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-75.3019962449716, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -216,14 +216,14 @@ test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO-
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-75.32009990219437, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Generalized Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -233,20 +233,20 @@ test "Generalized Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water (STO
         .gradient = null,
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     try std.testing.expectApproxEqAbs(-75.32009990219433, res.energy[0], TEST_TOLERANCE);
 }
 
 test "Restricted Hartree-Fock on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -271,14 +271,14 @@ test "Restricted Hartree-Fock on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Generalized Hartree-Fock on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .generalized = true,
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -303,7 +303,7 @@ test "Generalized Hartree-Fock on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -313,7 +313,7 @@ test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water with Numerica
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -338,7 +338,7 @@ test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water with Numerica
 }
 
 test "Generalized Kohn-Sham DFT with LDA (VWN5) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .generalized = true,
@@ -349,7 +349,7 @@ test "Generalized Kohn-Sham DFT with LDA (VWN5) Functional on Water with Numeric
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -374,7 +374,7 @@ test "Generalized Kohn-Sham DFT with LDA (VWN5) Functional on Water with Numeric
 }
 
 test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -384,7 +384,7 @@ test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water with Numerical
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -409,7 +409,7 @@ test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water with Numerical
 }
 
 test "Generalized Kohn-Sham DFT with GGA (PBE) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .generalized = true,
@@ -420,7 +420,7 @@ test "Generalized Kohn-Sham DFT with GGA (PBE) Functional on Water with Numerica
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -445,7 +445,7 @@ test "Generalized Kohn-Sham DFT with GGA (PBE) Functional on Water with Numerica
 }
 
 test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -455,7 +455,7 @@ test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water with Num
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -480,7 +480,7 @@ test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water with Num
 }
 
 test "Generalized Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .generalized = true,
@@ -491,7 +491,7 @@ test "Generalized Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water with Nu
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -516,7 +516,7 @@ test "Generalized Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water with Nu
 }
 
 test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -526,7 +526,7 @@ test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water with Num
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -551,7 +551,7 @@ test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water with Num
 }
 
 test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .generalized = true,
@@ -562,7 +562,7 @@ test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water with Nu
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -587,7 +587,7 @@ test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water with Nu
 }
 
 test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .dft = .{
@@ -596,7 +596,7 @@ test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water with 
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -621,7 +621,7 @@ test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water with 
 }
 
 test "Generalized Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.HartreeFockOptions{
+    const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
         .basis = "builtin:sto-3g",
         .generalized = true,
@@ -631,7 +631,7 @@ test "Generalized Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water with
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.hartree_fock_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off

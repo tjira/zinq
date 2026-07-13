@@ -4,7 +4,7 @@ const zinq = @import("zinq");
 const TEST_TOLERANCE = 1e-8;
 
 test "Restricted CIS on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.ConfigurationInteractionOptions{
+    const opt = zinq.configuration_interaction.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -13,7 +13,7 @@ test "Restricted CIS on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -42,7 +42,7 @@ test "Restricted CIS on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Generalized CIS on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.ConfigurationInteractionOptions{
+    const opt = zinq.configuration_interaction.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -52,7 +52,7 @@ test "Generalized CIS on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -81,7 +81,7 @@ test "Generalized CIS on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Restricted CISD on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.ConfigurationInteractionOptions{
+    const opt = zinq.configuration_interaction.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -91,7 +91,7 @@ test "Restricted CISD on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -120,7 +120,7 @@ test "Restricted CISD on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Generalized CISD on Water with Analytical Gradient (STO-3G)" {
-    const opt = zinq.ConfigurationInteractionOptions{
+    const opt = zinq.configuration_interaction.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -131,7 +131,7 @@ test "Generalized CISD on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -160,7 +160,7 @@ test "Generalized CISD on Water with Analytical Gradient (STO-3G)" {
 }
 
 test "Restricted CIS on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.ConfigurationInteractionOptions{
+    const opt = zinq.configuration_interaction.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -169,7 +169,7 @@ test "Restricted CIS on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -198,7 +198,7 @@ test "Restricted CIS on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Generalized CIS on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.ConfigurationInteractionOptions{
+    const opt = zinq.configuration_interaction.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -208,7 +208,7 @@ test "Generalized CIS on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -237,7 +237,7 @@ test "Generalized CIS on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Restricted CISD on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.ConfigurationInteractionOptions{
+    const opt = zinq.configuration_interaction.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -247,7 +247,7 @@ test "Restricted CISD on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -276,7 +276,7 @@ test "Restricted CISD on Water with Numerical Gradient (STO-3G)" {
 }
 
 test "Generalized CISD on Water with Numerical Gradient (STO-3G)" {
-    const opt = zinq.ConfigurationInteractionOptions{
+    const opt = zinq.configuration_interaction.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
@@ -287,7 +287,7 @@ test "Generalized CISD on Water with Numerical Gradient (STO-3G)" {
         .gradient = .{ .numeric = .{} },
     };
 
-    var res = try zinq.configuration_interaction_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off

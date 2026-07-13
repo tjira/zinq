@@ -9,31 +9,60 @@ const openblas = @cImport(@cInclude("openblas_config.h"));
 
 const Allocator = std.mem.Allocator;
 
-pub const ClassicalDynamicsOptions = @import("classical_dynamics.zig").Options;
-pub const classical_dynamics_run = @import("classical_dynamics.zig").run;
-pub const ConfigurationInteractionOptions = @import("configuration_interaction.zig").Options;
-pub const configuration_interaction_run = @import("configuration_interaction.zig").run;
-pub const HartreeFockOptions = @import("hartree_fock.zig").Options;
-pub const hartree_fock_run = @import("hartree_fock.zig").run;
-pub const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
-pub const molecular_integrals_run = @import("molecular_integrals.zig").run;
-pub const MollerPlessetOptions = @import("moller_plesset.zig").Options;
-pub const moller_plesset_run = @import("moller_plesset.zig").run;
-pub const QuantumDynamicsOptions = @import("quantum_dynamics.zig").Options;
-pub const quantum_dynamics_run = @import("quantum_dynamics.zig").run;
+pub const cimport = @import("cimport.zig");
+pub const classical_dynamics = @import("classical_dynamics.zig");
+pub const configuration_interaction = @import("configuration_interaction.zig");
+pub const constant = @import("constant.zig");
+pub const cphf = @import("cphf.zig");
+pub const density_functional_theory = @import("density_functional_theory.zig");
+pub const dual = @import("dual.zig");
+pub const exprtk = @import("exprtk.zig");
+pub const fourier_transform = @import("fourier_transform.zig");
+pub const frequency_analysis = @import("frequency_analysis.zig");
+pub const hartree_fock = @import("hartree_fock.zig");
+pub const integral_transform = @import("integral_transform.zig");
+pub const integrator = @import("integrator.zig");
+pub const lebedev_quadrature_nodes = @import("lebedev_quadrature_nodes.zig");
+pub const linear_algebra = @import("linear_algebra.zig");
+pub const molecular_grid = @import("molecular_grid.zig");
+pub const molecular_integrals = @import("molecular_integrals.zig");
+pub const molecular_optimization = @import("molecular_optimization.zig");
+pub const molecular_system = @import("molecular_system.zig");
+pub const moller_plesset = @import("moller_plesset.zig");
+pub const nuclear_derivative = @import("nuclear_derivative.zig");
+pub const population_analysis = @import("population_analysis.zig");
+pub const potential = @import("potential.zig");
+pub const quantum_dynamics = @import("quantum_dynamics.zig");
+pub const read_write = @import("read_write.zig");
+pub const spectral_analysis = @import("spectral_analysis.zig");
+pub const surface_hopping = @import("surface_hopping.zig");
+pub const tensor = @import("tensor.zig");
+pub const value = @import("value.zig");
+pub const wavepacket = @import("wavepacket.zig");
+pub const xc_functional = @import("xc_functional.zig");
 
-const printf = @import("read_write.zig").printf;
+const printf = read_write.printf;
+
+const Handlers = struct {
+    pub const classical_dynamics = @import("classical_dynamics.zig");
+    pub const configuration_interaction = @import("configuration_interaction.zig");
+    pub const hartree_fock = @import("hartree_fock.zig");
+    pub const molecular_integrals = @import("molecular_integrals.zig");
+    pub const moller_plesset = @import("moller_plesset.zig");
+    pub const quantum_dynamics = @import("quantum_dynamics.zig");
+};
 
 const Options = struct {
     zinq: []union(enum) {
-        classical_dynamics: ClassicalDynamicsOptions,
-        configuration_interaction: ConfigurationInteractionOptions,
-        hartree_fock: HartreeFockOptions,
-        molecular_integrals: MolecularIntegralsOptions,
-        moller_plesset: MollerPlessetOptions,
-        quantum_dynamics: QuantumDynamicsOptions,
+        classical_dynamics: classical_dynamics.Options,
+        configuration_interaction: configuration_interaction.Options,
+        hartree_fock: hartree_fock.Options,
+        molecular_integrals: molecular_integrals.Options,
+        moller_plesset: moller_plesset.Options,
+        quantum_dynamics: quantum_dynamics.Options,
     },
 };
+
 
 pub fn main(init: std.process.Init) !void {
     var timer = std.Io.Timestamp.now(init.io, .real);
@@ -83,7 +112,7 @@ fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: A
 
         switch (parsed.value.zinq[i]) {
             inline else => |field, tag| {
-                var result = try @field(@This(), @tagName(tag) ++ "_run")(T, io, field, true, gpa);
+                var result = try @field(Handlers, @tagName(tag)).run(T, io, field, true, gpa);
                 defer result.deinit(gpa);
             },
         }

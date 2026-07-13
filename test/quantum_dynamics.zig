@@ -6,7 +6,7 @@ const zinq = @import("zinq");
 const TEST_TOLERANCE = 1e-8;
 
 test "Adiabatic RTP on Tully's First Potential" {
-    const opt = zinq.QuantumDynamicsOptions{
+    const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
         .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 1, .gamma = &.{2}, .adiabatic = true },
         .potential = .{ .tully_1 = .{} },
@@ -17,7 +17,7 @@ test "Adiabatic RTP on Tully's First Potential" {
         .adiabatic = true,
     };
 
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -32,7 +32,7 @@ test "Adiabatic RTP on Tully's First Potential" {
 }
 
 test "Diabatic RTP on Tully's First Potential" {
-    const opt = zinq.QuantumDynamicsOptions{
+    const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
         .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 1, .gamma = &.{2}, .adiabatic = false },
         .potential = .{ .tully_1 = .{} },
@@ -43,7 +43,7 @@ test "Diabatic RTP on Tully's First Potential" {
         .adiabatic = false,
     };
 
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -58,7 +58,7 @@ test "Diabatic RTP on Tully's First Potential" {
 }
 
 test "Adiabatic RTP on Time-Linear Potential" {
-    const opt = zinq.QuantumDynamicsOptions{
+    const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -16, 16 }}, .npoint = 256 },
         .initial_conditions = .{ .momentum = &.{0}, .position = &.{0}, .state = 1, .gamma = &.{2}, .adiabatic = true },
         .potential = .{ .time_linear = .{} },
@@ -69,7 +69,7 @@ test "Adiabatic RTP on Time-Linear Potential" {
         .adiabatic = true,
     };
 
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -84,7 +84,7 @@ test "Adiabatic RTP on Time-Linear Potential" {
 }
 
 test "Diabatic RTP on Time-Linear Potential" {
-    const opt = zinq.QuantumDynamicsOptions{
+    const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -16, 16 }}, .npoint = 256 },
         .initial_conditions = .{ .momentum = &.{0}, .position = &.{0}, .state = 1, .gamma = &.{2}, .adiabatic = false },
         .potential = .{ .time_linear = .{} },
@@ -95,7 +95,7 @@ test "Diabatic RTP on Time-Linear Potential" {
         .adiabatic = false,
     };
 
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -110,7 +110,7 @@ test "Diabatic RTP on Time-Linear Potential" {
 }
 
 test "ITP on 1D HO Potential" {
-    const opt = zinq.QuantumDynamicsOptions{
+    const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -8, 8 }}, .npoint = 128 },
         .initial_conditions = .{ .momentum = &.{0}, .position = &.{1}, .gamma = &.{2} },
         .potential = .{ .harmonic = .{} },
@@ -121,7 +121,7 @@ test "ITP on 1D HO Potential" {
         .time_step = 0.01,
     };
 
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -144,7 +144,7 @@ test "ITP on 1D HO Potential" {
 }
 
 test "ITP on 2D HO Potential" {
-    const opt = zinq.QuantumDynamicsOptions{
+    const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{ .{ -8, 8 }, .{ -8, 8 } }, .npoint = 64 },
         .initial_conditions = .{ .momentum = &.{ 0, 0 }, .position = &.{ 1, 1 }, .gamma = &.{ 2, 2 } },
         .potential = .{ .harmonic = .{ .k = &.{ 1, 1 } } },
@@ -155,7 +155,7 @@ test "ITP on 2D HO Potential" {
         .time_step = 0.01,
     };
 
-    var output = try zinq.quantum_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off

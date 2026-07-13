@@ -6,7 +6,7 @@ const zinq = @import("zinq");
 const TEST_TOLERANCE = 1e-8;
 
 test "Adiabatic Landau--Zener on Tully's First Potential" {
-    const opt = zinq.ClassicalDynamicsOptions{
+    const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .tully_1 = .{} },
         .surface_hopping = .{ .landau_zener = .{} },
@@ -17,7 +17,7 @@ test "Adiabatic Landau--Zener on Tully's First Potential" {
         .adiabatic = true,
     };
 
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -31,7 +31,7 @@ test "Adiabatic Landau--Zener on Tully's First Potential" {
 }
 
 test "Diabatic Landau--Zener on Tully's First Potential" {
-    const opt = zinq.ClassicalDynamicsOptions{
+    const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .tully_1 = .{} },
         .surface_hopping = .{ .landau_zener = .{} },
@@ -42,7 +42,7 @@ test "Diabatic Landau--Zener on Tully's First Potential" {
         .adiabatic = false,
     };
 
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -56,7 +56,7 @@ test "Diabatic Landau--Zener on Tully's First Potential" {
 }
 
 test "Adiabatic Landau--Zener on Time-Linear Potential" {
-    const opt = zinq.ClassicalDynamicsOptions{
+    const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .time_linear = .{} },
         .surface_hopping = .{ .landau_zener = .{} },
@@ -67,7 +67,7 @@ test "Adiabatic Landau--Zener on Time-Linear Potential" {
         .adiabatic = true,
     };
 
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -81,7 +81,7 @@ test "Adiabatic Landau--Zener on Time-Linear Potential" {
 }
 
 test "Diabatic Landau--Zener on Time-Linear Potential" {
-    const opt = zinq.ClassicalDynamicsOptions{
+    const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .time_linear = .{} },
         .surface_hopping = .{ .landau_zener = .{} },
@@ -92,7 +92,7 @@ test "Diabatic Landau--Zener on Time-Linear Potential" {
         .adiabatic = false,
     };
 
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -106,7 +106,7 @@ test "Diabatic Landau--Zener on Time-Linear Potential" {
 }
 
 test "Adiabatic Fewest Switches on Tully's First Potential" {
-    const opt = zinq.ClassicalDynamicsOptions{
+    const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .tully_1 = .{} },
         .surface_hopping = .{ .fewest_switches = .{} },
@@ -117,7 +117,7 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
         .adiabatic = true,
     };
 
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -131,7 +131,7 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
 }
 
 test "Diabatic Fewest Switches on Tully's First Potential" {
-    const opt = zinq.ClassicalDynamicsOptions{
+    const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .tully_1 = .{} },
         .surface_hopping = .{ .fewest_switches = .{} },
@@ -142,7 +142,7 @@ test "Diabatic Fewest Switches on Tully's First Potential" {
         .adiabatic = false,
     };
 
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -156,7 +156,7 @@ test "Diabatic Fewest Switches on Tully's First Potential" {
 }
 
 test "Adiabatic Fewest Switches on Time-Linear Potential" {
-    const opt = zinq.ClassicalDynamicsOptions{
+    const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .time_linear = .{} },
         .surface_hopping = .{ .fewest_switches = .{} },
@@ -167,7 +167,7 @@ test "Adiabatic Fewest Switches on Time-Linear Potential" {
         .adiabatic = true,
     };
 
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -181,7 +181,7 @@ test "Adiabatic Fewest Switches on Time-Linear Potential" {
 }
 
 test "Diabatic Fewest Switches on Time-Linear Potential" {
-    const opt = zinq.ClassicalDynamicsOptions{
+    const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .time_linear = .{} },
         .surface_hopping = .{ .fewest_switches = .{} },
@@ -192,7 +192,7 @@ test "Diabatic Fewest Switches on Time-Linear Potential" {
         .adiabatic = false,
     };
 
-    var output = try zinq.classical_dynamics_run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
