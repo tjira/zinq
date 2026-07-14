@@ -21,3 +21,4 @@
 - **Math Delimiters:** Ensure the `$$` block delimiters are always placed on separate lines for proper rendering.
 - **Equation Flow:** Integrate equations grammatically into sentences (rather than using colons to introduce them).
   Avoid unnecessary bullet points or colons.
+- **Line Wrapping:** Do not wrap lines in documentation; each paragraph must be written as a single, continuous line.
