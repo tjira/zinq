@@ -16,3 +16,8 @@
 - **Simplicity & Scope:** Minimize the number of function arguments (group related parameters into structs if necessary) and strictly limit the number of local variables defined in a given scope.
 - **File Organization:** Define all structs before any functions. The strict top-to-bottom order for the file level must be public structs, followed by private structs, then public functions, and finally private functions.
 - **Struct Organization:** Within any struct definition, place all state and fields at the top, followed by all public functions, and finally all private functions.
+
+## Documentation & Markdown Style
+- **Math Delimiters:** Ensure the `$$` block delimiters are always placed on separate lines for proper rendering.
+- **Equation Flow:** Integrate equations grammatically into sentences (rather than using colons to introduce them).
+  Avoid unnecessary bullet points or colons.

@@ -19,4 +19,4 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Fewest Switches Surface Hopping: fssh.md
+  - Dual Numbers: dual_numbers.md
