@@ -31,3 +31,4 @@
 - [x] Implement providing guess density for electronic structure calculations.
 - [ ] Implement Wolfe conditions for BFGS optimization.
 - [x] Add an option to specify path to export molecule.
+- [x] Fix the allocation issue with the sys field in result structs.

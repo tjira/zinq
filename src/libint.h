@@ -4,6 +4,8 @@ typedef struct SystemData SystemData;
 
 SystemData* libint_init(const char *system, const char *basis); void libint_deinit(SystemData *sys);
 
+SystemData* libint_clone(SystemData *sys);
+
 size_t libint_nbf(SystemData *sys);
 size_t libint_nat(SystemData *sys);
 

@@ -88,6 +88,29 @@ pub fn MolecularSystem(comptime T: type) type {
             libint.libint_deinit(self.ptr);
         }
 
+        /// Clones the nuclear configuration and basis set data mapping.
+        pub fn clone(self: @This(), gpa: Allocator) !@This() {
+            const ptr = libint.libint_clone(self.ptr) orelse return error.InitializationFailed;
+            errdefer libint.libint_deinit(ptr);
+
+            const atoms = try gpa.alloc(i32, self.atoms.len);
+            errdefer gpa.free(atoms);
+
+            @memcpy(atoms, self.atoms);
+
+            const coors = try gpa.alloc(T, self.coors.len);
+            errdefer gpa.free(coors);
+
+            @memcpy(coors, self.coors);
+
+            const bf2at = try gpa.alloc(i32, self.bf2at.len);
+            errdefer gpa.free(bf2at);
+
+            @memcpy(bf2at, self.bf2at);
+
+            return .{ .ptr = ptr, .nbf = self.nbf, .atoms = atoms, .coors = coors, .bf2at = bf2at, .nel = self.nel };
+        }
+
         /// Calculates the four-center, two-electron Coulomb repulsion integrals over the basis functions.
         pub fn coulomb(self: @This(), gpa: Allocator) !Tensor(T, 4) {
             const I = try Tensor(T, 4).initZero(.{ self.nbf, self.nbf, self.nbf, self.nbf }, gpa);

@@ -75,6 +75,8 @@ pub fn Result(comptime T: type) type {
 
         /// Deallocates the computed one-electron and two-electron molecular integral tensors stored in the Result struct.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.sys.deinit(gpa);
+
             if (self.S) |*S| S.deinit(gpa);
             if (self.K) |*K| K.deinit(gpa);
             if (self.V) |*V| V.deinit(gpa);
@@ -148,7 +150,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
 /// Evaluates molecular integrals and gradients directly on an initialized molecular system.
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
-    var ints: Result(T) = .{ .sys = sys };
+    var ints: Result(T) = .{ .sys = try sys.clone(gpa) };
     errdefer ints.deinit(gpa);
 
     const any_calc = blk: {

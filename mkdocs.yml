@@ -19,5 +19,4 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Mixed Quantum-Classical Dynamics:
-      - Fewest Switches Surface Hopping: fssh.md
+  - Fewest Switches Surface Hopping: fssh.md

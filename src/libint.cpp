@@ -21,6 +21,10 @@ extern "C" {
         if (!sys) return; delete sys;
     }
 
+    SystemData* libint_clone(SystemData *sys) {
+        if (!sys) return nullptr; return new SystemData(*sys);
+    }
+
     size_t libint_nat(SystemData *sys) {
         if (!sys) return 0; return sys->atoms.size();
     }
