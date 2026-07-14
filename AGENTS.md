@@ -18,7 +18,9 @@
 - **Struct Organization:** Within any struct definition, place all state and fields at the top, followed by all public functions, and finally all private functions.
 
 ## Documentation & Markdown Style
-- **Math Delimiters:** Ensure the `$$` block delimiters are always placed on separate lines for proper rendering.
+- **Math Delimiters:** Ensure the `$$` block delimiters are always placed on separate lines and surrounded by empty lines for proper rendering.
 - **Equation Flow:** Integrate equations grammatically into sentences (rather than using colons to introduce them).
   Avoid unnecessary bullet points or colons.
+- **Math Whitespace:** Avoid unnecessary whitespace within mathematical equations.
+- **Notation Conventions:** Write matrices and vectors in bold (using `\mathbf{}`) and operators in normal, non-bold font (typically with a hat, e.g., `\hat{H}`).
 - **Line Wrapping:** Do not wrap lines in documentation; each paragraph must be written as a single, continuous line.
