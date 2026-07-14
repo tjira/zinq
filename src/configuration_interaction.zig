@@ -273,18 +273,14 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
-    errdefer if (opt.gradient) |_| gpa.free(grad);
+    errdefer gpa.free(grad);
 
     if (opt.gradient) |gradopt| switch (gradopt) {
         .analytic => |a| grad[0] = try gradient(T, hfres, C, dets, a.state, gpa),
         .numeric => grad[0] = try calculateNumericalGradient(T, io, runFromSystem, opt, sys, log, gpa),
     };
 
-    errdefer {
-        if (opt.gradient) |_| grad[0].deinit(gpa);
-
-        gpa.free(grad);
-    }
+    errdefer if (opt.gradient) |_| grad[0].deinit(gpa);
 
     if (log and opt.gradient != null) {
         const state = switch (opt.gradient.?) {

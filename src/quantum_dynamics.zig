@@ -705,7 +705,8 @@ fn checkInvalidInput(opt: Options) !void {
 
 /// Initializes the grid, wavefunction, Hamiltonian, and Fourier plans.
 fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationState(T) {
-    const pot = try Potential(T).init(io, opt.potential, gpa);
+    var pot = try Potential(T).init(io, opt.potential, gpa);
+    errdefer pot.deinit(gpa);
 
     const dt = if (opt.imaginary) |_| Complex(T).init(0, -opt.time_step) else Complex(T).init(opt.time_step, 0);
 

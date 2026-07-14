@@ -46,6 +46,10 @@ pub fn BasisGrid(comptime T: type) type {
                 errdefer if (dphi_dz) |*d| d.deinit(gpa);
             }
 
+            errdefer if (dphi_dx) |*d| d.deinit(gpa);
+            errdefer if (dphi_dy) |*d| d.deinit(gpa);
+            errdefer if (dphi_dz) |*d| d.deinit(gpa);
+
             if (has_mgga) {
                 lapl = try Matrix(T).init(n_grid, nbf, gpa);
             }
@@ -234,6 +238,9 @@ pub fn DensityGrid(comptime T: type) type {
                 errdefer if (del_rho) |*g| g.deinit(gpa);
             }
 
+            errdefer if (sig_val) |*s| s.deinit(gpa);
+            errdefer if (del_rho) |*g| g.deinit(gpa);
+
             if (has_mgga) {
                 tau_val = try Matrix(T).initZero(n_g, size_factor, gpa);
                 errdefer if (tau_val) |*t| t.deinit(gpa);
@@ -284,6 +291,8 @@ pub fn PotentialGrid(comptime T: type) type {
                 sig_pot = try Matrix(T).initZero(n_g, if (pol) 3 else 1, gpa);
                 errdefer if (sig_pot) |*s| s.deinit(gpa);
             }
+
+            errdefer if (sig_pot) |*s| s.deinit(gpa);
 
             if (has_mgga) {
                 tau_pot = try Matrix(T).initZero(n_g, size_factor, gpa);

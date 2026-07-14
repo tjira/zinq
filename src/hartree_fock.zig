@@ -369,7 +369,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     errdefer gpa.free(energy);
 
     var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
-    errdefer if (opt.gradient) |_| gpa.free(grad);
+    errdefer gpa.free(grad);
 
     const VN = try sys.nrep();
 
@@ -469,11 +469,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         .numeric => grad[0] = try calculateNumericalGradient(T, io, runFromSystem, opt, sys, log, gpa),
     };
 
-    errdefer {
-        if (opt.gradient) |_| grad[0].deinit(gpa);
-
-        gpa.free(grad);
-    }
+    errdefer if (opt.gradient) |_| grad[0].deinit(gpa);
 
     if (opt.write.gradient) |fname| if (grad.len > 0) {
         try writeMatrix(T, io, fname, grad[0]);

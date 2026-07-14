@@ -164,7 +164,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     errdefer gpa.free(energy);
 
     const grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
-    errdefer if (opt.gradient) |_| gpa.free(grad);
+    errdefer gpa.free(grad);
 
     energy[0] = hfres.energy[0];
 
@@ -228,8 +228,6 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     errdefer if (opt.gradient != null and opt.gradient.? == .numeric) {
         grad[0].deinit(gpa);
-
-        gpa.free(grad);
     };
 
     const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, log, gpa);

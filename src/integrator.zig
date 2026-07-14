@@ -30,7 +30,7 @@ pub fn Integrator(comptime T: type) type {
         }
 
         /// Deallocates memory associated with the integrator's stage derivative storage.
-        pub fn deinit(self: @This(), gpa: Allocator) void {
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
             switch (self.method) {
                 inline else => |*method| method.deinit(gpa),
             }
