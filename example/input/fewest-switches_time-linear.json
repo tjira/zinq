@@ -11,8 +11,10 @@
                 "potential" : {
                     "time_linear" : {}
                 },
-                "surface_hopping" : {
-                    "fewest_switches" : {}
+                "nonadiabatic" : {
+                    "surface_hopping" : {
+                        "fewest_switches" : {}
+                    }
                 },
                 "mass" : 1,
                 "trajectories" : 1000,

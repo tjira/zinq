@@ -11,8 +11,10 @@
                 "potential" : {
                     "tully_1" : {}
                 },
-                "surface_hopping" : {
-                    "fewest_switches" : {}
+                "nonadiabatic" : {
+                    "surface_hopping" : {
+                        "fewest_switches" : {}
+                    }
                 },
                 "mass" : 2000,
                 "trajectories" : 1000,

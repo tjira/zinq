@@ -67,6 +67,9 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 * **Surface Hopping**  
   Run nonadiabatic dynamics with various surface hopping algorithms.
 
+* **Ehrenfest Dynamics**  
+Perform mean-field nonadiabatic simulations with continuous electronic-nuclear coupling.
+
 ## Citation
 
 If you use Zinq in your research, please cite the project on [Zenodo](https://doi.org/10.5281/zenodo.18386143) using the following general BibTeX entry. If you are referring to a specific version, please visit the Zenodo page and download the corresponding citation there.

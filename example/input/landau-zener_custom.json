@@ -17,8 +17,10 @@
                         ]
                     }
                 },
-                "surface_hopping" : {
-                    "landau_zener" : {}
+                "nonadiabatic" : {
+                    "surface_hopping" : {
+                        "landau_zener" : {}
+                    }
                 },
                 "mass" : 2000,
                 "trajectories" : 1000,

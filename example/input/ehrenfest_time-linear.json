@@ -1,0 +1,29 @@
+{
+    "zinq" : [
+        {
+            "classical_dynamics" : {
+                "initial_conditions" : {
+                    "position" : [0],
+                    "momentum" : [0],
+                    "gamma" : [2],
+                    "state" : 1
+                },
+                "potential" : {
+                    "time_linear" : {}
+                },
+                "nonadiabatic" : {
+                    "ehrenfest" : {}
+                },
+                "mass" : 1,
+                "trajectories" : 1000,
+                "iterations" : 20000,
+                "time_step" : 0.001,
+                "adiabatic" : true,
+                "log_interval" : 5000,
+                "write" : {
+                    "population" : "POP_EH.mat"
+                }
+            }
+        }
+    ]
+}

@@ -3,7 +3,10 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
+const Complex = std.math.Complex;
 
+const Ehrenfest = @import("ehrenfest.zig").Ehrenfest;
+const EhrenfestOptions = @import("ehrenfest.zig").Options;
 const Matrix = @import("tensor.zig").Matrix;
 const Potential = @import("potential.zig").Potential;
 const PotentialOptions = @import("potential.zig").Options;
@@ -18,6 +21,12 @@ const norm = @import("linear_algebra.zig").norm;
 const printf = @import("read_write.zig").printf;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
+/// Tagged union for multi-state non-adiabatic trajectory propagation methods.
+pub const NonadiabaticOptions = union(enum) {
+    surface_hopping: SurfaceHoppingOptions,
+    ehrenfest: EhrenfestOptions,
+};
+
 /// Configuration options for the classical molecular dynamics simulation.
 pub const Options = struct {
     initial_conditions: InitialConditions,
@@ -28,7 +37,7 @@ pub const Options = struct {
     mass: f64,
     trajectories: u32,
 
-    surface_hopping: ?SurfaceHoppingOptions = null,
+    nonadiabatic: ?NonadiabaticOptions = null,
     write: Write = .{},
 
     adiabatic: bool = true,
@@ -79,7 +88,7 @@ pub fn Ensemble(comptime T: type) type {
         }
 
         /// Calculates the average potential energy of the ensemble based on active electronic states.
-        pub fn epot(self: @This(), pot: Potential(T), time: T, adiabatic: bool, gpa: Allocator) !T {
+        pub fn epot(self: @This(), pot: Potential(T), time: T, adiabatic: bool, coefics: ?Matrix(Complex(T)), gpa: Allocator) !T {
             var sum: T = 0;
 
             const V_slice = try gpa.alloc(T, pot.nstate() * pot.nstate());
@@ -91,7 +100,21 @@ pub fn Ensemble(comptime T: type) type {
             const W_slice = try gpa.alloc(T, pot.nstate());
             defer gpa.free(W_slice);
 
-            if (adiabatic) for (0..self.r.nrow()) |i| {
+            if (coefics) |coef| for (0..self.r.nrow()) |i| {
+                pot.eval(T, V_slice, self.r.rowSlice(i), time);
+
+                var traj_epot: T = 0;
+
+                for (0..pot.nstate()) |k| for (0..pot.nstate()) |l| {
+                    const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
+
+                    traj_epot += rho_kl * V_slice[k * pot.nstate() + l];
+                };
+
+                sum += traj_epot;
+            };
+
+            if (coefics == null and adiabatic) for (0..self.r.nrow()) |i| {
                 pot.eval(T, V_slice, self.r.rowSlice(i), time);
 
                 try eighSlice(T, W_slice, U_slice, V_slice);
@@ -99,7 +122,7 @@ pub fn Ensemble(comptime T: type) type {
                 sum += W_slice[self.s.at(i)];
             };
 
-            if (!adiabatic) for (0..self.r.nrow()) |i| {
+            if (coefics == null and !adiabatic) for (0..self.r.nrow()) |i| {
                 pot.eval(T, V_slice, self.r.rowSlice(i), time);
 
                 sum += V_slice[self.s.at(i) * pot.nstate() + self.s.at(i)];
@@ -122,14 +145,36 @@ pub fn Ensemble(comptime T: type) type {
         }
 
         /// Computes the population fraction of trajectories occupying each electronic state.
-        pub fn pop(self: @This(), nstate: usize, gpa: Allocator) !Vector(T) {
+        pub fn pop(self: @This(), nstate: usize, coefics: ?Matrix(Complex(T)), U: ?Matrix(T), adia: bool, gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(nstate, gpa);
 
-            for (0..self.s.length()) |i| {
-                value.ptr(self.s.at(i)).* += 1.0;
+            if (coefics) |coef| {
+                if (adia) for (0..self.r.nrow()) |i| for (0..nstate) |m| {
+                    var a_im = Complex(T).init(0, 0);
+
+                    for (0..nstate) |k| {
+                        const u_km, const c_ik = .{ U.?.at(i, k * nstate + m), coef.at(i, k) };
+
+                        a_im = a_im.add(Complex(T).init(c_ik.re * u_km, c_ik.im * u_km));
+                    }
+
+                    value.ptr(m).* += a_im.squaredMagnitude();
+                };
+
+                if (!adia) for (0..coef.nrow()) |i| for (0..nstate) |k| {
+                    value.ptr(k).* += coef.at(i, k).squaredMagnitude();
+                };
+
+                value.divs(@floatFromInt(self.r.nrow()));
             }
 
-            value.divs(@floatFromInt(self.s.length()));
+            if (coefics == null) {
+                for (0..self.s.length()) |i| {
+                    value.ptr(self.s.at(i)).* += 1;
+                }
+
+                value.divs(@floatFromInt(self.s.length()));
+            }
 
             return value;
         }
@@ -255,11 +300,23 @@ fn GradientBuffer(comptime T: type) type {
         }
 
         /// Computes and applies nuclear forces to trajectories based on potential gradients.
-        pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T)) void {
+        pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), coefics: ?*const Matrix(Complex(T))) void {
             const nstate = pot.nstate();
 
             for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
-                if (self.adia) {
+                if (coefics) |coef| {
+                    var der: T = 0;
+
+                    for (0..nstate) |k| for (0..nstate) |l| {
+                        const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
+
+                        der += rho_kl * self.grad_V.at(i, j * nstate * nstate + k * nstate + l);
+                    };
+
+                    ensemble.a.ptr(i, j).* = -der / ensemble.mass;
+                }
+
+                if (coefics == null and self.adia) {
                     var der: T = 0;
 
                     for (0..nstate) |k| {
@@ -275,7 +332,7 @@ fn GradientBuffer(comptime T: type) type {
                     ensemble.a.ptr(i, j).* = -der / ensemble.mass;
                 }
 
-                if (!self.adia) {
+                if (coefics == null and !self.adia) {
                     const k = ensemble.s.at(i) * nstate + ensemble.s.at(i);
 
                     ensemble.a.ptr(i, j).* = -self.grad_V.at(i, j * nstate * nstate + k) / ensemble.mass;
@@ -451,14 +508,16 @@ fn Observables(comptime T: type) type {
             if (calc.mom) obs.mom = try sim.ensemble.mom(gpa);
             if (calc.pos) obs.pos = try sim.ensemble.pos(gpa);
 
-            if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), gpa);
+            const coefics = if (sim.propag.namd) |*n| (if (n.* == .ehrenfest) n.ehrenfest.coefics else null) else null;
+
+            if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefics, sim.gb.U, sim.gb.adia, gpa);
 
             if (calc.ekin) {
                 obs.ekin = sim.ensemble.ekin();
             }
 
             if (calc.epot) {
-                obs.epot = try sim.ensemble.epot(sim.elpoten, time, sim.gb.adia, gpa);
+                obs.epot = try sim.ensemble.epot(sim.elpoten, time, sim.gb.adia, coefics, gpa);
             }
 
             return obs;
@@ -476,7 +535,13 @@ fn Observables(comptime T: type) type {
 /// Numerical integrator for classical trajectories and surface hopping updates.
 fn Propagator(comptime T: type) type {
     return struct {
-        sh: ?SurfaceHopping(T),
+        /// Trajectory propagation method utilizing adiabatic/diabatic surface hopping or mean-field Ehrenfest dynamics.
+        pub const Namd = union(enum) {
+            surface_hopping: SurfaceHopping(T),
+            ehrenfest: Ehrenfest(T),
+        };
+
+        namd: ?Namd = null,
 
         dt: T,
 
@@ -484,18 +549,28 @@ fn Propagator(comptime T: type) type {
         pub fn init(opt: Options, nstate: usize, gpa: Allocator) !@This() {
             const istate = opt.initial_conditions.state;
 
-            var sh: ?SurfaceHopping(T) = null;
+            var namd: ?Namd = null;
 
-            if (opt.surface_hopping) |shopt| {
-                sh = try SurfaceHopping(T).init(shopt, nstate, opt.trajectories, istate, opt.adiabatic, gpa);
-            }
+            if (opt.nonadiabatic) |naopt| if (naopt == .surface_hopping) {
+                const sh = try SurfaceHopping(T).init(naopt.surface_hopping, nstate, opt.trajectories, istate, opt.adiabatic, gpa);
 
-            return .{ .dt = @floatCast(opt.time_step), .sh = sh };
+                namd = .{ .surface_hopping = sh };
+            };
+
+            if (opt.nonadiabatic) |naopt| if (naopt == .ehrenfest) {
+                const eh = try Ehrenfest(T).init(naopt.ehrenfest, nstate, opt.trajectories, gpa);
+
+                namd = .{ .ehrenfest = eh };
+            };
+
+            return .{ .dt = @floatCast(opt.time_step), .namd = namd };
         }
 
         /// Deallocates surface hopping resources.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            if (self.sh) |*sh| sh.deinit(gpa);
+            if (self.namd) |*namd| switch (namd.*) {
+                inline else => |*n| n.deinit(gpa),
+            };
         }
 
         /// Integrates equations of motion using the Velocity Verlet algorithm.
@@ -508,17 +583,23 @@ fn Propagator(comptime T: type) type {
 
             try gb.update(ens.r, pot, time);
 
-            gb.apply(ens, pot);
+            if (self.namd) |*n| if (n.* == .ehrenfest) {
+                try n.ehrenfest.step(gb.V, self.dt);
+            };
+
+            const coefics = if (self.namd) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
+
+            gb.apply(ens, pot, coefics);
 
             for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
                 ens.p.ptr(i, j).* += 0.5 * ens.mass * ens.a.at(i, j) * self.dt;
             };
 
-            if (self.sh) |*sh| {
-                try sh.hop(ens, gb.V, gb.W, gb.U, self.dt);
+            if (self.namd) |*n| if (n.* == .surface_hopping) {
+                try n.surface_hopping.hop(ens, gb.V, gb.W, gb.U, self.dt);
 
-                gb.apply(ens, pot);
-            }
+                gb.apply(ens, pot, null);
+            };
         }
     };
 }
@@ -631,11 +712,17 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
 
     try gb.update(ensemble.r, pot, 0);
 
-    if (prop.sh) |*sh| {
-        sh.update(if (opt.adiabatic) gb.W else gb.V, gb.U);
-    }
+    if (prop.namd) |*n| if (n.* == .surface_hopping) {
+        n.surface_hopping.update(if (opt.adiabatic) gb.W else gb.V, gb.U);
+    };
 
-    gb.apply(&ensemble, pot);
+    if (prop.namd) |*n| if (n.* == .ehrenfest) {
+        n.ehrenfest.setInitialState(opt.initial_conditions.state, opt.adiabatic, gb.U);
+    };
+
+    const coefics = if (prop.namd) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
+
+    gb.apply(&ensemble, pot, coefics);
 
     return .{ .ensemble = ensemble, .elpoten = pot, .propag = prop, .gb = gb };
 }

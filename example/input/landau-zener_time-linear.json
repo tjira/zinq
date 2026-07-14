@@ -11,8 +11,10 @@
                 "potential" : {
                     "time_linear" : {}
                 },
-                "surface_hopping" : {
-                    "landau_zener" : {}
+                "nonadiabatic" : {
+                    "surface_hopping" : {
+                        "landau_zener" : {}
+                    }
                 },
                 "mass" : 1,
                 "trajectories" : 1000,

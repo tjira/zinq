@@ -32,3 +32,4 @@
 - [ ] Implement Wolfe conditions for BFGS optimization.
 - [x] Add an option to specify path to export molecule.
 - [x] Fix the allocation issue with the sys field in result structs.
+- [x] Implement Ehrenfest dynamics in the classical dynamics code.

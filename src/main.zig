@@ -18,6 +18,7 @@ pub const constant = @import("constant.zig");
 pub const cphf = @import("cphf.zig");
 pub const density_functional_theory = @import("density_functional_theory.zig");
 pub const dual = @import("dual.zig");
+pub const ehrenfest = @import("ehrenfest.zig");
 pub const exprtk = @import("exprtk.zig");
 pub const fourier_transform = @import("fourier_transform.zig");
 pub const frequency_analysis = @import("frequency_analysis.zig");
