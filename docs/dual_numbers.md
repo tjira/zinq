@@ -1,12 +1,10 @@
 # Dual Numbers and Automatic Differentiation
 
-This document provides a mathematically rigorous explanation of dual numbers and how they enable forward-mode automatic differentiation.
+This document provides a mathematically rigorous explanation of dual numbers and how they enable forward-mode automatic differentiation as implemented in the codebase.
 
 ---
 
-## 1. Mathematical Definition of Dual Numbers
-
-Dual numbers are an extension of the real numbers, analogous to complex numbers, introduced by William Clifford in 1873.
+## I. Mathematical Definition of Dual Numbers
 
 A dual number $u$ is defined as
 
@@ -20,45 +18,63 @@ $$
 \epsilon\neq0,\quad\epsilon^2=0.
 $$
 
-### Algebraic Properties
+In the codebase, dual numbers are implemented via the `ScalarDual(T)` generic structure, where the real part $x$ corresponds to the field `val` and the dual part $y$ corresponds to the field `der`.
 
-Given two dual numbers $u=x_1+y_1\epsilon$ and $v=x_2+y_2\epsilon$, the fundamental algebraic operations are defined by direct expansion.
+### Algebraic Properties and Code Implementation
 
-For addition and subtraction, we have
+Given two dual numbers $u=x_1+y_1\epsilon$ and $v=x_2+y_2\epsilon$, the fundamental algebraic operations are mapped directly to methods on the `ScalarDual(T)` structure:
 
-$$
-u\pm v=(x_1\pm x_2)+(y_1\pm y_2)\epsilon.
-$$
-
-For multiplication, expanding the product yields
+* **Addition**: Evaluated via the `add` method as
 
 $$
-u\cdot v=(x_1+y_1\epsilon)(x_2+y_2\epsilon)=x_1x_2+(x_1y_2+y_1x_2)\epsilon+y_1y_2\epsilon^2.
+u+v=(x_1+x_2)+(y_1+y_2)\epsilon
 $$
 
-Since the dual unit squares to zero, the term containing $\epsilon^2$ vanishes, which simplifies the product to
+and scalar addition `adds` as $u+c=(x_1+c)+y_1\epsilon$.
+
+* **Subtraction**: Evaluated via the `sub` method as
 
 $$
-u\cdot v=x_1x_2+(x_1y_2+y_1x_2)\epsilon.
+u-v=(x_1-x_2)+(y_1-y_2)\epsilon
 $$
 
-For division, we multiply the numerator and denominator by the conjugate $x_2-y_2\epsilon$ to obtain
+and scalar subtraction `subs` as $u-c=(x_1-c)+y_1\epsilon$.
+
+* **Multiplication**: Evaluated via the `mul` method using the product rule as
 
 $$
-\frac{u}{v}=\frac{(x_1+y_1\epsilon)(x_2-y_2\epsilon)}{(x_2+y_2\epsilon)(x_2-y_2\epsilon)}=\frac{x_1x_2+(y_1x_2-x_1y_2)\epsilon}{x_2^2},
+u\cdot v=x_1x_2+(x_1y_2+y_1x_2)\epsilon
 $$
 
-which yields
+and scalar multiplication `muls` as $u\cdot c=x_1c+y_1c\epsilon$.
+
+* **Division**: Evaluated via the `div` method using the quotient rule as
 
 $$
 \frac{u}{v}=\frac{x_1}{x_2}+\left(\frac{y_1x_2-x_1y_2}{x_2^2}\right)\epsilon
 $$
 
-under the condition that $x_2\neq0$.
+and scalar division `divs` as $u/c=x_1/c+(y_1/c)\epsilon$, under the condition that the denominator is non-zero.
+
+* **Exponential**: Evaluated via the `exp` method using the chain rule as
+
+$$
+e^u=e^{x_1}+e^{x_1}y_1\epsilon
+$$
+
+which propagates the derivative through exponential functions.
+
+* **Absolute Value**: Evaluated via the `abs` method as
+
+$$
+|u|=|x_1|+\text{sgn}(x_1)y_1\epsilon
+$$
+
+which implements the derivative of the absolute value function.
 
 ---
 
-## 2. Differentiation with Dual Numbers
+## II. Differentiation with Dual Numbers
 
 The connection between dual numbers and differentiation arises from the Taylor series expansion of a real-analytic function $f$ evaluated at a dual number $u=x+y\epsilon$, which is given by
 
@@ -72,13 +88,7 @@ $$
 f(x+y\epsilon)=f(x)+f'(x)y\epsilon.
 $$
 
-By setting the dual component $y=1$, we obtain
-
-$$
-f(x+\epsilon)=f(x)+f'(x)\epsilon.
-$$
-
-Thus, evaluating an analytical function over a dual number computes the function value in the real part and the exact derivative in the dual part.
+By setting the dual component $y=1$, evaluating $f(x+\epsilon)$ yields the function value in the real part and the exact derivative in the dual part.
 
 ### Generalizing to Multivariate Functions
 
@@ -94,4 +104,4 @@ $$
 f(\mathbf{r}+\mathbf{e}_j\epsilon)=f(\mathbf{r})+\frac{\partial f(\mathbf{r})}{\partial r_j}\epsilon.
 $$
 
-This represents the principle of forward-mode automatic differentiation. It avoids the truncation errors of numerical finite differences and the expression bloat of symbolic differentiation.
+This represents the principle of forward-mode automatic differentiation. The codebase utilizes this trick to evaluate nuclear gradients (such as in Møller–Plesset perturbation theory) by propagating dual numbers throughout the entire self-consistent field and molecular orbital transformation routines, avoiding finite-difference truncation errors.

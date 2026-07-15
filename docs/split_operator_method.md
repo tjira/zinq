@@ -4,7 +4,9 @@ The Split-Operator (SPO) Fourier method is a highly efficient numerical algorith
 
 ---
 
-## 1. Mathematical Formulation
+## I. Mathematical Formulation
+
+### 1. Schrödinger Equation and Strang Splitting
 
 The time evolution of a quantum state $|\psi(t)\rangle$ is governed by the time-dependent Schrödinger equation
 
@@ -18,7 +20,7 @@ $$
 |\psi(t+\Delta t)\rangle=\exp\left(-\frac{i}{\hbar}\hat{H}\Delta t\right)|\psi(t)\rangle
 $$
 
-Since the kinetic energy operator $\hat{T}$ and potential energy operator $\hat{V}$ do not commute ($\left[\hat{T},\hat{V}\right]\neq0$), the exponential of their sum cannot be factored directly. The second-order Strang splitting scheme approximates the propagator as
+Since the kinetic energy operator $\hat{T}$ and potential energy operator $\hat{V}$ do not commute, the exponential of their sum cannot be factored directly. The second-order Strang splitting scheme approximates the propagator as
 
 $$
 \exp\left(-\frac{i}{\hbar}\hat{H}\Delta t\right)=\exp\left(-\frac{i}{2\hbar}\hat{V}\Delta t\right)\exp\left(-\frac{i}{\hbar}\hat{T}\Delta t\right)\exp\left(-\frac{i}{2\hbar}\hat{V}\Delta t\right)+\mathcal{O}(\Delta t^3)
@@ -28,11 +30,11 @@ which is accurate to second order in $\Delta t$.
 
 ---
 
-## 2. Position and Momentum Space Representations
+## II. Representation and Multi-State Propagation
 
-The split-operator method achieves high computational efficiency by evaluating each split propagator in the representation where that operator is diagonal.
+### 2. Position and Momentum Space Integrals
 
-The potential energy operator $\hat{V}$ is diagonal in position space $\mathbf{r}$. Applying the potential propagator is a simple multiplication at each grid point as
+The split-operator method achieves high computational efficiency by evaluating each split propagator in the representation where that operator is diagonal. The potential energy operator $\hat{V}$ is diagonal in position space $\mathbf{r}$. Applying the potential propagator is a simple multiplication at each grid point as
 
 $$
 \psi'(\mathbf{r})=\exp\left(-\frac{i}{2\hbar}\mathbf{V}(\mathbf{r})\Delta t\right)\psi(\mathbf{r})
@@ -44,17 +46,19 @@ $$
 \exp\left(-\frac{i}{2\hbar}\mathbf{V}(\mathbf{r})\Delta t\right)=\mathbf{U}(\mathbf{r})\exp\left(-\frac{i}{2\hbar}\mathbf{W}(\mathbf{r})\Delta t\right)\mathbf{U}^{\dagger}(\mathbf{r})
 $$
 
-The kinetic energy operator $\hat{T}$ is diagonal in momentum space $\mathbf{p}$ (or wavenumber space $\mathbf{k}$). Applying the kinetic propagator involves transforming the wavefunction to momentum space using the Fast Fourier Transform (FFT), multiplying by the diagonal kinetic phase factors, and transforming back to position space using the Inverse Fast Fourier Transform (IFFT) as
+which rotates the wavepacket into the adiabatic basis, applies the scalar phase factor updates, and rotates back. The kinetic energy operator $\hat{T}$ is diagonal in momentum space $\mathbf{p}$ (or wavenumber space $\mathbf{k}$). Applying the kinetic propagator involves transforming the wavefunction to momentum space using the Fast Fourier Transform (FFT), multiplying by the diagonal kinetic phase factors, and transforming back to position space using the Inverse Fast Fourier Transform (IFFT) as
 
 $$
 \tilde{\psi}''(\mathbf{k})=\exp\left(-\frac{i\hbar k^2}{2m}\Delta t\right)\tilde{\psi}'(\mathbf{k})
 $$
 
-where $m$ is the mass of the particle.
+where $m$ is the mass of the particle. The codebase implements these transforms by interfacing with the FFTW library, which generates optimized plans to carry out the multidimensional Fourier transforms.
 
 ---
 
-## 3. Absorbing Boundary Potentials
+## III. Boundary Conditions and Relaxation
+
+### 3. Absorbing Boundary Potentials
 
 To prevent unphysical reflections of the wavepacket at the grid boundaries, a complex absorbing potential (CAP) $-iV_{\text{cap}}(\mathbf{r})$ is added to the Hamiltonian. The effective Hamiltonian becomes
 
@@ -62,4 +66,14 @@ $$
 \hat{H}_{\text{eff}}=\hat{T}+\hat{V}-iV_{\text{cap}}(\mathbf{r})
 $$
 
-which introduces a real exponential decay factor in the potential propagator that dampens the wavefunction as it approaches the boundaries of the grid.
+which introduces a real exponential decay factor in the potential propagator that dampens the wavefunction as it approaches the boundaries of the grid, absorbing the outgoing flux.
+
+### 4. Imaginary-Time Relaxation Trick
+
+To find the ground-state wavefunction of a molecular system, the codebase implements the imaginary-time propagation trick. By substituting $\Delta t \to -i \Delta \tau$ where $\Delta \tau$ is a real parameter, the real oscillatory phase factors in the propagator turn into real decaying exponentials as
+
+$$
+\exp\left(-\frac{\hat{H}\Delta\tau}{\hbar}\right)
+$$
+
+This decay operator dampens high-energy eigenstates exponentially faster than the ground state. By repeatedly applying the split propagators and re-normalizing the wavepacket to unity at each step, the excited-state components vanish and the wavefunction relaxes to the exact numerical ground state.

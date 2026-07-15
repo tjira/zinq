@@ -5,6 +5,8 @@ repo_url: https://github.com/tjira/zinq
 theme:
   name: material
   favicon: favicon.ico
+  features:
+    - navigation.sections
 
 extra:
   generator: false
@@ -19,11 +21,20 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Dual Numbers: dual_numbers.md
-  - Ehrenfest Dynamics: ehrenfest_dynamics.md
-  - Fewest Switches Surface Hopping: fewest_switches_surface_hopping.md
-  - Landau–Zener Surface Hopping: landau_zener_surface_hopping.md
-  - Split-Operator Method: split_operator_method.md
-  - Hartree–Fock Method: hartree_fock.md
-  - Møller–Plesset Perturbation Theory: moller_plesset.md
-  - Configuration–Interaction: configuration_interaction.md
+  - Mathematical Foundations:
+      - Dual Numbers: dual_numbers.md
+      - Runge–Kutta Methods: runge_kutta.md
+  - Electronic Structure:
+      - Density Functional Theory: density_functional_theory.md
+      - Hartree–Fock Method: hartree_fock.md
+      - Møller–Plesset Perturbation Theory: moller_plesset.md
+      - Configuration–Interaction: configuration_interaction.md
+      - Geometry Optimization: geometry_optimization.md
+      - Vibrational Frequency Analysis: vibrational_frequency_analysis.md
+      - Population Analysis: population_analysis.md
+  - Time Evolution & Dynamics:
+      - Classical Molecular Dynamics: classical_molecular_dynamics.md
+      - Ehrenfest Dynamics: ehrenfest_dynamics.md
+      - Fewest Switches Surface Hopping: fewest_switches_surface_hopping.md
+      - Landau–Zener Surface Hopping: landau_zener_surface_hopping.md
+      - Split-Operator Method: split_operator_method.md

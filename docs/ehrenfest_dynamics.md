@@ -4,7 +4,9 @@ Ehrenfest dynamics is a mixed quantum-classical molecular dynamics method that d
 
 ---
 
-## 1. Quantum Electronic Propagation
+## I. Quantum Electronic Propagation
+
+### 1. Electronic Wavefunction Expansion
 
 In the quantum description, the electronic wavefunction $\Psi(\mathbf{r},\mathbf{R}(t),t)$ is expanded in a diabatic basis $\{\phi_k(\mathbf{r})\}$ as
 
@@ -26,9 +28,15 @@ $$
 
 which governs the propagation of the quantum subsystem along the classical path.
 
+### 2. Implementation Tricks and Sub-stepping
+
+Because electronic motion operates on a significantly faster timescale than classical nuclear motion, propagating both systems with the same classical time step $dt$ is numerically unstable. To circumvent this, the codebase implements a sub-stepping trick where the electronic coefficients are integrated over $N_{\text{steps}}$ sub-intervals of size $dt / N_{\text{steps}}$ during each classical step. The electronic TDSE is solved in the diabatic basis using the pre-allocated Runge–Kutta integrator (typically RK4), and the complex derivative is evaluated directly using optimized real-imaginary matrix-vector contractions to minimize execution overhead.
+
 ---
 
-## 2. Classical Nuclear Dynamics
+## II. Classical Nuclear Dynamics
+
+### 3. Mean-Field Potential and Force
 
 The classical nuclear degrees of freedom are governed by Newton's equations of motion
 
@@ -64,7 +72,9 @@ where the spatial gradients of the diabatic Hamiltonian matrix elements $\nabla_
 
 ---
 
-## 3. Basis Transformations and Populations
+## III. Basis Transformations and Populations
+
+### 4. Initial State Setup and Projection
 
 When the trajectory initial conditions are defined in the adiabatic basis, the initial wavefunction $|\Psi(0)\rangle$ is an eigenstate of the electronic Hamiltonian at the initial position $\mathbf{R}(0)$, which is written as
 
