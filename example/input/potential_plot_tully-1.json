@@ -1,0 +1,34 @@
+{
+    "zinq" : [
+        {
+            "potential_plot" : {
+                "grid" : {
+                    "bounds" : [[-8, 8]],
+                    "npoint" : 2048
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "adiabatic" : false,
+                "write" : {
+                    "potential" : "POT_DIA.mat"
+                }
+            }
+        },
+        {
+            "potential_plot" : {
+                "grid" : {
+                    "bounds" : [[-8, 8]],
+                    "npoint" : 2048
+                },
+                "potential" : {
+                    "tully_1" : {}
+                },
+                "adiabatic" : true,
+                "write" : {
+                    "potential" : "POT_ADIA.mat"
+                }
+            }
+        }
+    ]
+}

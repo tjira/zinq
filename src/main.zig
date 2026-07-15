@@ -35,6 +35,7 @@ pub const moller_plesset = @import("moller_plesset.zig");
 pub const nuclear_derivative = @import("nuclear_derivative.zig");
 pub const population_analysis = @import("population_analysis.zig");
 pub const potential = @import("potential.zig");
+pub const potential_plot = @import("potential_plot.zig");
 pub const quantum_dynamics = @import("quantum_dynamics.zig");
 pub const read_write = @import("read_write.zig");
 pub const spectral_analysis = @import("spectral_analysis.zig");
@@ -53,6 +54,7 @@ const Handlers = struct {
     pub const hartree_fock = @import("hartree_fock.zig");
     pub const molecular_integrals = @import("molecular_integrals.zig");
     pub const moller_plesset = @import("moller_plesset.zig");
+    pub const potential_plot = @import("potential_plot.zig");
     pub const quantum_dynamics = @import("quantum_dynamics.zig");
 };
 
@@ -64,6 +66,7 @@ const Options = struct {
         hartree_fock: hartree_fock.Options,
         molecular_integrals: molecular_integrals.Options,
         moller_plesset: moller_plesset.Options,
+        potential_plot: potential_plot.Options,
         quantum_dynamics: quantum_dynamics.Options,
     },
 };

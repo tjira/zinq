@@ -1,0 +1,38 @@
+{
+    "zinq" : [
+        {
+            "potential_plot" : {
+                "grid" : {
+                    "bounds" : [[-8, 8], [-8, 8], [-8, 8]],
+                    "npoint" : 1024
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1, 1]
+                    }
+                },
+                "adiabatic" : false,
+                "write" : {
+                    "potential" : "POT_DIA.mat"
+                }
+            }
+        },
+        {
+            "potential_plot" : {
+                "grid" : {
+                    "bounds" : [[-8, 8], [-8, 8], [-8, 8]],
+                    "npoint" : 1024
+                },
+                "potential" : {
+                    "harmonic" : {
+                        "k" : [1, 1, 1]
+                    }
+                },
+                "adiabatic" : true,
+                "write" : {
+                    "potential" : "POT_ADIA.mat"
+                }
+            }
+        }
+    ]
+}
