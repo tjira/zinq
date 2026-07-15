@@ -12,6 +12,9 @@ const Vector = @import("tensor.zig").Vector;
 const isDual = @import("value.zig").isDual;
 const readMatrix = @import("read_write.zig").readMatrix;
 
+const CM2EV = @import("constant.zig").CM2EV;
+const EV2AU = @import("constant.zig").EV2AU;
+
 /// Parameter union for potential energy surfaces supporting harmonic, coupling, and Tully 1, 2, and 3 models.
 pub const Options = union(enum) {
     file: struct {
@@ -43,6 +46,12 @@ pub const Options = union(enum) {
         B: f64 = 0.10,
         C: f64 = 0.90,
     },
+    lvc: struct {
+        frequencies: []const f64,
+        excitation_energies: []const f64,
+        kappa: []const []const f64,
+        lambda: []const []const []const f64,
+    },
     custom: struct {
         matrix: []const []const []const u8,
         ndim: u32,
@@ -59,6 +68,7 @@ pub fn Potential(comptime T: type) type {
         tully_1: Tully1(T),
         tully_2: Tully2(T),
         tully_3: Tully3(T),
+        lvc: Lvc(T),
         custom: Custom(T),
 
         /// Initializes the selected potential energy surface based on configuration options.
@@ -70,6 +80,7 @@ pub fn Potential(comptime T: type) type {
                 .tully_1 => |f| .{ .tully_1 = Tully1(T).init(f.A, f.B, f.C, f.D) },
                 .tully_2 => |f| .{ .tully_2 = Tully2(T).init(f.A, f.B, f.C, f.D, f.E0) },
                 .tully_3 => |f| .{ .tully_3 = Tully3(T).init(f.A, f.B, f.C) },
+                .lvc => |f| .{ .lvc = Lvc(T).init(f.frequencies, f.excitation_energies, f.kappa, f.lambda) },
                 .custom => |f| .{ .custom = try Custom(T).init(f.ndim, f.matrix, f.time_dependent, allocator) },
             };
         }
@@ -474,6 +485,91 @@ fn File(comptime T: type) type {
 
         pub fn nstate(self: @This()) usize {
             return std.math.sqrt(self.U.ncol() - self.ndim());
+        }
+    };
+}
+
+/// Returns a linear vibronic coupling (LVC) potential energy surface type parameterized in eV and cm^-1.
+fn Lvc(comptime T: type) type {
+    return struct {
+        frequencies: []const T,
+        kap: []const []const T,
+
+        excitation_energies: []const T,
+        lmb: []const []const []const T,
+
+        /// Initializes the linear vibronic coupling potential with frequencies, excitations, and coupling constants.
+        pub fn init(frequencies: []const T, excitation_energies: []const T, kappa: []const []const T, lambda: []const []const []const T) @This() {
+            std.debug.assert(kappa.len == excitation_energies.len);
+
+            for (kappa) |row| {
+                std.debug.assert(row.len == frequencies.len);
+            }
+
+            std.debug.assert(lambda.len == excitation_energies.len);
+
+            for (lambda) |row| {
+                std.debug.assert(row.len == excitation_energies.len);
+
+                for (row) |col| {
+                    std.debug.assert(col.len == frequencies.len);
+                }
+            }
+
+            return .{ .frequencies = frequencies, .excitation_energies = excitation_energies, .kap = kappa, .lmb = lambda };
+        }
+
+        /// Evaluates the vibronic coupling potential matrix in Hartree at dimensionless normal coordinates r.
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+            std.debug.assert(V.len == self.nstate() * self.nstate());
+
+            var v0 = Value(U).fromFloat(0);
+
+            for (0..self.frequencies.len) |i| {
+                const q = Value(U).init(r[i]);
+
+                v0 = v0.add(q.mul(q).muls(0.5 * self.frequencies[i] * CM2EV));
+            }
+
+            for (0..self.excitation_energies.len) |n| {
+                var term = Value(U).fromFloat(self.excitation_energies[n]);
+
+                for (0..self.frequencies.len) |i| {
+                    term = term.add(Value(U).init(r[i]).muls(self.kap[n][i]));
+                }
+
+                V[n * self.nstate() + n] = v0.add(term).val;
+            }
+
+            for (0..self.excitation_energies.len) |m| for (m + 1..self.excitation_energies.len) |n| {
+                var term = Value(U).fromFloat(0);
+
+                for (0..self.frequencies.len) |i| {
+                    term = term.add(Value(U).init(r[i]).muls(self.lmb[m][n][i]));
+                }
+
+                V[m * self.nstate() + n] = term.val;
+                V[n * self.nstate() + m] = term.val;
+            };
+
+            for (0..V.len) |i| {
+                V[i] = Value(U).init(V[i]).muls(EV2AU).val;
+            }
+        }
+
+        /// Returns false as this vibronic potential has no explicit time dependence.
+        pub fn isTd(_: @This()) bool {
+            return false;
+        }
+
+        /// Returns the number of normal modes (nuclear degrees of freedom) in the potential.
+        pub fn ndim(self: @This()) usize {
+            return self.frequencies.len;
+        }
+
+        /// Returns the number of electronic states in the non-adiabatic potential representation.
+        pub fn nstate(self: @This()) usize {
+            return self.excitation_energies.len;
         }
     };
 }

@@ -2,6 +2,8 @@
 
 const std = @import("std");
 
+pub const h = 6.62607015e-34; // PLANCK CONSTANT [J s]
+pub const e = 1.602176634e-19; // ELEMENTARY CHARGE [C]
 pub const c = 299792458.0; // SPEED OF LIGHT [m/s]
 pub const a0 = 5.29177210544e-11; // BOHR RADIUS [m]
 pub const Eh = 4.3597447222060e-18; // HARTREE ENERGY [J]
@@ -9,6 +11,8 @@ pub const mu = 1.66053906892e-27; // ATOMIC MASS UNIT [kg]
 
 pub const A2BOHR = 1e-10 / a0; // ANGSTROM TO BOHR
 pub const AU2CM = @sqrt(Eh / (mu * a0 * a0)) / (2e2 * c * std.math.pi); // ATOMIC UNIT OF FREQUENCY TO CM^-1
+pub const CM2EV = (1e2 * h * c) / e; // CM^-1 TO EV
+pub const EV2AU = e / Eh; // EV TO ATOMIC UNIT OF ENERGY
 
 pub const AN2SM = std.StaticStringMap(i32).initComptime(.{
     // zig fmt: off
