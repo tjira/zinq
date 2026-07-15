@@ -20,7 +20,7 @@
                 "nonadiabatic" : {
                     "ehrenfest" : {}
                 },
-                "mass" : 2000,
+                "mass" : [2000],
                 "trajectories" : 1000,
                 "iterations" : 3000,
                 "time_step" : 1,

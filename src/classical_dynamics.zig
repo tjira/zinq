@@ -34,7 +34,7 @@ pub const Options = struct {
 
     time_step: f64,
     iterations: u32,
-    mass: f64,
+    mass: []const f64,
     trajectories: u32,
 
     nonadiabatic: ?NonadiabaticOptions = null,
@@ -50,13 +50,12 @@ pub fn Ensemble(comptime T: type) type {
         r: Matrix(T),
         p: Matrix(T),
         a: Matrix(T),
+        m: []const T,
 
         s: Vector(usize),
 
-        mass: T,
-
         /// Initializes the ensemble trajectories with allocated memory for positions, momenta, and forces.
-        pub fn init(ndim: usize, ntraj: usize, mass: T, gpa: Allocator) !@This() {
+        pub fn init(ndim: usize, ntraj: usize, mass: []const T, gpa: Allocator) !@This() {
             var r = try Matrix(T).init(ntraj, ndim, gpa);
             errdefer r.deinit(gpa);
 
@@ -66,10 +65,15 @@ pub fn Ensemble(comptime T: type) type {
             var a = try Matrix(T).init(ntraj, ndim, gpa);
             errdefer a.deinit(gpa);
 
-            const s = try Vector(usize).init(ntraj, gpa);
+            var s = try Vector(usize).init(ntraj, gpa);
             errdefer s.deinit(gpa);
 
-            return .{ .r = r, .p = p, .a = a, .s = s, .mass = mass };
+            const m = try gpa.alloc(T, mass.len);
+            errdefer gpa.free(m);
+
+            @memcpy(m, mass);
+
+            return .{ .r = r, .p = p, .a = a, .s = s, .m = m };
         }
 
         /// Deallocates the positions, momenta, and force vectors of the trajectory ensemble.
@@ -78,13 +82,19 @@ pub fn Ensemble(comptime T: type) type {
             self.p.deinit(gpa);
             self.a.deinit(gpa);
             self.s.deinit(gpa);
+
+            gpa.free(self.m);
         }
 
         /// Calculates the average classical kinetic energy of the ensemble trajectories.
         pub fn ekin(self: @This()) T {
-            const p_norm = norm(T, self.p.asVector());
+            var sum: T = 0;
 
-            return (p_norm * p_norm) / (2 * self.mass * @as(T, @floatFromInt(self.p.nrow())));
+            for (0..self.p.nrow()) |i| for (0..self.p.ncol()) |j| {
+                sum += self.p.at(i, j) * self.p.at(i, j) / (2 * self.m[j]);
+            };
+
+            return sum / @as(T, @floatFromInt(self.p.nrow()));
         }
 
         /// Calculates the average potential energy of the ensemble based on active electronic states.
@@ -313,7 +323,7 @@ fn GradientBuffer(comptime T: type) type {
                         der += rho_kl * self.grad_V.at(i, j * nstate * nstate + k * nstate + l);
                     };
 
-                    ensemble.a.ptr(i, j).* = -der / ensemble.mass;
+                    ensemble.a.ptr(i, j).* = -der / ensemble.m[j];
                 }
 
                 if (coefics == null and self.adia) {
@@ -329,13 +339,13 @@ fn GradientBuffer(comptime T: type) type {
                         }
                     }
 
-                    ensemble.a.ptr(i, j).* = -der / ensemble.mass;
+                    ensemble.a.ptr(i, j).* = -der / ensemble.m[j];
                 }
 
                 if (coefics == null and !self.adia) {
                     const k = ensemble.s.at(i) * nstate + ensemble.s.at(i);
 
-                    ensemble.a.ptr(i, j).* = -self.grad_V.at(i, j * nstate * nstate + k) / ensemble.mass;
+                    ensemble.a.ptr(i, j).* = -self.grad_V.at(i, j * nstate * nstate + k) / ensemble.m[j];
                 }
             };
         }
@@ -576,9 +586,9 @@ fn Propagator(comptime T: type) type {
         /// Integrates equations of motion using the Velocity Verlet algorithm.
         pub fn step(self: *@This(), ens: *Ensemble(T), gb: *GradientBuffer(T), pot: Potential(T), time: T) !void {
             for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
-                ens.p.ptr(i, j).* += 0.5 * ens.mass * ens.a.at(i, j) * self.dt;
+                ens.p.ptr(i, j).* += 0.5 * ens.m[j] * ens.a.at(i, j) * self.dt;
 
-                ens.r.ptr(i, j).* += (ens.p.at(i, j) / ens.mass) * self.dt;
+                ens.r.ptr(i, j).* += (ens.p.at(i, j) / ens.m[j]) * self.dt;
             };
 
             try gb.update(ens.r, pot, time);
@@ -592,7 +602,7 @@ fn Propagator(comptime T: type) type {
             gb.apply(ens, pot, coefics);
 
             for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
-                ens.p.ptr(i, j).* += 0.5 * ens.mass * ens.a.at(i, j) * self.dt;
+                ens.p.ptr(i, j).* += 0.5 * ens.m[j] * ens.a.at(i, j) * self.dt;
             };
 
             if (self.namd) |*n| if (n.* == .surface_hopping) {
@@ -657,8 +667,14 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
-    if (opt.mass <= 0) {
+    for (opt.mass) |m| if (m <= 0) {
         std.log.err("MASS MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    };
+
+    if (opt.mass.len != opt.initial_conditions.position.len) {
+        std.log.err("MASS VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
 
         return error.InvalidInput;
     }
@@ -699,7 +715,14 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     var pot = try Potential(T).init(io, opt.potential, gpa);
     errdefer pot.deinit(gpa);
 
-    var ensemble = try Ensemble(T).init(pot.ndim(), opt.trajectories, opt.mass, gpa);
+    const mass = try gpa.alloc(T, opt.mass.len);
+    defer gpa.free(mass);
+
+    for (opt.mass, 0..) |m, i| {
+        mass[i] = @floatCast(m);
+    }
+
+    var ensemble = try Ensemble(T).init(pot.ndim(), opt.trajectories, mass, gpa);
     errdefer ensemble.deinit(gpa);
 
     var gb = try GradientBuffer(T).init(pot.ndim(), pot.nstate(), opt.trajectories, opt.adiabatic, gpa);

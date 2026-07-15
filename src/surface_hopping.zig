@@ -521,7 +521,7 @@ fn rescaleMomentumIsotropic(comptime T: type, ensemble: *Ensemble(T), i: usize, 
     var ekin_old: T = 0;
 
     for (0..ensemble.p.ncol()) |j| {
-        ekin_old += ensemble.p.at(i, j) * ensemble.p.at(i, j) / (2 * ensemble.mass);
+        ekin_old += ensemble.p.at(i, j) * ensemble.p.at(i, j) / (2 * ensemble.m[j]);
     }
 
     if (ekin_old < 1e-14) {

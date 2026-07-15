@@ -28,7 +28,7 @@ pub const Options = struct {
 
     time_step: f64,
     iterations: u32,
-    mass: f64,
+    mass: []const f64,
 
     write: Write = .{},
 
@@ -610,8 +610,14 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
-    if (opt.mass <= 0) {
+    for (opt.mass) |m| if (m <= 0) {
         std.log.err("MASS MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    };
+
+    if (opt.mass.len != opt.initial_conditions.position.len) {
+        std.log.err("MASS VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
 
         return error.InvalidInput;
     }
@@ -723,7 +729,14 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);
     errdefer wfn.deinit(gpa);
 
-    var ham = try Hamiltonian(T).init(grid, pot, opt.mass, gpa);
+    const mass = try gpa.alloc(T, opt.mass.len);
+    defer gpa.free(mass);
+
+    for (opt.mass, 0..) |m, i| {
+        mass[i] = @floatCast(m);
+    }
+
+    var ham = try Hamiltonian(T).init(grid, pot, mass, gpa);
     errdefer ham.deinit(gpa);
 
     var prop = try Propagator(T).init(grid, ham, opt.absorbing_potential, dt, gpa);

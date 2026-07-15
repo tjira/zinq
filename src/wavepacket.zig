@@ -93,7 +93,7 @@ pub fn Hamiltonian(comptime T: type) type {
         K: Vector(T),
 
         /// Allocates and computes kinetic and potential operator matrix elements.
-        pub fn init(grid: Grid(T), pot: Potential(T), m: T, gpa: Allocator) !@This() {
+        pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, gpa: Allocator) !@This() {
             var V = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
             errdefer V.deinit(gpa);
 
@@ -112,7 +112,7 @@ pub fn Hamiltonian(comptime T: type) type {
                 for (0..grid.r.ncol()) |j| {
                     const kij = grid.k.at(i, j);
 
-                    sum += 0.5 * kij * kij / m;
+                    sum += 0.5 * kij * kij / m[j];
                 }
 
                 K.ptr(i).* = sum;
