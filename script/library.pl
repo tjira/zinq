@@ -52,12 +52,12 @@ if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_f
 create_compiler_wrappers($target, $pwd);
 
 # COMPILE EACH PROGRAM
+compile_exprtk  ($prefix,                $pwd                   ) if   $build_exprtk;
 compile_eigen   ($prefix, $cores,        $pwd, $shared          ) if    $build_eigen;
 compile_libint  ($prefix, $cores,        $pwd, $shared          ) if   $build_libint;
 compile_libxc   ($prefix, $cores, $host, $pwd, $shared          ) if    $build_libxc;
 compile_openblas($prefix, $cores,        $pwd, $shared, $generic) if $build_openblas;
-compile_fftw    ($prefix, $cores, $host, $pwd, $shared          ) if     $build_fftw;
-compile_exprtk  ($prefix,                $pwd                   ) if   $build_exprtk;
+compile_fftw    ($prefix, $cores, $host, $pwd, $shared, $generic) if     $build_fftw;
 
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
@@ -355,7 +355,7 @@ sub compile_openblas {
 
 sub compile_fftw {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $host, $pwd, $shared) = @_;
+    my ($prefix, $cores, $host, $pwd, $shared, $generic) = @_;
 
     # DEFINE THE URL FOR THE FFTW SOURCE ARCHIVE
     my $url = "https://www.fftw.org/fftw-3.3.11.tar.gz";
@@ -379,6 +379,11 @@ sub compile_fftw {
         push @args, "--disable-static", "--enable-shared";
     } else {
         push @args, "--enable-static", "--disable-shared";
+    }
+
+    # DISABLE SIMD OPTIMIZATIONS IF COMPILING FOR A GENERIC PROCESSOR
+    if ($generic) {
+        push @args, "CFLAGS=-O3";
     }
 
     # RUN CONFIGURE

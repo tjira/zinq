@@ -30,19 +30,28 @@ jobs:
         with:
           version: 0.16.0
 
+      - name: Cache Compiled Libraries
+        id: cache-libs
+        uses: actions/cache@v4
+        with:
+          path: external-${{matrix.target}}-musl
+          key: libs-${{matrix.target}}-musl-${{hashFiles('script/library.pl')}}
+
       - name: Install Boost
         id: install-boost
+        if: steps.cache-libs.outputs.cache-hit != 'true'
         uses: MarkusJx/install-boost@v2
         with:
           boost_version: 1.83.0
 
       - name: Compile Libraries
+        if: steps.cache-libs.outputs.cache-hit != 'true'
         env:
-          BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
+          BOOST_ROOT: ${{steps.install-boost.outputs.BOOST_ROOT}}
         run: ./script/library.pl --target ${{matrix.target}} --generic
 
       - name: Compile Zinq
-        run: zig build --release=fast -Dtarget=${{matrix.target}}-musl
+        run: zig build --release=safe -Dtarget=${{matrix.target}}-musl
 
       - name: Move Binary
         run: mkdir -p bin && cd zig-out && for FOLDER in *64*linux*; do mv $FOLDER/zinq ../bin/zinq-$FOLDER; done && cd -

@@ -47,7 +47,7 @@ jobs:
 
       - name: Compile Libraries
         env:
-          BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
+          BOOST_ROOT: ${{steps.install-boost.outputs.BOOST_ROOT}}
         run: ./script/library.pl --target ${{matrix.target}} ${{matrix.build_flags}} --generic
 
       - name: Remove Unnecessary Files
