@@ -8,7 +8,7 @@ const TEST_TOLERANCE = 1e-8;
 test "Adiabatic RTP on Tully's First Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 1, .gamma = &.{2}, .adiabatic = true },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = true },
         .potential = .{ .tully_1 = .{} },
         .fft = .{ .plan = .estimate },
         .mass = 2000,
@@ -21,20 +21,20 @@ test "Adiabatic RTP on Tully's First Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.items[0].pos.?.at(0), 13.4112458739984250, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), 16.0101963477170000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),  0.4103851968095453, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),  0.5896148031908718, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,       0.0017922958069609, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,       0.0647077026432969, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,       1.0000000000004160, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pos.?.at(0), 11.6269248968113810, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), 14.0456023908310640, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),  0.6769375217267849, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),  0.3230624782736362, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,      -0.0035387559533022, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,       0.0500387575031156, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,       1.0000000000004217, TEST_TOLERANCE);
     // zig fmt: on
 }
 
 test "Diabatic RTP on Tully's First Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 1, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
         .potential = .{ .tully_1 = .{} },
         .fft = .{ .plan = .estimate },
         .mass = 2000,
@@ -47,13 +47,117 @@ test "Diabatic RTP on Tully's First Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.items[0].pos.?.at(0), 13.4112458739984270, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), 16.0101963477169900, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),  0.5896145961498663, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),  0.4103854038505511, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,       0.0017922958069610, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,       0.0647077026432969, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,       1.0000000000004168, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pos.?.at(0), 11.6269248968113480, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), 14.0456023908310300, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),  0.3230626433492805, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),  0.6769373566511372, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,      -0.0035387559533022, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,       0.0500387575031154, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,       1.0000000000004183, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Adiabatic RTP on Tully's Second Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = true },
+        .potential = .{ .tully_2 = .{} },
+        .fft = .{ .plan = .estimate },
+        .mass = 2000,
+        .iterations = 3000,
+        .time_step = 1,
+        .adiabatic = true,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pos.?.at(0), 12.4393051391604530, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), 13.7764794654338230, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),  0.8733073000105006, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),  0.1266926999896673, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,       0.0062932662885039, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,       0.0502066811056963, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,       1.0000000000001665, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Diabatic RTP on Tully's Second Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .tully_2 = .{} },
+        .fft = .{ .plan = .estimate },
+        .mass = 2000,
+        .iterations = 3000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pos.?.at(0), 12.4393078601794990, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), 13.7764819035420650, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),  0.8739386183194002, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),  0.1260613816807633, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,       0.0062933022922637, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,       0.0502066977305322, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,       1.0000000000001630, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Adiabatic RTP on Tully's Third Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = true },
+        .potential = .{ .tully_3 = .{} },
+        .fft = .{ .plan = .estimate },
+        .mass = 2000,
+        .iterations = 3000,
+        .time_step = 1,
+        .adiabatic = true,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pos.?.at(0), -12.0664752176863580, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), -14.9298798323700700, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),   0.5701885511501665, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),   0.4298114488501240, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,       -0.0000841350199430, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,        0.0559839768140773, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,        1.0000000000002907, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Diabatic RTP on Tully's Third Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .tully_3 = .{} },
+        .fft = .{ .plan = .estimate },
+        .mass = 2000,
+        .iterations = 3000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pos.?.at(0), -11.6085920927679020, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].mom.?.at(0), -15.0674401601427230, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(0),   0.5749203324097494, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].pop.?.at(1),   0.4250796675905397, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].epot.?,        0.0000953637213076, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].ekin.?,        0.0570046362590877, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.items[0].norm.?,        1.0000000000002878, TEST_TOLERANCE);
     // zig fmt: on
 }
 

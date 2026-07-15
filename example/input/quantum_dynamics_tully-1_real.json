@@ -10,7 +10,7 @@
                     "position" : [-10],
                     "momentum" : [15],
                     "gamma" : [2],
-                    "state" : 1,
+                    "state" : 0,
                     "adiabatic" : true
                 },
                 "potential" : {

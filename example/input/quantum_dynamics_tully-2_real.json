@@ -1,27 +1,28 @@
 {
     "zinq" : [
         {
-            "classical_dynamics" : {
+            "quantum_dynamics" : {
+                "grid" : {
+                    "bounds" : [[-24, 32]],
+                    "npoint" : 2048
+                },
                 "initial_conditions" : {
                     "position" : [-10],
                     "momentum" : [15],
                     "gamma" : [2],
-                    "state" : 0
+                    "state" : 0,
+                    "adiabatic" : true
                 },
                 "potential" : {
-                    "tully_1" : {}
-                },
-                "nonadiabatic" : {
-                    "ehrenfest" : {}
+                    "tully_2" : {}
                 },
                 "mass" : 2000,
-                "trajectories" : 1000,
                 "iterations" : 3000,
                 "time_step" : 1,
                 "adiabatic" : true,
                 "log_interval" : 500,
                 "write" : {
-                    "population" : "POP_EH.mat"
+                    "population" : "POP_QD.mat"
                 }
             }
         }

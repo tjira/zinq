@@ -12,7 +12,7 @@ const Vector = @import("tensor.zig").Vector;
 const isDual = @import("value.zig").isDual;
 const readMatrix = @import("read_write.zig").readMatrix;
 
-/// Parameter union for potential energy surfaces, supporting file, harmonic, time-dependent linear, Tully 1, and custom math expressions.
+/// Parameter union for potential energy surfaces supporting harmonic, coupling, and Tully 1, 2, and 3 models.
 pub const Options = union(enum) {
     file: struct {
         ndim: u32,
@@ -31,6 +31,18 @@ pub const Options = union(enum) {
         C: f64 = 0.005,
         D: f64 = 1.000,
     },
+    tully_2: struct {
+        A: f64 = 0.10,
+        B: f64 = 0.28,
+        C: f64 = 0.015,
+        D: f64 = 0.06,
+        E0: f64 = 0.05,
+    },
+    tully_3: struct {
+        A: f64 = 6.0e-4,
+        B: f64 = 0.10,
+        C: f64 = 0.90,
+    },
     custom: struct {
         matrix: []const []const []const u8,
         ndim: u32,
@@ -45,6 +57,8 @@ pub fn Potential(comptime T: type) type {
         harmonic: Harmonic(T),
         time_linear: TimeLinear(T),
         tully_1: Tully1(T),
+        tully_2: Tully2(T),
+        tully_3: Tully3(T),
         custom: Custom(T),
 
         /// Initializes the selected potential energy surface based on configuration options.
@@ -54,6 +68,8 @@ pub fn Potential(comptime T: type) type {
                 .harmonic => |f| .{ .harmonic = Harmonic(T).init(f.k) },
                 .time_linear => |f| .{ .time_linear = TimeLinear(T).init(f.a, f.g) },
                 .tully_1 => |f| .{ .tully_1 = Tully1(T).init(f.A, f.B, f.C, f.D) },
+                .tully_2 => |f| .{ .tully_2 = Tully2(T).init(f.A, f.B, f.C, f.D, f.E0) },
+                .tully_3 => |f| .{ .tully_3 = Tully3(T).init(f.A, f.B, f.C) },
                 .custom => |f| .{ .custom = try Custom(T).init(f.ndim, f.matrix, f.time_dependent, allocator) },
             };
         }
@@ -227,6 +243,106 @@ fn Tully1(comptime T: type) type {
             return 1;
         }
 
+        pub fn nstate(_: @This()) usize {
+            return 2;
+        }
+    };
+}
+
+/// Returns a Tully 2 dual avoided crossing potential model type.
+fn Tully2(comptime T: type) type {
+    return struct {
+        A: T,
+        B: T,
+        C: T,
+        D: T,
+
+        E0: T,
+
+        /// Initializes Tully 2 model parameters representing dual avoided crossing.
+        pub fn init(A: T, B: T, C: T, D: T, E0: T) @This() {
+            return .{ .A = A, .B = B, .C = C, .D = D, .E0 = E0 };
+        }
+
+        /// Evaluates the Tully dual avoided crossing two-state potential matrix.
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+            const r0 = Value(U).init(r[0]);
+
+            const A = Value(U).fromFloat(self.A);
+            const B = Value(U).fromFloat(self.B);
+            const C = Value(U).fromFloat(self.C);
+            const D = Value(U).fromFloat(self.D);
+
+            const E0 = Value(U).fromFloat(self.E0);
+
+            const V00 = Value(U).fromFloat(0);
+            const V01 = r0.mul(r0).mul(D).neg().exp().mul(C);
+            const V11 = r0.mul(r0).mul(B).neg().exp().mul(A).neg().add(E0);
+
+            V[0] = V00.val;
+            V[1] = V01.val;
+            V[2] = V01.val;
+            V[3] = V11.val;
+        }
+
+        /// Returns false as this potential is independent of time.
+        pub fn isTd(_: @This()) bool {
+            return false;
+        }
+
+        /// Returns the single nuclear coordinate dimension of the model.
+        pub fn ndim(_: @This()) usize {
+            return 1;
+        }
+
+        /// Returns the number of electronic states in this model system.
+        pub fn nstate(_: @This()) usize {
+            return 2;
+        }
+    };
+}
+
+/// Returns a Tully 3 extended coupling with reflection potential model type.
+fn Tully3(comptime T: type) type {
+    return struct {
+        A: T,
+        B: T,
+        C: T,
+
+        /// Initializes Tully 3 model parameters representing extended coupling.
+        pub fn init(A: T, B: T, C: T) @This() {
+            return .{ .A = A, .B = B, .C = C };
+        }
+
+        /// Evaluates the Tully extended coupling two-state potential matrix.
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+            const r0 = Value(U).init(r[0]);
+
+            const A = Value(U).fromFloat(self.A);
+            const B = Value(U).fromFloat(self.B);
+            const C = Value(U).fromFloat(self.C);
+
+            const V00 = A;
+            const V01 = Value(U).fromFloat(1).sub(r0.abs().mul(C).neg().exp()).mul(r0.sign()).adds(1).mul(B);
+            const V11 = A.neg();
+
+            V[0] = V00.val;
+            V[1] = V01.val;
+            V[2] = V01.val;
+            V[3] = V11.val;
+        }
+
+        /// Returns false as this potential is independent of time.
+        pub fn isTd(_: @This()) bool {
+            return false;
+        }
+
+        /// Returns the single nuclear coordinate dimension of the model.
+        pub fn ndim(_: @This()) usize {
+            return 1;
+        }
+
+        /// Returns the number of electronic states in this model system.
         pub fn nstate(_: @This()) usize {
             return 2;
         }

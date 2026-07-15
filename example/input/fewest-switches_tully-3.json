@@ -9,10 +9,12 @@
                     "state" : 0
                 },
                 "potential" : {
-                    "tully_1" : {}
+                    "tully_3" : {}
                 },
                 "nonadiabatic" : {
-                    "ehrenfest" : {}
+                    "surface_hopping" : {
+                        "fewest_switches" : {}
+                    }
                 },
                 "mass" : 2000,
                 "trajectories" : 1000,
@@ -21,7 +23,7 @@
                 "adiabatic" : true,
                 "log_interval" : 500,
                 "write" : {
-                    "population" : "POP_EH.mat"
+                    "population" : "POP_FS.mat"
                 }
             }
         }
