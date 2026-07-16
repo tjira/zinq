@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install Dependencies
-        run: sudo apt-get install bsdtar
+        run: sudo apt-get install libarchive-tools
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
