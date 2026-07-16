@@ -191,11 +191,15 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         gpa.free(grads.?);
     };
 
-    for (2..(opt.order + 1)) |i| {
+    for (2..opt.order + 1) |i| {
         energy[0] += energies[i];
 
         if (log) {
-            try printf(io, "\nMP{d} TOTAL ENERGY: {d:.14} Eh\n", .{ i, energy[0] });
+            try printf(io, "\nMP{d:02} TOTAL ENERGY: {d:.14} Eh", .{ i, energy[0] });
+
+            if (grads != null) {
+                try printf(io, "\n", .{});
+            }
         }
 
         if (grads != null) {
@@ -204,12 +208,16 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
             };
 
             if (log) {
-                try printf(io, "\nMP{d} ANALYTICAL NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{i});
+                try printf(io, "\nMP{d:02} ANALYTICAL NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{i});
 
                 for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
                     try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
                 };
             }
+        }
+
+        if (log and grads == null and i == opt.order) {
+            try printf(io, "\n", .{});
         }
     }
 
