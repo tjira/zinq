@@ -15,6 +15,8 @@
 /zig-out/
 /zinq.egg-info/
 
+/.env.fish
+/.env.sh
 /zigar
 /zigcc
 /zigcpp
