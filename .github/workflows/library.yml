@@ -34,6 +34,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Install Dependencies
+        run: sudo apt-get install bsdtar
+
       - name: Setup Zig
         uses: mlugg/setup-zig@v2
         with:

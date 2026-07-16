@@ -37,6 +37,10 @@ jobs:
           path: external-${{matrix.target}}-musl
           key: libs-${{matrix.target}}-musl-${{hashFiles('script/library.pl')}}
 
+      - name: Install Dependencies
+        if: steps.cache-libs.outputs.cache-hit != 'true'
+        run: sudo apt-get install bsdtar
+
       - name: Install Boost
         id: install-boost
         if: steps.cache-libs.outputs.cache-hit != 'true'
