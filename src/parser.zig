@@ -62,11 +62,14 @@ pub const Parser = struct {
         \\USAGE: zinq hf [ARGUMENTS] [OPTIONS]
         \\
         \\OPTIONS:
-        \\  -b, --basis    SPECIFY BASIS SET (DEFAULT: STO-3G)
-        \\  -h, --help     PRINT THIS HELP MESSAGE AND EXIT
+        \\  -b, --basis           SPECIFY BASIS SET (DEFAULT: STO-3G)
+        \\  -s, --multiplicity    SPECIFY MULTIPLICITY (DEFAULT: 1)
+        \\  -c, --charge          SPECIFY CHARGE (DEFAULT: 0)
+        \\  --generalized         ENABLE GENERALIZED HARTREE-FOCK
+        \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
-        \\  file           XYZ FILE DESCRIBING MOLECULE
+        \\  file                  XYZ FILE DESCRIBING MOLECULE
         \\
     ;
 
@@ -76,12 +79,15 @@ pub const Parser = struct {
         \\USAGE: zinq mp [ARGUMENTS] [OPTIONS]
         \\
         \\OPTIONS:
-        \\  -b, --basis    SPECIFY BASIS SET (DEFAULT: STO-3G)
-        \\  -o, --order    SPECIFY PERTURBATION ORDER (DEFAULT: 2)
-        \\  -h, --help     PRINT THIS HELP MESSAGE AND EXIT
+        \\  -b, --basis           SPECIFY BASIS SET (DEFAULT: STO-3G)
+        \\  -o, --order           SPECIFY PERTURBATION ORDER (DEFAULT: 2)
+        \\  -s, --multiplicity    SPECIFY MULTIPLICITY (DEFAULT: 1)
+        \\  -c, --charge          SPECIFY CHARGE (DEFAULT: 0)
+        \\  --generalized         ENABLE GENERALIZED PERTURBATION THEORY
+        \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
-        \\  file           XYZ FILE DESCRIBING MOLECULE
+        \\  file                  XYZ FILE DESCRIBING MOLECULE
         \\
     ;
 
@@ -121,21 +127,23 @@ pub const Parser = struct {
 
     /// Projects CLI subcommand parameters into Hartree-Fock electronic states.
     pub fn runHartreeFock(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
-        const parsed = try parseArgs(sub.args, arena);
+        const allowed_options = &.{
+            "-b",
+            "--basis",
+            "-s",
+            "--multiplicity",
+            "-c",
+            "--charge",
+            "--generalized",
+        };
+
+        const parsed = try parseArgs(io, sub.args, arena, allowed_options);
 
         if (parsed.options.contains("-h") or parsed.options.contains("--help")) {
             try runHelp(io, help_hf);
 
             return;
         }
-
-        var opt_iter = parsed.options.keyIterator();
-
-        while (opt_iter.next()) |key| if (!std.mem.eql(u8, key.*, "-b") and !std.mem.eql(u8, key.*, "--basis")) {
-            try printf(io, "UNKNOWN '{s}' OPTION\n", .{key.*});
-
-            return error.UnknownOption;
-        };
 
         if (parsed.positional.len > 1) {
             try printf(io, "MULTIPLE MOLECULE FILES SPECIFIED\n", .{});
@@ -157,11 +165,42 @@ pub const Parser = struct {
             return error.MissingBasisValue;
         };
 
+        const multiplicity_opt = parsed.options.get("-s") orelse parsed.options.get("--multiplicity");
+
+        if (multiplicity_opt) |s| if (s.len == 0) {
+            try printf(io, "MISSING VALUE FOR MULTIPLICITY OPTION\n", .{});
+
+            return error.MissingMultiplicityValue;
+        };
+
+        const charge_opt = parsed.options.get("-c") orelse parsed.options.get("--charge");
+
+        if (charge_opt) |c| if (c.len == 0) {
+            try printf(io, "MISSING VALUE FOR CHARGE OPTION\n", .{});
+
+            return error.MissingChargeValue;
+        };
+
+        const multiplicity = if (multiplicity_opt) |s| std.fmt.parseInt(u32, s, 10) catch |err| {
+            try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
+
+            return err;
+        } else 1;
+
+        const charge = if (charge_opt) |c| std.fmt.parseInt(i32, c, 10) catch |err| {
+            try printf(io, "INVALID VALUE FOR CHARGE OPTION\n", .{});
+
+            return err;
+        } else 0;
+
         const basis_resolved = try std.fmt.allocPrint(arena, "builtin:{s}", .{basis_opt orelse "sto-3g"});
 
         const opt = hartree_fock.Options{
             .system = parsed.positional[0],
             .basis = basis_resolved,
+            .multiplicity = multiplicity,
+            .charge = charge,
+            .generalized = parsed.options.contains("--generalized"),
         };
 
         var result = try hartree_fock.run(f64, io, opt, true, gpa);
@@ -170,25 +209,24 @@ pub const Parser = struct {
 
     /// Projects Hartree-Fock reference states into perturbed Møller-Plesset correlation spaces.
     pub fn runMollerPlesset(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
-        const parsed = try parseArgs(sub.args, arena);
+        const allowed_options = &.{
+            "-b",
+            "--basis",
+            "-o",
+            "--order",
+            "-s",
+            "--multiplicity",
+            "-c",
+            "--charge",
+            "--generalized",
+        };
+
+        const parsed = try parseArgs(io, sub.args, arena, allowed_options);
 
         if (parsed.options.contains("-h") or parsed.options.contains("--help")) {
             try runHelp(io, help_mp);
 
             return;
-        }
-
-        var opt_iter = parsed.options.keyIterator();
-
-        while (opt_iter.next()) |key| {
-            const is_basis = std.mem.eql(u8, key.*, "-b") or std.mem.eql(u8, key.*, "--basis");
-            const is_order = std.mem.eql(u8, key.*, "-o") or std.mem.eql(u8, key.*, "--order");
-
-            if (!is_basis and !is_order) {
-                try printf(io, "UNKNOWN '{s}' OPTION\n", .{key.*});
-
-                return error.UnknownOption;
-            }
         }
 
         if (parsed.positional.len > 1) {
@@ -225,12 +263,43 @@ pub const Parser = struct {
             return err;
         };
 
+        const multiplicity_opt = parsed.options.get("-s") orelse parsed.options.get("--multiplicity");
+
+        if (multiplicity_opt) |s| if (s.len == 0) {
+            try printf(io, "MISSING VALUE FOR MULTIPLICITY OPTION\n", .{});
+
+            return error.MissingMultiplicityValue;
+        };
+
+        const charge_opt = parsed.options.get("-c") orelse parsed.options.get("--charge");
+
+        if (charge_opt) |c| if (c.len == 0) {
+            try printf(io, "MISSING VALUE FOR CHARGE OPTION\n", .{});
+
+            return error.MissingChargeValue;
+        };
+
+        const multiplicity = if (multiplicity_opt) |s| std.fmt.parseInt(u32, s, 10) catch |err| {
+            try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
+
+            return err;
+        } else 1;
+
+        const charge = if (charge_opt) |c| std.fmt.parseInt(i32, c, 10) catch |err| {
+            try printf(io, "INVALID VALUE FOR CHARGE OPTION\n", .{});
+
+            return err;
+        } else 0;
+
         const basis_resolved = try std.fmt.allocPrint(arena, "builtin:{s}", .{basis_opt orelse "sto-3g"});
 
         const opt = moller_plesset.Options{
             .hartree_fock = .{
                 .system = parsed.positional[0],
                 .basis = basis_resolved,
+                .multiplicity = multiplicity,
+                .charge = charge,
+                .generalized = parsed.options.contains("--generalized"),
             },
             .order = order,
         };
@@ -239,9 +308,9 @@ pub const Parser = struct {
         defer result.deinit(gpa);
     }
 
-    /// Projects coordinate-space trajectories and physical configuration options from raw token streams.
-    fn parseArgs(args: []const []const u8, allocator: Allocator) !ParsedArgs {
-        var positional: std.ArrayList([]const u8), var options = .{ .empty, std.StringHashMap([]const u8).init(allocator) };
+    /// Maps trajectories and options from raw token streams to allowed options in space $\mathcal{P}$.
+    fn parseArgs(io: std.Io, args: []const []const u8, allocator: Allocator, comptime allowed: []const []const u8) !ParsedArgs {
+        var positional, var options = .{ std.ArrayList([]const u8).empty, std.StringHashMap([]const u8).init(allocator) };
 
         var i: usize = 0;
 
@@ -249,10 +318,27 @@ pub const Parser = struct {
             const arg = args[i];
 
             if (std.mem.startsWith(u8, arg, "-")) {
-                if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+                if (std.mem.eql(u8, arg, "-h") or
+                    std.mem.eql(u8, arg, "--help") or
+                    std.mem.eql(u8, arg, "--generalized"))
+                {
                     try options.put(arg, "");
 
                     continue;
+                }
+
+                var is_allowed = false;
+
+                inline for (allowed) |opt| if (std.mem.eql(u8, arg, opt)) {
+                    is_allowed = true;
+
+                    break;
+                };
+
+                if (!is_allowed) {
+                    try printf(io, "UNKNOWN '{s}' OPTION\n", .{arg});
+
+                    return error.UnknownOption;
                 }
 
                 if (i + 1 >= args.len) try options.put(arg, "");
