@@ -10,7 +10,7 @@ use File::Copy   qw(move copy       );
 use Getopt::Long qw(GetOptions      );
 
 # DEFINE LIBRARY NAMES
-my @lib_names = qw(eigen glad glfw libint libxc openblas fftw exprtk);
+my @lib_names = qw(eigen libint libxc openblas fftw exprtk);
 
 # DEFINE BUILD OPTIONS
 my (%build, $shared, $generic);
@@ -54,13 +54,11 @@ rmtree("lib") if -d "lib";
 
 # COMPILE EACH PROGRAM
 compile_exprtk  ($prefix,                $pwd                   ) if $build{exprtk};
-compile_glad    ($prefix,                $pwd                   ) if $build{glad};
 compile_eigen   ($prefix, $cores,        $pwd, $shared          ) if $build{eigen};
 compile_libint  ($prefix, $cores,        $pwd, $shared          ) if $build{libint};
 compile_libxc   ($prefix, $cores, $host, $pwd, $shared          ) if $build{libxc};
 compile_openblas($prefix, $cores,        $pwd, $shared, $generic) if $build{openblas};
 compile_fftw    ($prefix, $cores, $host, $pwd, $shared, $generic) if $build{fftw};
-compile_glfw    ($prefix, $cores,        $pwd, $shared          ) if $build{glfw};
 
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
@@ -424,91 +422,4 @@ sub compile_exprtk {
 
     # RUN COPY
     copy($src, $dst) or die "FAILED TO COPY '$src' TO '$dst': $!";
-}
-
-sub compile_glad {
-    # EXTRACT ARGUMENTS
-    my ($prefix, $pwd) = @_;
-
-    # DEFINE THE URL FOR THE GLAD SOURCE ARCHIVE
-    my $url = "https://github.com/Dav1dde/glad/archive/refs/tags/v2.0.8.tar.gz";
-
-    # DOWNLOAD AND EXTRACT THE LIBRARY
-    download_library($url, "glad");
-
-    # DEFINE THE OUTPUT DIRECTORY
-    my $out_dir = "lib/cglad";
-
-    # CREATE THE OUTPUT DIRECTORY
-    make_path($out_dir) or die "CANNOT CREATE '$out_dir': $!";
-
-    # EXECUTE THE PYTHON GENERATOR TO GENERATE HEADER-ONLY OPENGL 4.6 CORE
-    my @args = (
-        "python3",
-        "-m", "glad",
-        "--api", "gl:core=4.6",
-        "--out-path", $out_dir,
-        "c",
-        "--header-only"
-    );
-
-    # SET PYTHONPATH TO lib/glad TO LOAD THE GLAD MODULE CORRECTLY
-    local $ENV{PYTHONPATH} = "lib/glad";
-
-    system(@args) == 0 or die "GLAD GENERATION FAILED";
-
-    # CREATE INCLUDE DIRECTORY IF IT DOESN'T EXIST
-    make_path("$prefix/include/glad") if ! -d "$prefix/include/glad";
-
-    # DEFINE SOURCE DIRECTORY
-    my $src = "lib/cglad/include/glad/gl.h";
-
-    # DEFINE DESTINATION PATH
-    my $dst = "$prefix/include/glad/gl.h";
-
-    # RUN COPY
-    copy($src, $dst) or die "FAILED TO COPY '$src' TO '$dst': $!";
-}
-
-# Downloads, builds, and installs GLFW for window and OpenGL context creation in physics simulations.
-sub compile_glfw {
-    # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $pwd, $shared) = @_;
-
-    # DEFINE THE URL FOR THE GLFW SOURCE ZIP FILE
-    my $url = "https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip";
-
-    # DOWNLOAD AND EXTRACT THE LIBRARY
-    download_library($url, "glfw");
-
-    # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
-    chdir "lib/glfw" or die "CANNOT CHDIR TO 'lib/glfw': $!";
-
-    # DETERMINE WHETHER TO BUILD SHARED OR STATIC LIBRARIES
-    my $build_shared = $shared ? "True" : "False";
-
-    # CONFIGURE COMMAND
-    my @args = (
-        "cmake",
-        "-B", "build",
-        "-DBUILD_SHARED_LIBS=$build_shared",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=$prefix",
-        "-DCMAKE_PREFIX_PATH=$prefix",
-        "-DGLFW_BUILD_EXAMPLES=OFF",
-        "-DGLFW_BUILD_TESTS=OFF",
-        "-DGLFW_BUILD_DOCS=OFF"
-    );
-
-    # RUN CONFIGURE
-    system(@args) == 0 or die "GLFW CONFIGURE FAILED";
-
-    # RUN BUILD
-    system("cmake", "--build", "build", "--parallel", $cores) == 0 or die "GLFW BUILD FAILED";
-
-    # INSTALL THE LIBRARY
-    system("cmake", "--install", "build") == 0 or die "GLFW INSTALL FAILED";
-
-    # CHANGE BACK TO ORIGINAL DIRECTORY
-    chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
 }
