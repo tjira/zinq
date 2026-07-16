@@ -9,8 +9,11 @@ use Cwd          qw(getcwd          );
 use File::Copy   qw(move copy       );
 use Getopt::Long qw(GetOptions      );
 
-# DEFINE VARIABLES FOR BUILD OPTIONS
-my ($build_eigen, $build_libint, $build_libxc, $build_openblas, $build_fftw, $build_exprtk, $shared, $generic);
+# DEFINE LIBRARY NAMES
+my @lib_names = qw(eigen glad glfw libint libxc openblas fftw exprtk);
+
+# DEFINE BUILD OPTIONS
+my (%build, $shared, $generic);
 
 # DEFINE DEFAULT TARGET AND HOST
 my $target = qx(uname -m); chomp $target; $target .= "-$^O"; my $host = $target;
@@ -20,44 +23,44 @@ my $cores = qx(nproc --all); chomp $cores; $cores ||= 1;
 
 # PARSE COMMAND-LINE OPTIONS
 GetOptions(
-    "eigen"    =>    \$build_eigen,
-    "libint"   =>   \$build_libint,
-    "libxc"    =>    \$build_libxc,
-    "openblas" => \$build_openblas,
-    "fftw"     =>     \$build_fftw,
-    "exprtk"   =>   \$build_exprtk,
-    "target=s" =>         \$target,
-    "cores|j=i"=>          \$cores,
-    "shared"   =>         \$shared,
-    "generic"  =>        \$generic,
+    (map {$_ => \$build{$_}} @lib_names),
+    "target=s" => \$target,
+    "cores|j=i"=> \$cores,
+    "shared"   => \$shared,
+    "generic"  => \$generic,
 );
 
 # APPEND THE ABI TO TARGET BASED ON STATIC OR DYNAMIC REQUEST
 $target .= $shared ? "-gnu" : "-musl";
 
 # IF NO FLAGS ARE PROVIDED, BUILD EVERYTHING
-if (!$build_eigen && !$build_libint && !$build_libxc && !$build_openblas && !$build_fftw && !$build_exprtk) {
-    $build_eigen = $build_libint = $build_libxc = $build_openblas = $build_fftw = $build_exprtk = 1;
+if (!grep { $build{$_} } @lib_names) {
+    $build{$_} = 1 for @lib_names;
 }
 
 # GET CWD AND PREFIX
 my $pwd = getcwd(); my $prefix = "$pwd/external-$target";
 
 # CLEAN PREVIOUS INSTALLATION ONLY IF BUILDING EVERYTHING
-if ($build_eigen && $build_libint && $build_libxc && $build_openblas && $build_fftw && $build_exprtk) {
+if ((grep {$build{$_}} @lib_names) == @lib_names) {
     rmtree($prefix) if -d $prefix;
 }
 
 # CREATE COMPILER WRAPPERS AND EXPORT ENVIRONMENT VARIABLES
 create_compiler_wrappers($target, $pwd);
 
+# CLEAN LIBRARIES
+rmtree("lib") if -d "lib";
+
 # COMPILE EACH PROGRAM
-compile_exprtk  ($prefix,                $pwd                   ) if   $build_exprtk;
-compile_eigen   ($prefix, $cores,        $pwd, $shared          ) if    $build_eigen;
-compile_libint  ($prefix, $cores,        $pwd, $shared          ) if   $build_libint;
-compile_libxc   ($prefix, $cores, $host, $pwd, $shared          ) if    $build_libxc;
-compile_openblas($prefix, $cores,        $pwd, $shared, $generic) if $build_openblas;
-compile_fftw    ($prefix, $cores, $host, $pwd, $shared, $generic) if     $build_fftw;
+compile_exprtk  ($prefix,                $pwd                   ) if $build{exprtk};
+compile_glad    ($prefix,                $pwd                   ) if $build{glad};
+compile_eigen   ($prefix, $cores,        $pwd, $shared          ) if $build{eigen};
+compile_libint  ($prefix, $cores,        $pwd, $shared          ) if $build{libint};
+compile_libxc   ($prefix, $cores, $host, $pwd, $shared          ) if $build{libxc};
+compile_openblas($prefix, $cores,        $pwd, $shared, $generic) if $build{openblas};
+compile_fftw    ($prefix, $cores, $host, $pwd, $shared, $generic) if $build{fftw};
+compile_glfw    ($prefix, $cores,        $pwd, $shared          ) if $build{glfw};
 
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
@@ -75,21 +78,16 @@ sub download_library {
     make_path("lib") if ! -d "lib";
 
     # GET EXISTING PATHS IN LIB TO DETECT NEWLY EXTRACTED CONTENT
-    my %before = map { $_ => 1 } glob("lib/*");
+    my %before = map {$_ => 1} glob("lib/*");
 
-    # DETERMINE TAR FLAGS BASED ON URL
-    my $tar_flags = $url =~ /\.tar\.bz2$|\.tbz2$/ ? '-xj' : '-xz';
-
-    # COMMAND TO DOWNLOAD AND EXTRACT THE ARCHIVE
-    my $cmd = "curl -L -A 'Mozilla/5.0' '$url' | tar $tar_flags -C lib";
+    # COMMAND TO DOWNLOAD AND EXTRACT THE ARCHIVE USING BSDTAR
+    my $cmd = "curl -sL -A 'Mozilla/5.0' '$url' | bsdtar -x -f - -C lib";
 
     # EXECUTE THE COMMAND AND CHECK FOR SUCCESS
-    if (system($cmd) != 0) {
-        die "FAILED TO DOWNLOAD/EXTRACT '$dest_name' from '$url'";
-    }
+    system($cmd) == 0 or die "FAILED TO DOWNLOAD/EXTRACT '$dest_name' FROM '$url'";
 
     # FIND THE EXTRACTED PATH
-    my @paths = grep { !$before{$_} } glob("lib/*");
+    my @paths = grep {!$before{$_}} glob("lib/*");
 
     # CHECK IF THE EXTRACTED PATH WAS FOUND
     die "EXTRACTED PATH FOR '$dest_name' NOT FOUND" unless @paths;
@@ -235,9 +233,6 @@ sub compile_libint {
 
     # EXTRACT THE COMPILED LIBINT COMPILER PACKAGE
     system("tar", "-xzvf", $tgz_file) == 0 or die "FAILED TO EXTRACT LIBINT COMPILER EXPORT";
-
-    # CLEAN UP ANY PREVIOUS COMPILATION DIRECTORY
-    rmtree("lib/clibint") if -d "lib/clibint";
 
     # FIND THE EXTRACTED LIBINT DIRECTORY
     my ($extracted_dir) = glob("libint*");
@@ -429,4 +424,91 @@ sub compile_exprtk {
 
     # RUN COPY
     copy($src, $dst) or die "FAILED TO COPY '$src' TO '$dst': $!";
+}
+
+sub compile_glad {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $pwd) = @_;
+
+    # DEFINE THE URL FOR THE GLAD SOURCE ARCHIVE
+    my $url = "https://github.com/Dav1dde/glad/archive/refs/tags/v2.0.8.tar.gz";
+
+    # DOWNLOAD AND EXTRACT THE LIBRARY
+    download_library($url, "glad");
+
+    # DEFINE THE OUTPUT DIRECTORY
+    my $out_dir = "lib/cglad";
+
+    # CREATE THE OUTPUT DIRECTORY
+    make_path($out_dir) or die "CANNOT CREATE '$out_dir': $!";
+
+    # EXECUTE THE PYTHON GENERATOR TO GENERATE HEADER-ONLY OPENGL 4.6 CORE
+    my @args = (
+        "python3",
+        "-m", "glad",
+        "--api", "gl:core=4.6",
+        "--out-path", $out_dir,
+        "c",
+        "--header-only"
+    );
+
+    # SET PYTHONPATH TO lib/glad TO LOAD THE GLAD MODULE CORRECTLY
+    local $ENV{PYTHONPATH} = "lib/glad";
+
+    system(@args) == 0 or die "GLAD GENERATION FAILED";
+
+    # CREATE INCLUDE DIRECTORY IF IT DOESN'T EXIST
+    make_path("$prefix/include/glad") if ! -d "$prefix/include/glad";
+
+    # DEFINE SOURCE DIRECTORY
+    my $src = "lib/cglad/include/glad/gl.h";
+
+    # DEFINE DESTINATION PATH
+    my $dst = "$prefix/include/glad/gl.h";
+
+    # RUN COPY
+    copy($src, $dst) or die "FAILED TO COPY '$src' TO '$dst': $!";
+}
+
+# Downloads, builds, and installs GLFW for window and OpenGL context creation in physics simulations.
+sub compile_glfw {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $cores, $pwd, $shared) = @_;
+
+    # DEFINE THE URL FOR THE GLFW SOURCE ZIP FILE
+    my $url = "https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.zip";
+
+    # DOWNLOAD AND EXTRACT THE LIBRARY
+    download_library($url, "glfw");
+
+    # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
+    chdir "lib/glfw" or die "CANNOT CHDIR TO 'lib/glfw': $!";
+
+    # DETERMINE WHETHER TO BUILD SHARED OR STATIC LIBRARIES
+    my $build_shared = $shared ? "True" : "False";
+
+    # CONFIGURE COMMAND
+    my @args = (
+        "cmake",
+        "-B", "build",
+        "-DBUILD_SHARED_LIBS=$build_shared",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_INSTALL_PREFIX=$prefix",
+        "-DCMAKE_PREFIX_PATH=$prefix",
+        "-DGLFW_BUILD_EXAMPLES=OFF",
+        "-DGLFW_BUILD_TESTS=OFF",
+        "-DGLFW_BUILD_DOCS=OFF"
+    );
+
+    # RUN CONFIGURE
+    system(@args) == 0 or die "GLFW CONFIGURE FAILED";
+
+    # RUN BUILD
+    system("cmake", "--build", "build", "--parallel", $cores) == 0 or die "GLFW BUILD FAILED";
+
+    # INSTALL THE LIBRARY
+    system("cmake", "--install", "build") == 0 or die "GLFW INSTALL FAILED";
+
+    # CHANGE BACK TO ORIGINAL DIRECTORY
+    chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
 }
