@@ -33,6 +33,7 @@ pub const molecular_optimization = @import("molecular_optimization.zig");
 pub const molecular_system = @import("molecular_system.zig");
 pub const moller_plesset = @import("moller_plesset.zig");
 pub const nuclear_derivative = @import("nuclear_derivative.zig");
+pub const parser = @import("parser.zig");
 pub const population_analysis = @import("population_analysis.zig");
 pub const potential = @import("potential.zig");
 pub const potential_plot = @import("potential_plot.zig");
@@ -91,9 +92,13 @@ pub fn main(init: std.process.Init) !void {
 
     try printf(init.io, "LIBINT: v{s}, LIBXC: v{s}\n", .{ libint.LIBINT_VERSION, libxc.xc_version_string() });
 
-    for (targets(try init.minimal.args.toSlice(init.arena.allocator()))) |e| {
-        try run(f64, init.io, e, init.gpa, init.arena.allocator());
-    }
+    const args = try init.minimal.args.toSlice(init.arena.allocator());
+
+    var parsobj = try parser.Parser.init(args, init.arena.allocator());
+
+    try parsobj.dispatch(init.io, init.gpa, init.arena.allocator());
+
+    if (parsobj.action == .help) return;
 
     try printf(init.io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.untilNow(init.io, .real)});
 }
@@ -114,7 +119,7 @@ fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !?st
 }
 
 /// Runs the specified electronic structure or molecular dynamics jobs.
-fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
+pub fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
     const parsed = try parse(Options, io, fname, arena) orelse return;
 
     for (0..parsed.value.zinq.len) |i| {
@@ -127,9 +132,4 @@ fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: A
             },
         }
     }
-}
-
-/// Resolves the molecular simulation input filenames from command line arguments.
-fn targets(args: []const []const u8) []const []const u8 {
-    return if (args.len > 1) args[1..] else &[_][]const u8{"input.json"};
 }
