@@ -34,8 +34,8 @@ jobs:
         id: cache-libs
         uses: actions/cache@v4
         with:
-          path: external-x86_64-linux-musl
-          key: libs-x86_64-linux-musl-${{hashFiles('script/library.pl')}}
+          path: external-x86_64-linux
+          key: libs-x86_64-linux-${{hashFiles('script/library.pl')}}
 
       - name: Install Dependencies
         if: steps.cache-libs.outputs.cache-hit != 'true'

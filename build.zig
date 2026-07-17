@@ -92,9 +92,9 @@ fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
 fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     const dirs = [_][]const u8{ "lib", "include", "include/eigen3" };
 
-    const triple = try getTriple(b, module.resolved_target.?);
+    const arch, const os = .{ @tagName(module.resolved_target.?.result.cpu.arch), @tagName(module.resolved_target.?.result.os.tag) };
 
-    const ext = try std.fmt.allocPrint(b.allocator, "external-{s}", .{triple});
+    const ext = try std.fmt.allocPrint(b.allocator, "external-{s}-{s}", .{ arch, os });
 
     std.Io.Dir.cwd().access(b.graph.io, ext, .{}) catch |err| {
         if (err == error.FileNotFound) {
@@ -125,9 +125,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     };
 
     for (libs) |lib| {
-        const is_musl = module.resolved_target.?.result.abi == .musl;
-
-        module.linkSystemLibrary(lib, .{ .preferred_link_mode = if (is_musl) .static else .dynamic });
+        module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static });
     }
 }
 

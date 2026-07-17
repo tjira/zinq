@@ -34,8 +34,8 @@ jobs:
         id: cache-libs
         uses: actions/cache@v4
         with:
-          path: external-${{matrix.target}}-musl
-          key: libs-${{matrix.target}}-musl-${{hashFiles('script/library.pl')}}
+          path: external-${{matrix.target}}
+          key: libs-${{matrix.target}}-${{hashFiles('script/library.pl')}}
 
       - name: Install Dependencies
         if: steps.cache-libs.outputs.cache-hit != 'true'

@@ -7,7 +7,7 @@ permissions:
 
 jobs:
   compile:
-    name: ${{matrix.os}} / ${{matrix.target}}-${{matrix.suffix}}
+    name: ${{matrix.os}} / ${{matrix.target}}
     runs-on: ${{matrix.os}}
 
     strategy:
@@ -16,20 +16,8 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-linux
-            build_flags: "--shared"
-            suffix: "gnu"
-          - os: ubuntu-latest
-            target: x86_64-linux
-            build_flags: ""
-            suffix: "musl"
           - os: ubuntu-latest
             target: aarch64-linux
-            build_flags: "--shared"
-            suffix: "gnu"
-          - os: ubuntu-latest
-            target: aarch64-linux
-            build_flags: ""
-            suffix: "musl"
 
     steps:
       - uses: actions/checkout@v7
@@ -51,21 +39,21 @@ jobs:
       - name: Compile Libraries
         env:
           BOOST_ROOT: ${{steps.install-boost.outputs.BOOST_ROOT}}
-        run: ./script/library.pl --target ${{matrix.target}} ${{matrix.build_flags}} --generic
+        run: ./script/library.pl --target ${{matrix.target}} --generic
 
       - name: Remove Unnecessary Files
-        working-directory: external-${{matrix.target}}-${{matrix.suffix}}
+        working-directory: external-${{matrix.target}}
         run: rm -rf bin share lib/cmake lib/pkgconfig include/*.bib include/*.f03 lib/*.la
 
       - name: Remove Eigen Signature File
-        working-directory: external-${{matrix.target}}-${{matrix.suffix}}
+        working-directory: external-${{matrix.target}}
         run: rm -f include/eigen3/signature_of_eigen3_matrix_library
 
       - name: Prepare Artifact Directory
-        run: mkdir -p staging && mv external-${{matrix.target}}-${{matrix.suffix}} staging
+        run: mkdir -p staging && mv external-${{matrix.target}} staging
       
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: external-${{matrix.target}}-${{matrix.suffix}}
+          name: external-${{matrix.target}}
           path: staging

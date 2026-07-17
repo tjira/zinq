@@ -16,22 +16,22 @@ all: zinq .env.fish .env.sh
 
 # ZINQ BUILDING TARGETS ========================================================================================================================================
 
-zinq: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)-musl
+zinq: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast)
 
-docs: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)-musl
+docs: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)
 	@$(COMPILER) build docs
 
-run: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)-musl
+run: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) run
 
-test: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)-musl
+test: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) test
 
 # FILE OR DIRECTORY TARGETS ====================================================================================================================================
 
-external-$(ARCH)-$(OS)-musl:
-	@curl -Ls https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS)-musl.zip | bsdtar -xf -
+external-$(ARCH)-$(OS):
+	@curl -Ls https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip | bsdtar -xf -
 
 .env.fish:
 	@echo "fish_add_path $(CURDIR)/.zig-bin" > .env.fish

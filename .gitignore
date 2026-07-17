@@ -3,12 +3,9 @@
 /.zig-cache/
 /build/
 /dist/
-/external-aarch64-linux-gnu/
-/external-aarch64-linux-musl/
-/external-riscv64-linux-gnu/
-/external-riscv64-linux-musl/
-/external-x86_64-linux-gnu/
-/external-x86_64-linux-musl/
+/external-aarch64-linux/
+/external-riscv64-linux/
+/external-x86_64-linux/
 /lib/
 /orca/
 /site/
