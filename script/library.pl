@@ -326,6 +326,7 @@ sub compile_openblas {
         "NO_SHARED=1",
         "NUM_THREADS=128",
         "PREFIX=$prefix",
+        "PROFILE=0",
         $generic ? "TARGET=GENERIC" : "DYNAMIC_ARCH=1"
     );
 
