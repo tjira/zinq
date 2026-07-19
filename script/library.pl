@@ -246,6 +246,9 @@ sub compile_libint {
         "-DCMAKE_DISABLE_FIND_PACKAGE_Boost=True"
     );
 
+    # FIX COMPILATION ON WINDOWS
+    push @args, "-DLIBINT2_ALIGN_SIZE=0" if $target =~ /windows/;
+
     # RUN CONFIGURE
     system(@args) == 0 or die "LIBINT CONFIGURE FAILED";
 
