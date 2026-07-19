@@ -346,27 +346,24 @@ sub compile_fftw {
     
     # CONFIGURE COMMAND
     my @args = (
-        "./configure",
-        "--disable-fortran",
-        "--host=$host",
-        "--prefix=$prefix",
-        "--enable-static",
-        "--disable-shared"
+        "cmake",
+        "-B", "build",
+        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
+        "-DBUILD_SHARED_LIBS=OFF",
+        "-DBUILD_TESTS=OFF",
+        "-DDISABLE_FORTRAN=ON",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_INSTALL_PREFIX=$prefix"
     );
-
-    # DISABLE SIMD OPTIMIZATIONS IF COMPILING FOR A GENERIC PROCESSOR
-    if ($generic) {
-        push @args, "CFLAGS=-O3";
-    }
 
     # RUN CONFIGURE
     system(@args) == 0 or die "FFTW CONFIGURE FAILED";
 
-    # RUN MAKE
-    system("make", "-j", $cores) == 0 or die "FFTW MAKE FAILED";
+    # BUILD THE LIBRARY
+    system("cmake", "--build", "build", "--parallel", $cores) == 0 or die "FFTW BUILD FAILED";
 
     # INSTALL THE LIBRARY
-    system("make", "install") == 0 or die "FFTW INSTALL FAILED";
+    system("cmake", "--install", "build") == 0 or die "FFTW INSTALL FAILED";
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";

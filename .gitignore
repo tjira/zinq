@@ -6,6 +6,7 @@
 /external-aarch64-linux/
 /external-riscv64-linux/
 /external-x86_64-linux/
+/external-x86_64-windows/
 /lib/
 /orca/
 /site/
