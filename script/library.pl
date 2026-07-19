@@ -258,6 +258,11 @@ sub compile_libint {
     # INSTALL THE LIBRARY
     system("cmake", "--install", "build") == 0 or die "LIBINT INSTALL FAILED";
 
+    # PATCH BOYS.H TO USE WINDOWS ALIGNED MEMORY FUNCTIONS ON MINGW
+    if ($target =~ /windows/) {
+        system("perl", "-pi", "-e", "s/#ifdef _MSC_VER/#if defined(_MSC_VER) || defined(__MINGW32__)/g", "$prefix/include/libint2/boys.h");
+    }
+
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
 }
@@ -324,6 +329,9 @@ sub compile_openblas {
         $generic ? "TARGET=GENERIC" : "DYNAMIC_ARCH=1"
     );
 
+    # MANUALLY PASS OS NAME IF WINDOWS IS SPECIFIED
+    push @args, "OSNAME=WINNT" if $target =~ /windows/;
+
     # RUN MAKE
     system("make", @args, "-j", $cores, "libs", "shared") == 0 or die "OPENBLAS MAKE FAILED";
 
@@ -367,6 +375,11 @@ sub compile_fftw {
 
     # INSTALL THE LIBRARY
     system("cmake", "--install", "build") == 0 or die "FFTW INSTALL FAILED";
+
+    # PATCH FFTW3.H TO DISABLE __float128 ON WINDOWS
+    if ($target =~ /windows/ and -f "$prefix/include/fftw3.h") {
+        system("perl", "-pi", "-e", "s/#if \\(__GNUC__ > 4/#if 0 && (__GNUC__ > 4/g", "$prefix/include/fftw3.h");
+    }
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
