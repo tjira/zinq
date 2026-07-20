@@ -7,7 +7,7 @@ on:
 
 jobs:
   pypi:
-    name: ${{matrix.target}}-musl
+    name: ${{matrix.target}}-${{matrix.abi}}
     runs-on: ubuntu-latest
 
     permissions:
@@ -18,9 +18,23 @@ jobs:
       matrix:
         include:
           - target: x86_64-linux
+            abi: musl
             plat_name: manylinux_2_17_x86_64
           - target: aarch64-linux
+            abi: musl
             plat_name: manylinux_2_17_aarch64
+          - target: x86_64-macos
+            abi: none
+            plat_name: macosx_11_0_x86_64
+          - target: aarch64-macos
+            abi: none
+            plat_name: macosx_11_0_arm64
+          - target: x86_64-windows
+            abi: gnu
+            plat_name: win_amd64
+          - target: aarch64-windows
+            abi: gnu
+            plat_name: win_arm64
 
     steps:
       - uses: actions/checkout@v7
@@ -64,10 +78,13 @@ jobs:
         run: ./script/library.pl --target ${{matrix.target}} --generic
 
       - name: Compile Zinq
-        run: zig build --release=safe -Dcpu=baseline -Dtarget=${{matrix.target}}-musl
+        run: zig build --release=safe -Dcpu=baseline -Dtarget=${{matrix.target}}-${{matrix.abi}}
 
       - name: Copy Binary
-        run: mkdir -p zinq/bin && cp zig-out/${{matrix.target}}-musl/zinq zinq/bin/zinq
+        run: |
+          shopt -s nullglob && mkdir -p zinq/bin && cd zig-out && for FOLDER in *64*linux*;   do cp $FOLDER/zinq     ../zinq/bin/zinq;     done && cd -
+          shopt -s nullglob && mkdir -p zinq/bin && cd zig-out && for FOLDER in *64*macos*;   do cp $FOLDER/zinq     ../zinq/bin/zinq;     done && cd -
+          shopt -s nullglob && mkdir -p zinq/bin && cd zig-out && for FOLDER in *64*windows*; do cp $FOLDER/zinq.exe ../zinq/bin/zinq.exe; done && cd -
 
       - name: Build Wheel
         run: python -m build --wheel -C--build-option=--plat-name=${{matrix.plat_name}}

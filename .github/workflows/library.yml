@@ -24,6 +24,8 @@ jobs:
             target: aarch64-macos
           - os: ubuntu-latest
             target: x86_64-windows
+          - os: ubuntu-latest
+            target: aarch64-windows
 
     steps:
       - uses: actions/checkout@v7

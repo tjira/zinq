@@ -24,6 +24,6 @@ zinq = "zinq:main"
 packages = ["zinq"]
 
 [tool.setuptools.package-data]
-zinq = ["bin/zinq"]
+zinq = ["bin/zinq", "bin/zinq.exe"]
 
 [tool.setuptools_scm]

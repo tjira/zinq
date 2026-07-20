@@ -2,7 +2,9 @@ import os, platform, sys
 
 
 def _get_binary_path():
-    return os.path.join(os.path.dirname(__file__), "bin", "zinq")
+    suffix = ".exe" if platform.system() == "Windows" else ""
+
+    return os.path.join(os.path.dirname(__file__), "bin", "zinq" + suffix)
 
 
 def main():

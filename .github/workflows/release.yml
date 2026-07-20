@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    name: ${{matrix.os}} / ${{matrix.target}}
+    name: ${{matrix.target}}-${{matrix.abi}}
     runs-on: ${{matrix.os}}
 
     strategy:
@@ -37,6 +37,9 @@ jobs:
             abi: none
           - os: ubuntu-latest
             target: x86_64-windows
+            abi: gnu
+          - os: ubuntu-latest
+            target: aarch64-windows
             abi: gnu
 
     steps:
