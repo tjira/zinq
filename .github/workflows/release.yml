@@ -73,7 +73,7 @@ jobs:
         run: ./script/library.pl --target ${{matrix.target}} --generic
 
       - name: Compile Zinq
-        run: zig build --release=safe -Dtarget=${{matrix.target}}-${{matrix.abi}}
+        run: zig build --release=safe -Dcpu=baseline -Dtarget=${{matrix.target}}-${{matrix.abi}}
 
       - name: Move Binary
         run: |

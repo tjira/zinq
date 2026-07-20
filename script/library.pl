@@ -97,12 +97,9 @@ sub create_compiler_wrappers {
     # EXTRACT ARGUMENTS
     my ($target, $pwd) = @_;
 
-    # DETERMINE ARCHIVE FORMAT
-    my $format = ($target =~ /macos/) ? "darwin" : ($target =~ /windows/) ? "coff" : "gnu";
-
     # DEFINE WRAPPER CONTENTS
     my %wrappers = (
-        zigar     => "#!/usr/bin/env bash\n\nzig ar     --format=$format \"\$@\"\n",
+        zigar     => "#!/usr/bin/env bash\n\nzig ar                      \"\$@\"\n",
         zigcc     => "#!/usr/bin/env bash\n\nzig cc     --target=$target \"\$@\"\n",
         zigcpp    => "#!/usr/bin/env bash\n\nzig c++    --target=$target \"\$@\"\n",
         zigranlib => "#!/usr/bin/env bash\n\nzig ranlib                  \"\$@\"\n",
@@ -244,6 +241,8 @@ sub compile_libint {
     my @args = (
         "cmake",
         "-B", "build",
+        "-DCMAKE_AR=$pwd/zigar",
+        "-DCMAKE_RANLIB=$pwd/zigranlib",
         "-DCMAKE_INSTALL_PREFIX=$prefix",
         "-DBUILD_SHARED_LIBS=False",
         "-DCMAKE_DISABLE_FIND_PACKAGE_Boost=True"
@@ -364,6 +363,8 @@ sub compile_fftw {
     my @args = (
         "cmake",
         "-B", "build",
+        "-DCMAKE_AR=$pwd/zigar",
+        "-DCMAKE_RANLIB=$pwd/zigranlib",
         "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
         "-DBUILD_SHARED_LIBS=OFF",
         "-DBUILD_TESTS=OFF",

@@ -64,7 +64,7 @@ jobs:
         run: ./script/library.pl --target ${{matrix.target}} --generic
 
       - name: Compile Zinq
-        run: zig build --release=safe -Dtarget=${{matrix.target}}-musl
+        run: zig build --release=safe -Dcpu=baseline -Dtarget=${{matrix.target}}-musl
 
       - name: Copy Binary
         run: mkdir -p zinq/bin && cp zig-out/${{matrix.target}}-musl/zinq zinq/bin/zinq
