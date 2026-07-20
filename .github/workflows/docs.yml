@@ -47,6 +47,7 @@ jobs:
         uses: MarkusJx/install-boost@v2
         with:
           boost_version: 1.83.0
+          platform_version: 18.04
 
       - name: Compile Libraries
         if: steps.cache-libs.outputs.cache-hit != 'true'

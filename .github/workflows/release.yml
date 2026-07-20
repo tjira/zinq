@@ -19,8 +19,13 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-linux
+            abi: musl
           - os: ubuntu-latest
             target: aarch64-linux
+            abi: musl
+          - os: ubuntu-latest
+            target: x86_64-windows
+            abi: gnu
 
     steps:
       - uses: actions/checkout@v7
@@ -47,6 +52,7 @@ jobs:
         uses: MarkusJx/install-boost@v2
         with:
           boost_version: 1.83.0
+          platform_version: 18.04
 
       - name: Compile Libraries
         if: steps.cache-libs.outputs.cache-hit != 'true'
@@ -55,10 +61,13 @@ jobs:
         run: ./script/library.pl --target ${{matrix.target}} --generic
 
       - name: Compile Zinq
-        run: zig build --release=safe -Dtarget=${{matrix.target}}-musl
+        run: zig build --release=safe -Dtarget=${{matrix.target}}-${{matrix.abi}}
 
       - name: Move Binary
-        run: mkdir -p bin && cd zig-out && for FOLDER in *64*linux*; do mv $FOLDER/zinq ../bin/zinq-$FOLDER; done && cd -
+        run: |
+          mkdir -p bin && cd zig-out && for FOLDER in *64*linux*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
+          mkdir -p bin && cd zig-out && for FOLDER in *64*macos*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
+          mkdir -p bin && cd zig-out && for FOLDER in *64*windows*; do mv $FOLDER/zinq.exe ../bin/zinq-$FOLDER.exe; done && cd -
 
       - name: Release Zinq
         uses: svenstaro/upload-release-action@v2
