@@ -4,8 +4,10 @@
 /build/
 /dist/
 /external-aarch64-linux/
+/external-aarch64-macos/
 /external-riscv64-linux/
 /external-x86_64-linux/
+/external-x86_64-macos/
 /external-x86_64-windows/
 /lib/
 /orca/

@@ -30,6 +30,12 @@ jobs:
             target: aarch64-linux
             abi: gnu
           - os: ubuntu-latest
+            target: x86_64-macos
+            abi: none
+          - os: ubuntu-latest
+            target: aarch64-macos
+            abi: none
+          - os: ubuntu-latest
             target: x86_64-windows
             abi: gnu
 
@@ -58,7 +64,7 @@ jobs:
         uses: MarkusJx/install-boost@v2
         with:
           boost_version: 1.83.0
-          platform_version: 18.04
+          platform_version: 22.04
 
       - name: Compile Libraries
         if: steps.cache-libs.outputs.cache-hit != 'true'
