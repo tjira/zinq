@@ -77,9 +77,9 @@ jobs:
 
       - name: Move Binary
         run: |
-          mkdir -p bin && cd zig-out && for FOLDER in *64*linux*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
-          mkdir -p bin && cd zig-out && for FOLDER in *64*macos*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
-          mkdir -p bin && cd zig-out && for FOLDER in *64*windows*; do mv $FOLDER/zinq.exe ../bin/zinq-$FOLDER.exe; done && cd -
+          shopt -s nullglob && mkdir -p bin && cd zig-out && for FOLDER in *64*linux*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
+          shopt -s nullglob && mkdir -p bin && cd zig-out && for FOLDER in *64*macos*;   do mv $FOLDER/zinq     ../bin/zinq-$FOLDER;     done && cd -
+          shopt -s nullglob && mkdir -p bin && cd zig-out && for FOLDER in *64*windows*; do mv $FOLDER/zinq.exe ../bin/zinq-$FOLDER.exe; done && cd -
 
       - name: Release Zinq
         uses: svenstaro/upload-release-action@v2
