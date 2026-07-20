@@ -326,12 +326,13 @@ sub compile_openblas {
         "NO_SHARED=1",
         "NUM_THREADS=128",
         "PREFIX=$prefix",
-        "PROFILE=0",
         $generic ? "TARGET=GENERIC" : "DYNAMIC_ARCH=1"
     );
 
-    # MANUALLY PASS OS NAME IF WINDOWS IS SPECIFIED
-    push @args, "OSNAME=WINNT" if $target =~ /windows/;
+    # PATCH MAKEFILE.RULE TO REMOVE PROFILING ON WINDOWS
+    if ($target =~ /windows/) {
+        system("perl", "-pi", "-e", "s/COMMON_PROF = -pg/COMMON_PROF =/g", "Makefile.rule");
+    }
 
     # RUN MAKE
     system("make", @args, "-j", $cores, "libs", "shared") == 0 or die "OPENBLAS MAKE FAILED";
@@ -378,7 +379,7 @@ sub compile_fftw {
     system("cmake", "--install", "build") == 0 or die "FFTW INSTALL FAILED";
 
     # PATCH FFTW3.H TO DISABLE __float128 ON WINDOWS
-    if ($target =~ /windows/ and -f "$prefix/include/fftw3.h") {
+    if ($target =~ /windows/) {
         system("perl", "-pi", "-e", "s/#if \\(__GNUC__ > 4/#if 0 && (__GNUC__ > 4/g", "$prefix/include/fftw3.h");
     }
 
