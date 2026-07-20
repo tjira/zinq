@@ -1,4 +1,4 @@
-import os, platform, sys
+import os, platform, sys, subprocess
 
 
 def _get_binary_path():
@@ -8,4 +8,4 @@ def _get_binary_path():
 
 
 def main():
-    os.execvp(_get_binary_path(), [_get_binary_path()] + sys.argv[1:])
+    sys.exit(subprocess.call([_get_binary_path()] + sys.argv[1:]))
