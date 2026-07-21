@@ -1,4 +1,8 @@
+.SHELLFLAGS := $(if $(filter $(OS),Windows_NT),-NoProfile -Command,-c)
+
 DEBUG ?= 0
+
+SHELL := $(if $(filter $(OS),Windows_NT),powershell.exe,sh)
 
 ARCH := $(if $(filter $(OS),Windows_NT),x86_64,$(shell uname -m | tr '[:upper:]' '[:lower:]' | sed 's/arm64/aarch64/'))
 OS   := $(if $(filter $(OS),Windows_NT),windows,$(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/'))
@@ -6,9 +10,10 @@ OS   := $(if $(filter $(OS),Windows_NT),windows,$(shell uname -s | tr '[:upper:]
 ZIG_VERSION := 0.16.0
 ZLS_VERSION := 0.16.0
 
-HAS_ZIG := $(shell command -v zig 2> /dev/null)
-HAS_ZLS := $(shell command -v zls 2> /dev/null)
-COMPILER := $(if $(HAS_ZIG),zig,./.zig-bin/zig)
+HAS_ZIG := $(shell $(if $(filter windows,$(OS)),(Get-Command zig -ErrorAction SilentlyContinue).Path,command -v zig 2> /dev/null))
+HAS_ZLS := $(shell $(if $(filter windows,$(OS)),(Get-Command zls -ErrorAction SilentlyContinue).Path,command -v zls 2> /dev/null))
+
+COMPILER := $(if $(HAS_ZIG),zig,./.zig-bin/zig$(if $(filter $(OS),windows),.exe))
 
 .PHONY: all zinq docs run test
 
@@ -16,17 +21,17 @@ all: .env.fish .env.sh zinq
 
 # ZINQ BUILDING TARGETS ========================================================================================================================================
 
-zinq: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)
+zinq: $(if $(HAS_ZIG),,.zig-bin/zig) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast)
 
-docs: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)
+docs: $(if $(HAS_ZIG),,.zig-bin/zig) external-$(ARCH)-$(OS)
 	@$(COMPILER) build docs
 
-run: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)
+run: $(if $(HAS_ZIG),,.zig-bin/zig) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) run
 
-test: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)
-	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) -Dtarget=native-native-musl test
+test: $(if $(HAS_ZIG),,.zig-bin/zig) external-$(ARCH)-$(OS)
+	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) test
 
 # FILE OR DIRECTORY TARGETS ====================================================================================================================================
 
