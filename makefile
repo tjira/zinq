@@ -12,7 +12,7 @@ COMPILER := $(if $(HAS_ZIG),zig,./.zig-bin/zig)
 
 .PHONY: all zinq docs run test
 
-all: zinq .env.fish .env.sh
+all: .env.fish .env.sh zinq
 
 # ZINQ BUILDING TARGETS ========================================================================================================================================
 
