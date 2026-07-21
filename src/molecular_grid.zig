@@ -249,7 +249,13 @@ pub fn DensityGrid(comptime T: type) type {
                 errdefer if (lap_val) |*l| l.deinit(gpa);
             }
 
-            return .{ .rho_val = rho_val, .del_rho = del_rho, .sig_val = sig_val, .tau_val = tau_val, .lap_val = lap_val };
+            return .{
+                .rho_val = rho_val,
+                .del_rho = del_rho,
+                .sig_val = sig_val,
+                .tau_val = tau_val,
+                .lap_val = lap_val,
+            };
         }
 
         /// Frees allocated memory for the grid density and derivative values.
@@ -289,7 +295,6 @@ pub fn PotentialGrid(comptime T: type) type {
 
             if (needs_deriv) {
                 sig_pot = try Matrix(T).initZero(n_g, if (pol) 3 else 1, gpa);
-                errdefer if (sig_pot) |*s| s.deinit(gpa);
             }
 
             errdefer if (sig_pot) |*s| s.deinit(gpa);

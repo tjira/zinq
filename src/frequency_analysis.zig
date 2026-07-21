@@ -96,7 +96,11 @@ pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), sys: M
             const rz = coors[i * 3 + 2] - com[2];
 
             for (0..3) |k| {
-                G[i * 3 + k] = rx * inertia_vecs[0 * 3 + k] + ry * inertia_vecs[1 * 3 + k] + rz * inertia_vecs[2 * 3 + k];
+                const iv_0 = inertia_vecs[0 * 3 + k];
+                const iv_1 = inertia_vecs[1 * 3 + k];
+                const iv_2 = inertia_vecs[2 * 3 + k];
+
+                G[i * 3 + k] = rx * iv_0 + ry * iv_1 + rz * iv_2;
             }
         }
 

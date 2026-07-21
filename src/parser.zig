@@ -3,6 +3,8 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
+const StringHashMap = std.StringHashMap;
 
 const main = @import("main.zig");
 const hartree_fock = @import("hartree_fock.zig");
@@ -310,7 +312,7 @@ pub const Parser = struct {
 
     /// Maps trajectories and options from raw token streams to allowed options in space $\mathcal{P}$.
     fn parseArgs(io: std.Io, args: []const []const u8, allocator: Allocator, comptime allowed: []const []const u8) !ParsedArgs {
-        var positional, var options = .{ std.ArrayList([]const u8).empty, std.StringHashMap([]const u8).init(allocator) };
+        var positional, var options = .{ ArrayList([]const u8).empty, StringHashMap([]const u8).init(allocator) };
 
         var i: usize = 0;
 
@@ -318,10 +320,9 @@ pub const Parser = struct {
             const arg = args[i];
 
             if (std.mem.startsWith(u8, arg, "-")) {
-                if (std.mem.eql(u8, arg, "-h") or
-                    std.mem.eql(u8, arg, "--help") or
-                    std.mem.eql(u8, arg, "--generalized"))
-                {
+                const is_help = std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help");
+
+                if (is_help or std.mem.eql(u8, arg, "--generalized")) {
                     try options.put(arg, "");
 
                     continue;

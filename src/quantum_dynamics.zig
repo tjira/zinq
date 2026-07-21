@@ -255,7 +255,9 @@ fn History(comptime T: type) type {
             }
 
             if (spectrum) |spec| {
-                var acfpd, var sigma = try calcSpectrum(T, self.acf.?.takeRows(self.index), dt, spec.padding, spec.threshold, gpa);
+                const rows = self.acf.?.takeRows(self.index);
+
+                var acfpd, var sigma = try calcSpectrum(T, rows, dt, spec.padding, spec.threshold, gpa);
 
                 defer {
                     acfpd.deinit(gpa);
@@ -745,7 +747,15 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     var pop_apabs = try Vector(T).initZero(pot.nstate(), gpa);
     errdefer pop_apabs.deinit(gpa);
 
-    return .{ .wfn_kpgrids = grid, .hams = ham, .wfn = wfn, .epoten = pot, .propg = prop, .pop_apabs = pop_apabs, .orthw = .empty };
+    return .{
+        .wfn_kpgrids = grid,
+        .hams = ham,
+        .wfn = wfn,
+        .epoten = pot,
+        .propg = prop,
+        .pop_apabs = pop_apabs,
+        .orthw = .empty,
+    };
 }
 
 /// Prints final energies of target vibronic states to stdout.
@@ -858,7 +868,7 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
 
 /// Propagates the wavepacket over the specified iterations using split-operator steps.
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Observables(T) {
-    const ndim, const nstate = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate() };
+    const ndim, const nstate, const npoint = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate(), ctx.opt.grid.npoint };
 
     const neig = if (ctx.opt.imaginary) |imag| imag.nstate else 1;
 
@@ -870,7 +880,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
 
     const calc_acf = ctx.opt.spectrum != null or ctx.opt.write.acf != null;
 
-    var hist = try History(T).init(ndim, nstate, ctx.opt.grid.npoint, ctx.opt.iterations + 1, ctx.opt.write, calc_acf, gpa);
+    var hist = try History(T).init(ndim, nstate, npoint, ctx.opt.iterations + 1, ctx.opt.write, calc_acf, gpa);
     defer hist.deinit(gpa);
 
     if (ctx.opt.initial_conditions.adiabatic) {

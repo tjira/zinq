@@ -135,23 +135,25 @@ pub fn MolecularSystem(comptime T: type) type {
 
         /// Computes the first-order derivatives of spin-blocked two-electron Coulomb integrals.
         pub fn coulombD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 5) {
+            const nbf = self.nbf;
+
             var J = try self.coulombD1(gpa);
             defer J.deinit(gpa);
 
-            const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * self.nbf, 2 * self.nbf, 2 * self.nbf, 2 * self.nbf };
+            const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * nbf, 2 * nbf, 2 * nbf, 2 * nbf };
 
             var I = try Tensor(T, 5).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            for (0..I.shape[0]) |p| for (0..self.nbf) |i| for (0..self.nbf) |j| for (0..self.nbf) |k| for (0..self.nbf) |l| {
+            for (0..I.shape[0]) |p| for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
                 const val = J.at(.{ p, i, j, k, l });
 
                 I.ptr(.{ p, i, j, k, l }).* = val;
 
-                I.ptr(.{ p, i + self.nbf, j, k + self.nbf, l }).* = val;
-                I.ptr(.{ p, i, j + self.nbf, k, l + self.nbf }).* = val;
+                I.ptr(.{ p, i + nbf, j, k + nbf, l }).* = val;
+                I.ptr(.{ p, i, j + nbf, k, l + nbf }).* = val;
 
-                I.ptr(.{ p, i + self.nbf, j + self.nbf, k + self.nbf, l + self.nbf }).* = val;
+                I.ptr(.{ p, i + nbf, j + nbf, k + nbf, l + nbf }).* = val;
             };
 
             return I;

@@ -121,7 +121,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
     };
 
-    var sys = try MolecularSystem(T).init(opt.hartree_fock.system, basis_path, opt.hartree_fock.charge, opt.hartree_fock.multiplicity, gpa);
+    const charge, const multi = .{ opt.hartree_fock.charge, opt.hartree_fock.multiplicity };
+
+    var sys = try MolecularSystem(T).init(opt.hartree_fock.system, basis_path, charge, multi, gpa);
     defer sys.deinit(gpa);
 
     if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
@@ -181,7 +183,11 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     const energies = try mp(T, opt.order, hfres.ints.g.?, hfres.C, hfres.e, nocc, generalized, gpa);
     defer gpa.free(energies);
 
-    const grads = if (opt.gradient != null and opt.gradient.? == .analytic) try gradient(T, opt.order, hfres, gpa) else null;
+    var grads: ?[]Matrix(T) = null;
+
+    if (opt.gradient != null and opt.gradient.? == .analytic) {
+        grads = try gradient(T, opt.order, hfres, gpa);
+    }
 
     defer if (grads != null) {
         for (0..(opt.order + 1)) |i| {

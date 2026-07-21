@@ -109,7 +109,8 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
             hess.ptr(b, a).* = val;
 
             if (log) {
-                const fmt = "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
+                const fmt = "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) DIR {s} AND " ++
+                    "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
                 const sym_a = try getSymbol(sys.atoms[a / 3]);
                 const sym_b = try getSymbol(sys.atoms[b / 3]);
@@ -178,7 +179,9 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
     }
 
     if (res.energy.len <= state) {
-        std.log.err("STATE REQUESTED FOR NUMERICAL DERIVATIVE IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION", .{});
+        const msg = "STATE REQUESTED FOR NUMERICAL DERIVATIVE IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION";
+
+        std.log.err(msg, .{});
 
         return error.InvalidInput;
     }

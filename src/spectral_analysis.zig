@@ -21,7 +21,9 @@ pub fn calcSpectrum(comptime T: type, acf: Vector(Complex(T)), dt: T, padding: u
 
     const inptr = @as([*c]fftw.fftw_complex, @ptrCast(acfp.data.ptr));
 
-    const plan = fftw.fftw_plan_dft_c2r_1d(@intCast(spec.length()), inptr, spec.data.ptr, flags) orelse return error.PlanCreationFailed;
+    const err = error.PlanCreationFailed;
+
+    const plan = fftw.fftw_plan_dft_c2r_1d(@intCast(spec.length()), inptr, spec.data.ptr, flags) orelse return err;
     defer fftw.fftw_destroy_plan(plan);
 
     for (0..acf.length()) |i| {

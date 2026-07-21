@@ -499,24 +499,24 @@ fn Lvc(comptime T: type) type {
         lmb: []const []const []const T,
 
         /// Initializes the linear vibronic coupling potential with frequencies, excitations, and coupling constants.
-        pub fn init(frequencies: []const T, excitation_energies: []const T, kappa: []const []const T, lambda: []const []const []const T) @This() {
-            std.debug.assert(kappa.len == excitation_energies.len);
+        pub fn init(frequencies: []const T, exc_en: []const T, kappa: []const []const T, lambda: []const []const []const T) @This() {
+            std.debug.assert(kappa.len == exc_en.len);
 
             for (kappa) |row| {
                 std.debug.assert(row.len == frequencies.len);
             }
 
-            std.debug.assert(lambda.len == excitation_energies.len);
+            std.debug.assert(lambda.len == exc_en.len);
 
             for (lambda) |row| {
-                std.debug.assert(row.len == excitation_energies.len);
+                std.debug.assert(row.len == exc_en.len);
 
                 for (row) |col| {
                     std.debug.assert(col.len == frequencies.len);
                 }
             }
 
-            return .{ .frequencies = frequencies, .excitation_energies = excitation_energies, .kap = kappa, .lmb = lambda };
+            return .{ .frequencies = frequencies, .excitation_energies = exc_en, .kap = kappa, .lmb = lambda };
         }
 
         /// Evaluates the vibronic coupling potential matrix in Hartree at dimensionless normal coordinates r.
@@ -591,7 +591,9 @@ fn lerp(comptime T: type, comptime U: type, grid: Matrix(T), column: usize, r: [
             var low: usize, var high: usize, var mid: usize = .{ 0, size, size / 2 };
 
             while (low < high) : (mid = (low + high) / 2) {
-                if (grid.at(mid * stride, k) <= if (comptime isDual(U)) r[k].val else r[k]) low = mid + 1 else high = mid;
+                const r_k = if (comptime isDual(U)) r[k].val else r[k];
+
+                if (grid.at(mid * stride, k) <= r_k) low = mid + 1 else high = mid;
             }
 
             const idx = @min(@max(low, 1), size - 1);

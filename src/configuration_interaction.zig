@@ -1,4 +1,4 @@
-//! Solves the Configuration Interaction (CI) equations by diagonalizing the Hamiltonian over a Slater determinant basis.
+//! Solves the Configuration Interaction equations by diagonalizing the Hamiltonian over a Slater determinant basis.
 
 const std = @import("std");
 
@@ -192,7 +192,9 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
     };
 
-    var sys = try MolecularSystem(T).init(opt.hartree_fock.system, basis_path, opt.hartree_fock.charge, opt.hartree_fock.multiplicity, gpa);
+    const charge, const multi = .{ opt.hartree_fock.charge, opt.hartree_fock.multiplicity };
+
+    var sys = try MolecularSystem(T).init(opt.hartree_fock.system, basis_path, charge, multi, gpa);
     defer sys.deinit(gpa);
 
     if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
@@ -254,7 +256,9 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (log) {
-        try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nORBITAL TRANSFORMS TIME:", .{ timer.untilNow(io, .real), dets.items.len });
+        const params = .{ timer.untilNow(io, .real), dets.items.len };
+
+        try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nORBITAL TRANSFORMS TIME:", params);
     }
 
     var E, var C = blk: {
@@ -530,10 +534,14 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: s
             H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ i, mu, nu }));
         };
 
-        for (0..g_d.shape[0]) |mu| for (0..g_d.shape[1]) |lambda| for (0..g_d.shape[2]) |nu| for (0..g_d.shape[3]) |sigma| {
-            const val = hfres.ints.g.?.at(.{ mu, lambda, nu, sigma });
+        const n = g_d.shape[0];
 
-            g_d.ptr(.{ mu, lambda, nu, sigma }).* = ScalarDual(T).init(val, hfres.ints.dg.?.at(.{ i, mu, lambda, nu, sigma }));
+        for (0..n) |mu| for (0..n) |lambda| for (0..n) |nu| for (0..n) |sigma| {
+            const indices = .{ mu, lambda, nu, sigma };
+
+            const val = hfres.ints.g.?.at(indices);
+
+            g_d.ptr(indices).* = ScalarDual(T).init(val, hfres.ints.dg.?.at(.{ i, mu, lambda, nu, sigma }));
         };
 
         for (0..C_d.nrow()) |mu| for (0..C_d.ncol()) |p| {

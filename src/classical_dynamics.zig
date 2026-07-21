@@ -98,7 +98,7 @@ pub fn Ensemble(comptime T: type) type {
         }
 
         /// Calculates the average potential energy of the ensemble based on active electronic states.
-        pub fn epot(self: @This(), pot: Potential(T), time: T, adiabatic: bool, coefics: ?Matrix(Complex(T)), gpa: Allocator) !T {
+        pub fn epot(self: @This(), pot: Potential(T), time: T, adiabatic: bool, coefs: ?Matrix(Complex(T)), gpa: Allocator) !T {
             var sum: T = 0;
 
             const V_slice = try gpa.alloc(T, pot.nstate() * pot.nstate());
@@ -110,7 +110,7 @@ pub fn Ensemble(comptime T: type) type {
             const W_slice = try gpa.alloc(T, pot.nstate());
             defer gpa.free(W_slice);
 
-            if (coefics) |coef| for (0..self.r.nrow()) |i| {
+            if (coefs) |coef| for (0..self.r.nrow()) |i| {
                 pot.eval(T, V_slice, self.r.rowSlice(i), time);
 
                 var traj_epot: T = 0;
@@ -124,7 +124,7 @@ pub fn Ensemble(comptime T: type) type {
                 sum += traj_epot;
             };
 
-            if (coefics == null and adiabatic) for (0..self.r.nrow()) |i| {
+            if (coefs == null and adiabatic) for (0..self.r.nrow()) |i| {
                 pot.eval(T, V_slice, self.r.rowSlice(i), time);
 
                 try eighSlice(T, W_slice, U_slice, V_slice);
@@ -132,7 +132,7 @@ pub fn Ensemble(comptime T: type) type {
                 sum += W_slice[self.s.at(i)];
             };
 
-            if (coefics == null and !adiabatic) for (0..self.r.nrow()) |i| {
+            if (coefs == null and !adiabatic) for (0..self.r.nrow()) |i| {
                 pot.eval(T, V_slice, self.r.rowSlice(i), time);
 
                 sum += V_slice[self.s.at(i) * pot.nstate() + self.s.at(i)];
@@ -155,10 +155,10 @@ pub fn Ensemble(comptime T: type) type {
         }
 
         /// Computes the population fraction of trajectories occupying each electronic state.
-        pub fn pop(self: @This(), nstate: usize, coefics: ?Matrix(Complex(T)), U: ?Matrix(T), adia: bool, gpa: Allocator) !Vector(T) {
+        pub fn pop(self: @This(), nstate: usize, coefs: ?Matrix(Complex(T)), U: ?Matrix(T), adia: bool, gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(nstate, gpa);
 
-            if (coefics) |coef| {
+            if (coefs) |coef| {
                 if (adia) for (0..self.r.nrow()) |i| for (0..nstate) |m| {
                     var a_im = Complex(T).init(0, 0);
 
@@ -178,7 +178,7 @@ pub fn Ensemble(comptime T: type) type {
                 value.divs(@floatFromInt(self.r.nrow()));
             }
 
-            if (coefics == null) {
+            if (coefs == null) {
                 for (0..self.s.length()) |i| {
                     value.ptr(self.s.at(i)).* += 1;
                 }
@@ -310,11 +310,11 @@ fn GradientBuffer(comptime T: type) type {
         }
 
         /// Computes and applies nuclear forces to trajectories based on potential gradients.
-        pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), coefics: ?*const Matrix(Complex(T))) void {
+        pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), coefs: ?*const Matrix(Complex(T))) void {
             const nstate = pot.nstate();
 
             for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
-                if (coefics) |coef| {
+                if (coefs) |coef| {
                     var der: T = 0;
 
                     for (0..nstate) |k| for (0..nstate) |l| {
@@ -326,7 +326,7 @@ fn GradientBuffer(comptime T: type) type {
                     ensemble.a.ptr(i, j).* = -der / ensemble.m[j];
                 }
 
-                if (coefics == null and self.adia) {
+                if (coefs == null and self.adia) {
                     var der: T = 0;
 
                     for (0..nstate) |k| {
@@ -342,7 +342,7 @@ fn GradientBuffer(comptime T: type) type {
                     ensemble.a.ptr(i, j).* = -der / ensemble.m[j];
                 }
 
-                if (coefics == null and !self.adia) {
+                if (coefs == null and !self.adia) {
                     const k = ensemble.s.at(i) * nstate + ensemble.s.at(i);
 
                     ensemble.a.ptr(i, j).* = -self.grad_V.at(i, j * nstate * nstate + k) / ensemble.m[j];
@@ -518,16 +518,16 @@ fn Observables(comptime T: type) type {
             if (calc.mom) obs.mom = try sim.ensemble.mom(gpa);
             if (calc.pos) obs.pos = try sim.ensemble.pos(gpa);
 
-            const coefics = if (sim.propag.namd) |*n| (if (n.* == .ehrenfest) n.ehrenfest.coefics else null) else null;
+            const coefs = if (sim.propag.namd) |*n| (if (n.* == .ehrenfest) n.ehrenfest.coefics else null) else null;
 
-            if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefics, sim.gb.U, sim.gb.adia, gpa);
+            if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefs, sim.gb.U, sim.gb.adia, gpa);
 
             if (calc.ekin) {
                 obs.ekin = sim.ensemble.ekin();
             }
 
             if (calc.epot) {
-                obs.epot = try sim.ensemble.epot(sim.elpoten, time, sim.gb.adia, coefics, gpa);
+                obs.epot = try sim.ensemble.epot(sim.elpoten, time, sim.gb.adia, coefs, gpa);
             }
 
             return obs;
@@ -562,7 +562,9 @@ fn Propagator(comptime T: type) type {
             var namd: ?Namd = null;
 
             if (opt.nonadiabatic) |naopt| if (naopt == .surface_hopping) {
-                const sh = try SurfaceHopping(T).init(naopt.surface_hopping, nstate, opt.trajectories, istate, opt.adiabatic, gpa);
+                const sh_opt, const trajs = .{ naopt.surface_hopping, opt.trajectories };
+
+                const sh = try SurfaceHopping(T).init(sh_opt, nstate, trajs, istate, opt.adiabatic, gpa);
 
                 namd = .{ .surface_hopping = sh };
             };
@@ -743,9 +745,9 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         n.ehrenfest.setInitialState(opt.initial_conditions.state, opt.adiabatic, gb.U);
     };
 
-    const coefics = if (prop.namd) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
+    const coefs = if (prop.namd) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
 
-    gb.apply(&ensemble, pot, coefics);
+    gb.apply(&ensemble, pot, coefs);
 
     return .{ .ensemble = ensemble, .elpoten = pot, .propag = prop, .gb = gb };
 }

@@ -95,9 +95,16 @@ pub fn DftPotential(comptime T: type) type {
             var Vxc = try Matrix(T).init(nbf, nbf, gpa);
             errdefer Vxc.deinit(gpa);
 
-            const fcts = .{ exch_func, corr_func, exco_func };
-
-            return .{ .exch = fcts[0], .corr = fcts[1], .exco = fcts[2], .pts = grid[0], .wgh = grid[1], .Vxc = Vxc, .polarized = polarized, .exx_coef = exx };
+            return .{
+                .exch = exch_func,
+                .corr = corr_func,
+                .exco = exco_func,
+                .pts = grid[0],
+                .wgh = grid[1],
+                .Vxc = Vxc,
+                .polarized = polarized,
+                .exx_coef = exx,
+            };
         }
 
         /// Frees all allocated grid arrays and libxc functional resources.
@@ -117,13 +124,15 @@ pub fn DftPotential(comptime T: type) type {
 
             const size_factor: usize, const flags = .{ if (self.polarized) 2 else 1, self.getFamilyFlags() };
 
-            var basis = try BasisGrid(T).init(self.pts.shape[0], sys.nbf, flags.needs_deriv, flags.has_mgga, gpa);
+            const nd, const mgga = .{ flags.needs_deriv, flags.has_mgga };
+
+            var basis = try BasisGrid(T).init(self.pts.shape[0], sys.nbf, nd, mgga, gpa);
             defer basis.deinit(gpa);
 
-            var density = try DensityGrid(T).init(self.pts.shape[0], size_factor, flags.needs_deriv, flags.has_mgga, self.polarized, gpa);
+            var density = try DensityGrid(T).init(self.pts.shape[0], size_factor, nd, mgga, self.polarized, gpa);
             defer density.deinit(gpa);
 
-            var potential = try PotentialGrid(T).init(self.pts.shape[0], size_factor, flags.needs_deriv, flags.has_mgga, self.polarized, gpa);
+            var potential = try PotentialGrid(T).init(self.pts.shape[0], size_factor, nd, mgga, self.polarized, gpa);
             defer potential.deinit(gpa);
 
             self.evaluateBasis(sys, basis);
@@ -249,7 +258,11 @@ pub fn DftPotential(comptime T: type) type {
                             const dphi_dy_nu = ctx.basisgrid.dphi_dy.?.at(i, nu);
                             const dphi_dz_nu = ctx.basisgrid.dphi_dz.?.at(i, nu);
 
-                            const dphi_dot = dphi_dx_mu * dphi_dx_nu + dphi_dy_mu * dphi_dy_nu + dphi_dz_mu * dphi_dz_nu;
+                            const dphi_dx_mu_nu = dphi_dx_mu * dphi_dx_nu;
+                            const dphi_dy_mu_nu = dphi_dy_mu * dphi_dy_nu;
+                            const dphi_dz_mu_nu = dphi_dz_mu * dphi_dz_nu;
+
+                            const dphi_dot = dphi_dx_mu_nu + dphi_dy_mu_nu + dphi_dz_mu_nu;
 
                             tau_a += p_val_a * dphi_dot;
                             tau_b += p_val_b * dphi_dot;
@@ -280,9 +293,23 @@ pub fn DftPotential(comptime T: type) type {
                     ctx.density.del_rho.?.ptr(i, 4).* = del_rho_b_y;
                     ctx.density.del_rho.?.ptr(i, 5).* = del_rho_b_z;
 
-                    ctx.density.sig_val.?.ptr(i, 0).* = del_rho_a_x * del_rho_a_x + del_rho_a_y * del_rho_a_y + del_rho_a_z * del_rho_a_z;
-                    ctx.density.sig_val.?.ptr(i, 1).* = del_rho_a_x * del_rho_b_x + del_rho_a_y * del_rho_b_y + del_rho_a_z * del_rho_b_z;
-                    ctx.density.sig_val.?.ptr(i, 2).* = del_rho_b_x * del_rho_b_x + del_rho_b_y * del_rho_b_y + del_rho_b_z * del_rho_b_z;
+                    const del_rho_a_x_2 = del_rho_a_x * del_rho_a_x;
+                    const del_rho_a_y_2 = del_rho_a_y * del_rho_a_y;
+                    const del_rho_a_z_2 = del_rho_a_z * del_rho_a_z;
+
+                    ctx.density.sig_val.?.ptr(i, 0).* = del_rho_a_x_2 + del_rho_a_y_2 + del_rho_a_z_2;
+
+                    const del_rho_a_b_x_2 = del_rho_a_x * del_rho_b_x;
+                    const del_rho_a_b_y_2 = del_rho_a_y * del_rho_b_y;
+                    const del_rho_a_b_z_2 = del_rho_a_z * del_rho_b_z;
+
+                    ctx.density.sig_val.?.ptr(i, 1).* = del_rho_a_b_x_2 + del_rho_a_b_y_2 + del_rho_a_b_z_2;
+
+                    const del_rho_b_x_2 = del_rho_b_x * del_rho_b_x;
+                    const del_rho_b_y_2 = del_rho_b_y * del_rho_b_y;
+                    const del_rho_b_z_2 = del_rho_b_z * del_rho_b_z;
+
+                    ctx.density.sig_val.?.ptr(i, 2).* = del_rho_b_x_2 + del_rho_b_y_2 + del_rho_b_z_2;
                 }
 
                 if (ctx.has_mgga) {
@@ -329,7 +356,11 @@ pub fn DftPotential(comptime T: type) type {
                             const dphi_dy_nu = ctx.basisgrid.dphi_dy.?.at(i, nu);
                             const dphi_dz_nu = ctx.basisgrid.dphi_dz.?.at(i, nu);
 
-                            const dphi_dot = dphi_dx_mu * dphi_dx_nu + dphi_dy_mu * dphi_dy_nu + dphi_dz_mu * dphi_dz_nu;
+                            const dphi_dx_mu_nu = dphi_dx_mu * dphi_dx_nu;
+                            const dphi_dy_mu_nu = dphi_dy_mu * dphi_dy_nu;
+                            const dphi_dz_mu_nu = dphi_dz_mu * dphi_dz_nu;
+
+                            const dphi_dot = dphi_dx_mu_nu + dphi_dy_mu_nu + dphi_dz_mu_nu;
 
                             tau_tot += P.at(mu, nu) * dphi_dot;
 
@@ -349,7 +380,11 @@ pub fn DftPotential(comptime T: type) type {
                     ctx.density.del_rho.?.ptr(i, 1).* = del_rho_y;
                     ctx.density.del_rho.?.ptr(i, 2).* = del_rho_z;
 
-                    ctx.density.sig_val.?.ptr(i, 0).* = del_rho_x * del_rho_x + del_rho_y * del_rho_y + del_rho_z * del_rho_z;
+                    const del_rho_x_2 = del_rho_x * del_rho_x;
+                    const del_rho_y_2 = del_rho_y * del_rho_y;
+                    const del_rho_z_2 = del_rho_z * del_rho_z;
+
+                    ctx.density.sig_val.?.ptr(i, 0).* = del_rho_x_2 + del_rho_y_2 + del_rho_z_2;
                 }
 
                 if (ctx.has_mgga) {
@@ -370,21 +405,25 @@ pub fn DftPotential(comptime T: type) type {
                 const z = self.pts.at(i, 2);
 
                 if (needs_d2) {
-                    const dx_row = basis.dphi_dx.?.rowSlice(i);
-                    const dy_row = basis.dphi_dy.?.rowSlice(i);
-                    const dz_row = basis.dphi_dz.?.rowSlice(i);
+                    const phi_row = basis.phi.rowSlice(i).ptr;
 
-                    const lapl_row = basis.lapl.?.rowSlice(i);
+                    const dx_row = basis.dphi_dx.?.rowSlice(i).ptr;
+                    const dy_row = basis.dphi_dy.?.rowSlice(i).ptr;
+                    const dz_row = basis.dphi_dz.?.rowSlice(i).ptr;
 
-                    libint.libint_evaluate_basis_vgl(basis.phi.rowSlice(i).ptr, dx_row.ptr, dy_row.ptr, dz_row.ptr, lapl_row.ptr, x, y, z, sys.ptr);
+                    const lapl_row = basis.lapl.?.rowSlice(i).ptr;
+
+                    libint.libint_evaluate_basis_vgl(phi_row, dx_row, dy_row, dz_row, lapl_row, x, y, z, sys.ptr);
                 }
 
                 if (needs_d1 and !needs_d2) {
-                    const dx_row = basis.dphi_dx.?.rowSlice(i);
-                    const dy_row = basis.dphi_dy.?.rowSlice(i);
-                    const dz_row = basis.dphi_dz.?.rowSlice(i);
+                    const phi_row = basis.phi.rowSlice(i).ptr;
 
-                    libint.libint_evaluate_basis_vg(basis.phi.rowSlice(i).ptr, dx_row.ptr, dy_row.ptr, dz_row.ptr, x, y, z, sys.ptr);
+                    const dx_row = basis.dphi_dx.?.rowSlice(i).ptr;
+                    const dy_row = basis.dphi_dy.?.rowSlice(i).ptr;
+                    const dz_row = basis.dphi_dz.?.rowSlice(i).ptr;
+
+                    libint.libint_evaluate_basis_vg(phi_row, dx_row, dy_row, dz_row, x, y, z, sys.ptr);
                 }
 
                 if (!needs_d1 and !needs_d2) {
@@ -399,13 +438,17 @@ pub fn DftPotential(comptime T: type) type {
             const corr_fam = if (self.corr) |func| func.info.*.family else null;
             const exco_fam = if (self.exco) |func| func.info.*.family else null;
 
-            const is_exch_sgga = self.exch != null and (exch_fam == libxc.XC_FAMILY_GGA or exch_fam == libxc.XC_FAMILY_HYB_GGA);
-            const is_corr_sgga = self.corr != null and (corr_fam == libxc.XC_FAMILY_GGA or corr_fam == libxc.XC_FAMILY_HYB_GGA);
-            const is_exco_sgga = self.exco != null and (exco_fam == libxc.XC_FAMILY_GGA or exco_fam == libxc.XC_FAMILY_HYB_GGA);
+            const xc_gga, const xc_hyb_gga = .{ libxc.XC_FAMILY_GGA, libxc.XC_FAMILY_HYB_GGA };
 
-            const is_exch_mgga = self.exch != null and (exch_fam == libxc.XC_FAMILY_MGGA or exch_fam == libxc.XC_FAMILY_HYB_MGGA);
-            const is_corr_mgga = self.corr != null and (corr_fam == libxc.XC_FAMILY_MGGA or corr_fam == libxc.XC_FAMILY_HYB_MGGA);
-            const is_exco_mgga = self.exco != null and (exco_fam == libxc.XC_FAMILY_MGGA or exco_fam == libxc.XC_FAMILY_HYB_MGGA);
+            const is_exch_sgga = self.exch != null and (exch_fam == xc_gga or exch_fam == xc_hyb_gga);
+            const is_corr_sgga = self.corr != null and (corr_fam == xc_gga or corr_fam == xc_hyb_gga);
+            const is_exco_sgga = self.exco != null and (exco_fam == xc_gga or exco_fam == xc_hyb_gga);
+
+            const xc_mgga, const xc_hyb_mgga = .{ libxc.XC_FAMILY_MGGA, libxc.XC_FAMILY_HYB_MGGA };
+
+            const is_exch_mgga = self.exch != null and (exch_fam == xc_mgga or exch_fam == xc_hyb_mgga);
+            const is_corr_mgga = self.corr != null and (corr_fam == xc_mgga or corr_fam == xc_hyb_mgga);
+            const is_exco_mgga = self.exco != null and (exco_fam == xc_mgga or exco_fam == xc_hyb_mgga);
 
             const has_sgga = is_exch_sgga or is_corr_sgga or is_exco_sgga;
             const has_mgga = is_exch_mgga or is_corr_mgga or is_exco_mgga;
@@ -599,10 +642,11 @@ pub fn DftPotential(comptime T: type) type {
                     const v_lap = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(i, 0) else 0.0;
 
                     for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
+                        const rho_val = ctx.potgd.rho_pot.at(i, 0);
                         const phi_mu = ctx.basisgrid.phi.at(i, mu);
                         const phi_nu = ctx.basisgrid.phi.at(i, nu);
 
-                        var val = ctx.potgd.rho_pot.at(i, 0) * phi_mu * phi_nu + X_a.?.data[mu] * phi_nu + phi_mu * X_a.?.data[nu];
+                        var val = rho_val * phi_mu * phi_nu + X_a.?.data[mu] * phi_nu + phi_mu * X_a.?.data[nu];
 
                         if (ctx.has_mgga) {
                             const dx_mu_nu = ctx.basisgrid.dphi_dx.?.at(i, mu) * ctx.basisgrid.dphi_dx.?.at(i, nu);
@@ -615,6 +659,7 @@ pub fn DftPotential(comptime T: type) type {
 
                             const lapl_mu = ctx.basisgrid.lapl.?.at(i, mu);
                             const lapl_nu = ctx.basisgrid.lapl.?.at(i, nu);
+
                             const lapl_term = lapl_mu * phi_nu + 2 * dphi_dot + phi_mu * lapl_nu;
 
                             val += v_lap * lapl_term;
@@ -624,11 +669,12 @@ pub fn DftPotential(comptime T: type) type {
                     };
                 }
 
-                if (!ctx.needs_deriv) {
-                    for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
-                        self.Vxc.ptr(mu, nu).* += ctx.potgd.rho_pot.at(i, 0) * ctx.basisgrid.phi.at(i, mu) * ctx.basisgrid.phi.at(i, nu) * w;
-                    };
-                }
+                if (!ctx.needs_deriv) for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
+                    const phi_mu = ctx.basisgrid.phi.at(i, mu);
+                    const phi_nu = ctx.basisgrid.phi.at(i, nu);
+
+                    self.Vxc.ptr(mu, nu).* += ctx.potgd.rho_pot.at(i, 0) * phi_mu * phi_nu * w;
+                };
             }
             return energy_exc;
         }

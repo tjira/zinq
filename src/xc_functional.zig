@@ -111,7 +111,9 @@ pub fn evaluateXCGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_typ
             libxc.xc_gga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5);
 
             for (0..batch_len) |j| {
-                out.exc[i + j], out.rho_pot[i + j] = .{ out.exc[i + j] + e_xc_batch[j], out.rho_pot[i + j] + vrho_batch[j] };
+                const out_rho = out.rho_pot[i + j] + vrho_batch[j];
+
+                out.exc[i + j], out.rho_pot[i + j] = .{ out.exc[i + j] + e_xc_batch[j], out_rho };
 
                 sig_pot_unwrapped[i + j] += vsig_batch[j];
             }
@@ -262,7 +264,9 @@ pub fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_ty
             libxc.xc_mgga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5, p6, p7, p8, p9);
 
             for (0..batch_len) |j| {
-                out.exc[i + j], out.rho_pot[i + j] = .{ out.exc[i + j] + e_xc_batch[j], out.rho_pot[i + j] + vrho_batch[j] };
+                const out_rho = out.rho_pot[i + j] + vrho_batch[j];
+
+                out.exc[i + j], out.rho_pot[i + j] = .{ out.exc[i + j] + e_xc_batch[j], out_rho };
 
                 sig_pot_unwrapped[i + j] += vsig_batch[j];
                 tau_pot_unwrapped[i + j] += vtau_batch[j];

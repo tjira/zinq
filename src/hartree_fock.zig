@@ -499,7 +499,16 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         try writeMatrix(T, io, fname, hess[0]);
     };
 
-    var result: Result(T) = .{ .ints = ints, .P = P, .C = C, .F = F, .e = e, .energy = energy, .grad = grad, .hess = hess };
+    var result: Result(T) = .{
+        .ints = ints,
+        .P = P,
+        .C = C,
+        .F = F,
+        .e = e,
+        .energy = energy,
+        .grad = grad,
+        .hess = hess,
+    };
 
     if (opt.response) |response| {
         result.dC, result.de = try orbitalResponse(T, io, result, response, log, gpa);
@@ -684,36 +693,38 @@ fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Ma
 
 /// Constructs the Fock (or Kohn-Sham) matrix from core Hamiltonian and two-electron interactions.
 fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), generalized: bool, dft: ?*DftPotential(T), gpa: Allocator) !void {
-    std.debug.assert(F.shape[0] == ints.H.?.shape[0]);
-    std.debug.assert(F.shape[1] == ints.H.?.shape[1]);
-    std.debug.assert(P.shape[0] == ints.H.?.shape[0]);
-    std.debug.assert(P.shape[1] == ints.H.?.shape[1]);
+    const nbf = ints.H.?.shape[0];
 
-    std.debug.assert(ints.g.?.shape[0] == ints.H.?.shape[0]);
-    std.debug.assert(ints.g.?.shape[1] == ints.H.?.shape[0]);
-    std.debug.assert(ints.g.?.shape[2] == ints.H.?.shape[0]);
-    std.debug.assert(ints.g.?.shape[3] == ints.H.?.shape[0]);
+    std.debug.assert(F.shape[0] == nbf);
+    std.debug.assert(F.shape[1] == nbf);
+    std.debug.assert(P.shape[0] == nbf);
+    std.debug.assert(P.shape[1] == nbf);
 
-    for (0..F.shape[0]) |i| for (0..F.shape[1]) |j| {
+    std.debug.assert(ints.g.?.shape[0] == nbf);
+    std.debug.assert(ints.g.?.shape[1] == nbf);
+    std.debug.assert(ints.g.?.shape[2] == nbf);
+    std.debug.assert(ints.g.?.shape[3] == nbf);
+
+    for (0..nbf) |i| for (0..nbf) |j| {
         F.ptr(i, j).* = ints.H.?.at(i, j);
     };
 
     if (dft) |pot| {
-        for (0..ints.g.?.shape[0]) |j| for (0..ints.g.?.shape[1]) |k| for (0..ints.g.?.shape[2]) |l| for (0..ints.g.?.shape[3]) |m| {
+        for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| for (0..nbf) |m| {
             F.ptr(l, m).* += P.at(j, k) * ints.g.?.at(.{ j, l, k, m });
         };
 
         if (pot.exx_coef > 0) {
             const factor: T = if (generalized) 1 else 0.5;
 
-            for (0..ints.g.?.shape[0]) |i| for (0..ints.g.?.shape[1]) |j| for (0..ints.g.?.shape[2]) |k| for (0..ints.g.?.shape[3]) |l| {
+            for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
                 F.ptr(k, l).* -= factor * pot.exx_coef * P.at(i, j) * ints.g.?.at(.{ i, j, k, l });
             };
         }
 
         try pot.evaluate(ints.sys, P, gpa);
 
-        for (0..F.shape[0]) |j| for (0..F.shape[1]) |k| {
+        for (0..nbf) |j| for (0..nbf) |k| {
             F.ptr(j, k).* += pot.Vxc.at(j, k);
         };
     }
@@ -721,12 +732,12 @@ fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), ge
     if (dft == null) {
         const exch_factor: T = if (generalized) 1.0 else 0.5;
 
-        for (0..ints.g.?.shape[0]) |i| for (0..ints.g.?.shape[1]) |j| for (0..ints.g.?.shape[2]) |k| for (0..ints.g.?.shape[3]) |l| {
+        for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
             F.ptr(k, l).* += P.at(i, j) * (ints.g.?.at(.{ i, k, j, l }) - exch_factor * ints.g.?.at(.{ i, j, k, l }));
         };
     }
 
-    for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
+    for (0..nbf) |i| for (i + 1..nbf) |j| {
         const avg = (F.at(i, j) + F.at(j, i)) / 2;
 
         F.ptr(i, j).* = avg;
