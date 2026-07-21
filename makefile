@@ -35,8 +35,13 @@ test: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HA
 
 # LIBRARY INSTALLATION TARGETS =================================================================================================================================
 
+ifeq ($(OS),windows)
+external-$(ARCH)-$(OS):
+	@curl.exe -Ls -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip ; tar -xf external.zip ; rm external.zip
+else
 external-$(ARCH)-$(OS):
 	@curl -Ls https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip | bsdtar -xf -
+endif
 
 # ENVIRONMENT SCRIPTS ==========================================================================================================================================
 
@@ -61,10 +66,10 @@ endif
 
 ifeq ($(OS),windows)
 .zig-bin/zls.exe: | .zig-bin
-	@curl.exe -Ls -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip ; tar -xf zls.zip -C .zig-bin --strip-components=0 ; rm zls.zip
+	@curl.exe -Ls -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip ; tar -xf zls.zip -C .zig-bin ; rm zls.zip
 else
 .zig-bin/zls: | .zig-bin
-	@curl -Ls https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).tar.xz | tar -Jx -C .zig-bin --strip-components=0
+	@curl -Ls https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).tar.xz | tar -Jx -C .zig-bin
 endif
 
 # DIRECTORY CREATION TARGETS ===================================================================================================================================
