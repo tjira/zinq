@@ -26,7 +26,7 @@ run: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(AR
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) run
 
 test: $(if $(HAS_ZIG),,.zig-bin/zig) $(if $(HAS_ZLS),,.zig-bin/zls) external-$(ARCH)-$(OS)
-	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) test
+	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) -Dtarget=native-native-musl test
 
 # FILE OR DIRECTORY TARGETS ====================================================================================================================================
 

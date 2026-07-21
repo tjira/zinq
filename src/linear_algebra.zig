@@ -10,6 +10,8 @@ const Vector = @import("tensor.zig").Vector;
 
 const primType = @import("value.zig").primType;
 
+const ROW_MAJOR = lapacke.LAPACK_ROW_MAJOR;
+
 /// Performs the vector addition y = alpha * x + y (AXPY operation).
 pub fn addScaled(comptime T: type, alpha: T, x: Vector(T), y: *Vector(T)) void {
     std.debug.assert(x.length() == y.length());
@@ -64,7 +66,7 @@ pub fn eighSlice(comptime T: type, W: []T, U: []T, V: []T) !void {
         U[i] = V[i];
     }
 
-    const info = lapacke.LAPACKE_dsyevd(lapacke.LAPACK_ROW_MAJOR, 'V', 'U', n, U.ptr, n, W.ptr);
+    const info = lapacke.LAPACKE_dsyevd(ROW_MAJOR, 'V', 'U', n, U.ptr, n, W.ptr);
 
     if (info != 0) return error.LapackError;
 }
@@ -225,7 +227,7 @@ fn luSolveSlice(comptime T: type, X: []T, LU: []const T, ipiv: []const i32, B: [
         X[i] = B[i];
     }
 
-    const info = lapacke.LAPACKE_dgetrs(lapacke.LAPACK_ROW_MAJOR, 'N', n, nofrhs, LU.ptr, n, ipiv.ptr, X.ptr, nofrhs);
+    const info = lapacke.LAPACKE_dgetrs(ROW_MAJOR, 'N', n, nofrhs, LU.ptr, n, ipiv.ptr, X.ptr, nofrhs);
 
     if (info != 0) return error.LapackError;
 }

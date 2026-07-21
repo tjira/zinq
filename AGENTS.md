@@ -7,7 +7,7 @@
 
 ## Build & Execution Commands
 - **Run project:** `zig build run -- input.json` *(Note: Use `--` to properly pass input files to the generated executable).
-- **Run tests:** `zig build --release=fast test` *(Note: Always use `--release=fast` to enable optimizations for test execution)*
+- **Run tests:** `zig build --release=fast -Dtarget=native-native-musl test` *(Note: Always use `--release=fast` and `-Dtarget=native-native-musl` to match GitHub setup)*
 
 ## Code Style & Formatting
 - **Line Constraints:** Enforce a strict maximum line length of 120 characters, except where a single line is required (e.g., function signatures/calls).
