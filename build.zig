@@ -108,19 +108,18 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
 
     module.addIncludePath(b.path("src"));
 
+    const is_windows = module.resolved_target.?.result.os.tag == .windows;
+
     module.addLibraryPath(.{ .cwd_relative = dir0 });
     module.addIncludePath(.{ .cwd_relative = dir1 });
     module.addIncludePath(.{ .cwd_relative = dir2 });
 
-    module.addCSourceFile(.{ .file = b.path("src/libint.cpp") });
-    module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp") });
+    const flags: []const []const u8 = if (is_windows) &.{"-D__GXX_ABI_VERSION=1004"} else &.{};
 
-    const libs = [_][]const u8{
-        "fftw3",
-        "int2",
-        "openblas",
-        "xc",
-    };
+    module.addCSourceFile(.{ .file = b.path("src/libint.cpp"), .flags = flags });
+    module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });
+
+    const libs = [_][]const u8{ "fftw3", "int2", "openblas", "xc" };
 
     for (libs) |lib| {
         module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static });

@@ -17,38 +17,60 @@ COMPILER := $(if $(HAS_ZIG),zig,./.zig-bin/zig$(if $(filter $(OS),windows),.exe)
 
 .PHONY: all zinq docs run test
 
-all: .env.fish .env.sh zinq
+all: .env.fish .env.ps1 .env.sh zinq
 
 # ZINQ BUILDING TARGETS ========================================================================================================================================
 
-zinq: $(if $(HAS_ZIG),,.zig-bin/zig) external-$(ARCH)-$(OS)
+zinq: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast)
 
-docs: $(if $(HAS_ZIG),,.zig-bin/zig) external-$(ARCH)-$(OS)
+docs: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build docs
 
-run: $(if $(HAS_ZIG),,.zig-bin/zig) external-$(ARCH)-$(OS)
+run: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) run
 
-test: $(if $(HAS_ZIG),,.zig-bin/zig) external-$(ARCH)-$(OS)
+test: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) test
 
-# FILE OR DIRECTORY TARGETS ====================================================================================================================================
+# LIBRARY INSTALLATION TARGETS =================================================================================================================================
 
 external-$(ARCH)-$(OS):
 	@curl -Ls https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip | bsdtar -xf -
 
+# ENVIRONMENT SCRIPTS ==========================================================================================================================================
+
 .env.fish:
 	@echo "fish_add_path $(CURDIR)/.zig-bin" > .env.fish
+
+.env.ps1:
+	@echo '$$env:PATH="$(CURDIR)/.zig-bin;$$env:PATH"' > .env.ps1
 
 .env.sh:
 	@echo "export PATH=$(CURDIR)/.zig-bin:\$$PATH" > .env.sh
 
-.zig-bin/zig:
-	@mkdir -p .zig-bin && curl -Ls https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).tar.xz | tar -Jx -C .zig-bin --strip-components=1 && touch $@
+# COMPILER AND LANGUAGE SERVER INSTALLATION TARGETS ============================================================================================================
 
-.zig-bin/zls:
-	@mkdir -p .zig-bin && curl -Ls https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).tar.xz | tar -Jx -C .zig-bin --strip-components=0 && touch $@
+ifeq ($(OS),windows)
+.zig-bin/zig.exe: | .zig-bin
+	@curl.exe -Ls -o zig.zip https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).zip ; tar -xf zig.zip -C .zig-bin --strip-components=1 ; rm zig.zip
+else
+.zig-bin/zig: | .zig-bin
+	@curl -Ls https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).tar.xz | tar -Jx -C .zig-bin --strip-components=1
+endif
+
+ifeq ($(OS),windows)
+.zig-bin/zls.exe: | .zig-bin
+	@curl.exe -Ls -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip ; tar -xf zls.zip -C .zig-bin --strip-components=0 ; rm zls.zip
+else
+.zig-bin/zls: | .zig-bin
+	@curl -Ls https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).tar.xz | tar -Jx -C .zig-bin --strip-components=0
+endif
+
+# DIRECTORY CREATION TARGETS ===================================================================================================================================
+
+.zig-bin:
+	@$(if $(filter windows,$(OS)),mkdir .zig-bin -Force | Out-Null,mkdir -p .zig-bin)
 
 # ADDITIONAL TARGETS ===========================================================================================================================================
 
