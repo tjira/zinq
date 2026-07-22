@@ -21,6 +21,7 @@ pub const dual = @import("dual.zig");
 pub const ehrenfest = @import("ehrenfest.zig");
 pub const exprtk = @import("exprtk.zig");
 pub const fourier_transform = @import("fourier_transform.zig");
+pub const flux_analysis = @import("flux_analysis.zig");
 pub const frequency_analysis = @import("frequency_analysis.zig");
 pub const hartree_fock = @import("hartree_fock.zig");
 pub const integral_transform = @import("integral_transform.zig");

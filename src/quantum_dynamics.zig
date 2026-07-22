@@ -17,6 +17,7 @@ const Vector = @import("tensor.zig").Vector;
 const Wavefunction = @import("wavepacket.zig").Wavefunction;
 
 const calcSpectrum = @import("spectral_analysis.zig").calcSpectrum;
+const FluxAnalysisContext = @import("flux_analysis.zig").FluxAnalysisContext;
 const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
@@ -62,6 +63,16 @@ pub const Options = struct {
         write: struct {
             acf: ?[]const u8 = null,
             spectrum: ?[]const u8 = null,
+        } = .{},
+    } = null,
+
+    flux_analysis: ?struct {
+        flux_surface: f64,
+        e_min: f64 = 0.00025,
+        e_max: f64 = 0.225,
+        e_step: f64 = 0.001,
+        write: struct {
+            cross_section: ?[]const u8 = null,
         } = .{},
     } = null,
 };
@@ -111,10 +122,13 @@ fn History(comptime T: type) type {
 
         wfn: ?Matrix(T) = null,
 
+        flux_acc: ?Matrix(Complex(T)) = null,
+        wfn_init: ?Matrix(Complex(T)) = null,
+
         index: usize = 0,
 
         /// Allocates memory for wavefunctions and observables history arrays.
-        pub fn init(ndim: usize, nstate: usize, npoint: usize, iters: usize, write: Write, spectrum: bool, gpa: Allocator) !@This() {
+        pub fn init(ndim: usize, nstate: usize, npoint: usize, iters: usize, write: Write, spectrum: bool, opt: Options, gpa: Allocator) !@This() {
             var hist = @This(){};
             errdefer hist.deinit(gpa);
 
@@ -152,6 +166,14 @@ fn History(comptime T: type) type {
                 hist.acf = try Vector(Complex(T)).init(iters, gpa);
             }
 
+            if (opt.flux_analysis) |flux_opt| {
+                const n = @as(usize, @intFromFloat(@round((flux_opt.e_max - flux_opt.e_min) / flux_opt.e_step))) + 1;
+
+                hist.flux_acc = try Matrix(Complex(T)).initZero(n * nstate, npoint, gpa);
+
+                hist.wfn_init = try Matrix(Complex(T)).init(nstate, npoint, gpa);
+            }
+
             return hist;
         }
 
@@ -168,15 +190,38 @@ fn History(comptime T: type) type {
             if (self.norm) |*norm| norm.deinit(gpa);
 
             if (self.wfn) |*wfn| wfn.deinit(gpa);
+
+            if (self.flux_acc) |*flux_acc| flux_acc.deinit(gpa);
+            if (self.wfn_init) |*wfn_init| wfn_init.deinit(gpa);
         }
 
         /// Appends the current wavefunction and observables to the propagation history.
-        pub fn append(self: *@This(), wfn: Wavefunction(T), obs: Observables(T)) void {
-            const step_idx = self.index;
+        pub fn append(self: *@This(), wfn: Wavefunction(T), obs: Observables(T), opt: Options) void {
+            const step_idx, const t = .{ self.index, @as(T, @floatFromInt(self.index)) * opt.time_step };
 
             if (self.wfn) |*storage| for (0..wfn.W.ncol()) |j| for (0..wfn.W.nrow()) |i| {
                 storage.ptr(j, 2 * (step_idx * wfn.W.nrow() + i) + 0).* = wfn.W.at(i, j).re;
                 storage.ptr(j, 2 * (step_idx * wfn.W.nrow() + i) + 1).* = wfn.W.at(i, j).im;
+            };
+
+            if (self.flux_acc) |*accum| {
+                const flux_opt = opt.flux_analysis.?;
+
+                for (0..wfn.W.nrow()) |f| for (0..self.flux_acc.?.nrow() / wfn.W.nrow()) |ei| {
+                    const E = flux_opt.e_min + @as(T, @floatFromInt(ei)) * flux_opt.e_step;
+
+                    const phase = std.math.complex.exp(Complex(T).init(0, E * t));
+
+                    for (0..wfn.W.ncol()) |j| {
+                        const row = ei * wfn.W.nrow() + f;
+
+                        accum.ptr(row, j).* = accum.at(row, j).add(phase.mul(wfn.W.at(f, j)));
+                    }
+                };
+            }
+
+            if (step_idx == 0 and self.wfn_init != null) for (0..wfn.W.nrow()) |i| for (0..wfn.W.ncol()) |j| {
+                self.wfn_init.?.ptr(i, j).* = wfn.W.at(i, j);
             };
 
             if (self.pos) |*pos| if (obs.pos) |v| {
@@ -215,46 +260,46 @@ fn History(comptime T: type) type {
         }
 
         /// Writes the accumulated history and calculated spectra to output files.
-        pub fn exportWrite(self: *@This(), io: std.Io, dt: T, grid: Grid(T), write: Write, spectrum: anytype, nstate: usize, gpa: Allocator) !void {
-            const end = dt * @as(T, @floatFromInt(self.index - 1));
+        pub fn exportWrite(self: *@This(), io: std.Io, grid: Grid(T), opt: Options, pot: Potential(T), gpa: Allocator) !void {
+            const dt, const end = .{ opt.time_step, opt.time_step * @as(T, @floatFromInt(self.index - 1)) };
 
-            if (write.acf) |path| {
+            if (opt.write.acf) |path| {
                 try writeMatrixLspace(Complex(T), io, path, self.acf.?.takeRows(self.index).asMatrix(), 0, end);
             }
 
-            if (write.position) |path| {
+            if (opt.write.position) |path| {
                 try writeMatrixLspace(T, io, path, self.pos.?.takeRows(self.index), 0, end);
             }
 
-            if (write.momentum) |path| {
+            if (opt.write.momentum) |path| {
                 try writeMatrixLspace(T, io, path, self.mom.?.takeRows(self.index), 0, end);
             }
 
-            if (write.population) |path| {
+            if (opt.write.population) |path| {
                 try writeMatrixLspace(T, io, path, self.pop.?.takeRows(self.index), 0, end);
             }
 
-            if (write.potential_energy) |path| {
+            if (opt.write.potential_energy) |path| {
                 try writeMatrixLspace(T, io, path, self.epot.?.takeRows(self.index), 0, end);
             }
 
-            if (write.kinetic_energy) |path| {
+            if (opt.write.kinetic_energy) |path| {
                 try writeMatrixLspace(T, io, path, self.ekin.?.takeRows(self.index), 0, end);
             }
 
-            if (write.norm) |path| {
+            if (opt.write.norm) |path| {
                 try writeMatrixLspace(T, io, path, self.norm.?.takeRows(self.index), 0, end);
             }
 
-            if (write.total_energy) |path| {
+            if (opt.write.total_energy) |path| {
                 try writeMatrixLspace(T, io, path, self.etot.?.takeRows(self.index), 0, end);
             }
 
-            if (write.wavefunction) |path| {
-                try writeMatrixHjoin(T, io, path, grid.r, null, self.wfn.?, 2 * nstate * self.index);
+            if (opt.write.wavefunction) |path| {
+                try writeMatrixHjoin(T, io, path, grid.r, null, self.wfn.?, 2 * pot.nstate() * self.index);
             }
 
-            if (spectrum) |spec| {
+            if (opt.spectrum) |spec| {
                 const rows = self.acf.?.takeRows(self.index);
 
                 var acfpd, var sigma = try calcSpectrum(T, rows, dt, spec.padding, spec.threshold, gpa);
@@ -274,6 +319,17 @@ fn History(comptime T: type) type {
                     const nyquist, const nt = .{ std.math.pi / dt, @as(T, @floatFromInt(sigma.length())) };
 
                     try writeMatrixLspace(T, io, path, sigma.asMatrix(), -nyquist, nyquist * (nt - 2) / nt);
+                }
+            }
+
+            if (opt.flux_analysis) |flux_opt| {
+                const ctx = try FluxAnalysisContext(T).init(opt, grid, pot, gpa);
+
+                var prob_matrix = try ctx.analyze(self.wfn_init.?, self.flux_acc.?, gpa);
+                defer prob_matrix.deinit(gpa);
+
+                if (flux_opt.write.cross_section) |path| {
+                    try writeMatrixLspace(T, io, path, prob_matrix, flux_opt.e_min, flux_opt.e_max);
                 }
             }
         }
@@ -709,6 +765,32 @@ fn checkInvalidInput(opt: Options) !void {
 
         return error.InvalidInput;
     };
+
+    if (opt.flux_analysis) |flux| {
+        if (opt.grid.bounds.len != 1) {
+            std.log.err("FLUX ANALYSIS IS ONLY SUPPORTED IN 1D", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (flux.e_min <= 0) {
+            std.log.err("FLUX ANALYSIS E_MIN MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (flux.e_max <= flux.e_min) {
+            std.log.err("FLUX ANALYSIS E_MAX MUST BE GREATER THAN E_MIN", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (flux.e_step <= 0) {
+            std.log.err("FLUX ANALYSIS E_STEP MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        }
+    }
 }
 
 /// Initializes the grid, wavefunction, Hamiltonian, and Fourier plans.
@@ -878,9 +960,9 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
 
     ctx.sim.pop_apabs.zero();
 
-    const calc_acf = ctx.opt.spectrum != null or ctx.opt.write.acf != null;
+    const c_acf = ctx.opt.spectrum != null or ctx.opt.write.acf != null;
 
-    var hist = try History(T).init(ndim, nstate, npoint, ctx.opt.iterations + 1, ctx.opt.write, calc_acf, gpa);
+    var hist = try History(T).init(ndim, nstate, npoint, ctx.opt.iterations + 1, ctx.opt.write, c_acf, ctx.opt, gpa);
     defer hist.deinit(gpa);
 
     if (ctx.opt.initial_conditions.adiabatic) {
@@ -889,7 +971,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
 
     const track_cap_pop = ctx.opt.absorbing_potential != null and ctx.opt.absorbing_potential.?.track_population;
 
-    var wfn0 = if (calc_acf) try ctx.sim.wfn.clone(gpa) else null;
+    var wfn0 = if (c_acf) try ctx.sim.wfn.clone(gpa) else null;
     defer if (wfn0) |*w| w.deinit(gpa);
 
     var timer = std.Io.Timestamp.now(io, .real);
@@ -926,13 +1008,15 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
         var obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
         defer obs.deinit(gpa);
 
-        if (ctx.opt.write.wavefunction != null and ctx.opt.adiabatic) {
+        const need_adia_wfn = (ctx.opt.write.wavefunction != null or ctx.opt.flux_analysis != null) and ctx.opt.adiabatic;
+
+        if (need_adia_wfn) {
             try ctx.sim.wfn.toAdia(ctx.sim.hams, gpa);
         }
 
-        hist.append(ctx.sim.wfn, obs);
+        hist.append(ctx.sim.wfn, obs, ctx.opt);
 
-        if (ctx.opt.write.wavefunction != null and ctx.opt.adiabatic) {
+        if (need_adia_wfn) {
             try ctx.sim.wfn.toDia(ctx.sim.hams, gpa);
         }
 
@@ -954,7 +1038,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
         };
     }
 
-    try hist.exportWrite(io, ctx.opt.time_step, ctx.sim.wfn_kpgrids, ctx.opt.write, ctx.opt.spectrum, nstate, gpa);
+    try hist.exportWrite(io, ctx.sim.wfn_kpgrids, ctx.opt, ctx.sim.epoten, gpa);
 
     return try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, gpa);
 }
