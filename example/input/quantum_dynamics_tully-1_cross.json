@@ -4,12 +4,12 @@
             "quantum_dynamics" : {
                 "grid" : {
                     "bounds" : [[-24, 32]],
-                    "npoint" : 2048
+                    "npoint" : 1024
                 },
                 "initial_conditions" : {
                     "position" : [-10],
                     "momentum" : [15],
-                    "gamma" : [50],
+                    "gamma" : [40],
                     "state" : 0,
                     "adiabatic" : true
                 },
@@ -17,14 +17,12 @@
                     "tully_1" : {}
                 },
                 "mass" : [2000],
-                "iterations" : 1000000,
-                "time_step" : 1,
+                "iterations" : 100000,
+                "time_step" : 10,
                 "adiabatic" : true,
                 "log_interval" : 10000,
                 "absorbing_potential" : {
-                    "bounds" : [[-18, 24]],
-                    "exponent" : 0.005,
-                    "stop_norm" : 1e-3
+                    "bounds" : [[-18, 18]]
                 },
                 "flux_analysis" : {
                     "flux_surface" : 15,
