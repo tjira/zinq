@@ -46,7 +46,7 @@ jobs:
 
       - name: Install Dependencies
         if: steps.cache-libs.outputs.cache-hit != 'true'
-        run: sudo apt-get install libarchive-tools
+        run: sudo apt update && sudo apt-get install libarchive-tools
 
       - name: Install Boost
         id: install-boost

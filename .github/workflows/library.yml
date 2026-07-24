@@ -47,7 +47,7 @@ jobs:
 
       - name: Install Dependencies
         if: steps.cache-libs.outputs.cache-hit != 'true'
-        run: sudo apt-get install libarchive-tools
+        run: sudo apt update && sudo apt-get install libarchive-tools
 
       - name: Install Boost
         id: install-boost
@@ -72,7 +72,7 @@ jobs:
         run: rm -f include/eigen3/signature_of_eigen3_matrix_library
 
       - name: Prepare Artifact Directory
-        run: mkdir -p staging && mv external-${{matrix.target}} staging
+        run: mkdir -p staging && cp -r external-${{matrix.target}} staging
       
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
