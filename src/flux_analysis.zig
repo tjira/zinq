@@ -22,6 +22,8 @@ pub fn FluxAnalysisContext(comptime T: type) type {
 
         e_min: T,
         e_max: T,
+        gamma: T,
+        initk: T,
 
         e_step: T,
         Vreact: T,
@@ -90,6 +92,14 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                 prop_direction[i] = if (p_norm > 0) p / p_norm else 0;
             }
 
+            var sum_inv_gamma: T = 0;
+
+            for (opt.initial_conditions.gamma, 0..) |g, i| {
+                sum_inv_gamma += (prop_direction[i] * prop_direction[i]) / g;
+            }
+
+            const gamma = if (sum_inv_gamma > 0) 1 / sum_inv_gamma else 0;
+
             return .{
                 .flux_bounds = flux_bounds,
                 .e_min = flux_opt.e_min,
@@ -101,6 +111,8 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                 .Vreact = Vreact,
                 .grid = grid,
                 .prop_direction = prop_direction,
+                .initk = p_norm,
+                .gamma = gamma,
             };
         }
 
@@ -146,52 +158,43 @@ pub fn FluxAnalysisContext(comptime T: type) type {
             const ifft_plan = try FftPlan(Complex(T)).init(temp_phi, shape, 1, fftw.FFTW_ESTIMATE);
             defer ifft_plan.deinit();
 
-            for (0..ne) |ei| {
-                const E = self.e_min + @as(T, @floatFromInt(ei)) * self.e_step;
+            for (0..self.grid.r.ncol()) |d| {
+                const s_d, const r = .{ std.math.pow(usize, npoint, self.grid.r.ncol() - 1 - d), self.grid.r };
 
-                if (E <= self.Vreact) {
-                    continue;
+                const n_min_f = (self.flux_bounds[d][0] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
+                const n_max_f = (self.flux_bounds[d][1] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
+
+                const n_min: usize = @intFromFloat(@round(n_min_f));
+                const n_max: usize = @intFromFloat(@round(n_max_f));
+
+                if (n_min == 0 or n_max >= npoint - 1) {
+                    std.log.err("FLUX BOUNDS MUST LIE WITHIN THE GRID INTERIOR", .{});
+
+                    return error.InvalidInput;
                 }
 
-                const k_inc, var a_k = .{ std.math.sqrt(2 * m_eff * (E - self.Vreact)), Complex(T).init(0, 0) };
+                const dx_d, const dr = .{ r.at(s_d, d) - r.at(0, d), self.grid.dr };
 
-                for (0..self.grid.r.nrow()) |j| {
-                    var r_dot_p: T = 0;
+                for (0..ne) |ei| {
+                    const E = self.e_min + @as(T, @floatFromInt(ei)) * self.e_step;
 
-                    for (0..self.grid.r.ncol()) |d| {
-                        r_dot_p += self.grid.r.at(j, d) * self.prop_direction[d];
+                    if (E <= self.Vreact) {
+                        continue;
                     }
 
-                    const phase = std.math.complex.exp(Complex(T).init(0, -k_inc * r_dot_p));
+                    const k_inc = std.math.sqrt(2 * m_eff * (E - self.Vreact));
 
-                    a_k = a_k.add(phase.mul(wfn_init.at(self.istate, j)));
-                }
+                    const exp_arg = -std.math.pow(T, k_inc - self.initk, @as(T, 2)) / (self.gamma);
+                    const ak = std.math.sqrt(4 * std.math.pi / self.gamma) * std.math.exp(exp_arg);
 
-                const a_k_norm = a_k.squaredMagnitude();
+                    if (ak / (dr * dr) < 1e-6) {
+                        continue;
+                    }
 
-                if (a_k_norm < 1e-6) {
-                    continue;
-                }
+                    for (0..wfn_init.nrow()) |f| {
+                        const row = ei * wfn_init.nrow() + f;
 
-                for (0..wfn_init.nrow()) |f| {
-                    const row, var sum: T = .{ ei * wfn_init.nrow() + f, 0 };
-
-                    for (0..self.grid.r.ncol()) |d| {
-                        const s_d, const r = .{ std.math.pow(usize, npoint, self.grid.r.ncol() - 1 - d), self.grid.r };
-
-                        const n_min_f = (self.flux_bounds[d][0] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
-                        const n_max_f = (self.flux_bounds[d][1] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
-
-                        const n_min: usize = @intFromFloat(@round(n_min_f));
-                        const n_max: usize = @intFromFloat(@round(n_max_f));
-
-                        const is_single = (n_min == n_max);
-
-                        if (n_min == 0 or n_max >= npoint - 1) {
-                            std.log.err("FLUX BOUNDS MUST LIE WITHIN THE GRID INTERIOR", .{});
-
-                            return error.InvalidInput;
-                        }
+                        var sum: T = 0;
 
                         for (0..r.nrow()) |j| {
                             temp_phi[j] = flux_acc.at(row, j);
@@ -205,9 +208,7 @@ pub fn FluxAnalysisContext(comptime T: type) type {
 
                         ifft_plan.execute(temp_phi);
 
-                        const dx_d, const num = .{ r.at(s_d, d) - r.at(0, d), k_inc * self.dt * self.dt };
-
-                        const factor = num / (m_eff * self.mass[d] * dx_d * self.grid.dr * a_k_norm);
+                        const factor = dr * k_inc * self.dt * self.dt / (m_eff * self.mass[d] * dx_d * ak);
 
                         for (0..r.nrow()) |i| {
                             var in_bounds = true;
@@ -232,19 +233,14 @@ pub fn FluxAnalysisContext(comptime T: type) type {
 
                             if (!in_bounds) continue;
 
-                            const n_d = (i / s_d) % npoint;
+                            const val = flux_acc.at(row, i).conjugate().mul(temp_phi[i]).im;
 
-                            if (n_d == n_max) {
-                                sum += factor * flux_acc.at(row, i).conjugate().mul(temp_phi[i]).im;
-                            }
-
-                            if (n_d == n_min and !is_single) {
-                                sum -= factor * flux_acc.at(row, i).conjugate().mul(temp_phi[i]).im;
-                            }
+                            if ((i / s_d) % npoint == n_max) sum += factor * val;
+                            if ((i / s_d) % npoint == n_min) sum -= factor * val;
                         }
-                    }
 
-                    prob_matrix.ptr(ei, f).* = @abs(sum);
+                        prob_matrix.ptr(ei, f).* += sum;
+                    }
                 }
             }
 
