@@ -67,10 +67,10 @@ pub const Options = struct {
     } = null,
 
     flux_analysis: ?struct {
-        flux_surface: f64,
-        e_min: f64 = 0.00025,
-        e_max: f64 = 0.225,
-        e_step: f64 = 0.001,
+        flux_bounds: []const [2]f64,
+        e_min: f64,
+        e_max: f64,
+        e_step: f64,
         write: struct {
             cross_section: ?[]const u8 = null,
         } = .{},
@@ -169,9 +169,9 @@ fn History(comptime T: type) type {
             if (opt.flux_analysis) |flux_opt| {
                 const n = @as(usize, @intFromFloat(@round((flux_opt.e_max - flux_opt.e_min) / flux_opt.e_step))) + 1;
 
-                hist.flux_acc = try Matrix(Complex(T)).initZero(n * nstate, npoint, gpa);
+                hist.flux_acc = try Matrix(Complex(T)).initZero(n * nstate, wfn_nrow, gpa);
 
-                hist.wfn_init = try Matrix(Complex(T)).init(nstate, npoint, gpa);
+                hist.wfn_init = try Matrix(Complex(T)).init(nstate, wfn_nrow, gpa);
             }
 
             return hist;
@@ -321,9 +321,9 @@ fn History(comptime T: type) type {
                     try writeMatrixLspace(T, io, path, sigma.asMatrix(), -nyquist, nyquist * (nt - 2) / nt);
                 }
             }
-
             if (opt.flux_analysis) |flux_opt| {
-                const ctx = try FluxAnalysisContext(T).init(opt, grid, pot, gpa);
+                var ctx = try FluxAnalysisContext(T).init(opt, grid, pot, gpa);
+                defer ctx.deinit(gpa);
 
                 var prob_matrix = try ctx.analyze(self.wfn_init.?, self.flux_acc.?, gpa);
                 defer prob_matrix.deinit(gpa);
@@ -767,20 +767,26 @@ fn checkInvalidInput(opt: Options) !void {
     };
 
     if (opt.flux_analysis) |flux| {
-        if (opt.grid.bounds.len != 1) {
-            std.log.err("FLUX ANALYSIS IS ONLY SUPPORTED IN 1D", .{});
+        if (flux.flux_bounds.len != opt.grid.bounds.len) {
+            std.log.err("FLUX ANALYSIS BOUNDS DIMENSION DOES NOT MATCH GRID DIMENSION", .{});
 
             return error.InvalidInput;
         }
 
-        if (flux.e_min <= 0) {
+        for (flux.flux_bounds, opt.grid.bounds) |fb, gb| if (fb[0] < gb[0] or fb[1] > gb[1] or fb[0] > fb[1]) {
+            std.log.err("FLUX BOUNDS MUST LIE WITHIN GRID BOUNDS AND FB[0] <= FB[1]", .{});
+
+            return error.InvalidInput;
+        };
+
+        if (flux.e_min < 0) {
             std.log.err("FLUX ANALYSIS E_MIN MUST BE GREATER THAN 0", .{});
 
             return error.InvalidInput;
         }
 
         if (flux.e_max <= flux.e_min) {
-            std.log.err("FLUX ANALYSIS E_MAX MUST BE GREATER THAN E_MIN", .{});
+            std.log.err("FLUX ANALYSIS E_MAX MUST BE GREATER OR EQUAL THAN E_MIN", .{});
 
             return error.InvalidInput;
         }

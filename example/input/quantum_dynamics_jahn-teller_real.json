@@ -1,0 +1,31 @@
+{
+    "zinq" : [
+        {
+            "quantum_dynamics" : {
+                "grid" : {
+                    "bounds" : [[-12, 12], [-12, 12]],
+                    "npoint" : 128
+                },
+                "initial_conditions" : {
+                    "position" : [4, 4],
+                    "momentum" : [0, 0],
+                    "gamma" : [2, 2],
+                    "state" : 0,
+                    "adiabatic" : true
+                },
+                "potential" : {
+                    "jahn_teller" : {}
+                },
+                "mass" : [1, 1],
+                "iterations" : 2000,
+                "time_step" : 0.01,
+                "adiabatic" : true,
+                "log_interval" : 200,
+                "write" : {
+                    "wavefunction" : "WFN_QD.mat",
+                    "population" : "POP_QD.mat"
+                }
+            }
+        }
+    ]
+}

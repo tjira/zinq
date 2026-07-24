@@ -25,8 +25,12 @@ pub const Options = union(enum) {
         k: []const f64 = &.{1},
     },
     henon_heiles: struct {
-        omega: f64 = 1,
-        lambda: f64 = 0.1,
+        k: f64 = 1,
+        l: f64 = 0.1,
+    },
+    jahn_teller: struct {
+        k: f64 = 1,
+        g: f64 = 1,
     },
     time_linear: struct {
         a: f64 = 10,
@@ -69,6 +73,7 @@ pub fn Potential(comptime T: type) type {
         file: File(T),
         harmonic: Harmonic(T),
         henon_heiles: HenonHeiles(T),
+        jahn_teller: JahnTeller(T),
         time_linear: TimeLinear(T),
         tully_1: Tully1(T),
         tully_2: Tully2(T),
@@ -81,7 +86,8 @@ pub fn Potential(comptime T: type) type {
             return switch (options) {
                 .file => |f| .{ .file = try File(T).init(f.ndim, f.path, io, allocator) },
                 .harmonic => |f| .{ .harmonic = Harmonic(T).init(f.k) },
-                .henon_heiles => |f| .{ .henon_heiles = HenonHeiles(T).init(f.omega, f.lambda) },
+                .henon_heiles => |f| .{ .henon_heiles = HenonHeiles(T).init(f.k, f.l) },
+                .jahn_teller => |f| .{ .jahn_teller = JahnTeller(T).init(f.k, f.g) },
                 .time_linear => |f| .{ .time_linear = TimeLinear(T).init(f.a, f.g) },
                 .tully_1 => |f| .{ .tully_1 = Tully1(T).init(f.A, f.B, f.C, f.D) },
                 .tully_2 => |f| .{ .tully_2 = Tully2(T).init(f.A, f.B, f.C, f.D, f.E0) },
@@ -183,12 +189,12 @@ fn Harmonic(comptime T: type) type {
 /// Returns a Henon-Heiles potential energy surface type parameterized by frequency and anharmonicity.
 fn HenonHeiles(comptime T: type) type {
     return struct {
-        omg: T,
-        lmb: T,
+        k: T,
+        l: T,
 
         /// Initializes a Henon-Heiles potential with frequency and anharmonicity parameters.
-        pub fn init(omega: T, lambda: T) @This() {
-            return .{ .omg = omega, .lmb = lambda };
+        pub fn init(k: T, l: T) @This() {
+            return .{ .k = k, .l = l };
         }
 
         /// Evaluates the Henon-Heiles potential energy: V = 0.5 * omg^2 * (x^2 + y^2) + lmb * (x^2 * y - y^3 / 3).
@@ -198,11 +204,11 @@ fn HenonHeiles(comptime T: type) type {
             const x = Value(U).init(r[0]);
             const y = Value(U).init(r[1]);
 
-            const omg = Value(U).fromFloat(self.omg);
-            const lmb = Value(U).fromFloat(self.lmb);
+            const k = Value(U).fromFloat(self.k);
+            const l = Value(U).fromFloat(self.l);
 
-            const V0 = omg.mul(omg).muls(0.5).mul(x.mul(x).add(y.mul(y)));
-            const V1 = lmb.mul(x.mul(x).mul(y).sub(y.mul(y).mul(y).divs(3)));
+            const V0 = k.muls(0.5).mul(x.mul(x).add(y.mul(y)));
+            const V1 = l.mul(x.mul(x).mul(y).sub(y.mul(y).mul(y).divs(3)));
 
             V[0] = V0.add(V1).val;
         }
@@ -218,6 +224,51 @@ fn HenonHeiles(comptime T: type) type {
 
         pub fn nstate(_: @This()) usize {
             return 1;
+        }
+    };
+}
+
+/// Returns a Jahn-Teller potential energy surface type parameterized by frequency and coupling strength.
+fn JahnTeller(comptime T: type) type {
+    return struct {
+        k: T,
+        g: T,
+
+        /// Initializes a Jahn-Teller potential with frequency and coupling strength parameters.
+        pub fn init(k: T, g: T) @This() {
+            return .{ .k = k, .g = g };
+        }
+
+        /// Evaluates the Jahn-Teller potential energy matrix: V = 0.5 * k * (x^2 + y^2) * I + g * [[x, y], [y, -x]].
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+            std.debug.assert(r.len == 2);
+
+            const x = Value(U).init(r[0]);
+            const y = Value(U).init(r[1]);
+
+            const k = Value(U).fromFloat(self.k);
+            const g = Value(U).fromFloat(self.g);
+
+            const V00 = k.muls(0.5).mul(x.mul(x).add(y.mul(y))).add(g.mul(x));
+            const V01 = g.mul(y);
+            const V11 = k.muls(0.5).mul(x.mul(x).add(y.mul(y))).sub(g.mul(x));
+
+            V[0] = V00.val;
+            V[1] = V01.val;
+            V[2] = V01.val;
+            V[3] = V11.val;
+        }
+
+        pub fn isTd(_: @This()) bool {
+            return false;
+        }
+
+        pub fn ndim(_: @This()) usize {
+            return 2;
+        }
+
+        pub fn nstate(_: @This()) usize {
+            return 2;
         }
     };
 }
