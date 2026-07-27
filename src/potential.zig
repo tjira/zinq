@@ -47,7 +47,7 @@ pub const Options = union(enum) {
         B: f64 = 0.28,
         C: f64 = 0.015,
         D: f64 = 0.06,
-        E0: f64 = 0.05,
+        E: f64 = 0.05,
     },
     tully_3: struct {
         A: f64 = 6.0e-4,
@@ -90,7 +90,7 @@ pub fn Potential(comptime T: type) type {
                 .jahn_teller => |f| .{ .jahn_teller = JahnTeller(T).init(f.k, f.g) },
                 .time_linear => |f| .{ .time_linear = TimeLinear(T).init(f.a, f.g) },
                 .tully_1 => |f| .{ .tully_1 = Tully1(T).init(f.A, f.B, f.C, f.D) },
-                .tully_2 => |f| .{ .tully_2 = Tully2(T).init(f.A, f.B, f.C, f.D, f.E0) },
+                .tully_2 => |f| .{ .tully_2 = Tully2(T).init(f.A, f.B, f.C, f.D, f.E) },
                 .tully_3 => |f| .{ .tully_3 = Tully3(T).init(f.A, f.B, f.C) },
                 .lvc => |f| .{ .lvc = Lvc(T).init(f.frequencies, f.excitation_energies, f.kappa, f.lambda) },
                 .custom => |f| .{ .custom = try Custom(T).init(f.ndim, f.matrix, f.time_dependent, allocator) },
@@ -366,12 +366,11 @@ fn Tully2(comptime T: type) type {
         B: T,
         C: T,
         D: T,
-
-        E0: T,
+        E: T,
 
         /// Initializes Tully 2 model parameters representing dual avoided crossing.
-        pub fn init(A: T, B: T, C: T, D: T, E0: T) @This() {
-            return .{ .A = A, .B = B, .C = C, .D = D, .E0 = E0 };
+        pub fn init(A: T, B: T, C: T, D: T, E: T) @This() {
+            return .{ .A = A, .B = B, .C = C, .D = D, .E = E };
         }
 
         /// Evaluates the Tully dual avoided crossing two-state potential matrix.
@@ -383,11 +382,11 @@ fn Tully2(comptime T: type) type {
             const C = Value(U).fromFloat(self.C);
             const D = Value(U).fromFloat(self.D);
 
-            const E0 = Value(U).fromFloat(self.E0);
+            const E = Value(U).fromFloat(self.E);
 
             const V00 = Value(U).fromFloat(0);
             const V01 = r0.mul(r0).mul(D).neg().exp().mul(C);
-            const V11 = r0.mul(r0).mul(B).neg().exp().mul(A).neg().add(E0);
+            const V11 = r0.mul(r0).mul(B).neg().exp().mul(A).neg().add(E);
 
             V[0] = V00.val;
             V[1] = V01.val;
