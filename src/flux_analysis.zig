@@ -164,14 +164,14 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                 const n_min_f = (self.flux_bounds[d][0] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
                 const n_max_f = (self.flux_bounds[d][1] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
 
-                const n_min: usize = @intFromFloat(@round(n_min_f));
-                const n_max: usize = @intFromFloat(@round(n_max_f));
-
-                if (n_min == 0 or n_max >= npoint - 1) {
-                    std.log.err("FLUX BOUNDS MUST LIE WITHIN THE GRID INTERIOR", .{});
+                if (n_min_f < -0.5 or n_max_f >= @as(T, @floatFromInt(npoint)) - 0.5) {
+                    std.log.err("FLUX BOUNDS MUST LIE WITHIN THE GRID BOUNDS", .{});
 
                     return error.InvalidInput;
                 }
+
+                const n_min: usize = @intFromFloat(@round(n_min_f));
+                const n_max: usize = @intFromFloat(@round(n_max_f));
 
                 const dx_d, const dr = .{ r.at(s_d, d) - r.at(0, d), self.grid.dr };
 
@@ -187,7 +187,7 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                     const exp_arg = -std.math.pow(T, k_inc - self.initk, @as(T, 2)) / (self.gamma);
                     const ak = std.math.sqrt(4 * std.math.pi / self.gamma) * std.math.exp(exp_arg);
 
-                    if (ak / (dr * dr) < 1e-6) {
+                    if (ak / (dr * dr) < 1e-3) {
                         continue;
                     }
 
