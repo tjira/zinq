@@ -4,32 +4,32 @@
             "quantum_dynamics" : {
                 "grid" : {
                     "bounds" : [[-24, 32]],
-                    "npoint" : 1024
+                    "npoint" : 2048
                 },
                 "initial_conditions" : {
                     "position" : [-10],
-                    "momentum" : [15],
-                    "gamma" : [40],
+                    "momentum" : [60],
+                    "gamma" : [220],
                     "state" : 0,
                     "adiabatic" : true
                 },
                 "potential" : {
-                    "tully_1" : {}
+                    "tully_2" : {}
                 },
                 "mass" : [2000],
                 "iterations" : 100000,
-                "time_step" : 10,
+                "time_step" : 1,
                 "adiabatic" : true,
                 "log_interval" : 10000,
                 "absorbing_potential" : {
                     "bounds" : [[-18, 18]],
-                    "exponent" : 0.001
+                    "exponent" : 0.02
                 },
                 "flux_analysis" : {
                     "flux_bounds" : [[-15, 15]],
-                    "e_min" : 0.00025,
-                    "e_max" : 0.225,
-                    "e_step" : 0.001,
+                    "e_min" : 0.04,
+                    "e_max" : 2.5,
+                    "e_step" : 0.01,
                     "write" : {
                         "cross_section" : "CROSS_QD.mat"
                     }
