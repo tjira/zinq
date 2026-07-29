@@ -200,6 +200,8 @@ sub compile_libint {
         "-DLIBINT2_ENABLE_ERI=1",
         "-DLIBINT2_MAX_AM=4"
     );
+
+    # RUN CONFIGURE FOR LIBINT COMPILER
     system(@compiler_args) == 0 or die "LIBINT COMPILER CONFIGURE FAILED";
 
     # BUILD LIBINT COMPILER TARGET
@@ -245,6 +247,7 @@ sub compile_libint {
         "-DCMAKE_RANLIB=$pwd/zigranlib",
         "-DCMAKE_INSTALL_PREFIX=$prefix",
         "-DBUILD_SHARED_LIBS=False",
+        "-DBUILD_TESTING=False",
         "-DCMAKE_DISABLE_FIND_PACKAGE_Boost=True"
     );
 
