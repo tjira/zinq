@@ -123,7 +123,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     const charge, const multi = .{ opt.hartree_fock.charge, opt.hartree_fock.multiplicity };
 
-    var sys = try MolecularSystem(T).init(opt.hartree_fock.system, basis_path, charge, multi, gpa);
+    var sys = try MolecularSystem(T).init(io, opt.hartree_fock.system, basis_path, charge, multi, gpa);
     defer sys.deinit(gpa);
 
     if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {

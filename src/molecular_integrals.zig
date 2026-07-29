@@ -136,7 +136,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var sys = try MolecularSystem(T).init(opt.system, basis_path, opt.charge, opt.multiplicity, gpa);
+    var sys = try MolecularSystem(T).init(io, opt.system, basis_path, opt.charge, opt.multiplicity, gpa);
     defer sys.deinit(gpa);
 
     if (std.mem.startsWith(u8, opt.basis, "builtin:")) {

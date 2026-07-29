@@ -24,7 +24,15 @@ pub fn MolecularSystem(comptime T: type) type {
         nel: usize,
 
         /// Initializes the molecular system structure from geometry and basis inputs, calculating the net electron count.
-        pub fn init(system: []const u8, basis: []const u8, charge: i32, multiplicity: u32, gpa: Allocator) !@This() {
+        pub fn init(io: std.Io, system: []const u8, basis: []const u8, charge: i32, multiplicity: u32, gpa: Allocator) !@This() {
+            std.Io.Dir.cwd().access(io, system, .{}) catch |err| {
+                if (err == error.FileNotFound) {
+                    std.log.err("SYSTEM FILE '{s}' DOES NOT EXIST", .{system});
+                }
+
+                return err;
+            };
+
             const sys_c = try gpa.dupeSentinel(u8, system, 0);
             defer gpa.free(sys_c);
 
