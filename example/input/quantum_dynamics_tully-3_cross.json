@@ -1,0 +1,40 @@
+{
+    "zinq" : [
+        {
+            "quantum_dynamics" : {
+                "grid" : {
+                    "bounds" : [[-24, 32]],
+                    "npoint" : 2048
+                },
+                "initial_conditions" : {
+                    "position" : [-10],
+                    "momentum" : [17],
+                    "gamma" : [50],
+                    "state" : 0,
+                    "adiabatic" : true
+                },
+                "potential" : {
+                    "tully_3" : {}
+                },
+                "mass" : [2000],
+                "iterations" : 200000,
+                "time_step" : 1,
+                "adiabatic" : true,
+                "log_interval" : 10000,
+                "absorbing_potential" : {
+                    "bounds" : [[-18, 18]],
+                    "exponent" : 0.002
+                },
+                "flux_analysis" : {
+                    "flux_bounds" : [[-15, 15]],
+                    "e_min" : 0.0055,
+                    "e_max" : 0.225,
+                    "e_step" : 0.001,
+                    "write" : {
+                        "cross_section" : "CROSS_QD.mat"
+                    }
+                }
+            }
+        }
+    ]
+}
