@@ -233,16 +233,10 @@ pub fn FluxAnalysisContext(comptime T: type) type {
 
                             if (!in_bounds) continue;
 
-                            const val, var weight: T = .{ flux_acc.at(row, i).conjugate().mul(temp_phi[i]).im, 0 };
+                            const val = flux_acc.at(row, i).conjugate().mul(temp_phi[i]).im;
 
-                            for (0..r.ncol()) |k| if (k != d) {
-                                weight += r.at(i, k) * r.at(i, k);
-                            };
-
-                            weight = if (r.ncol() > 1) std.math.sqrt(weight) else 1;
-
-                            if ((i / s_d) % npoint == n_max) sum += factor * val * weight;
-                            if ((i / s_d) % npoint == n_min) sum -= factor * val * weight;
+                            if ((i / s_d) % npoint == n_max) sum += factor * val;
+                            if ((i / s_d) % npoint == n_min) sum -= factor * val;
                         }
 
                         prob_matrix.ptr(ei, f).* += sum;
