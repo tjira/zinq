@@ -1,0 +1,31 @@
+{
+    "zinq" : [
+        {
+            "classical_dynamics" : {
+                "initial_conditions" : {
+                    "position" : [4, 4],
+                    "momentum" : [0, 0],
+                    "gamma" : [2, 2],
+                    "state" : 0
+                },
+                "potential" : {
+                    "jahn_teller" : {}
+                },
+                "nonadiabatic" : {
+                    "surface_hopping" : {
+                        "landau_zener" : {}
+                    }
+                },
+                "mass" : [1, 1],
+                "trajectories" : 1000,
+                "iterations" : 2000,
+                "time_step" : 0.01,
+                "adiabatic" : true,
+                "log_interval" : 200,
+                "write" : {
+                    "population" : "POP_LZ.mat"
+                }
+            }
+        }
+    ]
+}
