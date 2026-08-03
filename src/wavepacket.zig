@@ -92,8 +92,11 @@ pub fn Hamiltonian(comptime T: type) type {
         U: Matrix(T),
         K: Vector(T),
 
+        mass: []const T,
+        cylindric: bool,
+
         /// Allocates and computes kinetic and potential operator matrix elements.
-        pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, gpa: Allocator) !@This() {
+        pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, cylindrical: bool, gpa: Allocator) !@This() {
             var V = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
             errdefer V.deinit(gpa);
 
@@ -118,7 +121,7 @@ pub fn Hamiltonian(comptime T: type) type {
                 K.ptr(i).* = sum;
             }
 
-            var ham = @This(){ .V = V, .W = W, .U = U, .K = K };
+            var ham = @This(){ .V = V, .W = W, .U = U, .K = K, .mass = m, .cylindric = cylindrical };
 
             try ham.update(grid, pot, 0, gpa);
 
@@ -139,6 +142,18 @@ pub fn Hamiltonian(comptime T: type) type {
             defer if (U_prev) |*u| u.deinit(gpa);
 
             pot.evalBatch(T, &self.V, grid.r, t);
+
+            if (self.cylindric) {
+                const radial_mass = self.mass[1];
+
+                for (0..grid.r.nrow()) |i| {
+                    const r = grid.r.at(i, 1);
+
+                    for (0..pot.nstate()) |s| {
+                        self.V.ptr(i, s * pot.nstate() + s).* -= if (r != 0) 1 / (8 * radial_mass * r * r) else 0;
+                    }
+                }
+            }
 
             try eighBatch(T, &self.W, &self.U, self.V);
 
@@ -352,7 +367,7 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Sets the wavefunction to a Gaussian wavepacket with specified phase.
-        pub fn setGaussian(self: *@This(), ic: InitialConditions, grid: Grid(T)) void {
+        pub fn setGaussian(self: *@This(), ic: InitialConditions, cylindrical: bool, grid: Grid(T)) void {
             self.W.fill(Complex(T).init(0, 0));
 
             for (0..grid.r.nrow()) |i| {
@@ -364,7 +379,13 @@ pub fn Wavefunction(comptime T: type) type {
                     exponent = exponent.add(Complex(T).init(-0.5 * ic.gamma[j] * dx * dx, ic.momentum[j] * dx));
                 }
 
-                self.W.ptr(ic.state, i).* = std.math.complex.exp(exponent);
+                var val = std.math.complex.exp(exponent);
+                if (cylindrical) {
+                    const r = grid.r.at(i, 1);
+                    const sgn = if (r >= 0) @as(T, 1) else @as(T, -1);
+                    val = val.mul(Complex(T).init(sgn * std.math.sqrt(@abs(r)), 0));
+                }
+                self.W.ptr(ic.state, i).* = val;
             }
 
             self.normalize(grid);

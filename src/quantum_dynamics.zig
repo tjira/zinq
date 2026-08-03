@@ -30,6 +30,7 @@ pub const Options = struct {
     time_step: f64,
     iterations: u32,
     mass: []const f64,
+    cylindrical: bool = false,
 
     write: Write = .{},
 
@@ -826,7 +827,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         mass[i] = @floatCast(m);
     }
 
-    var ham = try Hamiltonian(T).init(grid, pot, mass, gpa);
+    var ham = try Hamiltonian(T).init(grid, pot, mass, opt.cylindrical, gpa);
     errdefer ham.deinit(gpa);
 
     var prop = try Propagator(T).init(grid, ham, opt.absorbing_potential, dt, gpa);
@@ -962,7 +963,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
 
     if (ctx.log) try printHeader(io, ctx.eigs, ndim, nstate, neig);
 
-    ctx.sim.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.wfn_kpgrids);
+    ctx.sim.wfn.setGaussian(ctx.opt.initial_conditions, ctx.opt.cylindrical, ctx.sim.wfn_kpgrids);
 
     ctx.sim.pop_apabs.zero();
 
