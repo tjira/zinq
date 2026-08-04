@@ -378,7 +378,7 @@ fn Observables(comptime T: type) type {
             calc.epot = calc.epot or write.total_energy != null;
 
             if (calc.pos) {
-                obs.pos = try sim.wfn.pos(sim.wfn_kpgrids, gpa);
+                obs.pos = try sim.wfn.pos(sim.wfn_kpgrids, sim.hams.cylindric, gpa);
             }
 
             if (calc.norm) {
@@ -413,7 +413,7 @@ fn Observables(comptime T: type) type {
                 }
 
                 if (calc.mom) {
-                    obs.mom = try sim.wfn.mom(sim.wfn_kpgrids, gpa);
+                    obs.mom = try sim.wfn.mom(sim.wfn_kpgrids, sim.hams.cylindric, gpa);
                 }
 
                 if (calc.ekin) {
