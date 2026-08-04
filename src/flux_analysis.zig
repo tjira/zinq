@@ -19,26 +19,23 @@ const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 pub fn FluxAnalysisContext(comptime T: type) type {
     return struct {
         mass: []const T,
+        gmma: []const T,
 
         e_min: T,
         e_max: T,
-        gamma: T,
         initk: T,
 
+        e_perp: T,
+        r_perp: T,
         e_step: T,
         Vreact: T,
 
-        istate: usize,
         grid: Grid(T),
         cylindr: bool,
 
         flux_bounds: []const [2]T,
-        prop_direction: []const T,
 
         dt: T,
-        e_perp: T,
-        rho_perp: T,
-        gamma_r: T,
 
         /// Extracts necessary parameters and computes reactant potential energy directly during initialization.
         pub fn init(opt: anytype, grid: Grid(T), pot: Potential(T), gpa: Allocator) !@This() {
@@ -74,6 +71,13 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                 mass[i] = m;
             }
 
+            const gamma = try gpa.alloc(T, opt.initial_conditions.gamma.len);
+            errdefer gpa.free(gamma);
+
+            for (opt.initial_conditions.gamma, 0..) |g, i| {
+                gamma[i] = g;
+            }
+
             const flux_bounds = try gpa.alloc([2]T, flux_opt.flux_bounds.len);
             errdefer gpa.free(flux_bounds);
 
@@ -81,53 +85,15 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                 flux_bounds[i] = .{ b[0], b[1] };
             }
 
-            const prop_direction = try gpa.alloc(T, opt.initial_conditions.momentum.len);
-            errdefer gpa.free(prop_direction);
+            var e_perp: T, var r_perp: T = .{ 0, 1 };
 
-            var p_norm: T = 0;
-
-            for (opt.initial_conditions.momentum) |p| {
-                p_norm += p * p;
+            for (1..opt.mass.len) |i| {
+                e_perp += opt.initial_conditions.gamma[i] / (2 * mass[i]);
             }
 
-            p_norm = std.math.sqrt(p_norm);
-
-            for (opt.initial_conditions.momentum, 0..) |p, i| {
-                prop_direction[i] = if (p_norm > 0) p / p_norm else 0;
+            for (1..opt.initial_conditions.gamma.len) |i| {
+                r_perp *= std.math.sqrt(opt.initial_conditions.gamma[i] / std.math.pi);
             }
-
-            var sum_inv_gamma: T = 0;
-
-            for (opt.initial_conditions.gamma, 0..) |g, i| {
-                sum_inv_gamma += (prop_direction[i] * prop_direction[i]) / g;
-            }
-
-            const gamma = if (sum_inv_gamma > 0) 1 / sum_inv_gamma else 0;
-
-            var inv_m_eff: T = 0;
-            for (prop_direction, 0..) |e_p, i| if (mass[i] > 0) {
-                inv_m_eff += (e_p * e_p) / mass[i];
-            };
-            const m_eff = if (inv_m_eff > 0) 1 / inv_m_eff else 0;
-
-            var e_kin_init: T = 0;
-            for (opt.mass, 0..) |m, i| {
-                const k0 = opt.initial_conditions.momentum[i];
-                const g = opt.initial_conditions.gamma[i];
-                e_kin_init += (k0 * k0 + g) / (2 * m);
-            }
-
-            const e_long_init = if (m_eff > 0) (p_norm * p_norm + gamma) / (2 * m_eff) else 0;
-            const e_perp = e_kin_init - e_long_init;
-
-            var rho_peak: T = 1;
-            for (opt.initial_conditions.gamma) |g| {
-                rho_peak *= std.math.sqrt(g / std.math.pi);
-            }
-            const rho_long = std.math.sqrt(gamma / std.math.pi);
-            const rho_perp = if (rho_long > 0) rho_peak / rho_long else 1;
-
-            const gamma_r = opt.initial_conditions.gamma[1];
 
             return .{
                 .flux_bounds = flux_bounds,
@@ -136,41 +102,33 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                 .e_step = flux_opt.e_step,
                 .mass = mass,
                 .dt = opt.time_step,
-                .istate = opt.initial_conditions.state,
                 .Vreact = Vreact,
                 .grid = grid,
-                .prop_direction = prop_direction,
-                .initk = p_norm,
-                .gamma = gamma,
+                .initk = @abs(opt.initial_conditions.momentum[0]),
+                .gmma = gamma,
                 .e_perp = e_perp,
-                .rho_perp = rho_perp,
+                .r_perp = r_perp,
                 .cylindr = opt.cylindrical,
-                .gamma_r = gamma_r,
             };
         }
 
         /// Deallocates the dynamically allocated slices in the context.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             gpa.free(self.mass);
+            gpa.free(self.gmma);
+
             gpa.free(self.flux_bounds);
-            gpa.free(self.prop_direction);
         }
 
         /// Computes transition probabilities by integrating flux of energy-resolved wavefunctions at a dividing surface.
         pub fn analyze(self: @This(), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), gpa: Allocator) !Matrix(T) {
-            var npoint: usize, var inv_m_eff: T = .{ 1, 0 };
+            var npoint: usize, const m_eff = .{ 1, self.mass[0] };
 
             while (try std.math.powi(usize, npoint, self.grid.r.ncol()) != self.grid.r.nrow()) {
                 npoint += 1;
             }
 
             const ne = @as(usize, @intFromFloat(@round((self.e_max - self.e_min) / self.e_step))) + 1;
-
-            for (self.prop_direction, 0..) |e_p, i| if (self.mass[i] > 0) {
-                inv_m_eff += (e_p * e_p) / self.mass[i];
-            };
-
-            const m_eff = if (inv_m_eff > 0) 1 / inv_m_eff else 0;
 
             var prob_matrix = try Matrix(T).initZero(ne, wfn_init.nrow(), gpa);
             errdefer prob_matrix.deinit(gpa);
@@ -217,8 +175,8 @@ pub fn FluxAnalysisContext(comptime T: type) type {
 
                     const k_inc = std.math.sqrt(2 * m_eff * (E - self.Vreact - self.e_perp));
 
-                    const exp_arg = -std.math.pow(T, k_inc - self.initk, @as(T, 2)) / (self.gamma);
-                    const ak = std.math.sqrt(4 * std.math.pi / self.gamma) * std.math.exp(exp_arg);
+                    const exp_arg = -std.math.pow(T, k_inc - self.initk, @as(T, 2)) / (self.gmma[0]);
+                    const ak = std.math.sqrt(4 * std.math.pi / self.gmma[0]) * std.math.exp(exp_arg);
 
                     if (ak / (dx_d * dx_d) < 1e-3) {
                         continue;
@@ -268,7 +226,7 @@ pub fn FluxAnalysisContext(comptime T: type) type {
 
                             const val, var weight: T = .{ flux_acc.at(row, i).conjugate().mul(temp_phi[i]).im, 1 };
 
-                            weight *= if (self.cylindr) std.math.pi / self.gamma_r else 1 / self.rho_perp;
+                            weight *= if (self.cylindr) std.math.pi / self.gmma[1] else 1 / self.r_perp;
 
                             if ((i / s_d) % npoint == n_max) sum += factor * val * weight;
                             if ((i / s_d) % npoint == n_min) sum -= factor * val * weight;
