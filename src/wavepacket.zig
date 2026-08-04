@@ -243,7 +243,23 @@ pub fn Wavefunction(comptime T: type) type {
                 value += self.W.rowSlice(i)[j].squaredMagnitude() * ham.K.at(j);
             };
 
-            return value * grid.dk;
+            const ekin_cartesian = value * grid.dk;
+
+            var langer_expect: T = 0;
+
+            if (ham.cylindric) {
+                for (0..self.W.nrow()) |s| for (0..self.W.rowSlice(s).len) |j| {
+                    const r = grid.r.at(j, 1);
+
+                    if (r != 0) {
+                        langer_expect += self.W.rowSlice(s)[j].squaredMagnitude() / (8 * ham.mass[1] * r * r);
+                    }
+                };
+
+                langer_expect *= grid.dr;
+            }
+
+            return ekin_cartesian - langer_expect;
         }
 
         /// Computes potential energy expectation value in coordinate space.
@@ -257,7 +273,21 @@ pub fn Wavefunction(comptime T: type) type {
                 value += (psi_i.re * psi_k.re + psi_i.im * psi_k.im) * ham.V.at(j, i * self.W.nrow() + k);
             };
 
-            return value * grid.dr;
+            const epot_modified, var langer_expect: T = .{ value * grid.dr, 0 };
+
+            if (ham.cylindric) {
+                for (0..self.W.nrow()) |s| for (0..self.W.rowSlice(s).len) |j| {
+                    const r = grid.r.at(j, 1);
+
+                    if (r != 0) {
+                        langer_expect += self.W.rowSlice(s)[j].squaredMagnitude() / (8 * ham.mass[1] * r * r);
+                    }
+                };
+
+                langer_expect *= grid.dr;
+            }
+
+            return epot_modified + langer_expect;
         }
 
         /// Transforms the wavefunction between position and momentum space.
@@ -270,11 +300,13 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Computes momentum expectation value of the wavepacket.
-        pub fn mom(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
+        pub fn mom(self: @This(), grid: Grid(T), cylindrical: bool, gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
             for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
-                value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * grid.k.at(j, k);
+                const val = if (cylindrical and k == 1) @abs(grid.k.at(j, k)) else grid.k.at(j, k);
+
+                value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * val;
             };
 
             value.muls(grid.dk);
@@ -354,11 +386,13 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Computes position expectation value of the wavepacket.
-        pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
+        pub fn pos(self: @This(), grid: Grid(T), cylindrical: bool, gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
             for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
-                value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * grid.r.at(j, k);
+                const val = if (cylindrical and k == 1) @abs(grid.r.at(j, k)) else grid.r.at(j, k);
+
+                value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * val;
             };
 
             value.muls(grid.dr);
