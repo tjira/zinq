@@ -77,3 +77,59 @@ $$
 $$
 
 This decay operator dampens high-energy eigenstates exponentially faster than the ground state. By repeatedly applying the split propagators and re-normalizing the wavepacket to unity at each step, the excited-state components vanish and the wavefunction relaxes to the exact numerical ground state.
+
+---
+
+## IV. Flux Analysis and Cross Section Calculations
+
+### 5. Time-to-Energy Fourier Transform Flux Analysis
+
+To compute energy-resolved reaction probabilities and scattering cross sections, the codebase implements a time-to-energy Fourier transform flux analysis. The energy-resolved wavefunction $\psi(E,\mathbf{r})$ is obtained from the time-propagated wavefunction $\psi(\mathbf{r},t)$ using the half-Fourier transform
+
+$$
+\psi(E,\mathbf{r})=\frac{1}{\sqrt{2\pi}}\int_0^{\infty}\psi(\mathbf{r},t)\exp\left(\frac{i}{\hbar}Et\right)dt
+$$
+
+which is discretized as the accumulated sum at each time step $\Delta t$
+
+$$
+A(E,\mathbf{r})=\sum_n\psi(\mathbf{r},t_n)\exp\left(\frac{i}{\hbar}Et_n\right)
+$$
+
+with $t_n=n\Delta t$. The energy-dependent reaction probability $P(E)$ is determined by integrating the quantum probability flux through a dividing surface normal to the scattering coordinate $d$ at position $x_s$ using the relation
+
+$$
+P(E)=\frac{\hbar}{\mu a_k(E)}\int\text{Im}\left[\psi^*(E,\mathbf{r})\nabla_d\psi(E,\mathbf{r})\right]d\mathbf{S}_d
+$$
+
+where $a_k(E)$ is the energy distribution of the initial wavepacket, $\mu$ is the effective mass of the incident coordinate, and the derivative $\nabla_d\psi(E,\mathbf{r})$ is evaluated spectrally in momentum space using Fast Fourier Transforms. In Cartesian coordinates, the scattering cross section $\sigma(E)$ is obtained from the reaction probability $P(E)$ by dividing by the transverse wavepacket density at the center of the coordinate system as
+
+$$
+\sigma(E)=\frac{P(E)}{r_{\text{perp}}}
+$$
+
+where the transverse normalization factor is defined as
+
+$$
+r_{\text{perp}}=\prod_{i=1}^{N-1}\sqrt{\frac{\gamma_i}{\pi}}
+$$
+
+with $\gamma_i$ representing the width parameters of the initial Gaussian wavepacket in the $N-1$ transverse directions.
+
+
+### 6. Cylindrical Coordinate Transformation and Scaling
+
+When modeling processes with cylindrical symmetry, such as diatomic collisions under the $J=0$ approximation, the radial coordinate $r$ introduces a $1/r$ term in the kinetic energy operator. To avoid non-Hermitian operators and allow the use of standard Cartesian Fast Fourier Transforms, the radial wavefunction is scaled using the relation
+
+$$
+\psi(r,z)=\sqrt{r}\Psi(r,z)
+$$
+
+where $r$ is the radial coordinate. Applying this scaling to the cylindrical Schrödinger equation replaces the first-derivative radial operator with a Cartesian-like second derivative, at the cost of adding a centrifugal-like correction to the potential given by
+
+$$
+V_{\text{eff}}(r,z)=V(r,z)-\frac{\hbar^2}{8\mu_r r^2}
+$$
+
+where $\mu_r$ is the mass associated with the radial coordinate. The scattering cross section $\sigma(E)$ is then computed by weighting the integrated flux with the cylindrical factor $\pi/\gamma_r$, where $\gamma_r$ is the radial wavepacket width parameter.
+
