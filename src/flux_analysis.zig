@@ -26,18 +26,15 @@ pub fn FluxAnalysis(comptime T: type) type {
         initk: T,
 
         e_thrs: T,
-        r_perp: T,
         e_step: T,
-
-        grid: Grid(T),
-        cylindr: bool,
+        weight: T,
 
         flux_bounds: []const [2]T,
 
         dt: T,
 
         /// Extracts necessary parameters and computes reactant potential energy directly during initialization.
-        pub fn init(opt: anytype, grid: Grid(T), pot: Potential(T), gpa: Allocator) !@This() {
+        pub fn init(opt: anytype, pot: Potential(T), gpa: Allocator) !@This() {
             const flux_opt = opt.flux_analysis.?;
 
             const V_arr = try gpa.alloc(T, pot.nstate() * pot.nstate());
@@ -94,6 +91,8 @@ pub fn FluxAnalysis(comptime T: type) type {
                 r_perp *= std.math.sqrt(opt.initial_conditions.gamma[i] / std.math.pi);
             }
 
+            const weight = if (opt.cylindrical) std.math.pi / gamma[1] else 1 / r_perp;
+
             return .{
                 .flux_bounds = flux_bounds,
                 .e_min = flux_opt.e_min,
@@ -102,11 +101,9 @@ pub fn FluxAnalysis(comptime T: type) type {
                 .mass = mass,
                 .dt = opt.time_step,
                 .e_thrs = Vreact + e_perp,
-                .grid = grid,
                 .initk = @abs(opt.initial_conditions.momentum[0]),
                 .gmma = gamma,
-                .r_perp = r_perp,
-                .cylindr = opt.cylindrical,
+                .weight = weight,
             };
         }
 
@@ -119,10 +116,10 @@ pub fn FluxAnalysis(comptime T: type) type {
         }
 
         /// Computes transition probabilities by integrating flux of energy-resolved wavefunctions at a dividing surface.
-        pub fn run(self: @This(), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), gpa: Allocator) !Matrix(T) {
-            var npoint: usize, const m_eff = .{ 1, self.mass[0] };
+        pub fn run(self: @This(), grid: Grid(T), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), gpa: Allocator) !Matrix(T) {
+            var npoint: usize = 1;
 
-            while (try std.math.powi(usize, npoint, self.grid.r.ncol()) != self.grid.r.nrow()) {
+            while (try std.math.powi(usize, npoint, grid.r.ncol()) != grid.r.nrow()) {
                 npoint += 1;
             }
 
@@ -131,13 +128,13 @@ pub fn FluxAnalysis(comptime T: type) type {
             var sigma = try Matrix(T).initZero(ne, wfn_init.nrow(), gpa);
             errdefer sigma.deinit(gpa);
 
-            var temp_phi = try gpa.alloc(Complex(T), self.grid.r.nrow());
+            var temp_phi = try gpa.alloc(Complex(T), grid.r.nrow());
             defer gpa.free(temp_phi);
 
-            const shape = try gpa.alloc(i32, self.grid.r.ncol());
+            const shape = try gpa.alloc(i32, grid.r.ncol());
             defer gpa.free(shape);
 
-            for (0..self.grid.r.ncol()) |i| {
+            for (0..grid.r.ncol()) |i| {
                 shape[i] = @as(i32, @intCast(npoint));
             }
 
@@ -147,8 +144,8 @@ pub fn FluxAnalysis(comptime T: type) type {
             const ifft_plan = try FftPlan(Complex(T)).init(temp_phi, shape, 1, fftw.FFTW_ESTIMATE);
             defer ifft_plan.deinit();
 
-            for (0..self.grid.r.ncol()) |d| {
-                const s_d, const r = .{ std.math.pow(usize, npoint, self.grid.r.ncol() - 1 - d), self.grid.r };
+            for (0..grid.r.ncol()) |d| {
+                const s_d, const r = .{ std.math.pow(usize, npoint, grid.r.ncol() - 1 - d), grid.r };
 
                 const n_min_f = (self.flux_bounds[d][0] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
                 const n_max_f = (self.flux_bounds[d][1] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
@@ -162,7 +159,7 @@ pub fn FluxAnalysis(comptime T: type) type {
                 const n_min: usize = @intFromFloat(@round(n_min_f));
                 const n_max: usize = @intFromFloat(@round(n_max_f));
 
-                const dx_d, const dr = .{ r.at(s_d, d) - r.at(0, d), self.grid.dr };
+                const dx_d, const m = .{ r.at(s_d, d) - r.at(0, d), self.mass[0] };
 
                 for (0..ne) |ei| {
                     const E = self.e_min + @as(T, @floatFromInt(ei)) * self.e_step;
@@ -171,7 +168,7 @@ pub fn FluxAnalysis(comptime T: type) type {
                         continue;
                     }
 
-                    const k_inc = std.math.sqrt(2 * m_eff * (E - self.e_thrs));
+                    const k_inc = std.math.sqrt(2 * m * (E - self.e_thrs));
 
                     const exp_arg = -std.math.pow(T, k_inc - self.initk, @as(T, 2)) / (self.gmma[0]);
                     const ak = std.math.sqrt(4 * std.math.pi / self.gmma[0]) * std.math.exp(exp_arg);
@@ -181,31 +178,29 @@ pub fn FluxAnalysis(comptime T: type) type {
                     }
 
                     for (0..wfn_init.nrow()) |f| {
-                        const row = ei * wfn_init.nrow() + f;
+                        const row, var sum: T = .{ ei * wfn_init.nrow() + f, 0 };
 
-                        var sum: T = 0;
-
-                        for (0..r.nrow()) |j| {
+                        for (0..grid.r.nrow()) |j| {
                             temp_phi[j] = flux_acc.at(row, j);
                         }
 
                         ffft_plan.execute(temp_phi);
 
-                        for (0..r.nrow()) |m| {
-                            temp_phi[m] = temp_phi[m].mul(Complex(T).init(0, self.grid.k.at(m, d)));
+                        for (0..grid.r.nrow()) |m_idx| {
+                            temp_phi[m_idx] = temp_phi[m_idx].mul(Complex(T).init(0, grid.k.at(m_idx, d)));
                         }
 
                         ifft_plan.execute(temp_phi);
 
-                        const factor = dr * k_inc * self.dt * self.dt / (m_eff * self.mass[d] * dx_d * ak);
+                        const factor = grid.dr * k_inc * self.dt * self.dt / (m * self.mass[d] * dx_d * ak);
 
-                        for (0..r.nrow()) |i| {
+                        for (0..grid.r.nrow()) |i| {
                             var in_bounds = true;
 
-                            for (0..r.ncol()) |k| {
+                            for (0..grid.r.ncol()) |k| {
                                 if (k == d) continue;
 
-                                const s_k = std.math.pow(usize, npoint, r.ncol() - 1 - k);
+                                const s_k = std.math.pow(usize, npoint, grid.r.ncol() - 1 - k);
 
                                 const n_min_k_f = (self.flux_bounds[k][0] - r.at(0, k)) / (r.at(s_k, k) - r.at(0, k));
                                 const n_max_k_f = (self.flux_bounds[k][1] - r.at(0, k)) / (r.at(s_k, k) - r.at(0, k));
@@ -222,12 +217,10 @@ pub fn FluxAnalysis(comptime T: type) type {
 
                             if (!in_bounds) continue;
 
-                            const val, var weight: T = .{ flux_acc.at(row, i).conjugate().mul(temp_phi[i]).im, 1 };
+                            const val = flux_acc.at(row, i).conjugate().mul(temp_phi[i]).im;
 
-                            weight *= if (self.cylindr) std.math.pi / self.gmma[1] else 1 / self.r_perp;
-
-                            if ((i / s_d) % npoint == n_max) sum += factor * val * weight;
-                            if ((i / s_d) % npoint == n_min) sum -= factor * val * weight;
+                            if ((i / s_d) % npoint == n_max) sum += factor * val * self.weight;
+                            if ((i / s_d) % npoint == n_min) sum -= factor * val * self.weight;
                         }
 
                         sigma.ptr(ei, f).* += sum;

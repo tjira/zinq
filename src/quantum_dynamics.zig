@@ -322,11 +322,12 @@ fn History(comptime T: type) type {
                     try writeMatrixLspace(T, io, path, sigma.asMatrix(), -nyquist, nyquist * (nt - 2) / nt);
                 }
             }
+
             if (opt.flux_analysis) |flux_opt| {
-                var fa = try FluxAnalysis(T).init(opt, grid, pot, gpa);
+                var fa = try FluxAnalysis(T).init(opt, pot, gpa);
                 defer fa.deinit(gpa);
 
-                var sigma = try fa.run(self.wfn_init.?, self.flux_acc.?, gpa);
+                var sigma = try fa.run(grid, self.wfn_init.?, self.flux_acc.?, gpa);
                 defer sigma.deinit(gpa);
 
                 if (flux_opt.write.cross_section) |path| {
