@@ -16,7 +16,7 @@ const eighSlice = @import("linear_algebra.zig").eighSlice;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
 /// Holds all parameter configuration, input matrices, and grid references required for computing transition probabilities.
-pub fn FluxAnalysisContext(comptime T: type) type {
+pub fn FluxAnalysis(comptime T: type) type {
     return struct {
         mass: []const T,
         gmma: []const T,
@@ -25,10 +25,9 @@ pub fn FluxAnalysisContext(comptime T: type) type {
         e_max: T,
         initk: T,
 
-        e_perp: T,
+        e_thrs: T,
         r_perp: T,
         e_step: T,
-        Vreact: T,
 
         grid: Grid(T),
         cylindr: bool,
@@ -102,11 +101,10 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                 .e_step = flux_opt.e_step,
                 .mass = mass,
                 .dt = opt.time_step,
-                .Vreact = Vreact,
+                .e_thrs = Vreact + e_perp,
                 .grid = grid,
                 .initk = @abs(opt.initial_conditions.momentum[0]),
                 .gmma = gamma,
-                .e_perp = e_perp,
                 .r_perp = r_perp,
                 .cylindr = opt.cylindrical,
             };
@@ -121,7 +119,7 @@ pub fn FluxAnalysisContext(comptime T: type) type {
         }
 
         /// Computes transition probabilities by integrating flux of energy-resolved wavefunctions at a dividing surface.
-        pub fn analyze(self: @This(), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), gpa: Allocator) !Matrix(T) {
+        pub fn run(self: @This(), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), gpa: Allocator) !Matrix(T) {
             var npoint: usize, const m_eff = .{ 1, self.mass[0] };
 
             while (try std.math.powi(usize, npoint, self.grid.r.ncol()) != self.grid.r.nrow()) {
@@ -130,8 +128,8 @@ pub fn FluxAnalysisContext(comptime T: type) type {
 
             const ne = @as(usize, @intFromFloat(@round((self.e_max - self.e_min) / self.e_step))) + 1;
 
-            var prob_matrix = try Matrix(T).initZero(ne, wfn_init.nrow(), gpa);
-            errdefer prob_matrix.deinit(gpa);
+            var sigma = try Matrix(T).initZero(ne, wfn_init.nrow(), gpa);
+            errdefer sigma.deinit(gpa);
 
             var temp_phi = try gpa.alloc(Complex(T), self.grid.r.nrow());
             defer gpa.free(temp_phi);
@@ -169,11 +167,11 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                 for (0..ne) |ei| {
                     const E = self.e_min + @as(T, @floatFromInt(ei)) * self.e_step;
 
-                    if (E <= self.Vreact + self.e_perp) {
+                    if (E <= self.e_thrs) {
                         continue;
                     }
 
-                    const k_inc = std.math.sqrt(2 * m_eff * (E - self.Vreact - self.e_perp));
+                    const k_inc = std.math.sqrt(2 * m_eff * (E - self.e_thrs));
 
                     const exp_arg = -std.math.pow(T, k_inc - self.initk, @as(T, 2)) / (self.gmma[0]);
                     const ak = std.math.sqrt(4 * std.math.pi / self.gmma[0]) * std.math.exp(exp_arg);
@@ -232,12 +230,12 @@ pub fn FluxAnalysisContext(comptime T: type) type {
                             if ((i / s_d) % npoint == n_min) sum -= factor * val * weight;
                         }
 
-                        prob_matrix.ptr(ei, f).* += sum;
+                        sigma.ptr(ei, f).* += sum;
                     }
                 }
             }
 
-            return prob_matrix;
+            return sigma;
         }
     };
 }

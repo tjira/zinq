@@ -17,7 +17,7 @@ const Vector = @import("tensor.zig").Vector;
 const Wavefunction = @import("wavepacket.zig").Wavefunction;
 
 const calcSpectrum = @import("spectral_analysis.zig").calcSpectrum;
-const FluxAnalysisContext = @import("flux_analysis.zig").FluxAnalysisContext;
+const FluxAnalysis = @import("flux_analysis.zig").FluxAnalysis;
 const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
@@ -323,14 +323,14 @@ fn History(comptime T: type) type {
                 }
             }
             if (opt.flux_analysis) |flux_opt| {
-                var ctx = try FluxAnalysisContext(T).init(opt, grid, pot, gpa);
-                defer ctx.deinit(gpa);
+                var fa = try FluxAnalysis(T).init(opt, grid, pot, gpa);
+                defer fa.deinit(gpa);
 
-                var prob_matrix = try ctx.analyze(self.wfn_init.?, self.flux_acc.?, gpa);
-                defer prob_matrix.deinit(gpa);
+                var sigma = try fa.run(self.wfn_init.?, self.flux_acc.?, gpa);
+                defer sigma.deinit(gpa);
 
                 if (flux_opt.write.cross_section) |path| {
-                    try writeMatrixLspace(T, io, path, prob_matrix, flux_opt.e_min, flux_opt.e_max);
+                    try writeMatrixLspace(T, io, path, sigma, flux_opt.e_min, flux_opt.e_max);
                 }
             }
         }
@@ -768,6 +768,12 @@ fn checkInvalidInput(opt: Options) !void {
     };
 
     if (opt.flux_analysis) |flux| {
+        for (opt.initial_conditions.momentum[1..]) |m| if (m != 0) {
+            std.log.err("FLUX ANALYSIS REQUIRES ONLY THE FIRST MOMENTUM COORDINATE TO BE NON-ZERO", .{});
+
+            return error.InvalidInput;
+        };
+
         if (flux.flux_bounds.len != opt.grid.bounds.len) {
             std.log.err("FLUX ANALYSIS BOUNDS DIMENSION DOES NOT MATCH GRID DIMENSION", .{});
 
