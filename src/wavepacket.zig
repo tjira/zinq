@@ -236,34 +236,18 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Computes kinetic energy expectation value in momentum space.
-        pub fn ekin(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
+        pub fn ekin(self: @This(), ham: Hamiltonian(T), grid: Grid(T), langer: T) T {
             var value: T = 0;
 
             for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| {
                 value += self.W.rowSlice(i)[j].squaredMagnitude() * ham.K.at(j);
             };
 
-            const ekin_cartesian = value * grid.dk;
-
-            var langer_expect: T = 0;
-
-            if (ham.cylindric) {
-                for (0..self.W.nrow()) |s| for (0..self.W.rowSlice(s).len) |j| {
-                    const r = grid.r.at(j, 1);
-
-                    if (r != 0) {
-                        langer_expect += self.W.rowSlice(s)[j].squaredMagnitude() / (8 * ham.mass[1] * r * r);
-                    }
-                };
-
-                langer_expect *= grid.dr;
-            }
-
-            return ekin_cartesian - langer_expect;
+            return value * grid.dk - langer;
         }
 
         /// Computes potential energy expectation value in coordinate space.
-        pub fn epot(self: @This(), ham: Hamiltonian(T), grid: Grid(T)) T {
+        pub fn epot(self: @This(), ham: Hamiltonian(T), grid: Grid(T), langer: T) T {
             var value: T = 0;
 
             for (0..self.W.nrow()) |i| for (0..self.W.nrow()) |k| for (0..self.W.ncol()) |j| {
@@ -273,21 +257,7 @@ pub fn Wavefunction(comptime T: type) type {
                 value += (psi_i.re * psi_k.re + psi_i.im * psi_k.im) * ham.V.at(j, i * self.W.nrow() + k);
             };
 
-            const epot_modified, var langer_expect: T = .{ value * grid.dr, 0 };
-
-            if (ham.cylindric) {
-                for (0..self.W.nrow()) |s| for (0..self.W.rowSlice(s).len) |j| {
-                    const r = grid.r.at(j, 1);
-
-                    if (r != 0) {
-                        langer_expect += self.W.rowSlice(s)[j].squaredMagnitude() / (8 * ham.mass[1] * r * r);
-                    }
-                };
-
-                langer_expect *= grid.dr;
-            }
-
-            return epot_modified + langer_expect;
+            return value * grid.dr + langer;
         }
 
         /// Transforms the wavefunction between position and momentum space.

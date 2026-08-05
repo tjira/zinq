@@ -385,8 +385,22 @@ fn Observables(comptime T: type) type {
                 obs.norm = sim.wfn.norm(sim.wfn_kpgrids);
             }
 
+            var langer: T = 0;
+
+            if (sim.hams.cylindric and (calc.epot or calc.ekin)) {
+                for (0..sim.wfn.W.nrow()) |s| for (0..sim.wfn.W.rowSlice(s).len) |j| {
+                    const r = sim.wfn_kpgrids.r.at(j, 1);
+
+                    if (r != 0) {
+                        langer += sim.wfn.W.at(s, j).squaredMagnitude() / (8 * sim.hams.mass[1] * r * r);
+                    }
+                };
+
+                langer *= sim.wfn_kpgrids.dr;
+            }
+
             if (calc.epot) {
-                obs.epot = sim.wfn.epot(sim.hams, sim.wfn_kpgrids);
+                obs.epot = sim.wfn.epot(sim.hams, sim.wfn_kpgrids, langer);
             }
 
             if (calc.pop) {
@@ -417,7 +431,7 @@ fn Observables(comptime T: type) type {
                 }
 
                 if (calc.ekin) {
-                    obs.ekin = sim.wfn.ekin(sim.hams, sim.wfn_kpgrids);
+                    obs.ekin = sim.wfn.ekin(sim.hams, sim.wfn_kpgrids, langer);
                 }
             }
 
