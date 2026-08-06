@@ -88,10 +88,14 @@ pub fn FluxAnalysis(comptime T: type) type {
             }
 
             for (1..opt.initial_conditions.gamma.len) |i| {
+                if (opt.cylindrical and i == opt.initial_conditions.gamma.len - 1) {
+                    continue;
+                }
+
                 r_perp *= std.math.sqrt(opt.initial_conditions.gamma[i] / std.math.pi);
             }
 
-            const weight = if (opt.cylindrical) std.math.pi / gamma[1] else 1 / r_perp;
+            const weight = if (opt.cylindrical) (std.math.pi / gamma[gamma.len - 1]) / r_perp else 1 / r_perp;
 
             return .{
                 .flux_bounds = flux_bounds,

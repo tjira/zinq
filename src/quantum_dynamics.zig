@@ -821,13 +821,15 @@ fn checkInvalidInput(opt: Options) !void {
     }
 
     if (opt.cylindrical) {
-        if (opt.grid.bounds.len != 2) {
-            std.log.err("CYLINDRICAL SIMULATION REQUIRES EXACTLY 2 GRID DIMENSIONS", .{});
+        if (opt.grid.bounds.len < 2) {
+            std.log.err("CYLINDRICAL SIMULATION REQUIRES AT LEAST 2 GRID DIMENSIONS", .{});
 
             return error.InvalidInput;
         }
 
-        if (opt.grid.bounds[1][0] != -opt.grid.bounds[1][1]) {
+        const radial_dim = opt.grid.bounds.len - 1;
+
+        if (opt.grid.bounds[radial_dim][0] != -opt.grid.bounds[radial_dim][1]) {
             std.log.err("CYLINDRICAL SIMULATION REQUIRES SYMMETRIC RADIAL GRID BOUNDS", .{});
 
             return error.InvalidInput;

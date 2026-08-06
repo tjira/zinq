@@ -146,13 +146,13 @@ pub fn Hamiltonian(comptime T: type) type {
             pot.evalBatch(T, &self.V, grid.r, t);
 
             if (self.cylindric) {
-                const radial_mass = self.mass[1];
+                const radial_idx = grid.r.ncol() - 1;
 
                 for (0..grid.r.nrow()) |i| {
-                    const r = grid.r.at(i, 1);
+                    const r, const m = .{ grid.r.at(i, radial_idx), self.mass[radial_idx] };
 
                     for (0..pot.nstate()) |s| {
-                        self.V.ptr(i, s * pot.nstate() + s).* -= if (r != 0) 1 / (8 * radial_mass * r * r) else 0;
+                        self.V.ptr(i, s * pot.nstate() + s).* -= if (r != 0) 1 / (8 * m * r * r) else 0;
                     }
                 }
             }
@@ -275,8 +275,10 @@ pub fn Wavefunction(comptime T: type) type {
         pub fn mom(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
+            const radial_idx = grid.r.ncol() - 1;
+
             for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
-                const val = if (grid.cylindrical and k == 1) @abs(grid.k.at(j, k)) else grid.k.at(j, k);
+                const val = if (grid.cylindrical and k == radial_idx) @abs(grid.k.at(j, k)) else grid.k.at(j, k);
 
                 value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * val;
             };
@@ -361,8 +363,10 @@ pub fn Wavefunction(comptime T: type) type {
         pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
+            const radial_idx = grid.r.ncol() - 1;
+
             for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
-                const val = if (grid.cylindrical and k == 1) @abs(grid.r.at(j, k)) else grid.r.at(j, k);
+                const val = if (grid.cylindrical and k == radial_idx) @abs(grid.r.at(j, k)) else grid.r.at(j, k);
 
                 value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * val;
             };
@@ -388,7 +392,7 @@ pub fn Wavefunction(comptime T: type) type {
                 var val = std.math.complex.exp(exponent);
 
                 if (grid.cylindrical) {
-                    const r = grid.r.at(i, 1);
+                    const r = grid.r.at(i, grid.r.ncol() - 1);
 
                     val = val.mul(Complex(T).init(std.math.sign(r) * std.math.sqrt(@abs(r)), 0));
                 }
