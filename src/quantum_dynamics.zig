@@ -379,7 +379,7 @@ fn Observables(comptime T: type) type {
             calc.epot = calc.epot or write.total_energy != null;
 
             if (calc.pos) {
-                obs.pos = try sim.wfn.pos(sim.wfn_kpgrids, sim.hams.cylindric, gpa);
+                obs.pos = try sim.wfn.pos(sim.wfn_kpgrids, gpa);
             }
 
             if (calc.norm) {
@@ -428,7 +428,7 @@ fn Observables(comptime T: type) type {
                 }
 
                 if (calc.mom) {
-                    obs.mom = try sim.wfn.mom(sim.wfn_kpgrids, sim.hams.cylindric, gpa);
+                    obs.mom = try sim.wfn.mom(sim.wfn_kpgrids, gpa);
                 }
 
                 if (calc.ekin) {
@@ -819,6 +819,20 @@ fn checkInvalidInput(opt: Options) !void {
             return error.InvalidInput;
         }
     }
+
+    if (opt.cylindrical) {
+        if (opt.grid.bounds.len != 2) {
+            std.log.err("CYLINDRICAL SIMULATION REQUIRES EXACTLY 2 GRID DIMENSIONS", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (opt.grid.bounds[1][0] != -opt.grid.bounds[1][1]) {
+            std.log.err("CYLINDRICAL SIMULATION REQUIRES SYMMETRIC RADIAL GRID BOUNDS", .{});
+
+            return error.InvalidInput;
+        }
+    }
 }
 
 /// Initializes the grid, wavefunction, Hamiltonian, and Fourier plans.
@@ -835,7 +849,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         .exhaustive => fftw.FFTW_EXHAUSTIVE,
     };
 
-    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, gpa);
+    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, opt.cylindrical, gpa);
     errdefer grid.deinit(gpa);
 
     var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);
@@ -848,7 +862,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         mass[i] = @floatCast(m);
     }
 
-    var ham = try Hamiltonian(T).init(grid, pot, mass, opt.cylindrical, gpa);
+    var ham = try Hamiltonian(T).init(grid, pot, mass, gpa);
     errdefer ham.deinit(gpa);
 
     var prop = try Propagator(T).init(grid, ham, opt.absorbing_potential, dt, gpa);
@@ -984,7 +998,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
 
     if (ctx.log) try printHeader(io, ctx.eigs, ndim, nstate, neig);
 
-    ctx.sim.wfn.setGaussian(ctx.opt.initial_conditions, ctx.opt.cylindrical, ctx.sim.wfn_kpgrids);
+    ctx.sim.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.wfn_kpgrids);
 
     ctx.sim.pop_apabs.zero();
 

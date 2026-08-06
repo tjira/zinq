@@ -51,7 +51,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var pot = try Potential(T).init(io, opt.potential, gpa);
     defer pot.deinit(gpa);
 
-    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, gpa);
+    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, false, gpa);
     defer grid.deinit(gpa);
 
     const nstate, const nrow = .{ pot.nstate(), grid.r.nrow() };

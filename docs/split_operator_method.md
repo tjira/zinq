@@ -119,17 +119,47 @@ with $\gamma_i$ representing the width parameters of the initial Gaussian wavepa
 
 ### 6. Cylindrical Coordinate Transformation and Scaling
 
-When modeling processes with cylindrical symmetry, such as diatomic collisions under the $J=0$ approximation, the radial coordinate $r$ introduces a $1/r$ term in the kinetic energy operator. To avoid non-Hermitian operators and allow the use of standard Cartesian Fast Fourier Transforms, the radial wavefunction is scaled using the relation
+When modeling processes with cylindrical symmetry, such as diatomic collisions under the $J=0$ approximation, the radial coordinate $r$ introduces a $1/r$ term in the kinetic energy operator. Under this symmetry, the wavefunction has no dependence on the azimuthal angle $\theta$, reducing the 3D Schrödinger equation to a 2D problem in $(z, r)$. The Schrödinger equation is written as
+
+$$
+\hat{H}\Psi(r,z)=\left[-\frac{\hbar^2}{2\mu_z}\frac{\partial^2}{\partial z^2}-\frac{\hbar^2}{2\mu_r}\left(\frac{\partial^2}{\partial r^2}+\frac{1}{r}\frac{\partial}{\partial r}\right)+V(r,z)\right]\Psi(r,z)=E\Psi(r,z)
+$$
+
+where $\mu_z$ and $\mu_r$ are the coordinates' masses and $V(r,z)$ is the potential energy surface. To avoid non-Hermitian operators and allow the use of standard Cartesian Fast Fourier Transforms, the radial wavefunction is scaled using the relation
 
 $$
 \psi(r,z)=\sqrt{r}\Psi(r,z)
 $$
 
-where $r$ is the radial coordinate. Applying this scaling to the cylindrical Schrödinger equation replaces the first-derivative radial operator with a Cartesian-like second derivative, at the cost of adding a centrifugal-like correction to the potential given by
+where $r$ is the radial coordinate. We substitute this back into the Schrödinger equation by expressing the original wavefunction as $\Psi(r,z)=r^{-1/2}\psi(r,z)$. Differentiating $\Psi$ with respect to the radial coordinate $r$ gives the first derivative
+
+$$
+\frac{\partial\Psi}{\partial r}=-\frac{1}{2}r^{-3/2}\psi+r^{-1/2}\frac{\partial\psi}{\partial r}
+$$
+
+and the second derivative
+
+$$
+\frac{\partial^2\Psi}{\partial r^2}=\frac{3}{4}r^{-5/2}\psi-r^{-3/2}\frac{\partial\psi}{\partial r}+r^{-1/2}\frac{\partial^2\psi}{\partial r^2}
+$$
+
+which we substitute back into the radial kinetic energy operator term to yield the relation
+
+$$
+\left(\frac{\partial^2}{\partial r^2}+\frac{1}{r}\frac{\partial}{\partial r}\right)\Psi=r^{-1/2}\left(\frac{\partial^2\psi}{\partial r^2}+\frac{1}{4r^2}\psi\right)
+$$
+
+Multiplying the entire Schrödinger equation by $\sqrt{r}$ and substituting this relation simplifies the equation to a standard Cartesian form
+
+$$
+\left[-\frac{\hbar^2}{2\mu_z}\frac{\partial^2}{\partial z^2}-\frac{\hbar^2}{2\mu_r}\frac{\partial^2}{\partial r^2}+V_{\text{eff}}(r,z)\right]\psi(r,z)=E\psi(r,z)
+$$
+
+where the effective potential includes a centrifugal-like correction given by
 
 $$
 V_{\text{eff}}(r,z)=V(r,z)-\frac{\hbar^2}{8\mu_r r^2}
 $$
 
-where $\mu_r$ is the mass associated with the radial coordinate. The scattering cross section $\sigma(E)$ is then computed by weighting the integrated flux with the cylindrical factor $\pi/\gamma_r$, where $\gamma_r$ is the radial wavepacket width parameter.
+with $\mu_r$ representing the mass associated with the radial coordinate. To satisfy the boundary condition at the origin where the wavefunction must vanish, the grid is extended symmetrically to negative radial values spanning $[-R_{\max}, R_{\max}]$, and the initial scaled wavefunction $\psi(r,z)$ is constructed with odd symmetry under $r\to-r$ as $\psi(r,z)=\text{sgn}(r)\sqrt{|r|}\Psi(r,z)$. This odd symmetry is preserved during propagation by the Cartesian kinetic energy operator, guaranteeing that the wavefunction remains zero at $r=0$. Because the negative coordinate region is a numerical extension, physical observables like position and momentum are computed using the absolute value of the radial grid coordinates. The scattering cross section $\sigma(E)$ is then computed by weighting the integrated flux with the cylindrical factor $\pi/\gamma_r$, where $\gamma_r$ is the radial wavepacket width parameter.
 

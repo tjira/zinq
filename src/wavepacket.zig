@@ -31,8 +31,10 @@ pub fn Grid(comptime T: type) type {
         dr: T,
         dk: T,
 
+        cylindrical: bool,
+
         /// Allocates and initializes grid coordinates and momentum vectors.
-        pub fn init(bounds: []const [2]T, npoint: u32, gpa: Allocator) !@This() {
+        pub fn init(bounds: []const [2]T, npoint: u32, cylindrical: bool, gpa: Allocator) !@This() {
             const ncol = std.math.pow(usize, npoint, bounds.len);
 
             var r = try Matrix(T).init(ncol, bounds.len, gpa);
@@ -73,7 +75,7 @@ pub fn Grid(comptime T: type) type {
                 }
             }
 
-            return .{ .r = r, .k = k, .dr = dr, .dk = dk };
+            return .{ .r = r, .k = k, .dr = dr, .dk = dk, .cylindrical = cylindrical };
         }
 
         /// Deallocates coordinate and momentum space grid matrices.
@@ -96,7 +98,7 @@ pub fn Hamiltonian(comptime T: type) type {
         cylindric: bool,
 
         /// Allocates and computes kinetic and potential operator matrix elements.
-        pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, cylindrical: bool, gpa: Allocator) !@This() {
+        pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, gpa: Allocator) !@This() {
             var V = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
             errdefer V.deinit(gpa);
 
@@ -121,7 +123,7 @@ pub fn Hamiltonian(comptime T: type) type {
                 K.ptr(i).* = sum;
             }
 
-            var ham = @This(){ .V = V, .W = W, .U = U, .K = K, .mass = m, .cylindric = cylindrical };
+            var ham = @This(){ .V = V, .W = W, .U = U, .K = K, .mass = m, .cylindric = grid.cylindrical };
 
             try ham.update(grid, pot, 0, gpa);
 
@@ -270,11 +272,11 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Computes momentum expectation value of the wavepacket.
-        pub fn mom(self: @This(), grid: Grid(T), cylindrical: bool, gpa: Allocator) !Vector(T) {
+        pub fn mom(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
             for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
-                const val = if (cylindrical and k == 1) @abs(grid.k.at(j, k)) else grid.k.at(j, k);
+                const val = if (grid.cylindrical and k == 1) @abs(grid.k.at(j, k)) else grid.k.at(j, k);
 
                 value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * val;
             };
@@ -356,11 +358,11 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Computes position expectation value of the wavepacket.
-        pub fn pos(self: @This(), grid: Grid(T), cylindrical: bool, gpa: Allocator) !Vector(T) {
+        pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(grid.r.ncol(), gpa);
 
             for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
-                const val = if (cylindrical and k == 1) @abs(grid.r.at(j, k)) else grid.r.at(j, k);
+                const val = if (grid.cylindrical and k == 1) @abs(grid.r.at(j, k)) else grid.r.at(j, k);
 
                 value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * val;
             };
@@ -371,7 +373,7 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Sets the wavefunction to a Gaussian wavepacket with specified phase.
-        pub fn setGaussian(self: *@This(), ic: InitialConditions, cylindrical: bool, grid: Grid(T)) void {
+        pub fn setGaussian(self: *@This(), ic: InitialConditions, grid: Grid(T)) void {
             self.W.fill(Complex(T).init(0, 0));
 
             for (0..grid.r.nrow()) |i| {
@@ -384,10 +386,11 @@ pub fn Wavefunction(comptime T: type) type {
                 }
 
                 var val = std.math.complex.exp(exponent);
-                if (cylindrical) {
+
+                if (grid.cylindrical) {
                     const r = grid.r.at(i, 1);
-                    const sgn = if (r >= 0) @as(T, 1) else @as(T, -1);
-                    val = val.mul(Complex(T).init(sgn * std.math.sqrt(@abs(r)), 0));
+
+                    val = val.mul(Complex(T).init(std.math.sign(r) * std.math.sqrt(@abs(r)), 0));
                 }
                 self.W.ptr(ic.state, i).* = val;
             }
