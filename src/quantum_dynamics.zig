@@ -30,7 +30,6 @@ pub const Options = struct {
     time_step: f64,
     iterations: u32,
     mass: []const f64,
-    cylindrical: bool = false,
 
     write: Write = .{},
 
@@ -51,6 +50,7 @@ pub const Options = struct {
     grid: struct {
         bounds: []const [2]f64,
         npoint: u32,
+        cylindrical: bool = false,
     },
 
     imaginary: ?struct {
@@ -820,7 +820,7 @@ fn checkInvalidInput(opt: Options) !void {
         }
     }
 
-    if (opt.cylindrical) {
+    if (opt.grid.cylindrical) {
         if (opt.grid.bounds.len < 2) {
             std.log.err("CYLINDRICAL SIMULATION REQUIRES AT LEAST 2 GRID DIMENSIONS", .{});
 
@@ -851,7 +851,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         .exhaustive => fftw.FFTW_EXHAUSTIVE,
     };
 
-    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, opt.cylindrical, gpa);
+    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, opt.grid.cylindrical, gpa);
     errdefer grid.deinit(gpa);
 
     var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);

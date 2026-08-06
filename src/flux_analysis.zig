@@ -84,20 +84,20 @@ pub fn FluxAnalysis(comptime T: type) type {
             var e_perp: T, var r_perp: T = .{ 0, 1 };
 
             for (1..opt.mass.len) |i| {
-                const f_zpe = if (opt.cylindrical and i == opt.mass.len - 1) @as(T, 1) else @as(T, 0.5);
+                const f_zpe = if (opt.grid.cylindrical and i == opt.mass.len - 1) @as(T, 1) else @as(T, 0.5);
 
                 e_perp += f_zpe * opt.initial_conditions.gamma[i] / mass[i];
             }
 
             for (1..opt.initial_conditions.gamma.len) |i| {
-                if (opt.cylindrical and i == opt.initial_conditions.gamma.len - 1) {
+                if (opt.grid.cylindrical and i == opt.initial_conditions.gamma.len - 1) {
                     continue;
                 }
 
                 r_perp *= std.math.sqrt(opt.initial_conditions.gamma[i] / std.math.pi);
             }
 
-            const weight = if (opt.cylindrical) (std.math.pi / gamma[gamma.len - 1]) / r_perp else 1 / r_perp;
+            const weight = if (opt.grid.cylindrical) (std.math.pi / gamma[gamma.len - 1]) / r_perp else 1 / r_perp;
 
             return .{
                 .flux_bounds = flux_bounds,
