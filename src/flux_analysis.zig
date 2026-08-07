@@ -60,26 +60,14 @@ pub fn FluxAnalysis(comptime T: type) type {
                 Vreact = V_arr[opt.initial_conditions.state * pot.nstate() + opt.initial_conditions.state];
             }
 
-            const mass = try gpa.alloc(T, opt.mass.len);
+            const mass = try gpa.dupe(T, opt.mass);
             errdefer gpa.free(mass);
 
-            for (opt.mass, 0..) |m, i| {
-                mass[i] = m;
-            }
-
-            const gamma = try gpa.alloc(T, opt.initial_conditions.gamma.len);
+            const gamma = try gpa.dupe(T, opt.initial_conditions.gamma);
             errdefer gpa.free(gamma);
 
-            for (opt.initial_conditions.gamma, 0..) |g, i| {
-                gamma[i] = g;
-            }
-
-            const flux_bounds = try gpa.alloc([2]T, flux_opt.flux_bounds.len);
+            const flux_bounds = try gpa.dupe([2]T, flux_opt.flux_bounds);
             errdefer gpa.free(flux_bounds);
-
-            for (flux_opt.flux_bounds, 0..) |b, i| {
-                flux_bounds[i] = .{ b[0], b[1] };
-            }
 
             var e_perp: T, var r_perp: T = .{ 0, 1 };
 
@@ -89,13 +77,9 @@ pub fn FluxAnalysis(comptime T: type) type {
                 e_perp += f_zpe * opt.initial_conditions.gamma[i] / mass[i];
             }
 
-            for (1..opt.initial_conditions.gamma.len) |i| {
-                if (opt.grid.cylindrical and i == opt.initial_conditions.gamma.len - 1) {
-                    continue;
-                }
-
-                r_perp *= std.math.sqrt(opt.initial_conditions.gamma[i] / std.math.pi);
-            }
+            for (1..gamma.len) |i| if (!(opt.grid.cylindrical and i == gamma.len - 1)) {
+                r_perp *= std.math.sqrt(gamma[i] / std.math.pi);
+            };
 
             const weight = if (opt.grid.cylindrical) (std.math.pi / gamma[gamma.len - 1]) / r_perp else 1 / r_perp;
 
