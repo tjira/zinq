@@ -1,32 +1,34 @@
 # Split-Operator Method
 
-The Split-Operator (SPO) Fourier method is a highly efficient numerical algorithm developed by Feit, Fleck, and Steiger in 1982 to solve the time-dependent Schrödinger equation. It is widely used in quantum dynamics to propagate wavepackets on grid representations by dividing the time-evolution propagator into kinetic and potential energy components.
+This document provides a highly detailed, mathematically rigorous, yet simple and intuitive explanation of the Split-Operator (SPO) Fourier method and how it is implemented in our quantum dynamics codebase. If you want to understand how we simulate the movements of a quantum wavepacket in time by switching back and forth between position and momentum space using Fourier transforms, this guide is written step-by-step for you.
 
 ---
 
 ## I. Mathematical Formulation
 
+To understand the Split-Operator method, we must first look at what a quantum wavepacket is. In quantum mechanics, a particle (such as an atom or a molecule) does not have a single exact position. Instead, it is described by a wavefunction, which is a complex-valued wave that represents the probability distribution of where the particle might be found. The way this wavefunction changes over time is governed by the time-dependent Schrödinger equation. The main difficulty in solving this equation is that the energy operator, called the Hamiltonian, contains two parts: the potential energy (which depends on the positions of the atoms) and the kinetic energy (which depends on their velocities or momenta). Because these two operators do not commute, we cannot calculate them easily in the same representation. The Split-Operator method solves this by splitting the time step into small parts, allowing us to calculate each energy component in the representation where it is easiest to evaluate.
+
 ### 1. Schrödinger Equation and Strang Splitting
 
-The time evolution of a quantum state $|\psi(t)\rangle$ is governed by the time-dependent Schrödinger equation
+The time evolution of a quantum state wavefunction $|\psi(t)\rangle$ is governed by the time-dependent Schrödinger equation
 
 $$
 i\hbar\frac{d}{dt}|\psi(t)\rangle=\hat{H}|\psi(t)\rangle
 $$
 
-where $\hat{H}=\hat{T}+\hat{V}$ is the total Hamiltonian operator, consisting of the kinetic energy operator $\hat{T}$ and the potential energy operator $\hat{V}$. The formal solution for a small time step $\Delta t$ is
+where $\hat{H}=\hat{T}+\hat{V}$ is the Hamiltonian operator, consisting of the kinetic energy operator $\hat{T}$ and the potential energy operator $\hat{V}$. The formal solution for how the wavefunction changes over a small time step $\Delta t$ is written as
 
 $$
 |\psi(t+\Delta t)\rangle=\exp\left(-\frac{i}{\hbar}\hat{H}\Delta t\right)|\psi(t)\rangle
 $$
 
-Since the kinetic energy operator $\hat{T}$ and potential energy operator $\hat{V}$ do not commute, the exponential of their sum cannot be factored directly. The second-order Strang splitting scheme approximates the propagator as
+where the term containing the exponential is the propagator. Because the kinetic energy operator $\hat{T}$ (which involves derivatives) and the potential energy operator $\hat{V}$ (which involves coordinate values) do not commute, the exponential of their sum cannot be factored directly. To solve this, we use the second-order Strang splitting scheme to approximate the propagator as
 
 $$
 \exp\left(-\frac{i}{\hbar}\hat{H}\Delta t\right)=\exp\left(-\frac{i}{2\hbar}\hat{V}\Delta t\right)\exp\left(-\frac{i}{\hbar}\hat{T}\Delta t\right)\exp\left(-\frac{i}{2\hbar}\hat{V}\Delta t\right)+\mathcal{O}(\Delta t^3)
 $$
 
-which is accurate to second order in $\Delta t$.
+where we apply half of the potential energy propagation, then the full kinetic energy propagation, and finally the second half of the potential energy propagation. This symmetric splitting cancels out the first-order error terms, making the integration highly accurate.
 
 ---
 
@@ -34,25 +36,25 @@ which is accurate to second order in $\Delta t$.
 
 ### 2. Position and Momentum Space Integrals
 
-The split-operator method achieves high computational efficiency by evaluating each split propagator in the representation where that operator is diagonal. The potential energy operator $\hat{V}$ is diagonal in position space $\mathbf{r}$. Applying the potential propagator is a simple multiplication at each grid point as
+The main advantage of the Split-Operator method is that it evaluates each split propagator in the representation where that operator is diagonal. The potential energy operator $\hat{V}$ is diagonal in position space. In this space, the potential propagator is just a simple multiplication at each grid point, written as
 
 $$
 \psi'(\mathbf{r})=\exp\left(-\frac{i}{2\hbar}\mathbf{V}(\mathbf{r})\Delta t\right)\psi(\mathbf{r})
 $$
 
-In a multi-state nonadiabatic system, $\mathbf{V}(\mathbf{r})$ is an $N\times N$ matrix. The matrix exponential is evaluated by diagonalizing $\mathbf{V}(\mathbf{r})$ at each grid point using the unitary transformation matrix $\mathbf{U}(\mathbf{r})$ containing the eigenvectors and the diagonal matrix of adiabatic eigenvalues $\mathbf{W}(\mathbf{r})$ as
+where $\mathbf{r}$ represents the position coordinates on our grid. If the system has multiple electronic states, the potential energy $\mathbf{V}(\mathbf{r})$ at each grid point is a matrix rather than a single number. To apply the propagator to this matrix, the program diagonalizes the potential matrix at each grid point using the unitary transformation matrix $\mathbf{U}(\mathbf{r})$ containing its eigenvectors and the diagonal matrix of adiabatic eigenvalues $\mathbf{W}(\mathbf{r})$ as
 
 $$
 \exp\left(-\frac{i}{2\hbar}\mathbf{V}(\mathbf{r})\Delta t\right)=\mathbf{U}(\mathbf{r})\exp\left(-\frac{i}{2\hbar}\mathbf{W}(\mathbf{r})\Delta t\right)\mathbf{U}^{\dagger}(\mathbf{r})
 $$
 
-which rotates the wavepacket into the adiabatic basis, applies the scalar phase factor updates, and rotates back. The kinetic energy operator $\hat{T}$ is diagonal in momentum space $\mathbf{p}$ (or wavenumber space $\mathbf{k}$). Applying the kinetic propagator involves transforming the wavefunction to momentum space using the Fast Fourier Transform (FFT), multiplying by the diagonal kinetic phase factors, and transforming back to position space using the Inverse Fast Fourier Transform (IFFT) as
+which rotates the wavefunction into the adiabatic basis, applies the simple phase updates, and rotates it back to the original diabatic basis. The kinetic energy operator $\hat{T}$ is diagonal in momentum space $\mathbf{p}$. To apply the kinetic propagator, the program uses the Fast Fourier Transform (FFT) to convert the wavefunction from position space to momentum space, multiplies the values by the kinetic phase factors, and then uses the Inverse Fast Fourier Transform (IFFT) to convert the wavefunction back to position space. The momentum space update is calculated as
 
 $$
 \tilde{\psi}''(\mathbf{k})=\exp\left(-\frac{i\hbar k^2}{2m}\Delta t\right)\tilde{\psi}'(\mathbf{k})
 $$
 
-where $m$ is the mass of the particle. The codebase implements these transforms by interfacing with the FFTW library, which generates optimized plans to carry out the multidimensional Fourier transforms.
+where $m$ is the mass of the particle and $\mathbf{k}$ is the wavevector representing momentum. Our codebase implements these transforms by interfacing with the FFTW library, which generates optimized plans to run the multidimensional Fourier transforms as quickly as possible.
 
 ---
 
@@ -60,23 +62,23 @@ where $m$ is the mass of the particle. The codebase implements these transforms 
 
 ### 3. Absorbing Boundary Potentials
 
-To prevent unphysical reflections of the wavepacket at the grid boundaries, a complex absorbing potential (CAP) $-iV_{\text{cap}}(\mathbf{r})$ is added to the Hamiltonian. The effective Hamiltonian becomes
+Because we must run our simulations on a finite grid of points, we face a physical problem: when the wavepacket reaches the edge of the grid, it will reflect off the boundary and travel backward, interfering with itself. This is unphysical, as a real wavepacket would simply fly off into space. To prevent these reflections, we add an imaginary absorbing potential $-iV_{\text{cap}}(\mathbf{r})$ near the edges of the grid. The effective Hamiltonian becomes
 
 $$
 \hat{H}_{\text{eff}}=\hat{T}+\hat{V}-iV_{\text{cap}}(\mathbf{r})
 $$
 
-which introduces a real exponential decay factor in the potential propagator that dampens the wavefunction as it approaches the boundaries of the grid, absorbing the outgoing flux.
+where the imaginary term acts like a sponge, introducing a real decaying exponential factor in the potential propagator that dampens the wavefunction to zero as it approaches the boundaries of the grid, absorbing the outgoing flux.
 
 ### 4. Imaginary-Time Relaxation Trick
 
-To find the ground-state wavefunction of a molecular system, the codebase implements the imaginary-time propagation trick. By substituting $\Delta t \to -i \Delta \tau$ where $\Delta \tau$ is a real parameter, the real oscillatory phase factors in the propagator turn into real decaying exponentials as
+If we want to find the lowest-energy ground-state wavefunction of a system, we can use a mathematical trick called imaginary-time propagation. By substituting the real time step with an imaginary time step $\Delta t \to -i \Delta \tau$, the oscillatory phase factors in our propagator turn into real decaying exponentials as
 
 $$
 \exp\left(-\frac{\hat{H}\Delta\tau}{\hbar}\right)
 $$
 
-This decay operator dampens high-energy eigenstates exponentially faster than the ground state. By repeatedly applying the split propagators and re-normalizing the wavepacket to unity at each step, the excited-state components vanish and the wavefunction relaxes to the exact numerical ground state.
+which decays the amplitudes of the different energy states. Because higher-energy excited states decay exponentially faster than the lowest-energy ground state, repeatedly applying this propagator and re-normalizing the total probability of the wavefunction back to one will cause all the excited states to disappear, leaving only the exact numerical ground state.
 
 ---
 
@@ -84,82 +86,80 @@ This decay operator dampens high-energy eigenstates exponentially faster than th
 
 ### 5. Time-to-Energy Fourier Transform Flux Analysis
 
-To compute energy-resolved reaction probabilities and scattering cross sections, the codebase implements a time-to-energy Fourier transform flux analysis. The energy-resolved wavefunction $\psi(E,\mathbf{r})$ is obtained from the time-propagated wavefunction $\psi(\mathbf{r},t)$ using the half-Fourier transform
+To calculate chemical reaction rates and scattering cross sections, we want to know how much of the wavepacket passes through a specific plane (called a dividing surface) at different energies. We first calculate the energy-resolved wavefunction $\psi(E,\mathbf{r})$ by taking the Fourier transform of the time-propagated wavefunction $\psi(\mathbf{r},t)$ as
 
 $$
 \psi(E,\mathbf{r})=\frac{1}{\sqrt{2\pi}}\int_0^{\infty}\psi(\mathbf{r},t)\exp\left(\frac{i}{\hbar}Et\right)dt
 $$
 
-which is discretized as the accumulated sum at each time step $\Delta t$
+which we discretize on our computer as an accumulated sum over all time steps $t_n=n\Delta t$ as
 
 $$
 A(E,\mathbf{r})=\sum_n\psi(\mathbf{r},t_n)\exp\left(\frac{i}{\hbar}Et_n\right)
 $$
 
-with $t_n=n\Delta t$. The energy-dependent reaction probability $P(E)$ is determined by integrating the quantum probability flux through a dividing surface normal to the scattering coordinate $d$ at position $x_s$ using the relation
+where the sum accumulates the wavepacket values. The reaction probability $P(E)$ is then computed by integrating the quantum probability flux through the dividing surface as
 
 $$
 P(E)=\frac{\hbar}{\mu a_k(E)}\int\text{Im}\left[\psi^*(E,\mathbf{r})\nabla_d\psi(E,\mathbf{r})\right]d\mathbf{S}_d
 $$
 
-where $a_k(E)$ is the energy distribution of the initial wavepacket, $\mu$ is the effective mass of the incident coordinate, and the derivative $\nabla_d\psi(E,\mathbf{r})$ is evaluated spectrally in momentum space using Fast Fourier Transforms. In Cartesian coordinates, the scattering cross section $\sigma(E)$ is obtained from the reaction probability $P(E)$ by dividing by the transverse wavepacket density at the center of the coordinate system as
+where $a_k(E)$ is the energy distribution of the initial wavepacket, $\mu$ is the mass, and the spatial derivative $\nabla_d\psi(E,\mathbf{r})$ along the coordinate normal to the surface is calculated in momentum space using FFTs. The scattering cross section $\sigma(E)$ is then calculated by dividing the reaction probability by the transverse density of the wavepacket as
 
 $$
 \sigma(E)=\frac{P(E)}{r_{\text{perp}}}
 $$
 
-where the transverse normalization factor is defined as
+where the normalization factor is defined as
 
 $$
 r_{\text{perp}}=\prod_{i=1}^{N-1}\sqrt{\frac{\gamma_i}{\pi}}
 $$
 
-with $\gamma_i$ representing the width parameters of the initial Gaussian wavepacket in the $N-1$ transverse directions.
-
+with $\gamma_i$ representing the width parameters of the initial wavepacket.
 
 ### 6. Cylindrical Coordinate Transformation and Scaling
 
-When modeling processes with cylindrical symmetry, such as diatomic collisions under the $J=0$ approximation, the radial coordinate $r$ introduces a $1/r$ term in the kinetic energy operator. Under this symmetry, the wavefunction has no dependence on the azimuthal angle $\theta$, reducing the 3D Schrödinger equation to a 2D problem in $(z, r)$. The Schrödinger equation is written as
+When a collision has cylindrical symmetry (like a diatomic molecule colliding with an atom), we can reduce the 3D Schrödinger equation to a 2D problem in coordinates $(z, r)$, where $z$ is the axis and $r$ is the radial distance. The Hamiltonian in these coordinates is written as
 
 $$
 \hat{H}\Psi(r,z)=\left[-\frac{\hbar^2}{2\mu_z}\frac{\partial^2}{\partial z^2}-\frac{\hbar^2}{2\mu_r}\left(\frac{\partial^2}{\partial r^2}+\frac{1}{r}\frac{\partial}{\partial r}\right)+V(r,z)\right]\Psi(r,z)=E\Psi(r,z)
 $$
 
-where $\mu_z$ and $\mu_r$ are the coordinates' masses and $V(r,z)$ is the potential energy surface. To avoid non-Hermitian operators and allow the use of standard Cartesian Fast Fourier Transforms, the radial wavefunction is scaled using the relation
+where the radial term contains a first derivative $1/r$ that is not Hermitian and cannot be solved using standard Cartesian FFTs. To solve this, we define a scaled wavefunction as
 
 $$
 \psi(r,z)=\sqrt{r}\Psi(r,z)
 $$
 
-where $r$ is the radial coordinate. We substitute this back into the Schrödinger equation by expressing the original wavefunction as $\Psi(r,z)=r^{-1/2}\psi(r,z)$. Differentiating $\Psi$ with respect to the radial coordinate $r$ gives the first derivative
+and substitute this back into the equations. Differentiating this scaled wavefunction gives the first radial derivative as
 
 $$
 \frac{\partial\Psi}{\partial r}=-\frac{1}{2}r^{-3/2}\psi+r^{-1/2}\frac{\partial\psi}{\partial r}
 $$
 
-and the second derivative
+and the second radial derivative as
 
 $$
 \frac{\partial^2\Psi}{\partial r^2}=\frac{3}{4}r^{-5/2}\psi-r^{-3/2}\frac{\partial\psi}{\partial r}+r^{-1/2}\frac{\partial^2\psi}{\partial r^2}
 $$
 
-which we substitute back into the radial kinetic energy operator term to yield the relation
+which we combine to simplify the radial kinetic energy operator to
 
 $$
 \left(\frac{\partial^2}{\partial r^2}+\frac{1}{r}\frac{\partial}{\partial r}\right)\Psi=r^{-1/2}\left(\frac{\partial^2\psi}{\partial r^2}+\frac{1}{4r^2}\psi\right)
 $$
 
-Multiplying the entire Schrödinger equation by $\sqrt{r}$ and substituting this relation simplifies the equation to a standard Cartesian form
+where the first-derivative terms cancel out. Multiplying the entire Schrödinger equation by $\sqrt{r}$ yields a standard Cartesian-like equation
 
 $$
 \left[-\frac{\hbar^2}{2\mu_z}\frac{\partial^2}{\partial z^2}-\frac{\hbar^2}{2\mu_r}\frac{\partial^2}{\partial r^2}+V_{\text{eff}}(r,z)\right]\psi(r,z)=E\psi(r,z)
 $$
 
-where the effective potential includes a centrifugal-like correction given by
+where the effective potential includes a centrifugal correction term calculated as
 
 $$
 V_{\text{eff}}(r,z)=V(r,z)-\frac{\hbar^2}{8\mu_r r^2}
 $$
 
-with $\mu_r$ representing the mass associated with the radial coordinate. To satisfy the boundary condition at the origin where the wavefunction must vanish, the grid is extended symmetrically to negative radial values spanning $[-R_{\max}, R_{\max}]$, and the initial scaled wavefunction $\psi(r,z)$ is constructed with odd symmetry under $r\to-r$ as $\psi(r,z)=\text{sgn}(r)\sqrt{|r|}\Psi(r,z)$. This odd symmetry is preserved during propagation by the Cartesian kinetic energy operator, guaranteeing that the wavefunction remains zero at $r=0$. Because the negative coordinate region is a numerical extension, physical observables like position and momentum are computed using the absolute value of the radial grid coordinates. The scattering cross section $\sigma(E)$ is then computed by weighting the integrated flux with the cylindrical factor $\pi/\gamma_r$, where $\gamma_r$ is the radial wavepacket width parameter.
-
+which can be solved using standard FFT algorithms. To satisfy the physical boundary condition where the wavefunction must be zero at $r=0$, the radial grid is extended symmetrically to negative values spanning $[-R_{\max}, R_{\max}]$, and the initial wavefunction is constructed with odd symmetry as $\psi(r,z)=\text{sgn}(r)\sqrt{|r|}\Psi(r,z)$. The Cartesian kinetic energy propagator preserves this odd symmetry, guaranteeing that the wavefunction remains zero at $r=0$.
