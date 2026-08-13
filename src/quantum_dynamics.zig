@@ -578,9 +578,11 @@ fn Propagator(comptime T: type) type {
         pub fn getR(self: @This(), grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), t: T, capopt: anytype, i: usize) ![]Complex(T) {
             if (self.R) |R| return R.rowSlice(i);
 
-            const nstate = pot.nstate();
+            const nstate, var cap_decay: T = .{ pot.nstate(), 1 };
 
-            const cap_decay = std.math.sqrt(@max(0, 1 - self.getCap(grid, capopt, i)));
+            if (capopt != null) {
+                cap_decay = std.math.sqrt(@max(0, 1 - self.getCap(grid, capopt, i)));
+            }
 
             const w, const u, _ = try ham.getTriple(grid, pot, t, i);
 

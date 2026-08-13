@@ -634,9 +634,10 @@ pub fn Wavefunction(comptime T: type) type {
                     var sum = Complex(T).init(0, 0);
 
                     for (0..self.W.nrow()) |k| {
-                        const u_kj = Complex(T).init(u[k * self.W.nrow() + i], 0);
+                        const u_kj = u[k * self.W.nrow() + i];
 
-                        sum = sum.add(temp[k].mul(u_kj));
+                        sum.re += temp[k].re * u_kj;
+                        sum.im += temp[k].im * u_kj;
                     }
 
                     self.W.ptr(i, j).* = sum;
@@ -660,9 +661,10 @@ pub fn Wavefunction(comptime T: type) type {
                     var sum = Complex(T).init(0, 0);
 
                     for (0..self.W.nrow()) |k| {
-                        const u_jk = Complex(T).init(u[i * self.W.nrow() + k], 0);
+                        const u_jk = u[i * self.W.nrow() + k];
 
-                        sum = sum.add(temp[k].mul(u_jk));
+                        sum.re += temp[k].re * u_jk;
+                        sum.im += temp[k].im * u_jk;
                     }
 
                     self.W.ptr(i, j).* = sum;
