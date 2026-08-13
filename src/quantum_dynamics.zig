@@ -7,6 +7,7 @@ const fftw = @import("cimport.zig").fftw;
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
+const FluxAnalysis = @import("flux_analysis.zig").FluxAnalysis;
 const Grid = @import("wavepacket.zig").Grid;
 const Hamiltonian = @import("wavepacket.zig").Hamiltonian;
 const InitialConditions = @import("wavepacket.zig").InitialConditions;
@@ -17,7 +18,6 @@ const Vector = @import("tensor.zig").Vector;
 const Wavefunction = @import("wavepacket.zig").Wavefunction;
 
 const calcSpectrum = @import("spectral_analysis.zig").calcSpectrum;
-const FluxAnalysis = @import("flux_analysis.zig").FluxAnalysis;
 const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
@@ -353,7 +353,7 @@ fn Observables(comptime T: type) type {
         norm: ?T = null,
 
         /// Computes quantum expectation values and state populations from the current wavepacket.
-        pub fn init(sim: *SimulationState(T), wfn0: ?Wavefunction(T), write: Write, adia: bool, log: bool, gpa: Allocator) !@This() {
+        pub fn init(sim: *SimulationState(T), wfn0: ?Wavefunction(T), write: Write, adia: bool, log: bool, t: T, gpa: Allocator) !@This() {
             var obs = @This(){};
             errdefer obs.deinit(gpa);
 
@@ -402,12 +402,12 @@ fn Observables(comptime T: type) type {
             }
 
             if (calc.epot) {
-                obs.epot = sim.wfn.epot(sim.hams, sim.wfn_kpgrids, langer);
+                obs.epot = sim.wfn.epot(sim.hams, sim.wfn_kpgrids, sim.epoten, t, langer);
             }
 
             if (calc.pop) {
                 if (adia == true) {
-                    obs.pop = try sim.wfn.popAdia(sim.hams, sim.wfn_kpgrids, gpa);
+                    obs.pop = try sim.wfn.popAdia(sim.hams, sim.wfn_kpgrids, sim.epoten, t, gpa);
                 }
 
                 if (adia != true) {
@@ -456,36 +456,45 @@ fn Propagator(comptime T: type) type {
         K: ?Vector(Complex(T)),
         cap_weight: ?Vector(T),
 
+        r_buf: ?[]Complex(T),
+
         dt: Complex(T),
 
         /// Initializes the kinetic and potential propagation operators and absorbing boundary weights.
-        pub fn init(grid: Grid(T), ham: Hamiltonian(T), capopt: anytype, dt: Complex(T), optimize_memory: bool, gpa: Allocator) !@This() {
+        pub fn init(grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), capopt: anytype, dt: Complex(T), optimize_memory: bool, gpa: Allocator) !@This() {
             if (optimize_memory) {
-                return @This(){ .R = null, .K = null, .cap_weight = null, .dt = dt };
+                const r_buf = try gpa.alloc(Complex(T), pot.nstate() * pot.nstate());
+                errdefer gpa.free(r_buf);
+
+                return @This(){ .R = null, .K = null, .cap_weight = null, .r_buf = r_buf, .dt = dt };
             }
 
-            var R = try Matrix(Complex(T)).init(ham.V.nrow(), ham.V.ncol(), gpa);
+            const nstate = pot.nstate();
+
+            var R = try Matrix(Complex(T)).init(grid.r.nrow(), nstate * nstate, gpa);
             errdefer R.deinit(gpa);
 
-            var K = try Vector(Complex(T)).initZero(ham.K.length(), gpa);
+            var K = try Vector(Complex(T)).initZero(grid.r.nrow(), gpa);
             errdefer K.deinit(gpa);
 
-            var cap_weight = try Vector(T).initZero(ham.K.length(), gpa);
+            var cap_weight = try Vector(T).initZero(grid.r.nrow(), gpa);
             errdefer cap_weight.deinit(gpa);
 
-            for (0..ham.K.data.len) |i| {
-                K.data[i] = std.math.complex.exp(Complex(T).init(0, -ham.K.data[i]).mul(dt));
+            for (0..grid.r.nrow()) |i| {
+                K.data[i] = std.math.complex.exp(Complex(T).init(0, -ham.getK(grid, i)).mul(dt));
             }
 
-            var prop = @This(){ .R = R, .K = K, .cap_weight = cap_weight, .dt = dt };
+            var prop = @This(){ .R = R, .K = K, .cap_weight = cap_weight, .r_buf = null, .dt = dt };
 
-            prop.update(grid, ham, capopt);
+            try prop.update(grid, ham, pot, 0, capopt);
 
             return prop;
         }
 
         /// Deallocates split-operator propagation matrices.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
+            if (self.r_buf) |buf| gpa.free(buf);
+
             if (self.R) |*R| R.deinit(gpa);
             if (self.K) |*K| K.deinit(gpa);
 
@@ -493,23 +502,23 @@ fn Propagator(comptime T: type) type {
         }
 
         /// Propagates the wavepacket by one time step using potential and kinetic operator splits.
-        pub fn step(self: @This(), sim: *SimulationState(T), capopt: anytype, adia: bool, track_pop: bool, gpa: Allocator) !void {
-            if (track_pop) self.accumAbsorbed(sim, capopt, adia);
+        pub fn step(self: @This(), sim: *SimulationState(T), capopt: anytype, adia: bool, track_pop: bool, t: T, gpa: Allocator) !void {
+            if (track_pop) try self.accumAbsorbed(sim, capopt, adia, t, gpa);
 
-            try self.applyR(sim, capopt, gpa);
+            try self.applyR(sim, capopt, t, gpa);
 
             try self.applyK(sim);
 
-            if (track_pop) self.accumAbsorbed(sim, capopt, adia);
+            if (track_pop) try self.accumAbsorbed(sim, capopt, adia, t, gpa);
 
-            try self.applyR(sim, capopt, gpa);
+            try self.applyR(sim, capopt, t, gpa);
         }
 
         /// Updates the potential propagator matrix and absorbing boundary exponential decay.
-        pub fn update(self: *@This(), grid: Grid(T), ham: Hamiltonian(T), capopt: anytype) void {
+        pub fn update(self: *@This(), grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), t: T, capopt: anytype) !void {
             if (self.R == null) return;
 
-            const nstate = std.math.sqrt(ham.V.ncol());
+            const nstate = pot.nstate();
 
             for (0..self.R.?.nrow()) |i| {
                 var cap_sum: T = 0;
@@ -531,16 +540,18 @@ fn Propagator(comptime T: type) type {
 
                 self.cap_weight.?.ptr(i).* = 1 - cap_decay * cap_decay;
 
-                const R_i = self.getR(null, grid, ham, capopt, i);
+                const R_i = try self.getR(grid, ham, pot, t, capopt, i);
+
+                const w, const u, _ = try ham.getTriple(grid, pot, t, i);
 
                 for (0..nstate) |k| for (0..nstate) |j| {
                     var sum = Complex(T).init(0, 0);
 
                     for (0..nstate) |m| {
-                        const U_km = ham.U.at(i, k * nstate + m);
-                        const U_jm = ham.U.at(i, j * nstate + m);
+                        const U_km = u[k * nstate + m];
+                        const U_jm = u[j * nstate + m];
 
-                        const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * ham.W.at(i, m)).mul(self.dt));
+                        const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * w[m]).mul(self.dt));
 
                         sum = sum.add(Complex(T).init(phase.re * U_km * U_jm, phase.im * U_km * U_jm));
                     }
@@ -551,36 +562,40 @@ fn Propagator(comptime T: type) type {
         }
 
         /// Retrieves the diabatic propagator row representing potential-induced transitions at a grid point.
-        pub fn getR(self: @This(), buffer: ?[]Complex(T), grid: Grid(T), ham: Hamiltonian(T), capopt: anytype, i: usize) []Complex(T) {
+        pub fn getR(self: @This(), grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), t: T, capopt: anytype, i: usize) ![]Complex(T) {
             if (self.R) |R| return R.rowSlice(i);
 
-            const nstate = std.math.sqrt(ham.V.ncol());
+            const nstate = pot.nstate();
 
             const cap_decay = std.math.sqrt(@max(0, 1 - self.getCap(grid, capopt, i)));
+
+            const w, const u, _ = try ham.getTriple(grid, pot, t, i);
+
+            const buffer = self.r_buf.?;
 
             for (0..nstate) |k| for (0..nstate) |j| {
                 var sum = Complex(T).init(0, 0);
 
                 for (0..nstate) |m| {
-                    const U_km = ham.U.at(i, k * nstate + m);
-                    const U_jm = ham.U.at(i, j * nstate + m);
+                    const U_km = u[k * nstate + m];
+                    const U_jm = u[j * nstate + m];
 
-                    const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * ham.W.at(i, m)).mul(self.dt));
+                    const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * w[m]).mul(self.dt));
 
                     sum = sum.add(Complex(T).init(phase.re * U_km * U_jm, phase.im * U_km * U_jm));
                 }
 
-                buffer.?[k * nstate + j] = sum.mul(Complex(T).init(cap_decay, 0));
+                buffer[k * nstate + j] = sum.mul(Complex(T).init(cap_decay, 0));
             };
 
-            return buffer.?;
+            return buffer;
         }
 
         /// Retrieves the kinetic propagator phase factor representing momentum-dependent grid transitions.
-        pub fn getK(self: @This(), ham: Hamiltonian(T), i: usize) Complex(T) {
+        pub fn getK(self: @This(), grid: Grid(T), ham: Hamiltonian(T), i: usize) Complex(T) {
             if (self.K) |K| return K.at(i);
 
-            return std.math.complex.exp(Complex(T).init(0, -ham.K.at(i)).mul(self.dt));
+            return std.math.complex.exp(Complex(T).init(0, -ham.getK(grid, i)).mul(self.dt));
         }
 
         /// Retrieves the absorbing boundary decay coefficient value at a grid coordinate to damp outgoing flux.
@@ -608,33 +623,44 @@ fn Propagator(comptime T: type) type {
         }
 
         /// Computes and accumulates the population absorbed by the boundary potential.
-        fn accumAbsorbed(self: @This(), sim: *SimulationState(T), capopt: anytype, adia: bool) void {
-            for (0..sim.wfn.W.nrow()) |i| {
-                var sum: T = 0;
+        fn accumAbsorbed(self: @This(), sim: *SimulationState(T), capopt: anytype, adia: bool, t: T, gpa: Allocator) !void {
+            const nstate = sim.wfn.W.nrow();
 
-                for (0..sim.wfn.W.ncol()) |j| {
-                    const w = self.getCap(sim.wfn_kpgrids, capopt, j);
+            var sums = try gpa.alloc(T, nstate);
+            defer gpa.free(sums);
 
+            @memset(sums, 0);
+
+            for (0..sim.wfn.W.ncol()) |j| {
+                const w = self.getCap(sim.wfn_kpgrids, capopt, j);
+
+                if (w == 0) continue;
+
+                const triple = if (adia) try sim.hams.getTriple(sim.wfn_kpgrids, sim.epoten, t, j) else null;
+
+                for (0..nstate) |i| {
                     if (adia) {
                         var adia_re: T = 0;
                         var adia_im: T = 0;
 
-                        for (0..sim.wfn.W.nrow()) |k| {
-                            const u = sim.hams.U.at(j, k * sim.wfn.W.nrow() + i);
+                        for (0..nstate) |k| {
+                            const u = triple.?[1][k * nstate + i];
 
                             adia_re += sim.wfn.W.at(k, j).re * u;
                             adia_im += sim.wfn.W.at(k, j).im * u;
                         }
 
-                        sum += w * (adia_re * adia_re + adia_im * adia_im);
+                        sums[i] += w * (adia_re * adia_re + adia_im * adia_im);
                     }
 
                     if (!adia) {
-                        sum += w * sim.wfn.W.at(i, j).squaredMagnitude();
+                        sums[i] += w * sim.wfn.W.at(i, j).squaredMagnitude();
                     }
                 }
+            }
 
-                sim.pop_apabs.ptr(i).* += sum * sim.wfn_kpgrids.dr;
+            for (0..nstate) |i| {
+                sim.pop_apabs.ptr(i).* += sums[i] * sim.wfn_kpgrids.dr;
             }
         }
 
@@ -647,22 +673,17 @@ fn Propagator(comptime T: type) type {
             }
 
             for (0..sim.wfn.W.nrow()) |i| for (0..sim.wfn.W.ncol()) |j| {
-                sim.wfn.W.ptr(i, j).* = self.getK(sim.hams, j).mul(sim.wfn.W.at(i, j));
+                sim.wfn.W.ptr(i, j).* = self.getK(sim.wfn_kpgrids, sim.hams, j).mul(sim.wfn.W.at(i, j));
             };
         }
 
         /// Applies the potential energy propagator in position space.
-        fn applyR(self: @This(), sim: *SimulationState(T), capopt: anytype, gpa: Allocator) !void {
+        fn applyR(self: @This(), sim: *SimulationState(T), capopt: anytype, t: T, gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), sim.wfn.W.nrow());
             defer gpa.free(temp);
 
-            const nstate = std.math.sqrt(sim.hams.V.ncol());
-
-            const R_row_buf = if (self.R == null) try gpa.alloc(Complex(T), nstate * nstate) else null;
-            defer if (self.R == null) gpa.free(R_row_buf.?);
-
             for (0..sim.wfn.W.ncol()) |j| {
-                const R_j = self.getR(R_row_buf, sim.wfn_kpgrids, sim.hams, capopt, j);
+                const R_j = try self.getR(sim.wfn_kpgrids, sim.hams, sim.epoten, t, capopt, j);
 
                 for (0..sim.wfn.W.nrow()) |i| {
                     var sum = Complex(T).init(0, 0);
@@ -937,10 +958,10 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         mass[i] = @floatCast(m);
     }
 
-    var ham = try Hamiltonian(T).init(grid, pot, mass, gpa);
+    var ham = try Hamiltonian(T).init(grid, pot, mass, opt.optimize_memory, gpa);
     errdefer ham.deinit(gpa);
 
-    var prop = try Propagator(T).init(grid, ham, opt.absorbing_potential, dt, opt.optimize_memory, gpa);
+    var prop = try Propagator(T).init(grid, ham, pot, opt.absorbing_potential, dt, opt.optimize_memory, gpa);
     errdefer prop.deinit(gpa);
 
     var pop_apabs = try Vector(T).initZero(pot.nstate(), gpa);
@@ -1083,7 +1104,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
     defer hist.deinit(gpa);
 
     if (ctx.opt.initial_conditions.adiabatic) {
-        try ctx.sim.wfn.toDia(ctx.sim.hams, gpa);
+        try ctx.sim.wfn.toDia(ctx.sim.hams, ctx.sim.wfn_kpgrids, ctx.sim.epoten, 0, gpa);
     }
 
     const track_cap_pop = ctx.opt.absorbing_potential != null and ctx.opt.absorbing_potential.?.track_population;
@@ -1096,13 +1117,15 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
     for (0..ctx.opt.iterations + 1) |i| {
         const time = (@as(T, @floatFromInt(i)) - 0.5) * ctx.opt.time_step;
 
+        const ap, const obst = .{ ctx.opt.absorbing_potential, @as(T, @floatFromInt(i)) * ctx.opt.time_step };
+
         if (i > 0 and ctx.sim.epoten.isTd()) {
             try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, time, gpa);
 
-            ctx.sim.propg.update(ctx.sim.wfn_kpgrids, ctx.sim.hams, ctx.opt.absorbing_potential);
+            try ctx.sim.propg.update(ctx.sim.wfn_kpgrids, ctx.sim.hams, ctx.sim.epoten, time, ap);
         }
 
-        if (i > 0) try ctx.sim.propg.step(ctx.sim, ctx.opt.absorbing_potential, ctx.opt.adiabatic, track_cap_pop, gpa);
+        if (i > 0) try ctx.sim.propg.step(ctx.sim, ap, ctx.opt.adiabatic, track_cap_pop, time, gpa);
 
         if (ctx.opt.imaginary != null) for (0..ctx.sim.orthw.items.len) |j| {
             const overlap = ctx.sim.orthw.items[j].overlap(ctx.sim.wfn, ctx.sim.wfn_kpgrids);
@@ -1117,38 +1140,36 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
         if (ctx.sim.epoten.isTd()) {
-            const t = @as(T, @floatFromInt(i)) * ctx.opt.time_step;
-
-            try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, t, gpa);
+            try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, obst, gpa);
         }
 
-        var obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, is_log_step, gpa);
+        var obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, is_log_step, obst, gpa);
         defer obs.deinit(gpa);
 
-        const need_adia_wfn = (ctx.opt.write.wavefunction != null or ctx.opt.flux_analysis != null) and ctx.opt.adiabatic;
+        const need_a_wfn = (ctx.opt.write.wavefunction != null or ctx.opt.flux_analysis != null) and ctx.opt.adiabatic;
 
-        if (need_adia_wfn) {
-            try ctx.sim.wfn.toAdia(ctx.sim.hams, gpa);
+        if (need_a_wfn) {
+            try ctx.sim.wfn.toAdia(ctx.sim.hams, ctx.sim.wfn_kpgrids, ctx.sim.epoten, obst, gpa);
         }
 
         hist.append(ctx.sim.wfn, obs, ctx.opt);
 
-        if (need_adia_wfn) {
-            try ctx.sim.wfn.toDia(ctx.sim.hams, gpa);
+        if (need_a_wfn) {
+            try ctx.sim.wfn.toDia(ctx.sim.hams, ctx.sim.wfn_kpgrids, ctx.sim.epoten, obst, gpa);
         }
 
         if (is_log_step) {
             try printIteration(T, io, obs, i, &timer);
         }
 
-        if (ctx.opt.absorbing_potential) |ap| if (ap.stop_norm) |stop_norm| {
+        if (ctx.opt.absorbing_potential) |cap| if (cap.stop_norm) |stop_norm| {
             const norm = ctx.sim.wfn.norm(ctx.sim.wfn_kpgrids);
 
             if (norm < stop_norm) {
-                var stop_obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, gpa);
-                defer stop_obs.deinit(gpa);
+                var stop_o = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, obst, gpa);
+                defer stop_o.deinit(gpa);
 
-                if (!is_log_step) try printIteration(T, io, stop_obs, i, &timer);
+                if (!is_log_step) try printIteration(T, io, stop_o, i, &timer);
 
                 break;
             }
@@ -1157,5 +1178,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
 
     try hist.exportWrite(io, ctx.sim.wfn_kpgrids, ctx.opt, ctx.sim.epoten, gpa);
 
-    return try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, gpa);
+    const time = @as(T, @floatFromInt(ctx.opt.iterations)) * ctx.opt.time_step;
+
+    return try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, time, gpa);
 }

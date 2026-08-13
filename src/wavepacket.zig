@@ -11,6 +11,7 @@ const Potential = @import("potential.zig").Potential;
 const Vector = @import("tensor.zig").Vector;
 
 const eighBatch = @import("linear_algebra.zig").eighBatch;
+const eighSlice = @import("linear_algebra.zig").eighSlice;
 
 /// Initial parameters of the wavepacket including position, momentum, and Gaussian width.
 pub const InitialConditions = struct {
@@ -89,16 +90,53 @@ pub fn Grid(comptime T: type) type {
 /// Representation of kinetic energy and potential energy operators on the grid.
 pub fn Hamiltonian(comptime T: type) type {
     return struct {
-        V: Matrix(T),
-        W: Matrix(T),
-        U: Matrix(T),
-        K: Vector(T),
+        V: ?Matrix(T),
+        W: ?Matrix(T),
+        U: ?Matrix(T),
+        K: ?Vector(T),
 
         mass: []const T,
         cylindric: bool,
 
+        w_buf: ?[]T,
+        u_buf: ?[]T,
+        v_buf: ?[]T,
+
         /// Allocates and computes kinetic and potential operator matrix elements.
-        pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, gpa: Allocator) !@This() {
+        pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, optimize_memory: bool, gpa: Allocator) !@This() {
+            const mass = try gpa.alloc(T, m.len);
+            errdefer gpa.free(mass);
+
+            @memcpy(mass, m);
+
+            if (optimize_memory) {
+                const nstate = pot.nstate();
+
+                const w_buf = try gpa.alloc(T, nstate);
+                errdefer gpa.free(w_buf);
+
+                const u_buf = try gpa.alloc(T, nstate * nstate);
+                errdefer gpa.free(u_buf);
+
+                const v_buf = try gpa.alloc(T, nstate * nstate);
+                errdefer gpa.free(v_buf);
+
+                var ham: @This() = undefined;
+
+                ham.V = null;
+                ham.W = null;
+                ham.U = null;
+                ham.K = null;
+
+                ham.mass, ham.cylindric = .{ mass, grid.cylindrical };
+
+                ham.w_buf = w_buf;
+                ham.u_buf = u_buf;
+                ham.v_buf = v_buf;
+
+                return ham;
+            }
+
             var V = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
             errdefer V.deinit(gpa);
 
@@ -117,13 +155,24 @@ pub fn Hamiltonian(comptime T: type) type {
                 for (0..grid.r.ncol()) |j| {
                     const kij = grid.k.at(i, j);
 
-                    sum += 0.5 * kij * kij / m[j];
+                    sum += 0.5 * kij * kij / mass[j];
                 }
 
                 K.ptr(i).* = sum;
             }
 
-            var ham = @This(){ .V = V, .W = W, .U = U, .K = K, .mass = m, .cylindric = grid.cylindrical };
+            var ham: @This() = undefined;
+
+            ham.V = V;
+            ham.W = W;
+            ham.U = U;
+            ham.K = K;
+
+            ham.mass, ham.cylindric = .{ mass, grid.cylindrical };
+
+            ham.w_buf = null;
+            ham.u_buf = null;
+            ham.v_buf = null;
 
             try ham.update(grid, pot, 0, gpa);
 
@@ -132,18 +181,26 @@ pub fn Hamiltonian(comptime T: type) type {
 
         /// Deallocates Hamiltonian operator matrices.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.V.deinit(gpa);
-            self.W.deinit(gpa);
-            self.U.deinit(gpa);
-            self.K.deinit(gpa);
+            gpa.free(self.mass);
+
+            if (self.w_buf) |buf| gpa.free(buf);
+            if (self.u_buf) |buf| gpa.free(buf);
+            if (self.v_buf) |buf| gpa.free(buf);
+
+            if (self.V) |*V| V.deinit(gpa);
+            if (self.W) |*W| W.deinit(gpa);
+            if (self.U) |*U| U.deinit(gpa);
+            if (self.K) |*K| K.deinit(gpa);
         }
 
         /// Updates potential energy values and diagonalizes to get adiabatic states.
         pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T, gpa: Allocator) !void {
-            var U_prev = if (pot.isTd() and t > 0) try self.U.clone(gpa) else null;
+            if (self.V == null) return;
+
+            var U_prev = if (pot.isTd() and t > 0) try self.U.?.clone(gpa) else null;
             defer if (U_prev) |*u| u.deinit(gpa);
 
-            pot.evalBatch(T, &self.V, grid.r, t);
+            pot.evalBatch(T, &self.V.?, grid.r, t);
 
             if (self.cylindric) {
                 const radial_idx = grid.r.ncol() - 1;
@@ -152,22 +209,22 @@ pub fn Hamiltonian(comptime T: type) type {
                     const r, const m = .{ grid.r.at(i, radial_idx), self.mass[radial_idx] };
 
                     for (0..pot.nstate()) |s| {
-                        self.V.ptr(i, s * pot.nstate() + s).* -= if (r != 0) 1 / (8 * m * r * r) else 0;
+                        self.V.?.ptr(i, s * pot.nstate() + s).* -= if (r != 0) 1 / (8 * m * r * r) else 0;
                     }
                 }
             }
 
-            try eighBatch(T, &self.W, &self.U, self.V);
+            try eighBatch(T, &self.W.?, &self.U.?, self.V.?);
 
             if (grid.r.ncol() == 1) for (1..grid.r.nrow()) |i| for (0..pot.nstate()) |j| {
                 var overlap: T = 0;
 
                 for (0..pot.nstate()) |k| {
-                    overlap += self.U.at(i, k * pot.nstate() + j) * self.U.at(i - 1, k * pot.nstate() + j);
+                    overlap += self.U.?.at(i, k * pot.nstate() + j) * self.U.?.at(i - 1, k * pot.nstate() + j);
                 }
 
                 if (overlap < 0) for (0..pot.nstate()) |k| {
-                    self.U.ptr(i, k * pot.nstate() + j).* = -self.U.at(i, k * pot.nstate() + j);
+                    self.U.?.ptr(i, k * pot.nstate() + j).* = -self.U.?.at(i, k * pot.nstate() + j);
                 };
             };
 
@@ -175,13 +232,64 @@ pub fn Hamiltonian(comptime T: type) type {
                 var total_overlap: T = 0;
 
                 for (0..grid.r.nrow()) |i| for (0..pot.nstate()) |k| {
-                    total_overlap += self.U.at(i, k * pot.nstate() + j) * prev.at(i, k * pot.nstate() + j);
+                    total_overlap += self.U.?.at(i, k * pot.nstate() + j) * prev.at(i, k * pot.nstate() + j);
                 };
 
                 if (total_overlap < 0) for (0..grid.r.nrow()) |i| for (0..pot.nstate()) |k| {
-                    self.U.ptr(i, k * pot.nstate() + j).* = -self.U.at(i, k * pot.nstate() + j);
+                    self.U.?.ptr(i, k * pot.nstate() + j).* = -self.U.?.at(i, k * pot.nstate() + j);
                 };
             };
+        }
+
+        /// Returns the kinetic energy expectation value at grid index i.
+        pub fn getK(self: @This(), grid: Grid(T), i: usize) T {
+            if (self.K) |K| return K.at(i);
+
+            var sum: T = 0;
+
+            for (0..grid.r.ncol()) |j| {
+                const kij = grid.k.at(i, j);
+
+                sum += 0.5 * kij * kij / self.mass[j];
+            }
+
+            return sum;
+        }
+
+        /// Computes or retrieves potential energy matrix elements at grid coordinate index i.
+        pub fn getV(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) []const T {
+            if (self.V) |V| return V.rowSlice(i);
+
+            const buffer = self.v_buf.?;
+
+            pot.eval(T, buffer, grid.r.rowSlice(i), t);
+
+            if (self.cylindric) {
+                const r, const m = .{ grid.r.at(i, grid.r.ncol() - 1), self.mass[grid.r.ncol() - 1] };
+
+                for (0..pot.nstate()) |s| {
+                    buffer[s * pot.nstate() + s] -= if (r != 0) 1 / (8 * m * r * r) else 0;
+                }
+            }
+
+            return buffer;
+        }
+
+        /// Computes or retrieves eigenvalues and eigenvectors at grid index i.
+        pub fn getTriple(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) !struct { []const T, []const T, []const T } {
+            if (self.U) |U| {
+                return .{ self.W.?.rowSlice(i), U.rowSlice(i), self.V.?.rowSlice(i) };
+            }
+
+            const w = self.w_buf.?;
+            const u = self.u_buf.?;
+            const v = self.v_buf.?;
+
+            _ = self.getV(grid, pot, t, i);
+
+            try eighSlice(T, w, u, v);
+
+            return .{ w, u, v };
         }
     };
 }
@@ -242,22 +350,28 @@ pub fn Wavefunction(comptime T: type) type {
             var value: T = 0;
 
             for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| {
-                value += self.W.rowSlice(i)[j].squaredMagnitude() * ham.K.at(j);
+                value += self.W.rowSlice(i)[j].squaredMagnitude() * ham.getK(grid, j);
             };
 
             return value * grid.dk - langer;
         }
 
         /// Computes potential energy expectation value in coordinate space.
-        pub fn epot(self: @This(), ham: Hamiltonian(T), grid: Grid(T), langer: T) T {
+        pub fn epot(self: @This(), ham: Hamiltonian(T), grid: Grid(T), pot: Potential(T), t: T, langer: T) T {
             var value: T = 0;
 
-            for (0..self.W.nrow()) |i| for (0..self.W.nrow()) |k| for (0..self.W.ncol()) |j| {
-                const psi_i = self.W.at(i, j);
-                const psi_k = self.W.at(k, j);
+            for (0..self.W.ncol()) |j| {
+                const V_j = ham.getV(grid, pot, t, j);
 
-                value += (psi_i.re * psi_k.re + psi_i.im * psi_k.im) * ham.V.at(j, i * self.W.nrow() + k);
-            };
+                for (0..self.W.nrow()) |i| {
+                    for (0..self.W.nrow()) |k| {
+                        const psi_i = self.W.at(i, j);
+                        const psi_k = self.W.at(k, j);
+
+                        value += (psi_i.re * psi_k.re + psi_i.im * psi_k.im) * V_j[i * self.W.nrow() + k];
+                    }
+                }
+            }
 
             return value * grid.dr + langer;
         }
@@ -335,16 +449,19 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Computes adiabatic populations of electronic states.
-        pub fn popAdia(self: @This(), ham: Hamiltonian(T), grid: Grid(T), gpa: Allocator) !Vector(T) {
+        pub fn popAdia(self: @This(), ham: Hamiltonian(T), grid: Grid(T), pot: Potential(T), t: T, gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(self.W.nrow(), gpa);
+            errdefer value.deinit(gpa);
 
-            for (0..self.W.nrow()) |i| {
-                for (0..self.W.ncol()) |j| {
+            for (0..self.W.ncol()) |j| {
+                const triple = try ham.getTriple(grid, pot, t, j);
+
+                for (0..self.W.nrow()) |i| {
                     var adia_re: T = 0;
                     var adia_im: T = 0;
 
                     for (0..self.W.nrow()) |k| {
-                        const U_jk = ham.U.at(j, k * self.W.nrow() + i);
+                        const U_jk = triple[1][k * self.W.nrow() + i];
 
                         adia_re += self.W.at(k, j).re * U_jk;
                         adia_im += self.W.at(k, j).im * U_jk;
@@ -396,6 +513,7 @@ pub fn Wavefunction(comptime T: type) type {
 
                     val = val.mul(Complex(T).init(std.math.sign(r) * std.math.sqrt(@abs(r)), 0));
                 }
+
                 self.W.ptr(ic.state, i).* = val;
             }
 
@@ -403,7 +521,7 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Transforms the wavepacket from diabatic to adiabatic representation.
-        pub fn toAdia(self: *@This(), ham: Hamiltonian(T), gpa: Allocator) !void {
+        pub fn toAdia(self: *@This(), ham: Hamiltonian(T), grid: Grid(T), pot: Potential(T), t: T, gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), self.W.nrow());
             defer gpa.free(temp);
 
@@ -412,11 +530,13 @@ pub fn Wavefunction(comptime T: type) type {
                     temp[i] = self.W.at(i, j);
                 }
 
+                _, const u, _ = try ham.getTriple(grid, pot, t, j);
+
                 for (0..self.W.nrow()) |i| {
                     var sum = Complex(T).init(0, 0);
 
                     for (0..self.W.nrow()) |k| {
-                        const u_kj = Complex(T).init(ham.U.at(j, k * self.W.nrow() + i), 0);
+                        const u_kj = Complex(T).init(u[k * self.W.nrow() + i], 0);
 
                         sum = sum.add(temp[k].mul(u_kj));
                     }
@@ -427,7 +547,7 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Transforms the wavepacket from adiabatic to diabatic representation.
-        pub fn toDia(self: *@This(), ham: Hamiltonian(T), gpa: Allocator) !void {
+        pub fn toDia(self: *@This(), ham: Hamiltonian(T), grid: Grid(T), pot: Potential(T), t: T, gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), self.W.nrow());
             defer gpa.free(temp);
 
@@ -436,11 +556,13 @@ pub fn Wavefunction(comptime T: type) type {
                     temp[i] = self.W.at(i, j);
                 }
 
+                _, const u, _ = try ham.getTriple(grid, pot, t, j);
+
                 for (0..self.W.nrow()) |i| {
                     var sum = Complex(T).init(0, 0);
 
                     for (0..self.W.nrow()) |k| {
-                        const u_jk = Complex(T).init(ham.U.at(j, i * self.W.nrow() + k), 0);
+                        const u_jk = Complex(T).init(u[i * self.W.nrow() + k], 0);
 
                         sum = sum.add(temp[k].mul(u_jk));
                     }
