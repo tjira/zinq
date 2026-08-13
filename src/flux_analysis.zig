@@ -63,11 +63,11 @@ pub fn FluxAnalysis(comptime T: type) type {
             const mass = try gpa.dupe(T, opt.mass);
             errdefer gpa.free(mass);
 
-            const gamma = try gpa.dupe(T, opt.initial_conditions.gamma);
-            errdefer gpa.free(gamma);
+            const gammas = try gpa.dupe(T, opt.initial_conditions.gamma);
+            errdefer gpa.free(gammas);
 
-            const flux_bounds = try gpa.dupe([2]T, flux_opt.flux_bounds);
-            errdefer gpa.free(flux_bounds);
+            const f_bounds = try gpa.dupe([2]T, flux_opt.flux_bounds);
+            errdefer gpa.free(f_bounds);
 
             var e_perp: T, var r_perp: T = .{ 0, 1 };
 
@@ -77,24 +77,23 @@ pub fn FluxAnalysis(comptime T: type) type {
                 e_perp += f_zpe * opt.initial_conditions.gamma[i] / mass[i];
             }
 
-            for (1..gamma.len) |i| if (!(opt.grid.cylindrical and i == gamma.len - 1)) {
-                r_perp *= std.math.sqrt(gamma[i] / std.math.pi);
+            for (1..gammas.len) |i| if (!(opt.grid.cylindrical and i == gammas.len - 1)) {
+                r_perp *= std.math.sqrt(gammas[i] / std.math.pi);
             };
 
-            const weight = if (opt.grid.cylindrical) (std.math.pi / gamma[gamma.len - 1]) / r_perp else 1 / r_perp;
+            const weight = if (opt.grid.cylindrical) (std.math.pi / gammas[gammas.len - 1]) / r_perp else 1 / r_perp;
 
-            return .{
-                .flux_bounds = flux_bounds,
-                .e_min = flux_opt.e_min,
-                .e_max = flux_opt.e_max,
-                .e_step = flux_opt.e_step,
-                .mass = mass,
-                .dt = opt.time_step,
-                .e_thrs = Vreact + e_perp,
-                .initk = @abs(opt.initial_conditions.momentum[0]),
-                .gmma = gamma,
-                .weight = weight,
-            };
+            var ctx: @This() = undefined;
+
+            ctx.e_min = flux_opt.e_min;
+            ctx.e_max = flux_opt.e_max;
+
+            ctx.e_step, ctx.dt, ctx.e_thrs = .{ flux_opt.e_step, opt.time_step, Vreact + e_perp };
+            ctx.gmma, ctx.weight, ctx.mass, ctx.flux_bounds = .{ gammas, weight, mass, f_bounds };
+
+            ctx.initk = @abs(opt.initial_conditions.momentum[0]);
+
+            return ctx;
         }
 
         /// Deallocates the dynamically allocated slices in the context.

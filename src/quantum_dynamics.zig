@@ -980,15 +980,14 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     var pop_apabs = try Vector(T).initZero(pot.nstate(), gpa);
     errdefer pop_apabs.deinit(gpa);
 
-    return .{
-        .wfn_kpgrids = grid,
-        .hams = ham,
-        .wfn = wfn,
-        .epoten = pot,
-        .propg = prop,
-        .pop_apabs = pop_apabs,
-        .orthw = .empty,
-    };
+    var ss: SimulationState(T) = undefined;
+
+    ss.epoten = pot;
+    ss.propg = prop;
+
+    ss.wfn, ss.wfn_kpgrids, ss.hams, ss.pop_apabs, ss.orthw = .{ wfn, grid, ham, pop_apabs, .empty };
+
+    return ss;
 }
 
 /// Prints final energies of target vibronic states to stdout.
