@@ -296,7 +296,22 @@ pub fn Hamiltonian(comptime T: type) type {
             var U_prev = if (pot.isTd() and t > 0) try self.U.?.clone(gpa) else null;
             defer if (U_prev) |*u| u.deinit(gpa);
 
-            pot.evalBatch(T, &self.V.?, grid.r.?, t);
+            if (grid.r) |r| {
+                pot.evalBatch(T, &self.V.?, r, t);
+            }
+
+            if (grid.r == null) {
+                const r_coords = try gpa.alloc(T, grid.ncol());
+                defer gpa.free(r_coords);
+
+                for (0..grid.nrow()) |i| {
+                    for (0..grid.ncol()) |j| {
+                        r_coords[j] = grid.getR(i, j);
+                    }
+
+                    pot.eval(T, self.V.?.rowSlice(i), r_coords, t);
+                }
+            }
 
             if (self.cylindric) {
                 const radial_idx = grid.ncol() - 1;

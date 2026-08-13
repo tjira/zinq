@@ -35,7 +35,12 @@ pub const Options = struct {
 
     adiabatic: bool = false,
     log_interval: u32 = 1,
-    optimize_memory: bool = false,
+
+    memory: struct {
+        propagator: bool = true,
+        potential: bool = true,
+        grid: bool = true,
+    } = .{},
 
     absorbing_potential: ?struct {
         track_population: bool = false,
@@ -960,7 +965,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         .exhaustive => fftw.FFTW_EXHAUSTIVE,
     };
 
-    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, opt.grid.cylindrical, opt.optimize_memory, gpa);
+    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, opt.grid.cylindrical, !opt.memory.grid, gpa);
     errdefer grid.deinit(gpa);
 
     var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);
@@ -973,10 +978,10 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         mass[i] = @floatCast(m);
     }
 
-    var ham = try Hamiltonian(T).init(grid, pot, mass, opt.optimize_memory, gpa);
+    var ham = try Hamiltonian(T).init(grid, pot, mass, !opt.memory.potential, gpa);
     errdefer ham.deinit(gpa);
 
-    var prop = try Propagator(T).init(grid, ham, pot, opt.absorbing_potential, dt, opt.optimize_memory, gpa);
+    var prop = try Propagator(T).init(grid, ham, pot, opt.absorbing_potential, dt, !opt.memory.propagator, gpa);
     errdefer prop.deinit(gpa);
 
     var pop_apabs = try Vector(T).initZero(pot.nstate(), gpa);
