@@ -109,7 +109,7 @@ pub fn FluxAnalysis(comptime T: type) type {
         pub fn run(self: @This(), grid: Grid(T), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), gpa: Allocator) !Matrix(T) {
             var npoint: usize = 1;
 
-            while (try std.math.powi(usize, npoint, grid.r.ncol()) != grid.r.nrow()) {
+            while (try std.math.powi(usize, npoint, grid.ncol()) != grid.nrow()) {
                 npoint += 1;
             }
 
@@ -118,13 +118,13 @@ pub fn FluxAnalysis(comptime T: type) type {
             var sigma = try Matrix(T).initZero(ne, wfn_init.nrow(), gpa);
             errdefer sigma.deinit(gpa);
 
-            var temp_phi = try gpa.alloc(Complex(T), grid.r.nrow());
+            var temp_phi = try gpa.alloc(Complex(T), grid.nrow());
             defer gpa.free(temp_phi);
 
-            const shape = try gpa.alloc(i32, grid.r.ncol());
+            const shape = try gpa.alloc(i32, grid.ncol());
             defer gpa.free(shape);
 
-            for (0..grid.r.ncol()) |i| {
+            for (0..grid.ncol()) |i| {
                 shape[i] = @as(i32, @intCast(npoint));
             }
 
@@ -134,11 +134,11 @@ pub fn FluxAnalysis(comptime T: type) type {
             const ifft_plan = try FftPlan(Complex(T)).init(temp_phi, shape, 1, fftw.FFTW_ESTIMATE);
             defer ifft_plan.deinit();
 
-            for (0..grid.r.ncol()) |d| {
-                const s_d, const r = .{ std.math.pow(usize, npoint, grid.r.ncol() - 1 - d), grid.r };
+            for (0..grid.ncol()) |d| {
+                const s_d = std.math.pow(usize, npoint, grid.ncol() - 1 - d);
 
-                const n_min_f = (self.flux_bounds[d][0] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
-                const n_max_f = (self.flux_bounds[d][1] - r.at(0, d)) / (r.at(s_d, d) - r.at(0, d));
+                const n_min_f = (self.flux_bounds[d][0] - grid.getR(0, d)) / (grid.getR(s_d, d) - grid.getR(0, d));
+                const n_max_f = (self.flux_bounds[d][1] - grid.getR(0, d)) / (grid.getR(s_d, d) - grid.getR(0, d));
 
                 if (n_min_f < -0.5 or n_max_f >= @as(T, @floatFromInt(npoint)) - 0.5) {
                     std.log.err("FLUX BOUNDS MUST LIE WITHIN THE GRID BOUNDS", .{});
@@ -149,7 +149,7 @@ pub fn FluxAnalysis(comptime T: type) type {
                 const n_min: usize = @intFromFloat(@round(n_min_f));
                 const n_max: usize = @intFromFloat(@round(n_max_f));
 
-                const dx_d, const m = .{ r.at(s_d, d) - r.at(0, d), self.mass[0] };
+                const dx_d, const m = .{ grid.getR(s_d, d) - grid.getR(0, d), self.mass[0] };
 
                 for (0..ne) |ei| {
                     const E = self.e_min + @as(T, @floatFromInt(ei)) * self.e_step;
@@ -170,30 +170,30 @@ pub fn FluxAnalysis(comptime T: type) type {
                     for (0..wfn_init.nrow()) |f| {
                         const row, var sum: T = .{ ei * wfn_init.nrow() + f, 0 };
 
-                        for (0..grid.r.nrow()) |j| {
+                        for (0..grid.nrow()) |j| {
                             temp_phi[j] = flux_acc.at(row, j);
                         }
 
                         ffft_plan.execute(temp_phi);
 
-                        for (0..grid.r.nrow()) |m_idx| {
-                            temp_phi[m_idx] = temp_phi[m_idx].mul(Complex(T).init(0, grid.k.at(m_idx, d)));
+                        for (0..grid.nrow()) |m_idx| {
+                            temp_phi[m_idx] = temp_phi[m_idx].mul(Complex(T).init(0, grid.getK(m_idx, d)));
                         }
 
                         ifft_plan.execute(temp_phi);
 
                         const factor = grid.dr * k_inc * self.dt * self.dt / (m * self.mass[d] * dx_d * ak);
 
-                        for (0..grid.r.nrow()) |i| {
+                        for (0..grid.nrow()) |i| {
                             var in_bounds = true;
 
-                            for (0..grid.r.ncol()) |k| {
+                            for (0..grid.ncol()) |k| {
                                 if (k == d) continue;
 
-                                const s_k = std.math.pow(usize, npoint, grid.r.ncol() - 1 - k);
+                                const s_k = std.math.pow(usize, npoint, grid.ncol() - 1 - k);
 
-                                const n_min_k_f = (self.flux_bounds[k][0] - r.at(0, k)) / (r.at(s_k, k) - r.at(0, k));
-                                const n_max_k_f = (self.flux_bounds[k][1] - r.at(0, k)) / (r.at(s_k, k) - r.at(0, k));
+                                const n_min_k_f = (self.flux_bounds[k][0] - grid.getR(0, k)) / (grid.getR(s_k, k) - grid.getR(0, k));
+                                const n_max_k_f = (self.flux_bounds[k][1] - grid.getR(0, k)) / (grid.getR(s_k, k) - grid.getR(0, k));
 
                                 const n_min_k: usize = @intFromFloat(@round(n_min_k_f));
                                 const n_max_k: usize = @intFromFloat(@round(n_max_k_f));

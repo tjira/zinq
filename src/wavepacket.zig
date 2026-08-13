@@ -26,23 +26,24 @@ pub const InitialConditions = struct {
 /// Generates a multidimensional discrete coordinate and momentum space grid.
 pub fn Grid(comptime T: type) type {
     return struct {
-        r: Matrix(T),
-        k: Matrix(T),
+        r: ?Matrix(T),
+        k: ?Matrix(T),
+        npoint: usize,
 
         dr: T,
         dk: T,
 
+        lim: []const [2]T,
         cylindrical: bool,
 
         /// Allocates and initializes grid coordinates and momentum vectors.
-        pub fn init(bounds: []const [2]T, npoint: u32, cylindrical: bool, gpa: Allocator) !@This() {
-            const ncol = std.math.pow(usize, npoint, bounds.len);
+        pub fn init(bounds: []const [2]T, npoint: u32, cylindrical: bool, optimize_memory: bool, gpa: Allocator) !@This() {
+            const total_points = std.math.pow(usize, npoint, bounds.len);
 
-            var r = try Matrix(T).init(ncol, bounds.len, gpa);
-            errdefer r.deinit(gpa);
+            const bounds_copy = try gpa.alloc([2]T, bounds.len);
+            errdefer gpa.free(bounds_copy);
 
-            var k = try Matrix(T).init(ncol, bounds.len, gpa);
-            errdefer k.deinit(gpa);
+            @memcpy(bounds_copy, bounds);
 
             var dr: T = 1;
 
@@ -53,9 +54,31 @@ pub fn Grid(comptime T: type) type {
                 dr *= (max - min) / @as(T, @floatFromInt(npoint));
             }
 
-            const dk = dr / @as(T, @floatFromInt(ncol));
+            const dk = dr / @as(T, @floatFromInt(total_points));
 
-            for (0..ncol) |i| {
+            if (optimize_memory) {
+                var grid: @This() = undefined;
+
+                grid.r = null;
+                grid.k = null;
+
+                grid.lim, grid.npoint = .{ bounds_copy, npoint };
+
+                grid.dr = dr;
+                grid.dk = dk;
+
+                grid.cylindrical = cylindrical;
+
+                return grid;
+            }
+
+            var r = try Matrix(T).init(total_points, bounds.len, gpa);
+            errdefer r.deinit(gpa);
+
+            var k = try Matrix(T).init(total_points, bounds.len, gpa);
+            errdefer k.deinit(gpa);
+
+            for (0..total_points) |i| {
                 var temp = i;
 
                 for (0..bounds.len) |l| {
@@ -76,13 +99,79 @@ pub fn Grid(comptime T: type) type {
                 }
             }
 
-            return .{ .r = r, .k = k, .dr = dr, .dk = dk, .cylindrical = cylindrical };
+            var grid: @This() = undefined;
+
+            grid.r = r;
+            grid.k = k;
+
+            grid.lim, grid.npoint = .{ bounds_copy, npoint };
+
+            grid.dr = dr;
+            grid.dk = dk;
+
+            grid.cylindrical = cylindrical;
+
+            return grid;
         }
 
-        /// Deallocates coordinate and momentum space grid matrices.
+        /// Deallocates coordinate and momentum space grid matrices and boundaries.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.r.deinit(gpa);
-            self.k.deinit(gpa);
+            if (self.r) |*r| r.deinit(gpa);
+            if (self.k) |*k| k.deinit(gpa);
+
+            gpa.free(self.lim);
+        }
+
+        /// Calculates the grid coordinate value along dimension j at grid index i.
+        pub fn getR(self: @This(), i: usize, j: usize) T {
+            if (self.r) |r| return r.at(i, j);
+
+            const exponent, var div: usize = .{ self.lim.len - j - 1, 1 };
+
+            for (0..exponent) |_| {
+                div *= self.npoint;
+            }
+
+            const n_idx = (i / div) % self.npoint;
+
+            const min = self.lim[j][0];
+            const max = self.lim[j][1];
+
+            return min + @as(T, @floatFromInt(n_idx)) * (max - min) / @as(T, @floatFromInt(self.npoint));
+        }
+
+        /// Calculates the momentum space coordinate along dimension j at grid index i.
+        pub fn getK(self: @This(), i: usize, j: usize) T {
+            if (self.k) |k| return k.at(i, j);
+
+            const exponent, var div: usize = .{ self.lim.len - j - 1, 1 };
+
+            for (0..exponent) |_| {
+                div *= self.npoint;
+            }
+
+            const n_idx = (i / div) % self.npoint;
+
+            const min = self.lim[j][0];
+            const max = self.lim[j][1];
+
+            const dki, const n = .{ 2 * std.math.pi / (max - min), @as(T, @floatFromInt(n_idx)) };
+
+            return (if (n_idx < self.npoint / 2) n else n - @as(T, @floatFromInt(self.npoint))) * dki;
+        }
+
+        /// Returns the total number of grid points in the discrete coordinates space.
+        pub fn nrow(self: @This()) usize {
+            if (self.r) |r| return r.nrow();
+
+            return std.math.pow(usize, self.npoint, self.lim.len);
+        }
+
+        /// Returns the number of dimensions/axes in the multi-dimensional grid.
+        pub fn ncol(self: @This()) usize {
+            if (self.r) |r| return r.ncol();
+
+            return self.lim.len;
         }
     };
 }
@@ -101,6 +190,7 @@ pub fn Hamiltonian(comptime T: type) type {
         w_buf: ?[]T,
         u_buf: ?[]T,
         v_buf: ?[]T,
+        r_buf: ?[]T,
 
         /// Allocates and computes kinetic and potential operator matrix elements.
         pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, optimize_memory: bool, gpa: Allocator) !@This() {
@@ -121,6 +211,9 @@ pub fn Hamiltonian(comptime T: type) type {
                 const v_buf = try gpa.alloc(T, nstate * nstate);
                 errdefer gpa.free(v_buf);
 
+                const r_buf = try gpa.alloc(T, grid.ncol());
+                errdefer gpa.free(r_buf);
+
                 var ham: @This() = undefined;
 
                 ham.V = null;
@@ -133,27 +226,28 @@ pub fn Hamiltonian(comptime T: type) type {
                 ham.w_buf = w_buf;
                 ham.u_buf = u_buf;
                 ham.v_buf = v_buf;
+                ham.r_buf = r_buf;
 
                 return ham;
             }
 
-            var V = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
+            var V = try Matrix(T).init(grid.nrow(), pot.nstate() * pot.nstate(), gpa);
             errdefer V.deinit(gpa);
 
-            var U = try Matrix(T).init(grid.r.nrow(), pot.nstate() * pot.nstate(), gpa);
+            var U = try Matrix(T).init(grid.nrow(), pot.nstate() * pot.nstate(), gpa);
             errdefer U.deinit(gpa);
 
-            var W = try Matrix(T).init(grid.r.nrow(), pot.nstate(), gpa);
+            var W = try Matrix(T).init(grid.nrow(), pot.nstate(), gpa);
             errdefer W.deinit(gpa);
 
-            var K = try Vector(T).initZero(grid.r.nrow(), gpa);
+            var K = try Vector(T).initZero(grid.nrow(), gpa);
             errdefer K.deinit(gpa);
 
-            for (0..grid.r.nrow()) |i| {
+            for (0..grid.nrow()) |i| {
                 var sum: T = 0;
 
-                for (0..grid.r.ncol()) |j| {
-                    const kij = grid.k.at(i, j);
+                for (0..grid.ncol()) |j| {
+                    const kij = grid.getK(i, j);
 
                     sum += 0.5 * kij * kij / mass[j];
                 }
@@ -173,6 +267,7 @@ pub fn Hamiltonian(comptime T: type) type {
             ham.w_buf = null;
             ham.u_buf = null;
             ham.v_buf = null;
+            ham.r_buf = null;
 
             try ham.update(grid, pot, 0, gpa);
 
@@ -186,6 +281,7 @@ pub fn Hamiltonian(comptime T: type) type {
             if (self.w_buf) |buf| gpa.free(buf);
             if (self.u_buf) |buf| gpa.free(buf);
             if (self.v_buf) |buf| gpa.free(buf);
+            if (self.r_buf) |buf| gpa.free(buf);
 
             if (self.V) |*V| V.deinit(gpa);
             if (self.W) |*W| W.deinit(gpa);
@@ -200,13 +296,13 @@ pub fn Hamiltonian(comptime T: type) type {
             var U_prev = if (pot.isTd() and t > 0) try self.U.?.clone(gpa) else null;
             defer if (U_prev) |*u| u.deinit(gpa);
 
-            pot.evalBatch(T, &self.V.?, grid.r, t);
+            pot.evalBatch(T, &self.V.?, grid.r.?, t);
 
             if (self.cylindric) {
-                const radial_idx = grid.r.ncol() - 1;
+                const radial_idx = grid.ncol() - 1;
 
-                for (0..grid.r.nrow()) |i| {
-                    const r, const m = .{ grid.r.at(i, radial_idx), self.mass[radial_idx] };
+                for (0..grid.nrow()) |i| {
+                    const r, const m = .{ grid.getR(i, radial_idx), self.mass[radial_idx] };
 
                     for (0..pot.nstate()) |s| {
                         self.V.?.ptr(i, s * pot.nstate() + s).* -= if (r != 0) 1 / (8 * m * r * r) else 0;
@@ -216,7 +312,7 @@ pub fn Hamiltonian(comptime T: type) type {
 
             try eighBatch(T, &self.W.?, &self.U.?, self.V.?);
 
-            if (grid.r.ncol() == 1) for (1..grid.r.nrow()) |i| for (0..pot.nstate()) |j| {
+            if (grid.ncol() == 1) for (1..grid.nrow()) |i| for (0..pot.nstate()) |j| {
                 var overlap: T = 0;
 
                 for (0..pot.nstate()) |k| {
@@ -231,11 +327,11 @@ pub fn Hamiltonian(comptime T: type) type {
             if (U_prev) |prev| for (0..pot.nstate()) |j| {
                 var total_overlap: T = 0;
 
-                for (0..grid.r.nrow()) |i| for (0..pot.nstate()) |k| {
+                for (0..grid.nrow()) |i| for (0..pot.nstate()) |k| {
                     total_overlap += self.U.?.at(i, k * pot.nstate() + j) * prev.at(i, k * pot.nstate() + j);
                 };
 
-                if (total_overlap < 0) for (0..grid.r.nrow()) |i| for (0..pot.nstate()) |k| {
+                if (total_overlap < 0) for (0..grid.nrow()) |i| for (0..pot.nstate()) |k| {
                     self.U.?.ptr(i, k * pot.nstate() + j).* = -self.U.?.at(i, k * pot.nstate() + j);
                 };
             };
@@ -247,8 +343,8 @@ pub fn Hamiltonian(comptime T: type) type {
 
             var sum: T = 0;
 
-            for (0..grid.r.ncol()) |j| {
-                const kij = grid.k.at(i, j);
+            for (0..grid.ncol()) |j| {
+                const kij = grid.getK(i, j);
 
                 sum += 0.5 * kij * kij / self.mass[j];
             }
@@ -260,12 +356,18 @@ pub fn Hamiltonian(comptime T: type) type {
         pub fn getV(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) []const T {
             if (self.V) |V| return V.rowSlice(i);
 
-            const buffer = self.v_buf.?;
+            const buffer, const r_coords = .{ self.v_buf.?, self.r_buf.? };
 
-            pot.eval(T, buffer, grid.r.rowSlice(i), t);
+            for (0..grid.ncol()) |j| {
+                r_coords[j] = grid.getR(i, j);
+            }
+
+            pot.eval(T, buffer, r_coords, t);
 
             if (self.cylindric) {
-                const r, const m = .{ grid.r.at(i, grid.r.ncol() - 1), self.mass[grid.r.ncol() - 1] };
+                const radial_idx = grid.ncol() - 1;
+
+                const r, const m = .{ grid.getR(i, radial_idx), self.mass[radial_idx] };
 
                 for (0..pot.nstate()) |s| {
                     buffer[s * pot.nstate() + s] -= if (r != 0) 1 / (8 * m * r * r) else 0;
@@ -387,12 +489,10 @@ pub fn Wavefunction(comptime T: type) type {
 
         /// Computes momentum expectation value of the wavepacket.
         pub fn mom(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(grid.r.ncol(), gpa);
+            var value, const radial_idx = .{ try Vector(T).initZero(grid.ncol(), gpa), grid.ncol() - 1 };
 
-            const radial_idx = grid.r.ncol() - 1;
-
-            for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
-                const val = if (grid.cylindrical and k == radial_idx) @abs(grid.k.at(j, k)) else grid.k.at(j, k);
+            for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.ncol()) |k| {
+                const val = if (grid.cylindrical and k == radial_idx) @abs(grid.getK(j, k)) else grid.getK(j, k);
 
                 value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * val;
             };
@@ -478,12 +578,10 @@ pub fn Wavefunction(comptime T: type) type {
 
         /// Computes position expectation value of the wavepacket.
         pub fn pos(self: @This(), grid: Grid(T), gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(grid.r.ncol(), gpa);
+            var value, const radial_idx = .{ try Vector(T).initZero(grid.ncol(), gpa), grid.ncol() - 1 };
 
-            const radial_idx = grid.r.ncol() - 1;
-
-            for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.r.ncol()) |k| {
-                const val = if (grid.cylindrical and k == radial_idx) @abs(grid.r.at(j, k)) else grid.r.at(j, k);
+            for (0..self.W.nrow()) |i| for (0..self.W.rowSlice(i).len) |j| for (0..grid.ncol()) |k| {
+                const val = if (grid.cylindrical and k == radial_idx) @abs(grid.getR(j, k)) else grid.getR(j, k);
 
                 value.ptr(k).* += self.W.rowSlice(i)[j].squaredMagnitude() * val;
             };
@@ -497,11 +595,11 @@ pub fn Wavefunction(comptime T: type) type {
         pub fn setGaussian(self: *@This(), ic: InitialConditions, grid: Grid(T)) void {
             self.W.fill(Complex(T).init(0, 0));
 
-            for (0..grid.r.nrow()) |i| {
+            for (0..grid.nrow()) |i| {
                 var exponent = Complex(T).init(0, 0);
 
-                for (0..grid.r.ncol()) |j| {
-                    const dx = grid.r.at(i, j) - ic.position[j];
+                for (0..grid.ncol()) |j| {
+                    const dx = grid.getR(i, j) - ic.position[j];
 
                     exponent = exponent.add(Complex(T).init(-0.5 * ic.gamma[j] * dx * dx, ic.momentum[j] * dx));
                 }
@@ -509,7 +607,7 @@ pub fn Wavefunction(comptime T: type) type {
                 var val = std.math.complex.exp(exponent);
 
                 if (grid.cylindrical) {
-                    const r = grid.r.at(i, grid.r.ncol() - 1);
+                    const r = grid.getR(i, grid.ncol() - 1);
 
                     val = val.mul(Complex(T).init(std.math.sign(r) * std.math.sqrt(@abs(r)), 0));
                 }

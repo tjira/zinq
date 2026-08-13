@@ -27,6 +27,9 @@ zinq: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HA
 docs: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build docs
 
+fmt: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
+	@$(COMPILER) fmt src
+
 run: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) run
 

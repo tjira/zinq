@@ -298,7 +298,20 @@ fn History(comptime T: type) type {
             }
 
             if (opt.write.wavefunction) |path| {
-                try writeMatrixHjoin(T, io, path, grid.r, null, self.wfn.?, 2 * pot.nstate() * self.index);
+                if (grid.r) |r| {
+                    try writeMatrixHjoin(T, io, path, r, null, self.wfn.?, 2 * pot.nstate() * self.index);
+                }
+
+                if (grid.r == null) {
+                    var temp_r = try Matrix(T).init(grid.nrow(), grid.ncol(), gpa);
+                    defer temp_r.deinit(gpa);
+
+                    for (0..grid.nrow()) |i| for (0..grid.ncol()) |j| {
+                        temp_r.ptr(i, j).* = grid.getR(i, j);
+                    };
+
+                    try writeMatrixHjoin(T, io, path, temp_r, null, self.wfn.?, 2 * pot.nstate() * self.index);
+                }
             }
 
             if (opt.spectrum) |spec| {
@@ -391,7 +404,7 @@ fn Observables(comptime T: type) type {
 
             if (sim.hams.cylindric and (calc.epot or calc.ekin)) {
                 for (0..sim.wfn.W.nrow()) |s| for (0..sim.wfn.W.rowSlice(s).len) |j| {
-                    const r = sim.wfn_kpgrids.r.at(j, 1);
+                    const r = sim.wfn_kpgrids.getR(j, 1);
 
                     if (r != 0) {
                         langer += sim.wfn.W.at(s, j).squaredMagnitude() / (8 * sim.hams.mass[1] * r * r);
@@ -471,16 +484,16 @@ fn Propagator(comptime T: type) type {
 
             const nstate = pot.nstate();
 
-            var R = try Matrix(Complex(T)).init(grid.r.nrow(), nstate * nstate, gpa);
+            var R = try Matrix(Complex(T)).init(grid.nrow(), nstate * nstate, gpa);
             errdefer R.deinit(gpa);
 
-            var K = try Vector(Complex(T)).initZero(grid.r.nrow(), gpa);
+            var K = try Vector(Complex(T)).initZero(grid.nrow(), gpa);
             errdefer K.deinit(gpa);
 
-            var cap_weight = try Vector(T).initZero(grid.r.nrow(), gpa);
+            var cap_weight = try Vector(T).initZero(grid.nrow(), gpa);
             errdefer cap_weight.deinit(gpa);
 
-            for (0..grid.r.nrow()) |i| {
+            for (0..grid.nrow()) |i| {
                 K.data[i] = std.math.complex.exp(Complex(T).init(0, -ham.getK(grid, i)).mul(dt));
             }
 
@@ -523,8 +536,8 @@ fn Propagator(comptime T: type) type {
             for (0..self.R.?.nrow()) |i| {
                 var cap_sum: T = 0;
 
-                if (capopt) |cap| for (0..grid.r.ncol()) |j| {
-                    const r_val = grid.r.at(i, j);
+                if (capopt) |cap| for (0..grid.ncol()) |j| {
+                    const r_val = grid.getR(i, j);
 
                     const min_bound = cap.bounds[j][0];
                     const max_bound = cap.bounds[j][1];
@@ -604,8 +617,8 @@ fn Propagator(comptime T: type) type {
 
             var cap_sum: T = 0;
 
-            if (capopt) |cap| for (0..grid.r.ncol()) |j| {
-                const r_val = grid.r.at(i, j);
+            if (capopt) |cap| for (0..grid.ncol()) |j| {
+                const r_val = grid.getR(i, j);
 
                 const min_bound = cap.bounds[j][0];
                 const max_bound = cap.bounds[j][1];
@@ -945,7 +958,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         .exhaustive => fftw.FFTW_EXHAUSTIVE,
     };
 
-    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, opt.grid.cylindrical, gpa);
+    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, opt.grid.cylindrical, opt.optimize_memory, gpa);
     errdefer grid.deinit(gpa);
 
     var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);

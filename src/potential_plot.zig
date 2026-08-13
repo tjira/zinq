@@ -51,10 +51,10 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     var pot = try Potential(T).init(io, opt.potential, gpa);
     defer pot.deinit(gpa);
 
-    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, false, gpa);
+    var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, false, false, gpa);
     defer grid.deinit(gpa);
 
-    const nstate, const nrow = .{ pot.nstate(), grid.r.nrow() };
+    const nstate, const nrow = .{ pot.nstate(), grid.nrow() };
 
     var U = try Matrix(T).initZero(nrow, nstate * nstate, gpa);
     errdefer U.deinit(gpa);
@@ -71,7 +71,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    pot.evalBatch(T, &U, grid.r, opt.time);
+    pot.evalBatch(T, &U, grid.r.?, opt.time);
 
     if (log) {
         try printf(io, "COMPUTE POTENTIAL: {f}\n", .{timer.untilNow(io, .real)});
@@ -96,7 +96,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.potential) |path| {
-        try writeMatrixHjoin(T, io, path, grid.r, null, U, null);
+        try writeMatrixHjoin(T, io, path, grid.r.?, null, U, null);
 
         if (log) {
             try printf(io, "POTENTIAL WRITTEN: {f}\n", .{timer.untilNow(io, .real)});
