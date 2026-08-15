@@ -579,9 +579,14 @@ fn Propagator(comptime T: type) type {
             }
         }
 
+        /// Retrieves a precomputed propagator row at a grid point.
+        pub fn getRPrecomputed(self: @This(), i: usize) []Complex(T) {
+            return self.R.?.rowSlice(i);
+        }
+
         /// Retrieves the diabatic propagator row representing potential-induced transitions at a grid point.
         pub fn getR(self: @This(), grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), t: T, capopt: anytype, i: usize) ![]Complex(T) {
-            if (self.R) |R| return R.rowSlice(i);
+            if (self.R != null) return self.getRPrecomputed(i);
 
             const nstate, var cap_decay: T = .{ pot.nstate(), 1 };
 
@@ -697,8 +702,35 @@ fn Propagator(comptime T: type) type {
             };
         }
 
-        /// Applies the potential energy propagator in position space.
-        fn applyR(self: @This(), sim: *SimulationState(T), capopt: anytype, t: T, gpa: Allocator) !void {
+        /// Fast potential propagation in coordinate space for small state spaces using stack-allocated structures.
+        fn applyRFast(self: @This(), comptime N: usize, sim: *SimulationState(T), capopt: anytype, t: T) !void {
+            var w_col: [N]Complex(T) = undefined;
+
+            for (0..sim.wfn.W.ncol()) |j| {
+                var R_j = if (self.R != null) self.getRPrecomputed(j) else undefined;
+
+                if (self.R == null) {
+                    R_j = try self.getR(sim.wfn_kpgrids, sim.hams, sim.epoten, t, capopt, j);
+                }
+
+                inline for (0..N) |k| {
+                    w_col[k] = sim.wfn.W.at(k, j);
+                }
+
+                inline for (0..N) |i| {
+                    var sum = Complex(T).init(0, 0);
+
+                    inline for (0..N) |k| {
+                        sum = sum.add(R_j[i * N + k].mul(w_col[k]));
+                    }
+
+                    sim.wfn.W.ptr(i, j).* = sum;
+                }
+            }
+        }
+
+        /// Potential propagation in coordinate space for large state spaces using dynamically allocated buffers.
+        fn applyRSlow(self: @This(), sim: *SimulationState(T), capopt: anytype, t: T, gpa: Allocator) !void {
             var temp = try gpa.alloc(Complex(T), sim.wfn.W.nrow());
             defer gpa.free(temp);
 
@@ -719,6 +751,19 @@ fn Propagator(comptime T: type) type {
                     sim.wfn.W.ptr(i, j).* = temp[i];
                 }
             }
+        }
+
+        /// Applies the potential energy propagator in position space.
+        fn applyR(self: @This(), sim: *SimulationState(T), capopt: anytype, t: T, gpa: Allocator) !void {
+            const nstate = sim.wfn.W.nrow();
+
+            if (nstate < 16) {
+                inline for (1..16) |N| {
+                    if (nstate == N) return try self.applyRFast(N, sim, capopt, t);
+                }
+            }
+
+            try self.applyRSlow(sim, capopt, t, gpa);
         }
     };
 }
