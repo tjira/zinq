@@ -60,6 +60,28 @@ pub fn eighSlice(comptime T: type, W: []T, U: []T, V: []T) !void {
 
     if (primType(T) != f64) @compileError("EIGH NOW ONLY SUPPORTS F64 NUMBERS");
 
+    if (W.len == 1) {
+        W[0], U[0] = .{ V[0], 1 };
+
+        return;
+    }
+
+    if (W.len == 2) {
+        const A, const B, const C = .{ V[0], 0.5 * (V[1] + V[2]), V[3] };
+
+        const theta = 0.5 * std.math.atan2(2 * B, A - C);
+
+        const c = @cos(theta);
+        const s = @sin(theta);
+
+        W[0] = A * s * s - 2 * B * c * s + C * c * c;
+        W[1] = A * c * c + 2 * B * c * s + C * s * s;
+
+        U[0], U[1], U[2], U[3] = .{ -s, c, c, s };
+
+        return;
+    }
+
     const n: i32 = @intCast(W.len);
 
     for (0..V.len) |i| {
