@@ -374,7 +374,9 @@ sub compile_fftw {
         "-DBUILD_TESTS=OFF",
         "-DDISABLE_FORTRAN=ON",
         "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=$prefix"
+        "-DCMAKE_INSTALL_PREFIX=$prefix",
+        $generic ? "-DENABLE_SSE2=OFF" : "-DENABLE_SSE2=ON",
+        $generic ? "-DENABLE_AVX=OFF" : "-DENABLE_AVX=ON",
     );
 
     # RUN CONFIGURE
