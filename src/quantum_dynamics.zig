@@ -579,14 +579,9 @@ fn Propagator(comptime T: type) type {
             }
         }
 
-        /// Retrieves a precomputed propagator row at a grid point.
-        pub fn getRPrecomputed(self: @This(), i: usize) []Complex(T) {
-            return self.R.?.rowSlice(i);
-        }
-
         /// Retrieves the diabatic propagator row representing potential-induced transitions at a grid point.
         pub fn getR(self: @This(), grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), t: T, capopt: anytype, i: usize) ![]Complex(T) {
-            if (self.R != null) return self.getRPrecomputed(i);
+            if (self.R) |R| return  R.rowSlice(i);
 
             const nstate, var cap_decay: T = .{ pot.nstate(), 1 };
 
@@ -702,31 +697,75 @@ fn Propagator(comptime T: type) type {
             };
         }
 
-        /// Fast potential propagation in coordinate space for small state spaces using stack-allocated structures.
-        fn applyRFast(self: @This(), comptime N: usize, sim: *SimulationState(T), capopt: anytype, t: T) !void {
-            var w_col: [N]Complex(T) = undefined;
+        /// Fast potential propagation in coordinate space using precomputed propagator matrices.
+        fn applyRFastStatic(self: @This(), comptime N: usize, sim: *SimulationState(T)) void {
+            var rows: [N][]Complex(T), var w_col: [N]Complex(T) = .{ undefined, undefined };
 
-            for (0..sim.wfn.W.ncol()) |j| {
-                var R_j = if (self.R != null) self.getRPrecomputed(j) else undefined;
+            inline for (0..N) |k| {
+                rows[k] = sim.wfn.W.rowSlice(k);
+            }
 
-                if (self.R == null) {
-                    R_j = try self.getR(sim.wfn_kpgrids, sim.hams, sim.epoten, t, capopt, j);
-                }
+            const r_data, const ncol, var r_idx: usize = .{ self.R.?.data, sim.wfn.W.ncol(), 0 };
 
+            for (0..ncol) |j| {
                 inline for (0..N) |k| {
-                    w_col[k] = sim.wfn.W.at(k, j);
+                    w_col[k] = rows[k][j];
                 }
 
                 inline for (0..N) |i| {
-                    var sum = Complex(T).init(0, 0);
+                    var sum_re: T = 0;
+                    var sum_im: T = 0;
 
                     inline for (0..N) |k| {
-                        sum = sum.add(R_j[i * N + k].mul(w_col[k]));
+                        const r, const w = .{ r_data[r_idx + i * N + k], w_col[k] };
+
+                        sum_re += r.re * w.re - r.im * w.im;
+                        sum_im += r.re * w.im + r.im * w.re;
                     }
 
-                    sim.wfn.W.ptr(i, j).* = sum;
+                    rows[i][j] = Complex(T).init(sum_re, sum_im);
+                }
+
+                r_idx += N * N;
+            }
+        }
+
+        /// Fast potential propagation in coordinate space with on-the-fly propagator computation.
+        fn applyRFastDynamic(self: @This(), comptime N: usize, sim: *SimulationState(T), capopt: anytype, t: T) !void {
+            var rows: [N][]Complex(T), var w_col: [N]Complex(T) = .{ undefined, undefined };
+
+            inline for (0..N) |k| {
+                rows[k] = sim.wfn.W.rowSlice(k);
+            }
+
+            const ncol = sim.wfn.W.ncol();
+
+            for (0..ncol) |j| {
+                const R_j = try self.getR(sim.wfn_kpgrids, sim.hams, sim.epoten, t, capopt, j);
+
+                inline for (0..N) |k| {
+                    w_col[k] = rows[k][j];
+                }
+
+                inline for (0..N) |i| {
+                    var sum_re: T = 0;
+                    var sum_im: T = 0;
+
+                    inline for (0..N) |k| {
+                        const r, const w = .{ R_j[i * N + k], w_col[k] };
+
+                        sum_re += r.re * w.re - r.im * w.im;
+                        sum_im += r.re * w.im + r.im * w.re;
+                    }
+
+                    rows[i][j] = Complex(T).init(sum_re, sum_im);
                 }
             }
+        }
+
+        /// Fast potential propagation in coordinate space for small state spaces using stack-allocated structures.
+        fn applyRFast(self: @This(), comptime N: usize, sim: *SimulationState(T), capopt: anytype, t: T) !void {
+            return if (self.R) |_| self.applyRFastStatic(N, sim) else self.applyRFastDynamic(N, sim, capopt, t);
         }
 
         /// Potential propagation in coordinate space for large state spaces using dynamically allocated buffers.
