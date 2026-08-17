@@ -8,6 +8,7 @@ const cblas = @import("cimport.zig").cblas;
 const Matrix = @import("tensor.zig").Matrix;
 const Vector = @import("tensor.zig").Vector;
 
+const isComplex = @import("value.zig").isComplex;
 const primType = @import("value.zig").primType;
 
 const ROW_MAJOR = lapacke.LAPACK_ROW_MAJOR;
@@ -17,6 +18,19 @@ pub fn addScaled(comptime T: type, alpha: T, x: Vector(T), y: *Vector(T)) void {
     std.debug.assert(x.length() == y.length());
 
     addScaledSlice(T, x.length(), alpha, x.data, y.data);
+}
+
+/// Performs the AXPY operation (y = alpha * x + y) on contiguous slices using CBLAS daxpy or zaxpy.
+pub fn addScaledSlice(comptime T: type, n: usize, alpha: T, x: []const T, y: []T) void {
+    if (comptime primType(T) != f64) @compileError("ADDSCALED ONLY SUPPORTS F64 PRIMITIVE TYPES");
+
+    if (comptime T == f64) {
+        return cblas.cblas_daxpy(@intCast(n), alpha, x.ptr, 1, y.ptr, 1);
+    }
+
+    if (comptime isComplex(T)) {
+        return cblas.cblas_zaxpy(@intCast(n), &alpha, x.ptr, 1, y.ptr, 1);
+    }
 }
 
 /// Computes the dot product (inner product) of two vectors: x^T * y.
@@ -188,13 +202,6 @@ pub fn mmv(comptime T: type, y: *Vector(T), A: Matrix(T), x: Vector(T), a: T, b:
 /// Computes the Euclidean L2 norm of a vector.
 pub fn norm(comptime T: type, x: Vector(T)) T {
     return normSlice(T, x.length(), x.data);
-}
-
-/// Performs the AXPY operation (y = alpha * x + y) on contiguous slices using CBLAS daxpy.
-fn addScaledSlice(comptime T: type, n: usize, alpha: T, x: []const T, y: []T) void {
-    if (comptime primType(T) != f64) @compileError("ADDSCALED ONLY SUPPORTS F64 PRIMITIVE TYPES");
-
-    cblas.cblas_daxpy(@intCast(n), alpha, x.ptr, 1, y.ptr, 1);
 }
 
 /// Computes the dot product of two contiguous slices using CBLAS ddot.

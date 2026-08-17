@@ -17,6 +17,7 @@ const PotentialOptions = @import("potential.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 const Wavefunction = @import("wavepacket.zig").Wavefunction;
 
+const addScaledSlice = @import("linear_algebra.zig").addScaledSlice;
 const calcSpectrum = @import("spectral_analysis.zig").calcSpectrum;
 const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
@@ -214,17 +215,19 @@ fn History(comptime T: type) type {
             if (self.flux_acc) |*accum| {
                 const flux_opt = opt.flux_analysis.?;
 
-                for (0..wfn.W.nrow()) |f| for (0..self.flux_acc.?.nrow() / wfn.W.nrow()) |ei| {
-                    const E = flux_opt.e_min + @as(T, @floatFromInt(ei)) * flux_opt.e_step;
+                for (0..wfn.W.nrow()) |f| {
+                    const wfn_row = wfn.W.rowSlice(f);
 
-                    const phase = std.math.complex.exp(Complex(T).init(0, E * t));
+                    for (0..self.flux_acc.?.nrow() / wfn.W.nrow()) |ei| {
+                        const E = flux_opt.e_min + @as(T, @floatFromInt(ei)) * flux_opt.e_step;
 
-                    for (0..wfn.W.ncol()) |j| {
+                        const phase = Complex(T).init(std.math.cos(E * t), std.math.sin(E * t));
+
                         const row = ei * wfn.W.nrow() + f;
 
-                        accum.ptr(row, j).* = accum.at(row, j).add(phase.mul(wfn.W.at(f, j)));
+                        addScaledSlice(Complex(T), wfn_row.len, phase, wfn_row, accum.rowSlice(row));
                     }
-                };
+                }
             }
 
             if (step_idx == 0 and self.wfn_init != null) for (0..wfn.W.nrow()) |i| for (0..wfn.W.ncol()) |j| {
@@ -581,7 +584,7 @@ fn Propagator(comptime T: type) type {
 
         /// Retrieves the diabatic propagator row representing potential-induced transitions at a grid point.
         pub fn getR(self: @This(), grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), t: T, capopt: anytype, i: usize) ![]Complex(T) {
-            if (self.R) |R| return  R.rowSlice(i);
+            if (self.R) |R| return R.rowSlice(i);
 
             const nstate, var cap_decay: T = .{ pot.nstate(), 1 };
 
