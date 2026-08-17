@@ -9,10 +9,10 @@ if (@ARGV < 1) {
 }
 
 # PROFILE THE PROGRAM
-system('perf', 'record', '-g', '--', @ARGV);
+system('valgrind', '-q', '--tool=callgrind', '--callgrind-out-file=callgrind.data', @ARGV);
 
 # CREATE THE ANALYSIS PIPELINE
-my $pipeline = 'perf script | gprof2dot -e 1 -f perf -n 5 | dot -T svg -o profile.svg';
+my $pipeline = 'gprof2dot -e 1 -f callgrind -n 5 -z main.main callgrind.data | dot -T svg -o profile.svg';
 
 # RUN THE PIPELINE
 system($pipeline);
