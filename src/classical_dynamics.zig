@@ -13,6 +13,8 @@ const PotentialOptions = @import("potential.zig").Options;
 const ScalarDual = @import("dual.zig").ScalarDual;
 const SurfaceHopping = @import("surface_hopping.zig").SurfaceHopping;
 const SurfaceHoppingOptions = @import("surface_hopping.zig").Options;
+const Thermostat = @import("thermostat.zig").Thermostat;
+const ThermostatOptions = @import("thermostat.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 
 const eighBatch = @import("linear_algebra.zig").eighBatch;
@@ -20,6 +22,8 @@ const eighSlice = @import("linear_algebra.zig").eighSlice;
 const norm = @import("linear_algebra.zig").norm;
 const printf = @import("read_write.zig").printf;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
+
+const AU2K = @import("constant.zig").AU2K;
 
 /// Tagged union for multi-state non-adiabatic trajectory propagation methods.
 pub const NonadiabaticOptions = union(enum) {
@@ -31,6 +35,7 @@ pub const NonadiabaticOptions = union(enum) {
 pub const Options = struct {
     initial_conditions: InitialConditions,
     potential: PotentialOptions,
+    thermostat: ?ThermostatOptions = null,
 
     time_step: f64,
     iterations: u32,
@@ -225,6 +230,11 @@ pub fn Ensemble(comptime T: type) type {
                 self.p.ptr(i, j).* = ic.momentum[j] + stdev * random.floatNorm(T);
             };
         }
+
+        /// Calculates the instantaneous kinetic temperature of the ensemble in Kelvin.
+        pub fn temp(self: @This()) T {
+            return (2 * self.ekin() / @as(T, @floatFromInt(self.p.ncol()))) * AU2K;
+        }
     };
 }
 
@@ -257,6 +267,7 @@ const Write = struct {
     population: ?[]const u8 = null,
     position: ?[]const u8 = null,
     potential_energy: ?[]const u8 = null,
+    temperature: ?[]const u8 = null,
     total_energy: ?[]const u8 = null,
 };
 
@@ -382,6 +393,7 @@ fn History(comptime T: type) type {
 
         epot: ?Matrix(T) = null,
         ekin: ?Matrix(T) = null,
+        temp: ?Matrix(T) = null,
         etot: ?Matrix(T) = null,
 
         index: usize = 0,
@@ -409,6 +421,8 @@ fn History(comptime T: type) type {
             if (store_epot) hist.epot = try Matrix(T).init(iters, 1, gpa);
             if (store_etot) hist.etot = try Matrix(T).init(iters, 1, gpa);
 
+            if (write.temperature != null) hist.temp = try Matrix(T).init(iters, 1, gpa);
+
             return hist;
         }
 
@@ -420,6 +434,7 @@ fn History(comptime T: type) type {
 
             if (self.epot) |*epot| epot.deinit(gpa);
             if (self.ekin) |*ekin| ekin.deinit(gpa);
+            if (self.temp) |*temp| temp.deinit(gpa);
             if (self.etot) |*etot| etot.deinit(gpa);
         }
 
@@ -445,6 +460,10 @@ fn History(comptime T: type) type {
 
             if (self.ekin) |*ekin| {
                 ekin.ptr(step_idx, 0).* = obs.ekin.?;
+            }
+
+            if (self.temp) |*temp| {
+                temp.ptr(step_idx, 0).* = obs.temp.?;
             }
 
             if (self.etot) |*etot| {
@@ -478,6 +497,10 @@ fn History(comptime T: type) type {
                 try writeMatrixLspace(T, io, path, self.ekin.?.takeRows(self.index), 0, end);
             }
 
+            if (write.temperature) |path| {
+                try writeMatrixLspace(T, io, path, self.temp.?.takeRows(self.index), 0, end);
+            }
+
             if (write.total_energy) |path| {
                 try writeMatrixLspace(T, io, path, self.etot.?.takeRows(self.index), 0, end);
             }
@@ -494,9 +517,10 @@ fn Observables(comptime T: type) type {
 
         epot: ?T = null,
         ekin: ?T = null,
+        temp: ?T = null,
 
         /// Computes the physical observables from the current simulation state.
-        pub fn init(sim: SimulationState(T), time: T, write: Write, log: bool, gpa: Allocator) !@This() {
+        pub fn init(sim: SimulationState(T), time: T, write: Write, log: bool, has_thermo: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
             errdefer obs.deinit(gpa);
 
@@ -510,6 +534,8 @@ fn Observables(comptime T: type) type {
 
                 .ekin = log or calc_ekin,
                 .epot = log or calc_epot,
+
+                .temp = (log and has_thermo) or write.temperature != null,
             };
 
             calc.ekin = calc.ekin or write.total_energy != null;
@@ -528,6 +554,10 @@ fn Observables(comptime T: type) type {
 
             if (calc.epot) {
                 obs.epot = try sim.ensemble.epot(sim.elpoten, time, sim.gb.adia, coefs, gpa);
+            }
+
+            if (calc.temp) {
+                obs.temp = sim.ensemble.temp();
             }
 
             return obs;
@@ -552,6 +582,7 @@ fn Propagator(comptime T: type) type {
         };
 
         namd: ?Namd = null,
+        thermo: ?Thermostat(T) = null,
 
         dt: T,
 
@@ -575,7 +606,9 @@ fn Propagator(comptime T: type) type {
                 namd = .{ .ehrenfest = eh };
             };
 
-            return .{ .dt = @floatCast(opt.time_step), .namd = namd };
+            const thermo = if (opt.thermostat) |topt| Thermostat(T).init(topt, @floatCast(opt.time_step)) else null;
+
+            return .{ .dt = @floatCast(opt.time_step), .namd = namd, .thermo = thermo };
         }
 
         /// Deallocates surface hopping resources.
@@ -590,7 +623,15 @@ fn Propagator(comptime T: type) type {
             for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
                 ens.p.ptr(i, j).* += 0.5 * ens.m[j] * ens.a.at(i, j) * self.dt;
 
-                ens.r.ptr(i, j).* += (ens.p.at(i, j) / ens.m[j]) * self.dt;
+                ens.r.ptr(i, j).* += 0.5 * (ens.p.at(i, j) / ens.m[j]) * self.dt;
+            };
+
+            if (self.thermo) |*thermo| {
+                thermo.apply(&ens.p, ens.m);
+            }
+
+            for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
+                ens.r.ptr(i, j).* += 0.5 * (ens.p.at(i, j) / ens.m[j]) * self.dt;
             };
 
             try gb.update(ens.r, pot, time);
@@ -710,6 +751,22 @@ fn checkInvalidInput(opt: Options) !void {
 
         return error.InvalidInput;
     }
+
+    if (opt.thermostat) |topt| switch (topt) {
+        .langevin => |lopt| {
+            if (lopt.temperature < 0) {
+                std.log.err("TEMPERATURE MUST BE NON-NEGATIVE", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (lopt.gamma < 0) {
+                std.log.err("FRICTION COEFFICIENT MUST BE NON-NEGATIVE", .{});
+
+                return error.InvalidInput;
+            }
+        },
+    };
 }
 
 /// Initializes the simulation state, potential, and initial ensemble.
@@ -764,41 +821,73 @@ fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
 }
 
 /// Prints the column headers for the real-time dynamics logging output.
-fn printHeader(io: std.Io, ndim: usize, nstate: usize) !void {
+fn printHeader(io: std.Io, ndim: usize, nstate: usize, has_thermo: bool) !void {
     try std.Io.File.stdout().writeStreamingAll(io, "\nREAL-TIME PROPAGATION");
 
-    const fmt = "\n{[0]s:8} {[1]s:12} {[2]s:12} {[3]s:12} {[4]s:[5]} {[6]s:[7]} {[8]s:[9]} {[10]s:4}\n";
+    if (has_thermo) {
+        const fmt = "\n{[0]s:8} {[1]s:12} {[2]s:12} {[3]s:12} {[4]s:12} {[5]s:[6]} {[7]s:[8]} {[9]s:[10]} {[11]s:4}\n";
 
-    const tuple = .{
-        "ITER",
+        const tuple = .{
+            "ITER",
 
-        "EKIN (Eh)",
-        "EPOT (Eh)",
-        "ETOT (Eh)",
+            "EKIN (Eh)",
+            "EPOT (Eh)",
+            "ETOT (Eh)",
+            "TEMP (K)",
 
-        "POS (a0)",
-        12 * ndim,
+            "POS (a0)",
+            12 * ndim,
 
-        "MOM (hb/a0)",
-        12 * ndim,
+            "MOM (hb/a0)",
+            12 * ndim,
 
-        "POP (-)",
-        11 * nstate,
+            "POP (-)",
+            11 * nstate,
 
-        "TIME",
-    };
+            "TIME",
+        };
 
-    try printf(io, fmt, tuple);
+        try printf(io, fmt, tuple);
+    }
+
+    if (!has_thermo) {
+        const fmt = "\n{[0]s:8} {[1]s:12} {[2]s:12} {[3]s:12} {[4]s:[5]} {[6]s:[7]} {[8]s:[9]} {[10]s:4}\n";
+
+        const tuple = .{
+            "ITER",
+
+            "EKIN (Eh)",
+            "EPOT (Eh)",
+            "ETOT (Eh)",
+
+            "POS (a0)",
+            12 * ndim,
+
+            "MOM (hb/a0)",
+            12 * ndim,
+
+            "POP (-)",
+            11 * nstate,
+
+            "TIME",
+        };
+
+        try printf(io, fmt, tuple);
+    }
 }
 
 /// Prints the current iteration step's physical observables and elapsed time.
-fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, timer: *std.Io.Timestamp) !void {
+fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, has_thermo: bool, timer: *std.Io.Timestamp) !void {
     const ekin = obs.ekin orelse std.math.nan(T);
     const epot = obs.epot orelse std.math.nan(T);
 
     const etot = ekin + epot;
 
     try printf(io, "{d:8} {d:12.6} {d:12.6} {d:12.6} ", .{ i, ekin, epot, etot });
+
+    if (has_thermo) if (obs.temp) |temp| {
+        try printf(io, "{d:12.4} ", .{temp});
+    };
 
     if (obs.pos) |pos| {
         try printf(io, "[", .{});
@@ -839,7 +928,9 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: Allocator) !Observables(T) {
     const ndim, const nstate = .{ ctx.sim.elpoten.ndim(), ctx.sim.elpoten.nstate() };
 
-    if (ctx.log) try printHeader(io, ndim, nstate);
+    const has_thermo = ctx.opt.thermostat != null;
+
+    if (ctx.log) try printHeader(io, ndim, nstate, has_thermo);
 
     var hist = try History(T).init(ndim, nstate, ctx.opt.iterations + 1, ctx.opt.write, gpa);
     defer hist.deinit(gpa);
@@ -855,13 +946,13 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
 
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
-        var obs = try Observables(T).init(ctx.sim.*, time, ctx.opt.write, is_log_step, gpa);
+        var obs = try Observables(T).init(ctx.sim.*, time, ctx.opt.write, is_log_step, has_thermo, gpa);
         defer obs.deinit(gpa);
 
         hist.append(obs);
 
         if (is_log_step) {
-            try printIteration(T, io, obs, i, &timer);
+            try printIteration(T, io, obs, i, has_thermo, &timer);
         }
     }
 
@@ -869,5 +960,5 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
 
     const end_time = @as(T, @floatFromInt(ctx.opt.iterations)) * ctx.opt.time_step;
 
-    return try Observables(T).init(ctx.sim.*, end_time, ctx.opt.write, true, gpa);
+    return try Observables(T).init(ctx.sim.*, end_time, ctx.opt.write, true, has_thermo, gpa);
 }
