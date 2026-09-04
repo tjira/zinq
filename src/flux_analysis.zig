@@ -42,6 +42,16 @@ pub fn FluxAnalysis(comptime T: type) type {
 
             pot.eval(T, V_arr, opt.initial_conditions.position, 0);
 
+            if (opt.j_quantum_number > 0) {
+                const j = @as(T, @floatFromInt(opt.j_quantum_number));
+
+                const m, const r = .{ opt.mass[0], opt.initial_conditions.position[0] };
+
+                for (0..pot.nstate()) |s| {
+                    V_arr[s * pot.nstate() + s] += if (r != 0) j * (j + 1) / (2 * m * r * r) else 0;
+                }
+            }
+
             var Vreact: T = 0;
 
             if (opt.initial_conditions.adiabatic) {

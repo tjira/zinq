@@ -45,7 +45,7 @@ pub fn readMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std
 
         reader.interface.toss(1);
 
-        var line_iterator = std.mem.tokenizeAny(u8, line, " ");
+        var line_iterator = std.mem.tokenizeAny(u8, std.mem.trim(u8, line, "\r"), " ");
 
         while (line_iterator.next()) |element| : (i += 1) {
             A.data[i] = try std.fmt.parseFloat(T, element);

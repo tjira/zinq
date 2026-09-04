@@ -186,6 +186,7 @@ pub fn Hamiltonian(comptime T: type) type {
 
         mass: []const T,
         cylindric: bool,
+        j_quantn: usize,
 
         w_buf: ?[]T,
         u_buf: ?[]T,
@@ -193,7 +194,7 @@ pub fn Hamiltonian(comptime T: type) type {
         r_buf: ?[]T,
 
         /// Allocates and computes kinetic and potential operator matrix elements.
-        pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, optimize_memory: bool, gpa: Allocator) !@This() {
+        pub fn init(grid: Grid(T), pot: Potential(T), m: []const T, j_quantn: u32, optimize_memory: bool, gpa: Allocator) !@This() {
             const mass = try gpa.alloc(T, m.len);
             errdefer gpa.free(mass);
 
@@ -221,7 +222,7 @@ pub fn Hamiltonian(comptime T: type) type {
                 ham.U = null;
                 ham.K = null;
 
-                ham.mass, ham.cylindric = .{ mass, grid.cylindrical };
+                ham.mass, ham.cylindric, ham.j_quantn = .{ mass, grid.cylindrical, j_quantn };
 
                 ham.w_buf = w_buf;
                 ham.u_buf = u_buf;
@@ -262,7 +263,7 @@ pub fn Hamiltonian(comptime T: type) type {
             ham.U = U;
             ham.K = K;
 
-            ham.mass, ham.cylindric = .{ mass, grid.cylindrical };
+            ham.mass, ham.cylindric, ham.j_quantn = .{ mass, grid.cylindrical, j_quantn };
 
             ham.w_buf = null;
             ham.u_buf = null;
@@ -321,6 +322,18 @@ pub fn Hamiltonian(comptime T: type) type {
 
                     for (0..pot.nstate()) |s| {
                         self.V.?.ptr(i, s * pot.nstate() + s).* -= if (r != 0) 1 / (8 * m * r * r) else 0;
+                    }
+                }
+            }
+
+            if (self.j_quantn > 0) {
+                const j, const m = .{ @as(T, @floatFromInt(self.j_quantn)), self.mass[0] };
+
+                for (0..grid.nrow()) |i| {
+                    const r = grid.getR(i, 0);
+
+                    for (0..pot.nstate()) |s| {
+                        self.V.?.ptr(i, s * pot.nstate() + s).* += if (r != 0) j * (j + 1) / (2 * m * r * r) else 0;
                     }
                 }
             }
@@ -386,6 +399,16 @@ pub fn Hamiltonian(comptime T: type) type {
 
                 for (0..pot.nstate()) |s| {
                     buffer[s * pot.nstate() + s] -= if (r != 0) 1 / (8 * m * r * r) else 0;
+                }
+            }
+
+            if (self.j_quantn > 0) {
+                const j = @as(T, @floatFromInt(self.j_quantn));
+
+                const r, const m = .{ grid.getR(i, 0), self.mass[0] };
+
+                for (0..pot.nstate()) |s| {
+                    buffer[s * pot.nstate() + s] += if (r != 0) j * (j + 1) / (2 * m * r * r) else 0;
                 }
             }
 

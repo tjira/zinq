@@ -31,6 +31,7 @@ pub const Options = struct {
     time_step: f64,
     iterations: u32,
     mass: []const f64,
+    j_quantum_number: u32 = 0,
 
     write: Write = .{},
 
@@ -1065,7 +1066,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         mass[i] = @floatCast(m);
     }
 
-    var ham = try Hamiltonian(T).init(grid, pot, mass, !opt.memory.potential, gpa);
+    var ham = try Hamiltonian(T).init(grid, pot, mass, opt.j_quantum_number, !opt.memory.potential, gpa);
     errdefer ham.deinit(gpa);
 
     var prop = try Propagator(T).init(grid, ham, pot, opt.absorbing_potential, dt, !opt.memory.propagator, gpa);
