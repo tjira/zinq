@@ -886,7 +886,7 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, h
     try printf(io, "{d:8} {d:12.6} {d:12.6} {d:12.6} ", .{ i, ekin, epot, etot });
 
     if (has_thermo) if (obs.temp) |temp| {
-        try printf(io, "{d:12.4} ", .{temp});
+        try printf(io, "{d:12.2} ", .{temp});
     };
 
     if (obs.pos) |pos| {
