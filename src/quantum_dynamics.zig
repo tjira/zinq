@@ -100,6 +100,19 @@ pub const PartialWaveOptions = struct {
     } = .{},
 };
 
+/// File paths for exporting time-dependent wavefunctions and expectation values to disk.
+const Write = struct {
+    acf: ?[]const u8 = null,
+    kinetic_energy: ?[]const u8 = null,
+    momentum: ?[]const u8 = null,
+    norm: ?[]const u8 = null,
+    population: ?[]const u8 = null,
+    position: ?[]const u8 = null,
+    potential_energy: ?[]const u8 = null,
+    total_energy: ?[]const u8 = null,
+    wavefunction: ?[]const u8 = null,
+};
+
 /// Stores accumulated quantum observables and cross sections from wavepacket propagation.
 pub fn Result(comptime T: type) type {
     return struct {
@@ -121,19 +134,6 @@ pub fn Result(comptime T: type) type {
         }
     };
 }
-
-/// File paths for exporting time-dependent wavefunctions and expectation values to disk.
-const Write = struct {
-    acf: ?[]const u8 = null,
-    kinetic_energy: ?[]const u8 = null,
-    momentum: ?[]const u8 = null,
-    norm: ?[]const u8 = null,
-    population: ?[]const u8 = null,
-    position: ?[]const u8 = null,
-    potential_energy: ?[]const u8 = null,
-    total_energy: ?[]const u8 = null,
-    wavefunction: ?[]const u8 = null,
-};
 
 /// Accumulates time-dependent wavefunctions, autocorrelation functions, and expectation values.
 fn History(comptime T: type) type {

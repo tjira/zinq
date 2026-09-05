@@ -133,7 +133,6 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
     };
 }
 
-
 /// Generates the Butcher Tableau coefficients for the first-order Euler method.
 fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {
     return .{

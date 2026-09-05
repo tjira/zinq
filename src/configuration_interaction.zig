@@ -80,6 +80,13 @@ pub const GradientOptions = union(enum) {
     },
 };
 
+/// Output file destinations for CI geometry, gradients, and Hessians.
+const Write = struct {
+    geometry: ?[]const u8 = null,
+    gradient: ?[]const u8 = null,
+    hessian: ?[]const u8 = null,
+};
+
 /// Holds CI results: reference SCF results, state energies, wavefunctions, and optional nuclear derivatives.
 pub fn Result(comptime T: type) type {
     return struct {
@@ -114,13 +121,6 @@ pub fn Result(comptime T: type) type {
         }
     };
 }
-
-/// Output file destinations for CI geometry, gradients, and Hessians.
-const Write = struct {
-    geometry: ?[]const u8 = null,
-    gradient: ?[]const u8 = null,
-    hessian: ?[]const u8 = null,
-};
 
 /// Generates excited Slater determinants up to specified excitation levels from a Hartree-Fock reference.
 pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Allocator) !std.ArrayList([]const usize) {

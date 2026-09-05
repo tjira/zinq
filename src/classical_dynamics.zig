@@ -271,7 +271,6 @@ pub fn Result(comptime T: type) type {
     };
 }
 
-
 /// Helper struct managing memory for potential energy gradients and wavefunctions.
 fn GradientBuffer(comptime T: type) type {
     return struct {

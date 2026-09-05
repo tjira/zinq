@@ -16,6 +16,19 @@ pub const Options = union(enum) {
     landau_zener: LandauZenerOptions,
 };
 
+/// Options configuration for Tully's fewest switches surface hopping.
+const FewestSwitchesOptions = struct {
+    integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
+
+    seed: u32 = 1,
+    nstep: u32 = 10,
+};
+
+/// Options configuration for Landau-Zener surface hopping.
+const LandauZenerOptions = struct {
+    seed: u32 = 1,
+};
+
 /// Implements nonadiabatic state transitions via surface hopping algorithms.
 pub fn SurfaceHopping(comptime T: type) type {
     return struct {
@@ -186,19 +199,6 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
     };
 }
-
-/// Options configuration for Tully's fewest switches surface hopping.
-const FewestSwitchesOptions = struct {
-    integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
-
-    seed: u32 = 1,
-    nstep: u32 = 10,
-};
-
-/// Options configuration for Landau-Zener surface hopping.
-const LandauZenerOptions = struct {
-    seed: u32 = 1,
-};
 
 /// Implements Tully's fewest switches surface hopping algorithm.
 fn FewestSwitches(comptime T: type) type {

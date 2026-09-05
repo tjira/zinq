@@ -104,6 +104,16 @@ pub const GradientOptions = union(enum) {
     },
 };
 
+/// File paths for exporting computed SCF matrices and geometries.
+const Write = struct {
+    coefficients: ?[]const u8 = null,
+    density: ?[]const u8 = null,
+    fock: ?[]const u8 = null,
+    geometry: ?[]const u8 = null,
+    gradient: ?[]const u8 = null,
+    hessian: ?[]const u8 = null,
+};
+
 /// Output molecular orbitals, density, Fock matrix, orbital energies, and gradients from an SCF calculation.
 pub fn Result(comptime T: type) type {
     return struct {
@@ -161,16 +171,6 @@ fn ScfWorkspace(comptime T: type) type {
         e: *Vector(T),
     };
 }
-
-/// File paths for exporting computed SCF matrices and geometries.
-const Write = struct {
-    coefficients: ?[]const u8 = null,
-    density: ?[]const u8 = null,
-    fock: ?[]const u8 = null,
-    geometry: ?[]const u8 = null,
-    gradient: ?[]const u8 = null,
-    hessian: ?[]const u8 = null,
-};
 
 /// Direct Inversion in the Iterative Subspace (DIIS) to accelerate Fock matrix convergence via error minimization.
 pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
@@ -922,4 +922,3 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
 
     return e_new;
 }
-

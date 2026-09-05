@@ -13,16 +13,6 @@ const Vector = @import("tensor.zig").Vector;
 const eighBatch = @import("linear_algebra.zig").eighBatch;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 
-/// Initial parameters of the wavepacket including position, momentum, and Gaussian width.
-pub const InitialConditions = struct {
-    position: []const f64,
-    momentum: []const f64,
-    gamma: []const f64,
-
-    state: u32 = 0,
-    adiabatic: bool = false,
-};
-
 /// Generates a multidimensional discrete coordinate and momentum space grid.
 pub fn Grid(comptime T: type) type {
     return struct {
@@ -122,24 +112,6 @@ pub fn Grid(comptime T: type) type {
             gpa.free(self.lim);
         }
 
-        /// Calculates the grid coordinate value along dimension j at grid index i.
-        pub fn getR(self: @This(), i: usize, j: usize) T {
-            if (self.r) |r| return r.at(i, j);
-
-            const exponent, var div: usize = .{ self.lim.len - j - 1, 1 };
-
-            for (0..exponent) |_| {
-                div *= self.npoint;
-            }
-
-            const n_idx = (i / div) % self.npoint;
-
-            const min = self.lim[j][0];
-            const max = self.lim[j][1];
-
-            return min + @as(T, @floatFromInt(n_idx)) * (max - min) / @as(T, @floatFromInt(self.npoint));
-        }
-
         /// Calculates the momentum space coordinate along dimension j at grid index i.
         pub fn getK(self: @This(), i: usize, j: usize) T {
             if (self.k) |k| return k.at(i, j);
@@ -160,11 +132,22 @@ pub fn Grid(comptime T: type) type {
             return (if (n_idx < self.npoint / 2) n else n - @as(T, @floatFromInt(self.npoint))) * dki;
         }
 
-        /// Returns the total number of grid points in the discrete coordinates space.
-        pub fn nrow(self: @This()) usize {
-            if (self.r) |r| return r.nrow();
+        /// Calculates the grid coordinate value along dimension j at grid index i.
+        pub fn getR(self: @This(), i: usize, j: usize) T {
+            if (self.r) |r| return r.at(i, j);
 
-            return std.math.pow(usize, self.npoint, self.lim.len);
+            const exponent, var div: usize = .{ self.lim.len - j - 1, 1 };
+
+            for (0..exponent) |_| {
+                div *= self.npoint;
+            }
+
+            const n_idx = (i / div) % self.npoint;
+
+            const min = self.lim[j][0];
+            const max = self.lim[j][1];
+
+            return min + @as(T, @floatFromInt(n_idx)) * (max - min) / @as(T, @floatFromInt(self.npoint));
         }
 
         /// Returns the number of dimensions/axes in the multi-dimensional grid.
@@ -172,6 +155,13 @@ pub fn Grid(comptime T: type) type {
             if (self.r) |r| return r.ncol();
 
             return self.lim.len;
+        }
+
+        /// Returns the total number of grid points in the discrete coordinates space.
+        pub fn nrow(self: @This()) usize {
+            if (self.r) |r| return r.nrow();
+
+            return std.math.pow(usize, self.npoint, self.lim.len);
         }
     };
 }
@@ -290,6 +280,73 @@ pub fn Hamiltonian(comptime T: type) type {
             if (self.K) |*K| K.deinit(gpa);
         }
 
+        /// Returns the kinetic energy expectation value at grid index i.
+        pub fn getK(self: @This(), grid: Grid(T), i: usize) T {
+            if (self.K) |K| return K.at(i);
+
+            var sum: T = 0;
+
+            for (0..grid.ncol()) |j| {
+                const kij = grid.getK(i, j);
+
+                sum += 0.5 * kij * kij / self.mass[j];
+            }
+
+            return sum;
+        }
+
+        /// Computes or retrieves eigenvalues and eigenvectors at grid index i.
+        pub fn getTriple(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) !struct { []const T, []const T, []const T } {
+            if (self.U) |U| {
+                return .{ self.W.?.rowSlice(i), U.rowSlice(i), self.V.?.rowSlice(i) };
+            }
+
+            const w = self.w_buf.?;
+            const u = self.u_buf.?;
+            const v = self.v_buf.?;
+
+            _ = self.getV(grid, pot, t, i);
+
+            try eighSlice(T, w, u, v);
+
+            return .{ w, u, v };
+        }
+
+        /// Computes or retrieves potential energy matrix elements at grid coordinate index i.
+        pub fn getV(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) []const T {
+            if (self.V) |V| return V.rowSlice(i);
+
+            const buffer, const r_coords = .{ self.v_buf.?, self.r_buf.? };
+
+            for (0..grid.ncol()) |j| {
+                r_coords[j] = grid.getR(i, j);
+            }
+
+            pot.eval(T, buffer, r_coords, t);
+
+            if (self.cylindric) {
+                const radial_idx = grid.ncol() - 1;
+
+                const r, const m = .{ grid.getR(i, radial_idx), self.mass[radial_idx] };
+
+                for (0..pot.nstate()) |s| {
+                    buffer[s * pot.nstate() + s] -= if (r != 0) 1 / (8 * m * r * r) else 0;
+                }
+            }
+
+            if (self.j_quantn > 0) {
+                const j = @as(T, @floatFromInt(self.j_quantn));
+
+                const r, const m = .{ grid.getR(i, 0), self.mass[0] };
+
+                for (0..pot.nstate()) |s| {
+                    buffer[s * pot.nstate() + s] += if (r != 0) j * (j + 1) / (2 * m * r * r) else 0;
+                }
+            }
+
+            return buffer;
+        }
+
         /// Updates potential energy values and diagonalizes to get adiabatic states.
         pub fn update(self: *@This(), grid: Grid(T), pot: Potential(T), t: T, gpa: Allocator) !void {
             if (self.V == null) return;
@@ -364,75 +421,18 @@ pub fn Hamiltonian(comptime T: type) type {
                 };
             };
         }
-
-        /// Returns the kinetic energy expectation value at grid index i.
-        pub fn getK(self: @This(), grid: Grid(T), i: usize) T {
-            if (self.K) |K| return K.at(i);
-
-            var sum: T = 0;
-
-            for (0..grid.ncol()) |j| {
-                const kij = grid.getK(i, j);
-
-                sum += 0.5 * kij * kij / self.mass[j];
-            }
-
-            return sum;
-        }
-
-        /// Computes or retrieves potential energy matrix elements at grid coordinate index i.
-        pub fn getV(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) []const T {
-            if (self.V) |V| return V.rowSlice(i);
-
-            const buffer, const r_coords = .{ self.v_buf.?, self.r_buf.? };
-
-            for (0..grid.ncol()) |j| {
-                r_coords[j] = grid.getR(i, j);
-            }
-
-            pot.eval(T, buffer, r_coords, t);
-
-            if (self.cylindric) {
-                const radial_idx = grid.ncol() - 1;
-
-                const r, const m = .{ grid.getR(i, radial_idx), self.mass[radial_idx] };
-
-                for (0..pot.nstate()) |s| {
-                    buffer[s * pot.nstate() + s] -= if (r != 0) 1 / (8 * m * r * r) else 0;
-                }
-            }
-
-            if (self.j_quantn > 0) {
-                const j = @as(T, @floatFromInt(self.j_quantn));
-
-                const r, const m = .{ grid.getR(i, 0), self.mass[0] };
-
-                for (0..pot.nstate()) |s| {
-                    buffer[s * pot.nstate() + s] += if (r != 0) j * (j + 1) / (2 * m * r * r) else 0;
-                }
-            }
-
-            return buffer;
-        }
-
-        /// Computes or retrieves eigenvalues and eigenvectors at grid index i.
-        pub fn getTriple(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) !struct { []const T, []const T, []const T } {
-            if (self.U) |U| {
-                return .{ self.W.?.rowSlice(i), U.rowSlice(i), self.V.?.rowSlice(i) };
-            }
-
-            const w = self.w_buf.?;
-            const u = self.u_buf.?;
-            const v = self.v_buf.?;
-
-            _ = self.getV(grid, pot, t, i);
-
-            try eighSlice(T, w, u, v);
-
-            return .{ w, u, v };
-        }
     };
 }
+
+/// Initial parameters of the wavepacket including position, momentum, and Gaussian width.
+pub const InitialConditions = struct {
+    position: []const f64,
+    momentum: []const f64,
+    gamma: []const f64,
+
+    state: u32 = 0,
+    adiabatic: bool = false,
+};
 
 /// Representation of a multi-state wavepacket and its Fourier transform plans.
 pub fn Wavefunction(comptime T: type) type {

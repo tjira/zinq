@@ -73,6 +73,13 @@ pub const GradientOptions = union(enum) {
     },
 };
 
+/// Destination paths for outputting Moller-Plesset geometries, gradients, and Hessians.
+const Write = struct {
+    geometry: ?[]const u8 = null,
+    gradient: ?[]const u8 = null,
+    hessian: ?[]const u8 = null,
+};
+
 /// Holds Moller-Plesset calculation outputs: HF reference result, perturbation energies, and derivatives.
 pub fn Result(comptime T: type) type {
     return struct {
@@ -103,13 +110,6 @@ pub fn Result(comptime T: type) type {
         }
     };
 }
-
-/// Destination paths for outputting Moller-Plesset geometries, gradients, and Hessians.
-const Write = struct {
-    geometry: ?[]const u8 = null,
-    gradient: ?[]const u8 = null,
-    hessian: ?[]const u8 = null,
-};
 
 /// Executes a Møller-Plesset calculation on a molecular system specified by file paths.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {

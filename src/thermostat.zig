@@ -5,38 +5,17 @@ const std = @import("std");
 const AU2K = @import("constant.zig").AU2K;
 const Matrix = @import("tensor.zig").Matrix;
 
+/// Tagged union for thermostat configuration options.
+pub const Options = union(enum) {
+    langevin: LangevinOptions,
+};
+
 /// Configuration options for the Langevin thermostat.
 pub const LangevinOptions = struct {
     temperature: f64,
     gamma: f64 = 1,
     seed: u32 = 1,
 };
-
-/// Tagged union for thermostat configuration options.
-pub const Options = union(enum) {
-    langevin: LangevinOptions,
-};
-
-/// Generic thermostat wrapper providing unified interface for canonical ensemble sampling.
-pub fn Thermostat(comptime T: type) type {
-    return union(enum) {
-        langevin: Langevin(T),
-
-        /// Initializes the configured thermostat method.
-        pub fn init(opt: Options, dt: T) @This() {
-            return switch (opt) {
-                .langevin => |lopt| .{ .langevin = Langevin(T).init(lopt, dt) },
-            };
-        }
-
-        /// Applies the thermalization update to the trajectory ensemble momenta.
-        pub fn apply(self: *@This(), p: *Matrix(T), m: []const T) void {
-            switch (self.*) {
-                inline else => |*t| t.apply(p, m),
-            }
-        }
-    };
-}
 
 /// Implements Langevin dynamics thermalization via Ornstein-Uhlenbeck stochastic integration.
 pub fn Langevin(comptime T: type) type {
@@ -63,6 +42,27 @@ pub fn Langevin(comptime T: type) type {
             for (0..p.nrow()) |i| for (0..p.ncol()) |j| {
                 p.ptr(i, j).* = self.c1 * p.at(i, j) + self.c2 * @sqrt(m[j]) * random.floatNorm(T);
             };
+        }
+    };
+}
+
+/// Generic thermostat wrapper providing unified interface for canonical ensemble sampling.
+pub fn Thermostat(comptime T: type) type {
+    return union(enum) {
+        langevin: Langevin(T),
+
+        /// Initializes the configured thermostat method.
+        pub fn init(opt: Options, dt: T) @This() {
+            return switch (opt) {
+                .langevin => |lopt| .{ .langevin = Langevin(T).init(lopt, dt) },
+            };
+        }
+
+        /// Applies the thermalization update to the trajectory ensemble momenta.
+        pub fn apply(self: *@This(), p: *Matrix(T), m: []const T) void {
+            switch (self.*) {
+                inline else => |*t| t.apply(p, m),
+            }
         }
     };
 }

@@ -223,11 +223,6 @@ pub fn Value(comptime T: type) type {
     };
 }
 
-/// Returns the underlying primitive float type (e.g. f64) of a scalar, complex, or dual number.
-pub fn primType(comptime T: type) type {
-    return if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
-}
-
 /// Returns true if the type T is a complex number representation.
 pub fn isComplex(comptime T: type) bool {
     if (@typeInfo(T) == .@"struct") {
@@ -244,6 +239,11 @@ pub fn isDual(comptime T: type) bool {
     }
 
     return false;
+}
+
+/// Returns the underlying primitive float type (e.g. f64) of a scalar, complex, or dual number.
+pub fn primType(comptime T: type) type {
+    return if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
 }
 
 /// Returns true if the type T is a native floating-point type.

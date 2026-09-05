@@ -16,6 +16,7 @@
 - **Simplicity & Scope:** Minimize the number of function arguments (group related parameters into structs if necessary) and strictly limit the number of local variables defined in a given scope.
 - **File Organization:** Define all structs before any functions. If an `Options` struct is present in the file, it must always be the first struct, along with all the other options structs that are in the parent `Options` struct. The strict top-to-bottom order for the file level must be public structs, followed by private structs, then public functions, and finally private functions. The structs and functions must be defined alphabetically by name within their respective categories.
 - **Struct Organization:** Within any struct definition, place all state and fields at the top, followed by all public functions, and finally all private functions. All the functions (public and private) must be defined alphabetically by name. The order of fields within a struct is not constrained. But in structs, first function will always be init (followed by other initialization functions) and second function will always be deinit, if they exist.
+- **Empty Lines:** Do not leave empty lines at the end of files and always keep exactly one empty line between functions or structs.
 
 ## Documentation & Markdown Style
 - **Math Delimiters:** Ensure the `$$` block delimiters are always placed on separate lines and surrounded by empty lines for proper rendering.

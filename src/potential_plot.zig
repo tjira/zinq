@@ -28,6 +28,11 @@ pub const Options = struct {
     write: Write = .{},
 };
 
+/// File paths for saving potential energy grid values.
+const Write = struct {
+    potential: ?[]const u8 = null,
+};
+
 /// Result containing the evaluated potential energy matrix.
 pub fn Result(comptime T: type) type {
     return struct {
@@ -38,11 +43,6 @@ pub fn Result(comptime T: type) type {
         }
     };
 }
-
-/// File paths for saving potential energy grid values.
-const Write = struct {
-    potential: ?[]const u8 = null,
-};
 
 /// Evaluates the potential on a grid, diagonalizes if adiabatic, and writes the output.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
