@@ -517,6 +517,8 @@ fn PartialWaveContext(comptime T: type) type {
         pub fn worker(self: *@This(), io: std.Io, opt: Options, log: bool, gpa: Allocator, thread_sigma: ?*Matrix(T)) void {
             const pw, const g = .{ opt.partial_waves.?, opt.partial_waves.?.statistical_factor };
 
+            const dj = @as(T, @floatFromInt(pw.j_step));
+
             var arena = std.heap.ArenaAllocator.init(gpa);
             defer arena.deinit();
 
@@ -569,7 +571,7 @@ fn PartialWaveContext(comptime T: type) type {
                         sigma.* = Matrix(T).initZero(s_j.nrow(), s_j.ncol(), gpa) catch continue;
                     }
 
-                    const factor = g * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
+                    const factor = dj * g * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
 
                     for (0..s_j.nrow()) |ei| {
                         const E = fa.e_min + @as(T, @floatFromInt(ei)) * fa.e_step;
@@ -1234,6 +1236,26 @@ fn checkInvalidInput(opt: Options) !void {
             std.log.err("CYLINDRICAL SIMULATION REQUIRES SYMMETRIC RADIAL GRID BOUNDS", .{});
 
             return error.InvalidInput;
+        }
+
+        if (opt.initial_conditions.position[radial_dim] != 0) {
+            std.log.err("CYLINDRICAL SIMULATION REQUIRES RADIAL POSITION TO BE ZERO", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (opt.initial_conditions.momentum[radial_dim] != 0) {
+            std.log.err("CYLINDRICAL SIMULATION REQUIRES RADIAL MOMENTUM TO BE ZERO", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (opt.absorbing_potential) |cap| {
+            if (cap.bounds[radial_dim][0] != -cap.bounds[radial_dim][1]) {
+                std.log.err("CYLINDRICAL SIMULATION REQUIRES SYMMETRIC RADIAL ABSORBING POTENTIAL BOUNDS", .{});
+
+                return error.InvalidInput;
+            }
         }
     }
 }
