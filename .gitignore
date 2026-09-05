@@ -16,6 +16,7 @@
 /zinq.egg-info/
 
 /.env.fish
+/.env.ps1
 /.env.sh
 /zigar
 /zigcc
@@ -29,7 +30,6 @@
 /*.mat
 /*.old
 /*.pdb
-/*.ps1
 /*.svg
 /*.txt
 /*.xz

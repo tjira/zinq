@@ -23,6 +23,19 @@ const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
+/// Configuration options for sweeping and summing over partial waves J.
+pub const PartialWaveOptions = struct {
+    j_min: u32 = 0,
+    j_max: u32,
+    j_step: u32 = 1,
+    statistical_factor: f64 = 1,
+    log_interval: u32 = 1,
+    threads: ?u32 = null,
+    write: struct {
+        cross_section: ?[]const u8 = null,
+    } = .{},
+};
+
 /// Configuration options for split-operator quantum dynamics wavepacket propagation on a grid.
 pub const Options = struct {
     initial_conditions: InitialConditions,
@@ -32,6 +45,7 @@ pub const Options = struct {
     iterations: u32,
     mass: []const f64,
     j_quantum_number: u32 = 0,
+    partial_waves: ?PartialWaveOptions = null,
 
     write: Write = .{},
 
@@ -86,10 +100,12 @@ pub const Options = struct {
     } = null,
 };
 
-/// Stores accumulated quantum observables over the course of wavepacket propagation.
+/// Stores accumulated quantum observables and cross sections from wavepacket propagation.
 pub fn Result(comptime T: type) type {
     return struct {
         observables: std.ArrayList(Observables(T)),
+
+        cross_section: ?Matrix(T) = null,
 
         /// Deallocates memory associated with the quantum dynamics results.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -98,6 +114,10 @@ pub fn Result(comptime T: type) type {
             }
 
             self.observables.deinit(gpa);
+
+            if (self.cross_section) |*cs| {
+                cs.deinit(gpa);
+            }
         }
     };
 }
@@ -271,7 +291,7 @@ fn History(comptime T: type) type {
         }
 
         /// Writes the accumulated history and calculated spectra to output files.
-        pub fn exportWrite(self: *@This(), io: std.Io, grid: Grid(T), opt: Options, pot: Potential(T), gpa: Allocator) !void {
+        pub fn exportWrite(self: *@This(), io: std.Io, grid: Grid(T), opt: Options, pot: Potential(T), gpa: Allocator) !?Matrix(T) {
             const dt, const end = .{ opt.time_step, opt.time_step * @as(T, @floatFromInt(self.index - 1)) };
 
             if (opt.write.acf) |path| {
@@ -346,17 +366,23 @@ fn History(comptime T: type) type {
                 }
             }
 
+            var result_sigma: ?Matrix(T) = null;
+
             if (opt.flux_analysis) |flux_opt| {
                 var fa = try FluxAnalysis(T).init(opt, pot, gpa);
                 defer fa.deinit(gpa);
 
                 var sigma = try fa.run(grid, self.wfn_init.?, self.flux_acc.?, gpa);
-                defer sigma.deinit(gpa);
+                errdefer sigma.deinit(gpa);
 
                 if (flux_opt.write.cross_section) |path| {
                     try writeMatrixLspace(T, io, path, sigma, flux_opt.e_min, flux_opt.e_max);
                 }
+
+                result_sigma = sigma;
             }
+
+            return result_sigma;
         }
     };
 }
@@ -839,9 +865,181 @@ fn SolveContext(comptime T: type) type {
     return struct { opt: Options, sim: *SimulationState(T), eigs: usize, log: bool };
 }
 
+/// Thread-safe counters and lock for parallel partial wave distribution.
+fn PartialWaveContext(comptime T: type) type {
+    return struct {
+        next_j: std.atomic.Value(u32),
+
+        completed: std.atomic.Value(u32) = .init(0),
+        mutx: std.atomic.Value(bool) = .init(false),
+
+        timer: std.Io.Timestamp,
+
+        /// Propagates partial wavepackets concurrently and accumulates state-resolved reaction cross sections.
+        pub fn worker(self: *@This(), io: std.Io, opt: Options, log: bool, gpa: Allocator, thread_sigma: ?*Matrix(T)) void {
+            const pw, const g = .{ opt.partial_waves.?, opt.partial_waves.?.statistical_factor };
+
+            var arena = std.heap.ArenaAllocator.init(gpa);
+            defer arena.deinit();
+
+            const tasks = (pw.j_max - pw.j_min) / pw.j_step + 1;
+
+            while (true) {
+                const j = self.next_j.fetchAdd(pw.j_step, .monotonic);
+
+                if (j > pw.j_max) break;
+
+                _ = arena.reset(.retain_capacity);
+
+                var opt_j = opt;
+
+                opt_j.j_quantum_number = j;
+                opt_j.partial_waves = null;
+
+                const alloc = arena.allocator();
+
+                inline for (std.meta.fields(@TypeOf(opt_j.write))) |field| {
+                    if (@field(opt_j.write, field.name)) |p| {
+                        @field(opt_j.write, field.name) = injectAngularFname(p, j, alloc) catch null;
+                    }
+                }
+
+                if (opt_j.flux_analysis) |*fa| if (fa.write.cross_section) |p| {
+                    fa.write.cross_section = injectAngularFname(p, j, alloc) catch null;
+                };
+
+                var sim = init(T, io, opt_j, alloc) catch {
+                    std.log.err("FAILED TO INITIALIZE SIMULATION FOR J={d}", .{ j });
+
+                    continue;
+                };
+
+                defer sim.deinit(alloc);
+
+                var res = solve(T, io, .{ .opt = opt_j, .sim = &sim, .eigs = 0, .log = false }, alloc) catch {
+                    std.log.err("SIMULATION FAILED FOR J={d}", .{ j });
+
+                    continue;
+                };
+
+                defer res.deinit(alloc);
+
+                if (res.cross_section) |*s_j| if (thread_sigma) |sigma| {
+                    const fa = opt.flux_analysis.?;
+
+                    if (sigma.data.len == 0) {
+                        sigma.* = Matrix(T).initZero(s_j.nrow(), s_j.ncol(), gpa) catch continue;
+                    }
+
+                    const factor = g * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
+
+                    for (0..s_j.nrow()) |ei| {
+                        const E = fa.e_min + @as(T, @floatFromInt(ei)) * fa.e_step;
+
+                        if (E <= 0) continue;
+
+                        for (0..s_j.ncol()) |col| {
+                            sigma.ptr(ei, col).* += (factor / E) * s_j.at(ei, col);
+                        }
+                    }
+                };
+
+                const done = self.completed.fetchAdd(1, .monotonic) + 1;
+
+                if (log and (done == 1 or done % pw.log_interval == 0 or done == tasks)) {
+                    while (self.mutx.swap(true, .acquire)) {
+                        std.Thread.yield() catch {};
+                    }
+
+                    const elapsed = self.timer.untilNow(io, .real);
+
+                    printf(io, "[{d:05}/{d:05}] {d:07} {f}\n", .{ done, tasks, j, elapsed }) catch {};
+
+                    self.timer = std.Io.Timestamp.now(io, .real);
+
+                    self.mutx.store(false, .release);
+                }
+            }
+        }
+    };
+}
+
+/// Computes total reactive cross sections by summing partial wave contributions across angular momentum states.
+fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    const pw = opt.partial_waves.?;
+
+    const nthreads = @min(pw.threads orelse 1, (pw.j_max - pw.j_min) / pw.j_step + 1);
+
+    if (nthreads < 1) {
+        std.log.err("PARTIAL WAVES THREAD COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (log) {
+        const params = .{ pw.j_min, pw.j_max, pw.j_step, nthreads };
+
+        try printf(io, "\nPARTIAL-WAVES RUNS FROM J={d} TO J={d} WITH STEP {d} USING {d} THREADS\n", params);
+
+        try printf(io, "{s:13} {s:7} {s}\n", .{ "SIMULATION", "J", "TIME" });
+    }
+
+    const thread_sigmas = if (pw.write.cross_section != null) try gpa.alloc(Matrix(T), nthreads) else null;
+
+    defer if (thread_sigmas) |sigmas| {
+        for (sigmas) |*s| if (s.data.len > 0) s.deinit(gpa);
+
+        gpa.free(sigmas);
+    };
+
+    if (thread_sigmas) |sigmas| for (sigmas) |*s| {
+        s.* = .{ .data = &.{}, .shape = .{ 0, 0 } };
+    };
+
+    var ctx = PartialWaveContext(T){ .next_j = .init(pw.j_min), .timer = std.Io.Timestamp.now(io, .real) };
+
+    if (nthreads == 1) {
+        ctx.worker(io, opt, log, gpa, if (thread_sigmas) |sigmas| &sigmas[0] else null);
+    }
+
+    if (nthreads > 1) {
+        var threads = try gpa.alloc(std.Thread, nthreads);
+        defer gpa.free(threads);
+
+        for (0..nthreads) |t| {
+            const sigma = if (thread_sigmas) |sigmas| &sigmas[t] else null;
+
+            threads[t] = try std.Thread.spawn(.{}, PartialWaveContext(T).worker, .{ &ctx, io, opt, log, gpa, sigma });
+        }
+
+        for (threads) |t| t.join();
+    }
+
+    var total: ?Matrix(T) = null;
+    errdefer if (total) |*t| t.deinit(gpa);
+
+    if (thread_sigmas) |sigmas| for (sigmas) |s| if (s.data.len > 0) {
+        if (total == null) total = try Matrix(T).initZero(s.nrow(), s.ncol(), gpa);
+
+        for (0..s.data.len) |i| total.?.data[i] += s.data[i];
+    };
+
+    if (total) |t| if (pw.write.cross_section) |cs| {
+        const fa = opt.flux_analysis.?;
+
+        try writeMatrixLspace(T, io, cs, t, fa.e_min, fa.e_max);
+    };
+
+    return Result(T){ .observables = .empty, .cross_section = total };
+}
+
 /// Executes the grid-based split-operator wavepacket propagation simulation.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
+
+    if (opt.partial_waves != null) {
+        return try runPartialWaves(T, io, opt, log, gpa);
+    }
 
     var result: Result(T) = .{ .observables = .empty };
     errdefer result.deinit(gpa);
@@ -856,14 +1054,25 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 
     for (0..if (opt.imaginary) |imag| imag.nstate else 1) |i| {
-        var obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i, .log = log }, gpa);
-        errdefer obs.deinit(gpa);
+        var res = try solve(T, io, .{ .opt = opt, .sim = &sim, .eigs = i, .log = log }, gpa);
+        errdefer res.deinit(gpa);
 
         if (i < if (opt.imaginary) |imag| imag.nstate else 0) {
             var cloned = try sim.wfn.clone(gpa);
             errdefer cloned.deinit(gpa);
 
             try sim.orthw.append(gpa, cloned);
+        }
+
+        var obs = res.observables.swapRemove(0);
+        errdefer obs.deinit(gpa);
+
+        res.observables.deinit(gpa);
+
+        if (res.cross_section) |cs| {
+            if (result.cross_section) |*old| old.deinit(gpa);
+
+            result.cross_section = cs;
         }
 
         try result.observables.append(gpa, obs);
@@ -880,6 +1089,38 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
 /// Validates grid bounds, time step, and initial conditions for quantum dynamics.
 fn checkInvalidInput(opt: Options) !void {
+    if (opt.partial_waves) |pw| {
+        if (pw.j_min > pw.j_max) {
+            std.log.err("PARTIAL WAVES J_MIN MUST BE LESS THAN OR EQUAL TO J_MAX", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (pw.j_step == 0) {
+            std.log.err("PARTIAL WAVES J_STEP MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (pw.statistical_factor <= 0) {
+            std.log.err("PARTIAL WAVES STATISTICAL FACTOR MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (pw.log_interval == 0) {
+            std.log.err("PARTIAL WAVES LOG INTERVAL MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (opt.flux_analysis == null) {
+            std.log.err("PARTIAL WAVES REQUIRE FLUX ANALYSIS TO BE CONFIGURED", .{});
+
+            return error.InvalidInput;
+        }
+    }
+
     if (opt.time_step <= 0) {
         std.log.err("TIME STEP MUST BE GREATER THAN 0", .{});
 
@@ -1023,6 +1264,12 @@ fn checkInvalidInput(opt: Options) !void {
     }
 
     if (opt.grid.cylindrical) {
+        if (opt.j_quantum_number != 0 or opt.partial_waves != null) {
+            std.log.err("CYLINDRICAL SIMULATION DOES NOT SUPPORT NONZERO J QUANTUM NUMBER", .{});
+
+            return error.InvalidInput;
+        }
+
         if (opt.grid.bounds.len < 2) {
             std.log.err("CYLINDRICAL SIMULATION REQUIRES AT LEAST 2 GRID DIMENSIONS", .{});
 
@@ -1194,7 +1441,7 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
 }
 
 /// Propagates the wavepacket over the specified iterations using split-operator steps.
-fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Observables(T) {
+fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Result(T) {
     const ndim, const nstate, const npoint = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate(), ctx.opt.grid.npoint };
 
     const neig = if (ctx.opt.imaginary) |imag| imag.nstate else 1;
@@ -1276,16 +1523,39 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Ob
                 var stop_o = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, obst, gpa);
                 defer stop_o.deinit(gpa);
 
-                if (!is_log_step) try printIteration(T, io, stop_o, i, &timer);
+                if (ctx.log and !is_log_step) try printIteration(T, io, stop_o, i, &timer);
 
                 break;
             }
         };
     }
 
-    try hist.exportWrite(io, ctx.sim.wfn_kpgrids, ctx.opt, ctx.sim.epoten, gpa);
+    const maybe_sigma = try hist.exportWrite(io, ctx.sim.wfn_kpgrids, ctx.opt, ctx.sim.epoten, gpa);
+
+    var result: Result(T) = .{ .observables = .empty, .cross_section = maybe_sigma };
+    errdefer result.deinit(gpa);
 
     const time = @as(T, @floatFromInt(ctx.opt.iterations)) * ctx.opt.time_step;
 
-    return try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, time, gpa);
+    var obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, time, gpa);
+    errdefer obs.deinit(gpa);
+
+    try result.observables.append(gpa, obs);
+
+    return result;
+}
+
+/// Injects the J partial wave index into output filenames.
+pub fn injectAngularFname(path: []const u8, j: u32, allocator: Allocator) ![]const u8 {
+    if (std.mem.indexOf(u8, path, "{J}")) |idx| {
+        return try std.fmt.allocPrint(allocator, "{s}{d}{s}", .{ path[0..idx], j, path[idx + 3 ..] });
+    }
+
+    const last_dot = std.mem.lastIndexOfScalar(u8, path, '.');
+
+    if (last_dot) |dot_idx| {
+        return try std.fmt.allocPrint(allocator, "{s}_J{d}{s}", .{ path[0..dot_idx], j, path[dot_idx..] });
+    }
+
+    return try std.fmt.allocPrint(allocator, "{s}_J{d}", .{ path, j });
 }

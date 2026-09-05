@@ -1,8 +1,12 @@
 //! Wrapper around FFTW for performing fast Fourier transforms on multi-dimensional complex arrays.
 
+const std = @import("std");
+
 const fftw = @cImport(@cInclude("fftw3.h"));
 
 const primType = @import("value.zig").primType;
+
+var fftw_lock = std.atomic.Value(bool).init(false);
 
 /// Returns an FFT plan type that encapsulates execution details for discrete Fourier transforms.
 pub fn FftPlan(comptime T: type) type {
@@ -17,19 +21,31 @@ pub fn FftPlan(comptime T: type) type {
 
             const ptr = @as([*c]fftw.fftw_complex, @ptrCast(arr.ptr));
 
+            lockFftw();
+
             const plan = fftw.fftw_plan_dft(@intCast(shape.len), shape.ptr, ptr, ptr, sign, mode);
+
+            unlockFftw();
 
             return .{ .plan = plan orelse return error.PlanCreationFailed, .sign = sign };
         }
 
         /// Destroys the FFTW plan, releasing all internal resources and plans.
         pub fn deinit(self: @This()) void {
+            lockFftw();
+
             fftw.fftw_destroy_plan(self.plan);
+
+            unlockFftw();
         }
 
         /// Creates a duplicate of the existing FFTW plan with identical transform properties.
         pub fn clone(self: @This()) !@This() {
+            lockFftw();
+
             const plan = fftw.fftw_copy_plan(self.plan);
+
+            unlockFftw();
 
             return .{ .plan = plan orelse return error.PlanDuplicationFailed, .sign = self.sign };
         }
@@ -46,4 +62,16 @@ pub fn FftPlan(comptime T: type) type {
             };
         }
     };
+}
+
+/// Locks the FFTW library for thread-safe operations, preventing concurrent access to shared resources.
+fn lockFftw() void {
+    while (fftw_lock.swap(true, .acquire)) {
+        std.Thread.yield() catch {};
+    }
+}
+
+/// Unlocks the FFTW library, allowing other threads to access shared resources after completing operations.
+fn unlockFftw() void {
+    fftw_lock.store(false, .release);
 }

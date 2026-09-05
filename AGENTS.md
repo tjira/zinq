@@ -14,8 +14,8 @@
 - **Function Signatures:** Never wrap function signatures or split function arguments across multiple lines. A function signature must remain on a single line regardless of length; if necessary, prefer a longer line.
 - **Docstrings:** Every new file, struct, or function must have a physically or mathematically motivated docstring of maximal 150 characters. For file-level docstrings, always leave exactly one empty line below it.
 - **Simplicity & Scope:** Minimize the number of function arguments (group related parameters into structs if necessary) and strictly limit the number of local variables defined in a given scope.
-- **File Organization:** Define all structs before any functions. The strict top-to-bottom order for the file level must be public structs, followed by private structs, then public functions, and finally private functions.
-- **Struct Organization:** Within any struct definition, place all state and fields at the top, followed by all public functions, and finally all private functions.
+- **File Organization:** Define all structs before any functions. The strict top-to-bottom order for the file level must be public structs, followed by private structs, then public functions, and finally private functions. The structs and functions must be defined alphabetically by name within their respective categories.
+- **Struct Organization:** Within any struct definition, place all state and fields at the top, followed by all public functions, and finally all private functions. All the functions (public and private) must be defined alphabetically by name. The order of fields within a struct is not constrained. But in structs, first function will always be init (followed by other initialization functions) and second function will always be deinit, if they exist.
 
 ## Documentation & Markdown Style
 - **Math Delimiters:** Ensure the `$$` block delimiters are always placed on separate lines and surrounded by empty lines for proper rendering.
