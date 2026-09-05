@@ -2,8 +2,6 @@
 
 const std = @import("std");
 
-const fftw = @import("cimport.zig").fftw;
-
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
@@ -115,7 +113,7 @@ pub fn FluxAnalysis(comptime T: type) type {
         }
 
         /// Computes transition probabilities by integrating flux of energy-resolved wavefunctions at a dividing surface.
-        pub fn run(self: @This(), grid: Grid(T), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), gpa: Allocator) !Matrix(T) {
+        pub fn run(self: @This(), grid: Grid(T), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), plans: [2]FftPlan(Complex(T)), gpa: Allocator) !Matrix(T) {
             var npoint: usize = 1;
 
             while (try std.math.powi(usize, npoint, grid.ncol()) != grid.nrow()) {
@@ -130,18 +128,7 @@ pub fn FluxAnalysis(comptime T: type) type {
             var temp_phi = try gpa.alloc(Complex(T), grid.nrow());
             defer gpa.free(temp_phi);
 
-            const shape = try gpa.alloc(i32, grid.ncol());
-            defer gpa.free(shape);
-
-            for (0..grid.ncol()) |i| {
-                shape[i] = @as(i32, @intCast(npoint));
-            }
-
-            const ffft_plan = try FftPlan(Complex(T)).init(temp_phi, shape, -1, fftw.FFTW_ESTIMATE);
-            defer ffft_plan.deinit();
-
-            const ifft_plan = try FftPlan(Complex(T)).init(temp_phi, shape, 1, fftw.FFTW_ESTIMATE);
-            defer ifft_plan.deinit();
+            const ffft_plan, const ifft_plan = plans;
 
             for (0..grid.ncol()) |d| {
                 const s_d = std.math.pow(usize, npoint, grid.ncol() - 1 - d);

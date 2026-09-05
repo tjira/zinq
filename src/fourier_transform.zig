@@ -12,6 +12,7 @@ var fftw_lock = std.atomic.Value(bool).init(false);
 pub fn FftPlan(comptime T: type) type {
     return struct {
         plan: fftw.fftw_plan,
+        isowner: bool = true,
 
         sign: i32,
 
@@ -32,6 +33,8 @@ pub fn FftPlan(comptime T: type) type {
 
         /// Destroys the FFTW plan, releasing all internal resources and plans.
         pub fn deinit(self: @This()) void {
+            if (!self.isowner) return;
+
             lockFftw();
 
             fftw.fftw_destroy_plan(self.plan);
@@ -41,6 +44,8 @@ pub fn FftPlan(comptime T: type) type {
 
         /// Creates a duplicate of the existing FFTW plan with identical transform properties.
         pub fn clone(self: @This()) !@This() {
+            if (!self.isowner) return self;
+
             lockFftw();
 
             const plan = fftw.fftw_copy_plan(self.plan);
@@ -60,6 +65,15 @@ pub fn FftPlan(comptime T: type) type {
                 arr[i].re /= @as(f64, @floatFromInt(arr.len));
                 arr[i].im /= @as(f64, @floatFromInt(arr.len));
             };
+        }
+
+        /// Returns a non-owning copy of the FFT plan that will not destroy the underlying plan on deinit.
+        pub fn unowned(self: @This()) @This() {
+            var copy = self;
+
+            copy.isowner = false;
+
+            return copy;
         }
     };
 }
