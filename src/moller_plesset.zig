@@ -33,14 +33,6 @@ const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 
 const AU2CM = @import("constant.zig").AU2CM;
 
-/// Options for computing Moller-Plesset energy gradients analytically or numerically.
-pub const GradientOptions = union(enum) {
-    analytic: struct {},
-    numeric: struct {
-        step: f64 = 1e-5,
-    },
-};
-
 /// Parameters governing the Møller-Plesset perturbation theory calculation and its derivatives.
 pub const Options = struct {
     hartree_fock: HartreeFockOptions,
@@ -71,6 +63,14 @@ pub const Options = struct {
             step: f64 = 1e-5,
         },
     } = null,
+};
+
+/// Options for computing Moller-Plesset energy gradients analytically or numerically.
+pub const GradientOptions = union(enum) {
+    analytic: struct {},
+    numeric: struct {
+        step: f64 = 1e-5,
+    },
 };
 
 /// Holds Moller-Plesset calculation outputs: HF reference result, perturbation energies, and derivatives.
@@ -342,6 +342,30 @@ fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Al
     return grads;
 }
 
+/// Computes the nuclear Hessian of the MP energy numerically and performs harmonic frequency analysis.
+fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
+    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
+    errdefer if (opt.hessian) |_| gpa.free(hess);
+
+    if (opt.hessian) |hessopt| switch (hessopt) {
+        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFn, opt, sys, log, gpa),
+    };
+
+    errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
+
+    if (log and opt.hessian != null) {
+        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
+        defer freqs.deinit(gpa);
+
+        const method_str = try std.fmt.allocPrint(gpa, "MP{d} NUMERIC", .{opt.order});
+        defer gpa.free(method_str);
+
+        try printHarmonicFrequencies(T, io, freqs, method_str);
+    }
+
+    return hess;
+}
+
 /// Computes Møller-Plesset energy corrections up to the specified perturbation order.
 fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
     const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
@@ -484,28 +508,4 @@ fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T
     }
 
     return energies;
-}
-
-/// Computes the nuclear Hessian of the MP energy numerically and performs harmonic frequency analysis.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
-    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
-    errdefer if (opt.hessian) |_| gpa.free(hess);
-
-    if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFn, opt, sys, log, gpa),
-    };
-
-    errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
-
-    if (log and opt.hessian != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
-        defer freqs.deinit(gpa);
-
-        const method_str = try std.fmt.allocPrint(gpa, "MP{d} NUMERIC", .{opt.order});
-        defer gpa.free(method_str);
-
-        try printHarmonicFrequencies(T, io, freqs, method_str);
-    }
-
-    return hess;
 }

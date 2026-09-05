@@ -25,18 +25,6 @@ pub const ParsedArgs = struct {
     options: std.StringHashMap([]const u8),
 };
 
-/// Option representations for subcommands executed in physical basis space.
-pub const Subcommand = enum {
-    hf,
-    mp,
-};
-
-/// Represents subcommand arguments mapped to physical actions.
-pub const SubcommandAction = struct {
-    name: Subcommand,
-    args: []const []const u8,
-};
-
 /// Maps input configuration paths and execution flags to the Hamiltonian state space.
 pub const Parser = struct {
     action: Action,
@@ -112,19 +100,6 @@ pub const Parser = struct {
     /// Iteratively simulates physical systems described by the parsed json files.
     pub fn runFiles(io: std.Io, gpa: Allocator, arena: Allocator, files: []const []const u8) !void {
         for (files) |e| try main.run(f64, io, e, gpa, arena);
-    }
-
-    /// Outputs the configuration option spectrum to guide simulation setup.
-    pub fn runHelp(io: std.Io, message: []const u8) !void {
-        try printf(io, "{s}", .{message});
-    }
-
-    /// Enforces specific subcommand constraints on physical parameter evaluation.
-    pub fn runSubcommand(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
-        switch (sub.name) {
-            .hf => try runHartreeFock(io, gpa, arena, sub),
-            .mp => try runMollerPlesset(io, gpa, arena, sub),
-        }
     }
 
     /// Projects CLI subcommand parameters into Hartree-Fock electronic states.
@@ -207,6 +182,11 @@ pub const Parser = struct {
 
         var result = try hartree_fock.run(f64, io, opt, true, gpa);
         defer result.deinit(gpa);
+    }
+
+    /// Outputs the configuration option spectrum to guide simulation setup.
+    pub fn runHelp(io: std.Io, message: []const u8) !void {
+        try printf(io, "{s}", .{message});
     }
 
     /// Projects Hartree-Fock reference states into perturbed Møller-Plesset correlation spaces.
@@ -310,6 +290,46 @@ pub const Parser = struct {
         defer result.deinit(gpa);
     }
 
+    /// Enforces specific subcommand constraints on physical parameter evaluation.
+    pub fn runSubcommand(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
+        switch (sub.name) {
+            .hf => try runHartreeFock(io, gpa, arena, sub),
+            .mp => try runMollerPlesset(io, gpa, arena, sub),
+        }
+    }
+
+    /// Projects the raw command line token sequence into distinct execution pathways.
+    fn parse(args: []const []const u8, allocator: Allocator) !Action {
+        if (args.len <= 1) {
+            const default_files = try allocator.alloc([]const u8, 1);
+
+            default_files[0] = "input.json";
+
+            return .{ .files = default_files };
+        }
+
+        if (std.mem.eql(u8, args[1], "hf")) {
+            return .{ .subcommand = .{ .name = .hf, .args = args[2..] } };
+        }
+
+        if (std.mem.eql(u8, args[1], "mp")) {
+            return .{ .subcommand = .{ .name = .mp, .args = args[2..] } };
+        }
+
+        for (args[1..]) |arg| if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+            return .help;
+        };
+
+        var files: std.ArrayList([]const u8) = .empty;
+        errdefer files.deinit(allocator);
+
+        for (args[1..]) |arg| {
+            try files.append(allocator, arg);
+        }
+
+        return .{ .files = try files.toOwnedSlice(allocator) };
+    }
+
     /// Maps trajectories and options from raw token streams to allowed options in space $\mathcal{P}$.
     fn parseArgs(io: std.Io, args: []const []const u8, allocator: Allocator, comptime allowed: []const []const u8) !ParsedArgs {
         var positional, var options = .{ ArrayList([]const u8).empty, StringHashMap([]const u8).init(allocator) };
@@ -358,36 +378,16 @@ pub const Parser = struct {
 
         return .{ .positional = try positional.toOwnedSlice(allocator), .options = options };
     }
+};
 
-    /// Projects the raw command line token sequence into distinct execution pathways.
-    fn parse(args: []const []const u8, allocator: Allocator) !Action {
-        if (args.len <= 1) {
-            const default_files = try allocator.alloc([]const u8, 1);
+/// Option representations for subcommands executed in physical basis space.
+pub const Subcommand = enum {
+    hf,
+    mp,
+};
 
-            default_files[0] = "input.json";
-
-            return .{ .files = default_files };
-        }
-
-        if (std.mem.eql(u8, args[1], "hf")) {
-            return .{ .subcommand = .{ .name = .hf, .args = args[2..] } };
-        }
-
-        if (std.mem.eql(u8, args[1], "mp")) {
-            return .{ .subcommand = .{ .name = .mp, .args = args[2..] } };
-        }
-
-        for (args[1..]) |arg| if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
-            return .help;
-        };
-
-        var files: std.ArrayList([]const u8) = .empty;
-        errdefer files.deinit(allocator);
-
-        for (args[1..]) |arg| {
-            try files.append(allocator, arg);
-        }
-
-        return .{ .files = try files.toOwnedSlice(allocator) };
-    }
+/// Represents subcommand arguments mapped to physical actions.
+pub const SubcommandAction = struct {
+    name: Subcommand,
+    args: []const []const u8,
 };

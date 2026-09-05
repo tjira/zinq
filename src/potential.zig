@@ -151,6 +151,135 @@ pub fn Potential(comptime T: type) type {
     };
 }
 
+/// Returns a custom potential type parsed from analytical string expressions.
+fn Custom(comptime T: type) type {
+    return struct {
+        expressions: []const Expression(T),
+
+        is_td: bool,
+        r_vals: []T,
+
+        /// Parses custom potential matrix expressions for a given coordinate dimension.
+        pub fn init(dim: usize, matrix: []const []const []const u8, is_td: bool, allocator: Allocator) !@This() {
+            for (0..matrix.len) |i| {
+                if (matrix[i].len != matrix.len) return error.NonSquareMatrix;
+            }
+
+            const exprs = try allocator.alloc(Expression(T), matrix.len * matrix.len);
+            errdefer allocator.free(exprs);
+
+            for (0..matrix.len) |i| for (0..matrix.len) |j| {
+                exprs[i * matrix.len + j] = Expression(T).init(matrix[i][j], dim) catch |err| {
+                    for (0..(i * matrix.len + j)) |k| {
+                        exprs[k].deinit();
+                    }
+
+                    return err;
+                };
+            };
+
+            errdefer for (0..matrix.len * matrix.len) |i| {
+                exprs[i].deinit();
+            };
+
+            return .{ .expressions = exprs, .r_vals = try allocator.alloc(T, dim), .is_td = is_td };
+        }
+
+        /// Frees parsed expression resources and internal coordinate buffer.
+        pub fn deinit(self: *@This(), allocator: Allocator) void {
+            allocator.free(self.r_vals);
+
+            for (self.expressions) |expr| {
+                expr.deinit();
+            }
+
+            allocator.free(self.expressions);
+        }
+
+        /// Evaluates custom potentials by parsing expressions using ExprTk.
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) void {
+            if (comptime U == T) for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
+                V[i * self.nstate() + j] = self.expressions[i * self.nstate() + j].evaluate_d0(r, t);
+            };
+
+            if (comptime isDual(U)) {
+                for (0..r.len) |i| {
+                    self.r_vals[i] = r[i].val;
+                }
+
+                for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
+                    const expr, var der: T = .{ self.expressions[i * self.nstate() + j], 0 };
+
+                    for (0..r.len) |k| {
+                        der += expr.evaluate_d1(self.r_vals, t.val, k) * r[k].der;
+                    }
+
+                    if (t.der != 0) {
+                        der += expr.evaluate_d1(self.r_vals, t.val, r.len) * t.der;
+                    }
+
+                    V[i * self.nstate() + j] = U.init(expr.evaluate_d0(self.r_vals, t.val), der);
+                };
+            }
+
+            if (comptime U != T and !isDual(U)) {
+                @compileError("UNSUPPORTED NUMBER TYPE FOR CUSTOM POTENTIAL");
+            }
+        }
+
+        pub fn isTd(self: @This()) bool {
+            return self.is_td;
+        }
+
+        pub fn ndim(self: @This()) usize {
+            return self.r_vals.len;
+        }
+
+        pub fn nstate(self: @This()) usize {
+            return std.math.sqrt(self.expressions.len);
+        }
+    };
+}
+
+/// Returns a potential type interpolated from grid data stored in a file.
+fn File(comptime T: type) type {
+    return struct {
+        U: Matrix(T),
+        ndims: usize,
+
+        /// Reads the potential grid data from the given file path.
+        pub fn init(ndims: usize, path: []const u8, io: std.Io, gpa: Allocator) !@This() {
+            return .{ .U = try readMatrix(T, io, path, gpa), .ndims = ndims };
+        }
+
+        /// Deallocates the stored potential grid matrix.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.U.deinit(gpa);
+        }
+
+        /// Evaluates the potential via multilinear interpolation of grid values.
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+            for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
+                const col = i * self.nstate() + j;
+
+                V[col] = lerp(T, U, self.U, self.ndim() + col, r);
+            };
+        }
+
+        pub fn isTd(_: @This()) bool {
+            return false;
+        }
+
+        pub fn ndim(self: @This()) usize {
+            return self.ndims;
+        }
+
+        pub fn nstate(self: @This()) usize {
+            return std.math.sqrt(self.U.ncol() - self.ndim());
+        }
+    };
+}
+
 /// Returns a harmonic potential energy surface type parameterized by force constants k.
 fn Harmonic(comptime T: type) type {
     return struct {
@@ -269,6 +398,91 @@ fn JahnTeller(comptime T: type) type {
 
         pub fn nstate(_: @This()) usize {
             return 2;
+        }
+    };
+}
+
+/// Returns a linear vibronic coupling (LVC) potential energy surface type parameterized in eV and cm^-1.
+fn Lvc(comptime T: type) type {
+    return struct {
+        frequencies: []const T,
+        kap: []const []const T,
+
+        excitation_energies: []const T,
+        lmb: []const []const []const T,
+
+        /// Initializes the linear vibronic coupling potential with frequencies, excitations, and coupling constants.
+        pub fn init(frequencies: []const T, exc_en: []const T, kappa: []const []const T, lambda: []const []const []const T) @This() {
+            std.debug.assert(kappa.len == exc_en.len);
+
+            for (kappa) |row| {
+                std.debug.assert(row.len == frequencies.len);
+            }
+
+            std.debug.assert(lambda.len == exc_en.len);
+
+            for (lambda) |row| {
+                std.debug.assert(row.len == exc_en.len);
+
+                for (row) |col| {
+                    std.debug.assert(col.len == frequencies.len);
+                }
+            }
+
+            return .{ .frequencies = frequencies, .excitation_energies = exc_en, .kap = kappa, .lmb = lambda };
+        }
+
+        /// Evaluates the vibronic coupling potential matrix in Hartree at dimensionless normal coordinates r.
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+            std.debug.assert(V.len == self.nstate() * self.nstate());
+
+            var v0 = Value(U).fromFloat(0);
+
+            for (0..self.frequencies.len) |i| {
+                const q = Value(U).init(r[i]);
+
+                v0 = v0.add(q.mul(q).muls(0.5 * self.frequencies[i] * CM2EV));
+            }
+
+            for (0..self.excitation_energies.len) |n| {
+                var term = Value(U).fromFloat(self.excitation_energies[n]);
+
+                for (0..self.frequencies.len) |i| {
+                    term = term.add(Value(U).init(r[i]).muls(self.kap[n][i]));
+                }
+
+                V[n * self.nstate() + n] = v0.add(term).val;
+            }
+
+            for (0..self.excitation_energies.len) |m| for (m + 1..self.excitation_energies.len) |n| {
+                var term = Value(U).fromFloat(0);
+
+                for (0..self.frequencies.len) |i| {
+                    term = term.add(Value(U).init(r[i]).muls(self.lmb[m][n][i]));
+                }
+
+                V[m * self.nstate() + n] = term.val;
+                V[n * self.nstate() + m] = term.val;
+            };
+
+            for (0..V.len) |i| {
+                V[i] = Value(U).init(V[i]).muls(EV2AU).val;
+            }
+        }
+
+        /// Returns false as this vibronic potential has no explicit time dependence.
+        pub fn isTd(_: @This()) bool {
+            return false;
+        }
+
+        /// Returns the number of normal modes (nuclear degrees of freedom) in the potential.
+        pub fn ndim(self: @This()) usize {
+            return self.frequencies.len;
+        }
+
+        /// Returns the number of electronic states in the non-adiabatic potential representation.
+        pub fn nstate(self: @This()) usize {
+            return self.excitation_energies.len;
         }
     };
 }
@@ -454,220 +668,6 @@ fn Tully3(comptime T: type) type {
         /// Returns the number of electronic states in this model system.
         pub fn nstate(_: @This()) usize {
             return 2;
-        }
-    };
-}
-
-/// Returns a custom potential type parsed from analytical string expressions.
-fn Custom(comptime T: type) type {
-    return struct {
-        expressions: []const Expression(T),
-
-        is_td: bool,
-        r_vals: []T,
-
-        /// Parses custom potential matrix expressions for a given coordinate dimension.
-        pub fn init(dim: usize, matrix: []const []const []const u8, is_td: bool, allocator: Allocator) !@This() {
-            for (0..matrix.len) |i| {
-                if (matrix[i].len != matrix.len) return error.NonSquareMatrix;
-            }
-
-            const exprs = try allocator.alloc(Expression(T), matrix.len * matrix.len);
-            errdefer allocator.free(exprs);
-
-            for (0..matrix.len) |i| for (0..matrix.len) |j| {
-                exprs[i * matrix.len + j] = Expression(T).init(matrix[i][j], dim) catch |err| {
-                    for (0..(i * matrix.len + j)) |k| {
-                        exprs[k].deinit();
-                    }
-
-                    return err;
-                };
-            };
-
-            errdefer for (0..matrix.len * matrix.len) |i| {
-                exprs[i].deinit();
-            };
-
-            return .{ .expressions = exprs, .r_vals = try allocator.alloc(T, dim), .is_td = is_td };
-        }
-
-        /// Frees parsed expression resources and internal coordinate buffer.
-        pub fn deinit(self: *@This(), allocator: Allocator) void {
-            allocator.free(self.r_vals);
-
-            for (self.expressions) |expr| {
-                expr.deinit();
-            }
-
-            allocator.free(self.expressions);
-        }
-
-        /// Evaluates custom potentials by parsing expressions using ExprTk.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) void {
-            if (comptime U == T) for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
-                V[i * self.nstate() + j] = self.expressions[i * self.nstate() + j].evaluate_d0(r, t);
-            };
-
-            if (comptime isDual(U)) {
-                for (0..r.len) |i| {
-                    self.r_vals[i] = r[i].val;
-                }
-
-                for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
-                    const expr, var der: T = .{ self.expressions[i * self.nstate() + j], 0 };
-
-                    for (0..r.len) |k| {
-                        der += expr.evaluate_d1(self.r_vals, t.val, k) * r[k].der;
-                    }
-
-                    if (t.der != 0) {
-                        der += expr.evaluate_d1(self.r_vals, t.val, r.len) * t.der;
-                    }
-
-                    V[i * self.nstate() + j] = U.init(expr.evaluate_d0(self.r_vals, t.val), der);
-                };
-            }
-
-            if (comptime U != T and !isDual(U)) {
-                @compileError("UNSUPPORTED NUMBER TYPE FOR CUSTOM POTENTIAL");
-            }
-        }
-
-        pub fn isTd(self: @This()) bool {
-            return self.is_td;
-        }
-
-        pub fn ndim(self: @This()) usize {
-            return self.r_vals.len;
-        }
-
-        pub fn nstate(self: @This()) usize {
-            return std.math.sqrt(self.expressions.len);
-        }
-    };
-}
-
-/// Returns a potential type interpolated from grid data stored in a file.
-fn File(comptime T: type) type {
-    return struct {
-        U: Matrix(T),
-        ndims: usize,
-
-        /// Reads the potential grid data from the given file path.
-        pub fn init(ndims: usize, path: []const u8, io: std.Io, gpa: Allocator) !@This() {
-            return .{ .U = try readMatrix(T, io, path, gpa), .ndims = ndims };
-        }
-
-        /// Deallocates the stored potential grid matrix.
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.U.deinit(gpa);
-        }
-
-        /// Evaluates the potential via multilinear interpolation of grid values.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
-            for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
-                const col = i * self.nstate() + j;
-
-                V[col] = lerp(T, U, self.U, self.ndim() + col, r);
-            };
-        }
-
-        pub fn isTd(_: @This()) bool {
-            return false;
-        }
-
-        pub fn ndim(self: @This()) usize {
-            return self.ndims;
-        }
-
-        pub fn nstate(self: @This()) usize {
-            return std.math.sqrt(self.U.ncol() - self.ndim());
-        }
-    };
-}
-
-/// Returns a linear vibronic coupling (LVC) potential energy surface type parameterized in eV and cm^-1.
-fn Lvc(comptime T: type) type {
-    return struct {
-        frequencies: []const T,
-        kap: []const []const T,
-
-        excitation_energies: []const T,
-        lmb: []const []const []const T,
-
-        /// Initializes the linear vibronic coupling potential with frequencies, excitations, and coupling constants.
-        pub fn init(frequencies: []const T, exc_en: []const T, kappa: []const []const T, lambda: []const []const []const T) @This() {
-            std.debug.assert(kappa.len == exc_en.len);
-
-            for (kappa) |row| {
-                std.debug.assert(row.len == frequencies.len);
-            }
-
-            std.debug.assert(lambda.len == exc_en.len);
-
-            for (lambda) |row| {
-                std.debug.assert(row.len == exc_en.len);
-
-                for (row) |col| {
-                    std.debug.assert(col.len == frequencies.len);
-                }
-            }
-
-            return .{ .frequencies = frequencies, .excitation_energies = exc_en, .kap = kappa, .lmb = lambda };
-        }
-
-        /// Evaluates the vibronic coupling potential matrix in Hartree at dimensionless normal coordinates r.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
-            std.debug.assert(V.len == self.nstate() * self.nstate());
-
-            var v0 = Value(U).fromFloat(0);
-
-            for (0..self.frequencies.len) |i| {
-                const q = Value(U).init(r[i]);
-
-                v0 = v0.add(q.mul(q).muls(0.5 * self.frequencies[i] * CM2EV));
-            }
-
-            for (0..self.excitation_energies.len) |n| {
-                var term = Value(U).fromFloat(self.excitation_energies[n]);
-
-                for (0..self.frequencies.len) |i| {
-                    term = term.add(Value(U).init(r[i]).muls(self.kap[n][i]));
-                }
-
-                V[n * self.nstate() + n] = v0.add(term).val;
-            }
-
-            for (0..self.excitation_energies.len) |m| for (m + 1..self.excitation_energies.len) |n| {
-                var term = Value(U).fromFloat(0);
-
-                for (0..self.frequencies.len) |i| {
-                    term = term.add(Value(U).init(r[i]).muls(self.lmb[m][n][i]));
-                }
-
-                V[m * self.nstate() + n] = term.val;
-                V[n * self.nstate() + m] = term.val;
-            };
-
-            for (0..V.len) |i| {
-                V[i] = Value(U).init(V[i]).muls(EV2AU).val;
-            }
-        }
-
-        /// Returns false as this vibronic potential has no explicit time dependence.
-        pub fn isTd(_: @This()) bool {
-            return false;
-        }
-
-        /// Returns the number of normal modes (nuclear degrees of freedom) in the potential.
-        pub fn ndim(self: @This()) usize {
-            return self.frequencies.len;
-        }
-
-        /// Returns the number of electronic states in the non-adiabatic potential representation.
-        pub fn nstate(self: @This()) usize {
-            return self.excitation_energies.len;
         }
     };
 }

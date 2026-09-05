@@ -55,6 +55,16 @@ fn ButcherTableau(comptime T: type, comptime STAGES: usize) type {
     };
 }
 
+/// Returns a first-order Runge-Kutta (Euler's method) stepper type.
+fn Rk1(comptime T: type) type {
+    return RungeKutta(T, rk1Tableau(primType(T)));
+}
+
+/// Returns the classical fourth-order Runge-Kutta (RK4) stepper type.
+fn Rk4(comptime T: type) type {
+    return RungeKutta(T, rk4Tableau(primType(T)));
+}
+
 /// Returns a generic Runge-Kutta stepper type for a given scalar type T and Butcher Tableau.
 fn RungeKutta(comptime T: type, comptime tab: anytype) type {
     const U = primType(T);
@@ -123,15 +133,6 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
     };
 }
 
-/// Returns a first-order Runge-Kutta (Euler's method) stepper type.
-fn Rk1(comptime T: type) type {
-    return RungeKutta(T, rk1Tableau(primType(T)));
-}
-
-/// Returns the classical fourth-order Runge-Kutta (RK4) stepper type.
-fn Rk4(comptime T: type) type {
-    return RungeKutta(T, rk4Tableau(primType(T)));
-}
 
 /// Generates the Butcher Tableau coefficients for the first-order Euler method.
 fn rk1Tableau(comptime U: type) ButcherTableau(U, 1) {

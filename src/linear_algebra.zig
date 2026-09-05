@@ -40,6 +40,16 @@ pub fn dot(comptime T: type, x: Vector(T), y: Vector(T)) T {
     return dotSlice(T, x.length(), x.data, y.data);
 }
 
+/// Computes eigenvalues and eigenvectors of a symmetric matrix: V = U * W * U^T.
+pub fn eigh(comptime T: type, W: *Vector(T), U: *Matrix(T), V: Matrix(T)) !void {
+    std.debug.assert(V.ncol() == W.length());
+
+    std.debug.assert(U.nrow() == V.nrow());
+    std.debug.assert(U.ncol() == V.ncol());
+
+    try eighSlice(T, W.data, U.data, V.data);
+}
+
 /// Computes eigenvalues and eigenvectors for a batch of symmetric matrices.
 pub fn eighBatch(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !void {
     std.debug.assert(V.ncol() == W.ncol() * W.ncol());
@@ -55,16 +65,6 @@ pub fn eighBatch(comptime T: type, W: *Matrix(T), U: *Matrix(T), V: Matrix(T)) !
 
         try eighSlice(T, Wi, Ui, Vi);
     }
-}
-
-/// Computes eigenvalues and eigenvectors of a symmetric matrix: V = U * W * U^T.
-pub fn eigh(comptime T: type, W: *Vector(T), U: *Matrix(T), V: Matrix(T)) !void {
-    std.debug.assert(V.ncol() == W.length());
-
-    std.debug.assert(U.nrow() == V.nrow());
-    std.debug.assert(U.ncol() == V.ncol());
-
-    try eighSlice(T, W.data, U.data, V.data);
 }
 
 /// Computes eigenvalues and eigenvectors of a symmetric matrix stored in a contiguous slice.

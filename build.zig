@@ -8,6 +8,104 @@ pub fn build(b: *std.Build) !void {
     setupTests(b, zinq_module);
 }
 
+fn getTriple(b: *std.Build, target: std.Build.ResolvedTarget) ![]const u8 {
+    const triple = .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), @tagName(target.result.abi) };
+
+    return try std.fmt.allocPrint(b.allocator, "{s}-{s}-{s}", triple);
+}
+
+fn getVersion(b: *std.Build) ![]const u8 {
+    const command = .{ "git", "describe", "--tags" };
+
+    const args: std.process.RunOptions = .{ .argv = &command, .cwd = .{ .dir = std.Io.Dir.cwd() } };
+
+    const result = std.process.run(b.allocator, b.graph.io, args) catch {
+        return "UNKNOWN";
+    };
+
+    defer {
+        b.allocator.free(result.stdout);
+        b.allocator.free(result.stderr);
+    }
+
+    if (result.term.exited != 0) {
+        return "UNKNOWN";
+    }
+
+    const version = b.allocator.dupe(u8, std.mem.trim(u8, result.stdout, " \n\r\t")) catch return "UNKNOWN";
+
+    if (std.mem.indexOfScalar(u8, version, '-')) |i| {
+        version[i] = '+';
+
+        if (std.mem.indexOfScalarPos(u8, version, i + 1, '-')) |j| {
+            version[j] = '.';
+        }
+    }
+
+    return version;
+}
+
+fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
+    const dirs = [_][]const u8{ "lib", "include", "include/eigen3" };
+
+    const arch, const os = .{ @tagName(module.resolved_target.?.result.cpu.arch), @tagName(module.resolved_target.?.result.os.tag) };
+
+    const ext = try std.fmt.allocPrint(b.allocator, "external-{s}-{s}", .{ arch, os });
+
+    std.Io.Dir.cwd().access(b.graph.io, ext, .{}) catch |err| {
+        if (err == error.FileNotFound) {
+            std.log.err("REQUIRED DEPENDENCIES DIRECTORY '{s}' DOES NOT EXIST", .{ext});
+        }
+
+        return err;
+    };
+
+    const dir0 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[0] });
+    const dir1 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[1] });
+    const dir2 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[2] });
+
+    module.addIncludePath(b.path("src"));
+
+    const is_windows = module.resolved_target.?.result.os.tag == .windows;
+
+    module.addLibraryPath(.{ .cwd_relative = dir0 });
+    module.addIncludePath(.{ .cwd_relative = dir1 });
+    module.addIncludePath(.{ .cwd_relative = dir2 });
+
+    const flags: []const []const u8 = if (is_windows) &.{"-D__GXX_ABI_VERSION=1004"} else &.{};
+
+    module.addCSourceFile(.{ .file = b.path("src/libint.cpp"), .flags = flags });
+    module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });
+
+    const libs = [_][]const u8{ "fftw3", "int2", "openblas", "xc" };
+
+    for (libs) |lib| {
+        module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static });
+    }
+}
+
+fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
+    const test_module = b.createModule(.{
+        .root_source_file = b.path("test/main.zig"),
+        .target = zinq_module.resolved_target,
+        .strip = zinq_module.strip,
+        .optimize = zinq_module.optimize,
+        .link_libc = zinq_module.link_libc,
+        .link_libcpp = true,
+    });
+
+    test_module.addImport("zinq", zinq_module);
+
+    const exe_test = b.addTest(.{
+        .root_module = test_module,
+        .use_llvm = true,
+    });
+
+    const run_exe_test = b.addRunArtifact(exe_test);
+
+    b.step("test", "Run unit tests").dependOn(&run_exe_test.step);
+}
+
 fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.ResolvedTarget) !*std.Build.Module {
     const zinq_module = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -63,102 +161,4 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
     b.step("docs", "Generate documentation").dependOn(&docs_zinq.step);
 
     return zinq_module;
-}
-
-fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
-    const test_module = b.createModule(.{
-        .root_source_file = b.path("test/main.zig"),
-        .target = zinq_module.resolved_target,
-        .strip = zinq_module.strip,
-        .optimize = zinq_module.optimize,
-        .link_libc = zinq_module.link_libc,
-        .link_libcpp = true,
-    });
-
-    test_module.addImport("zinq", zinq_module);
-
-    const exe_test = b.addTest(.{
-        .root_module = test_module,
-        .use_llvm = true,
-    });
-
-    const run_exe_test = b.addRunArtifact(exe_test);
-
-    b.step("test", "Run unit tests").dependOn(&run_exe_test.step);
-}
-
-fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
-    const dirs = [_][]const u8{ "lib", "include", "include/eigen3" };
-
-    const arch, const os = .{ @tagName(module.resolved_target.?.result.cpu.arch), @tagName(module.resolved_target.?.result.os.tag) };
-
-    const ext = try std.fmt.allocPrint(b.allocator, "external-{s}-{s}", .{ arch, os });
-
-    std.Io.Dir.cwd().access(b.graph.io, ext, .{}) catch |err| {
-        if (err == error.FileNotFound) {
-            std.log.err("REQUIRED DEPENDENCIES DIRECTORY '{s}' DOES NOT EXIST", .{ext});
-        }
-
-        return err;
-    };
-
-    const dir0 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[0] });
-    const dir1 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[1] });
-    const dir2 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[2] });
-
-    module.addIncludePath(b.path("src"));
-
-    const is_windows = module.resolved_target.?.result.os.tag == .windows;
-
-    module.addLibraryPath(.{ .cwd_relative = dir0 });
-    module.addIncludePath(.{ .cwd_relative = dir1 });
-    module.addIncludePath(.{ .cwd_relative = dir2 });
-
-    const flags: []const []const u8 = if (is_windows) &.{"-D__GXX_ABI_VERSION=1004"} else &.{};
-
-    module.addCSourceFile(.{ .file = b.path("src/libint.cpp"), .flags = flags });
-    module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });
-
-    const libs = [_][]const u8{ "fftw3", "int2", "openblas", "xc" };
-
-    for (libs) |lib| {
-        module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static });
-    }
-}
-
-fn getTriple(b: *std.Build, target: std.Build.ResolvedTarget) ![]const u8 {
-    const triple = .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag), @tagName(target.result.abi) };
-
-    return try std.fmt.allocPrint(b.allocator, "{s}-{s}-{s}", triple);
-}
-
-fn getVersion(b: *std.Build) ![]const u8 {
-    const command = .{ "git", "describe", "--tags" };
-
-    const args: std.process.RunOptions = .{ .argv = &command, .cwd = .{ .dir = std.Io.Dir.cwd() } };
-
-    const result = std.process.run(b.allocator, b.graph.io, args) catch {
-        return "UNKNOWN";
-    };
-
-    defer {
-        b.allocator.free(result.stdout);
-        b.allocator.free(result.stderr);
-    }
-
-    if (result.term.exited != 0) {
-        return "UNKNOWN";
-    }
-
-    const version = b.allocator.dupe(u8, std.mem.trim(u8, result.stdout, " \n\r\t")) catch return "UNKNOWN";
-
-    if (std.mem.indexOfScalar(u8, version, '-')) |i| {
-        version[i] = '+';
-
-        if (std.mem.indexOfScalarPos(u8, version, i + 1, '-')) |j| {
-            version[j] = '.';
-        }
-    }
-
-    return version;
 }

@@ -12,6 +12,18 @@ const Tensor = @import("tensor.zig").Tensor;
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 
+/// Configuration parameters specifying molecular geometry, basis sets, spin properties, and task selectors for integral calculation.
+pub const Options = struct {
+    system: []const u8,
+    basis: []const u8,
+
+    calculate: Calculate = .{},
+    write: Write = .{},
+    spin: bool = false,
+    charge: i32 = 0,
+    multiplicity: u32 = 1,
+};
+
 /// Specifier of boolean flags to select which one-electron and two-electron molecular integrals and derivatives to compute.
 const Calculate = struct {
     kinetic: bool = true,
@@ -40,18 +52,6 @@ const Write = struct {
     coulomb_d1: ?[]const u8 = null,
     nuclear_d1: ?[]const u8 = null,
     hmatrix_d1: ?[]const u8 = null,
-};
-
-/// Configuration parameters specifying molecular geometry, basis sets, spin properties, and task selectors for integral calculation.
-pub const Options = struct {
-    system: []const u8,
-    basis: []const u8,
-
-    calculate: Calculate = .{},
-    write: Write = .{},
-    spin: bool = false,
-    charge: i32 = 0,
-    multiplicity: u32 = 1,
 };
 
 /// Returns a generic type representing the calculated molecular integrals and their first-order nuclear derivatives.

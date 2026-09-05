@@ -50,17 +50,6 @@ pub const xc_functional = @import("xc_functional.zig");
 
 const printf = read_write.printf;
 
-/// Simulation runner handlers for classical dynamics, Hartree-Fock, and quantum dynamics.
-const Handlers = struct {
-    pub const classical_dynamics = @import("classical_dynamics.zig");
-    pub const configuration_interaction = @import("configuration_interaction.zig");
-    pub const hartree_fock = @import("hartree_fock.zig");
-    pub const molecular_integrals = @import("molecular_integrals.zig");
-    pub const moller_plesset = @import("moller_plesset.zig");
-    pub const potential_plot = @import("potential_plot.zig");
-    pub const quantum_dynamics = @import("quantum_dynamics.zig");
-};
-
 /// Parsed configuration options representing target molecular dynamics or electronic structure jobs.
 const Options = struct {
     zinq: []union(enum) {
@@ -72,6 +61,17 @@ const Options = struct {
         potential_plot: potential_plot.Options,
         quantum_dynamics: quantum_dynamics.Options,
     },
+};
+
+/// Simulation runner handlers for classical dynamics, Hartree-Fock, and quantum dynamics.
+const Handlers = struct {
+    pub const classical_dynamics = @import("classical_dynamics.zig");
+    pub const configuration_interaction = @import("configuration_interaction.zig");
+    pub const hartree_fock = @import("hartree_fock.zig");
+    pub const molecular_integrals = @import("molecular_integrals.zig");
+    pub const moller_plesset = @import("moller_plesset.zig");
+    pub const potential_plot = @import("potential_plot.zig");
+    pub const quantum_dynamics = @import("quantum_dynamics.zig");
 };
 
 /// Main entry point printing library versions and executing molecular simulation targets.
@@ -105,21 +105,6 @@ pub fn main(init: std.process.Init) !void {
     try printf(init.io, "\nTOTAL EXECUTION TIME: {f}\n", .{timer.untilNow(init.io, .real)});
 }
 
-/// Reads and parses the JSON configuration file containing molecular simulation parameters.
-fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !?std.json.Parsed(T) {
-    const fcontent = std.Io.Dir.cwd().readFileAlloc(io, fname, arena, .unlimited) catch |err| {
-        if (err == error.FileNotFound) {
-            try printf(io, "\nINPUT FILE '{s}' NOT FOUND\n", .{fname});
-
-            return null;
-        }
-
-        return err;
-    };
-
-    return try std.json.parseFromSlice(T, arena, fcontent, .{});
-}
-
 /// Runs the specified electronic structure or molecular dynamics jobs.
 pub fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, arena: Allocator) !void {
     const parsed = try parse(Options, io, fname, arena) orelse return;
@@ -134,4 +119,19 @@ pub fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, aren
             },
         }
     }
+}
+
+/// Reads and parses the JSON configuration file containing molecular simulation parameters.
+fn parse(comptime T: type, io: std.Io, fname: []const u8, arena: Allocator) !?std.json.Parsed(T) {
+    const fcontent = std.Io.Dir.cwd().readFileAlloc(io, fname, arena, .unlimited) catch |err| {
+        if (err == error.FileNotFound) {
+            try printf(io, "\nINPUT FILE '{s}' NOT FOUND\n", .{fname});
+
+            return null;
+        }
+
+        return err;
+    };
+
+    return try std.json.parseFromSlice(T, arena, fcontent, .{});
 }

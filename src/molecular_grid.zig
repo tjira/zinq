@@ -76,16 +76,6 @@ pub fn Becke(comptime T: type) type {
         n_rad: usize,
         n_leb: usize,
 
-        /// Computes the Becke partition coordinate transform step function for atomic cell smoothing.
-        fn beckeStep(mu: T) T {
-            var p = 1.5 * mu - 0.5 * mu * mu * mu;
-
-            p = 1.5 * p - 0.5 * p * p * p;
-            p = 1.5 * p - 0.5 * p * p * p;
-
-            return 0.5 * (1.0 - p);
-        }
-
         /// Generates Becke partitioned grid points and weights for multicenter molecular integration.
         pub fn get(self: @This(), sys: MolecularSystem(T), gpa: Allocator) !struct { Matrix(T), Vector(T) } {
             var centers = std.ArrayList([3]T).empty;
@@ -191,6 +181,16 @@ pub fn Becke(comptime T: type) type {
             };
 
             return .{ pts, wgh };
+        }
+
+        /// Computes the Becke partition coordinate transform step function for atomic cell smoothing.
+        fn beckeStep(mu: T) T {
+            var p = 1.5 * mu - 0.5 * mu * mu * mu;
+
+            p = 1.5 * p - 0.5 * p * p * p;
+            p = 1.5 * p - 0.5 * p * p * p;
+
+            return 0.5 * (1.0 - p);
         }
 
         /// Computes Chebyshev radial quadrature nodes and weights mapped to a physical atomic radius.

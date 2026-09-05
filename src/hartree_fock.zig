@@ -40,14 +40,6 @@ const writeXyzFile = @import("read_write.zig").writeXyzFile;
 const AN2SM = @import("constant.zig").AN2SM;
 const AU2CM = @import("constant.zig").AU2CM;
 
-/// Options for computing the nuclear gradient analytically or numerically.
-pub const GradientOptions = union(enum) {
-    analytic: struct {},
-    numeric: struct {
-        step: f64 = 1e-5,
-    },
-};
-
 /// Parameters governing the self-consistent field (SCF) calculation convergence and method options.
 pub const Options = struct {
     system: []const u8,
@@ -102,6 +94,14 @@ pub const Options = struct {
         threshold: f64 = 1e-8,
         diis: ?u32 = 8,
     } = null,
+};
+
+/// Options for computing the nuclear gradient analytically or numerically.
+pub const GradientOptions = union(enum) {
+    analytic: struct {},
+    numeric: struct {
+        step: f64 = 1e-5,
+    },
 };
 
 /// Output molecular orbitals, density, Fock matrix, orbital energies, and gradients from an SCF calculation.
@@ -626,6 +626,21 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
+/// Exports SCF result matrices to files if corresponding paths are provided.
+fn exportMatrices(comptime T: type, io: std.Io, write: Write, C: Matrix(T), P: Matrix(T), F: Matrix(T)) !void {
+    if (write.coefficients) |fname| {
+        try writeMatrix(T, io, fname, C);
+    }
+
+    if (write.density) |fname| {
+        try writeMatrix(T, io, fname, P);
+    }
+
+    if (write.fock) |fname| {
+        try writeMatrix(T, io, fname, F);
+    }
+}
+
 /// Computes the electronic density matrix from molecular orbital coefficients.
 fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) T {
     std.debug.assert(C.shape[0] == P.shape[0]);
@@ -743,6 +758,29 @@ fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), ge
         F.ptr(i, j).* = avg;
         F.ptr(j, i).* = avg;
     };
+}
+
+/// Computes the nuclear Hessian and performs harmonic frequency analysis.
+fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
+    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
+    errdefer if (opt.hessian) |_| gpa.free(hess);
+
+    if (opt.hessian) |hessopt| switch (hessopt) {
+        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFn, opt, sys, log, gpa),
+    };
+
+    errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
+
+    if (log and opt.hessian != null) {
+        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
+        defer freqs.deinit(gpa);
+
+        const method_str = if (opt.dft != null) "DFT NUMERIC" else "HARTREE-FOCK NUMERIC";
+
+        try printHarmonicFrequencies(T, io, freqs, method_str);
+    }
+
+    return hess;
 }
 
 /// Solves the self-consistent field equations iteratively using a density-driven approach.
@@ -885,40 +923,3 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
     return e_new;
 }
 
-/// Computes the nuclear Hessian and performs harmonic frequency analysis.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
-    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
-    errdefer if (opt.hessian) |_| gpa.free(hess);
-
-    if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFn, opt, sys, log, gpa),
-    };
-
-    errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
-
-    if (log and opt.hessian != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
-        defer freqs.deinit(gpa);
-
-        const method_str = if (opt.dft != null) "DFT NUMERIC" else "HARTREE-FOCK NUMERIC";
-
-        try printHarmonicFrequencies(T, io, freqs, method_str);
-    }
-
-    return hess;
-}
-
-/// Exports SCF result matrices to files if corresponding paths are provided.
-fn exportMatrices(comptime T: type, io: std.Io, write: Write, C: Matrix(T), P: Matrix(T), F: Matrix(T)) !void {
-    if (write.coefficients) |fname| {
-        try writeMatrix(T, io, fname, C);
-    }
-
-    if (write.density) |fname| {
-        try writeMatrix(T, io, fname, P);
-    }
-
-    if (write.fock) |fname| {
-        try writeMatrix(T, io, fname, F);
-    }
-}

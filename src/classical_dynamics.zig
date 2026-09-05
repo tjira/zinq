@@ -25,12 +25,6 @@ const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
 const AU2K = @import("constant.zig").AU2K;
 
-/// Tagged union for multi-state non-adiabatic trajectory propagation methods.
-pub const NonadiabaticOptions = union(enum) {
-    surface_hopping: SurfaceHoppingOptions,
-    ehrenfest: EhrenfestOptions,
-};
-
 /// Configuration options for the classical molecular dynamics simulation.
 pub const Options = struct {
     initial_conditions: InitialConditions,
@@ -47,6 +41,33 @@ pub const Options = struct {
 
     adiabatic: bool = true,
     log_interval: u32 = 1,
+};
+
+/// Tagged union for multi-state non-adiabatic trajectory propagation methods.
+pub const NonadiabaticOptions = union(enum) {
+    surface_hopping: SurfaceHoppingOptions,
+    ehrenfest: EhrenfestOptions,
+};
+
+/// Initial phase space parameters and Gaussian width for trajectory sampling.
+const InitialConditions = struct {
+    position: []const f64,
+    momentum: []const f64,
+    gamma: []const f64,
+
+    state: u32 = 0,
+    seed: u32 = 1,
+};
+
+/// Output paths for recording trajectory observables to disk during dynamics.
+const Write = struct {
+    kinetic_energy: ?[]const u8 = null,
+    momentum: ?[]const u8 = null,
+    population: ?[]const u8 = null,
+    position: ?[]const u8 = null,
+    potential_energy: ?[]const u8 = null,
+    temperature: ?[]const u8 = null,
+    total_energy: ?[]const u8 = null,
 };
 
 /// Generates a representation of a classical trajectory ensemble with positions, momenta, and active states.
@@ -250,26 +271,6 @@ pub fn Result(comptime T: type) type {
     };
 }
 
-/// Initial phase space parameters and Gaussian width for trajectory sampling.
-const InitialConditions = struct {
-    position: []const f64,
-    momentum: []const f64,
-    gamma: []const f64,
-
-    state: u32 = 0,
-    seed: u32 = 1,
-};
-
-/// Output paths for recording trajectory observables to disk during dynamics.
-const Write = struct {
-    kinetic_energy: ?[]const u8 = null,
-    momentum: ?[]const u8 = null,
-    population: ?[]const u8 = null,
-    position: ?[]const u8 = null,
-    potential_energy: ?[]const u8 = null,
-    temperature: ?[]const u8 = null,
-    total_energy: ?[]const u8 = null,
-};
 
 /// Helper struct managing memory for potential energy gradients and wavefunctions.
 fn GradientBuffer(comptime T: type) type {
