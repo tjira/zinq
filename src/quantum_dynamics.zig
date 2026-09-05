@@ -439,11 +439,15 @@ fn Observables(comptime T: type) type {
             var langer: T = 0;
 
             if (sim.hams.cylindric and (calc.epot or calc.ekin)) {
+                const radial_idx = sim.wfn_kpgrids.ncol() - 1;
+
+                const m = sim.hams.mass[radial_idx];
+
                 for (0..sim.wfn.W.nrow()) |s| for (0..sim.wfn.W.rowSlice(s).len) |j| {
-                    const r = sim.wfn_kpgrids.getR(j, 1);
+                    const r = sim.wfn_kpgrids.getR(j, radial_idx);
 
                     if (r != 0) {
-                        langer += sim.wfn.W.at(s, j).squaredMagnitude() / (8 * sim.hams.mass[1] * r * r);
+                        langer += sim.wfn.W.at(s, j).squaredMagnitude() / (8 * m * r * r);
                     }
                 };
 
