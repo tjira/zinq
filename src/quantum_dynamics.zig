@@ -506,7 +506,6 @@ fn Observables(comptime T: type) type {
 fn PartialWaveContext(comptime T: type) type {
     return struct {
         next_j: std.atomic.Value(u32),
-        plans: [2]FftPlan(Complex(T)),
 
         completed: std.atomic.Value(u32) = .init(0),
         mutx: std.atomic.Value(bool) = .init(false),
@@ -548,7 +547,7 @@ fn PartialWaveContext(comptime T: type) type {
                     fa.write.cross_section = injectAngularFname(p, j, alloc) catch null;
                 };
 
-                var sim = init(T, io, opt_j, self.plans, alloc) catch {
+                var sim = init(T, io, opt_j, alloc) catch {
                     std.log.err("FAILED TO INITIALIZE SIMULATION FOR J={d}", .{ j });
 
                     continue;
@@ -1002,7 +1001,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var sim = try init(T, io, opt, null, gpa);
+    var sim = try init(T, io, opt, gpa);
     defer sim.deinit(gpa);
 
     if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
@@ -1261,7 +1260,7 @@ fn checkInvalidInput(opt: Options) !void {
 }
 
 /// Initializes the grid, wavefunction, Hamiltonian, and Fourier plans.
-fn init(comptime T: type, io: std.Io, opt: Options, plans: ?[2]FftPlan(Complex(T)), gpa: Allocator) !SimulationState(T) {
+fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationState(T) {
     var pot = try Potential(T).init(io, opt.potential, gpa);
     errdefer pot.deinit(gpa);
 
@@ -1277,7 +1276,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, plans: ?[2]FftPlan(Complex(T
     var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, opt.grid.cylindrical, !opt.memory.grid, gpa);
     errdefer grid.deinit(gpa);
 
-    var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, plans, gpa);
+    var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);
     errdefer wfn.deinit(gpa);
 
     const mass = try gpa.alloc(T, opt.mass.len);
@@ -1446,20 +1445,9 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
         s.* = .{ .data = &.{}, .shape = .{ 0, 0 } };
     };
 
-    const plan_mode = switch (opt.fft.plan) {
-        .estimate => fftw.FFTW_ESTIMATE,
-        .measure => fftw.FFTW_MEASURE,
-        .patient => fftw.FFTW_PATIENT,
-        .exhaustive => fftw.FFTW_EXHAUSTIVE,
-    };
-
-    var proto_wfn = try Wavefunction(T).init(opt.grid.bounds.len, 1, opt.grid.npoint, plan_mode, null, gpa);
-    defer proto_wfn.deinit(gpa);
-
-    const plans = [2]FftPlan(Complex(T)){ proto_wfn.ffft.unowned(), proto_wfn.ifft.unowned() };
     const timer = std.Io.Timestamp.now(io, .real);
 
-    var ctx = PartialWaveContext(T){ .next_j = .init(pw.j_min), .plans = plans, .timer = timer };
+    var ctx = PartialWaveContext(T){ .next_j = .init(pw.j_min), .timer = timer };
 
     if (nthreads == 1) {
         ctx.worker(io, opt, log, gpa, if (thread_sigmas) |sigmas| &sigmas[0] else null);

@@ -443,32 +443,22 @@ pub fn Wavefunction(comptime T: type) type {
         ifft: FftPlan(Complex(T)),
 
         /// Allocates wavefunction components and plans forward and backward FFTs.
-        pub fn init(ndim: usize, nstate: usize, npoint: usize, plan_mode: u32, plans: ?[2]FftPlan(Complex(T)), gpa: Allocator) !@This() {
+        pub fn init(ndim: usize, nstate: usize, npoint: usize, plan_mode: u32, gpa: Allocator) !@This() {
             var W = try Matrix(Complex(T)).init(nstate, std.math.pow(usize, npoint, ndim), gpa);
             errdefer W.deinit(gpa);
 
-            const shape = if (plans == null) try gpa.alloc(i32, ndim) else null;
-            defer if (shape) |s| gpa.free(s);
+            const shape = try gpa.alloc(i32, ndim);
+            defer gpa.free(shape);
 
-            if (shape) |s| for (0..s.len) |i| {
-                s[i] = @as(i32, @intCast(npoint));
-            };
-
-            var ffft: FftPlan(Complex(T)) = undefined;
-            var ifft: FftPlan(Complex(T)) = undefined;
-
-            if (plans) |p| {
-                ffft = p[0].unowned();
-                ifft = p[1].unowned();
+            for (0..shape.len) |i| {
+                shape[i] = @as(i32, @intCast(npoint));
             }
 
-            if (plans == null) {
-                ffft = try FftPlan(Complex(T)).init(W.rowSlice(0), shape.?, -1, plan_mode);
-                errdefer ffft.deinit();
+            var ffft = try FftPlan(Complex(T)).init(W.rowSlice(0), shape, -1, plan_mode);
+            errdefer ffft.deinit();
 
-                ifft = try FftPlan(Complex(T)).init(W.rowSlice(0), shape.?, 1, plan_mode);
-                errdefer ifft.deinit();
-            }
+            var ifft = try FftPlan(Complex(T)).init(W.rowSlice(0), shape, 1, plan_mode);
+            errdefer ifft.deinit();
 
             return .{ .W = W, .ffft = ffft, .ifft = ifft };
         }
