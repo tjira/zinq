@@ -563,36 +563,60 @@ fn PartialWaveContext(comptime T: type) type {
 
                 defer res.deinit(alloc);
 
-                if (res.cross_section) |*s_j| if (thread_sigma) |sigma| {
+                var p_peak: T, var p_integ: T = .{ 0, 0 };
+
+                if (res.cross_section) |*s_j| {
                     const fa = opt.flux_analysis.?;
 
-                    if (sigma.data.len == 0) {
-                        sigma.* = Matrix(T).initZero(s_j.nrow(), s_j.ncol(), gpa) catch continue;
-                    }
-
-                    const factor = dj * g * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
-
                     for (0..s_j.nrow()) |ei| {
-                        const E = fa.e_min + @as(T, @floatFromInt(ei)) * fa.e_step;
-
-                        if (E <= 0) continue;
+                        var p_row: T = 0;
 
                         for (0..s_j.ncol()) |col| {
-                            sigma.ptr(ei, col).* += (factor / E) * s_j.at(ei, col);
+                            p_row += s_j.at(ei, col);
+                        }
+
+                        if (p_row > p_peak) p_peak = p_row;
+
+                        p_integ += p_row * fa.e_step;
+                    }
+
+                    if (thread_sigma) |sigma| {
+                        if (sigma.data.len == 0) {
+                            sigma.* = Matrix(T).initZero(s_j.nrow(), s_j.ncol(), gpa) catch continue;
+                        }
+
+                        const factor = dj * g * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
+
+                        for (0..s_j.nrow()) |ei| {
+                            const E = fa.e_min + @as(T, @floatFromInt(ei)) * fa.e_step;
+
+                            if (E <= 0) continue;
+
+                            for (0..s_j.ncol()) |col| {
+                                sigma.ptr(ei, col).* += (factor / E) * s_j.at(ei, col);
+                            }
                         }
                     }
-                };
+                }
+
+                const r_0, const m_0 = .{ opt.initial_conditions.position[0], opt.mass[0] };
+
+                const j_flt = @as(T, @floatFromInt(j));
+
+                const v_cent = if (r_0 != 0) j_flt * (j_flt + 1) / (2 * m_0 * r_0 * r_0) else 0;
 
                 const done = self.completed.fetchAdd(1, .monotonic) + 1;
 
-                if (log and (done == 1 or done % pw.log_interval == 0 or done == tasks)) {
+                if (log and (done == 1 or (done - 1) % pw.log_interval == 0 or done == tasks)) {
                     while (self.mutx.swap(true, .acquire)) {
                         std.Thread.yield() catch {};
                     }
 
                     const elapsed = self.timer.untilNow(io, .real);
 
-                    printf(io, "[{d:05}/{d:05}] {d:07} {f}\n", .{ done, tasks, j, elapsed }) catch {};
+                    const fmt = "{d:05} {d:7} {d:12.6} {d:11.6} {d:12.6} {f}\n";
+
+                    printf(io, fmt, .{ done - 1, j, v_cent, p_peak, p_integ, elapsed }) catch {};
 
                     self.timer = std.Io.Timestamp.now(io, .real);
 
@@ -1430,7 +1454,9 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
 
         try printf(io, "\nPARTIAL-WAVES RUNS FROM J={d} TO J={d} WITH STEP {d} USING {d} THREADS\n", params);
 
-        try printf(io, "{s:13} {s:7} {s}\n", .{ "SIMULATION", "J", "TIME" });
+        const cols = .{ "INDEX", "J", "VCENT (Eh)", "PEAK P (-)", "INTEG P (Eh)", "TIME" };
+
+        try printf(io, "{s:5} {s:7} {s:12} {s:11} {s:12} {s}\n", cols);
     }
 
     const thread_sigmas = if (pw.write.cross_section != null) try gpa.alloc(Matrix(T), nthreads) else null;
