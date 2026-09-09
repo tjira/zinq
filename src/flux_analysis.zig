@@ -31,10 +31,8 @@ pub fn FluxAnalysis(comptime T: type) type {
 
         dt: T,
 
-        /// Extracts necessary parameters and computes reactant potential energy directly during initialization.
-        pub fn init(opt: anytype, pot: Potential(T), gpa: Allocator) !@This() {
-            const flux_opt = opt.flux_analysis.?;
-
+        /// Computes the reactant asymptotic threshold energy (potential energy plus transversal zero-point energy).
+        pub fn getThreshold(opt: anytype, pot: Potential(T), gpa: Allocator) !T {
             const V_arr = try gpa.alloc(T, pot.nstate() * pot.nstate());
             defer gpa.free(V_arr);
 
@@ -68,6 +66,23 @@ pub fn FluxAnalysis(comptime T: type) type {
                 Vreact = V_arr[opt.initial_conditions.state * pot.nstate() + opt.initial_conditions.state];
             }
 
+            var e_perp: T = 0;
+
+            for (1..opt.mass.len) |i| {
+                const f_zpe = if (opt.grid.cylindrical and i == opt.mass.len - 1) @as(T, 1) else @as(T, 0.5);
+
+                e_perp += f_zpe * opt.initial_conditions.gamma[i] / opt.mass[i];
+            }
+
+            return Vreact + e_perp;
+        }
+
+        /// Extracts necessary parameters and computes reactant potential energy directly during initialization.
+        pub fn init(opt: anytype, pot: Potential(T), gpa: Allocator) !@This() {
+            const flux_opt = opt.flux_analysis.?;
+
+            const e_thrs = try getThreshold(opt, pot, gpa);
+
             const mass = try gpa.dupe(T, opt.mass);
             errdefer gpa.free(mass);
 
@@ -77,13 +92,7 @@ pub fn FluxAnalysis(comptime T: type) type {
             const f_bounds = try gpa.dupe([2]T, flux_opt.flux_bounds);
             errdefer gpa.free(f_bounds);
 
-            var e_perp: T, var r_perp: T = .{ 0, 1 };
-
-            for (1..opt.mass.len) |i| {
-                const f_zpe = if (opt.grid.cylindrical and i == opt.mass.len - 1) @as(T, 1) else @as(T, 0.5);
-
-                e_perp += f_zpe * opt.initial_conditions.gamma[i] / mass[i];
-            }
+            var r_perp: T = 1;
 
             for (1..gammas.len) |i| if (!(opt.grid.cylindrical and i == gammas.len - 1)) {
                 r_perp *= std.math.sqrt(gammas[i] / std.math.pi);
@@ -96,7 +105,7 @@ pub fn FluxAnalysis(comptime T: type) type {
             ctx.e_min = flux_opt.e_min;
             ctx.e_max = flux_opt.e_max;
 
-            ctx.e_step, ctx.dt, ctx.e_thrs = .{ flux_opt.e_step, opt.time_step, Vreact + e_perp };
+            ctx.e_step, ctx.dt, ctx.e_thrs = .{ flux_opt.e_step, opt.time_step, e_thrs };
             ctx.gmma, ctx.weight, ctx.mass, ctx.flux_bounds = .{ gammas, weight, mass, f_bounds };
 
             ctx.initk = @abs(opt.initial_conditions.momentum[0]);

@@ -376,7 +376,7 @@ fn History(comptime T: type) type {
                 errdefer sigma.deinit(gpa);
 
                 if (flux_opt.write.cross_section) |path| {
-                    try writeMatrixLspace(T, io, path, sigma, flux_opt.e_min, flux_opt.e_max);
+                    try writeMatrixLspace(T, io, path, sigma, flux_opt.e_min - fa.e_thrs, flux_opt.e_max - fa.e_thrs);
                 }
 
                 result_sigma = sigma;
@@ -1505,36 +1505,45 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
 
 /// Propagates the wavepacket over the specified iterations using split-operator steps.
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Result(T) {
-    const ndim, const nstate, const npoint = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate(), ctx.opt.grid.npoint };
+    var opt = ctx.opt;
 
-    const neig = if (ctx.opt.imaginary) |imag| imag.nstate else 1;
+    if (opt.flux_analysis) |*fa| {
+        const e_thrs = try FluxAnalysis(T).getThreshold(opt, ctx.sim.epoten, gpa);
+
+        fa.e_min += e_thrs;
+        fa.e_max += e_thrs;
+    }
+
+    const ndim, const nstate, const npoint = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate(), opt.grid.npoint };
+
+    const neig = if (opt.imaginary) |imag| imag.nstate else 1;
 
     if (ctx.log) try printHeader(io, ctx.eigs, ndim, nstate, neig);
 
-    ctx.sim.wfn.setGaussian(ctx.opt.initial_conditions, ctx.sim.wfn_kpgrids);
+    ctx.sim.wfn.setGaussian(opt.initial_conditions, ctx.sim.wfn_kpgrids);
 
     ctx.sim.pop_apabs.zero();
 
-    const c_acf = ctx.opt.spectrum != null or ctx.opt.write.acf != null;
+    const c_acf = opt.spectrum != null or opt.write.acf != null;
 
-    var hist = try History(T).init(ndim, nstate, npoint, ctx.opt.iterations + 1, ctx.opt.write, c_acf, ctx.opt, gpa);
+    var hist = try History(T).init(ndim, nstate, npoint, opt.iterations + 1, opt.write, c_acf, opt, gpa);
     defer hist.deinit(gpa);
 
-    if (ctx.opt.initial_conditions.adiabatic) {
+    if (opt.initial_conditions.adiabatic) {
         try ctx.sim.wfn.toDia(ctx.sim.hams, ctx.sim.wfn_kpgrids, ctx.sim.epoten, 0, gpa);
     }
 
-    const track_cap_pop = ctx.opt.absorbing_potential != null and ctx.opt.absorbing_potential.?.track_population;
+    const track_cap_pop = opt.absorbing_potential != null and opt.absorbing_potential.?.track_population;
 
     var wfn0 = if (c_acf) try ctx.sim.wfn.clone(gpa) else null;
     defer if (wfn0) |*w| w.deinit(gpa);
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    for (0..ctx.opt.iterations + 1) |i| {
-        const time = (@as(T, @floatFromInt(i)) - 0.5) * ctx.opt.time_step;
+    for (0..opt.iterations + 1) |i| {
+        const time = (@as(T, @floatFromInt(i)) - 0.5) * opt.time_step;
 
-        const ap, const obst = .{ ctx.opt.absorbing_potential, @as(T, @floatFromInt(i)) * ctx.opt.time_step };
+        const ap, const obst = .{ opt.absorbing_potential, @as(T, @floatFromInt(i)) * opt.time_step };
 
         if (i > 0 and ctx.sim.epoten.isTd()) {
             try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, time, gpa);
@@ -1542,9 +1551,9 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Re
             try ctx.sim.propg.update(ctx.sim.wfn_kpgrids, ctx.sim.hams, ctx.sim.epoten, time, ap);
         }
 
-        if (i > 0) try ctx.sim.propg.step(ctx.sim, ap, ctx.opt.adiabatic, track_cap_pop, time, gpa);
+        if (i > 0) try ctx.sim.propg.step(ctx.sim, ap, opt.adiabatic, track_cap_pop, time, gpa);
 
-        if (ctx.opt.imaginary != null) for (0..ctx.sim.orthw.items.len) |j| {
+        if (opt.imaginary != null) for (0..ctx.sim.orthw.items.len) |j| {
             const overlap = ctx.sim.orthw.items[j].overlap(ctx.sim.wfn, ctx.sim.wfn_kpgrids);
 
             for (0..ctx.sim.wfn.W.data.len) |k| {
@@ -1552,24 +1561,24 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Re
             }
         };
 
-        if (ctx.opt.imaginary != null) ctx.sim.wfn.normalize(ctx.sim.wfn_kpgrids);
+        if (opt.imaginary != null) ctx.sim.wfn.normalize(ctx.sim.wfn_kpgrids);
 
-        const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
+        const is_log_step = ctx.log and ((i % opt.log_interval == 0) or (i == opt.iterations));
 
         if (ctx.sim.epoten.isTd()) {
             try ctx.sim.hams.update(ctx.sim.wfn_kpgrids, ctx.sim.epoten, obst, gpa);
         }
 
-        var obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, is_log_step, obst, gpa);
+        var obs = try Observables(T).init(ctx.sim, wfn0, opt.write, opt.adiabatic, is_log_step, obst, gpa);
         defer obs.deinit(gpa);
 
-        const need_a_wfn = (ctx.opt.write.wavefunction != null or ctx.opt.flux_analysis != null) and ctx.opt.adiabatic;
+        const need_a_wfn = (opt.write.wavefunction != null or opt.flux_analysis != null) and opt.adiabatic;
 
         if (need_a_wfn) {
             try ctx.sim.wfn.toAdia(ctx.sim.hams, ctx.sim.wfn_kpgrids, ctx.sim.epoten, obst, gpa);
         }
 
-        hist.append(ctx.sim.wfn, obs, ctx.opt);
+        hist.append(ctx.sim.wfn, obs, opt);
 
         if (need_a_wfn) {
             try ctx.sim.wfn.toDia(ctx.sim.hams, ctx.sim.wfn_kpgrids, ctx.sim.epoten, obst, gpa);
@@ -1579,11 +1588,11 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Re
             try printIteration(T, io, obs, i, &timer);
         }
 
-        if (ctx.opt.absorbing_potential) |cap| if (cap.stop_norm) |stop_norm| {
+        if (opt.absorbing_potential) |cap| if (cap.stop_norm) |stop_norm| {
             const norm = ctx.sim.wfn.norm(ctx.sim.wfn_kpgrids);
 
             if (norm < stop_norm) {
-                var stop_o = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, obst, gpa);
+                var stop_o = try Observables(T).init(ctx.sim, wfn0, opt.write, opt.adiabatic, true, obst, gpa);
                 defer stop_o.deinit(gpa);
 
                 if (ctx.log and !is_log_step) try printIteration(T, io, stop_o, i, &timer);
@@ -1595,14 +1604,14 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Re
 
     const plans = .{ ctx.sim.wfn.ffft, ctx.sim.wfn.ifft };
 
-    const maybe_sigma = try hist.exportWrite(io, ctx.sim.wfn_kpgrids, ctx.opt, ctx.sim.epoten, plans, gpa);
+    const maybe_sigma = try hist.exportWrite(io, ctx.sim.wfn_kpgrids, opt, ctx.sim.epoten, plans, gpa);
 
     var result: Result(T) = .{ .observables = .empty, .cross_section = maybe_sigma };
     errdefer result.deinit(gpa);
 
-    const time = @as(T, @floatFromInt(ctx.opt.iterations)) * ctx.opt.time_step;
+    const time = @as(T, @floatFromInt(opt.iterations)) * opt.time_step;
 
-    var obs = try Observables(T).init(ctx.sim, wfn0, ctx.opt.write, ctx.opt.adiabatic, true, time, gpa);
+    var obs = try Observables(T).init(ctx.sim, wfn0, opt.write, opt.adiabatic, true, time, gpa);
     errdefer obs.deinit(gpa);
 
     try result.observables.append(gpa, obs);
