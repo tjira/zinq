@@ -76,6 +76,8 @@ const Handlers = struct {
 
 /// Main entry point printing library versions and executing molecular simulation targets.
 pub fn main(init: std.process.Init) !void {
+    cimport.cblas.openblas_set_num_threads(1);
+
     var timer = std.Io.Timestamp.now(init.io, .real);
 
     const v_major = builtin.zig_version.major;

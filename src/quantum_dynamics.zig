@@ -547,16 +547,16 @@ fn PartialWaveContext(comptime T: type) type {
                     fa.write.cross_section = injectAngularFname(p, j, alloc) catch null;
                 };
 
-                var sim = init(T, io, opt_j, alloc) catch {
-                    std.log.err("FAILED TO INITIALIZE SIMULATION FOR J={d}", .{ j });
+                var sim = init(T, io, opt_j, alloc) catch |err| {
+                    std.log.err("FAILED TO INITIALIZE SIMULATION FOR J={d} ({s})", .{ j, @errorName(err) });
 
                     continue;
                 };
 
                 defer sim.deinit(alloc);
 
-                var res = solve(T, io, .{ .opt = opt_j, .sim = &sim, .eigs = 0, .log = false }, alloc) catch {
-                    std.log.err("SIMULATION FAILED FOR J={d}", .{ j });
+                var res = solve(T, io, .{ .opt = opt_j, .sim = &sim, .eigs = 0, .log = false }, alloc) catch |err| {
+                    std.log.err("SIMULATION FAILED FOR J={d} ({s})", .{ j, @errorName(err) });
 
                     continue;
                 };

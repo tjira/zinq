@@ -64,13 +64,13 @@ pub fn FftPlan(comptime T: type) type {
 }
 
 /// Locks the FFTW library for thread-safe operations, preventing concurrent access to shared resources.
-fn lockFftw() void {
+pub fn lockFftw() void {
     while (fftw_lock.swap(true, .acquire)) {
         std.Thread.yield() catch {};
     }
 }
 
 /// Unlocks the FFTW library, allowing other threads to access shared resources after completing operations.
-fn unlockFftw() void {
+pub fn unlockFftw() void {
     fftw_lock.store(false, .release);
 }

@@ -7,6 +7,9 @@ const fftw = @import("cimport.zig").fftw;
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
+const lockFftw = @import("fourier_transform.zig").lockFftw;
+const unlockFftw = @import("fourier_transform.zig").unlockFftw;
+
 const Vector = @import("tensor.zig").Vector;
 
 /// Calculates the spectrum by Fourier transforming a windowed and zero-padded autocorrelation function.
@@ -23,8 +26,23 @@ pub fn calcSpectrum(comptime T: type, acf: Vector(Complex(T)), dt: T, padding: u
 
     const err = error.PlanCreationFailed;
 
-    const plan = fftw.fftw_plan_dft_c2r_1d(@intCast(spec.length()), inptr, spec.data.ptr, flags) orelse return err;
-    defer fftw.fftw_destroy_plan(plan);
+    lockFftw();
+
+    const plan = fftw.fftw_plan_dft_c2r_1d(@intCast(spec.length()), inptr, spec.data.ptr, flags) orelse {
+        unlockFftw();
+
+        return err;
+    };
+
+    unlockFftw();
+
+    defer {
+        lockFftw();
+
+        fftw.fftw_destroy_plan(plan);
+
+        unlockFftw();
+    }
 
     for (0..acf.length()) |i| {
         const x = @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(acf.length()));

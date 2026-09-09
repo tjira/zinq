@@ -13,6 +13,8 @@ const primType = @import("value.zig").primType;
 
 const ROW_MAJOR = lapacke.LAPACK_ROW_MAJOR;
 
+var lapack_lock = std.atomic.Value(bool).init(false);
+
 /// Performs the vector addition y = alpha * x + y (AXPY operation).
 pub fn addScaled(comptime T: type, alpha: T, x: Vector(T), y: *Vector(T)) void {
     std.debug.assert(x.length() == y.length());
@@ -102,7 +104,11 @@ pub fn eighSlice(comptime T: type, W: []T, U: []T, V: []T) !void {
         U[i] = V[i];
     }
 
+    lockLapack();
+
     const info = lapacke.LAPACKE_dsyevd(ROW_MAJOR, 'V', 'U', n, U.ptr, n, W.ptr);
+
+    unlockLapack();
 
     if (info != 0) return error.LapackError;
 }
@@ -225,9 +231,20 @@ fn geighSlice(comptime T: type, W: []T, U: []T, V: []T, B: []T) !void {
         U[i] = V[i];
     }
 
+    lockLapack();
+
     const info = lapacke.LAPACKE_dsygvd(lapacke.LAPACK_ROW_MAJOR, 1, 'V', 'U', n, U.ptr, n, B.ptr, n, W.ptr);
 
+    unlockLapack();
+
     if (info != 0) return error.LapackError;
+}
+
+/// Locks LAPACK routines for thread-safe execution across concurrent threads.
+fn lockLapack() void {
+    while (lapack_lock.swap(true, .acquire)) {
+        std.Thread.yield() catch {};
+    }
 }
 
 /// Computes the LU factorization of a matrix slice using LAPACK dgetrf.
@@ -238,7 +255,11 @@ fn luFactorizeSlice(comptime T: type, A: []T, ipiv: []i32) !void {
 
     const n: i32 = @intCast(std.math.sqrt(A.len));
 
+    lockLapack();
+
     const info = lapacke.LAPACKE_dgetrf(lapacke.LAPACK_ROW_MAJOR, n, n, A.ptr, n, ipiv.ptr);
+
+    unlockLapack();
 
     if (info != 0) return error.LapackError;
 }
@@ -256,7 +277,11 @@ fn luSolveSlice(comptime T: type, X: []T, LU: []const T, ipiv: []const i32, B: [
         X[i] = B[i];
     }
 
+    lockLapack();
+
     const info = lapacke.LAPACKE_dgetrs(ROW_MAJOR, 'N', n, nofrhs, LU.ptr, n, ipiv.ptr, X.ptr, nofrhs);
+
+    unlockLapack();
 
     if (info != 0) return error.LapackError;
 }
@@ -278,4 +303,9 @@ fn normSlice(comptime T: type, n: usize, x: []const T) primType(T) {
     if (comptime primType(T) != f64) @compileError("NORM ONLY SUPPORTS F64 PRIMITIVE TYPES");
 
     return cblas.cblas_dnrm2(@intCast(n), x.ptr, 1);
+}
+
+/// Unlocks LAPACK routines to allow other threads to execute matrix operations.
+fn unlockLapack() void {
+    lapack_lock.store(false, .release);
 }
