@@ -330,6 +330,7 @@ sub compile_openblas {
         "HOSTCC=gcc",
         "NOFORTRAN=1",
         "NO_SHARED=1",
+        "USE_LOCKING=1",
         "NUM_THREADS=128",
         "PREFIX=$prefix",
         $generic ? "TARGET=GENERIC" : "DYNAMIC_ARCH=1"
