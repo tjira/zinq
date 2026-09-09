@@ -93,7 +93,6 @@ pub const PartialWaveOptions = struct {
     j_min: u32 = 0,
     j_max: u32,
     j_step: u32 = 1,
-    statistical_factor: f64 = 1,
     log_interval: u32 = 1,
     threads: ?u32 = null,
     write: struct {
@@ -514,7 +513,7 @@ fn PartialWaveContext(comptime T: type) type {
 
         /// Propagates partial wavepackets concurrently and accumulates state-resolved reaction cross sections.
         pub fn worker(self: *@This(), io: std.Io, opt: Options, log: bool, gpa: Allocator, thread_sigma: ?*Matrix(T)) void {
-            const pw, const g = .{ opt.partial_waves.?, opt.partial_waves.?.statistical_factor };
+            const pw = opt.partial_waves.?;
 
             const dj = @as(T, @floatFromInt(pw.j_step));
 
@@ -585,7 +584,7 @@ fn PartialWaveContext(comptime T: type) type {
                             sigma.* = Matrix(T).initZero(s_j.nrow(), s_j.ncol(), gpa) catch continue;
                         }
 
-                        const factor = dj * g * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
+                        const factor = dj * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
 
                         for (0..s_j.nrow()) |ei| {
                             const E = fa.e_min + @as(T, @floatFromInt(ei)) * fa.e_step;
@@ -1075,12 +1074,6 @@ fn checkInvalidInput(opt: Options) !void {
 
         if (pw.j_step == 0) {
             std.log.err("PARTIAL WAVES J_STEP MUST BE GREATER THAN 0", .{});
-
-            return error.InvalidInput;
-        }
-
-        if (pw.statistical_factor <= 0) {
-            std.log.err("PARTIAL WAVES STATISTICAL FACTOR MUST BE GREATER THAN 0", .{});
 
             return error.InvalidInput;
         }
