@@ -280,3 +280,453 @@ test "ITP on 2D HO Potential" {
     try std.testing.expectApproxEqAbs(output.observables.items[1].norm.?,       1.0000000000000016, TEST_TOLERANCE);
     // zig fmt: on
 }
+
+test "Adiabatic RTP Cross Section on Tully's First Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = true },
+        .potential = .{ .tully_1 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.001,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.00025,
+            .e_max = 0.225,
+            .e_step = 0.001,
+        },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = true,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 77.7645328896552400, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Diabatic RTP Cross Section on Tully's First Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .tully_1 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.001,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.00025,
+            .e_max = 0.225,
+            .e_step = 0.001,
+        },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 77.7646030591721000, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Adiabatic RTP Cross Section on Tully's Second Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = true },
+        .potential = .{ .tully_2 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.02,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.04,
+            .e_max = 2.5,
+            .e_step = 0.01,
+        },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = true,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 5.9770907740295485, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Diabatic RTP Cross Section on Tully's Second Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .tully_2 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.02,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.04,
+            .e_max = 2.5,
+            .e_step = 0.01,
+        },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 5.9773512785414140, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Adiabatic RTP Cross Section on Tully's Third Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = true },
+        .potential = .{ .tully_3 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.002,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.0055,
+            .e_max = 0.225,
+            .e_step = 0.001,
+        },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = true,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 75.5296966499151500, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Diabatic RTP Cross Section on Tully's Third Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .tully_3 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.002,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.0055,
+            .e_max = 0.225,
+            .e_step = 0.001,
+        },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 75.7432002737949300, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Adiabatic RTP Partial Waves on Tully's First Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = true },
+        .potential = .{ .tully_1 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.001,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.00025,
+            .e_max = 0.225,
+            .e_step = 0.001,
+        },
+        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = true,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 137.5260385613105100, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Diabatic RTP Partial Waves on Tully's First Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .tully_1 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.001,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.00025,
+            .e_max = 0.225,
+            .e_step = 0.001,
+        },
+        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 137.5116217529468700, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Adiabatic RTP Partial Waves on Tully's Second Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = true },
+        .potential = .{ .tully_2 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.02,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.04,
+            .e_max = 2.5,
+            .e_step = 0.01,
+        },
+        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = true,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 9.4108097828783630, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Diabatic RTP Partial Waves on Tully's Second Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .tully_2 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.02,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.04,
+            .e_max = 2.5,
+            .e_step = 0.01,
+        },
+        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 9.4103936491983500, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Adiabatic RTP Partial Waves on Tully's Third Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = true },
+        .potential = .{ .tully_3 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.002,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.0055,
+            .e_max = 0.225,
+            .e_step = 0.001,
+        },
+        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = true,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 135.4783472560165800, TEST_TOLERANCE);
+    // zig fmt: on
+}
+
+test "Diabatic RTP Partial Waves on Tully's Third Potential" {
+    const opt = zinq.quantum_dynamics.Options{
+        .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
+        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .potential = .{ .tully_3 = .{} },
+        .absorbing_potential = .{
+            .bounds = &.{.{ -18, 18 }},
+            .exponent = 0.002,
+            .stop_norm = 1e-2,
+        },
+        .flux_analysis = .{
+            .flux_bounds = &.{.{ -15, 15 }},
+            .e_min = 0.0055,
+            .e_max = 0.225,
+            .e_step = 0.001,
+        },
+        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .fft = .{ .plan = .estimate },
+        .mass = &.{2000},
+        .iterations = 1000000,
+        .time_step = 1,
+        .adiabatic = false,
+    };
+
+    var output = try zinq.quantum_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    var sum: f64 = 0;
+
+    for (output.cross_section.?.data) |val| {
+        sum += val;
+    }
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(sum, 135.2753744156125300, TEST_TOLERANCE);
+    // zig fmt: on
+}

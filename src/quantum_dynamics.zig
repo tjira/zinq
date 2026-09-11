@@ -1511,7 +1511,7 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
         try printf(io, "{s:6} {s:7} {s:12} {s:12} {s:12} {s}\n", cols);
     }
 
-    const thread_sigmas = if (pw.write.cross_section != null) try gpa.alloc(Matrix(T), nthreads) else null;
+    const thread_sigmas = if (pw.write.cross_section != null or opt.flux_analysis != null) try gpa.alloc(Matrix(T), nthreads) else null;
 
     defer if (thread_sigmas) |sigmas| {
         for (sigmas) |*s| if (s.data.len > 0) s.deinit(gpa);
