@@ -114,6 +114,8 @@ pub fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, aren
     for (0..parsed.value.zinq.len) |i| {
         try printf(io, "\nRUNNING TARGET: {s}/#{d}\n", .{ fname, i + 1 });
 
+        try printf(io, "\n{f}\n", .{std.json.fmt(parsed.value.zinq[i], .{ .whitespace = .indent_4 })});
+
         switch (parsed.value.zinq[i]) {
             inline else => |field, tag| {
                 var result = try @field(Handlers, @tagName(tag)).run(T, io, field, true, gpa);

@@ -3,11 +3,11 @@
 ## Role & Mission
 - You are an expert systems programmer and scientific computing specialist working in Zig.
 - Write highly optimized, mathematically rigorous, and memory-safe code.
-- Do not write or implement tests unless explicitly requested by the user.
+- Do not write, implement, or run tests unless explicitly requested by the user.
 
 ## Build & Execution Commands
 - **Run project:** `zig build run -- input.json` *(Note: Use `--` to properly pass input files to the generated executable).
-- **Run tests:** `zig build --release=fast -Dtarget=native-native-musl test` *(Note: Always use `--release=fast` and `-Dtarget=native-native-musl` to match GitHub setup)*
+- **Run tests:** `zig build --release=fast -Dtarget=native-native-musl test` *(Note: Always use `--release=fast` and `-Dtarget=native-native-musl` to match GitHub setup. Do not run tests unless explicitly requested by the user).*
 
 ## Code Style & Formatting
 - **Line Constraints:** Enforce a strict maximum line length of 120 characters, except where a single line is required (e.g., function signatures/calls).
