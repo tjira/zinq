@@ -94,6 +94,10 @@ pub const PartialWaveOptions = struct {
     j_max: u32,
     j_step: u32 = 1,
     log_interval: u32 = 1,
+    stop_condition: ?struct {
+        consecutive_steps: u32 = 3,
+        tolerance: f64 = 1e-6,
+    } = null,
     threads: ?u32 = null,
     write: struct {
         cross_section: ?[]const u8 = null,
@@ -509,6 +513,9 @@ fn PartialWaveContext(comptime T: type) type {
         completed: std.atomic.Value(u32) = .init(0),
         mutx: std.atomic.Value(bool) = .init(false),
 
+        is_done: ?[]bool = null,
+        task_peaks: ?[]T = null,
+
         timer: std.Io.Timestamp,
 
         /// Propagates partial wavepackets concurrently and accumulates state-resolved reaction cross sections.
@@ -571,6 +578,8 @@ fn PartialWaveContext(comptime T: type) type {
                         var p_row: T = 0;
 
                         for (0..s_j.ncol()) |col| {
+                            if (s_j.ncol() > 1 and col == opt.initial_conditions.state) continue;
+
                             p_row += s_j.at(ei, col);
                         }
 
@@ -598,6 +607,42 @@ fn PartialWaveContext(comptime T: type) type {
                     }
                 }
 
+                if (pw.stop_condition) |sc| {
+                    const idx = (j - pw.j_min) / pw.j_step;
+
+                    while (self.mutx.swap(true, .acquire)) {
+                        std.Thread.yield() catch {};
+                    }
+
+                    self.task_peaks.?[idx], self.is_done.?[idx] = .{ p_peak, true };
+
+                    const k = sc.consecutive_steps;
+
+                    if (k <= tasks) {
+                        const min_s, const max_s = .{ if (idx + 1 >= k) idx + 1 - k else 0, @min(idx, tasks - k) };
+
+                        for (min_s..max_s + 1) |s| {
+                            var stop = true;
+
+                            for (s..s + k) |i| {
+                                if (!self.is_done.?[i] or self.task_peaks.?[i] >= @as(T, @floatCast(sc.tolerance))) {
+                                    stop = false;
+
+                                    break;
+                                }
+                            }
+
+                            if (stop) {
+                                self.next_j.store(pw.j_max + 1, .release);
+
+                                break;
+                            }
+                        }
+                    }
+
+                    self.mutx.store(false, .release);
+                }
+
                 const r_0, const m_0 = .{ opt.initial_conditions.position[0], opt.mass[0] };
 
                 const j_flt = @as(T, @floatFromInt(j));
@@ -613,7 +658,7 @@ fn PartialWaveContext(comptime T: type) type {
 
                     const elapsed = self.timer.untilNow(io, .real);
 
-                    const fmt = "{d:05} {d:7} {d:12.6} {d:11.6} {d:12.6} {f}\n";
+                    const fmt = "{d:06} {d:7} {d:12.6} {e:12.3} {e:12.3} {f}\n";
 
                     printf(io, fmt, .{ done - 1, j, v_cent, p_peak, p_integ, elapsed }) catch {};
 
@@ -1089,6 +1134,20 @@ fn checkInvalidInput(opt: Options) !void {
 
             return error.InvalidInput;
         }
+
+        if (pw.stop_condition) |sc| {
+            if (sc.consecutive_steps == 0) {
+                std.log.err("PARTIAL WAVES STOP CONDITION CONSECUTIVE STEPS MUST BE GREATER THAN 0", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (sc.tolerance < 0) {
+                std.log.err("PARTIAL WAVES STOP CONDITION TOLERANCE MUST BE NON-NEGATIVE", .{});
+
+                return error.InvalidInput;
+            }
+        }
     }
 
     if (opt.time_step <= 0) {
@@ -1449,7 +1508,7 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
 
         const cols = .{ "INDEX", "J", "VCENT (Eh)", "PEAK P (-)", "INTEG P (Eh)", "TIME" };
 
-        try printf(io, "{s:5} {s:7} {s:12} {s:11} {s:12} {s}\n", cols);
+        try printf(io, "{s:6} {s:7} {s:12} {s:12} {s:12} {s}\n", cols);
     }
 
     const thread_sigmas = if (pw.write.cross_section != null) try gpa.alloc(Matrix(T), nthreads) else null;
@@ -1464,9 +1523,19 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
         s.* = .{ .data = &.{}, .shape = .{ 0, 0 } };
     };
 
+    const tasks = (pw.j_max - pw.j_min) / pw.j_step + 1;
+
+    const is_done = if (pw.stop_condition != null) try gpa.alloc(bool, tasks) else null;
+    defer if (is_done) |d| gpa.free(d);
+
+    const tp = if (pw.stop_condition != null) try gpa.alloc(T, tasks) else null;
+    defer if (tp) |p| gpa.free(p);
+
+    if (is_done) |d| @memset(d, false);
+
     const timer = std.Io.Timestamp.now(io, .real);
 
-    var ctx = PartialWaveContext(T){ .next_j = .init(pw.j_min), .timer = timer };
+    var ctx = PartialWaveContext(T){ .is_done = is_done, .next_j = .init(pw.j_min), .task_peaks = tp, .timer = timer };
 
     if (nthreads == 1) {
         ctx.worker(io, opt, log, gpa, if (thread_sigmas) |sigmas| &sigmas[0] else null);
