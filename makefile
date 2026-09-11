@@ -43,7 +43,7 @@ external-$(ARCH)-$(OS):
 	@curl.exe -Ls -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip ; tar -xf external.zip ; rm external.zip
 else
 external-$(ARCH)-$(OS):
-	@curl -Ls https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip | bsdtar -xf -
+	@curl -Ls -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip ; unzip -q external.zip ; rm external.zip
 endif
 
 # ENVIRONMENT SCRIPTS ==========================================================================================================================================
