@@ -36,4 +36,4 @@
 - [ ] Implement Newton-Raphson optimization for geometry optimization.
 - [ ] Implement second derivatives of integrals over atomic orbitals.
 - [ ] Implement analytical Hessian for HF method.
-- [ ] Partial wave simulation sometimes fail to initialize, probably due to parallelism issues.
+- [x] Partial wave simulation sometimes fail to initialize, probably due to parallelism issues.

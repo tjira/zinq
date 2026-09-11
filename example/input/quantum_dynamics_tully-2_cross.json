@@ -17,13 +17,14 @@
                     "tully_2" : {}
                 },
                 "mass" : [2000],
-                "iterations" : 100000,
+                "iterations" : 1000000,
                 "time_step" : 1,
                 "adiabatic" : true,
-                "log_interval" : 10000,
+                "log_interval" : 1000,
                 "absorbing_potential" : {
                     "bounds" : [[-18, 18]],
-                    "exponent" : 0.02
+                    "exponent" : 0.02,
+                    "stop_norm" : 1e-6
                 },
                 "flux_analysis" : {
                     "flux_bounds" : [[-15, 15]],
