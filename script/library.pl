@@ -278,7 +278,7 @@ sub compile_libxc {
     my ($prefix, $cores, $host, $pwd) = @_;
 
     # DEFINE THE URL FOR THE LIBXC SOURCE ARCHIVE
-    my $url = "https://gitlab.com/libxc/libxc/-/archive/7.1.2/libxc-7.1.2.tar.bz2";
+    my $url = "https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.bz2";
 
     # DOWNLOAD AND EXTRACT THE LIBRARY
     download_library($url, "libxc");
