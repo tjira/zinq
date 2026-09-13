@@ -1111,6 +1111,12 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 /// Validates grid bounds, time step, and initial conditions for quantum dynamics.
 fn checkInvalidInput(opt: Options) !void {
     if (opt.partial_waves) |pw| {
+        if (opt.grid.bounds.len != 1) {
+            std.log.err("PARTIAL WAVES REQUIRE EXACTLY 1 GRID DIMENSION", .{});
+
+            return error.InvalidInput;
+        }
+
         if (pw.j_min > pw.j_max) {
             std.log.err("PARTIAL WAVES J_MIN MUST BE LESS THAN OR EQUAL TO J_MAX", .{});
 
@@ -1292,6 +1298,12 @@ fn checkInvalidInput(opt: Options) !void {
         }
     }
 
+    if (opt.j_quantum_number != 0 and opt.grid.bounds.len != 1) {
+        std.log.err("NONZERO J QUANTUM NUMBER REQUIRES EXACTLY 1 GRID DIMENSION", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.grid.cylindrical) {
         if (opt.j_quantum_number != 0 or opt.partial_waves != null) {
             std.log.err("CYLINDRICAL SIMULATION DOES NOT SUPPORT NONZERO J QUANTUM NUMBER", .{});
@@ -1328,6 +1340,14 @@ fn checkInvalidInput(opt: Options) !void {
         if (opt.absorbing_potential) |cap| {
             if (cap.bounds[radial_dim][0] != -cap.bounds[radial_dim][1]) {
                 std.log.err("CYLINDRICAL SIMULATION REQUIRES SYMMETRIC RADIAL ABSORBING POTENTIAL BOUNDS", .{});
+
+                return error.InvalidInput;
+            }
+        }
+
+        if (opt.flux_analysis) |flux| {
+            if (flux.flux_bounds[radial_dim][0] != -flux.flux_bounds[radial_dim][1]) {
+                std.log.err("CYLINDRICAL SIMULATION REQUIRES SYMMETRIC RADIAL FLUX BOUNDS", .{});
 
                 return error.InvalidInput;
             }

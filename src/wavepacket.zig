@@ -319,7 +319,9 @@ pub fn Hamiltonian(comptime T: type) type {
             const buffer, const r_coords = .{ self.v_buf.?, self.r_buf.? };
 
             for (0..grid.ncol()) |j| {
-                r_coords[j] = grid.getR(i, j);
+                const val = grid.getR(i, j);
+
+                r_coords[j] = if (self.cylindric and j == grid.ncol() - 1) @abs(val) else val;
             }
 
             pot.eval(T, buffer, r_coords, t);
@@ -355,7 +357,24 @@ pub fn Hamiltonian(comptime T: type) type {
             defer if (U_prev) |*u| u.deinit(gpa);
 
             if (grid.r) |r| {
-                pot.evalBatch(T, &self.V.?, r, t);
+                if (self.cylindric) {
+                    const r_coords = try gpa.alloc(T, grid.ncol());
+                    defer gpa.free(r_coords);
+
+                    for (0..grid.nrow()) |i| {
+                        for (0..grid.ncol()) |j| {
+                            const val = r.at(i, j);
+
+                            r_coords[j] = if (j == grid.ncol() - 1) @abs(val) else val;
+                        }
+
+                        pot.eval(T, self.V.?.rowSlice(i), r_coords, t);
+                    }
+                }
+
+                if (!self.cylindric) {
+                    pot.evalBatch(T, &self.V.?, r, t);
+                }
             }
 
             if (grid.r == null) {
@@ -364,7 +383,9 @@ pub fn Hamiltonian(comptime T: type) type {
 
                 for (0..grid.nrow()) |i| {
                     for (0..grid.ncol()) |j| {
-                        r_coords[j] = grid.getR(i, j);
+                        const val = grid.getR(i, j);
+
+                        r_coords[j] = if (self.cylindric and j == grid.ncol() - 1) @abs(val) else val;
                     }
 
                     pot.eval(T, self.V.?.rowSlice(i), r_coords, t);
