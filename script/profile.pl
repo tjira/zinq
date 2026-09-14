@@ -6,6 +6,7 @@ use strict; use warnings;
 # DEFINE VARIABLES
 my $root_node;
 
+# CHECK FOR '-z' OPTION
 if (@ARGV >= 2 && $ARGV[0] eq '-z') {
     shift @ARGV; $root_node = shift @ARGV;
 }

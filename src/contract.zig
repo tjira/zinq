@@ -24,6 +24,9 @@ fn ContractionPlan(comptime spec: []const u8) type {
         perm_c: [nc]usize,
 
         num_k: usize,
+
+        trans_a: bool,
+        trans_b: bool,
     };
 }
 
@@ -67,14 +70,14 @@ pub fn contract(comptime T: type, comptime spec: []const u8, C: anytype, A: anyt
 
     inline for (0..nc) |i| std.debug.assert(c_ten.shape[i] == shape_gemm[plan.perm_c[i]]);
 
-    const a_slice, const a_buf = try prepareSlice(T, na, a_ten, plan.perm_a, gpa);
+    const a_slice, const a_buf = try prepareSlice(T, na, a_ten, plan.perm_a, plan.trans_a, gpa);
     defer if (a_buf) |buf| (gpa.?).free(buf);
 
-    const b_slice, const b_buf = try prepareSlice(T, nb, b_ten, plan.perm_b, gpa);
+    const b_slice, const b_buf = try prepareSlice(T, nb, b_ten, plan.perm_b, plan.trans_b, gpa);
     defer if (b_buf) |buf| (gpa.?).free(buf);
 
     if (isIdentity(plan.perm_c)) {
-        return mmSlice(T, c_ten.data, a_slice, b_slice, m, n, k, alpha, beta, false, false);
+        return mmSlice(T, c_ten.data, a_slice, b_slice, m, n, k, alpha, beta, plan.trans_a, plan.trans_b);
     }
 
     const alloc = gpa orelse return error.AllocatorRequired;
@@ -82,7 +85,7 @@ pub fn contract(comptime T: type, comptime spec: []const u8, C: anytype, A: anyt
     const c_buf = try alloc.alloc(T, c_ten.data.len);
     defer alloc.free(c_buf);
 
-    mmSlice(T, c_buf, a_slice, b_slice, m, n, k, alpha, 0.0, false, false);
+    mmSlice(T, c_buf, a_slice, b_slice, m, n, k, alpha, 0, plan.trans_a, plan.trans_b);
 
     if (beta == 0) {
         return permuteSlice(T, nc, c_ten.data, c_buf, shape_gemm, plan.perm_c);
@@ -100,6 +103,21 @@ pub fn contract(comptime T: type, comptime spec: []const u8, C: anytype, A: anyt
 fn isIdentity(comptime order: anytype) bool {
     inline for (order, 0..) |val, i| {
         if (val != i) return false;
+    }
+
+    return true;
+}
+
+/// Checks if an index permutation corresponds to a transposed matrix partition.
+fn isTransposed(comptime order: anytype, comptime num_leading: usize, comptime num_trailing: usize) bool {
+    if (num_leading == 0 or num_trailing == 0) return false;
+
+    inline for (0..num_leading) |i| {
+        if (order[i] != num_trailing + i) return false;
+    }
+
+    inline for (0..num_trailing) |i| {
+        if (order[num_leading + i] != i) return false;
     }
 
     return true;
@@ -170,6 +188,9 @@ fn parseContraction(comptime spec: []const u8) ContractionPlan(spec) {
         .perm_c = perm_c,
 
         .num_k = num_k,
+
+        .trans_a = isTransposed(perm_a, num_i, num_k),
+        .trans_b = isTransposed(perm_b, num_k, num_j),
     };
 }
 
@@ -212,9 +233,9 @@ fn permuteSlice(comptime T: type, comptime N: usize, dst: []T, src: []const T, s
     }
 }
 
-/// Prepares a contiguous slice for GEMM by permuting tensor data if axes are not in identity order.
-fn prepareSlice(comptime T: type, comptime N: usize, ten: anytype, comptime perm: [N]usize, gpa: ?std.mem.Allocator) !struct { []const T, ?[]T } {
-    if (isIdentity(perm)) return .{ ten.data, null };
+/// Prepares a contiguous slice for GEMM by permuting tensor data if axes are not in identity or transposed order.
+fn prepareSlice(comptime T: type, comptime N: usize, ten: anytype, comptime perm: [N]usize, comptime trans: bool, gpa: ?std.mem.Allocator) !struct { []const T, ?[]T } {
+    if (trans or isIdentity(perm)) return .{ ten.data, null };
 
     const alloc = gpa orelse return error.AllocatorRequired;
 
