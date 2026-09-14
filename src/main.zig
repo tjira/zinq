@@ -15,6 +15,7 @@ pub const cimport = @import("cimport.zig");
 pub const classical_dynamics = @import("classical_dynamics.zig");
 pub const configuration_interaction = @import("configuration_interaction.zig");
 pub const constant = @import("constant.zig");
+pub const contract = @import("contract.zig");
 pub const cphf = @import("cphf.zig");
 pub const density_functional_theory = @import("density_functional_theory.zig");
 pub const dual = @import("dual.zig");

@@ -20,6 +20,11 @@ pub fn Matrix(comptime T: type) type {
             gpa.free(self.data);
         }
 
+        /// Promotes the 2D matrix to a rank-2 tensor representation.
+        pub fn asTensor(self: @This()) Tensor(T, 2) {
+            return .{ .data = self.data, .shape = self.shape };
+        }
+
         /// Flattens the 2D matrix into a 1D vector representation.
         pub fn asVector(self: @This()) Vector(T) {
             return .{ .data = self.data, .shape = .{self.data.len} };
@@ -107,6 +112,11 @@ pub fn Matrix(comptime T: type) type {
             return &self.data[i * self.shape[1] + j];
         }
 
+        /// Returns the rank (number of dimensions) of the matrix.
+        pub fn rank(self: @This()) usize {
+            return self.shape.len;
+        }
+
         /// Computes the root-mean-square value of the matrix elements.
         pub fn rms(self: @This()) T {
             var sum_sq: T = 0;
@@ -186,6 +196,11 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             return .{ .data = self.data, .shape = .{ rows, cols } };
         }
 
+        /// Promotes the tensor to a tensor representation to satisfy the tensor interface.
+        pub fn asTensor(self: @This()) @This() {
+            return self;
+        }
+
         /// Returns the tensor element at the specified multi-index coordinate.
         pub fn at(self: @This(), indx: [N]usize) T {
             var idx: usize = 0;
@@ -229,6 +244,11 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             return &self.data[idx];
         }
 
+        /// Returns the rank (number of dimensions) of the tensor.
+        pub fn rank(self: @This()) usize {
+            return self.shape.len;
+        }
+
         /// Sets all elements of the tensor to zero.
         pub fn zero(self: *@This()) void {
             for (0..self.data.len) |i| {
@@ -257,6 +277,11 @@ pub fn Vector(comptime T: type) type {
         /// Promotes the 1D vector to a 2D column matrix (N x 1).
         pub fn asMatrix(self: @This()) Matrix(T) {
             return .{ .data = self.data, .shape = .{ self.shape[0], 1 } };
+        }
+
+        /// Promotes the 1D vector to a rank-1 tensor representation.
+        pub fn asTensor(self: @This()) Tensor(T, 1) {
+            return .{ .data = self.data, .shape = self.shape };
         }
 
         /// Returns the vector element at index i.
@@ -304,6 +329,11 @@ pub fn Vector(comptime T: type) type {
             std.debug.assert(i < self.shape[0]);
 
             return &self.data[i];
+        }
+
+        /// Returns the rank (number of dimensions) of the vector.
+        pub fn rank(self: @This()) usize {
+            return self.shape.len;
         }
 
         /// Returns a subvector view consisting of the first n elements.

@@ -8,6 +8,8 @@ const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 
+const contract = @import("contract.zig").contract;
+
 /// Transforms a symmetric one-electron operator matrix from the atomic orbital basis to the molecular orbital basis.
 pub fn ao2mo_pp(comptime T: type, A_pp: *Matrix(T), A_xx: Matrix(T), C: Matrix(T)) void {
     const N = C.shape[0];
@@ -43,6 +45,25 @@ pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4),
 
     std.debug.assert(C.shape[0] == N);
     std.debug.assert(C.shape[1] == N);
+
+    if (T == f64) {
+        var g_pxxx = try Tensor(T, 4).init(.{ N, N, N, N }, gpa);
+        defer g_pxxx.deinit(gpa);
+
+        var g_ppxx = try Tensor(T, 4).init(.{ N, N, N, N }, gpa);
+        defer g_ppxx.deinit(gpa);
+
+        var g_pppx = try Tensor(T, 4).init(.{ N, N, N, N }, gpa);
+        defer g_pppx.deinit(gpa);
+
+        try contract(f64, "mi,mlns->ilns", &g_pxxx, C, g_xxxx, 1, 0, gpa);
+        try contract(f64, "ilns,lj->ijns", &g_ppxx, g_pxxx, C, 1, 0, gpa);
+        try contract(f64, "ijns,na->ijas", &g_pppx, g_ppxx, C, 1, 0, gpa);
+
+        try contract(f64, "ijas,sb->ijab", g_pppp, g_pppx, C, 1, 0, gpa);
+
+        return;
+    }
 
     var g_pxxx = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
     defer g_pxxx.deinit(gpa);
@@ -150,6 +171,10 @@ pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T
     std.debug.assert(A_xx.nrow() == N);
     std.debug.assert(A_xx.ncol() == N);
 
+    if (T == f64) {
+        return contract(f64, "mq,qp->mp", A_xx, C, A_pp, 1, 0, null) catch unreachable;
+    }
+
     for (0..N) |mu| for (0..N) |p| {
         var sum = Value(T).fromFloat(0);
 
@@ -180,6 +205,39 @@ fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: 
     std.debug.assert(g_oovv.shape[1] == nocc);
     std.debug.assert(g_oovv.shape[2] == nvir);
     std.debug.assert(g_oovv.shape[3] == nvir);
+
+    if (T == f64) {
+        var C_occ = try Matrix(T).init(N, nocc, gpa);
+        defer C_occ.deinit(gpa);
+
+        var C_vir = try Matrix(T).init(N, nvir, gpa);
+        defer C_vir.deinit(gpa);
+
+        for (0..N) |mu| for (0..nocc) |i| {
+            C_occ.ptr(mu, i).* = C.at(mu, i);
+        };
+
+        for (0..N) |mu| for (0..nvir) |a| {
+            C_vir.ptr(mu, a).* = C.at(mu, nocc + a);
+        };
+
+        var g_oxxx = try Tensor(T, 4).init(.{ nocc, N, N, N }, gpa);
+        defer g_oxxx.deinit(gpa);
+
+        var g_ooxx = try Tensor(T, 4).init(.{ nocc, nocc, N, N }, gpa);
+        defer g_ooxx.deinit(gpa);
+
+        var g_oovx = try Tensor(T, 4).init(.{ nocc, nocc, nvir, N }, gpa);
+        defer g_oovx.deinit(gpa);
+
+        try contract(f64, "mi,mlns->ilns", &g_oxxx, C_occ, g_xxxx, 1, 0, gpa);
+        try contract(f64, "ilns,lj->ijns", &g_ooxx, g_oxxx, C_occ, 1, 0, gpa);
+        try contract(f64, "ijns,na->ijas", &g_oovx, g_ooxx, C_vir, 1, 0, gpa);
+
+        try contract(f64, "ijas,sb->ijab", g_oovv, g_oovx, C_vir, 1, 0, gpa);
+
+        return;
+    }
 
     var g_oxxx = try Tensor(T, 4).initZero(.{ nocc, N, N, N }, gpa);
     defer g_oxxx.deinit(gpa);
