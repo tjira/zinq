@@ -278,7 +278,7 @@ sub compile_libxc {
     my ($prefix, $cores, $host, $pwd) = @_;
 
     # DEFINE THE URL FOR THE LIBXC SOURCE ARCHIVE
-    my $url = "https://gitlab.com/libxc/libxc/-/archive/7.0.0/libxc-7.0.0.tar.bz2";
+    my $url = "https://gitlab.com/libxc/libxc/-/archive/7.1.2/libxc-7.1.2.tar.bz2";
 
     # DOWNLOAD AND EXTRACT THE LIBRARY
     download_library($url, "libxc");
@@ -303,10 +303,10 @@ sub compile_libxc {
     system(@args) == 0 or die "LIBXC CONFIGURE FAILED";
 
     # RUN MAKE
-    system("make", "-j", $cores) == 0 or die "LIBXC MAKE FAILED";
+    system("make", "-C", "src", "-j", $cores) == 0 or die "LIBXC MAKE FAILED";
 
     # INSTALL THE LIBRARY
-    system("make", "install") == 0 or die "LIBXC INSTALL FAILED";
+    system("make", "-C", "src", "install") == 0 or die "LIBXC INSTALL FAILED";
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
