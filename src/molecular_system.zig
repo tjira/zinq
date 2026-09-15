@@ -191,6 +191,11 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Contracts two-electron integrals with the density matrix into the Fock matrix.
+        pub fn fock(self: @This(), F: *Matrix(T), P: Matrix(T), exch_factor: f64) void {
+            libint.libint_fock(@ptrCast(F.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr);
+        }
+
         /// Computes the one-electron kinetic energy matrix elements in the molecular basis.
         pub fn kinetic(self: @This(), gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);

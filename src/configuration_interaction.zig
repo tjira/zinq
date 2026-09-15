@@ -437,6 +437,12 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
 
 /// Validates input options for physical consistency and method requirements.
 fn checkInvalidInput(opt: Options) !void {
+    if (opt.hartree_fock.integral_direct) {
+        std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR CONFIGURATION INTERACTION", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.write.gradient != null and opt.gradient == null) {
         std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
 

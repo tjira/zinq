@@ -269,6 +269,12 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
 /// Validates Moller-Plesset inputs for method requirements and minimum perturbation order.
 fn checkInvalidInput(opt: Options) !void {
+    if (opt.hartree_fock.integral_direct) {
+        std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR MOLLER-PLESSET PERTURBATION THEORY", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.write.gradient != null and opt.gradient == null) {
         std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
 

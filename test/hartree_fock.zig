@@ -270,6 +270,38 @@ test "Restricted Hartree-Fock on Water with Numerical Gradient (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
 }
 
+test "Restricted Hartree-Fock on Water with Integral-Direct SCF and Numerical Gradient (STO-3G)" {
+    const opt = zinq.hartree_fock.Options{
+        .system = "example/molecule/water.xyz",
+        .basis = "builtin:sto-3g",
+        .integral_direct = true,
+        .gradient = .{ .numeric = .{} },
+    };
+
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+         0.0000002138733635, -0.0000014864554032,  0.0000005435651929,
+        -0.0000007190692486,  0.0000006274092357, -0.0000005378808510,
+         0.0000005037747997,  0.0000008640199667,  0.0000000021316282,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-74.9659012172971900, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
 test "Generalized Hartree-Fock on Water with Numerical Gradient (STO-3G)" {
     const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
@@ -310,6 +342,42 @@ test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water with Numerica
             .exchange = "lda_x",
             .correlation = "lda_c_vwn",
         },
+        .gradient = .{ .numeric = .{} },
+    };
+
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+         0.0504874833495705,  0.0174896662485935,  0.0201944729383285,
+        -0.0298922536501323,  0.0154032370858204, -0.0193921955826681,
+        -0.0205952410681221, -0.0328929097292985, -0.0008022837505450,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-74.7399385581955600, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
+test "Restricted Kohn-Sham DFT with LDA (VWN5) Functional on Water with Integral-Direct SCF and Numerical Gradient (STO-3G)" {
+    const opt = zinq.hartree_fock.Options{
+        .system = "example/molecule/water.xyz",
+        .basis = "builtin:sto-3g",
+        .dft = .{
+            .exchange = "lda_x",
+            .correlation = "lda_c_vwn",
+        },
+        .integral_direct = true,
         .gradient = .{ .numeric = .{} },
     };
 
@@ -408,6 +476,42 @@ test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water with Numerical
     try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
 }
 
+test "Restricted Kohn-Sham DFT with GGA (PBE) Functional on Water with Integral-Direct SCF and Numerical Gradient (STO-3G)" {
+    const opt = zinq.hartree_fock.Options{
+        .system = "example/molecule/water.xyz",
+        .basis = "builtin:sto-3g",
+        .dft = .{
+            .exchange = "gga_x_pbe",
+            .correlation = "gga_c_pbe",
+        },
+        .integral_direct = true,
+        .gradient = .{ .numeric = .{} },
+    };
+
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+         0.0584284151727843,  0.0202408919847130,  0.0233700383489577,
+        -0.0344129986729058,  0.0168859003224497, -0.0220802768069461,
+        -0.0240154150787930, -0.0371267958598764, -0.0012897622525543,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-75.2343406217922000, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
 test "Generalized Kohn-Sham DFT with GGA (PBE) Functional on Water with Numerical Gradient (STO-3G)" {
     const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
@@ -452,6 +556,42 @@ test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water with Num
             .exchange = "mgga_x_tpss",
             .correlation = "mgga_c_tpss",
         },
+        .gradient = .{ .numeric = .{} },
+    };
+
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+         0.0600934107808371,  0.0208183351446678,  0.0240339282697732,
+        -0.0353932449570493,  0.0173579849160888, -0.0227054535173465,
+        -0.0247001850084416, -0.0381763221923848, -0.0013284804367686,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-75.3357000886753000, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
+test "Restricted Kohn-Sham DFT with meta-GGA (TPSS) Functional on Water with Integral-Direct SCF and Numerical Gradient (STO-3G)" {
+    const opt = zinq.hartree_fock.Options{
+        .system = "example/molecule/water.xyz",
+        .basis = "builtin:sto-3g",
+        .dft = .{
+            .exchange = "mgga_x_tpss",
+            .correlation = "mgga_c_tpss",
+        },
+        .integral_direct = true,
         .gradient = .{ .numeric = .{} },
     };
 
@@ -550,6 +690,42 @@ test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water with Num
     try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
 }
 
+test "Restricted Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water with Integral-Direct SCF and Numerical Gradient (STO-3G)" {
+    const opt = zinq.hartree_fock.Options{
+        .system = "example/molecule/water.xyz",
+        .basis = "builtin:sto-3g",
+        .dft = .{
+            .exchange = "mgga_x_scan",
+            .correlation = "mgga_c_scan",
+        },
+        .integral_direct = true,
+        .gradient = .{ .numeric = .{} },
+    };
+
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+         0.0446175661750203,  0.0155010482671969,  0.0178289710106583,
+        -0.0260442448052345,  0.0114168855702701, -0.0162821514493317,
+        -0.0185733298962987, -0.0269179274425824, -0.0015468117453565,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-75.3019962449717000, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
 test "Generalized Kohn-Sham DFT with meta-GGA (SCAN) Functional on Water with Numerical Gradient (STO-3G)" {
     const opt = zinq.hartree_fock.Options{
         .system = "example/molecule/water.xyz",
@@ -593,6 +769,41 @@ test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water with 
         .dft = .{
             .exchange_correlation = "hyb_gga_xc_b3lyp",
         },
+        .gradient = .{ .numeric = .{} },
+    };
+
+    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+         0.0468003861442412,  0.0162124187852442,  0.0187193258227580,
+        -0.0277282929062039,  0.0143766300197967, -0.0180137874394859,
+        -0.0190720868431526, -0.0305890488050409, -0.0007055433570713,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-75.3200999021943400, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
+test "Restricted Kohn-Sham DFT with Hybrid GGA (B3LYP) Functional on Water with Integral-Direct SCF and Numerical Gradient (STO-3G)" {
+    const opt = zinq.hartree_fock.Options{
+        .system = "example/molecule/water.xyz",
+        .basis = "builtin:sto-3g",
+        .dft = .{
+            .exchange_correlation = "hyb_gga_xc_b3lyp",
+        },
+        .integral_direct = true,
         .gradient = .{ .numeric = .{} },
     };
 
