@@ -1,7 +1,7 @@
 <h1 align="center">Zinq</h1>
 
 <h4 align="center">
-  <a href="#features">Features</a>
+  <a href="#Features">Features</a>
   ·
   <a href="#Citation">Citation</a>
   ·

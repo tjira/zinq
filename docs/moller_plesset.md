@@ -1,10 +1,10 @@
 # Møller–Plesset Perturbation Theory
 
-This document provides a highly detailed, mathematically rigorous, yet simple and intuitive explanation of Møller–Plesset perturbation theory (MPPT) and how it is implemented in our scientific computing framework. If you want to understand how we can calculate the detailed correlation between electrons by treating it as a mathematical perturbation to the average Hartree–Fock field, this guide is written step-by-step for you.
+This document provides a highly detailed, mathematically rigorous, yet simple and intuitive explanation of Møller–Plesset perturbation theory (MPPT). If you want to understand how we can calculate the detailed correlation between electrons by treating it as a mathematical perturbation to the average Hartree–Fock field, this guide is written step-by-step for you.
 
 ---
 
-## I. Perturbation Expansion and Spin Variants
+## I. Perturbation Expansion
 
 To understand Møller–Plesset perturbation theory, we must first understand the limitations of the Hartree–Fock method. In Hartree–Fock, we assume that each electron moves in an average electric field created by all other electrons. In reality, electrons are negatively charged and repel each other individually. They perform a detailed dance to avoid getting close to one another, which is called electron correlation. Because Hartree–Fock misses this correlation, it underbinds molecules and gives inaccurate energies. Møller–Plesset perturbation theory is a way to calculate this correlation energy by starting with the Hartree–Fock solution and adding corrections to it step-by-step, treating the difference between the true electron interactions and the average field as a small mathematical perturbation.
 
@@ -16,7 +16,7 @@ $$
 \hat{H}=\hat{H}_0+\hat{V}
 $$
 
-where the reference state $| \Phi_0 \rangle$ is the Hartree–Fock Slater determinant. This reference determinant is an eigenstate of our unperturbed Hamiltonian $\hat{H}_0$, and its unperturbed energy is the sum of the orbital energies of the occupied electrons. For any excited Slater determinant $i$, the unperturbed energy is the sum of its occupied spin-orbital energies $\epsilon_p$ as
+where the reference state $|\Phi_0\rangle$ is the Hartree–Fock Slater determinant. This reference determinant is an eigenstate of our unperturbed Hamiltonian $\hat{H}_0$, and its unperturbed energy is the sum of the orbital energies of the occupied electrons. For any excited Slater determinant $i$, the unperturbed energy is the sum of its occupied spin-orbital energies $\epsilon_p$ as
 
 $$
 E_i^{(0)}=\sum_{p\in\text{det}_i}\epsilon_p
@@ -40,32 +40,32 @@ $$
 C_i^{(k)}=\frac{\sum_{j\neq0}V_{ij}C_j^{(k-1)}-\sum_{j=1}^{k-1}E^{(j)}C_i^{(k-j)}}{E_0^{(0)}-E_i^{(0)}}
 $$
 
-which describes how the perturbation mixes excited states into the wavefunction at higher orders. Our codebase implements this recurrence relation directly, enabling the user to calculate correlation energies up to any arbitrary perturbation order $k$ by recursively evaluating these coefficients and energy corrections.
-
-### 2. Generalized and Spin-Unrestricted Møller–Plesset Variants
-
-The specific equations of Møller–Plesset perturbation theory depend on the Hartree–Fock reference wavefunction we choose. Our codebase supports two main spin variants: Restricted Møller–Plesset (RMP) theory, which starts from a Restricted Hartree–Fock reference where all electrons are paired up in identical spatial orbitals; and Generalized Møller–Plesset (GMP) theory, which starts from a Generalized Hartree–Fock reference. GMP is formulated in a general spin-orbital basis where the spin components are allowed to mix, making it suitable for systems with non-collinear spin alignments or strong spin-orbit coupling.
+which describes how the perturbation mixes excited states into the wavefunction at higher orders. This recurrence relation enables the calculation of correlation energies up to any arbitrary perturbation order $k$ by recursively evaluating these coefficients and energy corrections.
 
 ---
 
 ## II. Nuclear Derivatives
 
-### 3. Analytical Nuclear Gradient
+### 2. Analytical Nuclear Gradient
 
-To find the forces on the atoms in a molecule when using MP perturbation theory, we must calculate the derivative of the correlation energy with respect to the nuclear coordinates. This is more difficult than in Hartree–Fock because the Møller–Plesset wavefunction is not variationally optimized. This means that when the nuclei move, the molecular orbital coefficients change, and we must explicitly calculate their derivatives using the Coupled-Perturbed Hartree–Fock (CPHF) equations. By differentiating the energy expression of order $k$, the analytical nuclear gradient is given by
-
-$$
-\frac{dE^{(k)}}{dx}=\sum_{j\neq0}\left(\frac{dV_{0j}}{dx}C_j^{(k-1)}+V_{0j}\frac{dC_j^{(k-1)}}{dx}\right)
-$$
-
-where $x$ represents a nuclear coordinate, and the derivatives of the coefficients $dC_j^{(k-1)}/dx$ are calculated recursively. Evaluating this gradient requires propagating the derivatives of the molecular integrals and the molecular orbital coefficients, which is computationally demanding and complicated to implement.
-
-### 4. Analytical Gradients via Dual Numbers
-
-To simplify this process, our codebase implements an alternative approach using dual numbers. A dual number consists of a real part and a dual part containing a derivative, written as $a+b\epsilon$ where the dual unit satisfies $\epsilon^2=0$. Evaluating any smooth function $f$ on a dual number yields the function value and its exact derivative as
+To find the forces on the atoms in a molecule when using MP perturbation theory, we must calculate the derivative of the total energy with respect to the nuclear coordinates. Because the Møller–Plesset wavefunction is not variationally optimized, its energy is not stationary with respect to changes in the molecular orbital coefficients, meaning the nuclear gradient depends explicitly on the first-order response of the molecular orbitals and their energies. The total analytical nuclear gradient at perturbation order $k$ combines the ground-state Hartree–Fock gradient and the correlation energy gradients as
 
 $$
-f(x+dx\epsilon)=f(x)+f'(x)dx\epsilon
+\frac{dE_{\text{tot}}}{dx}=\frac{dE_{\text{HF}}}{dx}+\sum_{m=2}^k\frac{dE^{(m)}}{dx}
 $$
 
-which provides a way to calculate derivatives without numerical subtraction errors. To calculate the nuclear gradient of the correlation energy, we perturb the coordinates of the nuclei by adding the dual unit as $x\to x+\epsilon$ and compute the atomic orbital integrals as dual numbers containing their derivatives. By running the entire self-consistent field iterations, molecular orbital transformations, and perturbation calculations using the generic `ScalarDual(T)` type, the program automatically propagates the derivatives through the entire algorithm. The real part of the final result is the correlation energy, and the dual part is the exact analytical nuclear gradient. This dual number approach bypasses the need to write complex code to solve the CPHF response equations manually, reducing code complexity and preventing implementation errors.
+where the derivative of each correlation correction $E^{(m)}$ is obtained by differentiating the Rayleigh–Schrödinger energy expression as
+
+$$
+\frac{dE^{(m)}}{dx}=\sum_{j\neq0}\left(\frac{dV_{0j}}{dx}C_j^{(m-1)}+V_{0j}\frac{dC_j^{(m-1)}}{dx}\right)
+$$
+
+which involves the derivatives of the perturbation matrix elements $\frac{dV_{0j}}{dx}$ and the recursive differentiation of the wavefunction coefficients $\frac{dC_j^{(m-1)}}{dx}$ through the orbital energy denominators.
+
+### 3. Differentiation via CPHF and Dual Numbers
+
+Evaluating the correlation gradient directly by differentiating the determinant matrix elements and recursive perturbation equations by hand is mathematically tedious and prone to algebraic errors. To resolve this, mean-field response theory is combined with forward-mode automatic differentiation using dual numbers.
+
+First, the Coupled-Perturbed Hartree–Fock (CPHF) equations are solved to determine the first-order mean-field response to nuclear displacements. Specifically, CPHF yields the molecular orbital coefficient derivatives $\frac{d\mathbf{C}}{dx}$ and the orbital energy derivatives $\frac{d\boldsymbol{\epsilon}}{dx}$, which describe how the molecular orbitals rotate and shift in energy as the atoms move.
+
+Second, rather than manually differentiating the four-index molecular orbital transformation, the Slater–Condon rules, and the recursive Rayleigh–Schrödinger equations, the post-Hartree–Fock perturbation series is differentiated using forward-mode automatic differentiation. Seeding the molecular orbital coefficients, orbital energies, and two-electron repulsion integrals with their exact first-order derivatives ($\frac{d\mathbf{C}}{dx}$, $\frac{d\boldsymbol{\epsilon}}{dx}$, and $\frac{d\mathbf{g}}{dx}$) automatically propagates the exact chain-rule derivatives through the perturbation series using dual numbers. Evaluating the perturbation series yields the correlation energy $E^{(m)}$ in the real component and the exact analytical correlation gradient $\frac{dE^{(m)}}{dx}$ in the dual component, completing the total analytical nuclear gradient.

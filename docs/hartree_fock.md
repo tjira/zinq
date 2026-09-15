@@ -26,7 +26,7 @@ $$
 \begin{pmatrix}\mathbf{F}^{\alpha\alpha}&\mathbf{F}^{\alpha\beta}\\\mathbf{F}^{\beta\alpha}&\mathbf{F}^{\beta\beta}\end{pmatrix}\begin{pmatrix}\mathbf{C}^{\alpha}\\\mathbf{C}^{\beta}\end{pmatrix}=\begin{pmatrix}\mathbf{S}&\mathbf{0}\\\mathbf{0}&\mathbf{S}\end{pmatrix}\begin{pmatrix}\mathbf{C}^{\alpha}\\\mathbf{C}^{\beta}\end{pmatrix}\mathbf{E}
 $$
 
-where the diagonal blocks $\mathbf{F}^{\alpha\alpha}$ and $\mathbf{F}^{\beta\beta}$ describe the energy and interactions that preserve the spin of the electrons, while the off-diagonal blocks $\mathbf{F}^{\alpha\beta}$ and $\mathbf{F}^{\beta\alpha}$ describe spin-mixing interactions (such as spin-orbit coupling). The matrices $\mathbf{C}^{\alpha}$ and $\mathbf{C}^{\beta}$ describe the spatial distribution of the alpha and beta spin components of the molecular orbitals, allowing the system to model complex magnetic arrangements.
+where the diagonal blocks $\mathbf{F}^{\alpha\alpha}$ and $\mathbf{F}^{\beta\beta}$ describe the energy and interactions that preserve the spin of the electrons, while the off-diagonal blocks $\mathbf{F}^{\alpha\beta}$ and $\mathbf{F}^{\beta\alpha}$ describe spin-mixing exchange interactions that couple alpha and beta channels. The matrices $\mathbf{C}^{\alpha}$ and $\mathbf{C}^{\beta}$ describe the spatial distribution of the alpha and beta spin components of the molecular orbitals, allowing the system to model non-collinear spin arrangements.
 
 ---
 
@@ -34,19 +34,19 @@ where the diagonal blocks $\mathbf{F}^{\alpha\alpha}$ and $\mathbf{F}^{\beta\bet
 
 ### 3. Fock Matrix Construction
 
-For a closed-shell system where all electrons are paired in spatial orbitals (Restricted Hartree–Fock), the elements of the Fock matrix in the atomic orbital basis are constructed as
+The elements of the Fock matrix in the basis functions are constructed as
 
 $$
-F_{\mu\nu}=H_{\mu\nu}^{\text{core}}+\sum_{\lambda,\sigma}P_{\lambda\sigma}\left(\langle\mu\lambda|\nu\sigma\rangle-\frac{1}{2}\langle\mu\lambda|\sigma\nu\rangle\right)
+F_{\mu\nu}=H_{\mu\nu}^{\text{core}}+\sum_{\lambda,\sigma}P_{\lambda\sigma}\left(\langle\mu\lambda|\nu\sigma\rangle-c_{\text{x}}\langle\mu\lambda|\sigma\nu\rangle\right)
 $$
 
-where $H_{\mu\nu}^{\text{core}}$ is the core Hamiltonian matrix containing the kinetic energy of the electrons and their electrostatic attraction to the nuclei, $P_{\lambda\sigma}$ represents the elements of the density matrix, $\langle\mu\lambda|\nu\sigma\rangle$ represents the two-electron Coulomb integrals describing the classical electrostatic repulsion between electron clouds, and $\langle\mu\lambda|\sigma\nu\rangle$ represents the two-electron exchange integrals. The exchange term is a purely quantum mechanical effect arising from the antisymmetry of the wavefunction, which acts to keep electrons of the same spin apart. The factor of $1/2$ on the exchange term arises because the summation runs over spatial orbitals, each of which can hold two electrons of opposite spins. The density matrix $\mathbf{P}$ is computed from the occupied molecular orbital coefficients as
+where $H_{\mu\nu}^{\text{core}}$ is the core Hamiltonian matrix containing the kinetic energy of the electrons and their electrostatic attraction to the nuclei, $P_{\lambda\sigma}$ represents the elements of the density matrix, $\langle\mu\lambda|\nu\sigma\rangle$ represents the two-electron Coulomb integrals describing the classical electrostatic repulsion between electron clouds, and $\langle\mu\lambda|\sigma\nu\rangle$ represents the two-electron exchange integrals. The exchange term is a purely quantum mechanical effect arising from the antisymmetry of the wavefunction, scaled by the exchange factor $c_{\text{x}}$. The density matrix $\mathbf{P}$ is computed from the occupied molecular orbital coefficients as
 
 $$
-P_{\lambda\sigma}=2\sum_i^{\text{occ}}C_{\lambda i}C_{\sigma i}
+P_{\lambda\sigma}=f_{\text{occ}}\sum_i^{\text{occ}}C_{\lambda i}C_{\sigma i}
 $$
 
-where the factor of two accounts for the double occupancy of each spatial orbital, and the sum runs over all occupied molecular orbitals. In Generalized Hartree–Fock, the equations are written directly in terms of spin-orbitals, which removes the factors of two and the $1/2$ scale factor.
+accounting for the occupied orbitals with an orbital occupancy factor $f_{\text{occ}}$. In Restricted Hartree–Fock (RHF), the equations are solved in the spatial basis where each spatial orbital is doubly occupied ($f_{\text{occ}}=2$), and the exchange factor is $c_{\text{x}}=1/2$ because exchange only occurs between electrons of identical spin. In Generalized Hartree–Fock (GHF), the equations are formulated in the combined spin-orbital basis where each spin-orbital has single occupancy ($f_{\text{occ}}=1$), and the exchange factor is $c_{\text{x}}=1$ because spin is explicitly resolved within the basis.
 
 ### 4. Self-Consistent Field Iteration and DIIS
 
@@ -66,7 +66,19 @@ $$
 E_{\text{elec}}=\frac{1}{2}\sum_{\mu,\nu}P_{\mu\nu}\left(H_{\mu\nu}^{\text{core}}+F_{\mu\nu}\right)
 $$
 
-where the factor of $1/2$ is necessary to prevent double-counting the electron-electron repulsions that are included in the Fock matrix. The total energy of the molecule is then the sum of this electronic energy and the classical electrostatic repulsion energy between the nuclei.
+where the factor of $1/2$ is necessary to prevent double-counting the electron-electron repulsions that are included in the Fock matrix. The total molecular energy is obtained by adding the classical electrostatic repulsion energy between the nuclei as
+
+$$
+E_{\text{tot}}=E_{\text{elec}}+V_{\text{nuc}}
+$$
+
+where the nuclear repulsion energy is evaluated from the atomic charges $Z_A$ and Cartesian nuclear positions $\mathbf{R}_A$ as
+
+$$
+V_{\text{nuc}}=\sum_{A<B}\frac{Z_AZ_B}{|\mathbf{R}_A-\mathbf{R}_B|}
+$$
+
+which completes the total ground-state energy evaluation.
 
 ---
 
@@ -74,38 +86,56 @@ where the factor of $1/2$ is necessary to prevent double-counting the electron-e
 
 ### 6. Analytical Nuclear Gradient
 
-To find the forces acting on the atoms (which we need for moving atoms in molecular dynamics or finding stable geometries), we calculate the derivative of the Hartree–Fock energy with respect to the nuclear coordinates. The analytical nuclear gradient is given by
+To find the forces acting on the atoms (which we need for moving atoms in molecular dynamics or finding stable geometries), we calculate the derivative of the Hartree–Fock energy with respect to the nuclear coordinates. Because the Hartree–Fock wavefunction is variationally optimized, its energy is stationary with respect to changes in the molecular orbital coefficients, meaning their derivatives do not appear in the gradient. The term containing the derivative of the overlap matrix $\mathbf{S}$ represents the Pulay force, which arises because the basis functions are centered on the atoms and move along with them as the nuclei move. The analytical nuclear gradient is given by
 
 $$
-\frac{dE_{\text{HF}}}{dx}=\frac{dV_{\text{nuc}}}{dx}+\sum_{\mu,\nu}P_{\mu\nu}\frac{dH_{\mu\nu}^{\text{core}}}{dx}-\sum_{\mu,\nu}W_{\mu\nu}\frac{dS_{\mu\nu}}{dx}+\frac{1}{2}\sum_{\mu,\nu,\lambda,\sigma}P_{\mu\nu}P_{\lambda\sigma}\left(\frac{d\langle\mu\lambda|\nu\sigma\rangle}{dx}-\frac{1}{2}\frac{d\langle\mu\lambda|\sigma\nu\rangle}{dx}\right)
+\frac{dE_{\text{HF}}}{dx}=\frac{dV_{\text{nuc}}}{dx}+\sum_{\mu,\nu}P_{\mu\nu}\frac{dH_{\mu\nu}^{\text{core}}}{dx}-\sum_{\mu,\nu}W_{\mu\nu}\frac{dS_{\mu\nu}}{dx}+\frac{1}{2}\sum_{\mu,\nu,\lambda,\sigma}P_{\mu\nu}P_{\lambda\sigma}\left(\frac{d\langle\mu\lambda|\nu\sigma\rangle}{dx}-c_{\text{x}}\frac{d\langle\mu\lambda|\sigma\nu\rangle}{dx}\right)
 $$
 
-where $V_{\text{nuc}}$ is the nuclear repulsion energy, and $\mathbf{W}$ is the energy-weighted density matrix defined from the molecular orbital energies $\epsilon_i$ and coefficients as
+where $V_{\text{nuc}}$ is the nuclear repulsion energy, $c_{\text{x}}$ is the exchange scaling factor, and $\mathbf{W}$ is the energy-weighted density matrix defined from the molecular orbital energies $\epsilon_i$ and coefficients as
 
 $$
-W_{\mu\nu}=2\sum_i^{\text{occ}}\epsilon_iC_{\mu i}C_{\nu i}
+W_{\mu\nu}=f_{\text{occ}}\sum_i^{\text{occ}}\epsilon_iC_{\mu i}C_{\nu i}
 $$
 
-which accounts for the energy of the occupied orbitals. Because the Hartree–Fock wavefunction is variationally optimized, its energy is stationary with respect to changes in the molecular orbital coefficients, meaning their derivatives do not appear in the gradient. The term containing the derivative of the overlap matrix $\mathbf{S}$ represents the Pulay force, which arises because the basis functions are centered on the atoms and move along with them as the nuclei move.
+accounting for the energy of the occupied orbitals with an orbital occupancy factor $f_{\text{occ}}$. In Restricted Hartree–Fock (RHF), the calculation is performed in the spatial atomic orbital basis where each spatial orbital is doubly occupied ($f_{\text{occ}}=2$), and the exchange factor is $c_{\text{x}}=1/2$ because exchange only occurs between electrons of identical spin. In Generalized Hartree–Fock (GHF), the calculation is formulated in a combined spin-orbital basis of twice the spatial dimension where each spin-orbital has single occupancy ($f_{\text{occ}}=1$), and the exchange factor is $c_{\text{x}}=1$ because the spin integration is carried out directly over the spin-orbitals.
 
 ### 7. Coupled-Perturbed Hartree–Fock Equations
 
-When a molecule is perturbed, such as when an atom moves or when we apply an external electric field, the molecular orbitals change. Because the Fock matrix depends on the density matrix, any change in the orbitals affects the Fock matrix, which in turn affects the orbitals. The Coupled-Perturbed Hartree–Fock (CPHF) equations describe this coupled response self-consistently. We express the derivative of the molecular orbital coefficients in terms of the unperturbed coefficients using an orbital response matrix $\mathbf{U}^x$ as
+When a molecular geometry is perturbed, the molecular orbitals rotate to preserve the self-consistent field condition $\mathbf{F}\mathbf{C}=\mathbf{S}\mathbf{C}\mathbf{E}$. The Coupled-Perturbed Hartree–Fock (CPHF) equations solve directly for the orbital response matrix $\mathbf{U}^x$, which describes the first-order transformation of the molecular orbital coefficients as
 
 $$
-\frac{dC_{\mu i}}{dx}=\sum_pC_{\mu p}U_{pi}^x
+\frac{dC_{\mu p}}{dx}=\sum_qC_{\mu q}U_{qp}^x
 $$
 
-where the sum runs over all occupied and virtual molecular orbitals. The requirement that the molecular orbitals remain orthonormal as they change constrains the symmetric part of the response matrix to satisfy
+where the occupied–virtual blocks $U_{ai}^x$ represent the physical relaxation and polarization of the electronic wavefunction, while the remaining blocks preserve orbital orthonormality through the constraint
 
 $$
-U_{pq}^x+U_{qp}^x+\frac{dS_{pq}}{dx}=0
+U_{pq}^x+U_{qp}^x+S_{pq}^{x,\text{MO}}=0
 $$
 
-where $S_{pq}$ is the derivative of the overlap matrix in the molecular orbital basis. The remaining occupied-virtual blocks of the response matrix are found by solving the CPHF equations
+where $S_{pq}^{x,\text{MO}}$ denotes the overlap derivative in the molecular orbital basis. Because rotating the orbitals induces a first-order perturbed density matrix $\mathbf{P}^x$ that modifies the Fock operator through electron repulsion, the response matrix elements $U_{ai}^x$ are coupled and solved iteratively as
 
 $$
-(\epsilon_a-\epsilon_i)U_{ai}^x-\sum_{j}^{\text{occ}}\sum_{b}^{\text{vir}}A_{ai,bj}U_{bj}^x=B_{ai}^x
+(\epsilon_a-\epsilon_i)U_{ai}^x=-\left(F_{ai}^{x,\text{MO}}+V_{ai}^{x,\text{MO}}(\mathbf{P}^x)-S_{ai}^{x,\text{MO}}\epsilon_i\right)
 $$
 
-where $i, j$ denote occupied orbitals, $a, b$ denote virtual (unoccupied) orbitals, $A_{ai,bj}$ are the coupling matrix elements that describe how the Hartree–Fock potential changes when the density matrix is modified, and $B_{ai}^x$ is the direct perturbation vector containing the derivatives of the Fock and overlap matrices. Because building and inverting the coupling matrix $\mathbf{A}$ directly would require huge amounts of memory and time, our codebase solves these equations iteratively using DIIS acceleration.
+where $F_{ai}^{x,\text{MO}}$ is the MO-transformed skeleton Fock derivative, and $V_{ai}^{x,\text{MO}}(\mathbf{P}^x)$ is the response potential generated by the first-order perturbed density matrix
+
+$$
+P_{\mu\nu}^x=f_{\text{occ}}\sum_j^{\text{occ}}\left(\frac{dC_{\mu j}}{dx}C_{\nu j}+C_{\mu j}\frac{dC_{\nu j}}{dx}\right)
+$$
+
+which is contracted with the two-electron integrals using an exchange scaling factor $c_{\text{x}}$ as
+
+$$
+V_{\lambda\sigma}^x=\sum_{\mu,\nu}P_{\mu\nu}^x\left(\langle\mu\lambda|\nu\sigma\rangle-c_{\text{x}}\langle\mu\nu|\lambda\sigma\rangle\right)
+$$
+
+before transformation into the molecular orbital basis. This formulation is universal for both spin variants, where Restricted Hartree–Fock uses $f_{\text{occ}}=2$ and $c_{\text{x}}=1/2$ in the spatial basis, whereas Generalized Hartree–Fock uses $f_{\text{occ}}=1$ and $c_{\text{x}}=1$ in the spin-orbital basis. Once the linear equations are solved for the response matrix $\mathbf{U}^x$, the molecular orbital coefficient derivatives are obtained by back-transformation as $\frac{d\mathbf{C}}{dx}=\mathbf{C}\mathbf{U}^x$, and the orbital energy derivatives are evaluated from the diagonal elements of the perturbed Fock matrix as
+
+$$
+\frac{d\epsilon_p}{dx}=F_{pp}^{x,\text{MO}}+V_{pp}^{x,\text{MO}}(\mathbf{P}^x)-S_{pp}^{x,\text{MO}}\epsilon_p
+$$
+
+which describes the first-order shift in each orbital energy eigenvalue. While first derivatives of the variational Hartree–Fock energy do not require orbital response calculations due to the Hellmann–Feynman theorem, the solved response matrix $\mathbf{U}^x$ and orbital derivatives are essential for calculating second derivatives of the Hartree–Fock energy (nuclear Hessians and vibrational frequencies) as well as analytical nuclear gradients for non-variational correlated methods such as Møller–Plesset perturbation theory.

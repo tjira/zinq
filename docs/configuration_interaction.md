@@ -1,6 +1,6 @@
 # Configuration–Interaction
 
-This document provides a highly detailed, mathematically rigorous, yet simple and intuitive explanation of the Configuration–Interaction (CI) method and how it is implemented in our framework. If you want to understand how we can describe electron correlation by mixing different electronic configurations together using a variational approach, this guide is written step-by-step for you.
+This document provides a highly detailed, mathematically rigorous, yet simple and intuitive explanation of the Configuration–Interaction (CI) method. If you want to understand how we can describe electron correlation by mixing different electronic configurations together using a variational approach, this guide is written step-by-step for you.
 
 ---
 
@@ -10,13 +10,13 @@ To understand the Configuration–Interaction method, we must first look at how 
 
 ### 1. Variational Wavefunction Expansion
 
-We write the Configuration–Interaction wavefunction expansion as
+We write the Configuration–Interaction wavefunction expansion for an electronic state $k$ as
 
 $$
-| \Psi_{\text{CI}} \rangle = c_0 | \Phi_0 \rangle + \sum_i c_i | \Phi_i \rangle
+|\Psi_k\rangle=\sum_a c_{ak}|\Phi_a\rangle
 $$
 
-where $| \Phi_0 \rangle$ is the reference Hartree–Fock Slater determinant representing the mean-field ground state of the system, $| \Phi_i \rangle$ represents the excited Slater determinants where one or more electrons have been promoted from occupied molecular orbitals to virtual (unoccupied) molecular orbitals, and $c_0$ and $c_i$ are the variational coefficients that we want to determine. In a determinant-based Configuration–Interaction approach, we represent each Slater determinant in our code as an array of occupied spin-orbital indices. By comparing these arrays, we can determine the excitation level of each determinant relative to the ground state, which simplifies the evaluation of the interaction energies.
+where $|\Phi_0\rangle$ is the reference Hartree–Fock Slater determinant representing the mean-field ground state of the system, $|\Phi_a\rangle$ represents the excited Slater determinants where one or more electrons have been promoted from occupied molecular orbitals to virtual molecular orbitals, and $c_{ak}$ are the variational coefficients that define state $k$. In a determinant-based Configuration–Interaction approach, each Slater determinant is specified by its occupied spin-orbital indices, from which the excitation level relative to the reference determinant is determined.
 
 ---
 
@@ -24,53 +24,47 @@ where $| \Phi_0 \rangle$ is the reference Hartree–Fock Slater determinant repr
 
 ### 2. Slater–Condon Rules
 
-To find the coefficients that minimize the energy of our system, we must construct a large matrix representing the electronic Hamiltonian operator $\hat{H}$ in the basis of our Slater determinants. The elements of this matrix are denoted as $H_{ij}=\langle\Phi_i|\hat{H}|\Phi_j\rangle$. Because our molecular orbitals are orthonormal and the Hamiltonian operator only contains interactions involving at most two electrons, we can use the Slater–Condon rules to simplify these matrix elements. These rules reduce the complicated many-electron integrals to simple one- and two-electron molecular integrals based on how many spin-orbitals differ between the two determinants.
-
-If the two determinants are identical, the matrix elements of a one-body operator $\hat{F}$ (which describes kinetic energy and nuclear attraction) and a two-body operator $\hat{G}$ (which describes electron-electron repulsion) are calculated as
+To find the coefficients that minimize the energy of the system, we construct the matrix representing the electronic Hamiltonian operator $\hat{H}$ in the basis of Slater determinants. The total electronic Hamiltonian is partitioned into one-electron and two-electron operators as
 
 $$
-\langle\Phi_A|\hat{F}|\Phi_A\rangle=\sum_i\langle\phi_i|\hat{f}|\phi_i\rangle
+\hat{H}=\sum_i\hat{h}^{\text{core}}(i)+\sum_{i<j}\hat{g}(i,j)
 $$
 
-and
+where $\hat{h}^{\text{core}}$ describes the one-electron kinetic energy and nuclear attraction, and $\hat{g}(i,j)=\frac{1}{r_{ij}}$ represents the electron-electron Coulomb repulsion. The matrix elements in the determinant basis are denoted as $H_{\text{CI},ab}=\langle\Phi_a|\hat{H}|\Phi_b\rangle$. Because the molecular orbitals are orthonormal and the Hamiltonian contains at most two-body interactions, the Slater–Condon rules simplify these matrix elements to one- and two-electron molecular spin-orbital integrals based on the number of spin-orbitals differing between determinants $a$ and $b$.
+
+If the two determinants are identical ($a=b$), the matrix element is the expectation value of the Hamiltonian evaluated as
 
 $$
-\langle\Phi_A|\hat{G}|\Phi_A\rangle=\frac{1}{2}\sum_{i,j}\langle\phi_i\phi_j||\phi_i\phi_j\rangle
+\langle\Phi_a|\hat{H}|\Phi_a\rangle=\sum_i\langle\phi_i|\hat{h}^{\text{core}}|\phi_i\rangle+\sum_{i<j}\langle\phi_i\phi_j||\phi_i\phi_j\rangle
 $$
 
-where the sums run over all occupied spin-orbitals $\phi_i$ and $\phi_j$, and the double bar indicates an antisymmetrized two-electron integral combining the classical Coulomb repulsion and the quantum exchange interaction.
+where the sums run over all occupied spin-orbitals $\phi_i$ and $\phi_j$, and $\langle\phi_i\phi_j||\phi_i\phi_j\rangle=\langle\phi_i\phi_j|\phi_i\phi_j\rangle-\langle\phi_i\phi_j|\phi_j\phi_i\rangle$ is the antisymmetrized two-electron integral combining classical Coulomb repulsion and quantum exchange.
 
-If the two determinants differ by exactly one spin-orbital (where determinant $A$ has orbital $\phi_p$ and determinant $B$ has orbital $\phi_r$ at that position), the matrix elements are calculated as
-
-$$
-\langle\Phi_A|\hat{F}|\Phi_B\rangle=\langle\phi_p|\hat{f}|\phi_r\rangle
-$$
-
-and
+If the two determinants differ by exactly one spin-orbital (where determinant $a$ contains spin-orbital $\phi_p$ and determinant $b$ contains spin-orbital $\phi_r$), the matrix element is evaluated as
 
 $$
-\langle\Phi_A|\hat{G}|\Phi_B\rangle=\sum_i\langle\phi_p\phi_i||\phi_r\phi_i\rangle
+\langle\Phi_a|\hat{H}|\Phi_b\rangle=(-1)^{\sigma_{ab}}\left(\langle\phi_p|\hat{h}^{\text{core}}|\phi_r\rangle+\sum_i\langle\phi_p\phi_i||\phi_r\phi_i\rangle\right)
 $$
 
-where the sum runs over the spin-orbitals common to both determinants, representing the transition interactions.
+where the sum runs over the spin-orbitals shared by both determinants, and $(-1)^{\sigma_{ab}}$ is a permutation phase factor determined by the number of orbital transpositions required to align the common spin-orbital occupations between the two determinants.
 
-If the two determinants differ by exactly two spin-orbitals (where determinant $A$ has orbitals $\phi_p$ and $\phi_q$, and determinant $B$ has orbitals $\phi_r$ and $\phi_s$), the one-body matrix element is zero, and the two-body matrix element is calculated as
+If the two determinants differ by exactly two spin-orbitals (where determinant $a$ contains spin-orbitals $\phi_p$ and $\phi_q$, and determinant $b$ contains spin-orbitals $\phi_r$ and $\phi_s$), the one-electron contribution vanishes, and the two-electron matrix element is evaluated as
 
 $$
-\langle\Phi_A|\hat{G}|\Phi_B\rangle=\langle\phi_p\phi_q||\phi_r\phi_s\rangle
+\langle\Phi_a|\hat{H}|\Phi_b\rangle=(-1)^{\sigma_{ab}}\langle\phi_p\phi_q||\phi_r\phi_s\rangle
 $$
 
-which directly measures the interaction between the two excitations. If the determinants differ by three or more spin-orbitals, the matrix elements are exactly zero because the Hamiltonian operator only contains interactions between at most two electrons at a time. When evaluating these matrix elements in our code, we compare the occupied spin-orbital indices of the two determinants. Because the wavefunction must be antisymmetric, swapping the order of any two electrons changes the sign of the determinant. To account for this, the code counts the number of permutations needed to align the indices of the two determinants and applies a phase factor of $-1$ for each permutation.
+which directly couples the two excited configurations. If the determinants differ by three or more spin-orbitals, the Hamiltonian matrix element is identically zero because $\hat{H}$ contains only one- and two-body operators.
 
 ### 3. Hamiltonian Diagonalization
 
-Applying the variational principle to find the coefficients that minimize the energy leads to a matrix eigenvalue equation
+Applying the variational principle to optimize the expansion coefficients leads to the matrix eigenvalue equation
 
 $$
-\mathbf{H}_{\text{CI}}\mathbf{C}_k=E_k\mathbf{C}_k
+\mathbf{H}_{\text{CI}}\mathbf{c}_k=E_k\mathbf{c}_k
 $$
 
-where $\mathbf{H}_{\text{CI}}$ is the Hamiltonian matrix representation in the Slater determinant basis, $\mathbf{C}_k$ is the eigenvector containing the coefficients for state $k$, and $E_k$ is the corresponding electronic energy. The total energy of the state is the sum of the electronic energy $E_k$ and the classical nuclear repulsion energy. We solve this eigenvalue equation using symmetric matrix diagonalization methods from `linear_algebra.zig`.
+where $\mathbf{H}_{\text{CI}}$ is the Hamiltonian matrix representation in the Slater determinant basis, $\mathbf{c}_k$ is the eigenvector containing the configuration coefficients for state $k$, and $E_k$ is the corresponding electronic energy eigenvalue. The total energy of state $k$ is the sum of the electronic energy $E_k$ and the nuclear repulsion energy $V_{\text{nuc}}$.
 
 ---
 
@@ -78,10 +72,18 @@ where $\mathbf{H}_{\text{CI}}$ is the Hamiltonian matrix representation in the S
 
 ### 4. Analytical Nuclear Gradient
 
-To calculate the forces acting on the nuclei, we must find the derivative of the CI energy with respect to the nuclear coordinates. The analytical gradient of the energy of state $k$ with respect to a nuclear coordinate $x$ is given by
+To determine the forces acting on the nuclei, we calculate the derivative of the total energy of state $k$ with respect to the Cartesian nuclear coordinates $x$. Differentiating the variational energy expression yields the analytical nuclear gradient as
 
 $$
-\frac{dE_k}{dx}=\frac{dV_{\text{nuc}}}{dx}+\sum_{a,b}C_{ak}C_{bk}\frac{dH_{\text{CI},ab}}{dx}
+\frac{dE_{k,\text{tot}}}{dx}=\frac{dV_{\text{nuc}}}{dx}+\sum_{a,b}c_{ak}c_{bk}\frac{dH_{\text{CI},ab}}{dx}
 $$
 
-where $V_{\text{nuc}}$ is the nuclear repulsion energy, and $C_{ak}$ and $C_{bk}$ are the components of the CI eigenvector. Because the CI coefficients are variationally optimized by diagonalizing the Hamiltonian matrix, their derivatives with respect to the coordinates do not contribute to the energy derivative. However, the molecular orbitals themselves are optimized for the Hartree–Fock reference state, not the CI state, meaning they are not variational with respect to the CI energy. Therefore, we must explicitly calculate the derivatives of the molecular orbital coefficients by solving the Coupled-Perturbed Hartree–Fock (CPHF) equations to account for how the orbitals change when the nuclei move.
+where $V_{\text{nuc}}$ is the nuclear repulsion energy, and $c_{ak}$ and $c_{bk}$ are the components of the CI eigenvector $\mathbf{c}_k$. Because the CI coefficients are variationally optimized by diagonalizing the Hamiltonian matrix, their derivatives with respect to nuclear displacements vanish by the Hellmann–Feynman theorem. However, the molecular orbitals are optimized for the Hartree–Fock reference rather than the CI wavefunction, so the energy is not stationary with respect to changes in the molecular orbital coefficients, meaning their nuclear derivatives contribute explicitly to $\frac{dH_{\text{CI},ab}}{dx}$.
+
+### 5. Differentiation via CPHF and Dual Numbers
+
+Evaluating the derivative of each Hamiltonian matrix element $\frac{dH_{\text{CI},ab}}{dx}$ requires propagating nuclear derivatives through the atomic orbital integrals, the four-index molecular orbital transformation, and the Slater–Condon rules. To accomplish this, mean-field response theory is combined with forward-mode automatic differentiation using dual numbers.
+
+First, the Coupled-Perturbed Hartree–Fock (CPHF) equations are solved to obtain the first-order response of the molecular orbitals to nuclear displacements. This yields the molecular orbital coefficient derivatives $\frac{d\mathbf{C}}{dx}$, which describe the geometric relaxation of the molecular orbital basis as the nuclei move.
+
+Second, rather than manually differentiating the four-index molecular orbital transformation and the determinant evaluation rules, the derivative of the CI Hamiltonian matrix is evaluated using forward-mode automatic differentiation. Seeding the atomic orbital core Hamiltonian $\mathbf{H}^{\text{core}}$, the two-electron repulsion integrals $\mathbf{g}$, and the molecular orbital coefficients $\mathbf{C}$ with their exact first-order derivatives ($\frac{d\mathbf{H}^{\text{core}}}{dx}$, $\frac{d\mathbf{g}}{dx}$, and $\frac{d\mathbf{C}}{dx}$) automatically propagates the derivatives through the integral transformation and Slater–Condon evaluation using dual numbers. The resulting dual component of the Hamiltonian matrix directly provides $\frac{dH_{\text{CI},ab}}{dx}$, which is contracted with the CI eigenvectors to complete the analytical nuclear gradient.
