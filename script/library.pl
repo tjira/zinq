@@ -308,6 +308,9 @@ sub compile_libxc {
     # INSTALL THE LIBRARY
     system("make", "-C", "src", "install") == 0 or die "LIBXC INSTALL FAILED";
 
+    # INSTALL THE HEADERS
+    system("make", "install-includeHEADERS") == 0 or die "LIBXC INSTALL HEADERS FAILED";
+
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
 }
