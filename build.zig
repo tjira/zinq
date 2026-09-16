@@ -66,13 +66,17 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
 
     module.addIncludePath(b.path("src"));
 
-    const is_windows = module.resolved_target.?.result.os.tag == .windows;
+    const os_enum = module.resolved_target.?.result.os.tag;
+
+    const is_linux, const is_windows = .{ os_enum == .linux, os_enum == .windows };
 
     module.addLibraryPath(.{ .cwd_relative = dir0 });
     module.addIncludePath(.{ .cwd_relative = dir1 });
     module.addIncludePath(.{ .cwd_relative = dir2 });
 
-    const flags: []const []const u8 = if (is_windows) &.{"-D__GXX_ABI_VERSION=1004"} else &.{};
+    const lin_flags, const win_flags = .{ &.{"-fopenmp"}, &.{"-D__GXX_ABI_VERSION=1004"} };
+
+    const flags: []const []const u8 = if (is_linux) lin_flags else if (is_windows) win_flags else &.{};
 
     module.addCSourceFile(.{ .file = b.path("src/libint.cpp"), .flags = flags });
     module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });

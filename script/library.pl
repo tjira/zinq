@@ -10,7 +10,7 @@ use File::Copy   qw(move copy       );
 use Getopt::Long qw(GetOptions      );
 
 # DEFINE LIBRARY NAMES
-my @lib_names = qw(eigen libint libxc openblas fftw exprtk);
+my @lib_names = qw(eigen libint libxc openblas fftw exprtk openmp);
 
 # DEFINE BUILD OPTIONS
 my (%build, $generic);
@@ -30,7 +30,7 @@ GetOptions(
 );
 
 # IF NO FLAGS ARE PROVIDED, BUILD EVERYTHING
-if (!grep { $build{$_} } @lib_names) {
+if (!grep {$build{$_}} @lib_names) {
     $build{$_} = 1 for @lib_names;
 }
 
@@ -49,12 +49,13 @@ create_compiler_wrappers($target, $pwd);
 rmtree("lib") if -d "lib";
 
 # COMPILE EACH PROGRAM
-compile_exprtk  ($prefix,                $pwd                   ) if $build{exprtk};
-compile_eigen   ($prefix, $cores,        $pwd                   ) if $build{eigen};
-compile_libint  ($prefix, $cores,        $pwd                   ) if $build{libint};
-compile_libxc   ($prefix, $cores, $host, $pwd                   ) if $build{libxc};
-compile_openblas($prefix, $cores,        $pwd,          $generic) if $build{openblas};
-compile_fftw    ($prefix, $cores, $host, $pwd,          $generic) if $build{fftw};
+compile_exprtk  ($prefix,                $pwd          ) if $build{exprtk};
+compile_eigen   ($prefix, $cores,        $pwd          ) if $build{eigen};
+compile_libint  ($prefix, $cores,        $pwd          ) if $build{libint};
+compile_libxc   ($prefix, $cores, $host, $pwd          ) if $build{libxc};
+compile_openblas($prefix, $cores,        $pwd, $generic) if $build{openblas};
+compile_fftw    ($prefix, $cores, $host, $pwd, $generic) if $build{fftw};
+compile_openmp  ($prefix, $cores, $target, $pwd) if $build{openmp};
 
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
@@ -158,6 +159,8 @@ sub compile_eigen {
     my @args = (
         "cmake",
         "-B", "build",
+        "-DCMAKE_AR=$pwd/zigar",
+        "-DCMAKE_RANLIB=$pwd/zigranlib",
         "-DBUILD_SHARED_LIBS=False",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INSTALL_PREFIX=$prefix",
@@ -431,4 +434,52 @@ sub compile_exprtk {
 
     # RUN COPY
     copy($src, $dst) or die "FAILED TO COPY '$src' TO '$dst': $!";
+}
+
+sub compile_openmp {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $cores, $target, $pwd) = @_;
+
+    # CHECK IF THE TARGET IS LINUX, RETURN IF NOT
+    return unless $target =~ /linux/;
+
+    # DEFINE THE URL FOR THE OPENMP SOURCE ARCHIVE
+    my $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.1/llvm-project-23.1.1.src.tar.xz";
+
+    # DOWNLOAD AND EXTRACT THE LIBRARY
+    download_library($url, "llvm");
+
+    # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
+    chdir "lib/llvm" or die "CANNOT CHDIR TO 'lib/llvm': $!";
+
+    # CONFIGURE COMMAND
+    my @args = (
+        "cmake",
+        "-B", "build",
+        "-S", "runtimes",
+        "-DCMAKE_AR=$pwd/zigar",
+        "-DCMAKE_RANLIB=$pwd/zigranlib",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_INSTALL_PREFIX=$prefix",
+        "-DLLVM_ENABLE_RUNTIMES=openmp",
+        "-DLIBOMP_ENABLE_SHARED=OFF",
+        "-DOPENMP_ENABLE_LIBOMPTARGET=OFF",
+        "-DOPENMP_ENABLE_OMPT_TOOLS=OFF",
+        "-DLIBOMP_OMPD_SUPPORT=OFF",
+        "-DLIBOMP_INSTALL_ALIASES=OFF",
+        "-DLLVM_INCLUDE_TESTS=OFF",
+        "-DLIBOMP_FORTRAN_MODULES=OFF",
+    );
+
+    # RUN CONFIGURE
+    system(@args) == 0 or die "OPENMP CONFIGURE FAILED";
+
+    # BUILD THE LIBRARY
+    system("cmake", "--build", "build", "--target", "omp", "--parallel", $cores) == 0 or die "OPENMP BUILD FAILED";
+
+    # INSTALL THE LIBRARY
+    system("cmake", "--install", "build", "--component", "openmp") == 0 or die "OPENMP INSTALL FAILED";
+
+    # CHANGE BACK TO ORIGINAL DIRECTORY
+    chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
 }
