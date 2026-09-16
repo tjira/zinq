@@ -546,12 +546,6 @@ fn checkInvalidInput(opt: Options) !void {
 
             return error.InvalidInput;
         }
-
-        if (opt.generalized) {
-            std.log.err("GENERALIZED HARTREE-FOCK IS NOT CURRENTLY SUPPORTED FOR INTEGRAL DIRECT CALCULATIONS", .{});
-
-            return error.InvalidInput;
-        }
     }
 
     if (opt.write.gradient != null and opt.gradient == null) {
@@ -761,7 +755,13 @@ fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), op
             exch_factor *= pot.exx_coef;
         }
 
-        ints.sys.fock(F, P, exch_factor);
+        if (opt.generalized) {
+            ints.sys.fockGhf(F, P, exch_factor);
+        }
+
+        if (!opt.generalized) {
+            ints.sys.fockRhf(F, P, exch_factor);
+        }
 
         if (dft) |pot| {
             try pot.evaluate(ints.sys, P, gpa);

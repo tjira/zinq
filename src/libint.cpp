@@ -162,7 +162,7 @@ extern "C" {
         }
     }
 
-    void twoelec_fock(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs) {
+    void twoelec_fock_rhf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs) {
         std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
 
         std::vector<double> G(nbf * nbf, 0);
@@ -231,6 +231,123 @@ extern "C" {
         }
     }
 
+    void twoelec_fock_ghf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs) {
+        std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
+
+        size_t nsp = 2 * nbf; std::vector<double> P_tot(nbf * nbf, 0);
+
+        std::vector<double> P_aa(nbf * nbf, 0);
+        std::vector<double> P_bb(nbf * nbf, 0);
+        std::vector<double> P_ab(nbf * nbf, 0);
+
+        for (size_t i = 0; i < nbf; i++) {
+            for (size_t j = 0; j < nbf; j++) {
+                double aa = P[(i + 0 * nbf) * nsp + (j + 0 * nbf)];
+                double bb = P[(i + 1 * nbf) * nsp + (j + 1 * nbf)];
+                double ab = P[(i + 0 * nbf) * nsp + (j + 1 * nbf)];
+
+                P_aa[i * nbf + j] = aa;
+                P_bb[i * nbf + j] = bb;
+                P_ab[i * nbf + j] = ab;
+
+                P_tot[i * nbf + j] = aa + bb;
+            }
+        }
+
+        std::vector<double> J(nbf * nbf, 0);
+
+        std::vector<double> G_aa(nbf * nbf, 0);
+        std::vector<double> G_bb(nbf * nbf, 0);
+        std::vector<double> G_ab(nbf * nbf, 0);
+
+        for (size_t s1 = 0; s1 < obs.size(); s1++) {
+            auto bf1_first = sh2bf.at(s1);
+
+            for (size_t s2 = 0; s2 <= s1; s2++) {
+                auto bf2_first = sh2bf.at(s2);
+
+                for (size_t s3 = 0; s3 <= s1; s3++) {
+                    auto bf3_first = sh2bf.at(s3);
+
+                    for (size_t s4 = 0; s4 <= ((s1 == s3) ? s2 : s3); s4++) {
+                        int id = 0; int idx = 0; auto bf4_first = sh2bf.at(s4);
+
+                        double s12_deg = (s1 == s2) ? 1 : 2;
+                        double s34_deg = (s3 == s4) ? 1 : 2;
+
+                        double s12_34_deg = (s1 == s3 && s2 == s4) ? 1 : 2;
+
+                        double s1234_deg = s12_deg * s34_deg * s12_34_deg;
+
+                        engines.at(id).compute(obs.at(s1), obs.at(s2), obs.at(s3), obs.at(s4));
+
+                        const auto& res = engines.at(id).results();
+
+                        if (res.at(0) == nullptr) continue;
+
+                        for (size_t f1 = 0; f1 < obs.at(s1).size(); f1++) {
+                            size_t bf1 = f1 + bf1_first;
+
+                            for (size_t f2 = 0; f2 < obs.at(s2).size(); f2++) {
+                                size_t bf2 = f2 + bf2_first;
+
+                                for (size_t f3 = 0; f3 < obs.at(s3).size(); f3++) {
+                                    size_t bf3 = f3 + bf3_first;
+
+                                    for (size_t f4 = 0; f4 < obs.at(s4).size(); f4++, idx++) {
+                                        size_t bf4 = f4 + bf4_first;
+
+                                        double val_deg = res[0][idx] * s1234_deg;
+
+                                        J[bf1 * nbf + bf2] += 0.5 * P_tot[bf3 * nbf + bf4] * val_deg;
+                                        J[bf3 * nbf + bf4] += 0.5 * P_tot[bf1 * nbf + bf2] * val_deg;
+
+                                        if (exch_factor != 0) {
+                                            double k_val = 0.25 * exch_factor * res[0][idx] * s12_deg * s34_deg;
+
+                                            auto update_k = [&](std::vector<double> &G_b, const std::vector<double> &P_b) {
+                                                G_b[bf1 * nbf + bf3] -= k_val * P_b[bf2 * nbf + bf4];
+                                                G_b[bf2 * nbf + bf4] -= k_val * P_b[bf1 * nbf + bf3];
+                                                G_b[bf1 * nbf + bf4] -= k_val * P_b[bf2 * nbf + bf3];
+                                                G_b[bf2 * nbf + bf3] -= k_val * P_b[bf1 * nbf + bf4];
+
+                                                if (s1 != s3 || s2 != s4) {
+                                                    G_b[bf3 * nbf + bf1] -= k_val * P_b[bf4 * nbf + bf2];
+                                                    G_b[bf4 * nbf + bf2] -= k_val * P_b[bf3 * nbf + bf1];
+                                                    G_b[bf3 * nbf + bf2] -= k_val * P_b[bf4 * nbf + bf1];
+                                                    G_b[bf4 * nbf + bf1] -= k_val * P_b[bf3 * nbf + bf2];
+                                                }
+                                            };
+
+                                            update_k(G_aa, P_aa);
+                                            update_k(G_bb, P_bb);
+                                            update_k(G_ab, P_ab);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (size_t i = 0; i < nbf; i++) {
+            for (size_t j = 0; j < nbf; j++) {
+                double j_val = 0.5 * (J[i * nbf + j] + J[j * nbf + i]);
+
+                double g_aa = 0.5 * (G_aa[i * nbf + j] + G_aa[j * nbf + i]);
+                double g_bb = 0.5 * (G_bb[i * nbf + j] + G_bb[j * nbf + i]);
+
+                F[(i + 0 * nbf) * nsp + (j + 0 * nbf)] += j_val + g_aa;
+                F[(i + 1 * nbf) * nsp + (j + 1 * nbf)] += j_val + g_bb;
+
+                F[i * nsp + (j + nbf)] += G_ab[i * nbf + j];
+                F[(i + nbf) * nsp + j] += G_ab[j * nbf + i];
+            }
+        }
+    }
+
     void libint_coulomb(double *I, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
@@ -239,12 +356,20 @@ extern "C" {
         twoelec(I, engine, sys->obs); libint2::finalize();
     }
 
-    void libint_fock(double *F, const double *P, double exch_factor, SystemData *sys) {
+    void libint_fock_ghf(double *F, const double *P, double exch_factor, SystemData *sys) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
 
-        twoelec_fock(F, P, exch_factor, engine, sys->obs); libint2::finalize();
+        twoelec_fock_ghf(F, P, exch_factor, engine, sys->obs); libint2::finalize();
+    }
+
+    void libint_fock_rhf(double *F, const double *P, double exch_factor, SystemData *sys) {
+        if (!sys) return; libint2::initialize();
+
+        Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
+
+        twoelec_fock_rhf(F, P, exch_factor, engine, sys->obs); libint2::finalize();
     }
 
     void libint_kinetic(double *I, SystemData *sys) {

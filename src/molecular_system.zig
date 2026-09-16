@@ -191,9 +191,14 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
-        /// Contracts two-electron integrals with the density matrix into the Fock matrix.
-        pub fn fock(self: @This(), F: *Matrix(T), P: Matrix(T), exch_factor: f64) void {
-            libint.libint_fock(@ptrCast(F.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr);
+        /// Contracts two-electron integrals with the generalized spin-orbital density matrix into the Fock matrix.
+        pub fn fockGhf(self: @This(), F: *Matrix(T), P: Matrix(T), exch_factor: f64) void {
+            libint.libint_fock_ghf(@ptrCast(F.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr);
+        }
+
+        /// Contracts two-electron integrals with the restricted spatial density matrix into the Fock matrix.
+        pub fn fockRhf(self: @This(), F: *Matrix(T), P: Matrix(T), exch_factor: f64) void {
+            libint.libint_fock_rhf(@ptrCast(F.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr);
         }
 
         /// Computes the one-electron kinetic energy matrix elements in the molecular basis.

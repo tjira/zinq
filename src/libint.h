@@ -9,7 +9,8 @@ SystemData* libint_clone(SystemData *sys);
 size_t libint_nbf(SystemData *sys);
 size_t libint_nat(SystemData *sys);
 
-void libint_fock(double *F, const double *P, double exch_factor, SystemData *sys);
+void libint_fock_ghf(double *F, const double *P, double exch_factor, SystemData *sys);
+void libint_fock_rhf(double *F, const double *P, double exch_factor, SystemData *sys);
 
 void libint_coulomb(double *I, SystemData *sys);
 void libint_kinetic(double *I, SystemData *sys);
