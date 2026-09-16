@@ -112,79 +112,17 @@ extern "C" {
     void twoelec(double *I, libint2::Engine &engine, const BasisSet &obs) {
         std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
 
-        for (size_t i = 0; i < obs.size(); i++) {
-            auto bf1_first = sh2bf.at(i);
-
-            for (size_t j = i; j < obs.size(); j++) {
-                auto bf2_first = sh2bf.at(j);
-
-                for (size_t k = i; k < obs.size(); k++) {
-                    auto bf3_first = sh2bf.at(k);
-
-                    for (size_t l = (i == k ? j : k); l < obs.size(); l++) {
-                        int id = 0; int idx = 0; auto bf4_first = sh2bf.at(l);
-
-                        engines.at(id).compute(obs.at(i), obs.at(j), obs.at(k), obs.at(l));
-
-                        const auto& res = engines.at(id).results();
-
-                        if (res.at(0) == nullptr) continue;
-
-                        for (size_t m = 0; m < obs.at(i).size(); m++) {
-                            size_t bf1 = m + bf1_first;
-
-                            for (size_t n = 0; n < obs.at(j).size(); n++) {
-                                size_t bf2 = n + bf2_first;
-
-                                for (size_t o = 0; o < obs.at(k).size(); o++) {
-                                    size_t bf3 = o + bf3_first;
-
-                                    for (size_t p = 0; p < obs.at(l).size(); p++, idx++) {
-                                        size_t bf4 = p + bf4_first;
-
-                                        double val = res.at(0)[idx];
-
-                                        I[bf1 * nbf * nbf * nbf + bf3 * nbf * nbf + bf2 * nbf + bf4] = val;
-                                        I[bf1 * nbf * nbf * nbf + bf4 * nbf * nbf + bf2 * nbf + bf3] = val;
-                                        I[bf2 * nbf * nbf * nbf + bf3 * nbf * nbf + bf1 * nbf + bf4] = val;
-                                        I[bf2 * nbf * nbf * nbf + bf4 * nbf * nbf + bf1 * nbf + bf3] = val;
-                                        I[bf3 * nbf * nbf * nbf + bf1 * nbf * nbf + bf4 * nbf + bf2] = val;
-                                        I[bf3 * nbf * nbf * nbf + bf2 * nbf * nbf + bf4 * nbf + bf1] = val;
-                                        I[bf4 * nbf * nbf * nbf + bf1 * nbf * nbf + bf3 * nbf + bf2] = val;
-                                        I[bf4 * nbf * nbf * nbf + bf2 * nbf * nbf + bf3 * nbf + bf1] = val;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    void twoelec_fock_rhf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs) {
-        std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
-
-        std::vector<double> G(nbf * nbf, 0);
-
         for (size_t s1 = 0; s1 < obs.size(); s1++) {
             auto bf1_first = sh2bf.at(s1);
 
-            for (size_t s2 = 0; s2 <= s1; s2++) {
+            for (size_t s2 = s1; s2 < obs.size(); s2++) {
                 auto bf2_first = sh2bf.at(s2);
 
-                for (size_t s3 = 0; s3 <= s1; s3++) {
+                for (size_t s3 = s1; s3 < obs.size(); s3++) {
                     auto bf3_first = sh2bf.at(s3);
 
-                    for (size_t s4 = 0; s4 <= ((s1 == s3) ? s2 : s3); s4++) {
+                    for (size_t s4 = (s1 == s3 ? s2 : s3); s4 < obs.size(); s4++) {
                         int id = 0; int idx = 0; auto bf4_first = sh2bf.at(s4);
-
-                        double s12_deg = (s1 == s2) ? 1 : 2;
-                        double s34_deg = (s3 == s4) ? 1 : 2;
-
-                        double s12_34_deg = (s1 == s3) ? (s2 == s4 ? 1 : 2) : 2;
-
-                        double s1234_deg = s12_deg * s34_deg * s12_34_deg;
 
                         engines.at(id).compute(obs.at(s1), obs.at(s2), obs.at(s3), obs.at(s4));
 
@@ -204,19 +142,16 @@ extern "C" {
                                     for (size_t f4 = 0; f4 < obs.at(s4).size(); f4++, idx++) {
                                         size_t bf4 = f4 + bf4_first;
 
-                                        double val_deg = res[0][idx] * s1234_deg;
+                                        double val = res[0][idx];
 
-                                        G[bf1 * nbf + bf2] += 0.5 * P[bf3 * nbf + bf4] * val_deg;
-                                        G[bf3 * nbf + bf4] += 0.5 * P[bf1 * nbf + bf2] * val_deg;
-
-                                        if (exch_factor != 0) {
-                                            double k_val = 0.25 * exch_factor * val_deg;
-
-                                            G[bf1 * nbf + bf3] -= k_val * P[bf2 * nbf + bf4];
-                                            G[bf2 * nbf + bf4] -= k_val * P[bf1 * nbf + bf3];
-                                            G[bf1 * nbf + bf4] -= k_val * P[bf2 * nbf + bf3];
-                                            G[bf2 * nbf + bf3] -= k_val * P[bf1 * nbf + bf4];
-                                        }
+                                        I[bf1 * nbf * nbf * nbf + bf3 * nbf * nbf + bf2 * nbf + bf4] = val;
+                                        I[bf1 * nbf * nbf * nbf + bf4 * nbf * nbf + bf2 * nbf + bf3] = val;
+                                        I[bf2 * nbf * nbf * nbf + bf3 * nbf * nbf + bf1 * nbf + bf4] = val;
+                                        I[bf2 * nbf * nbf * nbf + bf4 * nbf * nbf + bf1 * nbf + bf3] = val;
+                                        I[bf3 * nbf * nbf * nbf + bf1 * nbf * nbf + bf4 * nbf + bf2] = val;
+                                        I[bf3 * nbf * nbf * nbf + bf2 * nbf * nbf + bf4 * nbf + bf1] = val;
+                                        I[bf4 * nbf * nbf * nbf + bf1 * nbf * nbf + bf3 * nbf + bf2] = val;
+                                        I[bf4 * nbf * nbf * nbf + bf2 * nbf * nbf + bf3 * nbf + bf1] = val;
                                     }
                                 }
                             }
@@ -224,10 +159,6 @@ extern "C" {
                     }
                 }
             }
-        }
-
-        for (size_t i = 0; i < nbf; i++) for (size_t j = 0; j < nbf; j++) {
-            F[i * nbf + j] += 0.5 * (G[i * nbf + j] + G[j * nbf + i]);
         }
     }
 
@@ -297,15 +228,17 @@ extern "C" {
                                     for (size_t f4 = 0; f4 < obs.at(s4).size(); f4++, idx++) {
                                         size_t bf4 = f4 + bf4_first;
 
-                                        double val_deg = res[0][idx] * s1234_deg;
+                                        double val = res[0][idx];
+
+                                        double val_deg = val * s1234_deg;
 
                                         J[bf1 * nbf + bf2] += 0.5 * P_tot[bf3 * nbf + bf4] * val_deg;
                                         J[bf3 * nbf + bf4] += 0.5 * P_tot[bf1 * nbf + bf2] * val_deg;
 
                                         if (exch_factor != 0) {
-                                            double k_val = 0.25 * exch_factor * res[0][idx] * s12_deg * s34_deg;
+                                            double k_val = 0.25 * exch_factor * val * s12_deg * s34_deg;
 
-                                            auto update_k = [&](std::vector<double> &G_b, const std::vector<double> &P_b) {
+                                            auto update_k = [&](auto &G_b, const auto &P_b) {
                                                 G_b[bf1 * nbf + bf3] -= k_val * P_b[bf2 * nbf + bf4];
                                                 G_b[bf2 * nbf + bf4] -= k_val * P_b[bf1 * nbf + bf3];
                                                 G_b[bf1 * nbf + bf4] -= k_val * P_b[bf2 * nbf + bf3];
@@ -344,6 +277,81 @@ extern "C" {
 
                 F[i * nsp + (j + nbf)] += G_ab[i * nbf + j];
                 F[(i + nbf) * nsp + j] += G_ab[j * nbf + i];
+            }
+        }
+    }
+
+    void twoelec_fock_rhf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs) {
+        std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
+
+        std::vector<double> G(nbf * nbf, 0);
+
+        for (size_t s1 = 0; s1 < obs.size(); s1++) {
+            auto bf1_first = sh2bf.at(s1);
+
+            for (size_t s2 = 0; s2 <= s1; s2++) {
+                auto bf2_first = sh2bf.at(s2);
+
+                for (size_t s3 = 0; s3 <= s1; s3++) {
+                    auto bf3_first = sh2bf.at(s3);
+
+                    for (size_t s4 = 0; s4 <= ((s1 == s3) ? s2 : s3); s4++) {
+                        int id = 0; int idx = 0; auto bf4_first = sh2bf.at(s4);
+
+                        double s12_deg = (s1 == s2) ? 1 : 2;
+                        double s34_deg = (s3 == s4) ? 1 : 2;
+
+                        double s12_34_deg = (s1 == s3 && s2 == s4) ? 1 : 2;
+
+                        double s1234_deg = s12_deg * s34_deg * s12_34_deg;
+
+                        engines.at(id).compute(obs.at(s1), obs.at(s2), obs.at(s3), obs.at(s4));
+
+                        const auto& res = engines.at(id).results();
+
+                        if (res.at(0) == nullptr) continue;
+
+                        for (size_t f1 = 0; f1 < obs.at(s1).size(); f1++) {
+                            size_t bf1 = f1 + bf1_first;
+
+                            for (size_t f2 = 0; f2 < obs.at(s2).size(); f2++) {
+                                size_t bf2 = f2 + bf2_first;
+
+                                for (size_t f3 = 0; f3 < obs.at(s3).size(); f3++) {
+                                    size_t bf3 = f3 + bf3_first;
+
+                                    for (size_t f4 = 0; f4 < obs.at(s4).size(); f4++, idx++) {
+                                        size_t bf4 = f4 + bf4_first;
+
+                                        double val = res[0][idx];
+
+                                        double val_deg = val * s1234_deg;
+
+                                        G[bf1 * nbf + bf2] += 0.5 * P[bf3 * nbf + bf4] * val_deg;
+                                        G[bf3 * nbf + bf4] += 0.5 * P[bf1 * nbf + bf2] * val_deg;
+
+                                        if (exch_factor != 0) {
+                                            double k_val = 0.25 * exch_factor * val_deg;
+
+                                            G[bf1 * nbf + bf3] -= k_val * P[bf2 * nbf + bf4];
+                                            G[bf2 * nbf + bf4] -= k_val * P[bf1 * nbf + bf3];
+                                            G[bf1 * nbf + bf4] -= k_val * P[bf2 * nbf + bf3];
+                                            G[bf2 * nbf + bf3] -= k_val * P[bf1 * nbf + bf4];
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (size_t i = 0; i < nbf; i++) {
+            for (size_t j = 0; j < nbf; j++) {
+                double g_val = 0.5 * (G[i * nbf + j] + G[j * nbf + i]);
+
+                F[i * nbf + j] += g_val;
             }
         }
     }
