@@ -40,10 +40,10 @@ test: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HA
 
 ifeq ($(OS),windows)
 external-$(ARCH)-$(OS):
-	@curl.exe -Ls -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip ; tar -xf external.zip ; rm external.zip
+	@curl.exe -L# -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip ; tar -xf external.zip ; rm external.zip
 else
 external-$(ARCH)-$(OS):
-	@curl -Ls -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip ; unzip -q external.zip ; rm external.zip
+	@curl -L# -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip ; unzip -q external.zip ; rm external.zip
 endif
 
 # ENVIRONMENT SCRIPTS ==========================================================================================================================================
@@ -61,18 +61,18 @@ endif
 
 ifeq ($(OS),windows)
 .zig-bin/zig.exe: | .zig-bin
-	@curl.exe -Ls -o zig.zip https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).zip ; tar -xf zig.zip -C .zig-bin --strip-components=1 ; rm zig.zip
+	@curl.exe -L# -o zig.zip https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).zip ; tar -xf zig.zip -C .zig-bin --strip-components=1 ; rm zig.zip
 else
 .zig-bin/zig: | .zig-bin
-	@curl -Ls https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).tar.xz | tar -Jx -C .zig-bin --strip-components=1
+	@curl -L# https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).tar.xz | tar -Jx -C .zig-bin --strip-components=1
 endif
 
 ifeq ($(OS),windows)
 .zig-bin/zls.exe: | .zig-bin
-	@curl.exe -Ls -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip ; tar -xf zls.zip -C .zig-bin ; rm zls.zip
+	@curl.exe -L# -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip ; tar -xf zls.zip -C .zig-bin ; rm zls.zip
 else
 .zig-bin/zls: | .zig-bin
-	@curl -Ls https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).tar.xz | tar -Jx -C .zig-bin
+	@curl -L# https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).tar.xz | tar -Jx -C .zig-bin
 endif
 
 # DIRECTORY CREATION TARGETS ===================================================================================================================================
