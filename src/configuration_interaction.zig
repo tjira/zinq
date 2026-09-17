@@ -2,6 +2,8 @@
 
 const std = @import("std");
 
+const cblas = @import("cimport.zig").cblas;
+
 const Allocator = std.mem.Allocator;
 
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
@@ -41,6 +43,7 @@ pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
     excitations: []const u32 = &.{ 1, 2 },
+    nthreads: u32 = 1,
 
     write: Write = .{},
 
@@ -185,6 +188,8 @@ pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Alloc
 /// Performs a CI calculation on a molecular system specified by file paths.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
+
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
     const basis_path = try exportIfBuiltin(io, opt.hartree_fock.basis, gpa);
 
