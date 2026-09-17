@@ -2,6 +2,8 @@
 
 const std = @import("std");
 
+const cblas = @import("cimport.zig").cblas;
+
 const Allocator = std.mem.Allocator;
 
 const DftPotential = @import("density_functional_theory.zig").DftPotential;
@@ -318,6 +320,8 @@ pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: 
 /// Executes a Hartree-Fock or DFT calculation on a molecular system specified by file paths.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
+
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
     const basis_path = try exportIfBuiltin(io, opt.basis, gpa);
 
