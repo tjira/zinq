@@ -55,6 +55,7 @@ pub const Options = struct {
     threshold: f64 = 1e-8,
     mulliken: bool = false,
     integral_direct: bool = false,
+    nthreads: u32 = 1,
 
     dft: ?struct {
         exchange: ?[]const u8 = null,
@@ -354,6 +355,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         .spin = opt.generalized,
         .charge = opt.charge,
         .multiplicity = opt.multiplicity,
+        .nthreads = opt.nthreads,
         .calculate = .{
             .coulomb = !opt.integral_direct,
             .kinetic_d1 = opt.gradient != null and opt.gradient.? == .analytic,
@@ -546,6 +548,12 @@ fn checkInvalidInput(opt: Options) !void {
 
             return error.InvalidInput;
         }
+    }
+
+    if (opt.nthreads == 0) {
+        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
     }
 
     if (opt.write.gradient != null and opt.gradient == null) {
@@ -756,11 +764,11 @@ fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), op
         }
 
         if (opt.generalized) {
-            ints.sys.fockGhf(F, P, exch_factor);
+            ints.sys.fockGhf(F, P, exch_factor, opt.nthreads);
         }
 
         if (!opt.generalized) {
-            ints.sys.fockRhf(F, P, exch_factor);
+            ints.sys.fockRhf(F, P, exch_factor, opt.nthreads);
         }
 
         if (dft) |pot| {

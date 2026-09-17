@@ -120,32 +120,32 @@ pub fn MolecularSystem(comptime T: type) type {
         }
 
         /// Calculates the four-center, two-electron Coulomb repulsion integrals over the basis functions.
-        pub fn coulomb(self: @This(), gpa: Allocator) !Tensor(T, 4) {
+        pub fn coulomb(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 4) {
             const I = try Tensor(T, 4).initZero(.{ self.nbf, self.nbf, self.nbf, self.nbf }, gpa);
             errdefer I.deinit(gpa);
 
-            libint.libint_coulomb(I.data.ptr, self.ptr);
+            libint.libint_coulomb(I.data.ptr, self.ptr, nthreads);
 
             return I;
         }
 
         /// Computes the first-order derivatives of the two-electron Coulomb integrals with respect to nuclear coordinates.
-        pub fn coulombD1(self: @This(), gpa: Allocator) !Tensor(T, 5) {
+        pub fn coulombD1(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 5) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf, self.nbf, self.nbf };
 
             const I = try Tensor(T, 5).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            libint.libint_coulomb_deriv(I.data.ptr, self.ptr);
+            libint.libint_coulomb_deriv(I.data.ptr, self.ptr, nthreads);
 
             return I;
         }
 
         /// Computes the first-order derivatives of spin-blocked two-electron Coulomb integrals.
-        pub fn coulombD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 5) {
+        pub fn coulombD1Spin(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 5) {
             const nbf = self.nbf;
 
-            var J = try self.coulombD1(gpa);
+            var J = try self.coulombD1(nthreads, gpa);
             defer J.deinit(gpa);
 
             const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * nbf, 2 * nbf, 2 * nbf, 2 * nbf };
@@ -168,8 +168,8 @@ pub fn MolecularSystem(comptime T: type) type {
         }
 
         /// Constructs the spin-blocked four-center two-electron Coulomb repulsion integral tensor.
-        pub fn coulombSpin(self: @This(), gpa: Allocator) !Tensor(T, 4) {
-            var J = try self.coulomb(gpa);
+        pub fn coulombSpin(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 4) {
+            var J = try self.coulomb(nthreads, gpa);
             defer J.deinit(gpa);
 
             const shape = .{ 2 * self.nbf, 2 * self.nbf, 2 * self.nbf, 2 * self.nbf };
@@ -192,40 +192,40 @@ pub fn MolecularSystem(comptime T: type) type {
         }
 
         /// Contracts two-electron integrals with the generalized spin-orbital density matrix into the Fock matrix.
-        pub fn fockGhf(self: @This(), F: *Matrix(T), P: Matrix(T), exch_factor: f64) void {
-            libint.libint_fock_ghf(@ptrCast(F.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr);
+        pub fn fockGhf(self: @This(), F: *Matrix(T), P: Matrix(T), exch_factor: f64, nthreads: usize) void {
+            libint.libint_fock_ghf(@ptrCast(F.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr, nthreads);
         }
 
         /// Contracts two-electron integrals with the restricted spatial density matrix into the Fock matrix.
-        pub fn fockRhf(self: @This(), F: *Matrix(T), P: Matrix(T), exch_factor: f64) void {
-            libint.libint_fock_rhf(@ptrCast(F.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr);
+        pub fn fockRhf(self: @This(), F: *Matrix(T), P: Matrix(T), exch_factor: f64, nthreads: usize) void {
+            libint.libint_fock_rhf(@ptrCast(F.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr, nthreads);
         }
 
         /// Computes the one-electron kinetic energy matrix elements in the molecular basis.
-        pub fn kinetic(self: @This(), gpa: Allocator) !Matrix(T) {
+        pub fn kinetic(self: @This(), nthreads: usize, gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
             errdefer I.deinit(gpa);
 
-            libint.libint_kinetic(I.data.ptr, self.ptr);
+            libint.libint_kinetic(I.data.ptr, self.ptr, nthreads);
 
             return I;
         }
 
         /// Computes the first-order derivative of the one-electron kinetic energy matrix with respect to nuclear coordinates.
-        pub fn kineticD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
+        pub fn kineticD1(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };
 
             const I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            libint.libint_kinetic_deriv(I.data.ptr, self.ptr);
+            libint.libint_kinetic_deriv(I.data.ptr, self.ptr, nthreads);
 
             return I;
         }
 
         /// Computes the spin-blocked first-order derivative of the kinetic energy matrix.
-        pub fn kineticD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 3) {
-            var K = try self.kineticD1(gpa);
+        pub fn kineticD1Spin(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
+            var K = try self.kineticD1(nthreads, gpa);
             defer K.deinit(gpa);
 
             const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
@@ -243,8 +243,8 @@ pub fn MolecularSystem(comptime T: type) type {
         }
 
         /// Constructs the spin-blocked one-electron kinetic energy matrix.
-        pub fn kineticSpin(self: @This(), gpa: Allocator) !Matrix(T) {
-            var K = try self.kinetic(gpa);
+        pub fn kineticSpin(self: @This(), nthreads: usize, gpa: Allocator) !Matrix(T) {
+            var K = try self.kinetic(nthreads, gpa);
             defer K.deinit(gpa);
 
             var I = try Matrix(T).initZero(2 * self.nbf, 2 * self.nbf, gpa);
@@ -291,30 +291,30 @@ pub fn MolecularSystem(comptime T: type) type {
         }
 
         /// Computes the one-electron nuclear-electron attraction potential matrix in the molecular basis.
-        pub fn nuclear(self: @This(), gpa: Allocator) !Matrix(T) {
+        pub fn nuclear(self: @This(), nthreads: usize, gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
             errdefer I.deinit(gpa);
 
-            libint.libint_nuclear(I.data.ptr, self.ptr);
+            libint.libint_nuclear(I.data.ptr, self.ptr, nthreads);
 
             return I;
         }
 
         /// Computes the first-order derivative of the nuclear attraction matrix with respect to nuclear coordinates.
-        pub fn nuclearD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
+        pub fn nuclearD1(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };
 
             const I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            libint.libint_nuclear_deriv(I.data.ptr, self.ptr);
+            libint.libint_nuclear_deriv(I.data.ptr, self.ptr, nthreads);
 
             return I;
         }
 
         /// Computes the spin-blocked first-order derivative of the nuclear attraction matrix.
-        pub fn nuclearD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 3) {
-            var V = try self.nuclearD1(gpa);
+        pub fn nuclearD1Spin(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
+            var V = try self.nuclearD1(nthreads, gpa);
             defer V.deinit(gpa);
 
             const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
@@ -332,8 +332,8 @@ pub fn MolecularSystem(comptime T: type) type {
         }
 
         /// Constructs the spin-blocked nuclear-electron attraction potential matrix.
-        pub fn nuclearSpin(self: @This(), gpa: Allocator) !Matrix(T) {
-            var V = try self.nuclear(gpa);
+        pub fn nuclearSpin(self: @This(), nthreads: usize, gpa: Allocator) !Matrix(T) {
+            var V = try self.nuclear(nthreads, gpa);
             defer V.deinit(gpa);
 
             var I = try Matrix(T).initZero(2 * self.nbf, 2 * self.nbf, gpa);
@@ -349,30 +349,30 @@ pub fn MolecularSystem(comptime T: type) type {
         }
 
         /// Computes the overlap matrix elements representing the non-orthogonality of the spatial basis functions.
-        pub fn overlap(self: @This(), gpa: Allocator) !Matrix(T) {
+        pub fn overlap(self: @This(), nthreads: usize, gpa: Allocator) !Matrix(T) {
             const I = try Matrix(T).initZero(self.nbf, self.nbf, gpa);
             errdefer I.deinit(gpa);
 
-            libint.libint_overlap(I.data.ptr, self.ptr);
+            libint.libint_overlap(I.data.ptr, self.ptr, nthreads);
 
             return I;
         }
 
         /// Computes the first-order derivative of the basis function overlap matrix with respect to nuclear coordinates.
-        pub fn overlapD1(self: @This(), gpa: Allocator) !Tensor(T, 3) {
+        pub fn overlapD1(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };
 
             const I = try Tensor(T, 3).initZero(shape, gpa);
             errdefer I.deinit(gpa);
 
-            libint.libint_overlap_deriv(I.data.ptr, self.ptr);
+            libint.libint_overlap_deriv(I.data.ptr, self.ptr, nthreads);
 
             return I;
         }
 
         /// Computes the spin-blocked first-order derivative of the basis function overlap matrix.
-        pub fn overlapD1Spin(self: @This(), gpa: Allocator) !Tensor(T, 3) {
-            var S = try self.overlapD1(gpa);
+        pub fn overlapD1Spin(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
+            var S = try self.overlapD1(nthreads, gpa);
             defer S.deinit(gpa);
 
             const shape = .{ 3 * libint.libint_nat(self.ptr), 2 * self.nbf, 2 * self.nbf };
@@ -390,8 +390,8 @@ pub fn MolecularSystem(comptime T: type) type {
         }
 
         /// Constructs the spin-blocked basis function overlap matrix.
-        pub fn overlapSpin(self: @This(), gpa: Allocator) !Matrix(T) {
-            var S = try self.overlap(gpa);
+        pub fn overlapSpin(self: @This(), nthreads: usize, gpa: Allocator) !Matrix(T) {
+            var S = try self.overlap(nthreads, gpa);
             defer S.deinit(gpa);
 
             var I = try Matrix(T).initZero(2 * self.nbf, 2 * self.nbf, gpa);

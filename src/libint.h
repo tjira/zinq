@@ -9,18 +9,18 @@ SystemData* libint_clone(SystemData *sys);
 size_t libint_nbf(SystemData *sys);
 size_t libint_nat(SystemData *sys);
 
-void libint_fock_ghf(double *F, const double *P, double exch_factor, SystemData *sys);
-void libint_fock_rhf(double *F, const double *P, double exch_factor, SystemData *sys);
+void libint_fock_ghf(double *F, const double *P, double exch_factor, SystemData *sys, size_t nthreads);
+void libint_fock_rhf(double *F, const double *P, double exch_factor, SystemData *sys, size_t nthreads);
 
-void libint_coulomb(double *I, SystemData *sys);
-void libint_kinetic(double *I, SystemData *sys);
-void libint_nuclear(double *I, SystemData *sys);
-void libint_overlap(double *I, SystemData *sys);
+void libint_coulomb(double *I, SystemData *sys, size_t nthreads);
+void libint_kinetic(double *I, SystemData *sys, size_t nthreads);
+void libint_nuclear(double *I, SystemData *sys, size_t nthreads);
+void libint_overlap(double *I, SystemData *sys, size_t nthreads);
 
-void libint_coulomb_deriv(double *I, SystemData *sys);
-void libint_kinetic_deriv(double *I, SystemData *sys);
-void libint_nuclear_deriv(double *I, SystemData *sys);
-void libint_overlap_deriv(double *I, SystemData *sys);
+void libint_coulomb_deriv(double *I, SystemData *sys, size_t nthreads);
+void libint_kinetic_deriv(double *I, SystemData *sys, size_t nthreads);
+void libint_nuclear_deriv(double *I, SystemData *sys, size_t nthreads);
+void libint_overlap_deriv(double *I, SystemData *sys, size_t nthreads);
 
 void libint_atoms(int    *atoms, SystemData *sys);
 void libint_coors(double *coors, SystemData *sys);

@@ -22,6 +22,7 @@ pub const Options = struct {
     spin: bool = false,
     charge: i32 = 0,
     multiplicity: u32 = 1,
+    nthreads: usize = 1,
 };
 
 /// Specifier of boolean flags to select which one-electron and two-electron molecular integrals and derivatives to compute.
@@ -166,7 +167,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     var timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.overlap) {
-        ints.S = if (opt.spin) try sys.overlapSpin(gpa) else try sys.overlap(gpa);
+        ints.S = if (opt.spin) try sys.overlapSpin(opt.nthreads, gpa) else try sys.overlap(opt.nthreads, gpa);
 
         if (log) try printf(io, "OVERLAP INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -174,7 +175,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.kinetic or opt.calculate.hmatrix) {
-        ints.K = if (opt.spin) try sys.kineticSpin(gpa) else try sys.kinetic(gpa);
+        ints.K = if (opt.spin) try sys.kineticSpin(opt.nthreads, gpa) else try sys.kinetic(opt.nthreads, gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -182,7 +183,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.nuclear or opt.calculate.hmatrix) {
-        ints.V = if (opt.spin) try sys.nuclearSpin(gpa) else try sys.nuclear(gpa);
+        ints.V = if (opt.spin) try sys.nuclearSpin(opt.nthreads, gpa) else try sys.nuclear(opt.nthreads, gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -190,7 +191,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.coulomb) {
-        ints.g = if (opt.spin) try sys.coulombSpin(gpa) else try sys.coulomb(gpa);
+        ints.g = if (opt.spin) try sys.coulombSpin(opt.nthreads, gpa) else try sys.coulomb(opt.nthreads, gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -218,7 +219,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.overlap_d1) {
-        ints.dS = if (opt.spin) try sys.overlapD1Spin(gpa) else try sys.overlapD1(gpa);
+        ints.dS = if (opt.spin) try sys.overlapD1Spin(opt.nthreads, gpa) else try sys.overlapD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "OVERLAP INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -226,7 +227,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.kinetic_d1 or opt.calculate.hmatrix_d1) {
-        ints.dK = if (opt.spin) try sys.kineticD1Spin(gpa) else try sys.kineticD1(gpa);
+        ints.dK = if (opt.spin) try sys.kineticD1Spin(opt.nthreads, gpa) else try sys.kineticD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -234,7 +235,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.nuclear_d1 or opt.calculate.hmatrix_d1) {
-        ints.dV = if (opt.spin) try sys.nuclearD1Spin(gpa) else try sys.nuclearD1(gpa);
+        ints.dV = if (opt.spin) try sys.nuclearD1Spin(opt.nthreads, gpa) else try sys.nuclearD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -242,7 +243,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.coulomb_d1) {
-        ints.dg = if (opt.spin) try sys.coulombD1Spin(gpa) else try sys.coulombD1(gpa);
+        ints.dg = if (opt.spin) try sys.coulombD1Spin(opt.nthreads, gpa) else try sys.coulombD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -270,6 +271,12 @@ fn checkInvalidInput(opt: Options) !void {
 
     if (opt.basis.len == 0) {
         std.log.err("BASIS SET G94 PATH IS EMPTY", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.nthreads == 0) {
+        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
 
         return error.InvalidInput;
     }

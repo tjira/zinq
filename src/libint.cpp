@@ -1,5 +1,11 @@
 #include <libint2.hpp>
 
+#ifdef _OPENMP
+#include <omp.h>
+#else
+inline int omp_get_thread_num() { return 0; }
+#endif
+
 struct SystemData {
     std::vector<libint2::Atom> atoms; libint2::BasisSet obs;
 };
@@ -83,35 +89,58 @@ extern "C" {
 extern "C" {
     using namespace libint2;
 
-    void oneelec(double *I, libint2::Engine &engine, const BasisSet &obs) {
-        std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
+    void oneelec(double *I, libint2::Engine &engine, const BasisSet &obs, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
 
-        for (size_t i = 0; i < obs.size(); i++) {
-            for (size_t j = i; j < obs.size(); j++) {
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
 
-                int id = 0; int idx = 0;
+        std::vector<Engine> engines(nthreads, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
 
-                engines.at(id).compute(obs.at(i), obs.at(j));
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < obs.size(); s1++) {
+            auto bf1_first = sh2bf.at(s1);
+
+            for (size_t s2 = s1; s2 < obs.size(); s2++) {
+                int id = omp_get_thread_num(); int idx = 0; auto bf2_first = sh2bf.at(s2);
+
+                engines.at(id).compute(obs.at(s1), obs.at(s2));
 
                 const auto& res = engines.at(id).results();
 
                 if (res.at(0) == nullptr) continue;
 
-                for (size_t k = 0; k < obs.at(i).size(); k++) {
-                    for (size_t l = 0; l < obs.at(j).size(); l++) {
-                        double val = res.at(0)[idx++];
+                for (size_t f1 = 0; f1 < obs.at(s1).size(); f1++) {
+                    size_t bf1 = f1 + bf1_first;
 
-                        I[(k + sh2bf.at(i)) * nbf + (l + sh2bf.at(j))] = val;
-                        I[(l + sh2bf.at(j)) * nbf + (k + sh2bf.at(i))] = val;
+                    for (size_t f2 = 0; f2 < obs.at(s2).size(); f2++, idx++) {
+                        size_t bf2 = f2 + bf2_first;
+
+                        double val = res[0][idx];
+
+                        I[bf1 * nbf + bf2] = val;
+                        I[bf2 * nbf + bf1] = val;
                     }
                 }
             }
         }
     }
 
-    void twoelec(double *I, libint2::Engine &engine, const BasisSet &obs) {
-        std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
+    void twoelec(double *I, libint2::Engine &engine, const BasisSet &obs, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
 
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<Engine> engines(nthreads, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
         for (size_t s1 = 0; s1 < obs.size(); s1++) {
             auto bf1_first = sh2bf.at(s1);
 
@@ -122,7 +151,7 @@ extern "C" {
                     auto bf3_first = sh2bf.at(s3);
 
                     for (size_t s4 = (s1 == s3 ? s2 : s3); s4 < obs.size(); s4++) {
-                        int id = 0; int idx = 0; auto bf4_first = sh2bf.at(s4);
+                        int id = omp_get_thread_num(); int idx = 0; auto bf4_first = sh2bf.at(s4);
 
                         engines.at(id).compute(obs.at(s1), obs.at(s2), obs.at(s3), obs.at(s4));
 
@@ -162,8 +191,14 @@ extern "C" {
         }
     }
 
-    void twoelec_fock_ghf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs) {
-        std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
+    void twoelec_fock_ghf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<Engine> engines(nthreads, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
 
         size_t nsp = 2 * nbf; std::vector<double> P_tot(nbf * nbf, 0);
 
@@ -185,12 +220,15 @@ extern "C" {
             }
         }
 
-        std::vector<double> J(nbf * nbf, 0);
+        std::vector<double> J_threads(nthreads * nbf * nbf, 0);
 
-        std::vector<double> G_aa(nbf * nbf, 0);
-        std::vector<double> G_bb(nbf * nbf, 0);
-        std::vector<double> G_ab(nbf * nbf, 0);
+        std::vector<double> G_aa_threads(nthreads * nbf * nbf, 0);
+        std::vector<double> G_bb_threads(nthreads * nbf * nbf, 0);
+        std::vector<double> G_ab_threads(nthreads * nbf * nbf, 0);
 
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
         for (size_t s1 = 0; s1 < obs.size(); s1++) {
             auto bf1_first = sh2bf.at(s1);
 
@@ -201,7 +239,7 @@ extern "C" {
                     auto bf3_first = sh2bf.at(s3);
 
                     for (size_t s4 = 0; s4 <= ((s1 == s3) ? s2 : s3); s4++) {
-                        int id = 0; int idx = 0; auto bf4_first = sh2bf.at(s4);
+                        int id = omp_get_thread_num(); int idx = 0; auto bf4_first = sh2bf.at(s4);
 
                         double s12_deg = (s1 == s2) ? 1 : 2;
                         double s34_deg = (s3 == s4) ? 1 : 2;
@@ -232,13 +270,13 @@ extern "C" {
 
                                         double val_deg = val * s1234_deg;
 
-                                        J[bf1 * nbf + bf2] += 0.5 * P_tot[bf3 * nbf + bf4] * val_deg;
-                                        J[bf3 * nbf + bf4] += 0.5 * P_tot[bf1 * nbf + bf2] * val_deg;
+                                        J_threads[id * nbf * nbf + bf1 * nbf + bf2] += 0.5 * P_tot[bf3 * nbf + bf4] * val_deg;
+                                        J_threads[id * nbf * nbf + bf3 * nbf + bf4] += 0.5 * P_tot[bf1 * nbf + bf2] * val_deg;
 
                                         if (exch_factor != 0) {
                                             double k_val = 0.25 * exch_factor * val * s12_deg * s34_deg;
 
-                                            auto update_k = [&](auto &G_b, const auto &P_b) {
+                                            auto update_k = [&](double *G_b, const auto &P_b) {
                                                 G_b[bf1 * nbf + bf3] -= k_val * P_b[bf2 * nbf + bf4];
                                                 G_b[bf2 * nbf + bf4] -= k_val * P_b[bf1 * nbf + bf3];
                                                 G_b[bf1 * nbf + bf4] -= k_val * P_b[bf2 * nbf + bf3];
@@ -252,9 +290,9 @@ extern "C" {
                                                 }
                                             };
 
-                                            update_k(G_aa, P_aa);
-                                            update_k(G_bb, P_bb);
-                                            update_k(G_ab, P_ab);
+                                            update_k(&G_aa_threads[id * nbf * nbf], P_aa);
+                                            update_k(&G_bb_threads[id * nbf * nbf], P_bb);
+                                            update_k(&G_ab_threads[id * nbf * nbf], P_ab);
                                         }
                                     }
                                 }
@@ -262,6 +300,22 @@ extern "C" {
                         }
                     }
                 }
+            }
+        }
+
+        std::vector<double> J(nbf * nbf, 0);
+
+        std::vector<double> G_aa(nbf * nbf, 0);
+        std::vector<double> G_bb(nbf * nbf, 0);
+        std::vector<double> G_ab(nbf * nbf, 0);
+
+        for (size_t t = 0; t < nthreads; t++) {
+            for (size_t idx = 0; idx < nbf * nbf; idx++) {
+                J[idx] += J_threads[t * nbf * nbf + idx];
+
+                G_aa[idx] += G_aa_threads[t * nbf * nbf + idx];
+                G_bb[idx] += G_bb_threads[t * nbf * nbf + idx];
+                G_ab[idx] += G_ab_threads[t * nbf * nbf + idx];
             }
         }
 
@@ -281,11 +335,20 @@ extern "C" {
         }
     }
 
-    void twoelec_fock_rhf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs) {
-        std::vector<Engine> engines(1, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
+    void twoelec_fock_rhf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
 
-        std::vector<double> G(nbf * nbf, 0);
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
 
+        std::vector<Engine> engines(nthreads, engine); size_t nbf = obs.nbf(); auto sh2bf = obs.shell2bf();
+
+        std::vector<double> G_threads(nthreads * nbf * nbf, 0);
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
         for (size_t s1 = 0; s1 < obs.size(); s1++) {
             auto bf1_first = sh2bf.at(s1);
 
@@ -296,7 +359,7 @@ extern "C" {
                     auto bf3_first = sh2bf.at(s3);
 
                     for (size_t s4 = 0; s4 <= ((s1 == s3) ? s2 : s3); s4++) {
-                        int id = 0; int idx = 0; auto bf4_first = sh2bf.at(s4);
+                        int id = omp_get_thread_num(); int idx = 0; auto bf4_first = sh2bf.at(s4);
 
                         double s12_deg = (s1 == s2) ? 1 : 2;
                         double s34_deg = (s3 == s4) ? 1 : 2;
@@ -327,16 +390,16 @@ extern "C" {
 
                                         double val_deg = val * s1234_deg;
 
-                                        G[bf1 * nbf + bf2] += 0.5 * P[bf3 * nbf + bf4] * val_deg;
-                                        G[bf3 * nbf + bf4] += 0.5 * P[bf1 * nbf + bf2] * val_deg;
+                                        G_threads[id * nbf * nbf + bf1 * nbf + bf2] += 0.5 * P[bf3 * nbf + bf4] * val_deg;
+                                        G_threads[id * nbf * nbf + bf3 * nbf + bf4] += 0.5 * P[bf1 * nbf + bf2] * val_deg;
 
                                         if (exch_factor != 0) {
                                             double k_val = 0.25 * exch_factor * val_deg;
 
-                                            G[bf1 * nbf + bf3] -= k_val * P[bf2 * nbf + bf4];
-                                            G[bf2 * nbf + bf4] -= k_val * P[bf1 * nbf + bf3];
-                                            G[bf1 * nbf + bf4] -= k_val * P[bf2 * nbf + bf3];
-                                            G[bf2 * nbf + bf3] -= k_val * P[bf1 * nbf + bf4];
+                                            G_threads[id * nbf * nbf + bf1 * nbf + bf3] -= k_val * P[bf2 * nbf + bf4];
+                                            G_threads[id * nbf * nbf + bf2 * nbf + bf4] -= k_val * P[bf1 * nbf + bf3];
+                                            G_threads[id * nbf * nbf + bf1 * nbf + bf4] -= k_val * P[bf2 * nbf + bf3];
+                                            G_threads[id * nbf * nbf + bf2 * nbf + bf3] -= k_val * P[bf1 * nbf + bf4];
                                         }
                                     }
                                 }
@@ -344,6 +407,14 @@ extern "C" {
                         }
                     }
                 }
+            }
+        }
+
+        std::vector<double> G(nbf * nbf, 0);
+
+        for (size_t t = 0; t < nthreads; t++) {
+            for (size_t idx = 0; idx < nbf * nbf; idx++) {
+                G[idx] += G_threads[t * nbf * nbf + idx];
             }
         }
 
@@ -356,85 +427,92 @@ extern "C" {
         }
     }
 
-    void libint_coulomb(double *I, SystemData *sys) {
+    void libint_coulomb(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
 
-        twoelec(I, engine, sys->obs); libint2::finalize();
+        twoelec(I, engine, sys->obs, nthreads); libint2::finalize();
     }
 
-    void libint_fock_ghf(double *F, const double *P, double exch_factor, SystemData *sys) {
+    void libint_fock_ghf(double *F, const double *P, double exch_factor, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
 
-        twoelec_fock_ghf(F, P, exch_factor, engine, sys->obs); libint2::finalize();
+        twoelec_fock_ghf(F, P, exch_factor, engine, sys->obs, nthreads); libint2::finalize();
     }
 
-    void libint_fock_rhf(double *F, const double *P, double exch_factor, SystemData *sys) {
+    void libint_fock_rhf(double *F, const double *P, double exch_factor, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
 
-        twoelec_fock_rhf(F, P, exch_factor, engine, sys->obs); libint2::finalize();
+        twoelec_fock_rhf(F, P, exch_factor, engine, sys->obs, nthreads); libint2::finalize();
     }
 
-    void libint_kinetic(double *I, SystemData *sys) {
+    void libint_kinetic(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::kinetic, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
 
-        oneelec(I, engine, sys->obs); libint2::finalize();
+        oneelec(I, engine, sys->obs, nthreads); libint2::finalize();
     }
 
-    void libint_nuclear(double *I, SystemData *sys) {
+    void libint_nuclear(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::nuclear, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
 
         engine.set_params(make_point_charges(sys->atoms));
 
-        oneelec(I, engine, sys->obs); libint2::finalize();
+        oneelec(I, engine, sys->obs, nthreads); libint2::finalize();
     }
 
-    void libint_overlap(double *I, SystemData *sys) {
+    void libint_overlap(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::overlap, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
 
-        oneelec(I, engine, sys->obs); libint2::finalize();
+        oneelec(I, engine, sys->obs, nthreads); libint2::finalize();
     }
 }
 
 extern "C" {
     using namespace libint2;
 
-    void oneelec_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms) {
-        std::vector<Engine> engines(1, engine); bool is_nuclear = engine.oper() == Operator::nuclear;
+    void oneelec_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<Engine> engines(nthreads, engine); bool is_nuclear = engine.oper() == Operator::nuclear;
 
         size_t nbf = obs   .nbf(); auto sh2bf = obs  .shell2bf(     );
         size_t nat = atoms.size(); auto sh2at = obs.shell2atom(atoms);
 
-        for (size_t i = 0; i < obs.size(); i++) {
-            size_t atom_i = sh2at[i];
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < obs.size(); s1++) {
+            auto bf1_first = sh2bf.at(s1); size_t atom1 = sh2at[s1];
 
-            for (size_t j = i; j < obs.size(); j++) {
-                size_t atom_j = sh2at[j];
+            for (size_t s2 = s1; s2 < obs.size(); s2++) {
+                int id = omp_get_thread_num(); int idx = 0; auto bf2_first = sh2bf.at(s2); size_t atom2 = sh2at[s2];
 
-                int id = 0; int idx = 0;
-
-                engines.at(id).compute(obs.at(i), obs.at(j));
+                engines.at(id).compute(obs.at(s1), obs.at(s2));
 
                 const auto& res = engines.at(id).results();
 
                 if (res.at(0) == nullptr) continue;
 
-                for (size_t k = 0; k < obs.at(i).size(); k++) {
-                    size_t bf1 = k + sh2bf.at(i);
+                for (size_t f1 = 0; f1 < obs.at(s1).size(); f1++) {
+                    size_t bf1 = f1 + bf1_first;
 
-                    for (size_t l = 0; l < obs.at(j).size(); l++) {
-                        size_t bf2 = l + sh2bf.at(j);
+                    for (size_t f2 = 0; f2 < obs.at(s2).size(); f2++, idx++) {
+                        size_t bf2 = f2 + bf2_first;
 
                         for (size_t c = 0; c < nat; c++) for (size_t d = 0; d < 3; d++) {
                             double val = 0;
@@ -443,8 +521,8 @@ extern "C" {
                                 val += res.at(6 + 3 * c + d)[idx];
                             }
 
-                            if (atom_i == c) val += res.at(d + 0)[idx];
-                            if (atom_j == c) val += res.at(d + 3)[idx];
+                            if (atom1 == c) val += res.at(d + 0)[idx];
+                            if (atom2 == c) val += res.at(d + 3)[idx];
 
                             I[(3 * c + d) * nbf * nbf + bf1 * nbf + bf2] = val;
 
@@ -452,35 +530,40 @@ extern "C" {
                                 I[(3 * c + d) * nbf * nbf + bf2 * nbf + bf1] = val;
                             }
                         }
-
-                        idx++;
                     }
                 }
             }
         }
     }
 
-    void twoelec_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms) {
-        std::vector<libint2::Engine> engines(1, engine);
+    void twoelec_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<libint2::Engine> engines(nthreads, engine);
 
         size_t nbf = obs   .nbf(); auto sh2bf = obs  .shell2bf(     );
         size_t nat = atoms.size(); auto sh2at = obs.shell2atom(atoms);
 
-        for (size_t i = 0; i < obs.size(); i++) {
-            size_t atom_i = sh2at[i];
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < obs.size(); s1++) {
+            auto bf1_first = sh2bf.at(s1); size_t atom1 = sh2at[s1];
 
-            for (size_t j = i; j < obs.size(); j++) {
-                size_t atom_j = sh2at[j];
+            for (size_t s2 = s1; s2 < obs.size(); s2++) {
+                auto bf2_first = sh2bf.at(s2); size_t atom2 = sh2at[s2];
 
-                for (size_t k = i; k < obs.size(); k++) {
-                    size_t atom_k = sh2at[k];
+                for (size_t s3 = s1; s3 < obs.size(); s3++) {
+                    auto bf3_first = sh2bf.at(s3); size_t atom3 = sh2at[s3];
 
-                    for (size_t l = (i == k ? j : k); l < obs.size(); l++) {
-                        size_t atom_l = sh2at[l];
+                    for (size_t s4 = (s1 == s3 ? s2 : s3); s4 < obs.size(); s4++) {
+                        int id = omp_get_thread_num(); int idx = 0; auto bf4_first = sh2bf.at(s4); size_t atom4 = sh2at[s4];
 
-                        int id = 0;  int idx = 0;
-
-                        engines.at(id).compute(obs.at(i), obs.at(j), obs.at(k), obs.at(l));
+                        engines.at(id).compute(obs.at(s1), obs.at(s2), obs.at(s3), obs.at(s4));
 
                         const auto& res = engines.at(id).results();
 
@@ -492,26 +575,26 @@ extern "C" {
                             for (size_t c = 0; c < nat; c++) for (size_t d = 0; d < 3; d++) {
                                 double val = 0;
 
-                                if (atom_i == c) val += res.at(d + 0)[idx];
-                                if (atom_j == c) val += res.at(d + 3)[idx];
-                                if (atom_k == c) val += res.at(d + 6)[idx];
-                                if (atom_l == c) val += res.at(d + 9)[idx];
+                                if (atom1 == c) val += res.at(d + 0)[idx];
+                                if (atom2 == c) val += res.at(d + 3)[idx];
+                                if (atom3 == c) val += res.at(d + 6)[idx];
+                                if (atom4 == c) val += res.at(d + 9)[idx];
 
                                 I[(3 * c + d) * nbf * nbf * nbf * nbf + base_idx] = val;
                             }
                         };
 
-                        for (size_t m = 0; m < obs.at(i).size(); m++) {
-                            size_t bf1 = m + sh2bf.at(i);
+                        for (size_t f1 = 0; f1 < obs.at(s1).size(); f1++) {
+                            size_t bf1 = f1 + bf1_first;
 
-                            for (size_t n = 0; n < obs.at(j).size(); n++) {
-                                size_t bf2 = n + sh2bf.at(j);
+                            for (size_t f2 = 0; f2 < obs.at(s2).size(); f2++) {
+                                size_t bf2 = f2 + bf2_first;
 
-                                for (size_t o = 0; o < obs.at(k).size(); o++) {
-                                    size_t bf3 = o + sh2bf.at(k);
+                                for (size_t f3 = 0; f3 < obs.at(s3).size(); f3++) {
+                                    size_t bf3 = f3 + bf3_first;
 
-                                    for (size_t p_val = 0; p_val < obs.at(l).size(); p_val++) {
-                                        size_t bf4 = p_val + sh2bf.at(l);
+                                    for (size_t f4 = 0; f4 < obs.at(s4).size(); f4++, idx++) {
+                                        size_t bf4 = f4 + bf4_first;
 
                                         apply(bf1, bf3, bf2, bf4); 
                                         
@@ -543,8 +626,6 @@ extern "C" {
                                                 apply(bf4, bf2, bf3, bf1); 
                                             }
                                         }
-
-                                        idx++;
                                     }
                                 }
                             }
@@ -555,38 +636,38 @@ extern "C" {
         }
     }
 
-    void libint_coulomb_deriv(double *I, SystemData *sys) {
+    void libint_coulomb_deriv(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
 
-        twoelec_deriv(I, engine, sys->obs, sys->atoms); libint2::finalize();
+        twoelec_deriv(I, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
     }
 
-    void libint_kinetic_deriv(double *I, SystemData *sys) {
+    void libint_kinetic_deriv(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::kinetic, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
 
-        oneelec_deriv(I, engine, sys->obs, sys->atoms); libint2::finalize();
+        oneelec_deriv(I, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
     }
 
-    void libint_overlap_deriv(double *I, SystemData *sys) {
+    void libint_overlap_deriv(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::overlap, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
 
-        oneelec_deriv(I, engine, sys->obs, sys->atoms); libint2::finalize();
+        oneelec_deriv(I, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
     }
 
-    void libint_nuclear_deriv(double *I, SystemData *sys) {
+    void libint_nuclear_deriv(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
         Engine engine(Operator::nuclear, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
 
         engine.set_params(make_point_charges(sys->atoms));
 
-        oneelec_deriv(I, engine, sys->obs, sys->atoms); libint2::finalize();
+        oneelec_deriv(I, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
     }
 }
 

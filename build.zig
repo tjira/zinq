@@ -86,6 +86,10 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     for (libs) |lib| {
         module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static });
     }
+
+    if (is_linux) {
+        module.linkSystemLibrary("omp", .{ .preferred_link_mode = .static });
+    }
 }
 
 fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
