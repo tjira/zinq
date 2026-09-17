@@ -2,6 +2,8 @@
 
 const std = @import("std");
 
+const cblas = @import("cimport.zig").cblas;
+
 const Allocator = std.mem.Allocator;
 
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
@@ -38,6 +40,7 @@ pub const Options = struct {
     hartree_fock: HartreeFockOptions,
 
     order: u32 = 2,
+    nthreads: u32 = 1,
 
     write: Write = .{},
 
@@ -115,6 +118,8 @@ pub fn Result(comptime T: type) type {
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
+
     const basis_path = try exportIfBuiltin(io, opt.hartree_fock.basis, gpa);
 
     defer if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
@@ -161,6 +166,8 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, final_Pg orelse Pg, log, gpa);
     errdefer hfres.deinit(gpa);
+
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
     var energy = try gpa.alloc(T, 1);
     errdefer gpa.free(energy);
@@ -289,6 +296,12 @@ fn checkInvalidInput(opt: Options) !void {
 
     if (opt.order < 2) {
         std.log.err("MØLLER-PLESSET PERTURBATION ORDER MUST BE AT LEAST 2 (MP2)", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.nthreads == 0) {
+        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
 
         return error.InvalidInput;
     }

@@ -343,6 +343,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
+
     var final_Pg: ?Matrix(T) = null;
     defer if (final_Pg) |*p| p.deinit(gpa);
 

@@ -37,3 +37,4 @@
 - [ ] Implement second derivatives of integrals over atomic orbitals.
 - [ ] Implement analytical Hessian for HF method.
 - [x] Partial wave simulation sometimes fail to initialize, probably due to parallelism issues.
+- [x] Check if the HF is parallelized correctly when run from CI module.

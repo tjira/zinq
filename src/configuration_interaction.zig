@@ -240,6 +240,8 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, final_Pg orelse Pg, log, gpa);
     errdefer hfres.deinit(gpa);
 
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
+
     if (log) {
         try printf(io, "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCI EXCITATIONS CONSIDERED: [", .{timer.untilNow(io, .real)});
 
@@ -471,6 +473,12 @@ fn checkInvalidInput(opt: Options) !void {
 
         return error.InvalidInput;
     };
+
+    if (opt.nthreads == 0) {
+        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
 }
 
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
