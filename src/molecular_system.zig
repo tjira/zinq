@@ -167,6 +167,16 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Contracts two-electron derivative integrals directly with the GHF density matrix into the nuclear gradient.
+        pub fn coulombGradientGhf(self: @This(), G: *Matrix(T), P: Matrix(T), exch_factor: f64, nthreads: usize) void {
+            libint.libint_coulomb_gradient_ghf(@ptrCast(G.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr, nthreads);
+        }
+
+        /// Contracts two-electron derivative integrals directly with the RHF density matrix into the nuclear gradient.
+        pub fn coulombGradientRhf(self: @This(), G: *Matrix(T), P: Matrix(T), exch_factor: f64, nthreads: usize) void {
+            libint.libint_coulomb_gradient_rhf(@ptrCast(G.data.ptr), @ptrCast(P.data.ptr), exch_factor, self.ptr, nthreads);
+        }
+
         /// Constructs the spin-blocked four-center two-electron Coulomb repulsion integral tensor.
         pub fn coulombSpin(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 4) {
             var J = try self.coulomb(nthreads, gpa);

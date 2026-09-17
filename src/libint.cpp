@@ -636,6 +636,278 @@ extern "C" {
         }
     }
 
+    void twoelec_gradient_ghf(double *G, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<libint2::Engine> engines(nthreads, engine);
+
+        size_t nbf = obs   .nbf(); auto sh2bf = obs  .shell2bf(     );
+        size_t nat = atoms.size(); auto sh2at = obs.shell2atom(atoms);
+
+        size_t nsp = 2 * nbf; std::vector<double> P_tot(nbf * nbf, 0);
+
+        std::vector<double> P_aa(nbf * nbf, 0);
+        std::vector<double> P_bb(nbf * nbf, 0);
+        std::vector<double> P_ab(nbf * nbf, 0);
+        std::vector<double> P_ba(nbf * nbf, 0);
+
+        for (size_t i = 0; i < nbf; i++) {
+            for (size_t j = 0; j < nbf; j++) {
+                double aa = P[(i + 0 * nbf) * nsp + (j + 0 * nbf)];
+                double bb = P[(i + 1 * nbf) * nsp + (j + 1 * nbf)];
+                double ab = P[(i + 0 * nbf) * nsp + (j + 1 * nbf)];
+                double ba = P[(i + 1 * nbf) * nsp + (j + 0 * nbf)];
+
+                P_aa[i * nbf + j] = aa;
+                P_bb[i * nbf + j] = bb;
+                P_ab[i * nbf + j] = ab;
+                P_ba[i * nbf + j] = ba;
+
+                P_tot[i * nbf + j] = aa + bb;
+            }
+        }
+
+        std::vector<double> G_threads(nthreads * nat * 3, 0.0);
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < obs.size(); s1++) {
+            auto bf1_first = sh2bf.at(s1); size_t atom1 = sh2at[s1];
+
+            for (size_t s2 = s1; s2 < obs.size(); s2++) {
+                auto bf2_first = sh2bf.at(s2); size_t atom2 = sh2at[s2];
+
+                for (size_t s3 = s1; s3 < obs.size(); s3++) {
+                    auto bf3_first = sh2bf.at(s3); size_t atom3 = sh2at[s3];
+
+                    for (size_t s4 = (s1 == s3 ? s2 : s3); s4 < obs.size(); s4++) {
+                        int id = omp_get_thread_num(); int idx = 0; auto bf4_first = sh2bf.at(s4); size_t atom4 = sh2at[s4];
+
+                        engines.at(id).compute(obs.at(s1), obs.at(s2), obs.at(s3), obs.at(s4));
+
+                        const auto& res = engines.at(id).results();
+
+                        if (res.at(0) == nullptr) continue;
+
+                        for (size_t f1 = 0; f1 < obs.at(s1).size(); f1++) {
+                            size_t bf1 = f1 + bf1_first;
+
+                            for (size_t f2 = 0; f2 < obs.at(s2).size(); f2++) {
+                                size_t bf2 = f2 + bf2_first;
+
+                                for (size_t f3 = 0; f3 < obs.at(s3).size(); f3++) {
+                                    size_t bf3 = f3 + bf3_first;
+
+                                    for (size_t f4 = 0; f4 < obs.at(s4).size(); f4++, idx++) {
+                                        size_t bf4 = f4 + bf4_first;
+
+                                        if (s1 == s2 && bf1 > bf2) continue;
+                                        if (s3 == s4 && bf3 > bf4) continue;
+
+                                        if (s1 == s3 && s2 == s4 && (bf1 > bf3 || (bf1 == bf3 && bf2 > bf4))) continue;
+
+                                        double total_D = 0;
+
+                                        auto add_D = [&](size_t u, size_t v, size_t w, size_t x) {
+                                            double coul = 0.5 * P_tot[u * nbf + w] * P_tot[v * nbf + x];
+
+                                            double ec1 = P_aa[u * nbf + v] * P_aa[w * nbf + x];
+                                            double ec2 = P_bb[u * nbf + v] * P_bb[w * nbf + x];
+                                            double ec3 = P_ab[u * nbf + v] * P_ab[w * nbf + x];
+                                            double ec4 = P_ba[u * nbf + v] * P_ba[w * nbf + x];
+
+                                            double exch = ec1 + ec2 + ec3 + ec4;
+
+                                            total_D += coul - 0.5 * exch_factor * exch;
+                                        };
+
+                                        add_D(bf1, bf3, bf2, bf4);
+
+                                        if (bf3 != bf4) {
+                                            add_D(bf1, bf4, bf2, bf3);
+                                        }
+
+                                        if (bf1 != bf2) {
+                                            add_D(bf2, bf3, bf1, bf4);
+                                        }
+
+                                        if (bf1 != bf2 && bf3 != bf4) {
+                                            add_D(bf2, bf4, bf1, bf3);
+                                        }
+
+                                        if (!(bf1 == bf3 && bf2 == bf4) && !(bf1 == bf4 && bf2 == bf3)) {
+                                            add_D(bf3, bf1, bf4, bf2);
+
+                                            if (bf3 != bf4) {
+                                                add_D(bf4, bf1, bf3, bf2);
+                                            }
+
+                                            if (bf1 != bf2) {
+                                                add_D(bf3, bf2, bf4, bf1);
+                                            }
+
+                                            if (bf1 != bf2 && bf3 != bf4) {
+                                                add_D(bf4, bf2, bf3, bf1);
+                                            }
+                                        }
+
+                                        if (std::abs(total_D) < 1e-15) continue;
+
+                                        for (size_t d = 0; d < 3; d++) {
+                                            G_threads[id * nat * 3 + atom1 * 3 + d] += res.at(d + 0)[idx] * total_D;
+                                            G_threads[id * nat * 3 + atom2 * 3 + d] += res.at(d + 3)[idx] * total_D;
+                                            G_threads[id * nat * 3 + atom3 * 3 + d] += res.at(d + 6)[idx] * total_D;
+                                            G_threads[id * nat * 3 + atom4 * 3 + d] += res.at(d + 9)[idx] * total_D;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (size_t t = 0; t < nthreads; t++) {
+            for (size_t idx = 0; idx < nat * 3; idx++) {
+                G[idx] += G_threads[t * nat * 3 + idx];
+            }
+        }
+    }
+
+    void twoelec_gradient_rhf(double *G, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<libint2::Engine> engines(nthreads, engine);
+
+        size_t nbf = obs   .nbf(); auto sh2bf = obs  .shell2bf(     );
+        size_t nat = atoms.size(); auto sh2at = obs.shell2atom(atoms);
+
+        std::vector<double> G_threads(nthreads * nat * 3, 0);
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < obs.size(); s1++) {
+            auto bf1_first = sh2bf.at(s1); size_t atom1 = sh2at[s1];
+
+            for (size_t s2 = s1; s2 < obs.size(); s2++) {
+                auto bf2_first = sh2bf.at(s2); size_t atom2 = sh2at[s2];
+
+                for (size_t s3 = s1; s3 < obs.size(); s3++) {
+                    auto bf3_first = sh2bf.at(s3); size_t atom3 = sh2at[s3];
+
+                    for (size_t s4 = (s1 == s3 ? s2 : s3); s4 < obs.size(); s4++) {
+                        int id = omp_get_thread_num(); int idx = 0; auto bf4_first = sh2bf.at(s4); size_t atom4 = sh2at[s4];
+
+                        engines.at(id).compute(obs.at(s1), obs.at(s2), obs.at(s3), obs.at(s4));
+
+                        const auto& res = engines.at(id).results();
+
+                        if (res.at(0) == nullptr) continue;
+
+                        for (size_t f1 = 0; f1 < obs.at(s1).size(); f1++) {
+                            size_t bf1 = f1 + bf1_first;
+
+                            for (size_t f2 = 0; f2 < obs.at(s2).size(); f2++) {
+                                size_t bf2 = f2 + bf2_first;
+
+                                for (size_t f3 = 0; f3 < obs.at(s3).size(); f3++) {
+                                    size_t bf3 = f3 + bf3_first;
+
+                                    for (size_t f4 = 0; f4 < obs.at(s4).size(); f4++, idx++) {
+                                        size_t bf4 = f4 + bf4_first;
+
+                                        if (s1 == s2 && bf1 > bf2) continue;
+                                        if (s3 == s4 && bf3 > bf4) continue;
+
+                                        if (s1 == s3 && s2 == s4 && (bf1 > bf3 || (bf1 == bf3 && bf2 > bf4))) continue;
+
+                                        double total_D = 0;
+
+                                        auto add_D = [&](size_t u, size_t v, size_t w, size_t x) {
+                                            total_D += 0.5 * P[u * nbf + w] * P[v * nbf + x] - 0.5 * exch_factor * P[u * nbf + v] * P[w * nbf + x];
+                                        };
+
+                                        add_D(bf1, bf3, bf2, bf4);
+
+                                        if (bf3 != bf4) {
+                                            add_D(bf1, bf4, bf2, bf3);
+                                        }
+
+                                        if (bf1 != bf2) {
+                                            add_D(bf2, bf3, bf1, bf4);
+                                        }
+
+                                        if (bf1 != bf2 && bf3 != bf4) {
+                                            add_D(bf2, bf4, bf1, bf3);
+                                        }
+
+                                        if (!(bf1 == bf3 && bf2 == bf4) && !(bf1 == bf4 && bf2 == bf3)) {
+                                            add_D(bf3, bf1, bf4, bf2);
+
+                                            if (bf3 != bf4) {
+                                                add_D(bf4, bf1, bf3, bf2);
+                                            }
+
+                                            if (bf1 != bf2) {
+                                                add_D(bf3, bf2, bf4, bf1);
+                                            }
+
+                                            if (bf1 != bf2 && bf3 != bf4) {
+                                                add_D(bf4, bf2, bf3, bf1);
+                                            }
+                                        }
+
+                                        if (std::abs(total_D) < 1e-15) continue;
+
+                                        for (size_t d = 0; d < 3; d++) {
+                                            G_threads[id * nat * 3 + atom1 * 3 + d] += res.at(d + 0)[idx] * total_D;
+                                            G_threads[id * nat * 3 + atom2 * 3 + d] += res.at(d + 3)[idx] * total_D;
+                                            G_threads[id * nat * 3 + atom3 * 3 + d] += res.at(d + 6)[idx] * total_D;
+                                            G_threads[id * nat * 3 + atom4 * 3 + d] += res.at(d + 9)[idx] * total_D;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        for (size_t t = 0; t < nthreads; t++) {
+            for (size_t idx = 0; idx < nat * 3; idx++) {
+                G[idx] += G_threads[t * nat * 3 + idx];
+            }
+        }
+    }
+
+    void libint_coulomb_gradient_ghf(double *G, const double *P, double exch_factor, SystemData *sys, size_t nthreads) {
+        if (!sys) return; libint2::initialize();
+
+        Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
+
+        twoelec_gradient_ghf(G, P, exch_factor, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
+    }
+
+    void libint_coulomb_gradient_rhf(double *G, const double *P, double exch_factor, SystemData *sys, size_t nthreads) {
+        if (!sys) return; libint2::initialize();
+
+        Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
+
+        twoelec_gradient_rhf(G, P, exch_factor, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
+    }
+
     void libint_coulomb_deriv(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 

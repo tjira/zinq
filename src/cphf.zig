@@ -143,7 +143,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
                 U_p.ptr(j, k).* = U_x.at(j, k);
             };
 
-            mo2ao_xx(T, &dC_x, U_x, C);
+            try mo2ao_xx(T, &dC_x, U_x, C);
 
             V_x.zero();
 
@@ -274,7 +274,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             U_x.ptr(i, j).* = if (@abs(delta_e) > 1e-12) (f + v - e.at(j) * s) / delta_e else -0.5 * s;
         };
 
-        mo2ao_xx(T, &dC_x, U_x, C);
+        try mo2ao_xx(T, &dC_x, U_x, C);
 
         for (0..nbf) |i| for (0..nbf) |q| {
             dC.ptr(.{ c, i, q }).* = dC_x.at(i, q);

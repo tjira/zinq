@@ -163,7 +163,7 @@ pub fn ao2so_pppp(comptime T: type, g_so: *Tensor(T, 4), g_ao: Tensor(T, 4)) voi
 }
 
 /// Transforms a one-electron operator matrix from the molecular orbital basis back to the atomic orbital basis.
-pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T)) void {
+pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T)) !void {
     const N = C.shape[0];
 
     std.debug.assert(A_pp.nrow() == N);
@@ -172,7 +172,7 @@ pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T
     std.debug.assert(A_xx.ncol() == N);
 
     if (T == f64) {
-        return contract(f64, "mq,qp->mp", A_xx, C, A_pp, 1, 0, null) catch unreachable;
+        return try contract(f64, "mq,qp->mp", A_xx, C, A_pp, 1, 0, null);
     }
 
     for (0..N) |mu| for (0..N) |p| {

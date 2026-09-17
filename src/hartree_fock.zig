@@ -231,19 +231,22 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
 }
 
 /// Computes the nuclear gradient of the total energy with respect to atomic coordinates.
-pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T), e: Vector(T), generalized: bool, dft: ?*DftPotential(T), gpa: Allocator) !Matrix(T) {
+pub fn gradient(comptime T: type, ints: Integrals(T), ws: ScfWorkspace(T), generalized: bool, dft: ?*DftPotential(T), nthreads: usize, gpa: Allocator) !Matrix(T) {
     const dS = ints.dS orelse unreachable;
     const dH = ints.dH orelse unreachable;
-    const dg = ints.dg orelse unreachable;
 
     const nocc = if (generalized) ints.sys.nel else ints.sys.nel / 2;
 
     var G = try nuclearRepulsionGradient(T, ints.sys, gpa);
     errdefer G.deinit(gpa);
 
-    const exch_factor: T = if (generalized) 1 else 0.5;
+    var exch_factor: T = if (generalized) 1 else 0.5;
 
-    var W = try Matrix(T).init(P.shape[0], P.shape[0], gpa);
+    if (dft) |pot| {
+        exch_factor *= pot.exx_coef;
+    }
+
+    var W = try Matrix(T).init(ws.P.shape[0], ws.P.shape[0], gpa);
     defer W.deinit(gpa);
 
     const factor: T = if (generalized) 1 else 2;
@@ -252,31 +255,41 @@ pub fn gradient(comptime T: type, ints: Integrals(T), C: Matrix(T), P: Matrix(T)
         var sum: T = 0;
 
         for (0..nocc) |k| {
-            sum += factor * e.at(k) * C.at(i, k) * C.at(j, k);
+            sum += factor * ws.e.at(k) * ws.C.at(i, k) * ws.C.at(j, k);
         }
 
         W.ptr(i, j).* = sum;
     };
 
-    const exx_val = if (dft) |d| d.exx_coef else 1;
-
     for (0..ints.sys.atoms.len) |i| for (0..3) |j| {
         const offset = (3 * i + j) * dS.shape[1] * dS.shape[2];
 
-        const h_G = dot(T, P.asVector(), Vector(T).fromSlice(dH.data[offset .. offset + P.data.len]));
+        const h_G = dot(T, ws.P.asVector(), Vector(T).fromSlice(dH.data[offset .. offset + ws.P.data.len]));
         const s_G = dot(T, W.asVector(), Vector(T).fromSlice(dS.data[offset .. offset + W.data.len]));
 
         var g_G: T = 0;
 
-        for (0..dg.shape[1]) |p| for (0..dg.shape[2]) |q| for (0..dg.shape[3]) |r| for (0..dg.shape[4]) |s| {
-            const dg1 = dg.at(.{ 3 * i + j, p, r, q, s });
-            const dg2 = dg.at(.{ 3 * i + j, p, q, r, s });
+        if (ints.dg) |dg| {
+            for (0..dg.shape[1]) |p| for (0..dg.shape[2]) |q| for (0..dg.shape[3]) |r| for (0..dg.shape[4]) |s| {
+                const dg1 = dg.at(.{ 3 * i + j, p, r, q, s });
+                const dg2 = dg.at(.{ 3 * i + j, p, q, r, s });
 
-            g_G += 0.5 * P.at(p, q) * P.at(r, s) * (dg1 - exx_val * exch_factor * dg2);
-        };
+                g_G += 0.5 * ws.P.at(p, q) * ws.P.at(r, s) * (dg1 - exch_factor * dg2);
+            };
+        }
 
         G.ptr(i, j).* += h_G + g_G - s_G;
     };
+
+    if (ints.dg == null) {
+        if (generalized) {
+            ints.sys.coulombGradientGhf(&G, ws.P.*, exch_factor, nthreads);
+        }
+
+        if (!generalized) {
+            ints.sys.coulombGradientRhf(&G, ws.P.*, exch_factor, nthreads);
+        }
+    }
 
     return G;
 }
@@ -366,9 +379,9 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
             .coulomb = !opt.integral_direct,
             .kinetic_d1 = opt.gradient != null and opt.gradient.? == .analytic,
             .overlap_d1 = opt.gradient != null and opt.gradient.? == .analytic,
-            .coulomb_d1 = opt.gradient != null and opt.gradient.? == .analytic,
             .nuclear_d1 = opt.gradient != null and opt.gradient.? == .analytic,
             .hmatrix_d1 = opt.gradient != null and opt.gradient.? == .analytic,
+            .coulomb_d1 = !opt.integral_direct and opt.gradient != null and opt.gradient.? == .analytic,
         },
     };
 
@@ -475,7 +488,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (opt.gradient) |gradopt| switch (gradopt) {
-        .analytic => grad[0] = try gradient(T, ints, C, P, e, opt.generalized, if (dft) |*d| d else null, gpa),
+        .analytic => grad[0] = try gradient(T, ints, ws, opt.generalized, if (dft) |*d| d else null, opt.nthreads, gpa),
         .numeric => grad[0] = try calculateNumericalGradient(T, io, runFromSystem, opt, sys, log, gpa),
     };
 
@@ -530,25 +543,6 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 /// Validates input options for physical consistency and method compatibility.
 fn checkInvalidInput(opt: Options) !void {
     if (opt.integral_direct) {
-        if (opt.gradient != null and opt.gradient.? == .analytic) {
-            std.log.err("ANALYTIC GRADIENTS ARE NOT SUPPORTED FOR INTEGRAL DIRECT HARTREE-FOCK", .{});
-
-            return error.InvalidInput;
-        }
-
-        if (opt.optimize) |o| {
-            const grad = switch (o) {
-                .steepest_descent => |s| s.gradient,
-                .bfgs => |b| b.gradient,
-            };
-
-            if (grad == .analytic) {
-                std.log.err("ANALYTIC GRADIENT OPTIMIZATION IS NOT SUPPORTED FOR INTEGRAL DIRECT HARTREE-FOCK", .{});
-
-                return error.InvalidInput;
-            }
-        }
-
         if (opt.response != null) {
             std.log.err("CPHF RESPONSE PROPERTIES ARE NOT SUPPORTED FOR INTEGRAL DIRECT HARTREE-FOCK", .{});
 
