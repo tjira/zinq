@@ -183,7 +183,7 @@ foreach my $mol_file (glob("*.xyz")) {
 
     # CLOSE THE FILE HANDLES
     close $fh_in; close $fh_tmp;
-    
+
     # MOVE THE TEMP FILE TO THE EXAMPLE DIRECTORY
     move($tmp_file, "../example/molecule/$mol_file") or die "CANNOT MOVE '$mol_file' TO EXAMPLE DIRECTORY: $!";
 }

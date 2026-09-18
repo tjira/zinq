@@ -88,7 +88,7 @@ sub download_library {
     die "EXTRACTED PATH FOR '$dest_name' NOT FOUND" unless @paths;
 
     # REMOVE ANY EXISTING DIRECTORY WITH THE DESTINATION NAME
-    rmtree("lib/$dest_name") if -d "lib/$dest_name"; 
+    rmtree("lib/$dest_name") if -d "lib/$dest_name";
 
     # RENAME THE EXTRACTED PATH TO THE DESTINATION NAME
     move($paths[0], "lib/$dest_name") or die "FAILED TO MOVE '$paths[0]' TO 'lib/$dest_name': $!";
@@ -154,7 +154,7 @@ sub compile_eigen {
 
     # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
     chdir "lib/eigen" or die "CANNOT CHDIR TO 'lib/eigen': $!";
-    
+
     # CONFIGURE COMMAND
     my @args = (
         "cmake",
@@ -288,7 +288,7 @@ sub compile_libxc {
 
     # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
     chdir "lib/libxc" or die "CANNOT CHDIR TO 'lib/libxc': $!";
-    
+
     # RUN AUTORECONF
     system("autoreconf", "-i") == 0 or die "LIBXC AUTORECONF FAILED";
 
@@ -330,7 +330,7 @@ sub compile_openblas {
 
     # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
     chdir "lib/openblas" or die "CANNOT CHDIR TO 'lib/openblas': $!";
-    
+
     # DEFINE COMPILE ARGUMENTS
     my @args = (
         "HOSTCC=gcc",
@@ -369,7 +369,7 @@ sub compile_fftw {
 
     # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
     chdir "lib/fftw" or die "CANNOT CHDIR TO 'lib/fftw': $!";
-    
+
     # CONFIGURE COMMAND
     my @args = (
         "cmake",

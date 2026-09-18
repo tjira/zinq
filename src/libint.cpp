@@ -543,7 +543,7 @@ extern "C" {
         nthreads = 1;
         #endif
 
-        std::vector<libint2::Engine> engines(nthreads, engine);
+        std::vector<Engine> engines(nthreads, engine);
 
         size_t nbf = obs   .nbf(); auto sh2bf = obs  .shell2bf(     );
         size_t nat = atoms.size(); auto sh2at = obs.shell2atom(atoms);
@@ -596,34 +596,33 @@ extern "C" {
                                     for (size_t f4 = 0; f4 < obs.at(s4).size(); f4++, idx++) {
                                         size_t bf4 = f4 + bf4_first;
 
-                                        apply(bf1, bf3, bf2, bf4); 
-                                        
+                                        apply(bf1, bf3, bf2, bf4);
+
                                         if (bf3 != bf4) {
-                                            apply(bf1, bf4, bf2, bf3); 
+                                            apply(bf1, bf4, bf2, bf3);
                                         }
-                                        
+
                                         if (bf1 != bf2) {
-                                            apply(bf2, bf3, bf1, bf4); 
+                                            apply(bf2, bf3, bf1, bf4);
                                         }
-                                        
+
                                         if (bf1 != bf2 && bf3 != bf4) {
-                                            apply(bf2, bf4, bf1, bf3); 
+                                            apply(bf2, bf4, bf1, bf3);
                                         }
 
                                         if (!(bf1 == bf3 && bf2 == bf4) && !(bf1 == bf4 && bf2 == bf3)) {
-                                            
-                                            apply(bf3, bf1, bf4, bf2); 
-                                            
+                                            apply(bf3, bf1, bf4, bf2);
+
                                             if (bf3 != bf4) {
-                                                apply(bf4, bf1, bf3, bf2); 
+                                                apply(bf4, bf1, bf3, bf2);
                                             }
-                                            
+
                                             if (bf1 != bf2) {
-                                                apply(bf3, bf2, bf4, bf1); 
+                                                apply(bf3, bf2, bf4, bf1);
                                             }
-                                            
+
                                             if (bf1 != bf2 && bf3 != bf4) {
-                                                apply(bf4, bf2, bf3, bf1); 
+                                                apply(bf4, bf2, bf3, bf1);
                                             }
                                         }
                                     }
@@ -643,7 +642,7 @@ extern "C" {
         nthreads = 1;
         #endif
 
-        std::vector<libint2::Engine> engines(nthreads, engine);
+        std::vector<Engine> engines(nthreads, engine);
 
         size_t nbf = obs   .nbf(); auto sh2bf = obs  .shell2bf(     );
         size_t nat = atoms.size(); auto sh2at = obs.shell2atom(atoms);
@@ -787,7 +786,7 @@ extern "C" {
         nthreads = 1;
         #endif
 
-        std::vector<libint2::Engine> engines(nthreads, engine);
+        std::vector<Engine> engines(nthreads, engine);
 
         size_t nbf = obs   .nbf(); auto sh2bf = obs  .shell2bf(     );
         size_t nat = atoms.size(); auto sh2at = obs.shell2atom(atoms);

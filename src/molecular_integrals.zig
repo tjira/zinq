@@ -22,7 +22,7 @@ pub const Options = struct {
     spin: bool = false,
     charge: i32 = 0,
     multiplicity: u32 = 1,
-    nthreads: usize = 1,
+    nthreads: u32 = 1,
 };
 
 /// Specifier of boolean flags to select which one-electron and two-electron molecular integrals and derivatives to compute.
