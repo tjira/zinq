@@ -33,3 +33,47 @@ q_A=Z_A-N_A
 $$
 
 where a positive net charge $q_A$ indicates that the atom has lost electron density and carries a partial positive charge, while a negative net charge indicates that the atom has pulled electron density towards itself and carries a partial negative charge. These charges are useful for understanding the polarity of the molecule, its dipole moment, and how it will interact with other molecules.
+
+---
+
+## II. Löwdin Population Analysis
+
+While Mulliken population analysis provides a simple way to partition the electron density, it can suffer from unphysical charge distributions when large or diffuse basis sets are used because it partitions off-diagonal overlap elements equally without orthogonalization. Löwdin population analysis overcomes this limitation by transforming the non-orthogonal atomic orbital basis into a symmetrically orthogonalized basis before assigning electronic populations.
+
+### 1. Symmetric Orthogonalization and Populations
+
+Löwdin symmetric orthogonalization constructs an orthogonal basis using the square root of the overlap matrix $\mathbf{S}^{1/2}$. The symmetric square root matrix $\mathbf{S}^{1/2}$ is computed by diagonalizing the overlap matrix $\mathbf{S}=\mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^T$ through eigenvalue decomposition and evaluating
+
+$$
+\mathbf{S}^{1/2}=\mathbf{U}\boldsymbol{\Lambda}^{1/2}\mathbf{U}^T
+$$
+
+where $\boldsymbol{\Lambda}^{1/2}=\text{diag}(\sqrt{\lambda_1},\dots,\sqrt{\lambda_N})$ contains the square roots of the overlap eigenvalues. The electron density matrix expressed in this symmetrically orthogonalized Löwdin basis is given by
+
+$$
+\mathbf{P}^{\text{Löwdin}}=\mathbf{S}^{1/2}\mathbf{P}\mathbf{S}^{1/2}
+$$
+
+Because the basis functions are orthonormal in the transformed representation, the overlap matrix in the Löwdin basis is the identity matrix $\mathbf{I}$, meaning that there are no shared off-diagonal overlap densities to partition. The gross electron population $N_\mu$ associated with the $\mu$-th Löwdin basis function is simply the diagonal element of the Löwdin density matrix
+
+$$
+N_\mu=P^{\text{Löwdin}}_{\mu\mu}=(\mathbf{S}^{1/2}\mathbf{P}\mathbf{S}^{1/2})_{\mu\mu}
+$$
+
+which is evaluated efficiently in our implementation by taking the dot product between the $\mu$-th row of the intermediate product $\mathbf{S}^{1/2}\mathbf{P}$ and the $\mu$-th row of the symmetric matrix $\mathbf{S}^{1/2}$. The total electron population $N_A$ assigned to atom $A$ is then obtained by summing the diagonal populations belonging to the basis functions on center $A$ as
+
+$$
+N_A=\sum_{\mu\in A}N_\mu
+$$
+
+using the mapping array `sys.bf2at`.
+
+### 2. Net Atomic Charges
+
+The net Löwdin atomic charge $q_A$ on atom $A$ is subsequently obtained by subtracting the assigned electron population from the nuclear charge according to
+
+$$
+q_A=Z_A-N_A
+$$
+
+which yields atomic partial charges that are significantly more robust against basis set enlargement than Mulliken charges.

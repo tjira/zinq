@@ -24,6 +24,7 @@ const dot = @import("linear_algebra.zig").dot;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const geigh = @import("linear_algebra.zig").geigh;
 const getSymbol = @import("constant.zig").getSymbol;
+const lowdin = @import("population_analysis.zig").lowdin;
 const luFactorize = @import("linear_algebra.zig").luFactorize;
 const luSolve = @import("linear_algebra.zig").luSolve;
 const mm = @import("linear_algebra.zig").mm;
@@ -33,6 +34,7 @@ const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").run
 const mulliken = @import("population_analysis.zig").mulliken;
 const orbitalResponse = @import("cphf.zig").orbitalResponse;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
+const printLowdinCharges = @import("population_analysis.zig").printLowdinCharges;
 const printMullikenCharges = @import("population_analysis.zig").printMullikenCharges;
 const printf = @import("read_write.zig").printf;
 const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
@@ -55,6 +57,7 @@ pub const Options = struct {
     multiplicity: u32 = 1,
     iterations: u32 = 100,
     threshold: f64 = 1e-8,
+    lowdin: bool = false,
     mulliken: bool = false,
     integral_direct: bool = false,
     nthreads: u32 = 1,
@@ -456,6 +459,15 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     const ws: ScfWorkspace(T) = .{ .P = &P, .F = &F, .C = &C, .e = &e };
 
     energy[0] = try scf(T, io, opt, ints, ws, if (dft) |*d| d else null, log, gpa);
+
+    if (log and opt.lowdin) {
+        var charges = try lowdin(T, sys.*, P, ints.S.?, gpa);
+        defer charges.deinit(gpa);
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printLowdinCharges(T, io, sys.*, charges, method_str);
+    }
 
     if (log and opt.mulliken) {
         var charges = try mulliken(T, sys.*, P, ints.S.?, gpa);
