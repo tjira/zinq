@@ -670,7 +670,7 @@ extern "C" {
             }
         }
 
-        std::vector<double> G_threads(nthreads * nat * 3, 0.0);
+        std::vector<double> G_threads(nthreads * nat * 3, 0);
 
         #ifdef _OPENMP
         #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
