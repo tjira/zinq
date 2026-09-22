@@ -42,6 +42,7 @@ pub const potential_plot = @import("potential_plot.zig");
 pub const quantum_dynamics = @import("quantum_dynamics.zig");
 pub const read_write = @import("read_write.zig");
 pub const spectral_analysis = @import("spectral_analysis.zig");
+pub const spin_analysis = @import("spin_analysis.zig");
 pub const surface_hopping = @import("surface_hopping.zig");
 pub const tensor = @import("tensor.zig");
 pub const thermostat = @import("thermostat.zig");
