@@ -13,6 +13,7 @@
                 "hessian" : {
                     "numeric" : {}
                 },
+                "lowdin" : true,
                 "mulliken" : true
             }
         }
