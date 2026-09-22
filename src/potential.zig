@@ -32,6 +32,12 @@ pub const Options = union(enum) {
         k: f64 = 1,
         g: f64 = 1,
     },
+    morse: struct {
+        D: f64 = 0.2,
+        a: f64 = 1.0,
+
+        r0: f64 = 0.0,
+    },
     time_linear: struct {
         a: f64 = 10,
         g: f64 = 2,
@@ -74,6 +80,7 @@ pub fn Potential(comptime T: type) type {
         harmonic: Harmonic(T),
         henon_heiles: HenonHeiles(T),
         jahn_teller: JahnTeller(T),
+        morse: Morse(T),
         time_linear: TimeLinear(T),
         tully_1: Tully1(T),
         tully_2: Tully2(T),
@@ -88,6 +95,7 @@ pub fn Potential(comptime T: type) type {
                 .harmonic => |f| .{ .harmonic = Harmonic(T).init(f.k) },
                 .henon_heiles => |f| .{ .henon_heiles = HenonHeiles(T).init(f.k, f.l) },
                 .jahn_teller => |f| .{ .jahn_teller = JahnTeller(T).init(f.k, f.g) },
+                .morse => |f| .{ .morse = Morse(T).init(f.D, f.a, f.r0) },
                 .time_linear => |f| .{ .time_linear = TimeLinear(T).init(f.a, f.g) },
                 .tully_1 => |f| .{ .tully_1 = Tully1(T).init(f.A, f.B, f.C, f.D) },
                 .tully_2 => |f| .{ .tully_2 = Tully2(T).init(f.A, f.B, f.C, f.D, f.E) },
@@ -483,6 +491,50 @@ fn Lvc(comptime T: type) type {
         /// Returns the number of electronic states in the non-adiabatic potential representation.
         pub fn nstate(self: @This()) usize {
             return self.excitation_energies.len;
+        }
+    };
+}
+
+/// Returns a Morse potential energy surface type describing anharmonic bond stretching.
+fn Morse(comptime T: type) type {
+    return struct {
+        D: T,
+        a: T,
+
+        r0: T,
+
+        /// Initializes a Morse potential with dissociation energy D, stiffness a, and equilibrium distance r0.
+        pub fn init(D: T, a: T, r0: T) @This() {
+            return .{ .D = D, .a = a, .r0 = r0 };
+        }
+
+        /// Evaluates the Morse potential energy: V = D * (1 - exp(-a * (r - r0)))^2.
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+            const r0 = Value(U).init(r[0]);
+
+            const D = Value(U).fromFloat(self.D);
+            const a = Value(U).fromFloat(self.a);
+
+            const r_eq = Value(U).fromFloat(self.r0);
+
+            const factor = Value(U).fromFloat(1).sub(r0.sub(r_eq).mul(a).neg().exp());
+
+            V[0] = D.mul(factor).mul(factor).val;
+        }
+
+        /// Returns false as this potential is independent of time.
+        pub fn isTd(_: @This()) bool {
+            return false;
+        }
+
+        /// Returns the single nuclear coordinate dimension of the Morse potential.
+        pub fn ndim(_: @This()) usize {
+            return 1;
+        }
+
+        /// Returns the single electronic ground state of the Morse potential.
+        pub fn nstate(_: @This()) usize {
+            return 1;
         }
     };
 }

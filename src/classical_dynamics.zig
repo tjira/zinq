@@ -753,6 +753,19 @@ fn checkInvalidInput(opt: Options) !void {
     }
 
     if (opt.thermostat) |topt| switch (topt) {
+        .berendsen => |bopt| {
+            if (bopt.temperature < 0) {
+                std.log.err("TEMPERATURE MUST BE NON-NEGATIVE", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (bopt.tau <= 0) {
+                std.log.err("COUPLING CONSTANT TAU MUST BE POSITIVE", .{});
+
+                return error.InvalidInput;
+            }
+        },
         .langevin => |lopt| {
             if (lopt.temperature < 0) {
                 std.log.err("TEMPERATURE MUST BE NON-NEGATIVE", .{});
