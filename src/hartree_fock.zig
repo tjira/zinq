@@ -28,6 +28,7 @@ const getSymbol = @import("constant.zig").getSymbol;
 const lowdin = @import("population_analysis.zig").lowdin;
 const luFactorize = @import("linear_algebra.zig").luFactorize;
 const luSolve = @import("linear_algebra.zig").luSolve;
+const mayer = @import("population_analysis.zig").mayer;
 const mm = @import("linear_algebra.zig").mm;
 const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
 const molecular_integrals_run = @import("molecular_integrals.zig").run;
@@ -36,10 +37,13 @@ const mulliken = @import("population_analysis.zig").mulliken;
 const orbitalResponse = @import("cphf.zig").orbitalResponse;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printLowdinCharges = @import("population_analysis.zig").printLowdinCharges;
+const printMayerBondOrders = @import("population_analysis.zig").printMayerBondOrders;
 const printMullikenCharges = @import("population_analysis.zig").printMullikenCharges;
 const printTotalSpin = @import("spin_analysis.zig").printTotalSpin;
+const printWibergBondOrders = @import("population_analysis.zig").printWibergBondOrders;
 const printf = @import("read_write.zig").printf;
 const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
+const wiberg = @import("population_analysis.zig").wiberg;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 const writeXyzFile = @import("read_write.zig").writeXyzFile;
 
@@ -60,7 +64,9 @@ pub const Options = struct {
     iterations: u32 = 100,
     threshold: f64 = 1e-8,
     lowdin: bool = false,
+    mayer: bool = false,
     mulliken: bool = false,
+    wiberg: bool = false,
     integral_direct: bool = false,
     nthreads: u32 = 1,
 
@@ -479,6 +485,15 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         try printLowdinCharges(T, io, sys.*, charges, method_str);
     }
 
+    if (log and opt.mayer) {
+        var bo = try mayer(T, sys.*, P, ints.S.?, gpa);
+        defer bo.deinit(gpa);
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printMayerBondOrders(T, io, sys.*, bo, method_str);
+    }
+
     if (log and opt.mulliken) {
         var charges = try mulliken(T, sys.*, P, ints.S.?, gpa);
         defer charges.deinit(gpa);
@@ -486,6 +501,15 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
 
         try printMullikenCharges(T, io, sys.*, charges, method_str);
+    }
+
+    if (log and opt.wiberg) {
+        var bo = try wiberg(T, sys.*, P, ints.S.?, gpa);
+        defer bo.deinit(gpa);
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printWibergBondOrders(T, io, sys.*, bo, method_str);
     }
 
     if (log) {

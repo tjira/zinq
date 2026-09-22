@@ -25,8 +25,16 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
         run_opt.lowdin = false;
     }
 
+    if (comptime @hasField(@TypeOf(run_opt), "mayer")) {
+        run_opt.mayer = false;
+    }
+
     if (comptime @hasField(@TypeOf(run_opt), "mulliken")) {
         run_opt.mulliken = false;
+    }
+
+    if (comptime @hasField(@TypeOf(run_opt), "wiberg")) {
+        run_opt.wiberg = false;
     }
 
     if (comptime @hasField(@TypeOf(run_opt), "response")) {
@@ -41,8 +49,10 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
         run_opt.hartree_fock.response = null;
 
         run_opt.hartree_fock.hessian = null;
+        run_opt.hartree_fock.lowdin = false;
+        run_opt.hartree_fock.wiberg = false;
 
-        run_opt.hartree_fock.lowdin, run_opt.hartree_fock.mulliken = .{ false, false };
+        run_opt.hartree_fock.mayer, run_opt.hartree_fock.mulliken = .{ false, false };
 
         run_opt.hartree_fock.write = .{};
     }
@@ -187,8 +197,16 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
         run_opt.lowdin = false;
     }
 
+    if (comptime @hasField(@TypeOf(run_opt), "mayer")) {
+        run_opt.mayer = false;
+    }
+
     if (comptime @hasField(@TypeOf(run_opt), "mulliken")) {
         run_opt.mulliken = false;
+    }
+
+    if (comptime @hasField(@TypeOf(run_opt), "wiberg")) {
+        run_opt.wiberg = false;
     }
 
     if (comptime @hasField(@TypeOf(run_opt), "response")) {
@@ -203,8 +221,10 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
         run_opt.hartree_fock.response = null;
 
         run_opt.hartree_fock.hessian = null;
+        run_opt.hartree_fock.lowdin = false;
+        run_opt.hartree_fock.wiberg = false;
 
-        run_opt.hartree_fock.lowdin, run_opt.hartree_fock.mulliken = .{ false, false };
+        run_opt.hartree_fock.mayer, run_opt.hartree_fock.mulliken = .{ false, false };
 
         run_opt.hartree_fock.write = .{};
     }

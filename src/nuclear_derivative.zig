@@ -137,8 +137,16 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
         modified_opt.lowdin = false;
     }
 
+    if (comptime @hasField(@TypeOf(modified_opt), "mayer")) {
+        modified_opt.mayer = false;
+    }
+
     if (comptime @hasField(@TypeOf(modified_opt), "mulliken")) {
         modified_opt.mulliken = false;
+    }
+
+    if (comptime @hasField(@TypeOf(modified_opt), "wiberg")) {
+        modified_opt.wiberg = false;
     }
 
     if (comptime @hasField(@TypeOf(modified_opt), "response")) {
@@ -154,8 +162,10 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
         modified_opt.hartree_fock.response = null;
 
         modified_opt.hartree_fock.hessian = null;
+        modified_opt.hartree_fock.lowdin = false;
+        modified_opt.hartree_fock.wiberg = false;
 
-        modified_opt.hartree_fock.lowdin, modified_opt.hartree_fock.mulliken = .{ false, false };
+        modified_opt.hartree_fock.mayer, modified_opt.hartree_fock.mulliken = .{ false, false };
 
         modified_opt.hartree_fock.write = .{};
     }

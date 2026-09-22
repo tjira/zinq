@@ -1,4 +1,4 @@
-//! Implements Mulliken and Löwdin population analysis to calculate partial atomic charges from the density and overlap matrices.
+//! Implements Mulliken and Löwdin population analysis and Mayer and Wiberg bond order calculations.
 
 const std = @import("std");
 
@@ -62,6 +62,74 @@ pub fn lowdin(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
     return charges;
 }
 
+/// Computes Mayer bond orders between all pairs of atoms from the density and overlap matrices.
+pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !Matrix(T) {
+    const nbf = sys.nbf;
+
+    const is_gen = (P.shape[0] == 2 * nbf);
+
+    var bo = try Matrix(T).initZero(sys.atoms.len, sys.atoms.len, gpa);
+    errdefer bo.deinit(gpa);
+
+    if (!is_gen) {
+        var PS = try Matrix(T).init(nbf, nbf, gpa);
+        defer PS.deinit(gpa);
+
+        mm(T, &PS, P, S, 1.0, 0.0, false, false);
+
+        for (0..nbf) |u| {
+            const at_u: usize = @intCast(sys.bf2at[u]);
+
+            for (0..nbf) |v| {
+                const at_v: usize = @intCast(sys.bf2at[v]);
+
+                if (at_u != at_v) {
+                    bo.ptr(at_u, at_v).* += PS.at(u, v) * PS.at(v, u);
+                }
+            }
+        }
+    }
+
+    if (is_gen) {
+        var P_a = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_a.deinit(gpa);
+
+        var P_b = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_b.deinit(gpa);
+
+        for (0..nbf) |i| for (0..nbf) |j| {
+            P_a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
+            P_b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
+        };
+
+        var PS_a = try Matrix(T).init(nbf, nbf, gpa);
+        defer PS_a.deinit(gpa);
+
+        var PS_b = try Matrix(T).init(nbf, nbf, gpa);
+        defer PS_b.deinit(gpa);
+
+        mm(T, &PS_a, P_a, S, 1, 0, false, false);
+        mm(T, &PS_b, P_b, S, 1, 0, false, false);
+
+        for (0..nbf) |u| {
+            const at_u: usize = @intCast(sys.bf2at[u]);
+
+            for (0..nbf) |v| {
+                const at_v: usize = @intCast(sys.bf2at[v]);
+
+                if (at_u != at_v) {
+                    const term_a = PS_a.at(u, v) * PS_a.at(v, u);
+                    const term_b = PS_b.at(u, v) * PS_b.at(v, u);
+
+                    bo.ptr(at_u, at_v).* += 2.0 * (term_a + term_b);
+                }
+            }
+        }
+    }
+
+    return bo;
+}
+
 /// Computes Mulliken net atomic charges by partitioning the electronic density matrix using the overlap matrix.
 pub fn mulliken(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !Vector(T) {
     var net_populations = try gpa.alloc(T, sys.atoms.len);
@@ -94,6 +162,18 @@ pub fn printLowdinCharges(comptime T: type, io: std.Io, sys: MolecularSystem(T),
     }
 }
 
+/// Formats and prints the calculated Mayer bond orders to the output.
+pub fn printMayerBondOrders(comptime T: type, io: std.Io, sys: MolecularSystem(T), bo: Matrix(T), method_str: []const u8) !void {
+    try printf(io, "\n{s} MAYER BOND ORDERS\n", .{method_str});
+
+    for (0..sys.atoms.len) |i| for (i + 1..sys.atoms.len) |j| {
+        const sym_i = try getSymbol(sys.atoms[i]);
+        const sym_j = try getSymbol(sys.atoms[j]);
+
+        try printf(io, "{s:2}{d:<2} - {s:2}{d:<2} {d:20.14}\n", .{ sym_i, i + 1, sym_j, j + 1, bo.at(i, j) });
+    };
+}
+
 /// Formats and prints the calculated Mulliken atomic charges to the output.
 pub fn printMullikenCharges(comptime T: type, io: std.Io, sys: MolecularSystem(T), charges: Vector(T), method_str: []const u8) !void {
     try printf(io, "\n{s} MULLIKEN POPULATION ANALYSIS\n", .{method_str});
@@ -103,4 +183,120 @@ pub fn printMullikenCharges(comptime T: type, io: std.Io, sys: MolecularSystem(T
 
         try printf(io, "{s:4} {d:20.14}\n", .{ sym, charges.data[i] });
     }
+}
+
+/// Formats and prints the calculated Wiberg bond indices to the output.
+pub fn printWibergBondOrders(comptime T: type, io: std.Io, sys: MolecularSystem(T), bo: Matrix(T), method_str: []const u8) !void {
+    try printf(io, "\n{s} WIBERG BOND ORDERS\n", .{method_str});
+
+    for (0..sys.atoms.len) |i| for (i + 1..sys.atoms.len) |j| {
+        const sym_i = try getSymbol(sys.atoms[i]);
+        const sym_j = try getSymbol(sys.atoms[j]);
+
+        try printf(io, "{s:2}{d:<2} - {s:2}{d:<2} {d:20.14}\n", .{ sym_i, i + 1, sym_j, j + 1, bo.at(i, j) });
+    };
+}
+
+/// Computes Wiberg bond indices between all pairs of atoms in the symmetrically orthogonalized Löwdin basis.
+pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !Matrix(T) {
+    const nbf = sys.nbf;
+
+    const is_gen = (P.shape[0] == 2 * nbf);
+
+    var eigvals = try Vector(T).init(nbf, gpa);
+    defer eigvals.deinit(gpa);
+
+    var U = try Matrix(T).init(nbf, nbf, gpa);
+    defer U.deinit(gpa);
+
+    try eigh(T, &eigvals, &U, S);
+
+    var U_scaled = try Matrix(T).init(nbf, nbf, gpa);
+    defer U_scaled.deinit(gpa);
+
+    for (0..nbf) |i| for (0..nbf) |j| {
+        U_scaled.ptr(i, j).* = U.at(i, j) * @sqrt(@max(0, eigvals.at(j)));
+    };
+
+    var Shalf = try Matrix(T).init(nbf, nbf, gpa);
+    defer Shalf.deinit(gpa);
+
+    mm(T, &Shalf, U_scaled, U, 1, 0, false, true);
+
+    var bo = try Matrix(T).initZero(sys.atoms.len, sys.atoms.len, gpa);
+    errdefer bo.deinit(gpa);
+
+    if (!is_gen) {
+        var SP = try Matrix(T).init(nbf, nbf, gpa);
+        defer SP.deinit(gpa);
+
+        mm(T, &SP, Shalf, P, 1, 0, false, false);
+
+        var P_ortho = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_ortho.deinit(gpa);
+
+        mm(T, &P_ortho, SP, Shalf, 1, 0, false, false);
+
+        for (0..nbf) |u| {
+            const at_u: usize = @intCast(sys.bf2at[u]);
+
+            for (0..nbf) |v| {
+                const at_v: usize = @intCast(sys.bf2at[v]);
+
+                if (at_u != at_v) {
+                    const p_uv = P_ortho.at(u, v);
+
+                    bo.ptr(at_u, at_v).* += p_uv * p_uv;
+                }
+            }
+        }
+    }
+
+    if (is_gen) {
+        var P_a = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_a.deinit(gpa);
+
+        var P_b = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_b.deinit(gpa);
+
+        for (0..nbf) |i| for (0..nbf) |j| {
+            P_a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
+            P_b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
+        };
+
+        var SP_a = try Matrix(T).init(nbf, nbf, gpa);
+        defer SP_a.deinit(gpa);
+
+        var SP_b = try Matrix(T).init(nbf, nbf, gpa);
+        defer SP_b.deinit(gpa);
+
+        mm(T, &SP_a, Shalf, P_a, 1, 0, false, false);
+        mm(T, &SP_b, Shalf, P_b, 1, 0, false, false);
+
+        var P_ortho_a = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_ortho_a.deinit(gpa);
+
+        var P_ortho_b = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_ortho_b.deinit(gpa);
+
+        mm(T, &P_ortho_a, SP_a, Shalf, 1, 0, false, false);
+        mm(T, &P_ortho_b, SP_b, Shalf, 1, 0, false, false);
+
+        for (0..nbf) |u| {
+            const at_u: usize = @intCast(sys.bf2at[u]);
+
+            for (0..nbf) |v| {
+                const at_v: usize = @intCast(sys.bf2at[v]);
+
+                if (at_u != at_v) {
+                    const pa_uv = P_ortho_a.at(u, v);
+                    const pb_uv = P_ortho_b.at(u, v);
+
+                    bo.ptr(at_u, at_v).* += 2.0 * (pa_uv * pa_uv + pb_uv * pb_uv);
+                }
+            }
+        }
+    }
+
+    return bo;
 }

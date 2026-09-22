@@ -14,7 +14,9 @@
                     "numeric" : {}
                 },
                 "lowdin" : true,
-                "mulliken" : true
+                "mayer" : true,
+                "mulliken" : true,
+                "wiberg" : true
             }
         }
     ]
