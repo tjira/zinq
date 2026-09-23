@@ -9,10 +9,14 @@ pub const a0 = 5.29177210544e-11; // BOHR RADIUS [m]
 pub const Eh = 4.3597447222060e-18; // HARTREE ENERGY [J]
 pub const kB = 1.380649e-23; // BOLTZMANN CONSTANT [J/K]
 pub const mu = 1.66053906892e-27; // ATOMIC MASS UNIT [kg]
+pub const NA = 6.02214076e23; // AVOGADRO CONSTANT [1/mol]
+pub const CAL2J = 4.184; // THERMOCHEMICAL CALORIE TO JOULE [J/cal]
+pub const R = kB * NA; // GAS CONSTANT [J/(mol K)]
 
 pub const A2BOHR = 1e-10 / a0; // ANGSTROM TO BOHR
 pub const AU2CM = @sqrt(Eh / (mu * a0 * a0)) / (2e2 * c * std.math.pi); // ATOMIC UNIT OF FREQUENCY TO CM^-1
 pub const AU2K = Eh / kB; // ATOMIC UNIT OF ENERGY TO KELVIN
+pub const CM2AU = (1e2 * h * c) / Eh; // CM^-1 TO HARTREE
 pub const CM2EV = (1e2 * h * c) / e; // CM^-1 TO EV
 pub const EV2AU = e / Eh; // EV TO ATOMIC UNIT OF ENERGY
 

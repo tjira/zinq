@@ -6,6 +6,7 @@ const cblas = @import("cimport.zig").cblas;
 
 const Allocator = std.mem.Allocator;
 
+const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
@@ -24,6 +25,7 @@ const bfgs = @import("molecular_optimization.zig").bfgs;
 const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
+const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
 const eigh = @import("linear_algebra.zig").eigh;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const hartree_fock_run = @import("hartree_fock.zig").run;
@@ -31,6 +33,7 @@ const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
 const primType = @import("value.zig").primType;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
+const printThermochemistry = @import("frequency_analysis.zig").printThermochemistry;
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 const writeXyzFile = @import("read_write.zig").writeXyzFile;
@@ -41,7 +44,7 @@ const AU2CM = @import("constant.zig").AU2CM;
 /// Configurations for the CI calculation, excitation levels, optimization, and derivative settings.
 pub const Options = struct {
     excitations: []const u32 = &.{ 1, 2 },
-    frequency: ?struct {} = null,
+    frequency: ?FrequencyOptions = null,
     gradient: ?GradientOptions = null,
     hartree_fock: HartreeFockOptions,
     hessian: ?union(enum) {
@@ -303,7 +306,9 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         };
     }
 
-    const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, log, gpa);
+    const state = if (opt.hessian) |h| h.numeric.state else 0;
+
+    const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, E.at(state), log, gpa);
 
     errdefer {
         if (opt.hessian) |_| hess[0].deinit(gpa);
@@ -645,8 +650,8 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: s
     return grad;
 }
 
-/// Computes the nuclear Hessian of a CI state numerically and performs frequency analysis.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
+/// Computes the nuclear Hessian of a CI state numerically and performs frequency and thermochemical analyses.
+fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), energy: T, log: bool, gpa: Allocator) ![]Matrix(T) {
     var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
     errdefer if (opt.hessian) |_| gpa.free(hess);
 
@@ -660,10 +665,18 @@ fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn
         var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
         defer freqs.deinit(gpa);
 
-        const method_str = try std.fmt.allocPrint(gpa, "CI STATE {d} NUMERIC", .{opt.hessian.?.numeric.state});
+        const state = if (opt.hessian) |h| h.numeric.state else 0;
+
+        const method_str = try std.fmt.allocPrint(gpa, "CI STATE {d}", .{state});
         defer gpa.free(method_str);
 
         try printHarmonicFrequencies(T, io, freqs, method_str);
+
+        const mult = opt.hartree_fock.multiplicity;
+
+        const thermo = try calculateThermochemistry(T, opt.frequency.?, sys.*, freqs, mult, gpa);
+
+        try printThermochemistry(T, io, opt.frequency.?, thermo, energy, method_str);
     }
 
     return hess;

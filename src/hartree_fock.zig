@@ -7,6 +7,7 @@ const cblas = @import("cimport.zig").cblas;
 const Allocator = std.mem.Allocator;
 
 const DftPotential = @import("density_functional_theory.zig").DftPotential;
+const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const Integrals = @import("molecular_integrals.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
@@ -20,6 +21,7 @@ const bfgs = @import("molecular_optimization.zig").bfgs;
 const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
+const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
 const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
 const dot = @import("linear_algebra.zig").dot;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
@@ -39,6 +41,7 @@ const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonic
 const printLowdinCharges = @import("population_analysis.zig").printLowdinCharges;
 const printMayerBondOrders = @import("population_analysis.zig").printMayerBondOrders;
 const printMullikenCharges = @import("population_analysis.zig").printMullikenCharges;
+const printThermochemistry = @import("frequency_analysis.zig").printThermochemistry;
 const printTotalSpin = @import("spin_analysis.zig").printTotalSpin;
 const printWibergBondOrders = @import("population_analysis.zig").printWibergBondOrders;
 const printf = @import("read_write.zig").printf;
@@ -64,7 +67,7 @@ pub const Options = struct {
         } = .{},
     } = null,
     diis: ?u32 = 8,
-    frequency: ?struct {} = null,
+    frequency: ?FrequencyOptions = null,
     generalized: bool = false,
     gradient: ?GradientOptions = null,
     hessian: ?union(enum) {
@@ -549,7 +552,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         };
     };
 
-    const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, log, gpa);
+    const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, energy[0], log, gpa);
 
     errdefer {
         if (opt.hessian) |_| hess[0].deinit(gpa);
@@ -868,8 +871,8 @@ fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), op
     };
 }
 
-/// Computes the nuclear Hessian and performs harmonic frequency analysis.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) ![]Matrix(T) {
+/// Computes the nuclear Hessian and performs harmonic frequency and thermochemical analyses.
+fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), energy: T, log: bool, gpa: Allocator) ![]Matrix(T) {
     var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
     errdefer if (opt.hessian) |_| gpa.free(hess);
 
@@ -883,9 +886,13 @@ fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn
         var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
         defer freqs.deinit(gpa);
 
-        const method_str = if (opt.dft != null) "DFT NUMERIC" else "HARTREE-FOCK NUMERIC";
+        const method_str = if (opt.dft != null) "DFT" else "HARTREE-FOCK";
 
         try printHarmonicFrequencies(T, io, freqs, method_str);
+
+        const thermo = try calculateThermochemistry(T, opt.frequency.?, sys.*, freqs, opt.multiplicity, gpa);
+
+        try printThermochemistry(T, io, opt.frequency.?, thermo, energy, method_str);
     }
 
     return hess;
