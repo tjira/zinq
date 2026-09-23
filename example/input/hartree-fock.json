@@ -13,6 +13,7 @@
                 "hessian" : {
                     "numeric" : {}
                 },
+                "frequency" : {},
                 "lowdin" : true,
                 "mayer" : true,
                 "mulliken" : true,

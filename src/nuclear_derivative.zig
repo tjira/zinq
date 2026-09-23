@@ -133,6 +133,10 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
 
     modified_opt.gradient, modified_opt.hessian, modified_opt.optimize = .{ null, null, null };
 
+    if (comptime @hasField(@TypeOf(modified_opt), "frequency")) {
+        modified_opt.frequency = null;
+    }
+
     if (comptime @hasField(@TypeOf(modified_opt), "lowdin")) {
         modified_opt.lowdin = false;
     }
@@ -158,6 +162,8 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
     }
 
     if (comptime @hasField(@TypeOf(modified_opt), "hartree_fock")) {
+        modified_opt.hartree_fock.frequency = null;
+
         modified_opt.hartree_fock.gradient = null;
         modified_opt.hartree_fock.response = null;
 

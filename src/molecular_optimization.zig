@@ -21,6 +21,10 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
 
     run_opt.hessian, run_opt.optimize, run_opt.gradient = .{ null, null, bfgs_opt.gradient };
 
+    if (comptime @hasField(@TypeOf(run_opt), "frequency")) {
+        run_opt.frequency = null;
+    }
+
     if (comptime @hasField(@TypeOf(run_opt), "lowdin")) {
         run_opt.lowdin = false;
     }
@@ -46,7 +50,7 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
     }
 
     if (comptime is_hf) {
-        run_opt.hartree_fock.response = null;
+        run_opt.hartree_fock.frequency, run_opt.hartree_fock.response = .{ null, null };
 
         run_opt.hartree_fock.hessian = null;
         run_opt.hartree_fock.lowdin = false;
@@ -193,6 +197,10 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
 
     run_opt.hessian, run_opt.optimize, run_opt.gradient = .{ null, null, sd_opt.gradient };
 
+    if (comptime @hasField(@TypeOf(run_opt), "frequency")) {
+        run_opt.frequency = null;
+    }
+
     if (comptime @hasField(@TypeOf(run_opt), "lowdin")) {
         run_opt.lowdin = false;
     }
@@ -218,7 +226,7 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
     }
 
     if (comptime is_hf) {
-        run_opt.hartree_fock.response = null;
+        run_opt.hartree_fock.frequency, run_opt.hartree_fock.response = .{ null, null };
 
         run_opt.hartree_fock.hessian = null;
         run_opt.hartree_fock.lowdin = false;

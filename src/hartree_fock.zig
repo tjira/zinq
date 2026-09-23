@@ -81,6 +81,8 @@ pub const Options = struct {
         } = .{},
     } = null,
 
+    frequency: ?struct {} = null,
+
     gradient: ?GradientOptions = null,
 
     optimize: ?union(enum) {
@@ -614,6 +616,12 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
+    if (opt.frequency != null and opt.hessian == null) {
+        std.log.err("FREQUENCY CALCULATION REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.multiplicity == 0) {
         std.log.err("MULTIPLICITY MUST BE GREATER THAN 0", .{});
 
@@ -880,7 +888,7 @@ fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn
 
     errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
 
-    if (log and opt.hessian != null) {
+    if (log and opt.frequency != null) {
         var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
         defer freqs.deinit(gpa);
 

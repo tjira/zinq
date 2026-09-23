@@ -20,7 +20,11 @@
                 "hessian" : {
                     "numeric" : {}
                 },
-                "mulliken" : true
+                "frequency" : {},
+                "lowdin" : true,
+                "mayer" : true,
+                "mulliken" : true,
+                "wiberg" : true
             }
         }
     ]
