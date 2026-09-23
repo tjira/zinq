@@ -27,36 +27,32 @@ const AU2K = @import("constant.zig").AU2K;
 
 /// Configuration options for the classical molecular dynamics simulation.
 pub const Options = struct {
+    adiabatic: bool = true,
     initial_conditions: InitialConditions,
+    iterations: u32,
+    log_interval: u32 = 1,
+    mass: []const f64,
+    nonadiabatic: ?NonadiabaticOptions = null,
     potential: PotentialOptions,
     thermostat: ?ThermostatOptions = null,
-
     time_step: f64,
-    iterations: u32,
-    mass: []const f64,
     trajectories: u32,
-
-    nonadiabatic: ?NonadiabaticOptions = null,
     write: Write = .{},
-
-    adiabatic: bool = true,
-    log_interval: u32 = 1,
 };
 
 /// Tagged union for multi-state non-adiabatic trajectory propagation methods.
 pub const NonadiabaticOptions = union(enum) {
-    surface_hopping: SurfaceHoppingOptions,
     ehrenfest: EhrenfestOptions,
+    surface_hopping: SurfaceHoppingOptions,
 };
 
 /// Initial phase space parameters and Gaussian width for trajectory sampling.
 const InitialConditions = struct {
-    position: []const f64,
-    momentum: []const f64,
     gamma: []const f64,
-
-    state: u32 = 0,
+    momentum: []const f64,
+    position: []const f64,
     seed: u32 = 1,
+    state: u32 = 0,
 };
 
 /// Output paths for recording trajectory observables to disk during dynamics.

@@ -14,45 +14,42 @@ const writeMatrix = @import("read_write.zig").writeMatrix;
 
 /// Configuration parameters specifying molecular geometry, basis sets, spin properties, and task selectors for integral calculation.
 pub const Options = struct {
-    system: []const u8,
     basis: []const u8,
-
     calculate: Calculate = .{},
-    write: Write = .{},
-    spin: bool = false,
     charge: i32 = 0,
     multiplicity: u32 = 1,
     nthreads: u32 = 1,
+    spin: bool = false,
+    system: []const u8,
+    write: Write = .{},
 };
 
 /// Specifier of boolean flags to select which one-electron and two-electron molecular integrals and derivatives to compute.
 const Calculate = struct {
-    kinetic: bool = true,
-    overlap: bool = true,
     coulomb: bool = true,
-    nuclear: bool = true,
-    hmatrix: bool = true,
-
-    kinetic_d1: bool = false,
-    overlap_d1: bool = false,
     coulomb_d1: bool = false,
-    nuclear_d1: bool = false,
+    hmatrix: bool = true,
     hmatrix_d1: bool = false,
+    kinetic: bool = true,
+    kinetic_d1: bool = false,
+    nuclear: bool = true,
+    nuclear_d1: bool = false,
+    overlap: bool = true,
+    overlap_d1: bool = false,
 };
 
 /// Options specifying the output file paths for writing calculated molecular integrals and their derivatives.
 const Write = struct {
-    kinetic: ?[]const u8 = null,
-    overlap: ?[]const u8 = null,
     coulomb: ?[]const u8 = null,
-    nuclear: ?[]const u8 = null,
-    hmatrix: ?[]const u8 = null,
-
-    kinetic_d1: ?[]const u8 = null,
-    overlap_d1: ?[]const u8 = null,
     coulomb_d1: ?[]const u8 = null,
-    nuclear_d1: ?[]const u8 = null,
+    hmatrix: ?[]const u8 = null,
     hmatrix_d1: ?[]const u8 = null,
+    kinetic: ?[]const u8 = null,
+    kinetic_d1: ?[]const u8 = null,
+    nuclear: ?[]const u8 = null,
+    nuclear_d1: ?[]const u8 = null,
+    overlap: ?[]const u8 = null,
+    overlap_d1: ?[]const u8 = null,
 };
 
 /// Returns a generic type representing the calculated molecular integrals and their first-order nuclear derivatives.

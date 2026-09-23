@@ -447,12 +447,11 @@ pub fn Hamiltonian(comptime T: type) type {
 
 /// Initial parameters of the wavepacket including position, momentum, and Gaussian width.
 pub const InitialConditions = struct {
-    position: []const f64,
-    momentum: []const f64,
-    gamma: []const f64,
-
-    state: u32 = 0,
     adiabatic: bool = false,
+    gamma: []const f64,
+    momentum: []const f64,
+    position: []const f64,
+    state: u32 = 0,
 };
 
 /// Representation of a multi-state wavepacket and its Fourier transform plans.

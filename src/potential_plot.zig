@@ -15,16 +15,13 @@ const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 
 /// Configuration options for evaluating and exporting potential energy matrices on a grid.
 pub const Options = struct {
-    potential: PotentialOptions,
-
     adiabatic: bool = false,
-    time: f64 = 0,
-
     grid: struct {
         bounds: []const [2]f64,
         npoint: u32,
     },
-
+    potential: PotentialOptions,
+    time: f64 = 0,
     write: Write = .{},
 };
 

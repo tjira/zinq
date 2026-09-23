@@ -19,9 +19,8 @@ pub const Options = union(enum) {
 /// Options configuration for Tully's fewest switches surface hopping.
 const FewestSwitchesOptions = struct {
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
-
-    seed: u32 = 1,
     nstep: u32 = 10,
+    seed: u32 = 1,
 };
 
 /// Options configuration for Landau-Zener surface hopping.

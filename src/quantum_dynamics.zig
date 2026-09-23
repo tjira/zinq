@@ -26,72 +26,61 @@ const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
 /// Configuration options for split-operator quantum dynamics wavepacket propagation on a grid.
 pub const Options = struct {
-    initial_conditions: InitialConditions,
-    potential: PotentialOptions,
-
-    time_step: f64,
-    iterations: u32,
-    mass: []const f64,
-    j_quantum_number: u32 = 0,
-    partial_waves: ?PartialWaveOptions = null,
-
-    write: Write = .{},
-
-    adiabatic: bool = false,
-    log_interval: u32 = 1,
-
-    memory: struct {
-        propagator: bool = true,
-        potential: bool = true,
-        grid: bool = true,
-    } = .{},
-
     absorbing_potential: ?struct {
-        track_population: bool = false,
         bounds: []const [2]f64,
         exponent: f64 = 0.001,
         stop_norm: ?f64 = null,
+        track_population: bool = false,
     } = null,
-
+    adiabatic: bool = false,
     fft: struct {
         plan: enum { estimate, measure, patient, exhaustive } = .measure,
     } = .{},
-
+    flux_analysis: ?struct {
+        e_max: f64,
+        e_min: f64,
+        e_step: f64,
+        flux_bounds: []const [2]f64,
+        write: struct {
+            cross_section: ?[]const u8 = null,
+        } = .{},
+    } = null,
     grid: struct {
         bounds: []const [2]f64,
-        npoint: u32,
         cylindrical: bool = false,
+        npoint: u32,
     },
-
     imaginary: ?struct {
         nstate: u32 = 1,
     } = null,
-
+    initial_conditions: InitialConditions,
+    iterations: u32,
+    j_quantum_number: u32 = 0,
+    log_interval: u32 = 1,
+    mass: []const f64,
+    memory: struct {
+        grid: bool = true,
+        potential: bool = true,
+        propagator: bool = true,
+    } = .{},
+    partial_waves: ?PartialWaveOptions = null,
+    potential: PotentialOptions,
     spectrum: ?struct {
         padding: u32 = 0,
         threshold: f64 = 1e-6,
-
         write: struct {
             acf: ?[]const u8 = null,
             spectrum: ?[]const u8 = null,
         } = .{},
     } = null,
-
-    flux_analysis: ?struct {
-        flux_bounds: []const [2]f64,
-        e_min: f64,
-        e_max: f64,
-        e_step: f64,
-        write: struct {
-            cross_section: ?[]const u8 = null,
-        } = .{},
-    } = null,
+    time_step: f64,
+    write: Write = .{},
 };
 
 /// Configuration options for sweeping and summing over partial waves J.
 pub const PartialWaveOptions = struct {
-    j_min: u32 = 0,
     j_max: u32,
+    j_min: u32 = 0,
     j_step: u32 = 1,
     log_interval: u32 = 1,
     stop_condition: ?struct {

@@ -29,14 +29,13 @@ pub const Options = union(enum) {
         l: f64 = 0.1,
     },
     jahn_teller: struct {
-        k: f64 = 1,
         g: f64 = 1,
+        k: f64 = 1,
     },
     morse: struct {
         D: f64 = 0.2,
-        a: f64 = 1.0,
-
-        r0: f64 = 0.0,
+        a: f64 = 1,
+        r0: f64 = 0,
     },
     time_linear: struct {
         a: f64 = 10,
@@ -61,8 +60,8 @@ pub const Options = union(enum) {
         C: f64 = 0.90,
     },
     lvc: struct {
-        frequencies: []const f64,
         excitation_energies: []const f64,
+        frequencies: []const f64,
         kappa: []const []const f64,
         lambda: []const []const []const f64,
     },

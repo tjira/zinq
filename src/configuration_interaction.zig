@@ -40,38 +40,32 @@ const AU2CM = @import("constant.zig").AU2CM;
 
 /// Configurations for the CI calculation, excitation levels, optimization, and derivative settings.
 pub const Options = struct {
-    hartree_fock: HartreeFockOptions,
-
     excitations: []const u32 = &.{ 1, 2 },
-    nthreads: u32 = 1,
-
-    write: Write = .{},
-
     frequency: ?struct {} = null,
-
     gradient: ?GradientOptions = null,
-
-    optimize: ?union(enum) {
-        steepest_descent: struct {
-            gradient: GradientOptions = .{ .analytic = .{} },
-            threshold: f64 = 1e-4,
-            iterations: u32 = 100,
-            step: f64 = 1e-1,
-        },
-        bfgs: struct {
-            gradient: GradientOptions = .{ .analytic = .{} },
-            threshold: f64 = 1e-4,
-            iterations: u32 = 100,
-            step: f64 = 1,
-        },
-    } = null,
-
+    hartree_fock: HartreeFockOptions,
     hessian: ?union(enum) {
         numeric: struct {
             state: u32 = 0,
             step: f64 = 1e-5,
         },
     } = null,
+    nthreads: u32 = 1,
+    optimize: ?union(enum) {
+        bfgs: struct {
+            gradient: GradientOptions = .{ .analytic = .{} },
+            iterations: u32 = 100,
+            step: f64 = 1,
+            threshold: f64 = 1e-4,
+        },
+        steepest_descent: struct {
+            gradient: GradientOptions = .{ .analytic = .{} },
+            iterations: u32 = 100,
+            step: f64 = 1e-1,
+            threshold: f64 = 1e-4,
+        },
+    } = null,
+    write: Write = .{},
 };
 
 /// Options for computing CI energy gradients analytically or numerically for a specific electronic state.

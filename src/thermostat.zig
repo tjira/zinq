@@ -14,15 +14,15 @@ pub const Options = union(enum) {
 
 /// Configuration options for the Berendsen velocity rescaling thermostat.
 pub const BerendsenOptions = struct {
-    temperature: f64,
     tau: f64 = 100,
+    temperature: f64,
 };
 
 /// Configuration options for the Langevin thermostat.
 pub const LangevinOptions = struct {
-    temperature: f64,
     gamma: f64 = 1,
     seed: u32 = 1,
+    temperature: f64,
 };
 
 /// Implements Berendsen velocity rescaling thermostat for canonical temperature coupling.

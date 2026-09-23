@@ -52,65 +52,56 @@ const AU2CM = @import("constant.zig").AU2CM;
 
 /// Parameters governing the self-consistent field (SCF) calculation convergence and method options.
 pub const Options = struct {
-    system: []const u8,
     basis: []const u8,
-
-    write: Write = .{},
-
-    diis: ?u32 = 8,
-    generalized: bool = false,
     charge: i32 = 0,
-    multiplicity: u32 = 1,
-    iterations: u32 = 100,
-    threshold: f64 = 1e-8,
-    lowdin: bool = false,
-    mayer: bool = false,
-    mulliken: bool = false,
-    wiberg: bool = false,
-    integral_direct: bool = false,
-    nthreads: u32 = 1,
-
     dft: ?struct {
-        exchange: ?[]const u8 = null,
         correlation: ?[]const u8 = null,
+        exchange: ?[]const u8 = null,
         exchange_correlation: ?[]const u8 = null,
-
         grid: struct {
-            radial: usize = 50,
             angular: usize = 302,
+            radial: usize = 50,
         } = .{},
     } = null,
-
+    diis: ?u32 = 8,
     frequency: ?struct {} = null,
-
+    generalized: bool = false,
     gradient: ?GradientOptions = null,
-
-    optimize: ?union(enum) {
-        steepest_descent: struct {
-            gradient: GradientOptions = .analytic,
-            threshold: f64 = 1e-4,
-            iterations: u32 = 100,
-            step: f64 = 1e-1,
-        },
-        bfgs: struct {
-            gradient: GradientOptions = .analytic,
-            threshold: f64 = 1e-4,
-            iterations: u32 = 100,
-            step: f64 = 1,
-        },
-    } = null,
-
     hessian: ?union(enum) {
         numeric: struct {
             step: f64 = 1e-5,
         },
     } = null,
-
+    integral_direct: bool = false,
+    iterations: u32 = 100,
+    lowdin: bool = false,
+    mayer: bool = false,
+    mulliken: bool = false,
+    multiplicity: u32 = 1,
+    nthreads: u32 = 1,
+    optimize: ?union(enum) {
+        bfgs: struct {
+            gradient: GradientOptions = .analytic,
+            iterations: u32 = 100,
+            step: f64 = 1,
+            threshold: f64 = 1e-4,
+        },
+        steepest_descent: struct {
+            gradient: GradientOptions = .analytic,
+            iterations: u32 = 100,
+            step: f64 = 1e-1,
+            threshold: f64 = 1e-4,
+        },
+    } = null,
     response: ?struct {
+        diis: ?u32 = 8,
         iterations: u32 = 100,
         threshold: f64 = 1e-8,
-        diis: ?u32 = 8,
     } = null,
+    system: []const u8,
+    threshold: f64 = 1e-8,
+    wiberg: bool = false,
+    write: Write = .{},
 };
 
 /// Options for computing the nuclear gradient analytically or numerically.

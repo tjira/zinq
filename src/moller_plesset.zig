@@ -37,37 +37,31 @@ const AU2CM = @import("constant.zig").AU2CM;
 
 /// Parameters governing the Møller-Plesset perturbation theory calculation and its derivatives.
 pub const Options = struct {
-    hartree_fock: HartreeFockOptions,
-
-    order: u32 = 2,
-    nthreads: u32 = 1,
-
-    write: Write = .{},
-
     frequency: ?struct {} = null,
-
     gradient: ?GradientOptions = null,
-
-    optimize: ?union(enum) {
-        steepest_descent: struct {
-            gradient: GradientOptions = .analytic,
-            threshold: f64 = 1e-4,
-            iterations: u32 = 100,
-            step: f64 = 1e-1,
-        },
-        bfgs: struct {
-            gradient: GradientOptions = .analytic,
-            threshold: f64 = 1e-4,
-            iterations: u32 = 100,
-            step: f64 = 1,
-        },
-    } = null,
-
+    hartree_fock: HartreeFockOptions,
     hessian: ?union(enum) {
         numeric: struct {
             step: f64 = 1e-5,
         },
     } = null,
+    nthreads: u32 = 1,
+    optimize: ?union(enum) {
+        bfgs: struct {
+            gradient: GradientOptions = .analytic,
+            iterations: u32 = 100,
+            step: f64 = 1,
+            threshold: f64 = 1e-4,
+        },
+        steepest_descent: struct {
+            gradient: GradientOptions = .analytic,
+            iterations: u32 = 100,
+            step: f64 = 1e-1,
+            threshold: f64 = 1e-4,
+        },
+    } = null,
+    order: u32 = 2,
+    write: Write = .{},
 };
 
 /// Options for computing Moller-Plesset energy gradients analytically or numerically.
