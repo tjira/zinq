@@ -1,6 +1,6 @@
 # Population Analysis
 
-This document provides a highly detailed, mathematically rigorous, yet simple and intuitive explanation of population analysis and how it is implemented in our scientific computing framework. If you want to understand how we can divide a continuous quantum mechanical electron cloud among the individual atoms in a molecule to calculate atomic charges, this guide is written step-by-step for you.
+This document provides a highly detailed, mathematically rigorous, yet simple and intuitive explanation of population analysis and bond order calculations as implemented in our scientific computing framework. If you want to understand how we can divide a continuous quantum mechanical electron cloud among the individual atoms in a molecule to calculate atomic charges and evaluate covalent bond orders between pairs of atoms, this guide is written step-by-step for you.
 
 ---
 
@@ -77,3 +77,73 @@ q_A=Z_A-N_A
 $$
 
 which yields atomic partial charges that are significantly more robust against basis set enlargement than Mulliken charges.
+
+---
+
+## III. Mayer Bond Orders
+
+While atomic partial charges provide information about the net distribution of electrons among individual atoms, they do not quantify the strength or covalent nature of chemical bonds connecting pairs of atoms. Mayer bond order analysis extends the concept of population analysis to interatomic pairs by evaluating the shared electron pair density between atoms directly within the non-orthogonal atomic orbital basis.
+
+### 1. Mathematical Formulation
+
+For a closed-shell electronic system described by the total density matrix $\mathbf{P}$ and the basis overlap matrix $\mathbf{S}$, the covalent bond order $B_{AB}$ between two distinct atoms $A$ and $B$ is defined by summing the products of the elements of the intermediate matrix $\mathbf{P}\mathbf{S}$ as
+
+$$
+B_{AB}=\sum_{\mu\in A}\sum_{\nu\in B}(\mathbf{P}\mathbf{S})_{\mu\nu}(\mathbf{P}\mathbf{S})_{\nu\mu}
+$$
+
+where the indices $\mu$ and $\nu$ run over all atomic basis functions centered on atoms $A$ and $B$, respectively. In our implementation, the matrix product $\mathbf{P}\mathbf{S}$ is evaluated first using dense matrix multiplication, and the pairwise off-diagonal products are accumulated for all atom pairs with $A\neq B$ using the basis-to-atom mapping array `sys.bf2at`.
+
+### 2. Open-Shell and Generalized Systems
+
+In spin-unrestricted or generalized electronic structure formalisms where electrons of different spins occupy distinct spatial orbitals, the total density is partitioned into alpha and beta spin components $\mathbf{P}^\alpha$ and $\mathbf{P}^\beta$. The Mayer bond order between atoms $A$ and $B$ is then calculated by evaluating the product matrices $\mathbf{P}^\alpha\mathbf{S}$ and $\mathbf{P}^\beta\mathbf{S}$ separately and accumulating their contributions according to
+
+$$
+B_{AB}=2\sum_{\mu\in A}\sum_{\nu\in B}\left[(\mathbf{P}^\alpha\mathbf{S})_{\mu\nu}(\mathbf{P}^\alpha\mathbf{S})_{\nu\mu}+(\mathbf{P}^\beta\mathbf{S})_{\mu\nu}(\mathbf{P}^\beta\mathbf{S})_{\nu\mu}\right]
+$$
+
+which incorporates spin polarization and yields bond orders that recover classical chemical valences for single, double, and triple bonds without requiring basis set orthogonalization.
+
+---
+
+## IV. Wiberg Bond Orders
+
+The Wiberg bond index is an alternative measure of covalent bonding that was originally formulated in an orthogonal basis representation. Unlike the Mayer bond order, which operates directly on the non-orthogonal density and overlap matrices, the Wiberg bond order first projects the electronic density into the symmetrically orthogonalized Löwdin basis.
+
+### 1. Symmetric Orthogonalization and Wiberg Index
+
+To calculate Wiberg bond indices from non-orthogonal Gaussian basis functions, the overlap matrix $\mathbf{S}$ is diagonalized via eigenvalue decomposition $\mathbf{S}=\mathbf{U}\boldsymbol{\Lambda}\mathbf{U}^T$ to obtain the symmetric square root matrix $\mathbf{S}^{1/2}=\mathbf{U}\boldsymbol{\Lambda}^{1/2}\mathbf{U}^T$. The density matrix is then transformed into the orthonormal Löwdin basis as
+
+$$
+\mathbf{P}^{\text{ortho}}=\mathbf{S}^{1/2}\mathbf{P}\mathbf{S}^{1/2}
+$$
+
+which removes basis set overlap between distinct atomic centers. For a closed-shell system, the Wiberg bond order $W_{AB}$ between two distinct atoms $A$ and $B$ is calculated by summing the squares of the off-diagonal orthogonal density matrix elements as
+
+$$
+W_{AB}=\sum_{\mu\in A}\sum_{\nu\in B}(P^{\text{ortho}}_{\mu\nu})^2
+$$
+
+where the indices $\mu$ and $\nu$ run over the Löwdin basis functions mapped to atoms $A$ and $B$ via `sys.bf2at`.
+
+### 2. Open-Shell and Generalized Systems
+
+In generalized and spin-unrestricted calculations where the density matrix contains separate alpha and beta spin blocks $\mathbf{P}^\alpha$ and $\mathbf{P}^\beta$, each spin density matrix is transformed into the orthogonal Löwdin basis individually according to
+
+$$
+\mathbf{P}^{\alpha,\text{ortho}}=\mathbf{S}^{1/2}\mathbf{P}^\alpha\mathbf{S}^{1/2}
+$$
+
+and
+
+$$
+\mathbf{P}^{\beta,\text{ortho}}=\mathbf{S}^{1/2}\mathbf{P}^\beta\mathbf{S}^{1/2}
+$$
+
+and the total Wiberg bond index between atoms $A$ and $B$ is computed by summing the squared matrix elements across both spin manifolds as
+
+$$
+W_{AB}=2\sum_{\mu\in A}\sum_{\nu\in B}\left[(P^{\alpha,\text{ortho}}_{\mu\nu})^2+(P^{\beta,\text{ortho}}_{\mu\nu})^2\right]
+$$
+
+which provides a stable, basis-independent measure of electron sharing and chemical bond multiplicity between bonded atoms.
