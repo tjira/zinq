@@ -259,12 +259,7 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
         addScaled(T, c.at(i, 0), fck_hist[i].asVector(), &f_vec);
     }
 
-    if (symmetric) for (0..F.shape[0]) |i| for (i + 1..F.shape[1]) |j| {
-        const avg = (F.at(i, j) + F.at(j, i)) / 2;
-
-        F.ptr(i, j).* = avg;
-        F.ptr(j, i).* = avg;
-    };
+    if (symmetric) F.symmetrize();
 }
 
 /// Computes the nuclear gradient of the total energy with respect to atomic coordinates.

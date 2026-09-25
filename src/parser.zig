@@ -42,10 +42,28 @@ pub const Parser = struct {
         \\  -h, --help    PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\SUBCOMMANDS:
+        \\  eigh          CALCULATE EIGENVALUES AND EIGENVECTORS OF SYMMETRIC MATRIX
         \\  hf            RUN HARTREE-FOCK METHOD DIRECTLY ON MOLECULAR COORDINATES
         \\  mm            PERFORM MATRIX MULTIPLICATION ON INPUT MATRIX FILES
         \\  mp            RUN MOLLER-PLESSET PERTURBATION THEORY ON MOLECULAR COORDINATES
         \\  randn         GENERATE PSEUDORANDOM GAUSSIAN MATRICES
+        \\
+    ;
+
+    /// Help message for the symmetric matrix eigendecomposition subcommand, detailing usage and options.
+    pub const help_eigh =
+        \\
+        \\USAGE: zinq eigh [ARGUMENTS] [OPTIONS]
+        \\
+        \\OPTIONS:
+        \\  -e, --eigenvalues     OUTPUT FILE PATH TO SAVE EIGENVALUES
+        \\  -v, --eigenvectors    OUTPUT FILE PATH TO SAVE EIGENVECTORS
+        \\  -n, --nthreads        NUMBER OF THREADS (DEFAULT: 1)
+        \\  --print               PRINT EIGENVALUES AND EIGENVECTORS TO TERMINAL
+        \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
+        \\
+        \\ARGUMENTS:
+        \\  file                  INPUT SYMMETRIC MATRIX FILE
         \\
     ;
 
@@ -77,7 +95,7 @@ pub const Parser = struct {
         \\  -n, --nthreads        NUMBER OF THREADS (DEFAULT: 1)
         \\  --trans-a             TRANSPOSE FIRST MATRIX A
         \\  --trans-b             TRANSPOSE SECOND MATRIX B
-        \\  -p, --print           PRINT RESULT MATRIX TO TERMINAL
+        \\  --print               PRINT RESULT MATRIX TO TERMINAL
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
@@ -112,7 +130,8 @@ pub const Parser = struct {
         \\OPTIONS:
         \\  -o, --output          OUTPUT FILE PATH TO SAVE GENERATED MATRIX
         \\  -s, --seed            SPECIFY PSEUDORANDOM SEED (DEFAULT: 0)
-        \\  -p, --print           PRINT GENERATED MATRIX TO TERMINAL
+        \\  --symmetric           SYMMETRIZE GENERATED MATRIX
+        \\  --print               PRINT GENERATED MATRIX TO TERMINAL
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
@@ -135,6 +154,84 @@ pub const Parser = struct {
             .subcommand => |command| try runSubcommand(io, gpa, arena, command),
             .files => |files| try runFiles(io, gpa, arena, files),
         }
+    }
+
+    /// Projects symmetric matrix parameters into eigenvalue and eigenvector solution states.
+    pub fn runEigh(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
+        const allowed_options = &.{
+            "-e",
+            "--eigenvalues",
+            "-n",
+            "--nthreads",
+            "-v",
+            "--eigenvectors",
+        };
+
+        const allowed_flags = &.{
+            "--print",
+        };
+
+        const parsed = try parseArgs(io, sub.args, arena, allowed_options, allowed_flags);
+
+        if (parsed.options.contains("-h") or parsed.options.contains("--help")) {
+            try runHelp(io, help_eigh);
+
+            return;
+        }
+
+        if (parsed.positional.len > 1) {
+            try printf(io, "MULTIPLE MATRIX FILES SPECIFIED\n", .{});
+
+            return error.MultipleMatrixFiles;
+        }
+
+        if (parsed.positional.len == 0) {
+            try printf(io, "MATRIX FILE IS REQUIRED FOR 'eigh' SUBCOMMAND\n", .{});
+
+            return error.MissingMatrixFile;
+        }
+
+        const eigenvalues_opt = parsed.options.get("-e") orelse parsed.options.get("--eigenvalues");
+
+        if (eigenvalues_opt) |e| if (e.len == 0) {
+            try printf(io, "MISSING VALUE FOR EIGENVALUES OPTION\n", .{});
+
+            return error.MissingEigenvaluesValue;
+        };
+
+        const eigenvectors_opt = parsed.options.get("-v") orelse parsed.options.get("--eigenvectors");
+
+        if (eigenvectors_opt) |v| if (v.len == 0) {
+            try printf(io, "MISSING VALUE FOR EIGENVECTORS OPTION\n", .{});
+
+            return error.MissingEigenvectorsValue;
+        };
+
+        const nthreads_opt = parsed.options.get("-n") orelse parsed.options.get("--nthreads");
+
+        if (nthreads_opt) |t| if (t.len == 0) {
+            try printf(io, "MISSING VALUE FOR NTHREADS OPTION\n", .{});
+
+            return error.MissingNthreadsValue;
+        };
+
+        const nthreads = if (nthreads_opt) |t| std.fmt.parseInt(u32, t, 10) catch |err| {
+            try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+
+            return err;
+        } else 1;
+
+        const print = parsed.options.contains("--print");
+
+        const opt = tensor.EighOptions{
+            .matrix = parsed.positional[0],
+            .log = .{ .eigenvalues = print, .eigenvectors = print },
+            .nthreads = nthreads,
+            .write = .{ .eigenvalues = eigenvalues_opt, .eigenvectors = eigenvectors_opt },
+        };
+
+        var result = try tensor.runEigh(f64, io, opt, true, gpa);
+        defer result.deinit(gpa);
     }
 
     /// Iteratively simulates physical systems described by the parsed json files.
@@ -244,7 +341,6 @@ pub const Parser = struct {
         };
 
         const allowed_flags = &.{
-            "-p",
             "--print",
             "--trans-a",
             "--trans-b",
@@ -310,7 +406,7 @@ pub const Parser = struct {
             .a = parsed.positional[0],
             .b = parsed.positional[1],
             .alpha = alpha,
-            .log = .{ .product = parsed.options.contains("-p") or parsed.options.contains("--print") },
+            .log = .{ .product = parsed.options.contains("--print") },
             .nthreads = nthreads,
             .trans_a = parsed.options.contains("--trans-a"),
             .trans_b = parsed.options.contains("--trans-b"),
@@ -435,8 +531,8 @@ pub const Parser = struct {
         };
 
         const allowed_flags = &.{
-            "-p",
             "--print",
+            "--symmetric",
         };
 
         const parsed = try parseArgs(io, sub.args, arena, allowed_options, allowed_flags);
@@ -495,9 +591,10 @@ pub const Parser = struct {
 
         const opt = tensor.RandomOptions{
             .distribution = .{ .normal = .{} },
-            .log = .{ .matrix = parsed.options.contains("-p") or parsed.options.contains("--print") },
+            .log = .{ .matrix = parsed.options.contains("--print") },
             .seed = seed,
             .shape = .{ rows, cols },
+            .symmetric = parsed.options.contains("--symmetric"),
             .write = .{ .matrix = output_opt },
         };
 
@@ -508,6 +605,7 @@ pub const Parser = struct {
     /// Enforces specific subcommand constraints on physical parameter evaluation.
     pub fn runSubcommand(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         switch (sub.name) {
+            .eigh => try runEigh(io, gpa, arena, sub),
             .hf => try runHartreeFock(io, gpa, arena, sub),
             .mm => try runMatmul(io, gpa, arena, sub),
             .mp => try runMollerPlesset(io, gpa, arena, sub),
@@ -523,6 +621,10 @@ pub const Parser = struct {
             default_files[0] = "input.json";
 
             return .{ .files = default_files };
+        }
+
+        if (std.mem.eql(u8, args[1], "eigh")) {
+            return .{ .subcommand = .{ .name = .eigh, .args = args[2..] } };
         }
 
         if (std.mem.eql(u8, args[1], "hf")) {
@@ -621,6 +723,7 @@ pub const Parser = struct {
 
 /// Option representations for subcommands executed in physical basis space.
 pub const Subcommand = enum {
+    eigh,
     hf,
     mm,
     mp,

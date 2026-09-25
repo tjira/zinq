@@ -1,0 +1,30 @@
+{
+    "zinq" : [
+        {
+            "tensor" : {
+                "operation" : {
+                    "random" : {
+                        "shape" : [100, 100],
+                        "symmetric" : true,
+                        "write" : {
+                            "matrix" : "A.mat"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "tensor" : {
+                "operation" : {
+                    "eigh" : {
+                        "matrix" : "A.mat",
+                        "write" : {
+                            "eigenvalues" : "J.mat",
+                            "eigenvectors" : "C.mat"
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

@@ -8,6 +8,7 @@ const Allocator = std.mem.Allocator;
 
 const Value = @import("value.zig").Value;
 
+const eigh = @import("linear_algebra.zig").eigh;
 const mm = @import("linear_algebra.zig").mm;
 const printf = @import("read_write.zig").printf;
 const printMatrix = @import("read_write.zig").printMatrix;
@@ -17,6 +18,26 @@ const writeMatrix = @import("read_write.zig").writeMatrix;
 /// Configuration options for executing tensor and matrix transformations from data files.
 pub const Options = struct {
     operation: Operation,
+};
+
+/// Flags for printing computed eigenvalues and eigenvectors to terminal output.
+pub const EighLog = struct {
+    eigenvalues: bool = false,
+    eigenvectors: bool = false,
+};
+
+/// Parameters, logging preferences, and output destinations for symmetric eigendecomposition.
+pub const EighOptions = struct {
+    matrix: []const u8,
+    log: EighLog = .{},
+    nthreads: u32 = 1,
+    write: EighWrite = .{},
+};
+
+/// Output target file paths for saving computed eigenvalues and eigenvectors.
+pub const EighWrite = struct {
+    eigenvalues: ?[]const u8 = null,
+    eigenvectors: ?[]const u8 = null,
 };
 
 /// Flags for printing computed matrix multiplication quantities to terminal output.
@@ -50,6 +71,7 @@ pub const NormalDistribution = struct {
 
 /// Tagged union specifying the linear algebra operation to execute.
 pub const Operation = union(enum) {
+    eigh: EighOptions,
     matmul: MatmulOptions,
     random: RandomOptions,
 };
@@ -71,6 +93,7 @@ pub const RandomOptions = struct {
     log: RandomLog = .{},
     seed: u64 = 0,
     shape: [2]usize,
+    symmetric: bool = false,
     write: RandomWrite = .{},
 };
 
@@ -225,6 +248,18 @@ pub fn Matrix(comptime T: type) type {
             return self.data[i * self.shape[1] .. (i + 1) * self.shape[1]];
         }
 
+        /// Symmetrizes a square matrix in-place by averaging off-diagonal elements.
+        pub fn symmetrize(self: *@This()) void {
+            std.debug.assert(self.shape[0] == self.shape[1]);
+
+            for (0..self.shape[0]) |i| for (i + 1..self.shape[1]) |j| {
+                const avg = Value(T).init(self.at(i, j)).add(Value(T).init(self.at(j, i))).divs(2).val;
+
+                self.ptr(i, j).* = avg;
+                self.ptr(j, i).* = avg;
+            };
+        }
+
         /// Returns a submatrix view consisting of the first n rows.
         pub fn takeRows(self: @This(), n: usize) @This() {
             std.debug.assert(n <= self.shape[0]);
@@ -239,14 +274,16 @@ pub fn Matrix(comptime T: type) type {
     };
 }
 
-/// Generic container holding the computed matrix or tensor transformation result.
+/// Generic container holding computed multi-dimensional tensors or matrices.
 pub fn Result(comptime T: type) type {
     return struct {
-        matrix: Matrix(T),
+        tensors: []Matrix(T),
 
-        /// Deallocates memory associated with the result matrix.
+        /// Deallocates memory associated with the result tensors.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.matrix.deinit(gpa);
+            for (self.tensors) |*t| t.deinit(gpa);
+
+            gpa.free(self.tensors);
         }
     };
 }
@@ -448,9 +485,96 @@ pub fn Vector(comptime T: type) type {
 /// Executes tensor or matrix operations specified by options and writes results to files.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     switch (opt.operation) {
+        .eigh => |eigh_opt| return try runEigh(T, io, eigh_opt, log, gpa),
         .matmul => |matmul_opt| return try runMatmul(T, io, matmul_opt, log, gpa),
         .random => |rand_opt| return try runRandom(T, io, rand_opt, log, gpa),
     }
+}
+
+/// Computes eigenvalues and eigenvectors of a symmetric matrix from an input file.
+pub fn runEigh(comptime T: type, io: std.Io, opt: EighOptions, log: bool, gpa: Allocator) !Result(T) {
+    if (opt.nthreads == 0) {
+        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
+
+    if (log) {
+        try printf(io, "\nREAD MATRIX: ", .{});
+    }
+
+    var timer = std.Io.Timestamp.now(io, .real);
+
+    var A = try readMatrix(T, io, opt.matrix, gpa);
+    defer A.deinit(gpa);
+
+    if (A.nrow() != A.ncol()) {
+        std.log.err("EIGENVALUE DECOMPOSITION REQUIRES A SQUARE MATRIX", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    var W = try Vector(T).init(A.nrow(), gpa);
+    errdefer W.deinit(gpa);
+
+    var U = try Matrix(T).init(A.nrow(), A.ncol(), gpa);
+    errdefer U.deinit(gpa);
+
+    if (log) {
+        try printf(io, "\nCOMPUTE EIGH: ", .{});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    try eigh(T, &W, &U, A);
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    if (opt.write.eigenvalues != null or opt.write.eigenvectors != null) {
+        if (log) {
+            try printf(io, "\nWRITE MATRIX: ", .{});
+        }
+
+        timer = std.Io.Timestamp.now(io, .real);
+
+        if (opt.write.eigenvalues) |path| {
+            try writeMatrix(T, io, path, W.asMatrix());
+        }
+
+        if (opt.write.eigenvectors) |path| {
+            try writeMatrix(T, io, path, U);
+        }
+
+        if (log) {
+            try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+        }
+    }
+
+    if (opt.log.eigenvalues) {
+        try printf(io, "\nEIGENVALUES:\n", .{});
+
+        try printMatrix(T, io, W.asMatrix());
+    }
+
+    if (opt.log.eigenvectors) {
+        try printf(io, "\nEIGENVECTORS:\n", .{});
+
+        try printMatrix(T, io, U);
+    }
+
+    const tensors = try gpa.alloc(Matrix(T), 2);
+
+    tensors[0], tensors[1] = .{ W.asMatrix(), U };
+
+    return Result(T){ .tensors = tensors };
 }
 
 /// Executes matrix-matrix multiplication on input files using BLAS GEMM and exports the product.
@@ -517,16 +641,26 @@ pub fn runMatmul(comptime T: type, io: std.Io, opt: MatmulOptions, log: bool, gp
         try printMatrix(T, io, C);
     }
 
-    return Result(T){ .matrix = C };
+    const tensors = try gpa.alloc(Matrix(T), 1);
+
+    tensors[0] = C;
+
+    return Result(T){ .tensors = tensors };
 }
 
 /// Generates a random matrix with specified dimensions and probability distribution.
 pub fn runRandom(comptime T: type, io: std.Io, opt: RandomOptions, log: bool, gpa: Allocator) !Result(T) {
+    if (opt.symmetric and opt.shape[0] != opt.shape[1]) {
+        std.log.err("SYMMETRIC MATRIX GENERATION REQUIRES A SQUARE MATRIX", .{});
+
+        return error.InvalidInput;
+    }
+
     var A = try Matrix(T).init(opt.shape[0], opt.shape[1], gpa);
     errdefer A.deinit(gpa);
 
     if (log) {
-        try printf(io, "\nGENERATE RANDOM MATRIX: ", .{});
+        try printf(io, "\nINITIALIZE RANDOM MATRIX: ", .{});
     }
 
     var timer = std.Io.Timestamp.now(io, .real);
@@ -558,6 +692,20 @@ pub fn runRandom(comptime T: type, io: std.Io, opt: RandomOptions, log: bool, gp
         try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
     }
 
+    if (opt.symmetric) {
+        if (log) {
+            try printf(io, "SYMMETRIZE RANDOM MATRIX: ", .{});
+        }
+
+        timer = std.Io.Timestamp.now(io, .real);
+
+        A.symmetrize();
+
+        if (log) {
+            try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+        }
+    }
+
     if (opt.write.matrix) |path| {
         if (log) {
             try printf(io, "\nWRITE MATRIX: ", .{});
@@ -578,5 +726,9 @@ pub fn runRandom(comptime T: type, io: std.Io, opt: RandomOptions, log: bool, gp
         try printMatrix(T, io, A);
     }
 
-    return Result(T){ .matrix = A };
+    const tensors = try gpa.alloc(Matrix(T), 1);
+
+    tensors[0] = A;
+
+    return Result(T){ .tensors = tensors };
 }
