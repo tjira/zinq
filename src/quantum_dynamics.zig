@@ -26,53 +26,21 @@ const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
 /// Configuration options for split-operator quantum dynamics wavepacket propagation on a grid.
 pub const Options = struct {
-    absorbing_potential: ?struct {
-        bounds: []const [2]f64,
-        exponent: f64 = 0.001,
-        stop_norm: ?f64 = null,
-        track_population: bool = false,
-    } = null,
+    absorbing_potential: ?AbsorbingPotential = null,
     adiabatic: bool = false,
-    fft: struct {
-        plan: enum { estimate, measure, patient, exhaustive } = .measure,
-    } = .{},
-    flux_analysis: ?struct {
-        e_max: f64,
-        e_min: f64,
-        e_step: f64,
-        flux_bounds: []const [2]f64,
-        write: struct {
-            cross_section: ?[]const u8 = null,
-        } = .{},
-    } = null,
-    grid: struct {
-        bounds: []const [2]f64,
-        cylindrical: bool = false,
-        npoint: u32,
-    },
-    imaginary: ?struct {
-        nstate: u32 = 1,
-    } = null,
+    fft: Fft = .{},
+    flux_analysis: ?FluxAnalysisOptions = null,
+    grid: GridOptions,
+    imaginary: ?Imaginary = null,
     initial_conditions: InitialConditions,
     iterations: u32,
     j_quantum_number: u32 = 0,
     log_interval: u32 = 1,
     mass: []const f64,
-    memory: struct {
-        grid: bool = true,
-        potential: bool = true,
-        propagator: bool = true,
-    } = .{},
+    memory: Memory = .{},
     partial_waves: ?PartialWaveOptions = null,
     potential: PotentialOptions,
-    spectrum: ?struct {
-        padding: u32 = 0,
-        threshold: f64 = 1e-6,
-        write: struct {
-            acf: ?[]const u8 = null,
-            spectrum: ?[]const u8 = null,
-        } = .{},
-    } = null,
+    spectrum: ?SpectrumOptions = null,
     time_step: f64,
     write: Write = .{},
 };
@@ -83,14 +51,79 @@ pub const PartialWaveOptions = struct {
     j_min: u32 = 0,
     j_step: u32 = 1,
     log_interval: u32 = 1,
-    stop_condition: ?struct {
-        consecutive_steps: u32 = 3,
-        tolerance: f64 = 1e-6,
-    } = null,
+    stop_condition: ?PartialWaveStopCondition = null,
     threads: ?u32 = null,
-    write: struct {
-        cross_section: ?[]const u8 = null,
-    } = .{},
+    write: PartialWaveWrite = .{},
+};
+
+/// Negative imaginary potential parameters for absorbing outgoing boundary wavepackets.
+const AbsorbingPotential = struct {
+    bounds: []const [2]f64,
+    exponent: f64 = 0.001,
+    stop_norm: ?f64 = null,
+    track_population: bool = false,
+};
+
+/// Fast Fourier Transform execution planner configuration for momentum space conversion.
+const Fft = struct {
+    plan: enum { estimate, measure, patient, exhaustive } = .measure,
+};
+
+/// Quantum flux analysis settings for computing energy-resolved transmission cross sections.
+const FluxAnalysisOptions = struct {
+    e_max: f64,
+    e_min: f64,
+    e_step: f64,
+    flux_bounds: []const [2]f64,
+    write: FluxAnalysisWrite = .{},
+};
+
+/// Output file paths for recording reaction flux cross sections.
+const FluxAnalysisWrite = struct {
+    cross_section: ?[]const u8 = null,
+};
+
+/// Coordinate grid bounds and point discretization for wavefunction representation.
+const GridOptions = struct {
+    bounds: []const [2]f64,
+    cylindrical: bool = false,
+    npoint: u32,
+};
+
+/// Settings for imaginary time propagation to find the lowest energy eigenstates.
+const Imaginary = struct {
+    nstate: u32 = 1,
+};
+
+/// Memory caching toggles for grid coordinates, potential surfaces, and propagators.
+const Memory = struct {
+    grid: bool = true,
+    potential: bool = true,
+    propagator: bool = true,
+};
+
+/// Convergence criteria for terminating partial wave expansion over total angular momentum J.
+const PartialWaveStopCondition = struct {
+    consecutive_steps: u32 = 3,
+    tolerance: f64 = 1e-6,
+};
+
+/// Output file paths for recording total scattering cross sections.
+const PartialWaveWrite = struct {
+    cross_section: ?[]const u8 = null,
+};
+
+/// Spectral analysis parameters for Fourier transforming wavefunction autocorrelation functions.
+const SpectrumOptions = struct {
+    padding: u32 = 0,
+    threshold: f64 = 1e-6,
+    write: SpectrumWrite = .{},
+};
+
+/// Output file paths for recording autocorrelation functions and absorption spectra.
+const SpectrumWrite = struct {
+    acf: ?[]const u8 = null,
+    spectrum: ?[]const u8 = null,
 };
 
 /// File paths for exporting time-dependent wavefunctions and expectation values to disk.

@@ -57,24 +57,12 @@ const AU2CM = @import("constant.zig").AU2CM;
 pub const Options = struct {
     basis: []const u8,
     charge: i32 = 0,
-    dft: ?struct {
-        correlation: ?[]const u8 = null,
-        exchange: ?[]const u8 = null,
-        exchange_correlation: ?[]const u8 = null,
-        grid: struct {
-            angular: usize = 302,
-            radial: usize = 50,
-        } = .{},
-    } = null,
+    dft: ?DftOptions = null,
     diis: ?u32 = 8,
     frequency: ?FrequencyOptions = null,
     generalized: bool = false,
     gradient: ?GradientOptions = null,
-    hessian: ?union(enum) {
-        numeric: struct {
-            step: f64 = 1e-5,
-        },
-    } = null,
+    hessian: ?HessianOptions = null,
     integral_direct: bool = false,
     iterations: u32 = 100,
     lowdin: bool = false,
@@ -82,25 +70,8 @@ pub const Options = struct {
     mulliken: bool = false,
     multiplicity: u32 = 1,
     nthreads: u32 = 1,
-    optimize: ?union(enum) {
-        bfgs: struct {
-            gradient: GradientOptions = .analytic,
-            iterations: u32 = 100,
-            step: f64 = 1,
-            threshold: f64 = 1e-4,
-        },
-        steepest_descent: struct {
-            gradient: GradientOptions = .analytic,
-            iterations: u32 = 100,
-            step: f64 = 1e-1,
-            threshold: f64 = 1e-4,
-        },
-    } = null,
-    response: ?struct {
-        diis: ?u32 = 8,
-        iterations: u32 = 100,
-        threshold: f64 = 1e-8,
-    } = null,
+    optimize: ?OptimizeOptions = null,
+    response: ?ResponseOptions = null,
     system: []const u8,
     threshold: f64 = 1e-8,
     wiberg: bool = false,
@@ -109,10 +80,69 @@ pub const Options = struct {
 
 /// Options for computing the nuclear gradient analytically or numerically.
 pub const GradientOptions = union(enum) {
-    analytic: struct {},
-    numeric: struct {
-        step: f64 = 1e-5,
-    },
+    analytic: GradientAnalyticOptions,
+    numeric: GradientNumericOptions,
+};
+
+/// Tagged union specifying nuclear Hessian calculation methods.
+pub const HessianOptions = union(enum) {
+    numeric: HessianNumericOptions,
+};
+
+/// Tagged union specifying geometry optimization algorithms.
+pub const OptimizeOptions = union(enum) {
+    bfgs: BfgsOptions,
+    steepest_descent: SteepestDescentOptions,
+};
+
+/// Configuration options for BFGS quasi-Newton molecular geometry optimization.
+const BfgsOptions = struct {
+    gradient: GradientOptions = .analytic,
+    iterations: u32 = 100,
+    step: f64 = 1,
+    threshold: f64 = 1e-4,
+};
+
+/// Angular and radial grid point specifications for numerical DFT integration.
+const DftGridOptions = struct {
+    angular: usize = 302,
+    radial: usize = 50,
+};
+
+/// Exchange-correlation functionals and integration grid settings for DFT.
+const DftOptions = struct {
+    correlation: ?[]const u8 = null,
+    exchange: ?[]const u8 = null,
+    exchange_correlation: ?[]const u8 = null,
+    grid: DftGridOptions = .{},
+};
+
+/// Analytical nuclear gradient evaluation settings.
+const GradientAnalyticOptions = struct {};
+
+/// Finite difference displacement settings for numerical gradient evaluation.
+const GradientNumericOptions = struct {
+    step: f64 = 1e-5,
+};
+
+/// Finite difference displacement step for numerical Hessian evaluation.
+const HessianNumericOptions = struct {
+    step: f64 = 1e-5,
+};
+
+/// Convergence and iterative accelerator settings for coupled-perturbed HF response.
+const ResponseOptions = struct {
+    diis: ?u32 = 8,
+    iterations: u32 = 100,
+    threshold: f64 = 1e-8,
+};
+
+/// Configuration options for steepest descent molecular geometry optimization.
+const SteepestDescentOptions = struct {
+    gradient: GradientOptions = .analytic,
+    iterations: u32 = 100,
+    step: f64 = 1e-1,
+    threshold: f64 = 1e-4,
 };
 
 /// File paths for exporting computed SCF matrices and geometries.

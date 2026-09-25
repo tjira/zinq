@@ -43,36 +43,57 @@ pub const Options = struct {
     frequency: ?FrequencyOptions = null,
     gradient: ?GradientOptions = null,
     hartree_fock: HartreeFockOptions,
-    hessian: ?union(enum) {
-        numeric: struct {
-            step: f64 = 1e-5,
-        },
-    } = null,
+    hessian: ?HessianOptions = null,
     nthreads: u32 = 1,
-    optimize: ?union(enum) {
-        bfgs: struct {
-            gradient: GradientOptions = .analytic,
-            iterations: u32 = 100,
-            step: f64 = 1,
-            threshold: f64 = 1e-4,
-        },
-        steepest_descent: struct {
-            gradient: GradientOptions = .analytic,
-            iterations: u32 = 100,
-            step: f64 = 1e-1,
-            threshold: f64 = 1e-4,
-        },
-    } = null,
+    optimize: ?OptimizeOptions = null,
     order: u32 = 2,
     write: Write = .{},
 };
 
 /// Options for computing Moller-Plesset energy gradients analytically or numerically.
 pub const GradientOptions = union(enum) {
-    analytic: struct {},
-    numeric: struct {
-        step: f64 = 1e-5,
-    },
+    analytic: GradientAnalyticOptions,
+    numeric: GradientNumericOptions,
+};
+
+/// Tagged union specifying Moller-Plesset nuclear Hessian calculation methods.
+pub const HessianOptions = union(enum) {
+    numeric: HessianNumericOptions,
+};
+
+/// Tagged union specifying geometry optimization algorithms.
+pub const OptimizeOptions = union(enum) {
+    bfgs: BfgsOptions,
+    steepest_descent: SteepestDescentOptions,
+};
+
+/// Configuration options for BFGS quasi-Newton molecular geometry optimization.
+const BfgsOptions = struct {
+    gradient: GradientOptions = .analytic,
+    iterations: u32 = 100,
+    step: f64 = 1,
+    threshold: f64 = 1e-4,
+};
+
+/// Analytical nuclear gradient evaluation settings.
+const GradientAnalyticOptions = struct {};
+
+/// Finite difference displacement settings for numerical gradient evaluation.
+const GradientNumericOptions = struct {
+    step: f64 = 1e-5,
+};
+
+/// Finite difference displacement step for numerical Hessian evaluation.
+const HessianNumericOptions = struct {
+    step: f64 = 1e-5,
+};
+
+/// Configuration options for steepest descent molecular geometry optimization.
+const SteepestDescentOptions = struct {
+    gradient: GradientOptions = .analytic,
+    iterations: u32 = 100,
+    step: f64 = 1e-1,
+    threshold: f64 = 1e-4,
 };
 
 /// Destination paths for outputting Moller-Plesset geometries, gradients, and Hessians.

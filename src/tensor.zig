@@ -39,6 +39,12 @@ pub const MatmulWrite = struct {
     product: ?[]const u8 = null,
 };
 
+/// Mean and standard deviation parameters for Gaussian random number generation.
+pub const NormalDistribution = struct {
+    mean: f64 = 0,
+    std: f64 = 1,
+};
+
 /// Tagged union specifying the linear algebra operation to execute.
 pub const Operation = union(enum) {
     matmul: MatmulOptions,
@@ -47,14 +53,8 @@ pub const Operation = union(enum) {
 
 /// Probability distribution specifier for pseudorandom number sampling.
 pub const RandomDistribution = union(enum) {
-    normal: struct {
-        mean: f64 = 0,
-        std: f64 = 1,
-    },
-    uniform: struct {
-        max: f64 = 1,
-        min: f64 = 0,
-    },
+    normal: NormalDistribution,
+    uniform: UniformDistribution,
 };
 
 /// Flags for printing generated random matrices to terminal output.
@@ -74,6 +74,12 @@ pub const RandomOptions = struct {
 /// Output target file paths for saving generated random matrices.
 pub const RandomWrite = struct {
     matrix: ?[]const u8 = null,
+};
+
+/// Interval bounds for uniform pseudorandom number generation.
+pub const UniformDistribution = struct {
+    max: f64 = 1,
+    min: f64 = 0,
 };
 
 /// Returns a 2D matrix type representing linear operators or grids in coordinate space.

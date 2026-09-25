@@ -17,59 +17,92 @@ const EV2AU = @import("constant.zig").EV2AU;
 
 /// Parameter union for potential energy surfaces supporting harmonic, coupling, and Tully 1, 2, and 3 models.
 pub const Options = union(enum) {
-    file: struct {
-        ndim: u32,
-        path: []const u8,
-    },
-    harmonic: struct {
-        k: []const f64 = &.{1},
-    },
-    henon_heiles: struct {
-        k: f64 = 1,
-        l: f64 = 0.1,
-    },
-    jahn_teller: struct {
-        g: f64 = 1,
-        k: f64 = 1,
-    },
-    morse: struct {
-        D: f64 = 0.2,
-        a: f64 = 1,
-        r0: f64 = 0,
-    },
-    time_linear: struct {
-        a: f64 = 10,
-        g: f64 = 2,
-    },
-    tully_1: struct {
-        A: f64 = 0.010,
-        B: f64 = 1.600,
-        C: f64 = 0.005,
-        D: f64 = 1.000,
-    },
-    tully_2: struct {
-        A: f64 = 0.10,
-        B: f64 = 0.28,
-        C: f64 = 0.015,
-        D: f64 = 0.06,
-        E: f64 = 0.05,
-    },
-    tully_3: struct {
-        A: f64 = 6.0e-4,
-        B: f64 = 0.10,
-        C: f64 = 0.90,
-    },
-    lvc: struct {
-        excitation_energies: []const f64,
-        frequencies: []const f64,
-        kappa: []const []const f64,
-        lambda: []const []const []const f64,
-    },
-    custom: struct {
-        matrix: []const []const []const u8,
-        ndim: u32,
-        time_dependent: bool = false,
-    },
+    file: FileOptions,
+    harmonic: HarmonicOptions,
+    henon_heiles: HenonHeilesOptions,
+    jahn_teller: JahnTellerOptions,
+    morse: MorseOptions,
+    time_linear: TimeLinearOptions,
+    tully_1: Tully1Options,
+    tully_2: Tully2Options,
+    tully_3: Tully3Options,
+    lvc: LvcOptions,
+    custom: CustomOptions,
+};
+
+/// User-defined analytical potential matrix elements and coordinate dimension.
+const CustomOptions = struct {
+    matrix: []const []const []const u8,
+    ndim: u32,
+    time_dependent: bool = false,
+};
+
+/// Grid interpolation configuration loaded from an external potential file.
+const FileOptions = struct {
+    ndim: u32,
+    path: []const u8,
+};
+
+/// Harmonic oscillator force constants along uncoupled Cartesian coordinates.
+const HarmonicOptions = struct {
+    k: []const f64 = &.{1},
+};
+
+/// Quadratic and cubic coupling parameters for the Henon-Heiles potential.
+const HenonHeilesOptions = struct {
+    k: f64 = 1,
+    l: f64 = 0.1,
+};
+
+/// Linear and quadratic vibronic coupling parameters for E x e Jahn-Teller.
+const JahnTellerOptions = struct {
+    g: f64 = 1,
+    k: f64 = 1,
+};
+
+/// Linear vibronic coupling Hamiltonian parameters and mode frequencies.
+const LvcOptions = struct {
+    excitation_energies: []const f64,
+    frequencies: []const f64,
+    kappa: []const []const f64,
+    lambda: []const []const []const f64,
+};
+
+/// Dissociation energy, width parameter, and equilibrium distance for Morse potential.
+const MorseOptions = struct {
+    D: f64 = 0.2,
+    a: f64 = 1,
+    r0: f64 = 0,
+};
+
+/// Coupling strength and slope for time-dependent linear curve crossing.
+const TimeLinearOptions = struct {
+    a: f64 = 10,
+    g: f64 = 2,
+};
+
+/// Model parameters for Tully 1 simple avoided crossing diabatic potential.
+const Tully1Options = struct {
+    A: f64 = 0.010,
+    B: f64 = 1.600,
+    C: f64 = 0.005,
+    D: f64 = 1.000,
+};
+
+/// Model parameters for Tully 2 dual avoided crossing diabatic potential.
+const Tully2Options = struct {
+    A: f64 = 0.10,
+    B: f64 = 0.28,
+    C: f64 = 0.015,
+    D: f64 = 0.06,
+    E: f64 = 0.05,
+};
+
+/// Model parameters for Tully 3 extended coupling with reflection diabatic potential.
+const Tully3Options = struct {
+    A: f64 = 6.0e-4,
+    B: f64 = 0.10,
+    C: f64 = 0.90,
 };
 
 /// Returns a generic union representing a potential energy surface (PES) with coordinate and time evaluations.

@@ -47,39 +47,60 @@ pub const Options = struct {
     frequency: ?FrequencyOptions = null,
     gradient: ?GradientOptions = null,
     hartree_fock: HartreeFockOptions,
-    hessian: ?union(enum) {
-        numeric: struct {
-            state: u32 = 0,
-            step: f64 = 1e-5,
-        },
-    } = null,
+    hessian: ?HessianOptions = null,
     nthreads: u32 = 1,
-    optimize: ?union(enum) {
-        bfgs: struct {
-            gradient: GradientOptions = .{ .analytic = .{} },
-            iterations: u32 = 100,
-            step: f64 = 1,
-            threshold: f64 = 1e-4,
-        },
-        steepest_descent: struct {
-            gradient: GradientOptions = .{ .analytic = .{} },
-            iterations: u32 = 100,
-            step: f64 = 1e-1,
-            threshold: f64 = 1e-4,
-        },
-    } = null,
+    optimize: ?OptimizeOptions = null,
     write: Write = .{},
 };
 
 /// Options for computing CI energy gradients analytically or numerically for a specific electronic state.
 pub const GradientOptions = union(enum) {
-    analytic: struct {
-        state: u32 = 0,
-    },
-    numeric: struct {
-        state: u32 = 0,
-        step: f64 = 1e-5,
-    },
+    analytic: GradientAnalyticOptions,
+    numeric: GradientNumericOptions,
+};
+
+/// Tagged union specifying CI nuclear Hessian calculation methods.
+pub const HessianOptions = union(enum) {
+    numeric: HessianNumericOptions,
+};
+
+/// Tagged union specifying geometry optimization algorithms.
+pub const OptimizeOptions = union(enum) {
+    bfgs: BfgsOptions,
+    steepest_descent: SteepestDescentOptions,
+};
+
+/// Configuration options for BFGS quasi-Newton molecular geometry optimization.
+const BfgsOptions = struct {
+    gradient: GradientOptions = .{ .analytic = .{} },
+    iterations: u32 = 100,
+    step: f64 = 1,
+    threshold: f64 = 1e-4,
+};
+
+/// Analytical nuclear gradient evaluation settings for a specific state.
+const GradientAnalyticOptions = struct {
+    state: u32 = 0,
+};
+
+/// Finite difference displacement settings for numerical gradient evaluation.
+const GradientNumericOptions = struct {
+    state: u32 = 0,
+    step: f64 = 1e-5,
+};
+
+/// Finite difference displacement step for numerical Hessian evaluation.
+const HessianNumericOptions = struct {
+    state: u32 = 0,
+    step: f64 = 1e-5,
+};
+
+/// Configuration options for steepest descent molecular geometry optimization.
+const SteepestDescentOptions = struct {
+    gradient: GradientOptions = .{ .analytic = .{} },
+    iterations: u32 = 100,
+    step: f64 = 1e-1,
+    threshold: f64 = 1e-4,
 };
 
 /// Output file destinations for CI geometry, gradients, and Hessians.
