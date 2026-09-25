@@ -40,6 +40,23 @@ pub const EighWrite = struct {
     eigenvectors: ?[]const u8 = null,
 };
 
+/// Flags for printing formatted matrices to terminal output.
+pub const FormatLog = struct {
+    matrix: bool = false,
+};
+
+/// Parameters, logging preferences, and output destinations for matrix formatting.
+pub const FormatOptions = struct {
+    matrix: []const u8,
+    log: FormatLog = .{},
+    write: FormatWrite = .{},
+};
+
+/// Output target file paths for saving formatted matrices.
+pub const FormatWrite = struct {
+    matrix: ?[]const u8 = null,
+};
+
 /// Flags for printing computed matrix multiplication quantities to terminal output.
 pub const MatmulLog = struct {
     product: bool = false,
@@ -72,6 +89,7 @@ pub const NormalDistribution = struct {
 /// Tagged union specifying the linear algebra operation to execute.
 pub const Operation = union(enum) {
     eigh: EighOptions,
+    format: FormatOptions,
     matmul: MatmulOptions,
     random: RandomOptions,
 };
@@ -486,6 +504,7 @@ pub fn Vector(comptime T: type) type {
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     switch (opt.operation) {
         .eigh => |eigh_opt| return try runEigh(T, io, eigh_opt, log, gpa),
+        .format => |form_opt| return try runFormat(T, io, form_opt, log, gpa),
         .matmul => |matmul_opt| return try runMatmul(T, io, matmul_opt, log, gpa),
         .random => |rand_opt| return try runRandom(T, io, rand_opt, log, gpa),
     }
@@ -573,6 +592,48 @@ pub fn runEigh(comptime T: type, io: std.Io, opt: EighOptions, log: bool, gpa: A
     const tensors = try gpa.alloc(Matrix(T), 2);
 
     tensors[0], tensors[1] = .{ W.asMatrix(), U };
+
+    return Result(T){ .tensors = tensors };
+}
+
+/// Formats an input matrix from a file to standardized representation and saves it.
+pub fn runFormat(comptime T: type, io: std.Io, opt: FormatOptions, log: bool, gpa: Allocator) !Result(T) {
+    if (log) {
+        try printf(io, "\nREAD MATRIX: ", .{});
+    }
+
+    var timer = std.Io.Timestamp.now(io, .real);
+
+    var A = try readMatrix(T, io, opt.matrix, gpa);
+    errdefer A.deinit(gpa);
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    const output_path = opt.write.matrix orelse opt.matrix;
+
+    if (log) {
+        try printf(io, "\nWRITE MATRIX: ", .{});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    try writeMatrix(T, io, output_path, A);
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    if (opt.log.matrix) {
+        try printf(io, "\nMATRIX:\n", .{});
+
+        try printMatrix(T, io, A);
+    }
+
+    const tensors = try gpa.alloc(Matrix(T), 1);
+
+    tensors[0] = A;
 
     return Result(T){ .tensors = tensors };
 }

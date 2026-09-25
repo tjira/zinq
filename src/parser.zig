@@ -44,6 +44,7 @@ pub const Parser = struct {
         \\SUBCOMMANDS:
         \\  eigh          CALCULATE EIGENVALUES AND EIGENVECTORS OF SYMMETRIC MATRIX
         \\  hf            RUN HARTREE-FOCK METHOD DIRECTLY ON MOLECULAR COORDINATES
+        \\  mform         FORMAT INPUT MATRIX FILE TO STANDARDIZED ZINQ NOTATION
         \\  mm            PERFORM MATRIX MULTIPLICATION ON INPUT MATRIX FILES
         \\  mp            RUN MOLLER-PLESSET PERTURBATION THEORY ON MOLECULAR COORDINATES
         \\  randn         GENERATE PSEUDORANDOM GAUSSIAN MATRICES
@@ -81,6 +82,21 @@ pub const Parser = struct {
         \\
         \\ARGUMENTS:
         \\  file                  XYZ FILE DESCRIBING MOLECULE
+        \\
+    ;
+
+    /// Help message for the matrix formatting subcommand, detailing usage, options, and arguments.
+    pub const help_mform =
+        \\
+        \\USAGE: zinq mform [ARGUMENTS] [OPTIONS]
+        \\
+        \\OPTIONS:
+        \\  -o, --output          OUTPUT FILE PATH TO SAVE FORMATTED MATRIX
+        \\  --print               PRINT FORMATTED MATRIX TO TERMINAL
+        \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
+        \\
+        \\ARGUMENTS:
+        \\  file                  INPUT MATRIX FILE
         \\
     ;
 
@@ -237,6 +253,55 @@ pub const Parser = struct {
     /// Iteratively simulates physical systems described by the parsed json files.
     pub fn runFiles(io: std.Io, gpa: Allocator, arena: Allocator, files: []const []const u8) !void {
         for (files) |e| try main.run(f64, io, e, gpa, arena);
+    }
+
+    /// Reads matrix data from disk, standardizes formatting, and writes to target file.
+    pub fn runFormat(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
+        const allowed_options = &.{
+            "-o",
+            "--output",
+        };
+
+        const allowed_flags = &.{
+            "--print",
+        };
+
+        const parsed = try parseArgs(io, sub.args, arena, allowed_options, allowed_flags);
+
+        if (parsed.options.contains("-h") or parsed.options.contains("--help")) {
+            try runHelp(io, help_mform);
+
+            return;
+        }
+
+        if (parsed.positional.len > 1) {
+            try printf(io, "MULTIPLE MATRIX FILES SPECIFIED\n", .{});
+
+            return error.MultipleMatrixFiles;
+        }
+
+        if (parsed.positional.len == 0) {
+            try printf(io, "MATRIX FILE IS REQUIRED FOR 'mform' SUBCOMMAND\n", .{});
+
+            return error.MissingMatrixFile;
+        }
+
+        const output_opt = parsed.options.get("-o") orelse parsed.options.get("--output");
+
+        if (output_opt) |o| if (o.len == 0) {
+            try printf(io, "MISSING VALUE FOR OUTPUT OPTION\n", .{});
+
+            return error.MissingOutputValue;
+        };
+
+        const opt = tensor.FormatOptions{
+            .log = .{ .matrix = parsed.options.contains("--print") },
+            .matrix = parsed.positional[0],
+            .write = .{ .matrix = output_opt },
+        };
+
+        var result = try tensor.runFormat(f64, io, opt, true, gpa);
+        defer result.deinit(gpa);
     }
 
     /// Projects CLI subcommand parameters into Hartree-Fock electronic states.
@@ -607,6 +672,7 @@ pub const Parser = struct {
         switch (sub.name) {
             .eigh => try runEigh(io, gpa, arena, sub),
             .hf => try runHartreeFock(io, gpa, arena, sub),
+            .mform => try runFormat(io, gpa, arena, sub),
             .mm => try runMatmul(io, gpa, arena, sub),
             .mp => try runMollerPlesset(io, gpa, arena, sub),
             .randn => try runRandn(io, gpa, arena, sub),
@@ -629,6 +695,10 @@ pub const Parser = struct {
 
         if (std.mem.eql(u8, args[1], "hf")) {
             return .{ .subcommand = .{ .name = .hf, .args = args[2..] } };
+        }
+
+        if (std.mem.eql(u8, args[1], "mform")) {
+            return .{ .subcommand = .{ .name = .mform, .args = args[2..] } };
         }
 
         if (std.mem.eql(u8, args[1], "mm")) {
@@ -725,6 +795,7 @@ pub const Parser = struct {
 pub const Subcommand = enum {
     eigh,
     hf,
+    mform,
     mm,
     mp,
     randn,
