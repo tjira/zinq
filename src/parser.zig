@@ -74,6 +74,7 @@ pub const Parser = struct {
         \\OPTIONS:
         \\  -o, --output          OUTPUT FILE PATH TO SAVE RESULT MATRIX
         \\  -a, --alpha           SCALAR MULTIPLIER ALPHA (DEFAULT: 1)
+        \\  -n, --nthreads        NUMBER OF THREADS (DEFAULT: 1)
         \\  --trans-a             TRANSPOSE FIRST MATRIX A
         \\  --trans-b             TRANSPOSE SECOND MATRIX B
         \\  -p, --print           PRINT RESULT MATRIX TO TERMINAL
@@ -236,6 +237,8 @@ pub const Parser = struct {
         const allowed_options = &.{
             "-a",
             "--alpha",
+            "-n",
+            "--nthreads",
             "-o",
             "--output",
         };
@@ -275,6 +278,14 @@ pub const Parser = struct {
             return error.MissingAlphaValue;
         };
 
+        const nthreads_opt = parsed.options.get("-n") orelse parsed.options.get("--nthreads");
+
+        if (nthreads_opt) |t| if (t.len == 0) {
+            try printf(io, "MISSING VALUE FOR NTHREADS OPTION\n", .{});
+
+            return error.MissingNthreadsValue;
+        };
+
         const output_opt = parsed.options.get("-o") orelse parsed.options.get("--output");
 
         if (output_opt) |o| if (o.len == 0) {
@@ -289,11 +300,18 @@ pub const Parser = struct {
             return err;
         } else 1;
 
+        const nthreads = if (nthreads_opt) |t| std.fmt.parseInt(u32, t, 10) catch |err| {
+            try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+
+            return err;
+        } else 1;
+
         const opt = tensor.MatmulOptions{
             .a = parsed.positional[0],
             .b = parsed.positional[1],
             .alpha = alpha,
             .log = .{ .product = parsed.options.contains("-p") or parsed.options.contains("--print") },
+            .nthreads = nthreads,
             .trans_a = parsed.options.contains("--trans-a"),
             .trans_b = parsed.options.contains("--trans-b"),
             .write = .{ .product = output_opt },

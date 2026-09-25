@@ -2,6 +2,8 @@
 
 const std = @import("std");
 
+const cblas = @import("cimport.zig").cblas;
+
 const Allocator = std.mem.Allocator;
 
 const Value = @import("value.zig").Value;
@@ -29,6 +31,7 @@ pub const MatmulOptions = struct {
     alpha: f64 = 1,
     beta: f64 = 0,
     log: MatmulLog = .{},
+    nthreads: u32 = 1,
     trans_a: bool = false,
     trans_b: bool = false,
     write: MatmulWrite = .{},
@@ -452,6 +455,14 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
 /// Executes matrix-matrix multiplication on input files using BLAS GEMM and exports the product.
 pub fn runMatmul(comptime T: type, io: std.Io, opt: MatmulOptions, log: bool, gpa: Allocator) !Result(T) {
+    if (opt.nthreads == 0) {
+        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
+
     if (log) {
         try printf(io, "\nREAD MATRICES: ", .{});
     }
