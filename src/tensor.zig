@@ -452,11 +452,21 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
 /// Executes matrix-matrix multiplication on input files using BLAS GEMM and exports the product.
 pub fn runMatmul(comptime T: type, io: std.Io, opt: MatmulOptions, log: bool, gpa: Allocator) !Result(T) {
+    if (log) {
+        try printf(io, "\nREAD MATRICES: ", .{});
+    }
+
+    var timer = std.Io.Timestamp.now(io, .real);
+
     var A = try readMatrix(T, io, opt.a, gpa);
     defer A.deinit(gpa);
 
     var B = try readMatrix(T, io, opt.b, gpa);
     defer B.deinit(gpa);
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
 
     const m = if (opt.trans_a) A.ncol() else A.nrow();
     const n = if (opt.trans_b) B.nrow() else B.ncol();
@@ -468,7 +478,7 @@ pub fn runMatmul(comptime T: type, io: std.Io, opt: MatmulOptions, log: bool, gp
         try printf(io, "\nCOMPUTE MATMUL: ", .{});
     }
 
-    var timer = std.Io.Timestamp.now(io, .real);
+    timer = std.Io.Timestamp.now(io, .real);
 
     mm(T, &C, A, B, opt.alpha, opt.beta, opt.trans_a, opt.trans_b);
 
