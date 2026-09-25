@@ -71,11 +71,18 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
     var bo = try Matrix(T).initZero(sys.atoms.len, sys.atoms.len, gpa);
     errdefer bo.deinit(gpa);
 
+    var S_spatial = try Matrix(T).init(nbf, nbf, gpa);
+    defer S_spatial.deinit(gpa);
+
+    for (0..nbf) |i| for (0..nbf) |j| {
+        S_spatial.ptr(i, j).* = S.at(i, j);
+    };
+
     if (!is_gen) {
         var PS = try Matrix(T).init(nbf, nbf, gpa);
         defer PS.deinit(gpa);
 
-        mm(T, &PS, P, S, 1.0, 0.0, false, false);
+        mm(T, &PS, P, S_spatial, 1, 0, false, false);
 
         for (0..nbf) |u| {
             const at_u: usize = @intCast(sys.bf2at[u]);
@@ -97,9 +104,14 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
         var P_b = try Matrix(T).init(nbf, nbf, gpa);
         defer P_b.deinit(gpa);
 
+        var P_ab = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_ab.deinit(gpa);
+
         for (0..nbf) |i| for (0..nbf) |j| {
             P_a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
             P_b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
+
+            P_ab.ptr(i, j).* = P.at(i + 0 * nbf, j + 1 * nbf);
         };
 
         var PS_a = try Matrix(T).init(nbf, nbf, gpa);
@@ -108,8 +120,13 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
         var PS_b = try Matrix(T).init(nbf, nbf, gpa);
         defer PS_b.deinit(gpa);
 
-        mm(T, &PS_a, P_a, S, 1, 0, false, false);
-        mm(T, &PS_b, P_b, S, 1, 0, false, false);
+        var PS_ab = try Matrix(T).init(nbf, nbf, gpa);
+        defer PS_ab.deinit(gpa);
+
+        mm(T, &PS_a, P_a, S_spatial, 1, 0, false, false);
+        mm(T, &PS_b, P_b, S_spatial, 1, 0, false, false);
+
+        mm(T, &PS_ab, P_ab, S_spatial, 1, 0, false, false);
 
         for (0..nbf) |u| {
             const at_u: usize = @intCast(sys.bf2at[u]);
@@ -121,7 +138,9 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
                     const term_a = PS_a.at(u, v) * PS_a.at(v, u);
                     const term_b = PS_b.at(u, v) * PS_b.at(v, u);
 
-                    bo.ptr(at_u, at_v).* += 2.0 * (term_a + term_b);
+                    const term_ab = PS_ab.at(u, v) * PS_ab.at(v, u);
+
+                    bo.ptr(at_u, at_v).* += 2 * (term_a + term_b + 2 * term_ab);
                 }
             }
         }
@@ -203,13 +222,20 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
 
     const is_gen = (P.shape[0] == 2 * nbf);
 
+    var S_spatial = try Matrix(T).init(nbf, nbf, gpa);
+    defer S_spatial.deinit(gpa);
+
+    for (0..nbf) |i| for (0..nbf) |j| {
+        S_spatial.ptr(i, j).* = S.at(i, j);
+    };
+
     var eigvals = try Vector(T).init(nbf, gpa);
     defer eigvals.deinit(gpa);
 
     var U = try Matrix(T).init(nbf, nbf, gpa);
     defer U.deinit(gpa);
 
-    try eigh(T, &eigvals, &U, S);
+    try eigh(T, &eigvals, &U, S_spatial);
 
     var U_scaled = try Matrix(T).init(nbf, nbf, gpa);
     defer U_scaled.deinit(gpa);
@@ -259,9 +285,14 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
         var P_b = try Matrix(T).init(nbf, nbf, gpa);
         defer P_b.deinit(gpa);
 
+        var P_ab = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_ab.deinit(gpa);
+
         for (0..nbf) |i| for (0..nbf) |j| {
             P_a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
             P_b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
+
+            P_ab.ptr(i, j).* = P.at(i + 0 * nbf, j + 1 * nbf);
         };
 
         var SP_a = try Matrix(T).init(nbf, nbf, gpa);
@@ -270,8 +301,13 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
         var SP_b = try Matrix(T).init(nbf, nbf, gpa);
         defer SP_b.deinit(gpa);
 
+        var SP_ab = try Matrix(T).init(nbf, nbf, gpa);
+        defer SP_ab.deinit(gpa);
+
         mm(T, &SP_a, Shalf, P_a, 1, 0, false, false);
         mm(T, &SP_b, Shalf, P_b, 1, 0, false, false);
+
+        mm(T, &SP_ab, Shalf, P_ab, 1, 0, false, false);
 
         var P_ortho_a = try Matrix(T).init(nbf, nbf, gpa);
         defer P_ortho_a.deinit(gpa);
@@ -279,8 +315,13 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
         var P_ortho_b = try Matrix(T).init(nbf, nbf, gpa);
         defer P_ortho_b.deinit(gpa);
 
+        var P_ortho_ab = try Matrix(T).init(nbf, nbf, gpa);
+        defer P_ortho_ab.deinit(gpa);
+
         mm(T, &P_ortho_a, SP_a, Shalf, 1, 0, false, false);
         mm(T, &P_ortho_b, SP_b, Shalf, 1, 0, false, false);
+
+        mm(T, &P_ortho_ab, SP_ab, Shalf, 1, 0, false, false);
 
         for (0..nbf) |u| {
             const at_u: usize = @intCast(sys.bf2at[u]);
@@ -291,8 +332,9 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
                 if (at_u != at_v) {
                     const pa_uv = P_ortho_a.at(u, v);
                     const pb_uv = P_ortho_b.at(u, v);
+                    const pab_uv = P_ortho_ab.at(u, v);
 
-                    bo.ptr(at_u, at_v).* += 2.0 * (pa_uv * pa_uv + pb_uv * pb_uv);
+                    bo.ptr(at_u, at_v).* += 2.0 * (pa_uv * pa_uv + pb_uv * pb_uv + 2.0 * pab_uv * pab_uv);
                 }
             }
         }

@@ -22,12 +22,20 @@ pub fn calculateTotalSpin(comptime T: type, P: Matrix(T), S: Matrix(T), gpa: All
     var P_b = try Matrix(T).init(nbf, nbf, gpa);
     defer P_b.deinit(gpa);
 
+    var P_ab = try Matrix(T).init(nbf, nbf, gpa);
+    defer P_ab.deinit(gpa);
+
+    var P_ba = try Matrix(T).init(nbf, nbf, gpa);
+    defer P_ba.deinit(gpa);
+
     var S_spatial = try Matrix(T).init(nbf, nbf, gpa);
     defer S_spatial.deinit(gpa);
 
     for (0..nbf) |i| for (0..nbf) |j| {
         P_a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
         P_b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
+        P_ab.ptr(i, j).* = P.at(i + 0 * nbf, j + 1 * nbf);
+        P_ba.ptr(i, j).* = P.at(i + 1 * nbf, j + 0 * nbf);
 
         S_spatial.ptr(i, j).* = S.at(i, j);
     };
@@ -35,30 +43,48 @@ pub fn calculateTotalSpin(comptime T: type, P: Matrix(T), S: Matrix(T), gpa: All
     var AS = try Matrix(T).init(nbf, nbf, gpa);
     defer AS.deinit(gpa);
 
-    mm(T, &AS, P_a, S_spatial, 1, 0, false, false);
-
     var BS = try Matrix(T).init(nbf, nbf, gpa);
     defer BS.deinit(gpa);
 
+    var ABS = try Matrix(T).init(nbf, nbf, gpa);
+    defer ABS.deinit(gpa);
+
+    var BAS = try Matrix(T).init(nbf, nbf, gpa);
+    defer BAS.deinit(gpa);
+
+    mm(T, &AS, P_a, S_spatial, 1, 0, false, false);
     mm(T, &BS, P_b, S_spatial, 1, 0, false, false);
+
+    mm(T, &ABS, P_ab, S_spatial, 1, 0, false, false);
+    mm(T, &BAS, P_ba, S_spatial, 1, 0, false, false);
 
     var n_a: T = 0;
     var n_b: T = 0;
 
-    var tr_psps: T = 0;
+    var tr_abs: T = 0;
+    var tr_bas: T = 0;
+
+    var tr_asbs: T = 0;
+
+    var tr_absbas: T = 0;
 
     for (0..nbf) |i| {
         n_a += AS.at(i, i);
         n_b += BS.at(i, i);
 
+        tr_abs += ABS.at(i, i);
+        tr_bas += BAS.at(i, i);
+
         for (0..nbf) |j| {
-            tr_psps += AS.at(i, j) * BS.at(j, i);
+            tr_asbs += AS.at(i, j) * BS.at(j, i);
+
+            tr_absbas += ABS.at(i, j) * BAS.at(j, i);
         }
     }
 
-    const sz = 0.5 * (n_a - n_b);
+    const sx, const sz = .{ 0.5 * (tr_abs + tr_bas), 0.5 * (n_a - n_b) };
 
-    return sz * (sz + 1) + n_b - tr_psps;
+    return (sx * sx + sz * sz) + 0.5 * (n_a + n_b) - tr_asbs + tr_absbas;
 }
 
 /// Formats and prints the calculated total spin expectation value and spin contamination to the output.
