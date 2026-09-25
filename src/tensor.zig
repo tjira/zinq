@@ -2,7 +2,79 @@
 
 const std = @import("std");
 
+const Allocator = std.mem.Allocator;
+
 const Value = @import("value.zig").Value;
+
+const mm = @import("linear_algebra.zig").mm;
+const printf = @import("read_write.zig").printf;
+const printMatrix = @import("read_write.zig").printMatrix;
+const readMatrix = @import("read_write.zig").readMatrix;
+const writeMatrix = @import("read_write.zig").writeMatrix;
+
+/// Configuration options for executing tensor and matrix transformations from data files.
+pub const Options = struct {
+    operation: Operation,
+};
+
+/// Flags for printing computed matrix multiplication quantities to terminal output.
+pub const MatmulLog = struct {
+    product: bool = false,
+};
+
+/// Parameters and output destinations for matrix-matrix multiplication.
+pub const MatmulOptions = struct {
+    a: []const u8,
+    b: []const u8,
+    alpha: f64 = 1,
+    beta: f64 = 0,
+    log: MatmulLog = .{},
+    trans_a: bool = false,
+    trans_b: bool = false,
+    write: MatmulWrite = .{},
+};
+
+/// Output target file paths for saving matrix multiplication products.
+pub const MatmulWrite = struct {
+    product: ?[]const u8 = null,
+};
+
+/// Tagged union specifying the linear algebra operation to execute.
+pub const Operation = union(enum) {
+    matmul: MatmulOptions,
+    random: RandomOptions,
+};
+
+/// Probability distribution specifier for pseudorandom number sampling.
+pub const RandomDistribution = union(enum) {
+    normal: struct {
+        mean: f64 = 0,
+        std: f64 = 1,
+    },
+    uniform: struct {
+        max: f64 = 1,
+        min: f64 = 0,
+    },
+};
+
+/// Flags for printing generated random matrices to terminal output.
+pub const RandomLog = struct {
+    matrix: bool = false,
+};
+
+/// Parameters, distribution type, and output destinations for random matrix generation.
+pub const RandomOptions = struct {
+    distribution: RandomDistribution = .{ .normal = .{} },
+    log: RandomLog = .{},
+    seed: u64 = 0,
+    shape: [2]usize,
+    write: RandomWrite = .{},
+};
+
+/// Output target file paths for saving generated random matrices.
+pub const RandomWrite = struct {
+    matrix: ?[]const u8 = null,
+};
 
 /// Returns a 2D matrix type representing linear operators or grids in coordinate space.
 pub fn Matrix(comptime T: type) type {
@@ -154,6 +226,18 @@ pub fn Matrix(comptime T: type) type {
         /// Sets all elements of the matrix to zero.
         pub fn zero(self: *@This()) void {
             self.fill(std.mem.zeroes(T));
+        }
+    };
+}
+
+/// Generic container holding the computed matrix or tensor transformation result.
+pub fn Result(comptime T: type) type {
+    return struct {
+        matrix: Matrix(T),
+
+        /// Deallocates memory associated with the result matrix.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.matrix.deinit(gpa);
         }
     };
 }
@@ -350,4 +434,122 @@ pub fn Vector(comptime T: type) type {
             }
         }
     };
+}
+
+/// Executes tensor or matrix operations specified by options and writes results to files.
+pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
+    switch (opt.operation) {
+        .matmul => |matmul_opt| return try runMatmul(T, io, matmul_opt, log, gpa),
+        .random => |rand_opt| return try runRandom(T, io, rand_opt, log, gpa),
+    }
+}
+
+/// Executes matrix-matrix multiplication on input files using BLAS GEMM and exports the product.
+pub fn runMatmul(comptime T: type, io: std.Io, opt: MatmulOptions, log: bool, gpa: Allocator) !Result(T) {
+    var A = try readMatrix(T, io, opt.a, gpa);
+    defer A.deinit(gpa);
+
+    var B = try readMatrix(T, io, opt.b, gpa);
+    defer B.deinit(gpa);
+
+    const m = if (opt.trans_a) A.ncol() else A.nrow();
+    const n = if (opt.trans_b) B.nrow() else B.ncol();
+
+    var C = try Matrix(T).initZero(m, n, gpa);
+    errdefer C.deinit(gpa);
+
+    if (log) {
+        try printf(io, "\nCOMPUTE MATMUL: ", .{});
+    }
+
+    var timer = std.Io.Timestamp.now(io, .real);
+
+    mm(T, &C, A, B, opt.alpha, opt.beta, opt.trans_a, opt.trans_b);
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    if (opt.write.product) |path| {
+        if (log) {
+            try printf(io, "\nWRITE PRODUCT: ", .{});
+        }
+
+        timer = std.Io.Timestamp.now(io, .real);
+
+        try writeMatrix(T, io, path, C);
+
+        if (log) {
+            try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+        }
+    }
+
+    if (opt.log.product) {
+        try printf(io, "\nPRODUCT:\n", .{});
+
+        try printMatrix(T, io, C);
+    }
+
+    return Result(T){ .matrix = C };
+}
+
+/// Generates a random matrix with specified dimensions and probability distribution.
+pub fn runRandom(comptime T: type, io: std.Io, opt: RandomOptions, log: bool, gpa: Allocator) !Result(T) {
+    var A = try Matrix(T).init(opt.shape[0], opt.shape[1], gpa);
+    errdefer A.deinit(gpa);
+
+    if (log) {
+        try printf(io, "\nGENERATE RANDOM MATRIX: ", .{});
+    }
+
+    var timer = std.Io.Timestamp.now(io, .real);
+
+    const seed = if (opt.seed == 0) @as(u64, @truncate(@as(u96, @bitCast(timer.nanoseconds)))) else opt.seed;
+
+    var split_mix = std.Random.SplitMix64.init(seed);
+
+    var rng = std.Random.DefaultPrng.init(split_mix.next());
+
+    const random = rng.random();
+
+    switch (opt.distribution) {
+        .normal => |norm_opt| {
+            for (0..A.data.len) |i| {
+                A.data[i] = norm_opt.mean + norm_opt.std * random.floatNorm(T);
+            }
+        },
+        .uniform => |unif_opt| {
+            const diff = unif_opt.max - unif_opt.min;
+
+            for (0..A.data.len) |i| {
+                A.data[i] = unif_opt.min + diff * random.float(T);
+            }
+        },
+    }
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    if (opt.write.matrix) |path| {
+        if (log) {
+            try printf(io, "\nWRITE MATRIX: ", .{});
+        }
+
+        timer = std.Io.Timestamp.now(io, .real);
+
+        try writeMatrix(T, io, path, A);
+
+        if (log) {
+            try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+        }
+    }
+
+    if (opt.log.matrix) {
+        try printf(io, "\nMATRIX:\n", .{});
+
+        try printMatrix(T, io, A);
+    }
+
+    return Result(T){ .matrix = A };
 }

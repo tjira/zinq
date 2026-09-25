@@ -62,6 +62,7 @@ const Options = struct {
         moller_plesset: moller_plesset.Options,
         potential_plot: potential_plot.Options,
         quantum_dynamics: quantum_dynamics.Options,
+        tensor: tensor.Options,
     },
 };
 
@@ -74,6 +75,7 @@ const Handlers = struct {
     pub const moller_plesset = @import("moller_plesset.zig");
     pub const potential_plot = @import("potential_plot.zig");
     pub const quantum_dynamics = @import("quantum_dynamics.zig");
+    pub const tensor = @import("tensor.zig");
 };
 
 /// Main entry point printing library versions and executing molecular simulation targets.

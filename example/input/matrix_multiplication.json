@@ -1,0 +1,41 @@
+{
+    "zinq" : [
+        {
+            "tensor" : {
+                "operation" : {
+                    "random" : {
+                        "shape" : [100, 100],
+                        "write" : {
+                            "matrix" : "A.mat"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "tensor" : {
+                "operation" : {
+                    "random" : {
+                        "shape" : [100, 100],
+                        "write" : {
+                            "matrix" : "B.mat"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "tensor" : {
+                "operation" : {
+                    "matmul" : {
+                        "a" : "A.mat",
+                        "b" : "B.mat",
+                        "write" : {
+                            "product" : "C.mat"
+                        }
+                    }
+                }
+            }
+        }
+    ]
+}

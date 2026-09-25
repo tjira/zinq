@@ -20,6 +20,14 @@ pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     try writer.interface.flush();
 }
 
+/// Prints matrix dimensions and space-separated elements to standard output.
+pub fn printMatrix(comptime T: type, io: std.Io, A: Matrix(T)) !void {
+    var buffer: [65536]u8 = undefined;
+    var writer = std.Io.File.stdout().writer(io, &buffer);
+
+    try writeMatrixWriter(T, &writer, A);
+}
+
 /// Reads a matrix from a text file, parsing the header dimensions and space-separated floating-point elements.
 pub fn readMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Matrix(T) {
     var file = try std.Io.Dir.cwd().openFile(io, path, .{});
@@ -63,17 +71,7 @@ pub fn writeMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T)
     var buffer: [65536]u8 = undefined;
     var writer = file.writer(io, &buffer);
 
-    const ncol = if (comptime isComplex(T)) 2 * A.ncol() else A.ncol();
-
-    try writer.interface.print("{d} {d}\n", .{ A.nrow(), ncol });
-
-    for (0..A.nrow()) |i| for (0..A.ncol()) |j| {
-        try writeElement(&writer, A.at(i, j));
-
-        try writer.interface.print("{s}", .{if (j == A.ncol() - 1) "\n" else " "});
-    };
-
-    try writer.interface.flush();
+    try writeMatrixWriter(T, &writer, A);
 }
 
 /// Horizontally concatenates two matrices and writes the merged matrix to a file.
@@ -174,4 +172,19 @@ fn writeElement(writer: anytype, val: anytype) !void {
     if (comptime !isComplex(@TypeOf(val))) {
         try writer.interface.print("{d:20.14}", .{val});
     }
+}
+
+/// Writes matrix dimensions and space-separated elements to a buffered writer stream.
+fn writeMatrixWriter(comptime T: type, writer: anytype, A: Matrix(T)) !void {
+    const ncol = if (comptime isComplex(T)) 2 * A.ncol() else A.ncol();
+
+    try writer.interface.print("{d} {d}\n", .{ A.nrow(), ncol });
+
+    for (0..A.nrow()) |i| for (0..A.ncol()) |j| {
+        try writeElement(writer, A.at(i, j));
+
+        try writer.interface.print("{s}", .{if (j == A.ncol() - 1) "\n" else " "});
+    };
+
+    try writer.interface.flush();
 }
