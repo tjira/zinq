@@ -28,8 +28,12 @@
             "tensor" : {
                 "operation" : {
                     "matmul" : {
-                        "a" : "A.mat",
-                        "b" : "B.mat",
+                        "a" : {
+                            "file" : "A.mat"
+                        },
+                        "b" : {
+                            "file" : "B.mat"
+                        },
                         "write" : {
                             "product" : "C.mat"
                         }

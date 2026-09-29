@@ -16,8 +16,10 @@
         {
             "tensor" : {
                 "operation" : {
-                    "eigh" : {
-                        "matrix" : "A.mat",
+                    "eig" : {
+                        "matrix" : {
+                            "file" : "A.mat"
+                        },
                         "write" : {
                             "eigenvalues" : "J.mat",
                             "eigenvectors" : "C.mat"

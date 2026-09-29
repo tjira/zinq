@@ -15,9 +15,10 @@ const printf = @import("read_write.zig").printf;
 
 /// Represents the action mapping command parameters to the simulation trajectory.
 pub const Action = union(enum) {
-    help: void,
     files: []const []const u8,
+    help: void,
     subcommand: SubcommandAction,
+    unknown_option: []const u8,
 };
 
 /// Represents the phase space mapping of discrete physical options and coordinate arguments.
@@ -42,7 +43,7 @@ pub const Parser = struct {
         \\  -h, --help    PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\SUBCOMMANDS:
-        \\  eigh          CALCULATE EIGENVALUES AND EIGENVECTORS OF SYMMETRIC MATRIX
+        \\  eig           CALCULATE EIGENVALUES AND EIGENVECTORS OF SYMMETRIC MATRIX
         \\  hf            RUN HARTREE-FOCK METHOD DIRECTLY ON MOLECULAR COORDINATES
         \\  mform         FORMAT INPUT MATRIX FILE TO STANDARDIZED ZINQ NOTATION
         \\  mm            PERFORM MATRIX MULTIPLICATION ON INPUT MATRIX FILES
@@ -52,19 +53,20 @@ pub const Parser = struct {
     ;
 
     /// Help message for the symmetric matrix eigendecomposition subcommand, detailing usage and options.
-    pub const help_eigh =
+    pub const help_eig =
         \\
-        \\USAGE: zinq eigh [ARGUMENTS] [OPTIONS]
+        \\USAGE: zinq eig [ARGUMENTS] [OPTIONS]
         \\
         \\OPTIONS:
         \\  -e, --eigenvalues     OUTPUT FILE PATH TO SAVE EIGENVALUES
         \\  -v, --eigenvectors    OUTPUT FILE PATH TO SAVE EIGENVECTORS
         \\  -n, --nthreads        NUMBER OF THREADS (DEFAULT: 1)
+        \\  --random              GENERATE RANDOM SYMMETRIC MATRIX OF GIVEN SIZE
         \\  --print               PRINT EIGENVALUES AND EIGENVECTORS TO TERMINAL
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
-        \\  file                  INPUT SYMMETRIC MATRIX FILE
+        \\  file / dim            INPUT SYMMETRIC MATRIX FILE OR RANDOM MATRIX DIMENSION
         \\
     ;
 
@@ -109,14 +111,15 @@ pub const Parser = struct {
         \\  -o, --output          OUTPUT FILE PATH TO SAVE RESULT MATRIX
         \\  -a, --alpha           SCALAR MULTIPLIER ALPHA (DEFAULT: 1)
         \\  -n, --nthreads        NUMBER OF THREADS (DEFAULT: 1)
+        \\  --random              GENERATE RANDOM MATRICES OF GIVEN SHAPE
         \\  --trans-a             TRANSPOSE FIRST MATRIX A
         \\  --trans-b             TRANSPOSE SECOND MATRIX B
         \\  --print               PRINT RESULT MATRIX TO TERMINAL
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
-        \\  file_a                FIRST INPUT MATRIX FILE
-        \\  file_b                SECOND INPUT MATRIX FILE
+        \\  file_a / shape        FIRST INPUT MATRIX FILE OR RANDOM MATRIX SHAPE
+        \\  file_b / shape        SECOND INPUT MATRIX FILE OR RANDOM MATRIX SHAPE
         \\
     ;
 
@@ -166,14 +169,19 @@ pub const Parser = struct {
     /// Directs the parsed argument action into the corresponding state space execution path.
     pub fn dispatch(self: @This(), io: std.Io, gpa: Allocator, arena: Allocator) !void {
         switch (self.action) {
+            .files => |files| try runFiles(io, gpa, arena, files),
             .help => try runHelp(io, help_main),
             .subcommand => |command| try runSubcommand(io, gpa, arena, command),
-            .files => |files| try runFiles(io, gpa, arena, files),
+            .unknown_option => |opt| {
+                try printf(io, "UNKNOWN '{s}' OPTION\n", .{opt});
+
+                return error.UnknownOption;
+            },
         }
     }
 
     /// Projects symmetric matrix parameters into eigenvalue and eigenvector solution states.
-    pub fn runEigh(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
+    pub fn runEig(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         const allowed_options = &.{
             "-e",
             "--eigenvalues",
@@ -185,26 +193,36 @@ pub const Parser = struct {
 
         const allowed_flags = &.{
             "--print",
+            "--random",
         };
 
         const parsed = try parseArgs(io, sub.args, arena, allowed_options, allowed_flags);
 
         if (parsed.options.contains("-h") or parsed.options.contains("--help")) {
-            try runHelp(io, help_eigh);
+            try runHelp(io, help_eig);
 
             return;
         }
 
-        if (parsed.positional.len > 1) {
-            try printf(io, "MULTIPLE MATRIX FILES SPECIFIED\n", .{});
+        const is_random = parsed.options.contains("--random");
 
-            return error.MultipleMatrixFiles;
+        if (parsed.positional.len > 1) {
+            const msg = if (is_random) "MULTIPLE DIMENSIONS SPECIFIED\n" else "MULTIPLE MATRIX FILES SPECIFIED\n";
+
+            try printf(io, "{s}", .{msg});
+
+            return if (is_random) error.MultipleDimensions else error.MultipleMatrixFiles;
         }
 
         if (parsed.positional.len == 0) {
-            try printf(io, "MATRIX FILE IS REQUIRED FOR 'eigh' SUBCOMMAND\n", .{});
+            const msg = if (is_random)
+                "DIMENSION ARGUMENT IS REQUIRED FOR RANDOM 'eig' SUBCOMMAND\n"
+            else
+                "MATRIX FILE IS REQUIRED FOR 'eig' SUBCOMMAND\n";
 
-            return error.MissingMatrixFile;
+            try printf(io, "{s}", .{msg});
+
+            return if (is_random) error.MissingDimension else error.MissingMatrixFile;
         }
 
         const eigenvalues_opt = parsed.options.get("-e") orelse parsed.options.get("--eigenvalues");
@@ -231,22 +249,48 @@ pub const Parser = struct {
             return error.MissingNthreadsValue;
         };
 
-        const nthreads = if (nthreads_opt) |t| std.fmt.parseInt(u32, t, 10) catch |err| {
-            try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+        const nthreads = if (nthreads_opt) |t| blk: {
+            const val = std.fmt.parseInt(u32, t, 10) catch |err| {
+                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
 
-            return err;
+                return err;
+            };
+
+            if (val == 0) {
+                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+
+                return error.InvalidNthreads;
+            }
+
+            break :blk val;
         } else 1;
+
+        const matrix_source: tensor.MatrixSource = if (is_random) blk: {
+            const dim = std.fmt.parseInt(usize, parsed.positional[0], 10) catch |err| {
+                try printf(io, "INVALID VALUE FOR DIMENSION ARGUMENT\n", .{});
+
+                return err;
+            };
+
+            if (dim == 0) {
+                try printf(io, "INVALID VALUE FOR DIMENSION ARGUMENT\n", .{});
+
+                return error.InvalidDimension;
+            }
+
+            break :blk .{ .random = .{ .shape = .{ dim, dim }, .symmetric = true } };
+        } else .{ .file = parsed.positional[0] };
 
         const print = parsed.options.contains("--print");
 
-        const opt = tensor.EighOptions{
-            .matrix = parsed.positional[0],
+        const opt = tensor.EigOptions{
+            .matrix = matrix_source,
             .log = .{ .eigenvalues = print, .eigenvectors = print },
             .nthreads = nthreads,
             .write = .{ .eigenvalues = eigenvalues_opt, .eigenvectors = eigenvectors_opt },
         };
 
-        var result = try tensor.runEigh(f64, io, opt, true, gpa);
+        var result = try tensor.runEig(f64, io, opt, true, gpa);
         defer result.deinit(gpa);
     }
 
@@ -363,10 +407,20 @@ pub const Parser = struct {
             return error.MissingChargeValue;
         };
 
-        const multiplicity = if (multiplicity_opt) |s| std.fmt.parseInt(u32, s, 10) catch |err| {
-            try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
+        const multiplicity = if (multiplicity_opt) |s| blk: {
+            const val = std.fmt.parseInt(u32, s, 10) catch |err| {
+                try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
 
-            return err;
+                return err;
+            };
+
+            if (val == 0) {
+                try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
+
+                return error.InvalidMultiplicity;
+            }
+
+            break :blk val;
         } else 1;
 
         const charge = if (charge_opt) |c| std.fmt.parseInt(i32, c, 10) catch |err| {
@@ -407,6 +461,7 @@ pub const Parser = struct {
 
         const allowed_flags = &.{
             "--print",
+            "--random",
             "--trans-a",
             "--trans-b",
         };
@@ -419,16 +474,34 @@ pub const Parser = struct {
             return;
         }
 
-        if (parsed.positional.len > 2) {
-            try printf(io, "MULTIPLE MATRIX FILES SPECIFIED\n", .{});
+        const is_random = parsed.options.contains("--random");
 
-            return error.MultipleMatrixFiles;
+        if (!is_random) {
+            if (parsed.positional.len > 2) {
+                try printf(io, "TOO MANY MATRIX FILES SPECIFIED FOR 'mm' SUBCOMMAND\n", .{});
+
+                return error.TooManyArguments;
+            }
+
+            if (parsed.positional.len < 2) {
+                try printf(io, "TWO MATRIX FILES ARE REQUIRED FOR 'mm' SUBCOMMAND\n", .{});
+
+                return error.MissingMatrixFile;
+            }
         }
 
-        if (parsed.positional.len < 2) {
-            try printf(io, "TWO MATRIX FILES ARE REQUIRED FOR 'mm' SUBCOMMAND\n", .{});
+        if (is_random) {
+            if (parsed.positional.len == 0) {
+                try printf(io, "SHAPE ARGUMENTS ARE REQUIRED FOR RANDOM 'mm' SUBCOMMAND\n", .{});
 
-            return error.MissingMatrixFile;
+                return error.MissingShapeArgument;
+            }
+
+            if (parsed.positional.len > 3) {
+                try printf(io, "TOO MANY SHAPE ARGUMENTS SPECIFIED FOR 'mm' SUBCOMMAND\n", .{});
+
+                return error.TooManyArguments;
+            }
         }
 
         const alpha_opt = parsed.options.get("-a") orelse parsed.options.get("--alpha");
@@ -461,15 +534,125 @@ pub const Parser = struct {
             return err;
         } else 1;
 
-        const nthreads = if (nthreads_opt) |t| std.fmt.parseInt(u32, t, 10) catch |err| {
-            try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+        const nthreads = if (nthreads_opt) |t| blk: {
+            const val = std.fmt.parseInt(u32, t, 10) catch |err| {
+                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
 
-            return err;
+                return err;
+            };
+
+            if (val == 0) {
+                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+
+                return error.InvalidNthreads;
+            }
+
+            break :blk val;
         } else 1;
 
+        var source_a: tensor.MatrixSource = undefined;
+        var source_b: tensor.MatrixSource = undefined;
+
+        if (is_random) {
+            var m: usize = 0;
+            var k: usize = 0;
+            var n: usize = 0;
+
+            if (parsed.positional.len == 1) {
+                m = std.fmt.parseInt(usize, parsed.positional[0], 10) catch |err| {
+                    try printf(io, "INVALID VALUE FOR DIMENSION ARGUMENT\n", .{});
+
+                    return err;
+                };
+
+                if (m == 0) {
+                    try printf(io, "INVALID VALUE FOR DIMENSION ARGUMENT\n", .{});
+
+                    return error.InvalidDimension;
+                }
+
+                k = m;
+                n = m;
+            }
+
+            if (parsed.positional.len == 2) {
+                m = std.fmt.parseInt(usize, parsed.positional[0], 10) catch |err| {
+                    try printf(io, "INVALID VALUE FOR M ARGUMENT\n", .{});
+
+                    return err;
+                };
+
+                if (m == 0) {
+                    try printf(io, "INVALID VALUE FOR M ARGUMENT\n", .{});
+
+                    return error.InvalidDimension;
+                }
+
+                k = std.fmt.parseInt(usize, parsed.positional[1], 10) catch |err| {
+                    try printf(io, "INVALID VALUE FOR K ARGUMENT\n", .{});
+
+                    return err;
+                };
+
+                if (k == 0) {
+                    try printf(io, "INVALID VALUE FOR K ARGUMENT\n", .{});
+
+                    return error.InvalidDimension;
+                }
+
+                n = m;
+            }
+
+            if (parsed.positional.len == 3) {
+                m = std.fmt.parseInt(usize, parsed.positional[0], 10) catch |err| {
+                    try printf(io, "INVALID VALUE FOR M ARGUMENT\n", .{});
+
+                    return err;
+                };
+
+                if (m == 0) {
+                    try printf(io, "INVALID VALUE FOR M ARGUMENT\n", .{});
+
+                    return error.InvalidDimension;
+                }
+
+                k = std.fmt.parseInt(usize, parsed.positional[1], 10) catch |err| {
+                    try printf(io, "INVALID VALUE FOR K ARGUMENT\n", .{});
+
+                    return err;
+                };
+
+                if (k == 0) {
+                    try printf(io, "INVALID VALUE FOR K ARGUMENT\n", .{});
+
+                    return error.InvalidDimension;
+                }
+
+                n = std.fmt.parseInt(usize, parsed.positional[2], 10) catch |err| {
+                    try printf(io, "INVALID VALUE FOR N ARGUMENT\n", .{});
+
+                    return err;
+                };
+
+                if (n == 0) {
+                    try printf(io, "INVALID VALUE FOR N ARGUMENT\n", .{});
+
+                    return error.InvalidDimension;
+                }
+            }
+
+            source_a = .{ .random = .{ .shape = .{ m, k } } };
+            source_b = .{ .random = .{ .shape = .{ k, n } } };
+        }
+
+        if (!is_random) {
+            source_a = .{ .file = parsed.positional[0] };
+            source_b = .{ .file = parsed.positional[1] };
+        }
+
         const opt = tensor.MatmulOptions{
-            .a = parsed.positional[0],
-            .b = parsed.positional[1],
+            .a = source_a,
+            .b = source_b,
             .alpha = alpha,
             .log = .{ .product = parsed.options.contains("--print") },
             .nthreads = nthreads,
@@ -557,10 +740,20 @@ pub const Parser = struct {
             return error.MissingChargeValue;
         };
 
-        const multiplicity = if (multiplicity_opt) |s| std.fmt.parseInt(u32, s, 10) catch |err| {
-            try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
+        const multiplicity = if (multiplicity_opt) |s| blk: {
+            const val = std.fmt.parseInt(u32, s, 10) catch |err| {
+                try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
 
-            return err;
+                return err;
+            };
+
+            if (val == 0) {
+                try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
+
+                return error.InvalidMultiplicity;
+            }
+
+            break :blk val;
         } else 1;
 
         const charge = if (charge_opt) |c| std.fmt.parseInt(i32, c, 10) catch |err| {
@@ -609,7 +802,7 @@ pub const Parser = struct {
         }
 
         if (parsed.positional.len > 2) {
-            try printf(io, "TOO MANY ARGUMENTS SPECIFIED FOR 'randn'\n", .{});
+            try printf(io, "TOO MANY ARGUMENTS SPECIFIED FOR 'randn' SUBCOMMAND\n", .{});
 
             return error.TooManyArguments;
         }
@@ -642,11 +835,23 @@ pub const Parser = struct {
             return err;
         };
 
+        if (rows == 0) {
+            try printf(io, "INVALID VALUE FOR ROWS ARGUMENT\n", .{});
+
+            return error.InvalidDimension;
+        }
+
         const cols = std.fmt.parseInt(usize, parsed.positional[1], 10) catch |err| {
             try printf(io, "INVALID VALUE FOR COLS ARGUMENT\n", .{});
 
             return err;
         };
+
+        if (cols == 0) {
+            try printf(io, "INVALID VALUE FOR COLS ARGUMENT\n", .{});
+
+            return error.InvalidDimension;
+        }
 
         const seed = if (seed_opt) |s| std.fmt.parseInt(u64, s, 10) catch |err| {
             try printf(io, "INVALID VALUE FOR SEED OPTION\n", .{});
@@ -670,13 +875,32 @@ pub const Parser = struct {
     /// Enforces specific subcommand constraints on physical parameter evaluation.
     pub fn runSubcommand(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         switch (sub.name) {
-            .eigh => try runEigh(io, gpa, arena, sub),
+            .eig => try runEig(io, gpa, arena, sub),
             .hf => try runHartreeFock(io, gpa, arena, sub),
             .mform => try runFormat(io, gpa, arena, sub),
             .mm => try runMatmul(io, gpa, arena, sub),
             .mp => try runMollerPlesset(io, gpa, arena, sub),
             .randn => try runRandn(io, gpa, arena, sub),
         }
+    }
+
+    /// Verifies if an argument token represents a numeric coordinate value in parameter space.
+    fn isNumber(s: []const u8) bool {
+        if (s.len == 0) return false;
+
+        const start: usize = if (s[0] == '-' or s[0] == '+') 1 else 0;
+
+        if (start >= s.len) return false;
+
+        if (s[start] >= '0' and s[start] <= '9') {
+            return true;
+        }
+
+        if (s[start] == '.' and start + 1 < s.len) {
+            return s[start + 1] >= '0' and s[start + 1] <= '9';
+        }
+
+        return false;
     }
 
     /// Projects the raw command line token sequence into distinct execution pathways.
@@ -689,8 +913,8 @@ pub const Parser = struct {
             return .{ .files = default_files };
         }
 
-        if (std.mem.eql(u8, args[1], "eigh")) {
-            return .{ .subcommand = .{ .name = .eigh, .args = args[2..] } };
+        if (std.mem.eql(u8, args[1], "eig")) {
+            return .{ .subcommand = .{ .name = .eig, .args = args[2..] } };
         }
 
         if (std.mem.eql(u8, args[1], "hf")) {
@@ -715,6 +939,10 @@ pub const Parser = struct {
 
         for (args[1..]) |arg| if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
             return .help;
+        };
+
+        for (args[1..]) |arg| if (std.mem.startsWith(u8, arg, "-")) {
+            return .{ .unknown_option = arg };
         };
 
         var files: std.ArrayList([]const u8) = .empty;
@@ -771,14 +999,16 @@ pub const Parser = struct {
                     return error.UnknownOption;
                 }
 
-                if (i + 1 >= args.len or std.mem.startsWith(u8, args[i + 1], "-")) {
-                    try options.put(arg, "");
-                }
+                const has_val = i + 1 < args.len and (!std.mem.startsWith(u8, args[i + 1], "-") or isNumber(args[i + 1]));
 
-                if (i + 1 < args.len and !std.mem.startsWith(u8, args[i + 1], "-")) {
+                if (has_val) {
                     try options.put(arg, args[i + 1]);
 
                     i += 1;
+                }
+
+                if (!has_val) {
+                    try options.put(arg, "");
                 }
 
                 continue;
@@ -793,7 +1023,7 @@ pub const Parser = struct {
 
 /// Option representations for subcommands executed in physical basis space.
 pub const Subcommand = enum {
-    eigh,
+    eig,
     hf,
     mform,
     mm,

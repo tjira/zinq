@@ -21,21 +21,21 @@ pub const Options = struct {
 };
 
 /// Flags for printing computed eigenvalues and eigenvectors to terminal output.
-pub const EighLog = struct {
+pub const EigLog = struct {
     eigenvalues: bool = false,
     eigenvectors: bool = false,
 };
 
 /// Parameters, logging preferences, and output destinations for symmetric eigendecomposition.
-pub const EighOptions = struct {
-    matrix: []const u8,
-    log: EighLog = .{},
+pub const EigOptions = struct {
+    matrix: MatrixSource,
+    log: EigLog = .{},
     nthreads: u32 = 1,
-    write: EighWrite = .{},
+    write: EigWrite = .{},
 };
 
 /// Output target file paths for saving computed eigenvalues and eigenvectors.
-pub const EighWrite = struct {
+pub const EigWrite = struct {
     eigenvalues: ?[]const u8 = null,
     eigenvectors: ?[]const u8 = null,
 };
@@ -64,8 +64,8 @@ pub const MatmulLog = struct {
 
 /// Parameters and output destinations for matrix-matrix multiplication.
 pub const MatmulOptions = struct {
-    a: []const u8,
-    b: []const u8,
+    a: MatrixSource,
+    b: MatrixSource,
     alpha: f64 = 1,
     beta: f64 = 0,
     log: MatmulLog = .{},
@@ -80,6 +80,12 @@ pub const MatmulWrite = struct {
     product: ?[]const u8 = null,
 };
 
+/// Source specification for loading matrix operators from disk or generating them procedurally.
+pub const MatrixSource = union(enum) {
+    file: []const u8,
+    random: RandomOptions,
+};
+
 /// Mean and standard deviation parameters for Gaussian random number generation.
 pub const NormalDistribution = struct {
     mean: f64 = 0,
@@ -88,7 +94,7 @@ pub const NormalDistribution = struct {
 
 /// Tagged union specifying the linear algebra operation to execute.
 pub const Operation = union(enum) {
-    eigh: EighOptions,
+    eig: EigOptions,
     format: FormatOptions,
     matmul: MatmulOptions,
     random: RandomOptions,
@@ -503,7 +509,7 @@ pub fn Vector(comptime T: type) type {
 /// Executes tensor or matrix operations specified by options and writes results to files.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     switch (opt.operation) {
-        .eigh => |eigh_opt| return try runEigh(T, io, eigh_opt, log, gpa),
+        .eig => |eig_opt| return try runEig(T, io, eig_opt, log, gpa),
         .format => |form_opt| return try runFormat(T, io, form_opt, log, gpa),
         .matmul => |matmul_opt| return try runMatmul(T, io, matmul_opt, log, gpa),
         .random => |rand_opt| return try runRandom(T, io, rand_opt, log, gpa),
@@ -511,7 +517,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 }
 
 /// Computes eigenvalues and eigenvectors of a symmetric matrix from an input file.
-pub fn runEigh(comptime T: type, io: std.Io, opt: EighOptions, log: bool, gpa: Allocator) !Result(T) {
+pub fn runEig(comptime T: type, io: std.Io, opt: EigOptions, log: bool, gpa: Allocator) !Result(T) {
     if (opt.nthreads == 0) {
         std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
 
@@ -521,12 +527,12 @@ pub fn runEigh(comptime T: type, io: std.Io, opt: EighOptions, log: bool, gpa: A
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
     if (log) {
-        try printf(io, "\nREAD MATRIX: ", .{});
+        try printf(io, "\nINITIALIZE MATRIX: ", .{});
     }
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var A = try readMatrix(T, io, opt.matrix, gpa);
+    var A = try initMatrix(T, io, opt.matrix, gpa);
     defer A.deinit(gpa);
 
     if (A.nrow() != A.ncol()) {
@@ -546,7 +552,7 @@ pub fn runEigh(comptime T: type, io: std.Io, opt: EighOptions, log: bool, gpa: A
     errdefer U.deinit(gpa);
 
     if (log) {
-        try printf(io, "\nCOMPUTE EIGH: ", .{});
+        try printf(io, "\nCOMPUTE EIG: ", .{});
     }
 
     timer = std.Io.Timestamp.now(io, .real);
@@ -649,15 +655,15 @@ pub fn runMatmul(comptime T: type, io: std.Io, opt: MatmulOptions, log: bool, gp
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
     if (log) {
-        try printf(io, "\nREAD MATRICES: ", .{});
+        try printf(io, "\nINITIALIZE MATRICES: ", .{});
     }
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var A = try readMatrix(T, io, opt.a, gpa);
+    var A = try initMatrix(T, io, opt.a, gpa);
     defer A.deinit(gpa);
 
-    var B = try readMatrix(T, io, opt.b, gpa);
+    var B = try initMatrix(T, io, opt.b, gpa);
     defer B.deinit(gpa);
 
     if (log) {
@@ -792,4 +798,17 @@ pub fn runRandom(comptime T: type, io: std.Io, opt: RandomOptions, log: bool, gp
     tensors[0] = A;
 
     return Result(T){ .tensors = tensors };
+}
+
+/// Loads a matrix operator from a storage file or generates it using random distributions.
+fn initMatrix(comptime T: type, io: std.Io, source: MatrixSource, gpa: Allocator) !Matrix(T) {
+    switch (source) {
+        .file => |path| return try readMatrix(T, io, path, gpa),
+        .random => |rand_opt| {
+            const res = try runRandom(T, io, rand_opt, false, gpa);
+            defer gpa.free(res.tensors);
+
+            return res.tensors[0];
+        },
+    }
 }
