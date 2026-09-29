@@ -28,8 +28,8 @@ pub const Options = struct {
 const Calculate = struct {
     coulomb: bool = true,
     coulomb_d1: bool = false,
-    hmatrix: bool = true,
-    hmatrix_d1: bool = false,
+    hamiltonian: bool = true,
+    hamiltonian_d1: bool = false,
     kinetic: bool = true,
     kinetic_d1: bool = false,
     nuclear: bool = true,
@@ -39,11 +39,11 @@ const Calculate = struct {
 };
 
 /// Options specifying the output file paths for writing calculated molecular integrals and their derivatives.
-const Write = struct {
+pub const Write = struct {
     coulomb: ?[]const u8 = null,
     coulomb_d1: ?[]const u8 = null,
-    hmatrix: ?[]const u8 = null,
-    hmatrix_d1: ?[]const u8 = null,
+    hamiltonian: ?[]const u8 = null,
+    hamiltonian_d1: ?[]const u8 = null,
     kinetic: ?[]const u8 = null,
     kinetic_d1: ?[]const u8 = null,
     nuclear: ?[]const u8 = null,
@@ -148,6 +148,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
 /// Evaluates molecular integrals and gradients directly on an initialized molecular system.
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
+    try checkInvalidInput(opt);
+
     var ints: Result(T) = .{ .sys = try sys.clone(gpa) };
     errdefer ints.deinit(gpa);
 
@@ -171,7 +173,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    if (opt.calculate.kinetic or opt.calculate.hmatrix) {
+    if (opt.calculate.kinetic or opt.calculate.hamiltonian) {
         ints.K = if (opt.spin) try sys.kineticSpin(opt.nthreads, gpa) else try sys.kinetic(opt.nthreads, gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
@@ -179,7 +181,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    if (opt.calculate.nuclear or opt.calculate.hmatrix) {
+    if (opt.calculate.nuclear or opt.calculate.hamiltonian) {
         ints.V = if (opt.spin) try sys.nuclearSpin(opt.nthreads, gpa) else try sys.nuclear(opt.nthreads, gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
@@ -193,7 +195,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
         if (log) try printf(io, "COULOMB INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
 
-    if (opt.calculate.hmatrix) {
+    if (opt.calculate.hamiltonian) {
         ints.H = try Matrix(T).init(ints.K.?.nrow(), ints.K.?.ncol(), gpa);
 
         for (0..ints.H.?.nrow()) |i| for (0..ints.H.?.ncol()) |j| {
@@ -223,7 +225,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    if (opt.calculate.kinetic_d1 or opt.calculate.hmatrix_d1) {
+    if (opt.calculate.kinetic_d1 or opt.calculate.hamiltonian_d1) {
         ints.dK = if (opt.spin) try sys.kineticD1Spin(opt.nthreads, gpa) else try sys.kineticD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
@@ -231,7 +233,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    if (opt.calculate.nuclear_d1 or opt.calculate.hmatrix_d1) {
+    if (opt.calculate.nuclear_d1 or opt.calculate.hamiltonian_d1) {
         ints.dV = if (opt.spin) try sys.nuclearD1Spin(opt.nthreads, gpa) else try sys.nuclearD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
@@ -245,7 +247,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
         if (log) try printf(io, "COULOMB INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
 
-    if (opt.calculate.hmatrix_d1) {
+    if (opt.calculate.hamiltonian_d1) {
         ints.dH = try Tensor(T, 3).init(ints.dK.?.shape, gpa);
 
         for (0..ints.dH.?.shape[0]) |k| for (0..ints.dH.?.shape[1]) |i| for (0..ints.dH.?.shape[2]) |j| {
@@ -274,6 +276,66 @@ fn checkInvalidInput(opt: Options) !void {
 
     if (opt.nthreads == 0) {
         std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.coulomb != null and !opt.calculate.coulomb) {
+        std.log.err("COULOMB INTEGRALS WRITE REQUESTED BUT COULOMB INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.coulomb_d1 != null and !opt.calculate.coulomb_d1) {
+        std.log.err("COULOMB DERIVATIVE WRITE REQUESTED BUT COULOMB DERIVATIVE IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.hamiltonian != null and !opt.calculate.hamiltonian) {
+        std.log.err("HAMILTONIAN INTEGRALS WRITE REQUESTED BUT HAMILTONIAN INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.hamiltonian_d1 != null and !opt.calculate.hamiltonian_d1) {
+        std.log.err("HAMILTONIAN DERIVATIVE WRITE REQUESTED BUT HAMILTONIAN DERIVATIVE IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.kinetic != null and !opt.calculate.kinetic) {
+        std.log.err("KINETIC INTEGRALS WRITE REQUESTED BUT KINETIC INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.kinetic_d1 != null and !opt.calculate.kinetic_d1) {
+        std.log.err("KINETIC DERIVATIVE WRITE REQUESTED BUT KINETIC DERIVATIVE IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.nuclear != null and !opt.calculate.nuclear) {
+        std.log.err("NUCLEAR INTEGRALS WRITE REQUESTED BUT NUCLEAR INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.nuclear_d1 != null and !opt.calculate.nuclear_d1) {
+        std.log.err("NUCLEAR DERIVATIVE WRITE REQUESTED BUT NUCLEAR DERIVATIVE IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.overlap != null and !opt.calculate.overlap) {
+        std.log.err("OVERLAP INTEGRALS WRITE REQUESTED BUT OVERLAP INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.overlap_d1 != null and !opt.calculate.overlap_d1) {
+        std.log.err("OVERLAP DERIVATIVE WRITE REQUESTED BUT OVERLAP DERIVATIVE IS NOT CALCULATED", .{});
 
         return error.InvalidInput;
     }
@@ -331,12 +393,12 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
         if (log) try printf(io, "COULOMB INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
-    if (opt.write.hmatrix) |fname| {
-        const H = ints.H orelse return error.hmatrixMatrixNotCalculated;
+    if (opt.write.hamiltonian) |fname| {
+        const H = ints.H orelse return error.HamiltonianNotCalculated;
 
         try writeMatrix(T, io, fname, H);
 
-        if (log) try printf(io, "HMATRIX INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
+        if (log) try printf(io, "HAMILTONIAN INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
     const any_deriv_write = blk: {
@@ -391,11 +453,11 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
         if (log) try printf(io, "COULOMB DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
-    if (opt.write.hmatrix_d1) |fname| {
-        const dH = ints.dH orelse return error.hmatrixDerivativeMatrixNotCalculated;
+    if (opt.write.hamiltonian_d1) |fname| {
+        const dH = ints.dH orelse return error.HamiltonianDerivativeNotCalculated;
 
         try writeMatrix(T, io, fname, dH.asMatrix());
 
-        if (log) try printf(io, "HMATRIX DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
+        if (log) try printf(io, "HAMILTONIAN DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 }

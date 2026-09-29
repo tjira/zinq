@@ -8,7 +8,6 @@
                     "overlap" : "S_AO.mat",
                     "kinetic" : "T_AO.mat",
                     "nuclear" : "V_AO.mat",
-                    "hmatrix" : "H_AO.mat",
                     "coulomb" : "J_AO.mat"
                 }
             }

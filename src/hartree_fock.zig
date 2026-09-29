@@ -11,6 +11,7 @@ const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const Integrals = @import("molecular_integrals.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
+const MolecularIntegralsWrite = @import("molecular_integrals.zig").Write;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
@@ -145,7 +146,7 @@ const SteepestDescentOptions = struct {
     threshold: f64 = 1e-4,
 };
 
-/// File paths for exporting computed SCF matrices and geometries.
+/// File paths for exporting computed SCF matrices, molecular integrals, and geometries.
 const Write = struct {
     coefficients: ?[]const u8 = null,
     density: ?[]const u8 = null,
@@ -153,6 +154,7 @@ const Write = struct {
     geometry: ?[]const u8 = null,
     gradient: ?[]const u8 = null,
     hessian: ?[]const u8 = null,
+    integrals: MolecularIntegralsWrite = .{},
 };
 
 /// Output molecular orbitals, density, Fock matrix, orbital energies, and gradients from an SCF calculation.
@@ -400,6 +402,8 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         }
     }
 
+    const analytic_grad = opt.gradient != null and opt.gradient.? == .analytic;
+
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
@@ -409,12 +413,13 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         .nthreads = opt.nthreads,
         .calculate = .{
             .coulomb = !opt.integral_direct,
-            .kinetic_d1 = opt.gradient != null and opt.gradient.? == .analytic,
-            .overlap_d1 = opt.gradient != null and opt.gradient.? == .analytic,
-            .nuclear_d1 = opt.gradient != null and opt.gradient.? == .analytic,
-            .hmatrix_d1 = opt.gradient != null and opt.gradient.? == .analytic,
-            .coulomb_d1 = !opt.integral_direct and opt.gradient != null and opt.gradient.? == .analytic,
+            .coulomb_d1 = !opt.integral_direct and analytic_grad,
+            .hamiltonian_d1 = analytic_grad,
+            .kinetic_d1 = analytic_grad,
+            .nuclear_d1 = analytic_grad,
+            .overlap_d1 = analytic_grad,
         },
+        .write = opt.write.integrals,
     };
 
     var ints = try molecular_integrals_runFromSystem(T, io, molopts, sys.*, log, gpa);
@@ -615,6 +620,12 @@ fn checkInvalidInput(opt: Options) !void {
 
             return error.InvalidInput;
         }
+
+        if (opt.write.integrals.coulomb != null or opt.write.integrals.coulomb_d1 != null) {
+            std.log.err("COULOMB INTEGRALS WRITE REQUESTED BUT INTEGRAL DIRECT HARTREE-FOCK IS ENABLED", .{});
+
+            return error.InvalidInput;
+        }
     }
 
     if (opt.nthreads == 0) {
@@ -633,6 +644,38 @@ fn checkInvalidInput(opt: Options) !void {
         std.log.err("HESSIAN WRITE REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
 
         return error.InvalidInput;
+    }
+
+    if (opt.gradient == null or opt.gradient.? != .analytic) {
+        if (opt.write.integrals.coulomb_d1 != null) {
+            std.log.err("COULOMB DERIVATIVE WRITE REQUESTED BUT COULOMB DERIVATIVE IS NOT CALCULATED", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (opt.write.integrals.hamiltonian_d1 != null) {
+            std.log.err("HAMILTONIAN DERIVATIVE WRITE REQUESTED BUT HAMILTONIAN DERIVATIVE IS NOT CALCULATED", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (opt.write.integrals.kinetic_d1 != null) {
+            std.log.err("KINETIC DERIVATIVE WRITE REQUESTED BUT KINETIC DERIVATIVE IS NOT CALCULATED", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (opt.write.integrals.nuclear_d1 != null) {
+            std.log.err("NUCLEAR DERIVATIVE WRITE REQUESTED BUT NUCLEAR DERIVATIVE IS NOT CALCULATED", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (opt.write.integrals.overlap_d1 != null) {
+            std.log.err("OVERLAP DERIVATIVE WRITE REQUESTED BUT OVERLAP DERIVATIVE IS NOT CALCULATED", .{});
+
+            return error.InvalidInput;
+        }
     }
 
     if (opt.frequency != null and opt.hessian == null) {
