@@ -16,7 +16,7 @@ HAS_ZLS := $(shell $(if $(filter windows,$(OS)),(Get-Command zls -ErrorAction Si
 
 COMPILER := $(if $(HAS_ZIG),zig,./.zig-bin/zig$(if $(filter $(OS),windows),.exe))
 
-.PHONY: all zinq docs run test
+.PHONY: all zinq docs fmt molecule run test
 
 all: .env.fish .env.ps1 .env.sh zinq
 
@@ -85,3 +85,11 @@ endif
 
 clean:
 	@git clean -dffx
+
+ifeq ($(OS),windows)
+molecule: zinq
+	@Get-ChildItem example/molecule/*.xyz | ForEach-Object { ./zig-out/bin/zinq.exe hf $$_.FullName --optimize ; Move-Item -Force ($$_.FullName + ".opt") $$_.FullName }
+else
+molecule: zinq
+	@for file in example/molecule/*.xyz; do ./zig-out/bin/zinq hf "$$file" --optimize && mv "$$file.opt" "$$file"; done
+endif
