@@ -38,6 +38,7 @@ const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").runFromSystem;
 const mulliken = @import("population_analysis.zig").mulliken;
 const orbitalResponse = @import("cphf.zig").orbitalResponse;
+const printGeometry = @import("read_write.zig").printGeometry;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printLowdinCharges = @import("population_analysis.zig").printLowdinCharges;
 const printMayerBondOrders = @import("population_analysis.zig").printMayerBondOrders;
@@ -392,6 +393,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
+    if (log) {
+        try printGeometry(T, io, sys.atoms, sys.coors, "MOLECULAR GEOMETRY (Å)");
+    }
+
     var final_Pg: ?Matrix(T) = null;
     defer if (final_Pg) |*p| p.deinit(gpa);
 
@@ -399,6 +404,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         switch (o) {
             .steepest_descent => final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa),
             .bfgs => final_Pg = try bfgs(T, io, runFromSystem, opt, sys, Pg, log, gpa),
+        }
+
+        if (log) {
+            try printGeometry(T, io, sys.atoms, sys.coors, "OPTIMIZED MOLECULAR GEOMETRY (Å)");
         }
     }
 

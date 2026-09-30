@@ -86,10 +86,12 @@ endif
 clean:
 	@git clean -dffx
 
+# COMPUTE TARGETS ==============================================================================================================================================
+
 ifeq ($(OS),windows)
 molecule: zinq
-	@Get-ChildItem example/molecule/*.xyz | ForEach-Object { ./zig-out/bin/zinq.exe hf $$_.FullName --optimize ; Move-Item -Force ($$_.FullName + ".opt") $$_.FullName }
+	@Get-ChildItem example/molecule/*.xyz | ForEach-Object { ./zig-out/bin/zinq.exe hf $$_.FullName --direct --optimize ; Move-Item -Force ($$_.FullName + ".opt") $$_.FullName }
 else
 molecule: zinq
-	@for file in example/molecule/*.xyz; do ./zig-out/bin/zinq hf "$$file" --optimize && mv "$$file.opt" "$$file"; done
+	@for file in example/molecule/*.xyz; do ./zig-out/bin/zinq hf "$$file" --direct --optimize && mv "$$file.opt" "$$file"; done
 endif

@@ -20,6 +20,27 @@ pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     try writer.interface.flush();
 }
 
+/// Formats and prints atomic symbols and 3D nuclear coordinates in angstroms to standard output.
+pub fn printGeometry(comptime T: type, io: std.Io, atoms: []const i32, coors: []const T, title: ?[]const u8) !void {
+    const header = title orelse "MOLECULAR GEOMETRY (Å)";
+
+    try printf(io, "\n{s}\n", .{header});
+
+    for (0..atoms.len) |i| {
+        var sym: []const u8 = "X";
+
+        if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atoms[i])) |j| {
+            sym = AN2SM.kvs.keys[j];
+        }
+
+        const x = coors[3 * i + 0] / A2BOHR;
+        const y = coors[3 * i + 1] / A2BOHR;
+        const z = coors[3 * i + 2] / A2BOHR;
+
+        try printf(io, "{s:2} {d:20.14} {d:20.14} {d:20.14}\n", .{ sym, x, y, z });
+    }
+}
+
 /// Prints matrix dimensions and space-separated elements to standard output.
 pub fn printMatrix(comptime T: type, io: std.Io, A: Matrix(T)) !void {
     var buffer: [65536]u8 = undefined;
