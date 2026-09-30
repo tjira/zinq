@@ -79,6 +79,7 @@ pub const Parser = struct {
         \\  -b, --basis           SPECIFY BASIS SET (DEFAULT: STO-3G)
         \\  -s, --multiplicity    SPECIFY MULTIPLICITY (DEFAULT: 1)
         \\  -c, --charge          SPECIFY CHARGE (DEFAULT: 0)
+        \\  --direct              ENABLE INTEGRAL DIRECT HARTREE-FOCK
         \\  --generalized         ENABLE GENERALIZED HARTREE-FOCK
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
@@ -360,6 +361,7 @@ pub const Parser = struct {
         };
 
         const allowed_flags = &.{
+            "--direct",
             "--generalized",
         };
 
@@ -437,6 +439,7 @@ pub const Parser = struct {
             .multiplicity = multiplicity,
             .charge = charge,
             .generalized = parsed.options.contains("--generalized"),
+            .integral_direct = parsed.options.contains("--direct"),
         };
 
         var result = try hartree_fock.run(f64, io, opt, true, gpa);
