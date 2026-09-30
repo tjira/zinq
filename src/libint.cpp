@@ -13,12 +13,12 @@ struct SystemData {
 extern "C" {
     using namespace libint2;
 
-    SystemData* libint_init(const char *system, const char *basis) {
+    SystemData* libint_init(const char *system, const char *basis, double bohr_to_angstrom) {
         std::ifstream file(system);
 
         if (!file.is_open()) return nullptr;
 
-        std::vector<Atom> atoms = read_dotxyz(file);
+        std::vector<Atom> atoms = read_dotxyz(file, bohr_to_angstrom);
 
         return new SystemData{atoms, BasisSet(atoms, BasisSet::read_g94_basis_library(basis))};
     }

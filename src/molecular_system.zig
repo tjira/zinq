@@ -9,6 +9,8 @@ const Allocator = std.mem.Allocator;
 const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 
+const A2BOHR = @import("constant.zig").A2BOHR;
+
 /// Generates a MolecularSystem struct type for the given floating-point coordinate precision type T.
 pub fn MolecularSystem(comptime T: type) type {
     // Molecular system containing atom types, 3D coordinates, basis functions, and electron count.
@@ -39,7 +41,7 @@ pub fn MolecularSystem(comptime T: type) type {
             const bas_c = try gpa.dupeSentinel(u8, basis, 0);
             defer gpa.free(bas_c);
 
-            const ptr = libint.libint_init(sys_c.ptr, bas_c.ptr) orelse return error.InitializationFailed;
+            const ptr = libint.libint_init(sys_c.ptr, bas_c.ptr, 1.0 / A2BOHR) orelse return error.InitializationFailed;
             errdefer libint.libint_deinit(ptr);
 
             const nat = libint.libint_nat(ptr);
