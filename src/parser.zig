@@ -81,6 +81,7 @@ pub const Parser = struct {
         \\  -c, --charge          SPECIFY CHARGE (DEFAULT: 0)
         \\  --direct              ENABLE INTEGRAL DIRECT HARTREE-FOCK
         \\  --generalized         ENABLE GENERALIZED HARTREE-FOCK
+        \\  --optimize            OPTIMIZE MOLECULAR GEOMETRY USING BFGS
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
@@ -135,6 +136,7 @@ pub const Parser = struct {
         \\  -s, --multiplicity    SPECIFY MULTIPLICITY (DEFAULT: 1)
         \\  -c, --charge          SPECIFY CHARGE (DEFAULT: 0)
         \\  --generalized         ENABLE GENERALIZED PERTURBATION THEORY
+        \\  --optimize            OPTIMIZE MOLECULAR GEOMETRY USING BFGS
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
@@ -363,6 +365,7 @@ pub const Parser = struct {
         const allowed_flags = &.{
             "--direct",
             "--generalized",
+            "--optimize",
         };
 
         const parsed = try parseArgs(io, sub.args, arena, allowed_options, allowed_flags);
@@ -433,6 +436,10 @@ pub const Parser = struct {
 
         const basis_resolved = try std.fmt.allocPrint(arena, "builtin:{s}", .{basis_opt orelse "sto-3g"});
 
+        const optimize = parsed.options.contains("--optimize");
+
+        const opt_geom_path = if (optimize) try std.fmt.allocPrint(arena, "{s}.opt", .{parsed.positional[0]}) else null;
+
         const opt = hartree_fock.Options{
             .system = parsed.positional[0],
             .basis = basis_resolved,
@@ -440,6 +447,8 @@ pub const Parser = struct {
             .charge = charge,
             .generalized = parsed.options.contains("--generalized"),
             .integral_direct = parsed.options.contains("--direct"),
+            .optimize = if (optimize) .{ .bfgs = .{} } else null,
+            .write = .{ .geometry = opt_geom_path },
         };
 
         var result = try hartree_fock.run(f64, io, opt, true, gpa);
@@ -683,6 +692,7 @@ pub const Parser = struct {
 
         const allowed_flags = &.{
             "--generalized",
+            "--optimize",
         };
 
         const parsed = try parseArgs(io, sub.args, arena, allowed_options, allowed_flags);
@@ -767,6 +777,10 @@ pub const Parser = struct {
 
         const basis_resolved = try std.fmt.allocPrint(arena, "builtin:{s}", .{basis_opt orelse "sto-3g"});
 
+        const optimize = parsed.options.contains("--optimize");
+
+        const opt_geom_path = if (optimize) try std.fmt.allocPrint(arena, "{s}.opt", .{parsed.positional[0]}) else null;
+
         const opt = moller_plesset.Options{
             .hartree_fock = .{
                 .system = parsed.positional[0],
@@ -776,6 +790,8 @@ pub const Parser = struct {
                 .generalized = parsed.options.contains("--generalized"),
             },
             .order = order,
+            .optimize = if (optimize) .{ .bfgs = .{} } else null,
+            .write = .{ .geometry = opt_geom_path },
         };
 
         var result = try moller_plesset.run(f64, io, opt, true, gpa);
