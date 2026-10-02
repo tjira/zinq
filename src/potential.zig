@@ -1,33 +1,71 @@
-//! Defines potential energy surfaces (PES) including harmonic, time-linear coupling, Tully avoided crossing, custom, and file-interpolated types.
+//! Defines potential energy surfaces (PES) including ab initio, harmonic, Tully, vibronic, and custom models.
 
 const std = @import("std");
 
+const libint = @import("cimport.zig").libint;
+
 const Allocator = std.mem.Allocator;
 
+const ConfigurationInteractionOptions = @import("configuration_interaction.zig").Options;
 const Expression = @import("exprtk.zig").Expression;
+const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const Matrix = @import("tensor.zig").Matrix;
+const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const MollerPlessetOptions = @import("moller_plesset.zig").Options;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
+const ci_runFromSystem = @import("configuration_interaction.zig").runFromSystem;
+const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
+const hf_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const isDual = @import("value.zig").isDual;
+const mp_runFromSystem = @import("moller_plesset.zig").runFromSystem;
 const readMatrix = @import("read_write.zig").readMatrix;
 
 const CM2EV = @import("constant.zig").CM2EV;
 const EV2AU = @import("constant.zig").EV2AU;
 
-/// Parameter union for potential energy surfaces supporting harmonic, coupling, and Tully 1, 2, and 3 models.
+/// Parameter union for potential energy surfaces supporting ab initio, harmonic, coupling, and Tully models.
 pub const Options = union(enum) {
+    ab_initio: AbInitioOptions,
+    custom: CustomOptions,
     file: FileOptions,
     harmonic: HarmonicOptions,
     henon_heiles: HenonHeilesOptions,
     jahn_teller: JahnTellerOptions,
+    lvc: LvcOptions,
     morse: MorseOptions,
     time_linear: TimeLinearOptions,
     tully_1: Tully1Options,
     tully_2: Tully2Options,
     tully_3: Tully3Options,
-    lvc: LvcOptions,
-    custom: CustomOptions,
+};
+
+/// Ab initio electronic structure method configuration and trajectory output options.
+pub const AbInitioOptions = struct {
+    method: MethodOptions,
+    write: AbInitioWrite = .{},
+};
+
+/// Output file destinations for ab initio potential trajectories.
+pub const AbInitioWrite = struct {
+    position: ?[]const u8 = null,
+
+    /// Returns true if at least one trajectory property is configured for output.
+    pub fn any(self: @This()) bool {
+        inline for (@typeInfo(@This()).@"struct".fields) |field| {
+            if (@field(self, field.name) != null) return true;
+        }
+
+        return false;
+    }
+};
+
+/// Available electronic structure methods for on-the-fly potential evaluation.
+pub const MethodOptions = union(enum) {
+    configuration_interaction: ConfigurationInteractionOptions,
+    hartree_fock: HartreeFockOptions,
+    moller_plesset: MollerPlessetOptions,
 };
 
 /// User-defined analytical potential matrix elements and coordinate dimension.
@@ -108,62 +146,64 @@ const Tully3Options = struct {
 /// Returns a generic union representing a potential energy surface (PES) with coordinate and time evaluations.
 pub fn Potential(comptime T: type) type {
     return union(enum) {
+        ab_initio: AbInitio(T),
+        custom: Custom(T),
         file: File(T),
         harmonic: Harmonic(T),
         henon_heiles: HenonHeiles(T),
         jahn_teller: JahnTeller(T),
+        lvc: Lvc(T),
         morse: Morse(T),
         time_linear: TimeLinear(T),
         tully_1: Tully1(T),
         tully_2: Tully2(T),
         tully_3: Tully3(T),
-        lvc: Lvc(T),
-        custom: Custom(T),
 
         /// Initializes the selected potential energy surface based on configuration options.
         pub fn init(io: std.Io, options: Options, allocator: Allocator) !@This() {
             return switch (options) {
+                .ab_initio => |f| .{ .ab_initio = try AbInitio(T).init(io, f, allocator) },
+                .custom => |f| .{ .custom = try Custom(T).init(f.ndim, f.matrix, f.time_dependent, allocator) },
                 .file => |f| .{ .file = try File(T).init(f.ndim, f.path, io, allocator) },
                 .harmonic => |f| .{ .harmonic = Harmonic(T).init(f.k) },
                 .henon_heiles => |f| .{ .henon_heiles = HenonHeiles(T).init(f.k, f.l) },
                 .jahn_teller => |f| .{ .jahn_teller = JahnTeller(T).init(f.k, f.g) },
+                .lvc => |f| .{ .lvc = Lvc(T).init(f.frequencies, f.excitation_energies, f.kappa, f.lambda) },
                 .morse => |f| .{ .morse = Morse(T).init(f.D, f.a, f.r0) },
                 .time_linear => |f| .{ .time_linear = TimeLinear(T).init(f.a, f.g) },
                 .tully_1 => |f| .{ .tully_1 = Tully1(T).init(f.A, f.B, f.C, f.D) },
                 .tully_2 => |f| .{ .tully_2 = Tully2(T).init(f.A, f.B, f.C, f.D, f.E) },
                 .tully_3 => |f| .{ .tully_3 = Tully3(T).init(f.A, f.B, f.C) },
-                .lvc => |f| .{ .lvc = Lvc(T).init(f.frequencies, f.excitation_energies, f.kappa, f.lambda) },
-                .custom => |f| .{ .custom = try Custom(T).init(f.ndim, f.matrix, f.time_dependent, allocator) },
             };
         }
 
         /// Deallocates memory associated with the potential energy surface representation.
         pub fn deinit(self: *@This(), allocator: Allocator) void {
             switch (self.*) {
-                inline .file, .custom => |*pot| pot.deinit(allocator),
+                inline .ab_initio, .custom, .file => |*pot| pot.deinit(allocator),
 
                 inline else => {},
             }
         }
 
         /// Evaluates the potential energy matrix elements at coordinates r and time t.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) !void {
             std.debug.assert(V.len == self.nstate() * self.nstate());
 
             std.debug.assert(r.len == self.ndim());
 
             switch (self) {
-                inline else => |field| field.eval(U, V, r, t),
+                inline else => |field| try field.eval(U, V, r, t),
             }
         }
 
         /// Evaluates the potential energy matrix elements for a batch of coordinate coordinates.
-        pub fn evalBatch(self: @This(), comptime U: type, V: *Matrix(U), r: Matrix(U), t: T) void {
+        pub fn evalBatch(self: @This(), comptime U: type, V: *Matrix(U), r: Matrix(U), t: T) !void {
             const t_val = Value(U).fromFloat(t);
 
             switch (self) {
                 inline else => |field| {
-                    for (0..r.nrow()) |i| field.eval(U, V.rowSlice(i), r.rowSlice(i), t_val.val);
+                    for (0..r.nrow()) |i| try field.eval(U, V.rowSlice(i), r.rowSlice(i), t_val.val);
                 },
             }
         }
@@ -187,6 +227,221 @@ pub fn Potential(comptime T: type) type {
             return switch (self) {
                 inline else => |field| field.nstate(),
             };
+        }
+    };
+}
+
+/// Returns an ab initio potential energy surface evaluating electronic energies and nuclear gradients on the fly.
+fn AbInitio(comptime T: type) type {
+    return struct {
+        gpa: Allocator,
+        inpout: std.Io,
+
+        options: AbInitioOptions,
+        msys: MolecularSystem(T),
+
+        Pg: ?Matrix(T),
+
+        /// Initializes the molecular system and electronic structure method configuration.
+        pub fn init(io: std.Io, options: AbInitioOptions, gpa: Allocator) !@This() {
+            const sys_file, const basis_name, const charge, const multi, const gen = switch (options.method) {
+                .hartree_fock => |opt| .{ opt.system, opt.basis, opt.charge, opt.multiplicity, opt.generalized },
+
+                inline else => |opt| .{
+                    opt.hartree_fock.system,
+                    opt.hartree_fock.basis,
+                    opt.hartree_fock.charge,
+                    opt.hartree_fock.multiplicity,
+                    opt.hartree_fock.generalized,
+                },
+            };
+
+            const has_grad = switch (options.method) {
+                .configuration_interaction => |opt| opt.gradient != null,
+                .hartree_fock => |opt| opt.gradient != null,
+                .moller_plesset => |opt| opt.gradient != null,
+            };
+
+            if (!has_grad) {
+                std.log.err("GRADIENT CALCULATION IS MANDATORY FOR AB INITIO POTENTIAL", .{});
+
+                return error.InvalidInput;
+            }
+
+            const basis_path = try exportIfBuiltin(io, basis_name, gpa);
+
+            defer if (std.mem.startsWith(u8, basis_name, "builtin:")) {
+                std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
+            };
+
+            var msys = try MolecularSystem(T).init(io, sys_file, basis_path, charge, multi, gpa);
+            errdefer msys.deinit(gpa);
+
+            if (std.mem.startsWith(u8, basis_name, "builtin:")) {
+                try std.Io.Dir.cwd().deleteFile(io, basis_path);
+            }
+
+            const nbf = if (gen) 2 * msys.nbf else msys.nbf;
+
+            var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
+            errdefer Pg.deinit(gpa);
+
+            return .{ .gpa = gpa, .inpout = io, .options = options, .msys = msys, .Pg = Pg };
+        }
+
+        /// Deallocates molecular system resources and cached density matrix.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            if (self.Pg) |*pg| pg.deinit(gpa);
+
+            self.msys.deinit(gpa);
+        }
+
+        /// Evaluates the electronic energy at nuclear coordinates r.
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
+            if (comptime U != T) {
+                @panic("AB INITIO POTENTIAL ONLY SUPPORTS DIRECT FLOATING POINT EVALUATION");
+            }
+
+            @memcpy(self.msys.coors, r);
+
+            libint.libint_update_coords(self.msys.ptr, self.msys.coors.ptr);
+
+            switch (self.options.method) {
+                .hartree_fock => |opt| {
+                    var res = try hf_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+                    defer res.deinit(self.gpa);
+
+                    if (self.Pg) |pg| @memcpy(pg.data, res.P.data);
+
+                    V[0] = res.energy[0];
+                },
+
+                .moller_plesset => |opt| {
+                    var res = try mp_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+                    defer res.deinit(self.gpa);
+
+                    if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
+
+                    V[0] = res.energy[0];
+                },
+
+                .configuration_interaction => |opt| {
+                    var res = try ci_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+                    defer res.deinit(self.gpa);
+
+                    if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
+
+                    const n = self.nstate();
+
+                    @memset(V[0 .. n * n], 0);
+
+                    for (0..n) |k| {
+                        V[k * n + k] = res.energy[k];
+                    }
+                },
+            }
+        }
+
+        /// Evaluates the electronic energy and Cartesian nuclear gradients at coordinates r.
+        pub fn evalGrad(self: @This(), V: []T, grad_V: []T, r: []const T, active_state: usize) !void {
+            @memcpy(self.msys.coors, r);
+
+            libint.libint_update_coords(self.msys.ptr, self.msys.coors.ptr);
+
+            switch (self.options.method) {
+                .hartree_fock => |opt| {
+                    var res = try hf_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+                    defer res.deinit(self.gpa);
+
+                    if (self.Pg) |pg| @memcpy(pg.data, res.P.data);
+
+                    V[0] = res.energy[0];
+
+                    for (0..self.ndim()) |j| {
+                        grad_V[j] = res.grad[0].data[j];
+                    }
+                },
+
+                .moller_plesset => |opt| {
+                    var res = try mp_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+                    defer res.deinit(self.gpa);
+
+                    if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
+
+                    V[0] = res.energy[0];
+
+                    for (0..self.ndim()) |j| {
+                        grad_V[j] = res.grad[0].data[j];
+                    }
+                },
+
+                .configuration_interaction => |opt| {
+                    var run_opt = opt;
+
+                    if (run_opt.gradient) |*g| switch (g.*) {
+                        .analytic => |*a| a.state = @intCast(active_state),
+                        .numeric => |*num| num.state = @intCast(active_state),
+                    };
+
+                    var res = try ci_runFromSystem(T, self.inpout, run_opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+                    defer res.deinit(self.gpa);
+
+                    if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
+
+                    const n = self.nstate();
+
+                    @memset(V[0 .. n * n], 0);
+
+                    @memset(grad_V[0 .. self.ndim() * n * n], 0);
+
+                    for (0..n) |k| {
+                        V[k * n + k] = res.energy[k];
+                    }
+
+                    for (0..self.ndim()) |j| {
+                        grad_V[j * n * n + active_state * n + active_state] = res.grad[0].data[j];
+                    }
+                },
+            }
+        }
+
+        /// Returns false as this potential is independent of time.
+        pub fn isTd(_: @This()) bool {
+            return false;
+        }
+
+        /// Returns the Cartesian coordinate dimensionality of the molecular system.
+        pub fn ndim(self: @This()) usize {
+            return 3 * self.msys.atoms.len;
+        }
+
+        /// Returns the number of electronic states in the ab initio calculation.
+        pub fn nstate(self: @This()) usize {
+            return switch (self.options.method) {
+                .configuration_interaction => |opt| opt.nstate,
+
+                inline else => 1,
+            };
+        }
+
+        /// Updates potential values and gradients for all batch trajectory coordinate rows.
+        pub fn updateGradients(self: @This(), comptime U: type, V: *Matrix(U), grad_V: *Matrix(U), r: Matrix(U), states: []const usize) !void {
+            if (comptime U != T) {
+                @panic("AB INITIO POTENTIAL ONLY SUPPORTS DIRECT FLOATING POINT GRADIENT UPDATE");
+            }
+
+            for (0..r.nrow()) |i| {
+                try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), states[i]);
+            }
+        }
+
+        /// Updates potential value and gradient for a specific trajectory row and active electronic state.
+        pub fn updateTrajectoryGradient(self: @This(), comptime U: type, V: *Matrix(U), grad_V: *Matrix(U), r: Matrix(U), i: usize, active_state: usize) !void {
+            if (comptime U != T) {
+                @panic("AB INITIO POTENTIAL ONLY SUPPORTS DIRECT FLOATING POINT GRADIENT UPDATE");
+            }
+
+            try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), active_state);
         }
     };
 }
@@ -237,7 +492,7 @@ fn Custom(comptime T: type) type {
         }
 
         /// Evaluates custom potentials by parsing expressions using ExprTk.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, t: U) !void {
             if (comptime U == T) for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
                 V[i * self.nstate() + j] = self.expressions[i * self.nstate() + j].evaluate_d0(r, t);
             };
@@ -298,7 +553,7 @@ fn File(comptime T: type) type {
         }
 
         /// Evaluates the potential via multilinear interpolation of grid values.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
             for (0..self.nstate()) |i| for (0..self.nstate()) |j| {
                 const col = i * self.nstate() + j;
 
@@ -331,7 +586,7 @@ fn Harmonic(comptime T: type) type {
         }
 
         /// Evaluates the harmonic potential energy: V = 0.5 * sum( k_i * r_i^2 ).
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
             var sum = Value(U).fromFloat(0);
 
             for (0..r.len) |i| {
@@ -367,7 +622,7 @@ fn HenonHeiles(comptime T: type) type {
         }
 
         /// Evaluates the Henon-Heiles potential energy: V = 0.5 * omg^2 * (x^2 + y^2) + lmb * (x^2 * y - y^3 / 3).
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
             std.debug.assert(r.len == 2);
 
             const x = Value(U).init(r[0]);
@@ -409,7 +664,7 @@ fn JahnTeller(comptime T: type) type {
         }
 
         /// Evaluates the Jahn-Teller potential energy matrix: V = 0.5 * k * (x^2 + y^2) * I + g * [[x, y], [y, -x]].
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
             std.debug.assert(r.len == 2);
 
             const x = Value(U).init(r[0]);
@@ -473,7 +728,7 @@ fn Lvc(comptime T: type) type {
         }
 
         /// Evaluates the vibronic coupling potential matrix in Hartree at dimensionless normal coordinates r.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
             std.debug.assert(V.len == self.nstate() * self.nstate());
 
             var v0 = Value(U).fromFloat(0);
@@ -541,7 +796,7 @@ fn Morse(comptime T: type) type {
         }
 
         /// Evaluates the Morse potential energy: V = D * (1 - exp(-a * (r - r0)))^2.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
             const r0 = Value(U).init(r[0]);
 
             const D = Value(U).fromFloat(self.D);
@@ -583,7 +838,7 @@ fn TimeLinear(comptime T: type) type {
         }
 
         /// Evaluates the two-state time-dependent linear coupling potential matrix.
-        pub fn eval(self: @This(), comptime U: type, V: []U, _: []const U, t: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, _: []const U, t: U) !void {
             const a = Value(U).fromFloat(self.a);
             const g = Value(U).fromFloat(self.g);
 
@@ -625,7 +880,7 @@ fn Tully1(comptime T: type) type {
         }
 
         /// Evaluates the Tully simple avoided crossing two-state potential matrix.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
             const r0 = Value(U).init(r[0]);
 
             const A = Value(U).fromFloat(self.A);
@@ -672,7 +927,7 @@ fn Tully2(comptime T: type) type {
         }
 
         /// Evaluates the Tully dual avoided crossing two-state potential matrix.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
             const r0 = Value(U).init(r[0]);
 
             const A = Value(U).fromFloat(self.A);
@@ -722,7 +977,7 @@ fn Tully3(comptime T: type) type {
         }
 
         /// Evaluates the Tully extended coupling two-state potential matrix.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) void {
+        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
             const r0 = Value(U).init(r[0]);
 
             const A = Value(U).fromFloat(self.A);

@@ -305,7 +305,7 @@ pub fn Hamiltonian(comptime T: type) type {
             const u = self.u_buf.?;
             const v = self.v_buf.?;
 
-            _ = self.getV(grid, pot, t, i);
+            _ = try self.getV(grid, pot, t, i);
 
             try eighSlice(T, w, u, v);
 
@@ -313,7 +313,7 @@ pub fn Hamiltonian(comptime T: type) type {
         }
 
         /// Computes or retrieves potential energy matrix elements at grid coordinate index i.
-        pub fn getV(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) []const T {
+        pub fn getV(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) ![]const T {
             if (self.V) |V| return V.rowSlice(i);
 
             const buffer, const r_coords = .{ self.v_buf.?, self.r_buf.? };
@@ -324,7 +324,7 @@ pub fn Hamiltonian(comptime T: type) type {
                 r_coords[j] = if (self.cylindric and j == grid.ncol() - 1) @abs(val) else val;
             }
 
-            pot.eval(T, buffer, r_coords, t);
+            try pot.eval(T, buffer, r_coords, t);
 
             if (self.cylindric) {
                 const radial_idx = grid.ncol() - 1;
@@ -368,12 +368,12 @@ pub fn Hamiltonian(comptime T: type) type {
                             r_coords[j] = if (j == grid.ncol() - 1) @abs(val) else val;
                         }
 
-                        pot.eval(T, self.V.?.rowSlice(i), r_coords, t);
+                        try pot.eval(T, self.V.?.rowSlice(i), r_coords, t);
                     }
                 }
 
                 if (!self.cylindric) {
-                    pot.evalBatch(T, &self.V.?, r, t);
+                    try pot.evalBatch(T, &self.V.?, r, t);
                 }
             }
 
@@ -388,7 +388,7 @@ pub fn Hamiltonian(comptime T: type) type {
                         r_coords[j] = if (self.cylindric and j == grid.ncol() - 1) @abs(val) else val;
                     }
 
-                    pot.eval(T, self.V.?.rowSlice(i), r_coords, t);
+                    try pot.eval(T, self.V.?.rowSlice(i), r_coords, t);
                 }
             }
 
@@ -517,11 +517,11 @@ pub fn Wavefunction(comptime T: type) type {
         }
 
         /// Computes potential energy expectation value in coordinate space.
-        pub fn epot(self: @This(), ham: Hamiltonian(T), grid: Grid(T), pot: Potential(T), t: T, langer: T) T {
+        pub fn epot(self: @This(), ham: Hamiltonian(T), grid: Grid(T), pot: Potential(T), t: T, langer: T) !T {
             var value: T = 0;
 
             for (0..self.W.ncol()) |j| {
-                const V_j = ham.getV(grid, pot, t, j);
+                const V_j = try ham.getV(grid, pot, t, j);
 
                 for (0..self.W.nrow()) |i| {
                     for (0..self.W.nrow()) |k| {

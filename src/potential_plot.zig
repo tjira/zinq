@@ -71,7 +71,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    pot.evalBatch(T, &U, grid.r.?, opt.time);
+    try pot.evalBatch(T, &U, grid.r.?, opt.time);
 
     if (log) {
         try printf(io, "COMPUTE POTENTIAL: {f}\n", .{timer.untilNow(io, .real)});

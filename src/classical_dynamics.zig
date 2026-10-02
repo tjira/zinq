@@ -5,6 +5,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
+const AbInitioWrite = @import("potential.zig").AbInitioWrite;
 const Ehrenfest = @import("ehrenfest.zig").Ehrenfest;
 const EhrenfestOptions = @import("ehrenfest.zig").Options;
 const Matrix = @import("tensor.zig").Matrix;
@@ -19,19 +20,23 @@ const Vector = @import("tensor.zig").Vector;
 
 const eighBatch = @import("linear_algebra.zig").eighBatch;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
+const getMass = @import("constant.zig").getMass;
+const getTrajectoryPath = @import("read_write.zig").getTrajectoryPath;
 const norm = @import("linear_algebra.zig").norm;
 const printf = @import("read_write.zig").printf;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
+const writeXyzFrame = @import("read_write.zig").writeXyzFrame;
 
+const AMU2AU = @import("constant.zig").AMU2AU;
 const AU2K = @import("constant.zig").AU2K;
 
 /// Configuration options for the classical molecular dynamics simulation.
 pub const Options = struct {
     adiabatic: bool = true,
-    initial_conditions: InitialConditions,
+    initial_conditions: InitialConditions = .{},
     iterations: u32,
     log_interval: u32 = 1,
-    mass: []const f64,
+    mass: ?[]const f64 = null,
     nonadiabatic: ?NonadiabaticOptions = null,
     potential: PotentialOptions,
     thermostat: ?ThermostatOptions = null,
@@ -48,11 +53,12 @@ pub const NonadiabaticOptions = union(enum) {
 
 /// Initial phase space parameters and Gaussian width for trajectory sampling.
 const InitialConditions = struct {
-    gamma: []const f64,
-    momentum: []const f64,
-    position: []const f64,
+    gamma: ?[]const f64 = null,
+    momentum: ?[]const f64 = null,
+    position: ?[]const f64 = null,
     seed: u32 = 1,
     state: u32 = 0,
+    temperature: ?f64 = null,
 };
 
 /// Output paths for recording trajectory observables to disk during dynamics.
@@ -62,6 +68,7 @@ const Write = struct {
     population: ?[]const u8 = null,
     position: ?[]const u8 = null,
     potential_energy: ?[]const u8 = null,
+    state_potential_energy: ?[]const u8 = null,
     temperature: ?[]const u8 = null,
     total_energy: ?[]const u8 = null,
 };
@@ -117,50 +124,6 @@ pub fn Ensemble(comptime T: type) type {
             };
 
             return sum / @as(T, @floatFromInt(self.p.nrow()));
-        }
-
-        /// Calculates the average potential energy of the ensemble based on active electronic states.
-        pub fn epot(self: @This(), pot: Potential(T), time: T, adiabatic: bool, coefs: ?Matrix(Complex(T)), gpa: Allocator) !T {
-            var sum: T = 0;
-
-            const V_slice = try gpa.alloc(T, pot.nstate() * pot.nstate());
-            defer gpa.free(V_slice);
-
-            const U_slice = try gpa.alloc(T, pot.nstate() * pot.nstate());
-            defer gpa.free(U_slice);
-
-            const W_slice = try gpa.alloc(T, pot.nstate());
-            defer gpa.free(W_slice);
-
-            if (coefs) |coef| for (0..self.r.nrow()) |i| {
-                pot.eval(T, V_slice, self.r.rowSlice(i), time);
-
-                var traj_epot: T = 0;
-
-                for (0..pot.nstate()) |k| for (0..pot.nstate()) |l| {
-                    const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
-
-                    traj_epot += rho_kl * V_slice[k * pot.nstate() + l];
-                };
-
-                sum += traj_epot;
-            };
-
-            if (coefs == null and adiabatic) for (0..self.r.nrow()) |i| {
-                pot.eval(T, V_slice, self.r.rowSlice(i), time);
-
-                try eighSlice(T, W_slice, U_slice, V_slice);
-
-                sum += W_slice[self.s.at(i)];
-            };
-
-            if (coefs == null and !adiabatic) for (0..self.r.nrow()) |i| {
-                pot.eval(T, V_slice, self.r.rowSlice(i), time);
-
-                sum += V_slice[self.s.at(i) * pot.nstate() + self.s.at(i)];
-            };
-
-            return sum / @as(T, @floatFromInt(self.r.nrow()));
         }
 
         /// Computes the mean momentum vector averaged over all trajectories in the ensemble.
@@ -224,9 +187,10 @@ pub fn Ensemble(comptime T: type) type {
             return value;
         }
 
-        /// Samples initial positions and momenta from a Wigner-like Gaussian distribution.
-        pub fn setGaussian(self: *@This(), ic: InitialConditions) void {
+        /// Samples initial positions and momenta from a Wigner-like Gaussian distribution or reference geometry.
+        pub fn setGaussian(self: *@This(), ic: InitialConditions, default_pos: ?[]const T) void {
             var split_mix = std.Random.SplitMix64.init(ic.seed);
+
             var rng = std.Random.DefaultPrng.init(split_mix.next());
 
             for (0..self.s.length()) |i| {
@@ -236,15 +200,39 @@ pub fn Ensemble(comptime T: type) type {
             const random = rng.random();
 
             for (0..self.r.nrow()) |i| for (0..self.r.ncol()) |j| {
-                const stdev = 1 / std.math.sqrt(2 * ic.gamma[j]);
+                const r0 = if (ic.position) |r_pos| r_pos[j] else default_pos.?[j];
 
-                self.r.ptr(i, j).* = ic.position[j] + stdev * random.floatNorm(T);
+                if (ic.gamma) |gamma| {
+                    const stdev = 1 / std.math.sqrt(2 * gamma[j]);
+
+                    self.r.ptr(i, j).* = r0 + stdev * random.floatNorm(T);
+                }
+
+                if (ic.gamma == null) {
+                    self.r.ptr(i, j).* = r0;
+                }
             };
 
             for (0..self.p.nrow()) |i| for (0..self.p.ncol()) |j| {
-                const stdev = std.math.sqrt(ic.gamma[j] / 2);
+                const p0 = if (ic.momentum) |p_mom| p_mom[j] else 0;
 
-                self.p.ptr(i, j).* = ic.momentum[j] + stdev * random.floatNorm(T);
+                if (ic.temperature) |t_val| {
+                    const stdev = std.math.sqrt(self.m[j] * @as(T, @floatCast(t_val)) / AU2K);
+
+                    self.p.ptr(i, j).* = p0 + stdev * random.floatNorm(T);
+
+                    continue;
+                }
+
+                if (ic.gamma) |gamma| {
+                    const stdev = std.math.sqrt(gamma[j] / 2);
+
+                    self.p.ptr(i, j).* = p0 + stdev * random.floatNorm(T);
+
+                    continue;
+                }
+
+                self.p.ptr(i, j).* = p0;
             };
         }
 
@@ -266,6 +254,65 @@ pub fn Result(comptime T: type) type {
         }
     };
 }
+
+/// Manages streaming output files for multi-trajectory ab initio property logging.
+const AbInitioStreamWriter = struct {
+    files_pos: ?[]std.Io.File = null,
+
+    /// Initializes and opens trajectory output files on disk for configured properties.
+    pub fn init(io: std.Io, write: AbInitioWrite, ntraj: usize, gpa: Allocator) !@This() {
+        var self = @This(){};
+        errdefer self.deinit(io, gpa);
+
+        if (write.position) |path| {
+            self.files_pos = try initFiles(io, path, ntraj, gpa);
+        }
+
+        return self;
+    }
+
+    /// Closes all trajectory output files and deallocates handles.
+    pub fn deinit(self: *@This(), io: std.Io, gpa: Allocator) void {
+        if (self.files_pos) |files| {
+            for (files) |*file| file.close(io);
+
+            gpa.free(files);
+        }
+    }
+
+    /// Appends the current step's nuclear coordinates to trajectory files.
+    pub fn writeFrame(self: @This(), io: std.Io, comptime T: type, atoms: []const i32, r: Matrix(T), time: T) !void {
+        if (self.files_pos) |files| {
+            var buffer: [65536]u8 = undefined;
+
+            for (0..files.len) |k| {
+                var writer = files[k].writerStreaming(io, &buffer);
+
+                try writeXyzFrame(T, &writer, atoms, r.rowSlice(k), time);
+
+                try writer.interface.flush();
+            }
+        }
+    }
+
+    /// Opens output files for each trajectory in the ensemble.
+    fn initFiles(io: std.Io, path: []const u8, ntraj: usize, gpa: Allocator) ![]std.Io.File {
+        const files = try gpa.alloc(std.Io.File, ntraj);
+        errdefer gpa.free(files);
+
+        var count: usize = 0;
+        errdefer for (0..count) |k| files[k].close(io);
+
+        while (count < ntraj) : (count += 1) {
+            const fname = try getTrajectoryPath(path, count, ntraj, gpa);
+            defer if (ntraj > 1) gpa.free(fname);
+
+            files[count] = try std.Io.Dir.cwd().createFile(io, fname, .{});
+        }
+
+        return files;
+    }
+};
 
 /// Helper struct managing memory for potential energy gradients and wavefunctions.
 fn GradientBuffer(comptime T: type) type {
@@ -357,25 +404,83 @@ fn GradientBuffer(comptime T: type) type {
             };
         }
 
-        /// Evaluates the potential and its gradients using automatic differentiation.
-        pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T) !void {
-            pot.evalBatch(T, &self.V, r, time);
+        /// Calculates average potential energy from cached gradient buffer matrices.
+        pub fn epot(self: @This(), ensemble: Ensemble(T), nstate: usize, coefs: ?Matrix(Complex(T))) T {
+            var sum: T = 0;
 
-            if (self.adia) {
-                try eighBatch(T, &self.W, &self.U, self.V);
-            }
+            if (coefs) |coef| for (0..ensemble.r.nrow()) |i| {
+                var traj_epot: T = 0;
 
-            for (0..r.nrow()) |i| for (0..r.ncol()) |j| {
-                for (0..r.ncol()) |k| {
-                    self.r_dual.ptr(i, k).* = ScalarDual(T).init(r.at(i, k), if (k == j) 1 else 0);
-                }
+                for (0..nstate) |k| for (0..nstate) |l| {
+                    const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
 
-                pot.eval(ScalarDual(T), self.V_dual.rowSlice(i), self.r_dual.rowSlice(i), ScalarDual(T).init(time, 0));
+                    traj_epot += rho_kl * self.V.at(i, k * nstate + l);
+                };
 
-                for (0..pot.nstate() * pot.nstate()) |k| {
-                    self.grad_V.ptr(i, j * pot.nstate() * pot.nstate() + k).* = self.V_dual.at(i, k).der;
-                }
+                sum += traj_epot;
             };
+
+            if (coefs == null and self.adia) for (0..ensemble.r.nrow()) |i| {
+                sum += self.W.at(i, ensemble.s.at(i));
+            };
+
+            if (coefs == null and !self.adia) for (0..ensemble.r.nrow()) |i| {
+                sum += self.V.at(i, ensemble.s.at(i) * nstate + ensemble.s.at(i));
+            };
+
+            return sum / @as(T, @floatFromInt(ensemble.r.nrow()));
+        }
+
+        /// Computes the ensemble-averaged potential energy for each electronic state.
+        pub fn epotState(self: @This(), nstate: usize, gpa: Allocator) !Vector(T) {
+            var value = try Vector(T).initZero(nstate, gpa);
+
+            for (0..self.V.nrow()) |i| for (0..nstate) |k| {
+                const v_k = if (self.adia) self.W.at(i, k) else self.V.at(i, k * nstate + k);
+
+                value.ptr(k).* += v_k;
+            };
+
+            value.divs(@floatFromInt(self.V.nrow()));
+
+            return value;
+        }
+
+        /// Evaluates the potential and its gradients using automatic differentiation or direct ab initio evaluation.
+        pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T, states: []const usize) !void {
+            switch (pot) {
+                .ab_initio => |ab| {
+                    try ab.updateGradients(T, &self.V, &self.grad_V, r, states);
+
+                    if (self.adia) for (0..self.V.nrow()) |i| for (0..pot.nstate()) |k| {
+                        self.W.ptr(i, k).* = self.V.at(i, k * pot.nstate() + k);
+
+                        for (0..pot.nstate()) |l| {
+                            self.U.ptr(i, k * pot.nstate() + l).* = if (k == l) 1 else 0;
+                        }
+                    };
+                },
+
+                inline else => {
+                    try pot.evalBatch(T, &self.V, r, time);
+
+                    if (self.adia) {
+                        try eighBatch(T, &self.W, &self.U, self.V);
+                    }
+
+                    for (0..r.nrow()) |i| for (0..r.ncol()) |j| {
+                        for (0..r.ncol()) |k| {
+                            self.r_dual.ptr(i, k).* = ScalarDual(T).init(r.at(i, k), if (k == j) 1 else 0);
+                        }
+
+                        try pot.eval(ScalarDual(T), self.V_dual.rowSlice(i), self.r_dual.rowSlice(i), ScalarDual(T).init(time, 0));
+
+                        for (0..pot.nstate() * pot.nstate()) |k| {
+                            self.grad_V.ptr(i, j * pot.nstate() * pot.nstate() + k).* = self.V_dual.at(i, k).der;
+                        }
+                    };
+                },
+            }
         }
     };
 }
@@ -386,6 +491,8 @@ fn History(comptime T: type) type {
         pos: ?Matrix(T) = null,
         mom: ?Matrix(T) = null,
         pop: ?Matrix(T) = null,
+
+        state_epot: ?Matrix(T) = null,
 
         epot: ?Matrix(T) = null,
         ekin: ?Matrix(T) = null,
@@ -413,6 +520,10 @@ fn History(comptime T: type) type {
                 hist.pop = try Matrix(T).init(iters, nstate, gpa);
             }
 
+            if (write.state_potential_energy != null) {
+                hist.state_epot = try Matrix(T).init(iters, nstate, gpa);
+            }
+
             if (store_ekin) hist.ekin = try Matrix(T).init(iters, 1, gpa);
             if (store_epot) hist.epot = try Matrix(T).init(iters, 1, gpa);
             if (store_etot) hist.etot = try Matrix(T).init(iters, 1, gpa);
@@ -427,6 +538,8 @@ fn History(comptime T: type) type {
             if (self.pos) |*pos| pos.deinit(gpa);
             if (self.mom) |*mom| mom.deinit(gpa);
             if (self.pop) |*pop| pop.deinit(gpa);
+
+            if (self.state_epot) |*state_epot| state_epot.deinit(gpa);
 
             if (self.epot) |*epot| epot.deinit(gpa);
             if (self.ekin) |*ekin| ekin.deinit(gpa);
@@ -448,6 +561,10 @@ fn History(comptime T: type) type {
 
             if (self.pop) |*pop| if (obs.pop) |v| {
                 for (0..v.length()) |j| pop.ptr(step_idx, j).* = v.at(j);
+            };
+
+            if (self.state_epot) |*state_epot| if (obs.state_epot) |v| {
+                for (0..v.length()) |j| state_epot.ptr(step_idx, j).* = v.at(j);
             };
 
             if (self.epot) |*epot| {
@@ -489,6 +606,10 @@ fn History(comptime T: type) type {
                 try writeMatrixLspace(T, io, path, self.epot.?.takeRows(self.index), 0, end);
             }
 
+            if (write.state_potential_energy) |path| {
+                try writeMatrixLspace(T, io, path, self.state_epot.?.takeRows(self.index), 0, end);
+            }
+
             if (write.kinetic_energy) |path| {
                 try writeMatrixLspace(T, io, path, self.ekin.?.takeRows(self.index), 0, end);
             }
@@ -511,12 +632,14 @@ fn Observables(comptime T: type) type {
         mom: ?Vector(T) = null,
         pop: ?Vector(T) = null,
 
+        state_epot: ?Vector(T) = null,
+
         epot: ?T = null,
         ekin: ?T = null,
         temp: ?T = null,
 
         /// Computes the physical observables from the current simulation state.
-        pub fn init(sim: SimulationState(T), time: T, write: Write, log: bool, has_thermo: bool, gpa: Allocator) !@This() {
+        pub fn init(sim: SimulationState(T), write: Write, log: bool, has_thermo: bool, gpa: Allocator) !@This() {
             var obs = @This(){};
             errdefer obs.deinit(gpa);
 
@@ -540,16 +663,20 @@ fn Observables(comptime T: type) type {
             if (calc.mom) obs.mom = try sim.ensemble.mom(gpa);
             if (calc.pos) obs.pos = try sim.ensemble.pos(gpa);
 
-            const coefs = if (sim.propag.namd) |*n| (if (n.* == .ehrenfest) n.ehrenfest.coefics else null) else null;
+            const coefs = if (sim.propag.nonadia_dynamic) |n| (if (n == .ehrenfest) n.ehrenfest.coefics else null) else null;
 
             if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefs, sim.gb.U, sim.gb.adia, gpa);
+
+            if (write.state_potential_energy != null) {
+                obs.state_epot = try sim.gb.epotState(sim.elpoten.nstate(), gpa);
+            }
 
             if (calc.ekin) {
                 obs.ekin = sim.ensemble.ekin();
             }
 
             if (calc.epot) {
-                obs.epot = try sim.ensemble.epot(sim.elpoten, time, sim.gb.adia, coefs, gpa);
+                obs.epot = sim.gb.epot(sim.ensemble, sim.elpoten.nstate(), coefs);
             }
 
             if (calc.temp) {
@@ -564,6 +691,8 @@ fn Observables(comptime T: type) type {
             if (self.pos) |*pos| pos.deinit(gpa);
             if (self.mom) |*mom| mom.deinit(gpa);
             if (self.pop) |*pop| pop.deinit(gpa);
+
+            if (self.state_epot) |*state_epot| state_epot.deinit(gpa);
         }
     };
 }
@@ -577,7 +706,7 @@ fn Propagator(comptime T: type) type {
             ehrenfest: Ehrenfest(T),
         };
 
-        namd: ?Namd = null,
+        nonadia_dynamic: ?Namd = null,
         thermo: ?Thermostat(T) = null,
 
         dt: T,
@@ -586,30 +715,30 @@ fn Propagator(comptime T: type) type {
         pub fn init(opt: Options, nstate: usize, gpa: Allocator) !@This() {
             const istate = opt.initial_conditions.state;
 
-            var namd: ?Namd = null;
+            var nonadia_dynamic: ?Namd = null;
 
             if (opt.nonadiabatic) |naopt| if (naopt == .surface_hopping) {
                 const sh_opt, const trajs = .{ naopt.surface_hopping, opt.trajectories };
 
                 const sh = try SurfaceHopping(T).init(sh_opt, nstate, trajs, istate, opt.adiabatic, gpa);
 
-                namd = .{ .surface_hopping = sh };
+                nonadia_dynamic = .{ .surface_hopping = sh };
             };
 
             if (opt.nonadiabatic) |naopt| if (naopt == .ehrenfest) {
                 const eh = try Ehrenfest(T).init(naopt.ehrenfest, nstate, opt.trajectories, gpa);
 
-                namd = .{ .ehrenfest = eh };
+                nonadia_dynamic = .{ .ehrenfest = eh };
             };
 
             const thermo = if (opt.thermostat) |topt| Thermostat(T).init(topt, @floatCast(opt.time_step)) else null;
 
-            return .{ .dt = @floatCast(opt.time_step), .namd = namd, .thermo = thermo };
+            return .{ .dt = @floatCast(opt.time_step), .nonadia_dynamic = nonadia_dynamic, .thermo = thermo };
         }
 
         /// Deallocates surface hopping resources.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            if (self.namd) |*namd| switch (namd.*) {
+            if (self.nonadia_dynamic) |*namd| switch (namd.*) {
                 inline else => |*n| n.deinit(gpa),
             };
         }
@@ -630,13 +759,13 @@ fn Propagator(comptime T: type) type {
                 ens.r.ptr(i, j).* += 0.5 * (ens.p.at(i, j) / ens.m[j]) * self.dt;
             };
 
-            try gb.update(ens.r, pot, time);
+            try gb.update(ens.r, pot, time, ens.s.data);
 
-            if (self.namd) |*n| if (n.* == .ehrenfest) {
+            if (self.nonadia_dynamic) |*n| if (n.* == .ehrenfest) {
                 try n.ehrenfest.step(gb.V, self.dt);
             };
 
-            const coefics = if (self.namd) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
+            const coefics = if (self.nonadia_dynamic) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
 
             gb.apply(ens, pot, coefics);
 
@@ -644,8 +773,18 @@ fn Propagator(comptime T: type) type {
                 ens.p.ptr(i, j).* += 0.5 * ens.m[j] * ens.a.at(i, j) * self.dt;
             };
 
-            if (self.namd) |*n| if (n.* == .surface_hopping) {
-                try n.surface_hopping.hop(ens, gb.V, gb.W, gb.U, self.dt);
+            if (self.nonadia_dynamic) |*n| if (n.* == .surface_hopping) {
+                if (try n.surface_hopping.hop(ens, gb.V, gb.W, gb.U, self.dt)) {
+                    for (0..ens.s.length()) |i| if (ens.s.at(i) != n.surface_hopping.targets[i]) {
+                        switch (pot) {
+                            .ab_initio => |ab| {
+                                try ab.updateTrajectoryGradient(T, &gb.V, &gb.grad_V, ens.r, i, ens.s.at(i));
+                            },
+
+                            inline else => {},
+                        }
+                    };
+                }
 
                 gb.apply(ens, pot, null);
             };
@@ -706,18 +845,6 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
-    for (opt.mass) |m| if (m <= 0) {
-        std.log.err("MASS MUST BE GREATER THAN 0", .{});
-
-        return error.InvalidInput;
-    };
-
-    if (opt.mass.len != opt.initial_conditions.position.len) {
-        std.log.err("MASS VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
-
-        return error.InvalidInput;
-    }
-
     if (opt.trajectories == 0) {
         std.log.err("NUMBER OF TRAJECTORIES MUST BE GREATER THAN 0", .{});
 
@@ -730,22 +857,74 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
-    if (opt.initial_conditions.position.len == 0) {
-        std.log.err("INITIAL POSITION VECTOR MUST NOT BE EMPTY", .{});
+    if (opt.mass) |mass_vec| {
+        if (opt.potential == .ab_initio) {
+            std.log.err("MASS VECTOR MUST NOT BE PROVIDED FOR AB INITIO POTENTIAL", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (mass_vec) |m| if (m <= 0) {
+            std.log.err("MASS MUST BE GREATER THAN 0", .{});
+
+            return error.InvalidInput;
+        };
+
+        if (opt.initial_conditions.position) |pos| if (mass_vec.len != pos.len) {
+            std.log.err("MASS VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
+
+            return error.InvalidInput;
+        };
+    }
+
+    if (opt.mass == null and opt.potential != .ab_initio) {
+        std.log.err("MASS VECTOR MUST BE PROVIDED FOR MODEL POTENTIALS", .{});
 
         return error.InvalidInput;
     }
 
-    if (opt.initial_conditions.momentum.len != opt.initial_conditions.position.len) {
-        std.log.err("INITIAL MOMENTUM AND POSITION VECTORS MUST HAVE THE SAME LENGTH", .{});
+    if (opt.initial_conditions.position) |pos| {
+        if (pos.len == 0) {
+            std.log.err("INITIAL POSITION VECTOR MUST NOT BE EMPTY", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (opt.initial_conditions.momentum) |mom| if (mom.len != pos.len) {
+            std.log.err("INITIAL MOMENTUM AND POSITION VECTORS MUST HAVE THE SAME LENGTH", .{});
+
+            return error.InvalidInput;
+        };
+
+        if (opt.initial_conditions.gamma) |gam| if (gam.len != pos.len) {
+            std.log.err("INITIAL GAMMA VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
+
+            return error.InvalidInput;
+        };
+    }
+
+    if (opt.initial_conditions.position == null and opt.potential != .ab_initio) {
+        std.log.err("INITIAL POSITION VECTOR MUST BE PROVIDED FOR MODEL POTENTIALS", .{});
 
         return error.InvalidInput;
     }
 
-    if (opt.initial_conditions.gamma.len != opt.initial_conditions.position.len) {
-        std.log.err("INITIAL GAMMA VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
+    if (opt.potential == .ab_initio and opt.nonadiabatic != null) {
+        switch (opt.nonadiabatic.?) {
+            .ehrenfest => {
+                std.log.err("EHRENFEST DYNAMICS IS NOT SUPPORTED FOR AB INITIO POTENTIAL WITHOUT NACVS", .{});
 
-        return error.InvalidInput;
+                return error.InvalidInput;
+            },
+            .surface_hopping => |sh| switch (sh) {
+                .fewest_switches => {
+                    std.log.err("FSSH IS NOT SUPPORTED FOR AB INITIO POTENTIAL WITHOUT NACVS", .{});
+
+                    return error.InvalidInput;
+                },
+                inline else => {},
+            },
+        }
     }
 
     if (opt.thermostat) |topt| switch (topt) {
@@ -783,11 +962,21 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     var pot = try Potential(T).init(io, opt.potential, gpa);
     errdefer pot.deinit(gpa);
 
-    const mass = try gpa.alloc(T, opt.mass.len);
+    const mass = try gpa.alloc(T, pot.ndim());
     defer gpa.free(mass);
 
-    for (opt.mass, 0..) |m, i| {
-        mass[i] = @floatCast(m);
+    switch (pot) {
+        .ab_initio => |ab| for (0..ab.msys.atoms.len) |i| {
+            const m_au = try getMass(T, ab.msys.atoms[i]) * AMU2AU;
+
+            mass[i * 3 + 0] = m_au;
+            mass[i * 3 + 1] = m_au;
+            mass[i * 3 + 2] = m_au;
+        },
+
+        inline else => for (opt.mass.?, 0..) |m, i| {
+            mass[i] = @floatCast(m);
+        },
     }
 
     var ensemble = try Ensemble(T).init(pot.ndim(), opt.trajectories, mass, gpa);
@@ -799,19 +988,25 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     var prop = try Propagator(T).init(opt, pot.nstate(), gpa);
     errdefer prop.deinit(gpa);
 
-    ensemble.setGaussian(opt.initial_conditions);
+    const default_pos = switch (pot) {
+        .ab_initio => |ab| ab.msys.coors,
 
-    try gb.update(ensemble.r, pot, 0);
+        inline else => null,
+    };
 
-    if (prop.namd) |*n| if (n.* == .surface_hopping) {
+    ensemble.setGaussian(opt.initial_conditions, default_pos);
+
+    try gb.update(ensemble.r, pot, 0, ensemble.s.data);
+
+    if (prop.nonadia_dynamic) |*n| if (n.* == .surface_hopping) {
         n.surface_hopping.update(if (opt.adiabatic) gb.W else gb.V, gb.U);
     };
 
-    if (prop.namd) |*n| if (n.* == .ehrenfest) {
+    if (prop.nonadia_dynamic) |*n| if (n.* == .ehrenfest) {
         n.ehrenfest.setInitialState(opt.initial_conditions.state, opt.adiabatic, gb.U);
     };
 
-    const coefs = if (prop.namd) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
+    const coefs = if (prop.nonadia_dynamic) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
 
     gb.apply(&ensemble, pot, coefs);
 
@@ -833,6 +1028,9 @@ fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
 fn printHeader(io: std.Io, ndim: usize, nstate: usize, has_thermo: bool) !void {
     try std.Io.File.stdout().writeStreamingAll(io, "\nREAL-TIME PROPAGATION");
 
+    const col_width = @as(usize, 12) * @min(ndim, @as(usize, 3)) + (if (ndim > 3) @as(usize, 5) else @as(usize, 0));
+    const pop_width = @as(usize, 11) * @min(nstate, @as(usize, 3)) + (if (nstate > 3) @as(usize, 5) else @as(usize, 0));
+
     if (has_thermo) {
         const fmt = "\n{[0]s:8} {[1]s:12} {[2]s:12} {[3]s:12} {[4]s:12} {[5]s:[6]} {[7]s:[8]} {[9]s:[10]} {[11]s:4}\n";
 
@@ -845,13 +1043,13 @@ fn printHeader(io: std.Io, ndim: usize, nstate: usize, has_thermo: bool) !void {
             "TEMP (K)",
 
             "POS (a0)",
-            12 * ndim,
+            col_width,
 
             "MOM (hb/a0)",
-            12 * ndim,
+            col_width,
 
             "POP (-)",
-            11 * nstate,
+            pop_width,
 
             "TIME",
         };
@@ -870,13 +1068,13 @@ fn printHeader(io: std.Io, ndim: usize, nstate: usize, has_thermo: bool) !void {
             "ETOT (Eh)",
 
             "POS (a0)",
-            12 * ndim,
+            col_width,
 
             "MOM (hb/a0)",
-            12 * ndim,
+            col_width,
 
             "POP (-)",
-            11 * nstate,
+            pop_width,
 
             "TIME",
         };
@@ -898,31 +1096,49 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, h
         try printf(io, "{d:12.2} ", .{temp});
     };
 
-    if (obs.pos) |pos| {
+    if (obs.pos) |pos_vec| {
         try printf(io, "[", .{});
 
-        for (0..pos.length()) |j| {
-            try printf(io, "{d:10.4}{s}", .{ pos.at(j), if (j == pos.length() - 1) "" else ", " });
+        const n_show = @min(pos_vec.length(), 3);
+
+        for (0..n_show) |j| {
+            try printf(io, "{d:10.4}{s}", .{ pos_vec.at(j), if (j == pos_vec.length() - 1) "" else ", " });
+        }
+
+        if (pos_vec.length() > 3) {
+            try printf(io, "...", .{});
         }
 
         try printf(io, "] ", .{});
     }
 
-    if (obs.mom) |mom| {
+    if (obs.mom) |mom_vec| {
         try printf(io, "[", .{});
 
-        for (0..mom.length()) |j| {
-            try printf(io, "{d:10.4}{s}", .{ mom.at(j), if (j == mom.length() - 1) "" else ", " });
+        const n_show = @min(mom_vec.length(), 3);
+
+        for (0..n_show) |j| {
+            try printf(io, "{d:10.4}{s}", .{ mom_vec.at(j), if (j == mom_vec.length() - 1) "" else ", " });
+        }
+
+        if (mom_vec.length() > 3) {
+            try printf(io, "...", .{});
         }
 
         try printf(io, "] ", .{});
     }
 
-    if (obs.pop) |pop| {
+    if (obs.pop) |pop_vec| {
         try printf(io, "[", .{});
 
-        for (0..pop.length()) |j| {
-            try printf(io, "{d:9.4}{s}", .{ pop.at(j), if (j == pop.length() - 1) "" else ", " });
+        const n_show = @min(pop_vec.length(), 3);
+
+        for (0..n_show) |j| {
+            try printf(io, "{d:9.4}{s}", .{ pop_vec.at(j), if (j == pop_vec.length() - 1) "" else ", " });
+        }
+
+        if (pop_vec.length() > 3) {
+            try printf(io, "...", .{});
         }
 
         try printf(io, "] ", .{});
@@ -941,6 +1157,24 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
 
     if (ctx.log) try printHeader(io, ndim, nstate, has_thermo);
 
+    const atoms = switch (ctx.sim.elpoten) {
+        .ab_initio => |ab| ab.msys.atoms,
+
+        inline else => &.{},
+    };
+
+    var stream_writer: ?AbInitioStreamWriter = null;
+
+    if (ctx.sim.elpoten == .ab_initio) {
+        const ab = ctx.sim.elpoten.ab_initio;
+
+        if (ab.options.write.any()) {
+            stream_writer = try AbInitioStreamWriter.init(io, ab.options.write, ctx.sim.ensemble.r.nrow(), gpa);
+        }
+    }
+
+    defer if (stream_writer) |*sw| sw.deinit(io, gpa);
+
     var hist = try History(T).init(ndim, nstate, ctx.opt.iterations + 1, ctx.opt.write, gpa);
     defer hist.deinit(gpa);
 
@@ -953,9 +1187,13 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
             try ctx.sim.propag.step(&ctx.sim.ensemble, &ctx.sim.gb, ctx.sim.elpoten, time);
         }
 
+        if (stream_writer) |sw| {
+            try sw.writeFrame(io, T, atoms, ctx.sim.ensemble.r, time);
+        }
+
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));
 
-        var obs = try Observables(T).init(ctx.sim.*, time, ctx.opt.write, is_log_step, has_thermo, gpa);
+        var obs = try Observables(T).init(ctx.sim.*, ctx.opt.write, is_log_step, has_thermo, gpa);
         defer obs.deinit(gpa);
 
         hist.append(obs);
@@ -967,7 +1205,5 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
 
     try hist.exportWrite(io, ctx.opt.time_step, ctx.opt.write);
 
-    const end_time = @as(T, @floatFromInt(ctx.opt.iterations)) * ctx.opt.time_step;
-
-    return try Observables(T).init(ctx.sim.*, end_time, ctx.opt.write, true, has_thermo, gpa);
+    return try Observables(T).init(ctx.sim.*, ctx.opt.write, true, has_thermo, gpa);
 }

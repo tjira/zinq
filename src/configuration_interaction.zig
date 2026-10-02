@@ -48,6 +48,7 @@ pub const Options = struct {
     gradient: ?GradientOptions = null,
     hartree_fock: HartreeFockOptions,
     hessian: ?HessianOptions = null,
+    nstate: u32 = 1,
     nthreads: u32 = 1,
     optimize: ?OptimizeOptions = null,
     write: Write = .{},
@@ -282,6 +283,12 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         dets.deinit(gpa);
     }
 
+    if (opt.nstate > dets.items.len) {
+        std.log.err("NUMBER OF REQUESTED CI STATES EXCEEDS DETERMINANT COUNT", .{});
+
+        return error.InvalidInput;
+    }
+
     if (log) {
         const params = .{ timer.untilNow(io, .real), dets.items.len };
 
@@ -300,7 +307,19 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (log) {
-        try printf(io, "\nFINAL CI ENERGY: {d:.14} Eh\n", .{E.at(0)});
+        const n_states = @min(opt.nstate, E.length());
+
+        if (n_states == 1) {
+            try printf(io, "\nFINAL CI ENERGY: {d:.14} Eh\n", .{E.at(0)});
+        }
+
+        if (n_states > 1) {
+            try printf(io, "\nFINAL CI ENERGIES:\n", .{});
+
+            for (0..n_states) |s| {
+                try printf(io, "STATE {d:2}: {d:.14} Eh\n", .{ s, E.at(s) });
+            }
+        }
     }
 
     var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
@@ -506,6 +525,36 @@ fn checkInvalidInput(opt: Options) !void {
         std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
 
         return error.InvalidInput;
+    }
+
+    if (opt.nstate == 0) {
+        std.log.err("NUMBER OF CI STATES MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.gradient) |gradopt| {
+        const grad_state = switch (gradopt) {
+            inline else => |g| g.state,
+        };
+
+        if (grad_state >= opt.nstate) {
+            std.log.err("GRADIENT STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        }
+    }
+
+    if (opt.hessian) |hessopt| {
+        const hess_state = switch (hessopt) {
+            inline else => |h| h.state,
+        };
+
+        if (hess_state >= opt.nstate) {
+            std.log.err("HESSIAN STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        }
     }
 }
 

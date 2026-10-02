@@ -100,7 +100,7 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         /// Executes a surface hopping step, calculating transition probabilities and updating states.
-        pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), dt: T) !void {
+        pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), dt: T) !bool {
             self.update(if (self.adia_alg) W else V, U);
 
             const subdt = dt / @as(T, @floatFromInt(self.nosteps));
@@ -115,7 +115,7 @@ pub fn SurfaceHopping(comptime T: type) type {
                 self.calcTargetStates(ensemble);
             }
 
-            self.applyTargets(ensemble, W);
+            return self.applyTargets(ensemble, W);
         }
 
         /// Updates Hamiltonian and unitary transformation histories for hopping evaluation.
@@ -126,22 +126,36 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         /// Applies state transitions with isotropic nuclear momentum rescaling for conservation.
-        fn applyTargets(self: *@This(), ensemble: *Ensemble(T), W: Matrix(T)) void {
+        fn applyTargets(self: *@This(), ensemble: *Ensemble(T), W: Matrix(T)) bool {
+            var any_hop = false;
+
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
 
                 if (self.adia_alg and self.targets[i] != c) {
                     const E_new = W.at(i, self.targets[i]);
 
-                    if (rescaleMomentumIsotropic(T, ensemble, i, E_new - W.at(i, c))) {
+                    const enough_energy = rescaleMomentumIsotropic(T, ensemble, i, E_new - W.at(i, c));
+
+                    if (enough_energy) {
                         ensemble.s.ptr(i).* = self.targets[i];
+
+                        self.targets[i], any_hop = .{ c, true };
+                    }
+
+                    if (!enough_energy) {
+                        self.targets[i] = c;
                     }
                 }
 
                 if (!self.adia_alg and self.targets[i] != c) {
                     ensemble.s.ptr(i).* = self.targets[i];
+
+                    self.targets[i], any_hop = .{ c, true };
                 }
             }
+
+            return any_hop;
         }
 
         /// Computes state transition probabilities at the current dynamics step.

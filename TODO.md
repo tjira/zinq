@@ -6,7 +6,7 @@
 - [x] Generalize the Runge-Kutta integrators.
 - [x] Use CPHF for MP2 gradients.
 - [ ] Implement gradients for DFT calculations.
-- [ ] Add ab initio potential to classical MD.
+- [x] Add ab initio potential to classical MD.
 - [x] Add spectrum calculation to the QD code.
 - [x] Add complex absorbing potential to the QD code.
 - [x] Implement arbitrary order Moller-Plesset perturbation theory.
@@ -39,3 +39,9 @@
 - [x] Partial wave simulation sometimes fail to initialize, probably due to parallelism issues.
 - [x] Check if the HF is parallelized correctly when run from CI module.
 - [x] Extract all anonymous struct from the options structs and make them named structs.
+- [x] Evaluate nuclear gradients for the active electronic state dynamically in AbInitio and GradientBuffer to prevent zero acceleration after surface hops.
+- [ ] Implement nonadiabatic coupling vectors or time-step CI wavefunction overlaps to support ab initio FSSH and Ehrenfest dynamics.
+- [x] Prevent redundant diagonalization of already adiabatic potentials in gradient buffer to avoid state flipping at crossings.
+- [ ] Implement directional momentum rescaling along coupling or gradient difference vectors and momentum reflection for frustrated hops in surface hopping.
+- [ ] Add electronic decoherence corrections to surface hopping.
+- [ ] When active state is specified in NAMD input, ab initio potential still accepts gradient state. This should be fixed to prevent confusion.

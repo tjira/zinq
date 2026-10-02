@@ -1032,21 +1032,21 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
             e_new = getEnergy(T, ints, ws.F.*, ws.P.*, null) + VN;
         }
 
-        if (opt.diis != null and opt.diis.? > 0) {
+        if (opt.diis != null and opt.diis.? > 0 and i > 0) {
+            var e_diis = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer e_diis.deinit(gpa);
+
+            try getError(T, &e_diis, ws.F.*, ws.P.*, ints.S.?, gpa);
+
             try fck_hist.ensureUnusedCapacity(gpa, 1);
             try err_hist.ensureUnusedCapacity(gpa, 1);
 
             var f_diis = try Matrix(T).init(nbf, nbf, gpa);
             errdefer f_diis.deinit(gpa);
 
-            var e_diis = try Matrix(T).init(nbf, nbf, gpa);
-            errdefer e_diis.deinit(gpa);
-
             for (0..nbf) |j| for (0..nbf) |k| {
                 f_diis.ptr(j, k).* = ws.F.at(j, k);
             };
-
-            try getError(T, &e_diis, ws.F.*, ws.P.*, ints.S.?, gpa);
 
             if (fck_hist.items.len >= opt.diis.?) {
                 var old_f = fck_hist.orderedRemove(0);

@@ -1,0 +1,30 @@
+{
+    "zinq" : [
+        {
+            "classical_dynamics" : {
+                "iterations" : 100,
+                "potential" : {
+                    "ab_initio" : {
+                        "method" : {
+                            "configuration_interaction" : {
+                                "hartree_fock" : {
+                                    "basis" : "builtin:sto-3g",
+                                    "system" : "example/molecule/water.xyz"
+                                },
+                                "nstate" : 2,
+                                "gradient" : {
+                                    "analytic" : {}
+                                }
+                            }
+                        },
+                        "write" : {
+                            "position" : "trajectory.xyz"
+                        }
+                    }
+                },
+                "time_step" : 10,
+                "trajectories" : 1
+            }
+        }
+    ]
+}

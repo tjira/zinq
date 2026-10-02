@@ -4,11 +4,21 @@ const std = @import("std");
 
 const Matrix = @import("tensor.zig").Matrix;
 
-const AN2SM = @import("constant.zig").AN2SM;
 const isComplex = @import("value.zig").isComplex;
 const primType = @import("value.zig").primType;
 
 const A2BOHR = @import("constant.zig").A2BOHR;
+const AN2SM = @import("constant.zig").AN2SM;
+const AU2FS = @import("constant.zig").AU2FS;
+
+/// Resolves the trajectory output path with automatic numerical suffixing when ntraj > 1.
+pub fn getTrajectoryPath(path: []const u8, i: usize, ntraj: usize, gpa: std.mem.Allocator) ![]const u8 {
+    if (ntraj <= 1) return path;
+
+    const ext = std.fs.path.extension(path);
+
+    return try std.fmt.allocPrint(gpa, "{s}_{d}{s}", .{ path[0 .. path.len - ext.len], i, ext });
+}
 
 /// Formats and prints a string to standard output, flushing the writer buffer.
 pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
@@ -182,6 +192,25 @@ pub fn writeXyzFile(comptime T: type, io: std.Io, fname: []const u8, atoms: []co
     }
 
     try writer.interface.flush();
+}
+
+/// Appends a single XYZ frame to a writer stream with atomic coordinates and timestamp.
+pub fn writeXyzFrame(comptime T: type, writer: anytype, atoms: []const i32, coors: []const T, time: T) !void {
+    try writer.interface.print("{d}\nTIME = {d:.4} a.u. = {d:.4} fs\n", .{ atoms.len, time, time * AU2FS });
+
+    for (0..atoms.len) |i| {
+        var sym: []const u8 = "X";
+
+        if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atoms[i])) |j| {
+            sym = AN2SM.kvs.keys[j];
+        }
+
+        const x = coors[3 * i + 0] / A2BOHR;
+        const y = coors[3 * i + 1] / A2BOHR;
+        const z = coors[3 * i + 2] / A2BOHR;
+
+        try writer.interface.print("{s:2} {d:20.14} {d:20.14} {d:20.14}\n", .{ sym, x, y, z });
+    }
 }
 
 /// Writes a single real or complex floating-point element to the output writer stream.

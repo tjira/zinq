@@ -480,7 +480,7 @@ fn Observables(comptime T: type) type {
             }
 
             if (calc.epot) {
-                obs.epot = sim.wfn.epot(sim.hams, sim.wfn_kpgrids, sim.epoten, t, langer);
+                obs.epot = try sim.wfn.epot(sim.hams, sim.wfn_kpgrids, sim.epoten, t, langer);
             }
 
             if (calc.pop) {
@@ -1176,6 +1176,12 @@ fn checkInvalidInput(opt: Options) !void {
                 return error.InvalidInput;
             }
         }
+    }
+
+    if (opt.potential == .ab_initio) {
+        std.log.err("AB INITIO POTENTIAL IS NOT SUPPORTED FOR QUANTUM DYNAMICS", .{});
+
+        return error.InvalidInput;
     }
 
     if (opt.time_step <= 0) {

@@ -36,7 +36,7 @@ pub fn FluxAnalysis(comptime T: type) type {
             const V_arr = try gpa.alloc(T, pot.nstate() * pot.nstate());
             defer gpa.free(V_arr);
 
-            pot.eval(T, V_arr, opt.initial_conditions.position, 0);
+            try pot.eval(T, V_arr, opt.initial_conditions.position, 0);
 
             if (opt.j_quantum_number > 0) {
                 const j = @as(T, @floatFromInt(opt.j_quantum_number));

@@ -14,7 +14,9 @@ pub const CAL2J = 4.184; // THERMOCHEMICAL CALORIE TO JOULE [J/cal]
 pub const R = kB * NA; // GAS CONSTANT [J/(mol K)]
 
 pub const A2BOHR = 1e-10 / a0; // ANGSTROM TO BOHR
+pub const AMU2AU = mu * Eh * a0 * a0 / ((h / (2 * std.math.pi)) * (h / (2 * std.math.pi))); // AMU TO ELECTRON MASS
 pub const AU2CM = @sqrt(Eh / (mu * a0 * a0)) / (2e2 * c * std.math.pi); // ATOMIC UNIT OF FREQUENCY TO CM^-1
+pub const AU2FS = (h / (2 * std.math.pi * Eh)) * 1e15; // ATOMIC UNIT OF TIME TO FEMTOSECOND
 pub const AU2K = Eh / kB; // ATOMIC UNIT OF ENERGY TO KELVIN
 pub const CM2AU = (1e2 * h * c) / Eh; // CM^-1 TO HARTREE
 pub const CM2EV = (1e2 * h * c) / e; // CM^-1 TO EV
