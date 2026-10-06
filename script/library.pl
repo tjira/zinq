@@ -98,12 +98,15 @@ sub create_compiler_wrappers {
     # EXTRACT ARGUMENTS
     my ($target, $pwd) = @_;
 
+    # DEFINE ZIG COMPILER PATH
+    my $zig = -f "$pwd/.zig-bin/zig.exe" ? "$pwd/.zig-bin/zig.exe" : -f "$pwd/.zig-bin/zig" ? "$pwd/.zig-bin/zig" : "zig";
+
     # DEFINE WRAPPER CONTENTS
     my %wrappers = (
-        zigar     => "#!/usr/bin/env bash\n\nzig ar                      \"\$@\"\n",
-        zigcc     => "#!/usr/bin/env bash\n\nzig cc     --target=$target \"\$@\"\n",
-        zigcpp    => "#!/usr/bin/env bash\n\nzig c++    --target=$target \"\$@\"\n",
-        zigranlib => "#!/usr/bin/env bash\n\nzig ranlib                  \"\$@\"\n",
+        zigar     => "#!/usr/bin/env bash\n\n$zig ar                      \"\$@\"\n",
+        zigcc     => "#!/usr/bin/env bash\n\n$zig cc     --target=$target \"\$@\"\n",
+        zigcpp    => "#!/usr/bin/env bash\n\n$zig c++    --target=$target \"\$@\"\n",
+        zigranlib => "#!/usr/bin/env bash\n\n$zig ranlib                  \"\$@\"\n",
     );
 
     # LOOP OVER WRAPPERS
