@@ -8,7 +8,7 @@ SHELL := $(if $(filter $(OS),Windows_NT),powershell.exe,sh)
 ARCH := $(if $(filter $(OS),Windows_NT),x86_64,$(shell uname -m | tr '[:upper:]' '[:lower:]' | sed 's/arm64/aarch64/'))
 OS   := $(if $(filter $(OS),Windows_NT),windows,$(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/'))
 
-ZIG_VERSION := 0.16.0
+ZIG_VERSION := 0.17.0
 ZLS_VERSION := 0.16.0
 
 HAS_ZIG := $(shell $(if $(filter windows,$(OS)),(Get-Command zig -ErrorAction SilentlyContinue).Path,command -v zig 2> /dev/null))

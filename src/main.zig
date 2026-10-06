@@ -4,10 +4,10 @@ const builtin = @import("builtin");
 const config = @import("config");
 const std = @import("std");
 
-const libint = @cImport(@cInclude("libint2/config.h"));
-const fftw = @cImport(@cInclude("fftw3.h"));
-const libxc = @cImport(@cInclude("xc.h"));
-const openblas = @cImport(@cInclude("openblas_config.h"));
+const fftw = cimport.fftw;
+const libint = cimport.libint;
+const libxc = cimport.libxc;
+const cblas = cimport.cblas;
 
 const Allocator = std.mem.Allocator;
 
@@ -80,7 +80,7 @@ const Handlers = struct {
 
 /// Main entry point printing library versions and executing molecular simulation targets.
 pub fn main(init: std.process.Init) !void {
-    cimport.cblas.openblas_set_num_threads(1);
+    cblas.openblas_set_num_threads(1);
 
     var timer = std.Io.Timestamp.now(init.io, .real);
 
@@ -90,7 +90,7 @@ pub fn main(init: std.process.Init) !void {
 
     try printf(init.io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}\n\n", .{ v_major, v_minor, v_patch, config.version });
 
-    const openblas_v = std.mem.trim(u8, openblas.OPENBLAS_VERSION, "OpenBLAS ");
+    const openblas_v = std.mem.trim(u8, cblas.OPENBLAS_VERSION, "OpenBLAS ");
 
     try printf(init.io, "OPENBLAS: v{s}, ", .{openblas_v});
 

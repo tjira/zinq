@@ -2,7 +2,7 @@
 
 const std = @import("std");
 
-const fftw = @cImport(@cInclude("fftw3.h"));
+const fftw = @import("cimport.zig").fftw;
 
 const primType = @import("value.zig").primType;
 

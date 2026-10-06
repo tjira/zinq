@@ -243,7 +243,7 @@ pub fn isDual(comptime T: type) bool {
 
 /// Returns the underlying primitive float type (e.g. f64) of a scalar, complex, or dual number.
 pub fn primType(comptime T: type) type {
-    return if (isFloat(T)) T else @typeInfo(T).@"struct".fields[0].type;
+    return if (isFloat(T)) T else @typeInfo(T).@"struct".field_types[0];
 }
 
 /// Returns true if the type T is a native floating-point type.

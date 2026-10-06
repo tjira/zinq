@@ -1,3 +1,5 @@
+#include "libint2/config.h"
+
 #include <stddef.h>
 
 typedef struct SystemData SystemData;

@@ -154,8 +154,8 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     errdefer ints.deinit(gpa);
 
     const any_calc = blk: {
-        inline for (std.meta.fields(@TypeOf(opt.calculate))) |f| {
-            if (@field(opt.calculate, f.name)) break :blk true;
+        inline for (@typeInfo(@TypeOf(opt.calculate)).@"struct".field_names) |f| {
+            if (@field(opt.calculate, f)) break :blk true;
         }
 
         break :blk false;
@@ -204,9 +204,9 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     }
 
     const any_deriv_calc = blk: {
-        inline for (std.meta.fields(@TypeOf(opt.calculate))) |f| {
-            if (comptime std.mem.endsWith(u8, f.name, "_d1")) {
-                if (@field(opt.calculate, f.name)) break :blk true;
+        inline for (@typeInfo(@TypeOf(opt.calculate)).@"struct".field_names) |f| {
+            if (comptime std.mem.endsWith(u8, f, "_d1")) {
+                if (@field(opt.calculate, f)) break :blk true;
             }
         }
 
@@ -344,8 +344,8 @@ fn checkInvalidInput(opt: Options) !void {
 /// Exports calculated molecular integral and derivative tensors to target files specified in options.
 fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Result(T), log: bool) !void {
     const any_write = blk: {
-        inline for (std.meta.fields(@TypeOf(opt.write))) |f| {
-            if (@field(opt.write, f.name) != null) break :blk true;
+        inline for (@typeInfo(@TypeOf(opt.write)).@"struct".field_names) |f| {
+            if (@field(opt.write, f) != null) break :blk true;
         }
 
         break :blk false;
@@ -402,9 +402,9 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     }
 
     const any_deriv_write = blk: {
-        inline for (std.meta.fields(@TypeOf(opt.write))) |f| {
-            if (comptime std.mem.endsWith(u8, f.name, "_d1")) {
-                if (@field(opt.write, f.name) != null) break :blk true;
+        inline for (@typeInfo(@TypeOf(opt.write)).@"struct".field_names) |f| {
+            if (comptime std.mem.endsWith(u8, f, "_d1")) {
+                if (@field(opt.write, f) != null) break :blk true;
             }
         }
 

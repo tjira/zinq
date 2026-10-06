@@ -565,9 +565,9 @@ fn PartialWaveContext(comptime T: type) type {
 
                 const alloc = arena.allocator();
 
-                inline for (std.meta.fields(@TypeOf(opt_j.write))) |field| {
-                    if (@field(opt_j.write, field.name)) |p| {
-                        @field(opt_j.write, field.name) = injectAngularFname(p, j, alloc) catch null;
+                inline for (@typeInfo(@TypeOf(opt_j.write)).@"struct".field_names) |name| {
+                    if (@field(opt_j.write, name)) |p| {
+                        @field(opt_j.write, name) = injectAngularFname(p, j, alloc) catch null;
                     }
                 }
 
@@ -1049,8 +1049,8 @@ fn SimulationState(comptime T: type) type {
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             for (0..self.orthw.items.len) |i| self.orthw.items[i].deinit(gpa);
 
-            inline for (@typeInfo(@This()).@"struct".fields) |field| {
-                @field(self, field.name).deinit(gpa);
+            inline for (@typeInfo(@This()).@"struct".field_names) |name| {
+                @field(self, name).deinit(gpa);
             }
         }
     };

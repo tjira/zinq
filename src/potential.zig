@@ -53,8 +53,8 @@ pub const AbInitioWrite = struct {
 
     /// Returns true if at least one trajectory property is configured for output.
     pub fn any(self: @This()) bool {
-        inline for (@typeInfo(@This()).@"struct".fields) |field| {
-            if (@field(self, field.name) != null) return true;
+        inline for (@typeInfo(@This()).@"struct".field_names) |name| {
+            if (@field(self, name) != null) return true;
         }
 
         return false;

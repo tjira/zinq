@@ -127,7 +127,7 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
 
 /// Evaluates the electronic energy for a perturbed molecular geometry.
 fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), perts: anytype, Pg: ?Matrix(T), P: ?*Matrix(T), state: usize, gpa: Allocator) !T {
-    std.debug.assert(@typeInfo(@TypeOf(perts)).@"struct".fields.len % 2 == 0);
+    std.debug.assert(@typeInfo(@TypeOf(perts)).@"struct".field_names.len % 2 == 0);
 
     var modified_opt = opt;
 
@@ -176,9 +176,9 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
         modified_opt.hartree_fock.write = .{};
     }
 
-    var original_coors: [@typeInfo(@TypeOf(perts)).@"struct".fields.len / 2]T = undefined;
+    var original_coors: [@typeInfo(@TypeOf(perts)).@"struct".field_names.len / 2]T = undefined;
 
-    inline for (0..@typeInfo(@TypeOf(perts)).@"struct".fields.len / 2) |idx| {
+    inline for (0..@typeInfo(@TypeOf(perts)).@"struct".field_names.len / 2) |idx| {
         original_coors[idx] = sys.coors[perts[idx * 2]];
         sys.coors[perts[idx * 2]] += perts[idx * 2 + 1];
     }
@@ -186,7 +186,7 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
     libint.libint_update_coords(sys.ptr, sys.coors.ptr);
 
     defer {
-        inline for (0..@typeInfo(@TypeOf(perts)).@"struct".fields.len / 2) |idx| {
+        inline for (0..@typeInfo(@TypeOf(perts)).@"struct".field_names.len / 2) |idx| {
             sys.coors[perts[idx * 2 + 0]] = original_coors[idx];
         }
 

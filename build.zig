@@ -90,6 +90,10 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     if (is_linux) {
         module.linkSystemLibrary("omp", .{ .preferred_link_mode = .static });
     }
+
+    inline for (.{ "cblas", "exprtk", "fftw", "lapacke", "libint", "libxc" }) |name| {
+        module.addImport(name, translateHeader(b, module, b.path("src/" ++ name ++ ".h"), dir1));
+    }
 }
 
 fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
@@ -119,7 +123,7 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = opt,
-        .strip = opt == .ReleaseFast or opt == .ReleaseSmall,
+        .strip = opt == .fast or opt == .small,
         .link_libc = true,
         .link_libcpp = true,
     });
@@ -158,9 +162,7 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
 
     const run_exe_zinq = b.addRunArtifact(exe_zinq);
 
-    if (b.args) |args| {
-        run_exe_zinq.addArgs(args);
-    }
+    run_exe_zinq.addPassthruArgs();
 
     b.step("run", "Run the application").dependOn(&run_exe_zinq.step);
 
@@ -169,4 +171,18 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
     b.step("docs", "Generate documentation").dependOn(&docs_zinq.step);
 
     return zinq_module;
+}
+
+/// Configures a C translation build step for an external library header and returns the resulting module.
+fn translateHeader(b: *std.Build, module: *std.Build.Module, file: std.Build.LazyPath, inc_dir: []const u8) *std.Build.Module {
+    const trans = b.addTranslateC(.{
+        .root_source_file = file,
+        .target = module.resolved_target.?,
+        .optimize = module.optimize.?,
+        .link_libc = true,
+    });
+
+    trans.addIncludePath(.{ .cwd_relative = inc_dir });
+
+    return trans.createModule();
 }

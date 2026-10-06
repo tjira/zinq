@@ -802,8 +802,8 @@ fn SimulationState(comptime T: type) type {
 
         /// Deallocates all resources held within the simulation state.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            inline for (@typeInfo(@This()).@"struct".fields) |field| {
-                @field(self, field.name).deinit(gpa);
+            inline for (@typeInfo(@This()).@"struct".field_names) |name| {
+                @field(self, name).deinit(gpa);
             }
         }
     };

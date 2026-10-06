@@ -22,11 +22,13 @@ pub fn Integrator(comptime T: type) type {
 
         /// Initializes the chosen numerical integration method, allocating necessary temporary state arrays.
         pub fn init(tag: std.meta.Tag(Method), nstate: usize, gpa: Allocator) !@This() {
-            inline for (std.meta.fields(Method)) |field| if (tag == @field(std.meta.Tag(Method), field.name)) {
-                return .{ .method = @unionInit(Method, field.name, try field.type.init(nstate, gpa)) };
-            };
+            switch (tag) {
+                inline else => |t| {
+                    const MethodType = @FieldType(Method, @tagName(t));
 
-            unreachable;
+                    return .{ .method = @unionInit(Method, @tagName(t), try MethodType.init(nstate, gpa)) };
+                },
+            }
         }
 
         /// Deallocates memory associated with the integrator's stage derivative storage.
