@@ -74,7 +74,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     module.addIncludePath(.{ .cwd_relative = dir1 });
     module.addIncludePath(.{ .cwd_relative = dir2 });
 
-    const lin_flags, const win_flags = .{ &.{"-fopenmp"}, &.{"-D__GXX_ABI_VERSION=1004"} };
+    const lin_flags, const win_flags = .{ &.{ "-fopenmp", "-DNDEBUG" }, &.{"-D__GXX_ABI_VERSION=1004"} };
 
     const flags: []const []const u8 = if (is_linux) lin_flags else if (is_windows) win_flags else &.{};
 
