@@ -35,7 +35,7 @@ run: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) run $(if $(strip $(ARGS)),-- $(ARGS))
 
 test: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
-	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) -Dtarget=native-native-musl test
+	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) test
 
 # LIBRARY INSTALLATION TARGETS =================================================================================================================================
 
