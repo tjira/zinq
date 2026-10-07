@@ -403,6 +403,9 @@ sub compile_fftw {
         system("perl", "-pi", "-e", "s/#if \\(__GNUC__ > 4/#if 0 && (__GNUC__ > 4/g", "$prefix/include/fftw3.h");
     }
 
+    # PATCH FFTW3.H TO DISABLE LONG DOUBLE
+    system("perl", "-pi", "-e", "s/.*FFTW_MANGLE_LONG_DOUBLE.*//g", "$prefix/include/fftw3.h");
+
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
 }
