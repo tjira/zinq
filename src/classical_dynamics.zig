@@ -26,6 +26,7 @@ const norm = @import("linear_algebra.zig").norm;
 const printf = @import("read_write.zig").printf;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 const writeXyzFrame = @import("read_write.zig").writeXyzFrame;
+const writeXyzMomentumFrame = @import("read_write.zig").writeXyzMomentumFrame;
 
 const AMU2AU = @import("constant.zig").AMU2AU;
 const AU2K = @import("constant.zig").AU2K;
@@ -257,15 +258,52 @@ pub fn Result(comptime T: type) type {
 
 /// Manages streaming output files for multi-trajectory ab initio property logging.
 const AbInitioStreamWriter = struct {
+    files_ekin: ?[]std.Io.File = null,
+    files_epot: ?[]std.Io.File = null,
+    files_etot: ?[]std.Io.File = null,
+    files_temp: ?[]std.Io.File = null,
+
+    files_mom: ?[]std.Io.File = null,
+    files_pop: ?[]std.Io.File = null,
     files_pos: ?[]std.Io.File = null,
 
+    files_state_epot: ?[]std.Io.File = null,
+
     /// Initializes and opens trajectory output files on disk for configured properties.
-    pub fn init(io: std.Io, write: AbInitioWrite, ntraj: usize, gpa: Allocator) !@This() {
+    pub fn init(io: std.Io, write: AbInitioWrite, ntraj: usize, nstep: usize, nstate: usize, gpa: Allocator) !@This() {
         var self = @This(){};
         errdefer self.deinit(io, gpa);
 
+        if (write.kinetic_energy) |path| {
+            self.files_ekin = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
+        }
+
+        if (write.momentum_trajectory) |path| {
+            self.files_mom = try initFiles(io, path, ntraj, gpa);
+        }
+
+        if (write.population) |path| {
+            self.files_pop = try initMatrixFiles(io, path, ntraj, nstep, nstate + 1, gpa);
+        }
+
         if (write.position) |path| {
             self.files_pos = try initFiles(io, path, ntraj, gpa);
+        }
+
+        if (write.potential_energy) |path| {
+            self.files_epot = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
+        }
+
+        if (write.state_potential_energy) |path| {
+            self.files_state_epot = try initMatrixFiles(io, path, ntraj, nstep, nstate + 1, gpa);
+        }
+
+        if (write.temperature) |path| {
+            self.files_temp = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
+        }
+
+        if (write.total_energy) |path| {
+            self.files_etot = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
         }
 
         return self;
@@ -273,10 +311,88 @@ const AbInitioStreamWriter = struct {
 
     /// Closes all trajectory output files and deallocates handles.
     pub fn deinit(self: *@This(), io: std.Io, gpa: Allocator) void {
-        if (self.files_pos) |files| {
-            for (files) |*file| file.close(io);
+        inline for (@typeInfo(@This()).@"struct".field_names) |name| {
+            if (@field(self, name)) |files| {
+                for (files) |*file| file.close(io);
 
-            gpa.free(files);
+                gpa.free(files);
+            }
+        }
+    }
+
+    /// Appends the current step's energies and temperature to trajectory files.
+    pub fn writeEnergy(self: @This(), io: std.Io, comptime T: type, ensemble: Ensemble(T), gb: GradientBuffer(T), nstate: usize, coefs: ?Matrix(Complex(T)), time: T) !void {
+        const no_e = self.files_ekin == null and self.files_epot == null;
+        if (no_e and self.files_etot == null and self.files_temp == null) return;
+
+        const ntraj = ensemble.r.nrow();
+
+        var buffer: [65536]u8 = undefined;
+
+        for (0..ntraj) |k| {
+            var ekin: T = 0;
+
+            if (self.files_ekin != null or self.files_etot != null or self.files_temp != null) {
+                for (0..ensemble.p.ncol()) |j| {
+                    ekin += ensemble.p.at(k, j) * ensemble.p.at(k, j) / (2 * ensemble.m[j]);
+                }
+            }
+
+            var epot: T = 0;
+
+            if (self.files_epot != null or self.files_etot != null) {
+                if (coefs) |coef| {
+                    for (0..nstate) |l| for (0..nstate) |m| {
+                        const rho_lm = coef.at(k, l).conjugate().mul(coef.at(k, m)).re;
+
+                        epot += rho_lm * gb.V.at(k, l * nstate + m);
+                    };
+                }
+
+                if (coefs == null and gb.adia) {
+                    epot = gb.W.at(k, ensemble.s.at(k));
+                }
+
+                if (coefs == null and !gb.adia) {
+                    const sk = ensemble.s.at(k);
+
+                    epot = gb.V.at(k, sk * nstate + sk);
+                }
+            }
+
+            if (self.files_ekin) |files| {
+                var writer = files[k].writerStreaming(io, &buffer);
+
+                try writer.interface.print("{d:20.14} {d:20.14}\n", .{ time, ekin });
+
+                try writer.interface.flush();
+            }
+
+            if (self.files_epot) |files| {
+                var writer = files[k].writerStreaming(io, &buffer);
+
+                try writer.interface.print("{d:20.14} {d:20.14}\n", .{ time, epot });
+
+                try writer.interface.flush();
+            }
+
+            if (self.files_temp) |files| {
+                const temp_val = (2 * ekin / @as(T, @floatFromInt(ensemble.p.ncol()))) * AU2K;
+
+                var writer = files[k].writerStreaming(io, &buffer);
+
+                try writer.interface.print("{d:20.14} {d:20.14}\n", .{ time, temp_val });
+
+                try writer.interface.flush();
+            }
+
+            if (self.files_etot) |files| {
+                var writer = files[k].writerStreaming(io, &buffer);
+
+                try writer.interface.print("{d:20.14} {d:20.14}\n", .{ time, ekin + epot });
+
+                try writer.interface.flush();
+            }
         }
     }
 
@@ -295,12 +411,96 @@ const AbInitioStreamWriter = struct {
         }
     }
 
+    /// Appends the current step's nuclear momentum vectors to trajectory files.
+    pub fn writeMomentumFrame(self: @This(), io: std.Io, comptime T: type, atoms: []const i32, p: Matrix(T), time: T) !void {
+        if (self.files_mom) |files| {
+            var buffer: [65536]u8 = undefined;
+
+            for (0..files.len) |k| {
+                var writer = files[k].writerStreaming(io, &buffer);
+
+                try writeXyzMomentumFrame(T, &writer, atoms, p.rowSlice(k), time);
+
+                try writer.interface.flush();
+            }
+        }
+    }
+
+    /// Appends the current step's electronic state populations to trajectory files.
+    pub fn writePopulation(self: @This(), io: std.Io, comptime T: type, ensemble: Ensemble(T), gb: GradientBuffer(T), nstate: usize, coefs: ?Matrix(Complex(T)), time: T) !void {
+        if (self.files_pop) |files| {
+            var buffer: [65536]u8 = undefined;
+
+            for (0..files.len) |k| {
+                var writer = files[k].writerStreaming(io, &buffer);
+
+                try writer.interface.print("{d:20.14}", .{time});
+
+                for (0..nstate) |m| {
+                    var pop_m: T = 0;
+
+                    if (coefs) |coef| {
+                        if (gb.adia) {
+                            var a_km = Complex(T).init(0, 0);
+
+                            for (0..nstate) |l| {
+                                const u_lm, const c_kl = .{ gb.U.at(k, l * nstate + m), coef.at(k, l) };
+
+                                a_km = a_km.add(Complex(T).init(c_kl.re * u_lm, c_kl.im * u_lm));
+                            }
+
+                            pop_m = a_km.squaredMagnitude();
+                        }
+
+                        if (!gb.adia) {
+                            pop_m = coef.at(k, m).squaredMagnitude();
+                        }
+                    }
+
+                    if (coefs == null) {
+                        pop_m = if (m == ensemble.s.at(k)) 1 else 0;
+                    }
+
+                    try writer.interface.print(" {d:20.14}", .{pop_m});
+                }
+
+                try writer.interface.print("\n", .{});
+
+                try writer.interface.flush();
+            }
+        }
+    }
+
+    /// Appends the current step's electronic state potential energies to trajectory files.
+    pub fn writeStatePotentialEnergy(self: @This(), io: std.Io, comptime T: type, gb: GradientBuffer(T), nstate: usize, time: T) !void {
+        if (self.files_state_epot) |files| {
+            var buffer: [65536]u8 = undefined;
+
+            for (0..files.len) |k| {
+                var writer = files[k].writerStreaming(io, &buffer);
+
+                try writer.interface.print("{d:20.14}", .{time});
+
+                for (0..nstate) |s| {
+                    const epot = if (gb.adia) gb.W.at(k, s) else gb.V.at(k, s * nstate + s);
+
+                    try writer.interface.print(" {d:20.14}", .{epot});
+                }
+
+                try writer.interface.print("\n", .{});
+
+                try writer.interface.flush();
+            }
+        }
+    }
+
     /// Opens output files for each trajectory in the ensemble.
     fn initFiles(io: std.Io, path: []const u8, ntraj: usize, gpa: Allocator) ![]std.Io.File {
         const files = try gpa.alloc(std.Io.File, ntraj);
         errdefer gpa.free(files);
 
         var count: usize = 0;
+
         errdefer for (0..count) |k| files[k].close(io);
 
         while (count < ntraj) : (count += 1) {
@@ -308,6 +508,29 @@ const AbInitioStreamWriter = struct {
             defer if (ntraj > 1) gpa.free(fname);
 
             files[count] = try std.Io.Dir.cwd().createFile(io, fname, .{});
+        }
+
+        return files;
+    }
+
+    /// Opens trajectory files and writes the matrix dimensions header to each stream.
+    fn initMatrixFiles(io: std.Io, path: []const u8, ntraj: usize, nstep: usize, ncol: usize, gpa: Allocator) ![]std.Io.File {
+        const files = try initFiles(io, path, ntraj, gpa);
+
+        errdefer {
+            for (files) |*file| file.close(io);
+
+            gpa.free(files);
+        }
+
+        var buffer: [1024]u8 = undefined;
+
+        for (files) |file| {
+            var writer = file.writerStreaming(io, &buffer);
+
+            try writer.interface.print("{d} {d}\n", .{ nstep, ncol });
+
+            try writer.interface.flush();
         }
 
         return files;
@@ -1185,7 +1408,9 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
         const ab = ctx.sim.elpoten.ab_initio;
 
         if (ab.options.write.any()) {
-            stream_writer = try AbInitioStreamWriter.init(io, ab.options.write, ctx.sim.ensemble.r.nrow(), gpa);
+            const nrow, const iters = .{ ctx.sim.ensemble.r.nrow(), ctx.opt.iterations + 1 };
+
+            stream_writer = try AbInitioStreamWriter.init(io, ab.options.write, nrow, iters, nstate, gpa);
         }
     }
 
@@ -1204,7 +1429,18 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
         }
 
         if (stream_writer) |sw| {
+            const prop = ctx.sim.propag;
+
+            const coefs = if (prop.nonadia_dynamic) |n| (if (n == .ehrenfest) n.ehrenfest.coefics else null) else null;
+
             try sw.writeFrame(io, T, atoms, ctx.sim.ensemble.r, time);
+
+            try sw.writeMomentumFrame(io, T, atoms, ctx.sim.ensemble.p, time);
+            try sw.writeStatePotentialEnergy(io, T, ctx.sim.gb, nstate, time);
+
+            try sw.writeEnergy(io, T, ctx.sim.ensemble, ctx.sim.gb, nstate, coefs, time);
+
+            try sw.writePopulation(io, T, ctx.sim.ensemble, ctx.sim.gb, nstate, coefs, time);
         }
 
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));

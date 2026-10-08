@@ -8,6 +8,7 @@ const isComplex = @import("value.zig").isComplex;
 const primType = @import("value.zig").primType;
 
 const A2BOHR = @import("constant.zig").A2BOHR;
+const AMU2AU = @import("constant.zig").AMU2AU;
 const AN2SM = @import("constant.zig").AN2SM;
 const AU2FS = @import("constant.zig").AU2FS;
 
@@ -210,6 +211,27 @@ pub fn writeXyzFrame(comptime T: type, writer: anytype, atoms: []const i32, coor
         const z = coors[3 * i + 2] / A2BOHR;
 
         try writer.interface.print("{s:2} {d:20.14} {d:20.14} {d:20.14}\n", .{ sym, x, y, z });
+    }
+}
+
+/// Appends a single XYZ frame to a writer stream with atomic momentum vectors and timestamp.
+pub fn writeXyzMomentumFrame(comptime T: type, writer: anytype, atoms: []const i32, mom: []const T, time: T) !void {
+    try writer.interface.print("{d}\nTIME = {d:.4} a.u. = {d:.4} fs\n", .{ atoms.len, time, time * AU2FS });
+
+    const conv = AU2FS / (AMU2AU * A2BOHR);
+
+    for (0..atoms.len) |i| {
+        var sym: []const u8 = "X";
+
+        if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atoms[i])) |j| {
+            sym = AN2SM.kvs.keys[j];
+        }
+
+        const px = mom[3 * i + 0] * conv;
+        const py = mom[3 * i + 1] * conv;
+        const pz = mom[3 * i + 2] * conv;
+
+        try writer.interface.print("{s:2} {d:20.14} {d:20.14} {d:20.14}\n", .{ sym, px, py, pz });
     }
 }
 

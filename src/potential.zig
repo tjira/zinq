@@ -49,7 +49,14 @@ pub const AbInitioOptions = struct {
 
 /// Output file destinations for ab initio potential trajectories.
 pub const AbInitioWrite = struct {
+    kinetic_energy: ?[]const u8 = null,
+    momentum_trajectory: ?[]const u8 = null,
+    population: ?[]const u8 = null,
     position: ?[]const u8 = null,
+    potential_energy: ?[]const u8 = null,
+    state_potential_energy: ?[]const u8 = null,
+    temperature: ?[]const u8 = null,
+    total_energy: ?[]const u8 = null,
 
     /// Returns true if at least one trajectory property is configured for output.
     pub fn any(self: @This()) bool {
