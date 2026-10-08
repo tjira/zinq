@@ -927,6 +927,22 @@ fn checkInvalidInput(opt: Options) !void {
         }
     }
 
+    if (opt.potential == .ab_initio) switch (opt.potential.ab_initio.method) {
+        .configuration_interaction => |ci| if (ci.gradient) |grad| {
+            const grad_state = switch (grad) {
+                inline else => |g| g.state,
+            };
+
+            if (grad_state != null) {
+                std.log.err("GRADIENT STATE MUST NOT BE SPECIFIED FOR AB INITIO POTENTIAL", .{});
+
+                return error.InvalidInput;
+            }
+        },
+
+        inline else => {},
+    };
+
     if (opt.thermostat) |topt| switch (topt) {
         .berendsen => |bopt| {
             if (bopt.temperature < 0) {

@@ -44,5 +44,5 @@
 - [x] Prevent redundant diagonalization of already adiabatic potentials in gradient buffer to avoid state flipping at crossings.
 - [ ] Implement directional momentum rescaling along coupling or gradient difference vectors and momentum reflection for frustrated hops in surface hopping.
 - [ ] Add electronic decoherence corrections to surface hopping.
-- [ ] When active state is specified in NAMD input, ab initio potential still accepts gradient state. This should be fixed to prevent confusion.
+- [x] When active state is specified in NAMD input, ab initio potential still accepts gradient state. This should be fixed to prevent confusion.
 - [x] Check if Zig translate-c / Aro fixed the x86_64 long double array alignment bug to remove #define long in src/fftw.h.

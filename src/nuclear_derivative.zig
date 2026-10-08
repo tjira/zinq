@@ -24,7 +24,7 @@ pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, 
 
     const h = @as(T, @floatCast(opt.gradient.?.numeric.step));
 
-    const state = if (@hasField(@TypeOf(opt.gradient.?.numeric), "state")) opt.gradient.?.numeric.state else 0;
+    const state = if (@hasField(@TypeOf(opt.gradient.?.numeric), "state")) (opt.gradient.?.numeric.state orelse 0) else 0;
 
     if (log) try std.Io.File.stdout().writeStreamingAll(io, "\n");
 

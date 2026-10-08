@@ -81,12 +81,12 @@ const BfgsOptions = struct {
 
 /// Analytical nuclear gradient evaluation settings for a specific state.
 const GradientAnalyticOptions = struct {
-    state: u32 = 0,
+    state: ?u32 = null,
 };
 
 /// Finite difference displacement settings for numerical gradient evaluation.
 const GradientNumericOptions = struct {
-    state: u32 = 0,
+    state: ?u32 = null,
     step: f64 = 1e-5,
 };
 
@@ -326,7 +326,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     errdefer gpa.free(grad);
 
     if (opt.gradient) |gradopt| switch (gradopt) {
-        .analytic => |a| grad[0] = try gradient(T, hfres, C, dets, a.state, gpa),
+        .analytic => |a| grad[0] = try gradient(T, hfres, C, dets, a.state orelse 0, gpa),
         .numeric => grad[0] = try calculateNumericalGradient(T, io, runFromSystem, opt, sys, log, gpa),
     };
 
@@ -334,7 +334,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     if (log and opt.gradient != null) {
         const state = switch (opt.gradient.?) {
-            inline else => |g| g.state,
+            inline else => |g| g.state orelse 0,
         };
 
         const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTIC" else "NUMERIC";
@@ -535,7 +535,7 @@ fn checkInvalidInput(opt: Options) !void {
 
     if (opt.gradient) |gradopt| {
         const grad_state = switch (gradopt) {
-            inline else => |g| g.state,
+            inline else => |g| g.state orelse 0,
         };
 
         if (grad_state >= opt.nstate) {
