@@ -1132,6 +1132,12 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
+    if (opt.potential == .ab_initio and !opt.adiabatic) {
+        std.log.err("DIABATIC SIMULATION IS NOT SUPPORTED FOR AB INITIO POTENTIAL", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.potential == .ab_initio and opt.nonadiabatic != null) {
         switch (opt.nonadiabatic.?) {
             .ehrenfest => {
