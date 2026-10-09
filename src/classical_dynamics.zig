@@ -84,6 +84,8 @@ pub fn Ensemble(comptime T: type) type {
 
         s: Vector(usize),
 
+        ndof: usize,
+
         /// Initializes the ensemble trajectories with allocated memory for positions, momenta, and forces.
         pub fn init(ndim: usize, ntraj: usize, mass: []const T, gpa: Allocator) !@This() {
             var r = try Matrix(T).init(ntraj, ndim, gpa);
@@ -103,7 +105,7 @@ pub fn Ensemble(comptime T: type) type {
 
             @memcpy(m, mass);
 
-            return .{ .r = r, .p = p, .a = a, .s = s, .m = m };
+            return .{ .r = r, .p = p, .a = a, .s = s, .m = m, .ndof = ndim };
         }
 
         /// Deallocates the positions, momenta, and force vectors of the trajectory ensemble.
@@ -188,6 +190,155 @@ pub fn Ensemble(comptime T: type) type {
             return value;
         }
 
+        /// Projects out overall angular momentum and rotational velocities from the ensemble.
+        pub fn removeRotation(self: *@This()) usize {
+            const natom = self.m.len / 3;
+
+            if (natom < 2) return 0;
+
+            var m_tot: T = 0;
+
+            for (0..natom) |k| {
+                m_tot += self.m[k * 3];
+            }
+
+            if (m_tot <= 0) return 0;
+
+            var axes_removed: usize = 0;
+
+            for (0..self.r.nrow()) |i| {
+                var r_cm = [3]T{ 0, 0, 0 };
+
+                for (0..natom) |k| for (0..3) |c| {
+                    r_cm[c] += self.m[k * 3 + c] * self.r.at(i, k * 3 + c);
+                };
+
+                for (0..3) |c| r_cm[c] /= m_tot;
+
+                var L: [3]T, var I_tensor: [9]T = .{ .{ 0, 0, 0 }, .{ 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
+
+                for (0..natom) |k| {
+                    const mk = self.m[k * 3];
+
+                    const rx = self.r.at(i, k * 3 + 0) - r_cm[0];
+                    const ry = self.r.at(i, k * 3 + 1) - r_cm[1];
+                    const rz = self.r.at(i, k * 3 + 2) - r_cm[2];
+
+                    const px = self.p.at(i, k * 3 + 0);
+                    const py = self.p.at(i, k * 3 + 1);
+                    const pz = self.p.at(i, k * 3 + 2);
+
+                    L[0] += ry * pz - rz * py;
+                    L[1] += rz * px - rx * pz;
+                    L[2] += rx * py - ry * px;
+
+                    I_tensor[0] += mk * (ry * ry + rz * rz);
+                    I_tensor[4] += mk * (rx * rx + rz * rz);
+                    I_tensor[8] += mk * (rx * rx + ry * ry);
+
+                    I_tensor[1] -= mk * rx * ry;
+                    I_tensor[2] -= mk * rx * rz;
+                    I_tensor[5] -= mk * ry * rz;
+                }
+
+                I_tensor[3] = I_tensor[1];
+                I_tensor[6] = I_tensor[2];
+                I_tensor[7] = I_tensor[5];
+
+                var ev: [3]T, var evec: [9]T = .{ undefined, undefined };
+
+                eighSlice(T, &ev, &evec, &I_tensor) catch continue;
+
+                var omega: [3]T, var cur_axes: usize = .{ .{ 0, 0, 0 }, 0 };
+
+                for (0..3) |axis| if (ev[axis] > 1e-8) {
+                    cur_axes += 1;
+
+                    const l0, const l1, const l2 = .{ L[0], L[1], L[2] };
+
+                    const l_proj = evec[axis] * l0 + evec[3 + axis] * l1 + evec[6 + axis] * l2;
+
+                    for (0..3) |c| {
+                        omega[c] += (l_proj / ev[axis]) * evec[c * 3 + axis];
+                    }
+                };
+
+                if (i == 0) axes_removed = cur_axes;
+
+                for (0..natom) |k| {
+                    const mk = self.m[k * 3];
+
+                    const rx = self.r.at(i, k * 3 + 0) - r_cm[0];
+                    const ry = self.r.at(i, k * 3 + 1) - r_cm[1];
+                    const rz = self.r.at(i, k * 3 + 2) - r_cm[2];
+
+                    self.p.ptr(i, k * 3 + 0).* -= mk * (omega[1] * rz - omega[2] * ry);
+                    self.p.ptr(i, k * 3 + 1).* -= mk * (omega[2] * rx - omega[0] * rz);
+                    self.p.ptr(i, k * 3 + 2).* -= mk * (omega[0] * ry - omega[1] * rx);
+                }
+            }
+
+            self.ndof -|= axes_removed;
+
+            return axes_removed;
+        }
+
+        /// Removes center-of-mass position and momentum drift from all trajectories in the ensemble.
+        pub fn removeTranslation(self: *@This()) void {
+            const natom, var m_tot: T = .{ self.m.len / 3, 0 };
+
+            for (0..natom) |k| m_tot += self.m[k * 3];
+
+            if (m_tot <= 0) return;
+
+            for (0..self.r.nrow()) |i| {
+                var r_cm = [3]T{ 0, 0, 0 };
+                var p_cm = [3]T{ 0, 0, 0 };
+
+                for (0..natom) |k| for (0..3) |c| {
+                    r_cm[c] += self.m[k * 3 + c] * self.r.at(i, k * 3 + c);
+
+                    p_cm[c] += self.p.at(i, k * 3 + c);
+                };
+
+                for (0..3) |c| {
+                    r_cm[c] /= m_tot;
+                    p_cm[c] /= m_tot;
+                }
+
+                for (0..natom) |k| for (0..3) |c| {
+                    self.r.ptr(i, k * 3 + c).* -= r_cm[c];
+
+                    self.p.ptr(i, k * 3 + c).* -= self.m[k * 3 + c] * p_cm[c];
+                };
+            }
+
+            self.ndof -|= 3;
+        }
+
+        /// Rescales ensemble momenta to match the target kinetic temperature across active degrees of freedom.
+        pub fn rescaleTemperature(self: *@This(), temp_k: T) void {
+            if (self.ndof == 0) return;
+
+            const target_ekin = 0.5 * @as(T, @floatFromInt(self.ndof)) * (temp_k / AU2K);
+
+            for (0..self.p.nrow()) |i| {
+                var cur_ekin: T = 0;
+
+                for (0..self.p.ncol()) |j| {
+                    cur_ekin += (self.p.at(i, j) * self.p.at(i, j)) / (2 * self.m[j]);
+                }
+
+                if (cur_ekin > 1e-12) {
+                    const factor = @sqrt(target_ekin / cur_ekin);
+
+                    for (0..self.p.ncol()) |j| {
+                        self.p.ptr(i, j).* *= factor;
+                    }
+                }
+            }
+        }
+
         /// Samples initial positions and momenta from a Wigner-like Gaussian distribution or reference geometry.
         pub fn setGaussian(self: *@This(), ic: InitialConditions, default_pos: ?[]const T) void {
             var split_mix = std.Random.SplitMix64.init(ic.seed);
@@ -239,7 +390,7 @@ pub fn Ensemble(comptime T: type) type {
 
         /// Calculates the instantaneous kinetic temperature of the ensemble in Kelvin.
         pub fn temp(self: @This()) T {
-            return (2 * self.ekin() / @as(T, @floatFromInt(self.p.ncol()))) * AU2K;
+            return (2 * self.ekin() / @as(T, @floatFromInt(self.ndof))) * AU2K;
         }
     };
 }
@@ -1260,6 +1411,16 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     };
 
     ensemble.setGaussian(opt.initial_conditions, default_pos);
+
+    if (pot == .ab_initio) {
+        ensemble.removeTranslation();
+
+        _ = ensemble.removeRotation();
+
+        if (opt.initial_conditions.temperature) |t_val| {
+            ensemble.rescaleTemperature(@floatCast(t_val));
+        }
+    }
 
     try gb.update(ensemble.r, pot, 0, ensemble.s.data);
 
