@@ -29,7 +29,7 @@ docs: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HA
 	@$(COMPILER) build docs
 
 fmt: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
-	@$(COMPILER) fmt src test
+	@$(COMPILER) fmt src test build.zig
 
 run: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) run $(if $(strip $(ARGS)),-- $(ARGS))

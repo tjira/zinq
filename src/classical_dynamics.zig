@@ -1145,31 +1145,51 @@ fn checkInvalidInput(opt: Options) !void {
 
                 return error.InvalidInput;
             },
+
             .surface_hopping => |sh| switch (sh) {
                 .fewest_switches => {
                     std.log.err("FSSH IS NOT SUPPORTED FOR AB INITIO POTENTIAL WITHOUT NACVS", .{});
 
                     return error.InvalidInput;
                 },
+
                 inline else => {},
             },
         }
     }
 
     if (opt.potential == .ab_initio) switch (opt.potential.ab_initio.method) {
-        .configuration_interaction => |ci| if (ci.gradient) |grad| {
-            const grad_state = switch (grad) {
-                inline else => |g| g.state,
-            };
+        .hartree_fock => if (opt.initial_conditions.state > 0) {
+            std.log.err("REQUESTED ELECTRONIC STATE IS NOT SUPPORTED FOR HARTREE-FOCK POTENTIAL", .{});
 
-            if (grad_state != null) {
-                std.log.err("GRADIENT STATE MUST NOT BE SPECIFIED FOR AB INITIO POTENTIAL", .{});
+            return error.InvalidInput;
+        },
+
+        .moller_plesset => if (opt.initial_conditions.state > 0) {
+            std.log.err("REQUESTED ELECTRONIC STATE IS NOT SUPPORTED FOR MOLLER-PLESSET POTENTIAL", .{});
+
+            return error.InvalidInput;
+        },
+
+        .configuration_interaction => |ci| {
+            if (opt.initial_conditions.state >= ci.nstate) {
+                std.log.err("REQUESTED ELECTRONIC STATE EXCEEDS NUMBER OF CONFIGURATION INTERACTION STATES", .{});
 
                 return error.InvalidInput;
             }
-        },
 
-        inline else => {},
+            if (ci.gradient) |grad| {
+                const grad_state = switch (grad) {
+                    inline else => |g| g.state,
+                };
+
+                if (grad_state != null) {
+                    std.log.err("GRADIENT STATE MUST NOT BE SPECIFIED FOR AB INITIO POTENTIAL", .{});
+
+                    return error.InvalidInput;
+                }
+            }
+        },
     };
 
     if (opt.thermostat) |topt| switch (topt) {
