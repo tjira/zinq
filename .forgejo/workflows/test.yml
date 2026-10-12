@@ -30,4 +30,4 @@ jobs:
         run: make external-x86_64-linux
 
       - name: Run Tests in ReleaseFast Mode
-        run: zig build test
+        run: zig build --release=fast test
