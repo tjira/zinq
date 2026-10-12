@@ -76,7 +76,7 @@ jobs:
       - name: Strip Debug Symbols
         if: steps.cache-libs.outputs.cache-hit != 'true'
         working-directory: external-${{matrix.target}}
-        run: llvm-strip --strip-debug lib/*.a
+        run: llvm-strip --strip-debug --remove-section=.llvm_addrsig lib/*.a
 
       - name: Prepare Artifact Directory
         run: mkdir -p staging && cp -r external-${{matrix.target}} staging
