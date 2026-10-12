@@ -9,10 +9,8 @@ ARCH := $(if $(filter $(OS),Windows_NT),x86_64,$(shell uname -m | tr '[:upper:]'
 OS   := $(if $(filter $(OS),Windows_NT),windows,$(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/'))
 
 ZIG_VERSION := 0.17.0
-ZLS_VERSION := 0.16.0
 
 HAS_ZIG := $(shell $(if $(filter windows,$(OS)),(Get-Command zig -ErrorAction SilentlyContinue).Path,command -v zig 2> /dev/null))
-HAS_ZLS := $(shell $(if $(filter windows,$(OS)),(Get-Command zls -ErrorAction SilentlyContinue).Path,command -v zls 2> /dev/null))
 
 COMPILER := $(if $(HAS_ZIG),zig,./.zig-bin/zig$(if $(filter $(OS),windows),.exe))
 
@@ -22,19 +20,19 @@ all: .env.fish .env.ps1 .env.sh zinq
 
 # ZINQ BUILDING TARGETS ========================================================================================================================================
 
-zinq: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
+zinq: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast)
 
-docs: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
+docs: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build docs
 
-fmt: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
+fmt: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) fmt src test build.zig
 
-run: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
+run: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) run $(if $(strip $(ARGS)),-- $(ARGS))
 
-test: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) $(if $(HAS_ZLS),,.zig-bin/zls$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
+test: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) external-$(ARCH)-$(OS)
 	@$(COMPILER) build $(if $(filter 0,$(DEBUG)),--release=fast) test
 
 # LIBRARY INSTALLATION TARGETS =================================================================================================================================
@@ -58,7 +56,7 @@ endif
 .env.sh:
 	@echo "export PATH=$(CURDIR)/.zig-bin:\$$PATH" > .env.sh
 
-# COMPILER AND LANGUAGE SERVER INSTALLATION TARGETS ============================================================================================================
+# COMPILER INSTALLATION TARGETS ================================================================================================================================
 
 ifeq ($(OS),windows)
 .zig-bin/zig.exe: | .zig-bin
@@ -66,14 +64,6 @@ ifeq ($(OS),windows)
 else
 .zig-bin/zig: | .zig-bin
 	@curl -L# https://ziglang.org/download/$(ZIG_VERSION)/zig-$(ARCH)-$(OS)-$(ZIG_VERSION).tar.xz | tar -Jx -C .zig-bin --strip-components=1
-endif
-
-ifeq ($(OS),windows)
-.zig-bin/zls.exe: | .zig-bin
-	@curl.exe -L# -o zls.zip https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).zip ; tar -xf zls.zip -C .zig-bin ; rm zls.zip
-else
-.zig-bin/zls: | .zig-bin
-	@curl -L# https://github.com/zigtools/zls/releases/download/$(ZLS_VERSION)/zls-$(ARCH)-$(OS).tar.xz | tar -Jx -C .zig-bin
 endif
 
 # DIRECTORY CREATION TARGETS ===================================================================================================================================

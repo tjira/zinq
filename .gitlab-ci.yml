@@ -5,7 +5,7 @@ stages:
 default:
   image: ubuntu:latest
 
-setup:
+setup:libs:
   stage: setup
 
   cache:
@@ -17,25 +17,53 @@ setup:
       - external-x86_64-linux
 
   before_script:
-    - apt update && apt install curl make unzip xz-utils -y
+    - apt update && apt install curl make unzip -y
 
   script:
     - make external-x86_64-linux
+
+setup:zig:
+  stage: setup
+
+  cache:
+    key:
+      files:
+        - makefile
+      prefix: zig-x86_64-linux
+    paths:
+      - .zig-bin
+
+  before_script:
+    - apt update && apt install curl make xz-utils -y
+
+  script:
+    - make .zig-bin/zig
 
 test:
   stage: test
 
   needs:
-    - setup
+    - setup:libs
+    - setup:zig
 
   cache:
-    key:
-      files:
-        - script/library.pl
-      prefix: libs-x86_64-linux
-    paths:
-      - external-x86_64-linux
-    policy: pull
+    - key:
+        files:
+          - script/library.pl
+        prefix: libs-x86_64-linux
+      paths:
+        - external-x86_64-linux
+      policy: pull
+    - key:
+        files:
+          - makefile
+        prefix: zig-x86_64-linux
+      paths:
+        - .zig-bin
+      policy: pull
+
+  before_script:
+    - apt update && apt install make -y
 
   script:
     - make test
