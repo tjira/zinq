@@ -1,0 +1,17 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - '*'
+
+jobs:
+  build:
+    name: codeberg-medium / Build
+    runs-on: codeberg-medium
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the Project in Debug Mode
+        run: make DEBUG=1
