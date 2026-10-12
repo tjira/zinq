@@ -58,8 +58,5 @@ test:
         - .zig-bin
       policy: pull
 
-  before_script:
-    - apt update && apt install make -y
-
   script:
-    - make test
+    - .zig-bin/zig build test
