@@ -71,6 +71,9 @@ jobs:
         working-directory: external-${{matrix.target}}
         run: rm -f include/eigen3/signature_of_eigen3_matrix_library
 
+      - name: Strip Debug Symbols
+        run: llvm-strip --strip-debug external-${{matrix.target}}/lib/*.a
+
       - name: Prepare Artifact Directory
         run: mkdir -p staging && cp -r external-${{matrix.target}} staging
       
