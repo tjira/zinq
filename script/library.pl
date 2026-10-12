@@ -269,7 +269,7 @@ sub compile_libint {
     # INSTALL THE LIBRARY
     system("cmake", "--install", "build") == 0 or die "LIBINT INSTALL FAILED";
 
-    # PATCH BOYS.H AND BASIS.H TO CORRECTLY RECOGNIZE WINNDOWS
+    # PATCH BOYS.H AND BASIS.H TO CORRECTLY RECOGNIZE WINDOWS
     if ($target =~ /windows/) {
         system("perl", "-pi", "-e", "s/#ifdef _MSC_VER/#if defined(_MSC_VER) || defined(__MINGW32__)/g", "$prefix/include/libint2/boys.h" );
         system("perl", "-pi", "-e", "s/#ifdef _MSC_VER/#if defined(_MSC_VER) || defined(__MINGW32__)/g", "$prefix/include/libint2/basis.h");
