@@ -5,15 +5,16 @@ on:
     branches:
       - '*'
 
+permissions:
+  contents: read
+
 jobs:
   test:
-    runs-on: docker
-
-    container:
-      image: ubuntu:latest
+    name: codeberg-medium / ReleaseFast
+    runs-on: codeberg-medium
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Run Tests
+      - name: Run Tests in ReleaseFast Mode
         run: make test

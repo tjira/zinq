@@ -4,5 +4,9 @@ stages:
 test:
   stage: test
   image: ubuntu:latest
+
+  before_script:
+    - apt update && apt install make
+
   script:
     - make test
