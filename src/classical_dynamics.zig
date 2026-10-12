@@ -283,7 +283,7 @@ pub fn Ensemble(comptime T: type) type {
             return axes_removed;
         }
 
-        /// Removes center-of-mass position and momentum drift from all trajectories in the ensemble.
+        /// Removes center-of-mass momentum drift from all trajectories in the ensemble.
         pub fn removeTranslation(self: *@This()) void {
             const natom, var m_tot: T = .{ self.m.len / 3, 0 };
 
@@ -292,23 +292,17 @@ pub fn Ensemble(comptime T: type) type {
             if (m_tot <= 0) return;
 
             for (0..self.r.nrow()) |i| {
-                var r_cm = [3]T{ 0, 0, 0 };
                 var p_cm = [3]T{ 0, 0, 0 };
 
                 for (0..natom) |k| for (0..3) |c| {
-                    r_cm[c] += self.m[k * 3 + c] * self.r.at(i, k * 3 + c);
-
                     p_cm[c] += self.p.at(i, k * 3 + c);
                 };
 
                 for (0..3) |c| {
-                    r_cm[c] /= m_tot;
                     p_cm[c] /= m_tot;
                 }
 
                 for (0..natom) |k| for (0..3) |c| {
-                    self.r.ptr(i, k * 3 + c).* -= r_cm[c];
-
                     self.p.ptr(i, k * 3 + c).* -= self.m[k * 3 + c] * p_cm[c];
                 };
             }
@@ -1119,18 +1113,14 @@ fn Propagator(comptime T: type) type {
 
         /// Integrates equations of motion using the Velocity Verlet algorithm.
         pub fn step(self: *@This(), ens: *Ensemble(T), gb: *GradientBuffer(T), pot: Potential(T), time: T) !void {
-            for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
-                ens.p.ptr(i, j).* += 0.5 * ens.m[j] * ens.a.at(i, j) * self.dt;
-
-                ens.r.ptr(i, j).* += 0.5 * (ens.p.at(i, j) / ens.m[j]) * self.dt;
-            };
-
             if (self.thermo) |*thermo| {
-                thermo.apply(&ens.p, ens.m);
+                thermo.apply(&ens.p, ens.m, 0.5);
             }
 
             for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
-                ens.r.ptr(i, j).* += 0.5 * (ens.p.at(i, j) / ens.m[j]) * self.dt;
+                ens.p.ptr(i, j).* += 0.5 * ens.m[j] * ens.a.at(i, j) * self.dt;
+
+                ens.r.ptr(i, j).* += (ens.p.at(i, j) / ens.m[j]) * self.dt;
             };
 
             try gb.update(ens.r, pot, time, ens.s.data);
@@ -1146,6 +1136,10 @@ fn Propagator(comptime T: type) type {
             for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
                 ens.p.ptr(i, j).* += 0.5 * ens.m[j] * ens.a.at(i, j) * self.dt;
             };
+
+            if (self.thermo) |*thermo| {
+                thermo.apply(&ens.p, ens.m, 0.5);
+            }
 
             if (self.nonadia_dynamic) |*n| if (n.* == .surface_hopping) {
                 if (try n.surface_hopping.hop(ens, gb.V, gb.W, gb.U, self.dt)) {

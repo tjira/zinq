@@ -37,8 +37,10 @@ pub fn Berendsen(comptime T: type) type {
         }
 
         /// Applies velocity rescaling to trajectory momenta to couple with thermal bath.
-        pub fn apply(self: *@This(), p: *Matrix(T), m: []const T) void {
+        pub fn apply(self: *@This(), p: *Matrix(T), m: []const T, frac: T) void {
             const ndim = p.ncol();
+
+            const eff_dt_over_tau = frac * self.dt_over_tau;
 
             for (0..p.nrow()) |i| {
                 var ekin: T = 0;
@@ -50,7 +52,7 @@ pub fn Berendsen(comptime T: type) type {
                 const t_inst = 2 * ekin / @as(T, @floatFromInt(ndim));
 
                 if (t_inst > 1e-12) {
-                    const factor = 1 + self.dt_over_tau * (self.target_temp / t_inst - 1);
+                    const factor = 1 + eff_dt_over_tau * (self.target_temp / t_inst - 1);
 
                     for (0..ndim) |j| {
                         p.ptr(i, j).* *= @sqrt(@max(0, factor));
@@ -64,27 +66,31 @@ pub fn Berendsen(comptime T: type) type {
 /// Implements Langevin dynamics thermalization via Ornstein-Uhlenbeck stochastic integration.
 pub fn Langevin(comptime T: type) type {
     return struct {
-        c1: T,
-        c2: T,
+        gamma_dt: T,
+        target_t: T,
 
         rng: std.Random.DefaultPrng,
 
         /// Initializes Langevin thermal parameters and pseudo-random number generator.
         pub fn init(opt: LangevinOptions, dt: T) @This() {
             var split_mix = std.Random.SplitMix64.init(opt.seed);
+
             const rng = std.Random.DefaultPrng.init(split_mix.next());
 
-            const c1 = std.math.exp(-opt.gamma * dt);
-
-            return .{ .c1 = c1, .c2 = std.math.sqrt(opt.temperature * (1 - c1 * c1) / AU2K), .rng = rng };
+            return .{ .gamma_dt = opt.gamma * dt, .target_t = opt.temperature / AU2K, .rng = rng };
         }
 
         /// Applies the stochastic Langevin friction and random thermal kick to trajectory momenta.
-        pub fn apply(self: *@This(), p: *Matrix(T), m: []const T) void {
+        pub fn apply(self: *@This(), p: *Matrix(T), m: []const T, frac: T) void {
+            const temp = self.target_t;
+
+            const c1 = std.math.exp(-frac * self.gamma_dt);
+            const c2 = std.math.sqrt(temp * (1 - c1 * c1));
+
             const random = self.rng.random();
 
             for (0..p.nrow()) |i| for (0..p.ncol()) |j| {
-                p.ptr(i, j).* = self.c1 * p.at(i, j) + self.c2 * @sqrt(m[j]) * random.floatNorm(T);
+                p.ptr(i, j).* = c1 * p.at(i, j) + c2 * @sqrt(m[j]) * random.floatNorm(T);
             };
         }
     };
@@ -105,9 +111,9 @@ pub fn Thermostat(comptime T: type) type {
         }
 
         /// Applies the thermalization update to the trajectory ensemble momenta.
-        pub fn apply(self: *@This(), p: *Matrix(T), m: []const T) void {
+        pub fn apply(self: *@This(), p: *Matrix(T), m: []const T, frac: T) void {
             switch (self.*) {
-                inline else => |*t| t.apply(p, m),
+                inline else => |*t| t.apply(p, m, frac),
             }
         }
     };
