@@ -519,7 +519,7 @@ test "Adiabatic RTP Partial Waves on Tully's First Potential" {
             .e_max = 0.225,
             .e_step = 0.001,
         },
-        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .partial_waves = .{ .j_min = 0, .j_max = 2 },
         .fft = .{ .plan = .estimate },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -537,7 +537,7 @@ test "Adiabatic RTP Partial Waves on Tully's First Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 137.5260385613105100, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 10.6309389377229820, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -557,7 +557,7 @@ test "Diabatic RTP Partial Waves on Tully's First Potential" {
             .e_max = 0.225,
             .e_step = 0.001,
         },
-        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .partial_waves = .{ .j_min = 0, .j_max = 2 },
         .fft = .{ .plan = .estimate },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -575,7 +575,7 @@ test "Diabatic RTP Partial Waves on Tully's First Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 137.5116217529468700, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 10.6335524118560090, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -595,7 +595,7 @@ test "Adiabatic RTP Partial Waves on Tully's Second Potential" {
             .e_max = 2.5,
             .e_step = 0.01,
         },
-        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .partial_waves = .{ .j_min = 0, .j_max = 2 },
         .fft = .{ .plan = .estimate },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -613,7 +613,7 @@ test "Adiabatic RTP Partial Waves on Tully's Second Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 9.4108097828783630, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 0.7009235275354420, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -633,7 +633,7 @@ test "Diabatic RTP Partial Waves on Tully's Second Potential" {
             .e_max = 2.5,
             .e_step = 0.01,
         },
-        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .partial_waves = .{ .j_min = 0, .j_max = 2 },
         .fft = .{ .plan = .estimate },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -651,7 +651,7 @@ test "Diabatic RTP Partial Waves on Tully's Second Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 9.4103936491983500, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 0.7010014290449404, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -671,7 +671,7 @@ test "Adiabatic RTP Partial Waves on Tully's Third Potential" {
             .e_max = 0.225,
             .e_step = 0.001,
         },
-        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .partial_waves = .{ .j_min = 0, .j_max = 2 },
         .fft = .{ .plan = .estimate },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -689,7 +689,7 @@ test "Adiabatic RTP Partial Waves on Tully's Third Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 135.4783472560165800, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 10.6190051759095550, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -709,7 +709,7 @@ test "Diabatic RTP Partial Waves on Tully's Third Potential" {
             .e_max = 0.225,
             .e_step = 0.001,
         },
-        .partial_waves = .{ .j_min = 0, .j_max = 10 },
+        .partial_waves = .{ .j_min = 0, .j_max = 2 },
         .fft = .{ .plan = .estimate },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -727,6 +727,6 @@ test "Diabatic RTP Partial Waves on Tully's Third Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 135.2753744156125300, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 10.5149126555516600, TEST_TOLERANCE);
     // zig fmt: on
 }

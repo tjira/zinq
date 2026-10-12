@@ -1,0 +1,19 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - '*'
+
+jobs:
+  test:
+    runs-on: docker
+
+    container:
+      image: ubuntu:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Tests
+        run: make test

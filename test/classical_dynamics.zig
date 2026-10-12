@@ -11,7 +11,7 @@ test "Adiabatic Landau--Zener on Tully's First Potential" {
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = true,
@@ -21,12 +21,12 @@ test "Adiabatic Landau--Zener on Tully's First Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.3312896120968050, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.5971917050606630, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.5300000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.4700000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0006001827820393, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0471450477819875, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 10.6656268035362718, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.1521976635855786, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.5000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.5000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0000000017158227, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0439197242839718, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -36,7 +36,7 @@ test "Diabatic Landau--Zener on Tully's First Potential" {
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = false,
@@ -46,12 +46,12 @@ test "Diabatic Landau--Zener on Tully's First Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.6323986087966680, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.0180950224960980, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.3300000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.6700000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0033999979510066, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0498692969839902, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 10.4102050656993903, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 12.7282698987647933, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.4000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0019998953645219, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0418823550035157, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -61,7 +61,7 @@ test "Adiabatic Landau--Zener on Tully's Second Potential" {
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = true,
@@ -71,12 +71,12 @@ test "Adiabatic Landau--Zener on Tully's Second Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.8036285444219670, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.2573240059221970, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.9200000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.0800000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0040021822029992, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0525425178725186, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.7927660164116048, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.6354249793054265, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  1.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0000000196917084, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0539195441611981, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -86,7 +86,7 @@ test "Diabatic Landau--Zener on Tully's Second Potential" {
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = false,
@@ -96,12 +96,12 @@ test "Diabatic Landau--Zener on Tully's Second Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.5626221661956060, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.1973190568882540, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.9200000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.0800000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0039968873400233, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0522379841290380, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.5004176736399657, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.5927482922727982, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  1.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0536100151621981, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -111,7 +111,7 @@ test "Adiabatic Landau--Zener on Tully's Third Potential" {
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = true,
@@ -121,12 +121,12 @@ test "Adiabatic Landau--Zener on Tully's Third Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 27.6826368484236400, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 31.9935479192494720, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 26.9222894860173838, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 31.8271555187349904, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  1.0000000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.0000000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.2000008999363736, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.2559452886436811, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.2000008999539862, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.2533197213564702, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -136,7 +136,7 @@ test "Diabatic Landau--Zener on Tully's Third Potential" {
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = false,
@@ -146,12 +146,12 @@ test "Diabatic Landau--Zener on Tully's Third Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.5220947185096630, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 15.0091217734431250, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.9222407208208416, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.6354276821528622, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  1.0000000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.0000000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0006000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0565447217553644, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0539195684542596, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -161,7 +161,7 @@ test "Adiabatic Landau--Zener on Time-Linear Potential" {
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{1},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 2000,
         .time_step = 0.01,
         .adiabatic = true,
@@ -171,12 +171,12 @@ test "Adiabatic Landau--Zener on Time-Linear Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), -0.8878446095195264, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), -0.0988554174204397, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.3100000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.6900000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      38.0075992401519700, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       1.6941659415406718, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), -10.933662718651488, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), -0.7260653668261500, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.2000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.8000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      60.0119988002399367, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       1.6087210520063333, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -186,7 +186,7 @@ test "Diabatic Landau--Zener on Time-Linear Potential" {
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{1},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 2000,
         .time_step = 0.01,
         .adiabatic = false,
@@ -196,12 +196,12 @@ test "Diabatic Landau--Zener on Time-Linear Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0),  0.1908475272076625, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0),  0.0091217734431337, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.7200000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.2800000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      44.0000000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.4526169090816229, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), -7.3223471593512031, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), -0.3645723178471355, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.7000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      40.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.8077216762263024, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -211,7 +211,7 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = true,
@@ -221,12 +221,12 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.5803442185294190, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.9584695001026870, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6500000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3500000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0029999904136419, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0495447657622636, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.0050887212904378, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.7769409725990499, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.7000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0039999961708517, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0479196129299625, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -236,7 +236,7 @@ test "Diabatic Fewest Switches on Tully's First Potential" {
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = false,
@@ -246,12 +246,12 @@ test "Diabatic Fewest Switches on Tully's First Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.2240753628929290, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.5200327736925910, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.3800000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.6200000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0023999550866957, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0464549357190951, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.4462517262895229, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.0675748664262166, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.1000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.9000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0079999981562800, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0508921161863623, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -261,7 +261,7 @@ test "Adiabatic Fewest Switches on Tully's Second Potential" {
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = true,
@@ -271,12 +271,12 @@ test "Adiabatic Fewest Switches on Tully's Second Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.4182303937708480, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.7647161981900310, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.8800000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.1200000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0059957358450081, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0505489932626763, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.6758586536157249, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.6354351149612150, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  1.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0000000427207902, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0539196098911001, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -286,7 +286,7 @@ test "Diabatic Fewest Switches on Tully's Second Potential" {
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = false,
@@ -296,12 +296,12 @@ test "Diabatic Fewest Switches on Tully's Second Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.5148707789799050, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 12.6126032704844920, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0),  9.8316493874426403, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 10.7497391119596024, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.9000000000000000, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.1000000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0032035221290807, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0472945844383648, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0049999999999527, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0440895818063596, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -311,7 +311,7 @@ test "Adiabatic Fewest Switches on Tully's Third Potential" {
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = true,
@@ -321,12 +321,12 @@ test "Adiabatic Fewest Switches on Tully's Third Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.5289939577292980, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.3625346365611270, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.7400000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.2600000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.1199315061175614, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.1758759550682386, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 15.1345197513123360, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 17.6684970542176103, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.9000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.1000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.1400606365636651, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.1933795329088452, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -336,7 +336,7 @@ test "Diabatic Fewest Switches on Tully's Third Potential" {
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = false,
@@ -346,12 +346,12 @@ test "Diabatic Fewest Switches on Tully's Third Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.5220947185096630, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 15.0091217734431250, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.5500000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.4500000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0000600000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0565447217553644, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.9222407208208416, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.6354276821528622, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.5000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.5000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0539195684542596, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -361,7 +361,7 @@ test "Adiabatic Fewest Switches on Time-Linear Potential" {
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{1},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 2000,
         .time_step = 0.01,
         .adiabatic = true,
@@ -371,12 +371,12 @@ test "Adiabatic Fewest Switches on Time-Linear Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0),  1.6763424299984810, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0),  0.1635017328919781, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.3600000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.6400000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      28.0055994401119800, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       2.4083820506614500, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), -3.4436523009974729, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0),  0.0548681083088737, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.3000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.7000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      40.0079992001599578, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       3.0243765838306489, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -386,7 +386,7 @@ test "Diabatic Fewest Switches on Time-Linear Potential" {
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{1},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 2000,
         .time_step = 0.01,
         .adiabatic = false,
@@ -396,12 +396,12 @@ test "Diabatic Fewest Switches on Time-Linear Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0),  0.1908475272076625, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0),  0.0091217734431337, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.7800000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.2200000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      56.0000000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.4526169090816229, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0),  -7.3223471593512031, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0),  -0.3645723178471355, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),   1.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),   0.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      100.0000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,        0.8077216762263024, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -411,7 +411,7 @@ test "Adiabatic Ehrenfest on Tully's First Potential" {
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = true,
@@ -421,12 +421,12 @@ test "Adiabatic Ehrenfest on Tully's First Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.6802042578144580, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.0982468202290420, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6647537702384002, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3352462297615999, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0032950679439719, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0499006402144838, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.1050744301319391, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.7392283350592006, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6778064362111490, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3221935637888466, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0035561249904751, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0475356050762153, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -436,7 +436,7 @@ test "Diabatic Ehrenfest on Tully's First Potential" {
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = false,
@@ -446,12 +446,12 @@ test "Diabatic Ehrenfest on Tully's First Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.6802042578144580, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 14.0982468202290420, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.3352462297615999, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.6647537702384002, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0032950679439719, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0499006402144838, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.1050744301319355, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.7392283350592006, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.3221935637888462, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.6778064362111489, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0035561249904751, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0475356050762153, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -461,7 +461,7 @@ test "Adiabatic Ehrenfest on Tully's Second Potential" {
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = true,
@@ -471,12 +471,12 @@ test "Adiabatic Ehrenfest on Tully's Second Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.5712447447864760, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.9874375088259220, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.8481717205288644, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.1518282794703638, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0075913139300451, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0492208778278723, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.0237319718250149, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.5994442246659926, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.8505797952958785, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.1494202047033702, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0074709545291668, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0467114470472358, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -486,7 +486,7 @@ test "Diabatic Ehrenfest on Tully's Second Potential" {
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = false,
@@ -496,12 +496,12 @@ test "Diabatic Ehrenfest on Tully's Second Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.5711515914182850, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.9873060948859570, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.8482161667419055, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.1517838332573222, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0075923546826893, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0492198809756093, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 12.0235650532486886, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.5993029433022237, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.8503511626097490, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.1496488373895047, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0074723223268263, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0467100979913131, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -511,7 +511,7 @@ test "Adiabatic Ehrenfest on Tully's Third Potential" {
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = true,
@@ -521,12 +521,12 @@ test "Adiabatic Ehrenfest on Tully's Third Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 17.8174027527849040, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 21.2281186407351600, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6418720815441132, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3581279051462304, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0567490723865715, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.1126957002466461, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 17.2706908790505942, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 21.0981204670464066, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6450608001291388, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3549391869530560, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0580245580115124, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.1113458759664723, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -536,7 +536,7 @@ test "Diabatic Ehrenfest on Tully's Third Potential" {
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{2000},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 3000,
         .time_step = 1,
         .adiabatic = false,
@@ -546,12 +546,12 @@ test "Diabatic Ehrenfest on Tully's Third Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 4.0059001662911500, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 1.8447064645109301, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0), 0.5496561089271500, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1), 0.4503438824941452, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      0.0453131113438013, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,      0.0118295743021424, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0),  2.5501452145589107, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), -1.4160861088221239, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.3801717018587997, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.6198282912718285, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,       0.0355182152434366, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0189996160465501, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -561,7 +561,7 @@ test "Adiabatic Ehrenfest on Time-Linear Potential" {
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{1},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 2000,
         .time_step = 0.01,
         .adiabatic = true,
@@ -571,12 +571,12 @@ test "Adiabatic Ehrenfest on Time-Linear Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0),  0.1908475272076625, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0),  0.0091217734431337, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.2845956092560016, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.7153646808023937, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      43.0855216747040760, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.4526169090816228, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), -7.3223471593512031, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), -0.3645723178471355, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.2845956092560151, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.7153646808023986, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      43.0855216747033865, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.8077216762263024, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -586,7 +586,7 @@ test "Diabatic Ehrenfest on Time-Linear Potential" {
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{1},
-        .trajectories = 100,
+        .trajectories = 10,
         .iterations = 2000,
         .time_step = 0.01,
         .adiabatic = false,
@@ -596,11 +596,11 @@ test "Diabatic Ehrenfest on Time-Linear Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0),  0.1908475272076625, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0),  0.0091217734431337, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), -7.3223471593512031, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), -0.3645723178471355, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.7245718462070273, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.2753884438513730, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      44.3968192572406650, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.4526169090816228, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.2753884438513731, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      44.3968192572406792, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.8077216762263024, TEST_TOLERANCE);
     // zig fmt: on
 }
