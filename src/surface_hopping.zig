@@ -18,6 +18,7 @@ pub const Options = union(enum) {
 
 /// Options configuration for Tully's fewest switches surface hopping.
 const FewestSwitchesOptions = struct {
+    alpha: ?f64 = null,
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
     nstep: u32 = 10,
     seed: u32 = 1,
@@ -219,12 +220,18 @@ fn FewestSwitches(comptime T: type) type {
         coefics: Matrix(Complex(T)),
         itg: Integrator(Complex(T)),
 
+        alpha: ?T,
+
         hamilton: Matrix(T),
         sigmatdc: Matrix(T),
         uhist: [2]Matrix(T),
 
         /// Allocates and initializes wavefunction coefficients and Tully integrator.
         pub fn init(opt: anytype, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
+            if (opt.alpha) |a| {
+                if (!adia or a < 0) return error.InvalidInput;
+            }
+
             const cols = if (adia) nstate else nstate * nstate;
 
             var ham = try Matrix(T).init(ntraj, cols, gpa);
@@ -260,7 +267,7 @@ fn FewestSwitches(comptime T: type) type {
             const itg = try Integrator(Complex(T)).init(itg_tag, nstate, gpa);
             errdefer itg.deinit(gpa);
 
-            return .{ .coefics = coef, .hamilton = ham, .uhist = uhist, .sigmatdc = sigma, .itg = itg };
+            return .{ .alpha = opt.alpha, .coefics = coef, .hamilton = ham, .itg = itg, .sigmatdc = sigma, .uhist = uhist };
         }
 
         /// Deallocates Tully fewest switches coefficients and integrator resources.
@@ -296,18 +303,20 @@ fn FewestSwitches(comptime T: type) type {
 
                 const rho_cc = self.coefics.at(i, c).squaredMagnitude();
 
-                if (rho_cc < 1e-14) continue;
+                if (rho_cc >= 1e-14) {
+                    for (0..probs.ncol()) |j| {
+                        if (c == j) continue;
 
-                for (0..probs.ncol()) |j| {
-                    if (c == j) continue;
+                        const coef_c = self.coefics.at(i, c);
+                        const coef_j = self.coefics.at(i, j);
 
-                    const coef_c = self.coefics.at(i, c);
-                    const coef_j = self.coefics.at(i, j);
+                        const flux = self.sigmatdc.at(i, c * probs.ncol() + j) * coef_c.conjugate().mul(coef_j).re;
 
-                    const flux = self.sigmatdc.at(i, c * probs.ncol() + j) * coef_c.conjugate().mul(coef_j).re;
-
-                    probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
+                        probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
+                    }
                 }
+
+                self.applyDecoherence(ensemble, i, dt);
             }
         }
 
@@ -364,6 +373,48 @@ fn FewestSwitches(comptime T: type) type {
                     };
                 };
             }
+        }
+
+        /// Damps nonadiabatic electronic state amplitudes according to the Granucci-Persico decoherence time.
+        fn applyDecoherence(self: *@This(), ensemble: *Ensemble(T), traj: usize, dt: T) void {
+            const alpha = self.alpha orelse return;
+
+            var ekin: T = 0;
+
+            for (0..ensemble.p.ncol()) |j| {
+                ekin += ensemble.p.at(traj, j) * ensemble.p.at(traj, j) / (2 * ensemble.m[j]);
+            }
+
+            if (ekin <= 1e-4) return;
+
+            const c = ensemble.s.at(traj);
+
+            const e_curr = self.hamilton.at(traj, c);
+
+            for (0..self.coefics.ncol()) |j| {
+                if (j == c) continue;
+
+                const delta_e = @abs(self.hamilton.at(traj, j) - e_curr);
+
+                if (delta_e < 1e-14) continue;
+
+                const tau = (1 + alpha / ekin) / delta_e;
+                const d = std.math.exp(-0.5 * dt / tau);
+
+                self.coefics.ptr(traj, j).re *= d;
+                self.coefics.ptr(traj, j).im *= d;
+            }
+
+            var sum_norm: T = 1;
+
+            for (0..self.coefics.ncol()) |j| if (j != c) {
+                sum_norm -= self.coefics.at(traj, j).squaredMagnitude();
+            };
+
+            const renorm = std.math.sqrt(@max(0, sum_norm) / (self.coefics.at(traj, c).squaredMagnitude() + 1e-14));
+
+            self.coefics.ptr(traj, c).re *= renorm;
+            self.coefics.ptr(traj, c).im *= renorm;
         }
 
         /// Computes time derivative of electronic coefficients in the adiabatic basis.

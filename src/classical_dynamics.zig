@@ -1303,6 +1303,20 @@ fn checkInvalidInput(opt: Options) !void {
         }
     }
 
+    if (opt.nonadiabatic) |na| switch (na) {
+        .surface_hopping => |sh| switch (sh) {
+            .fewest_switches => |fs| if (fs.alpha != null and !opt.adiabatic) {
+                std.log.err("DECOHERENCE CORRECTION IS ONLY SUPPORTED FOR ADIABATIC SIMULATIONS", .{});
+
+                return error.InvalidInput;
+            },
+
+            inline else => {},
+        },
+
+        inline else => {},
+    };
+
     if (opt.potential == .ab_initio) switch (opt.potential.ab_initio.method) {
         .hartree_fock => if (opt.initial_conditions.state > 0) {
             std.log.err("REQUESTED ELECTRONIC STATE IS NOT SUPPORTED FOR HARTREE-FOCK POTENTIAL", .{});

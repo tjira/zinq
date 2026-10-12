@@ -79,3 +79,29 @@ $$
 $$
 
 where $E_{\text{kin}}$ is the initial kinetic energy of the nuclei. If the hop is uphill and the potential energy change is larger than the available kinetic energy, the term inside the square root is negative. In this case, the hop is rejected, and the trajectory remains on the active state $c$, which constitutes a frustrated hop.
+
+---
+
+## III. Decoherence Correction
+
+### 6. Granucci–Persico Energy-Based Decoherence Correction
+
+In standard Fewest Switches Surface Hopping, the electronic wavefunction retains phase coherence along the classical trajectory indefinitely, even after wavepackets propagating on distinct adiabatic surfaces have separated in nuclear phase space. This overcoherence can lead to spurious transitions and unphysical recrossings long after leaving the nonadiabatic interaction region. To restore physical wavepacket branching, our framework incorporates the energy-based decoherence correction proposed by Granucci and Persico, which is evaluated strictly in the adiabatic representation. For each inactive adiabatic state $j\ne c$, the characteristic decoherence time is defined as
+
+$$
+\tau_j=\frac{1+\alpha/E_{\text{kin}}}{|E_j-E_c|}
+$$
+
+where $\alpha$ is an empirical parameter, $E_{\text{kin}}$ is the nuclear kinetic energy, and $|E_j-E_c|$ is the adiabatic energy gap between state $j$ and the active state $c$. When $E_{\text{kin}}>10^{-4}\text{ a.u.}$, the electronic coefficients of all inactive states are damped at each integration substep $\Delta t$ according to
+
+$$
+c_j'(t)=c_j(t)\exp\left(-\frac{\Delta t}{2\tau_j}\right)
+$$
+
+while the active state coefficient is renormalized to conserve total electronic population through
+
+$$
+c_c'(t)=c_c(t)\sqrt{\frac{\max\left(0,1-\sum_{j\ne c}|c_j'(t)|^2\right)}{|c_c(t)|^2+10^{-14}}}
+$$
+
+which preserves the quantum phase of the active state while collapsing the electronic wavepacket toward the active adiabatic potential surface.
