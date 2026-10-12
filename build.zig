@@ -17,7 +17,7 @@ fn getTriple(b: *std.Build, target: std.Build.ResolvedTarget) ![]const u8 {
 fn getVersion(b: *std.Build) ![]const u8 {
     const command = .{ "git", "describe", "--tags" };
 
-    const args: std.process.RunOptions = .{ .argv = &command, .cwd = .{ .dir = std.Io.Dir.cwd() } };
+    const args: std.process.RunOptions = .{ .argv = &command };
 
     const result = std.process.run(b.allocator, b.graph.io, args) catch {
         return "UNKNOWN";
