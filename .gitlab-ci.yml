@@ -59,4 +59,4 @@ test:
       policy: pull
 
   script:
-    - .zig-bin/zig build --release=fast test
+    - .zig-bin/zig build --release=fast --color off --summary all --verbose test

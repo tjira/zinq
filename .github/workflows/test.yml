@@ -18,16 +18,16 @@ jobs:
         include:
           - os: ubuntu-latest
             mode_name: Debug
-            build_flags: ""
+            build_flags: "--color off --summary all --verbose"
           - os: ubuntu-latest
             mode_name: ReleaseFast
-            build_flags: "--release=fast"
+            build_flags: "--release=fast --color off --summary all --verbose"
           - os: ubuntu-latest
             mode_name: ReleaseSafe
-            build_flags: "--release=safe"
+            build_flags: "--release=safe --color off --summary all --verbose"
           - os: ubuntu-latest
             mode_name: ReleaseSmall
-            build_flags: "--release=small"
+            build_flags: "--release=small --color off --summary all --verbose"
 
     steps:
       - uses: actions/checkout@v7
