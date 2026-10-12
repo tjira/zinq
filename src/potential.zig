@@ -52,7 +52,7 @@ pub const AbInitioWrite = struct {
     kinetic_energy: ?[]const u8 = null,
     momentum_trajectory: ?[]const u8 = null,
     population: ?[]const u8 = null,
-    position: ?[]const u8 = null,
+    position_trajectory: ?[]const u8 = null,
     potential_energy: ?[]const u8 = null,
     state_potential_energy: ?[]const u8 = null,
     temperature: ?[]const u8 = null,
@@ -529,14 +529,17 @@ fn Custom(comptime T: type) type {
             }
         }
 
+        /// Returns true if the custom potential expression explicitly depends on time.
         pub fn isTd(self: @This()) bool {
             return self.is_td;
         }
 
+        /// Returns the spatial coordinate dimensionality of the custom potential.
         pub fn ndim(self: @This()) usize {
             return self.r_vals.len;
         }
 
+        /// Returns the number of coupled electronic states in the custom potential matrix.
         pub fn nstate(self: @This()) usize {
             return std.math.sqrt(self.expressions.len);
         }
@@ -568,14 +571,17 @@ fn File(comptime T: type) type {
             };
         }
 
+        /// Returns false as the grid file potential is independent of time.
         pub fn isTd(_: @This()) bool {
             return false;
         }
 
+        /// Returns the spatial coordinate dimensionality of the grid.
         pub fn ndim(self: @This()) usize {
             return self.ndims;
         }
 
+        /// Returns the number of coupled electronic states in the interpolated potential.
         pub fn nstate(self: @This()) usize {
             return std.math.sqrt(self.U.ncol() - self.ndim());
         }
@@ -603,14 +609,17 @@ fn Harmonic(comptime T: type) type {
             V[0] = sum.val;
         }
 
+        /// Returns false as the harmonic potential is independent of time.
         pub fn isTd(_: @This()) bool {
             return false;
         }
 
+        /// Returns the number of harmonic oscillator dimensions.
         pub fn ndim(self: @This()) usize {
             return self.k.len;
         }
 
+        /// Returns the single ground state of the uncoupled harmonic potential.
         pub fn nstate(_: @This()) usize {
             return 1;
         }
@@ -649,10 +658,12 @@ fn HenonHeiles(comptime T: type) type {
             return false;
         }
 
+        /// Returns the two spatial coordinate dimensions of the Henon-Heiles system.
         pub fn ndim(_: @This()) usize {
             return 2;
         }
 
+        /// Returns the single electronic state of the Henon-Heiles potential.
         pub fn nstate(_: @This()) usize {
             return 1;
         }
@@ -690,14 +701,17 @@ fn JahnTeller(comptime T: type) type {
             V[3] = V11.val;
         }
 
+        /// Returns false as the Jahn-Teller potential is independent of time.
         pub fn isTd(_: @This()) bool {
             return false;
         }
 
+        /// Returns the two degenerate normal mode coordinate dimensions.
         pub fn ndim(_: @This()) usize {
             return 2;
         }
 
+        /// Returns the two electronic states coupled by the Jahn-Teller interaction.
         pub fn nstate(_: @This()) usize {
             return 2;
         }
@@ -859,14 +873,17 @@ fn TimeLinear(comptime T: type) type {
             V[3] = V11.val;
         }
 
+        /// Returns true as the linear coupling potential explicitly depends on time.
         pub fn isTd(_: @This()) bool {
             return true;
         }
 
+        /// Returns the single nuclear coordinate dimension of the time-linear model.
         pub fn ndim(_: @This()) usize {
             return 1;
         }
 
+        /// Returns the two coupled electronic states of the time-linear model.
         pub fn nstate(_: @This()) usize {
             return 2;
         }
@@ -905,14 +922,17 @@ fn Tully1(comptime T: type) type {
             V[3] = V11.val;
         }
 
+        /// Returns false as this potential is independent of time.
         pub fn isTd(_: @This()) bool {
             return false;
         }
 
+        /// Returns the single nuclear coordinate dimension of the Tully 1 model.
         pub fn ndim(_: @This()) usize {
             return 1;
         }
 
+        /// Returns the two coupled electronic states in the Tully 1 model.
         pub fn nstate(_: @This()) usize {
             return 2;
         }

@@ -170,11 +170,19 @@ pub const Parser = struct {
     }
 
     /// Directs the parsed argument action into the corresponding state space execution path.
-    pub fn dispatch(self: @This(), io: std.Io, gpa: Allocator, arena: Allocator) !void {
+    pub fn dispatch(self: *@This(), io: std.Io, gpa: Allocator, arena: Allocator) !void {
         switch (self.action) {
             .files => |files| try runFiles(io, gpa, arena, files),
             .help => try runHelp(io, help_main),
-            .subcommand => |command| try runSubcommand(io, gpa, arena, command),
+            .subcommand => |command| {
+                for (command.args) |arg| if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
+                    self.action = .help;
+
+                    break;
+                };
+
+                try runSubcommand(io, gpa, arena, command);
+            },
             .unknown_option => |opt| {
                 try printf(io, "UNKNOWN '{s}' OPTION\n", .{opt});
 

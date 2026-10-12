@@ -55,7 +55,7 @@ compile_libint  ($prefix, $cores,        $pwd          ) if $build{libint};
 compile_libxc   ($prefix, $cores, $host, $pwd          ) if $build{libxc};
 compile_openblas($prefix, $cores,        $pwd, $generic) if $build{openblas};
 compile_fftw    ($prefix, $cores, $host, $pwd, $generic) if $build{fftw};
-compile_openmp  ($prefix, $cores, $target, $pwd) if $build{openmp};
+compile_openmp  ($prefix, $cores,        $pwd          ) if $build{openmp};
 
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
@@ -444,7 +444,7 @@ sub compile_exprtk {
 
 sub compile_openmp {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $target, $pwd) = @_;
+    my ($prefix, $cores, $pwd) = @_;
 
     # CHECK IF THE TARGET IS LINUX, RETURN IF NOT
     return unless $target =~ /linux/;

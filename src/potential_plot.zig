@@ -38,6 +38,7 @@ pub fn Result(comptime T: type) type {
     return struct {
         U: Matrix(T),
 
+        /// Deallocates memory allocated for the evaluated potential energy matrix.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.U.deinit(gpa);
         }

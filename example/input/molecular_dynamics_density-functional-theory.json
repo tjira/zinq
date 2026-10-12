@@ -18,7 +18,7 @@
                             }
                         },
                         "write" : {
-                            "position" : "trajectory.xyz"
+                            "position_trajectory" : "trajectory.xyz"
                         }
                     }
                 },

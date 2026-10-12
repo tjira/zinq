@@ -431,7 +431,7 @@ const AbInitioStreamWriter = struct {
             self.files_pop = try initMatrixFiles(io, path, ntraj, nstep, nstate + 1, gpa);
         }
 
-        if (write.position) |path| {
+        if (write.position_trajectory) |path| {
             self.files_pos = try initFiles(io, path, ntraj, gpa);
         }
 
@@ -1114,7 +1114,7 @@ fn Propagator(comptime T: type) type {
         /// Integrates equations of motion using the Velocity Verlet algorithm.
         pub fn step(self: *@This(), ens: *Ensemble(T), gb: *GradientBuffer(T), pot: Potential(T), time: T) !void {
             if (self.thermo) |*thermo| {
-                thermo.apply(&ens.p, ens.m, 0.5);
+                thermo.apply(&ens.p, ens.m, ens.ndof, 0.5);
             }
 
             for (0..ens.r.nrow()) |i| for (0..ens.r.ncol()) |j| {
@@ -1138,7 +1138,7 @@ fn Propagator(comptime T: type) type {
             };
 
             if (self.thermo) |*thermo| {
-                thermo.apply(&ens.p, ens.m, 0.5);
+                thermo.apply(&ens.p, ens.m, ens.ndof, 0.5);
             }
 
             if (self.nonadia_dynamic) |*n| if (n.* == .surface_hopping) {

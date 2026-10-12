@@ -15,6 +15,7 @@ pub fn Integrator(comptime T: type) type {
     return struct {
         method: Method,
 
+        /// Tagged union of available Runge-Kutta numerical integration schemes.
         pub const Method = union(enum) {
             rk1: Rk1(T),
             rk4: Rk4(T),
