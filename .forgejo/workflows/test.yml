@@ -13,5 +13,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.0
+
+      - name: Cache Compiled Libraries
+        id: cache-libs
+        uses: actions/cache@v5
+        with:
+          path: external-x86_64-linux
+          key: libs-x86_64-linux-${{hashFiles('script/library.pl')}}
+
+      - name: Download Precompiled Libraries
+        if: steps.cache-libs.outputs.cache-hit != 'true'
+        run: make external-x86_64-linux
+
       - name: Run Tests in ReleaseFast Mode
-        run: make test
+        run: zig build --release=fast test
