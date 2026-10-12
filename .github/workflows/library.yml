@@ -64,17 +64,14 @@ jobs:
         run: ./script/library.pl --target ${{matrix.target}} --generic
 
       - name: Remove Unnecessary Files
-        if: steps.cache-libs.outputs.cache-hit != 'true'
         working-directory: external-${{matrix.target}}
         run: rm -rf bin share lib/cmake lib/pkgconfig include/*.bib include/*.f03 lib/*.la
 
       - name: Remove Eigen Signature File
-        if: steps.cache-libs.outputs.cache-hit != 'true'
         working-directory: external-${{matrix.target}}
         run: rm -f include/eigen3/signature_of_eigen3_matrix_library
 
       - name: Strip Debug Symbols
-        if: steps.cache-libs.outputs.cache-hit != 'true'
         working-directory: external-${{matrix.target}}
         run: llvm-strip --strip-debug --remove-section=.llvm_addrsig lib/*.a
 
