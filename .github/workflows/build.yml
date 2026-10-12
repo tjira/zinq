@@ -1,0 +1,20 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - '*'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ubuntu-latest / Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build the Project in Debug Mode
+        run: make DEBUG=1
