@@ -6,7 +6,7 @@ test:
   image: ubuntu:latest
 
   before_script:
-    - apt update && apt install make
+    - apt update && apt install make xz-utils
 
   script:
     - make test
