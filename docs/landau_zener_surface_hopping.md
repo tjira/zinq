@@ -54,7 +54,7 @@ where $Z_{\text{min}}$ is the minimum energy gap and $\ddot{Z}$ is the curvature
 
 ### 2. History Buffer and Avoided Crossings
 
-To detect when a trajectory is passing through an avoided crossing, our codebase implements a history buffer: the program stores the electronic energies from the last three time steps in memory. This allows the algorithm to detect when the energy gap reaches a minimum or when the diabatic energies cross without needing analytical derivatives.
+To detect when a trajectory is passing through an avoided crossing, our codebase implements a history buffer that stores the electronic energies from the last three time steps in memory. This allows the algorithm to detect when the energy gap reaches a minimum or when the diabatic energies cross without needing analytical derivatives.
 
 ### 3. Adiabatic Transition Probability
 

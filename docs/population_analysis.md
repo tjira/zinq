@@ -96,13 +96,13 @@ where the indices $\mu$ and $\nu$ run over all atomic basis functions centered o
 
 ### 2. Open-Shell and Generalized Systems
 
-In spin-unrestricted or generalized electronic structure formalisms where electrons of different spins occupy distinct spatial orbitals, the total density is partitioned into alpha and beta spin components $\mathbf{P}^\alpha$ and $\mathbf{P}^\beta$. The Mayer bond order between atoms $A$ and $B$ is then calculated by evaluating the product matrices $\mathbf{P}^\alpha\mathbf{S}$ and $\mathbf{P}^\beta\mathbf{S}$ separately and accumulating their contributions according to
+In Generalized Hartree–Fock calculations where each molecular orbital is a two-component spinor, the density matrix contains the diagonal spin blocks $\mathbf{P}^\alpha$ and $\mathbf{P}^\beta$ along with the off-diagonal spin-mixing block $\mathbf{P}^{\alpha\beta}$. The Mayer bond order between atoms $A$ and $B$ is evaluated by accumulating both collinear and non-collinear contributions according to
 
 $$
-B_{AB}=2\sum_{\mu\in A}\sum_{\nu\in B}\left[(\mathbf{P}^\alpha\mathbf{S})_{\mu\nu}(\mathbf{P}^\alpha\mathbf{S})_{\nu\mu}+(\mathbf{P}^\beta\mathbf{S})_{\mu\nu}(\mathbf{P}^\beta\mathbf{S})_{\nu\mu}\right]
+B_{AB}=2\sum_{\mu\in A}\sum_{\nu\in B}\left[(\mathbf{P}^\alpha\mathbf{S})_{\mu\nu}(\mathbf{P}^\alpha\mathbf{S})_{\nu\mu}+(\mathbf{P}^\beta\mathbf{S})_{\mu\nu}(\mathbf{P}^\beta\mathbf{S})_{\nu\mu}+2(\mathbf{P}^{\alpha\beta}\mathbf{S})_{\mu\nu}(\mathbf{P}^{\alpha\beta}\mathbf{S})_{\nu\mu}\right]
 $$
 
-which incorporates spin polarization and yields bond orders that recover classical chemical valences for single, double, and triple bonds without requiring basis set orthogonalization.
+which incorporates spin polarization and recovers the standard spin-unrestricted expression when the off-diagonal spin-mixing block vanishes.
 
 ---
 
@@ -128,7 +128,7 @@ where the indices $\mu$ and $\nu$ run over the Löwdin basis functions mapped to
 
 ### 2. Open-Shell and Generalized Systems
 
-In generalized and spin-unrestricted calculations where the density matrix contains separate alpha and beta spin blocks $\mathbf{P}^\alpha$ and $\mathbf{P}^\beta$, each spin density matrix is transformed into the orthogonal Löwdin basis individually according to
+In Generalized Hartree–Fock and spin-unrestricted calculations where the density matrix contains the diagonal spin blocks $\mathbf{P}^\alpha$ and $\mathbf{P}^\beta$ alongside the off-diagonal spin-mixing block $\mathbf{P}^{\alpha\beta}$, each spin density matrix is transformed into the orthogonal Löwdin basis individually according to
 
 $$
 \mathbf{P}^{\alpha,\text{ortho}}=\mathbf{S}^{1/2}\mathbf{P}^\alpha\mathbf{S}^{1/2}
@@ -140,10 +140,16 @@ $$
 \mathbf{P}^{\beta,\text{ortho}}=\mathbf{S}^{1/2}\mathbf{P}^\beta\mathbf{S}^{1/2}
 $$
 
-and the total Wiberg bond index between atoms $A$ and $B$ is computed by summing the squared matrix elements across both spin manifolds as
+and
 
 $$
-W_{AB}=2\sum_{\mu\in A}\sum_{\nu\in B}\left[(P^{\alpha,\text{ortho}}_{\mu\nu})^2+(P^{\beta,\text{ortho}}_{\mu\nu})^2\right]
+\mathbf{P}^{\alpha\beta,\text{ortho}}=\mathbf{S}^{1/2}\mathbf{P}^{\alpha\beta}\mathbf{S}^{1/2}
+$$
+
+and the total Wiberg bond index between atoms $A$ and $B$ is computed by summing the squared matrix elements across all spin blocks as
+
+$$
+W_{AB}=2\sum_{\mu\in A}\sum_{\nu\in B}\left[(P^{\alpha,\text{ortho}}_{\mu\nu})^2+(P^{\beta,\text{ortho}}_{\mu\nu})^2+2(P^{\alpha\beta,\text{ortho}}_{\mu\nu})^2\right]
 $$
 
 which provides a stable, basis-independent measure of electron sharing and chemical bond multiplicity between bonded atoms.

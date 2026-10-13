@@ -29,13 +29,13 @@ where $H_{\mu\nu}^{\text{core}}$ is the one-electron core Hamiltonian matrix des
 Depending on how electron spin is treated, Kohn–Sham density functional theory is formulated in either a restricted or generalized framework. The density matrix is generally constructed from the occupied molecular orbital coefficients with an orbital occupancy factor $f_{\text{occ}}$ as
 
 $$
-P_{\mu\nu}=f_{\text{occ}}\sum_i^{\text{occ}} C_{\mu i}C_{\nu i}^*
+P_{\mu\nu}=f_{\text{occ}}\sum_i^{\text{occ}}C_{\mu i}C_{\nu i}^*
 $$
 
 where the occupancy factor reflects the nature of the basis. In Restricted Kohn–Sham (RKS), electrons of opposite spins are constrained to share identical spatial molecular orbitals, yielding a spin-unpolarized density $\rho_\alpha(\mathbf{r})=\rho_\beta(\mathbf{r})=\frac{1}{2}\rho(\mathbf{r})$. The density matrix $\mathbf{P}$ is defined in the $N_{\text{ao}}$-dimensional spatial basis where each spatial orbital holds two electrons ($f_{\text{occ}}=2$) with exchange factor $c_{\text{x}}=1/2$. In Generalized Kohn–Sham (GKS), the molecular orbitals are expanded into a $2N_{\text{ao}}$-dimensional spin-orbital basis where each state is a general two-component spinor with single occupancy ($f_{\text{occ}}=1$) and exchange factor $c_{\text{x}}=1$. The generalized density matrix is partitioned into spin blocks as
 
 $$
-\mathbf{P}=\begin{pmatrix}\mathbf{P}^{\alpha\alpha} & \mathbf{P}^{\alpha\beta} \\ \mathbf{P}^{\beta\alpha} & \mathbf{P}^{\beta\beta}\end{pmatrix}
+\mathbf{P}=\begin{pmatrix}\mathbf{P}^{\alpha\alpha}&\mathbf{P}^{\alpha\beta}\\\mathbf{P}^{\beta\alpha}&\mathbf{P}^{\beta\beta}\end{pmatrix}
 $$
 
 where the diagonal blocks $\mathbf{P}^{\alpha\alpha}$ and $\mathbf{P}^{\beta\beta}$ determine the individual spin densities $\rho_\alpha(\mathbf{r})$ and $\rho_\beta(\mathbf{r})$ on the numerical grid, while the off-diagonal blocks $\mathbf{P}^{\alpha\beta}$ and $\mathbf{P}^{\beta\alpha}$ describe non-collinear spin alignments that couple through the exact exchange operator in hybrid functionals. The resulting exchange-correlation potential matrix $\mathbf{V}^{\text{xc}}$ is block-diagonal in the spin channels with diagonal blocks $\mathbf{V}^{\text{xc},\alpha}$ and $\mathbf{V}^{\text{xc},\beta}$ evaluated from the spin-polarized functional derivatives.
@@ -96,7 +96,7 @@ $$
 \tau(\mathbf{r})=\frac{1}{2}\sum_{\mu,\nu}P_{\mu\nu}\nabla\chi_\mu(\mathbf{r})\cdot\nabla\chi_\nu(\mathbf{r})
 $$
 
-which classify functionals into standard approximations: the Local Density Approximation (LDA) depends solely on the local density $\rho$; the Generalized Gradient Approximation (GGA) incorporates the gradient norm squared $\gamma=|\nabla\rho|^2$; meta-GGA functionals additionally include the kinetic energy density $\tau$ or density Laplacian $\nabla^2\rho$; and hybrid functionals mix a fraction $a_{\text{x}}$ of non-local Hartree–Fock exact exchange into the Kohn–Sham operator. In spin-polarized generalized calculations, these expressions are evaluated separately for the alpha and beta spin channels using the diagonal blocks $\mathbf{P}^{\alpha\alpha}$ and $\mathbf{P}^{\beta\beta}$.
+which classify functionals into standard approximations, where the Local Density Approximation (LDA) depends solely on the local density $\rho$, the Generalized Gradient Approximation (GGA) incorporates the gradient norm squared $\gamma=|\nabla\rho|^2$, meta-GGA functionals additionally include the kinetic energy density $\tau$ or density Laplacian $\nabla^2\rho$, and hybrid functionals mix a fraction $a_{\text{x}}$ of non-local Hartree–Fock exact exchange into the Kohn–Sham operator. In spin-polarized generalized calculations, these expressions are evaluated separately for the alpha and beta spin channels using the diagonal blocks $\mathbf{P}^{\alpha\alpha}$ and $\mathbf{P}^{\beta\beta}$.
 
 ### 6. Exchange-Correlation Potential Construction
 

@@ -6,7 +6,7 @@ This document provides a highly detailed, mathematically rigorous, yet simple an
 
 ## I. Mathematical Formulation
 
-To understand the Split-Operator method, we must first look at what a quantum wavepacket is. In quantum mechanics, a particle (such as an atom or a molecule) does not have a single exact position. Instead, it is described by a wavefunction, which is a complex-valued wave that represents the probability distribution of where the particle might be found. The way this wavefunction changes over time is governed by the time-dependent Schrödinger equation. The main difficulty in solving this equation is that the energy operator, called the Hamiltonian, contains two parts: the potential energy (which depends on the positions of the atoms) and the kinetic energy (which depends on their velocities or momenta). Because these two operators do not commute, we cannot calculate them easily in the same representation. The Split-Operator method solves this by splitting the time step into small parts, allowing us to calculate each energy component in the representation where it is easiest to evaluate.
+To understand the Split-Operator method, we must first look at what a quantum wavepacket is. In quantum mechanics, a particle (such as an atom or a molecule) does not have a single exact position. Instead, it is described by a wavefunction, which is a complex-valued wave that represents the probability distribution of where the particle might be found. The way this wavefunction changes over time is governed by the time-dependent Schrödinger equation. The main difficulty in solving this equation is that the energy operator, called the Hamiltonian, contains two parts, namely the potential energy (which depends on the positions of the atoms) and the kinetic energy (which depends on their velocities or momenta). Because these two operators do not commute, we cannot calculate them easily in the same representation. The Split-Operator method solves this by splitting the time step into small parts, allowing us to calculate each energy component in the representation where it is easiest to evaluate.
 
 ### 1. Schrödinger Equation and Strang Splitting
 
@@ -62,7 +62,7 @@ where $m$ is the mass of the particle and $\mathbf{k}$ is the wavevector represe
 
 ### 3. Absorbing Boundary Potentials
 
-Because we must run our simulations on a finite grid of points, we face a physical problem: when the wavepacket reaches the edge of the grid, it will reflect off the boundary and travel backward, interfering with itself. This is unphysical, as a real wavepacket would simply fly off into space. To prevent these reflections, we add an imaginary absorbing potential $-iV_{\text{cap}}(\mathbf{r})$ near the edges of the grid. The effective Hamiltonian becomes
+Because we must run our simulations on a finite grid of points, we face a physical problem where the wavepacket reaches the edge of the grid and reflects off the boundary, traveling backward and interfering with itself. This is unphysical, as a real wavepacket would simply fly off into space. To prevent these reflections, we add an imaginary absorbing potential $-iV_{\text{cap}}(\mathbf{r})$ near the edges of the grid. The effective Hamiltonian becomes
 
 $$
 \hat{H}_{\text{eff}}=\hat{T}+\hat{V}-iV_{\text{cap}}(\mathbf{r})

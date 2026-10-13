@@ -6,7 +6,7 @@ This document provides a highly detailed, mathematically rigorous, yet simple an
 
 ## I. Core Wavefunction Theory
 
-To understand the Hartree–Fock method, we must first understand how it simplifies the description of electrons in a molecule. In quantum mechanics, electrons are identical particles that carry spin and repel each other. The behavior of these electrons is described by a many-electron wavefunction. Because electrons are fermions, their wavefunction must be antisymmetric, which means that if we swap the positions of any two electrons, the wavefunction must change its sign. The Hartree–Fock method models this many-electron wavefunction as a single mathematical construct called a Slater determinant. A Slater determinant is built from individual one-electron functions called molecular orbitals. By using a determinant, the wavefunction automatically satisfies both the Pauli exclusion principle (no two electrons can occupy the exact same state) and the antisymmetry requirement. In this model, we make a mean-field approximation: we assume that each electron does not interact with the other electrons individually, but instead moves through an average electric field created by all the other electrons combined.
+To understand the Hartree–Fock method, we must first understand how it simplifies the description of electrons in a molecule. In quantum mechanics, electrons are identical particles that carry spin and repel each other. The behavior of these electrons is described by a many-electron wavefunction. Because electrons are fermions, their wavefunction must be antisymmetric, which means that if we swap the positions of any two electrons, the wavefunction must change its sign. The Hartree–Fock method models this many-electron wavefunction as a single mathematical construct called a Slater determinant. A Slater determinant is built from individual one-electron functions called molecular orbitals. By using a determinant, the wavefunction automatically satisfies both the Pauli exclusion principle (no two electrons can occupy the exact same state) and the antisymmetry requirement. In this model, we make a mean-field approximation where each electron does not interact with the other electrons individually, but instead moves through an average electric field created by all the other electrons combined.
 
 ### 1. Roothaan–Hall Equations
 
@@ -20,7 +20,7 @@ where $\mathbf{F}$ is the Fock matrix, which represents the effective energy ope
 
 ### 2. Generalized Hartree–Fock and Spin Variants
 
-Depending on how we handle the spin of the electrons, there are different versions of the Hartree–Fock method: Restricted Hartree–Fock (RHF) forces electrons of opposite spins (alpha and beta) to share the exact same spatial molecular orbitals, which works well for stable molecules with paired electrons but fails when we try to break chemical bonds; Unrestricted Hartree–Fock (UHF) allows alpha and beta electrons to have different spatial orbitals; and Generalized Hartree–Fock (GHF) goes even further by allowing each molecular orbital to be a general mixture of alpha and beta spin components, meaning the spin direction can vary continuously in space. The GHF equations are formulated in a combined spin-orbital basis of twice the spatial dimension as
+Depending on how we handle the spin of the electrons, there are different versions of the Hartree–Fock method, where Restricted Hartree–Fock (RHF) forces electrons of opposite spins (alpha and beta) to share the exact same spatial molecular orbitals, which works well for stable molecules with paired electrons but fails when we try to break chemical bonds; Unrestricted Hartree–Fock (UHF) allows alpha and beta electrons to have different spatial orbitals; and Generalized Hartree–Fock (GHF) goes even further by allowing each molecular orbital to be a general mixture of alpha and beta spin components, meaning the spin direction can vary continuously in space. The GHF equations are formulated in a combined spin-orbital basis of twice the spatial dimension as
 
 $$
 \begin{pmatrix}\mathbf{F}^{\alpha\alpha}&\mathbf{F}^{\alpha\beta}\\\mathbf{F}^{\beta\alpha}&\mathbf{F}^{\beta\beta}\end{pmatrix}\begin{pmatrix}\mathbf{C}^{\alpha}\\\mathbf{C}^{\beta}\end{pmatrix}=\begin{pmatrix}\mathbf{S}&\mathbf{0}\\\mathbf{0}&\mathbf{S}\end{pmatrix}\begin{pmatrix}\mathbf{C}^{\alpha}\\\mathbf{C}^{\beta}\end{pmatrix}\mathbf{E}
@@ -80,11 +80,21 @@ $$
 
 which completes the total ground-state energy evaluation.
 
+### 6. Spin Contamination and Expectation Value
+
+In Generalized Hartree–Fock calculations, the molecular orbitals are not constrained to be pure spin eigenstates, which allows the single Slater determinant to break spin symmetry and suffer from spin contamination. To quantify spin purity, the total spin squared expectation value $\langle\hat{S}^2\rangle$ is evaluated from the generalized density matrix blocks and the spatial overlap matrix as
+
+$$
+\langle\hat{S}^2\rangle=\langle\hat{S}_x\rangle^2+\langle\hat{S}_z\rangle^2+\frac{N_\alpha+N_\beta}{2}-\text{Tr}(\mathbf{P}^\alpha\mathbf{S}\mathbf{P}^\beta\mathbf{S})+\text{Tr}(\mathbf{P}^{\alpha\beta}\mathbf{S}\mathbf{P}^{\beta\alpha}\mathbf{S})
+$$
+
+where the components of the net spin vector are $\langle\hat{S}_x\rangle=\frac{1}{2}\text{Tr}(\mathbf{P}^{\alpha\beta}\mathbf{S}+\mathbf{P}^{\beta\alpha}\mathbf{S})$ and $\langle\hat{S}_z\rangle=\frac{1}{2}(N_\alpha-N_\beta)$ with $N_\alpha=\text{Tr}(\mathbf{P}^\alpha\mathbf{S})$ and $N_\beta=\text{Tr}(\mathbf{P}^\beta\mathbf{S})$. For a pure spin state with total spin quantum number $S$, the exact eigenvalue is $S(S+1)$, and deviations from this value measure the extent of unphysical higher-multiplicity contamination.
+
 ---
 
 ## III. Nuclear Derivatives and Response
 
-### 6. Analytical Nuclear Gradient
+### 7. Analytical Nuclear Gradient
 
 To find the forces acting on the atoms (which we need for moving atoms in molecular dynamics or finding stable geometries), we calculate the derivative of the Hartree–Fock energy with respect to the nuclear coordinates. Because the Hartree–Fock wavefunction is variationally optimized, its energy is stationary with respect to changes in the molecular orbital coefficients, meaning their derivatives do not appear in the gradient. The term containing the derivative of the overlap matrix $\mathbf{S}$ represents the Pulay force, which arises because the basis functions are centered on the atoms and move along with them as the nuclei move. The analytical nuclear gradient is given by
 
@@ -100,7 +110,7 @@ $$
 
 accounting for the energy of the occupied orbitals with an orbital occupancy factor $f_{\text{occ}}$. In Restricted Hartree–Fock (RHF), the calculation is performed in the spatial atomic orbital basis where each spatial orbital is doubly occupied ($f_{\text{occ}}=2$), and the exchange factor is $c_{\text{x}}=1/2$ because exchange only occurs between electrons of identical spin. In Generalized Hartree–Fock (GHF), the calculation is formulated in a combined spin-orbital basis of twice the spatial dimension where each spin-orbital has single occupancy ($f_{\text{occ}}=1$), and the exchange factor is $c_{\text{x}}=1$ because the spin integration is carried out directly over the spin-orbitals.
 
-### 7. Coupled-Perturbed Hartree–Fock Equations
+### 8. Coupled-Perturbed Hartree–Fock Equations
 
 When a molecular geometry is perturbed, the molecular orbitals rotate to preserve the self-consistent field condition $\mathbf{F}\mathbf{C}=\mathbf{S}\mathbf{C}\mathbf{E}$. The Coupled-Perturbed Hartree–Fock (CPHF) equations solve directly for the orbital response matrix $\mathbf{U}^x$, which describes the first-order transformation of the molecular orbital coefficients as
 

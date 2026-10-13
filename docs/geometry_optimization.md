@@ -44,7 +44,7 @@ where the intermediate variables are defined as $\mathbf{u}_k=\mathbf{H}_k\mathb
 
 ### 4. Implementation Details and Safeguards
 
-In our codebase, a molecule's coordinates are stored as a 2D matrix of shape `N_atoms x 3`. For the matrix-vector multiplications required by the BFGS algorithm, we temporarily flatten this matrix into a 1D vector of length `3 * N_atoms`. To prevent numerical errors, the code implements safeguards: if the dot product of the coordinate change and gradient change $\mathbf{y}_k^{\text{T}}\mathbf{s}_k$ is negative or smaller than $10^{-12}$, we skip the BFGS update for that step. This prevents division by zero and ensures that the inverse Hessian does not become corrupted due to numerical noise or tiny steps near the minimum.
+In our codebase, a molecule's coordinates are stored as a 2D matrix of shape `N_atoms x 3`. For the matrix-vector multiplications required by the BFGS algorithm, we temporarily flatten this matrix into a 1D vector of length `3 * N_atoms`. To prevent numerical errors, the code implements safeguards such that if the dot product of the coordinate change and gradient change $\mathbf{y}_k^{\text{T}}\mathbf{s}_k$ is negative or smaller than $10^{-12}$, we skip the BFGS update for that step. This prevents division by zero and ensures that the inverse Hessian does not become corrupted due to numerical noise or tiny steps near the minimum.
 
 ### 5. Convergence Criteria
 

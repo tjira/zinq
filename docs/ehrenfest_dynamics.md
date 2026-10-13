@@ -32,7 +32,7 @@ which describes how the electronic state vector changes as the nuclei move along
 
 ### 2. Implementation Tricks and Sub-stepping
 
-Because electrons are extremely light, they move on a much faster timescale (femtoseconds or attoseconds) than the heavy nuclei (picoseconds). If we were to propagate both the electronic and nuclear equations using the same classical time step $dt$, the electronic calculation would become numerically unstable. To solve this, our codebase implements a sub-stepping procedure: we divide the classical nuclear time step $dt$ into $N_{\text{steps}}$ smaller sub-intervals of size $dt / N_{\text{steps}}$. During each classical step, the program integrates the complex electronic coefficients over these small sub-steps using a fourth-order Runge–Kutta (RK4) integrator, while the nuclear coordinates are assumed to change linearly. This allows the quantum equations to remain stable without making the classical molecular dynamics propagation too expensive.
+Because electrons are extremely light, they move on a much faster timescale (femtoseconds or attoseconds) than the heavy nuclei (picoseconds). If we were to propagate both the electronic and nuclear equations using the same classical time step $dt$, the electronic calculation would become numerically unstable. To solve this, our codebase implements a sub-stepping procedure that divides the classical nuclear time step $dt$ into $N_{\text{steps}}$ smaller sub-intervals of size $dt / N_{\text{steps}}$. During each classical step, the program integrates the complex electronic coefficients over these small sub-steps using a fourth-order Runge–Kutta (RK4) integrator, while the nuclear coordinates are assumed to change linearly. This allows the quantum equations to remain stable without making the classical molecular dynamics propagation too expensive.
 
 ---
 
@@ -46,7 +46,7 @@ $$
 M_A\frac{d^2\mathbf{R}_A}{dt^2}=\mathbf{F}_A
 $$
 
-where $M_A$ is the mass of nucleus $A$, $\mathbf{R}_A$ is its 3D position vector, and $\mathbf{F}_A$ is the classical force acting on it. Under the Ehrenfest approximation, the potential energy $E_{\text{pot}}$ is the expectation value of the electronic Hamiltonian, which is calculated as
+where $M_A$ is the mass of nucleus $A$, $\mathbf{R}_A$ is its 3D position vector, and $\mathbf{F}_A$ is the classical force acting on it. In the diabatic representation, the potential energy $E_{\text{pot}}$ is the expectation value of the electronic Hamiltonian, which is calculated as
 
 $$
 E_{\text{pot}}=\sum_{j,k}c_j^*(t)H_{jk}(\mathbf{R}(t))c_k(t)
@@ -66,11 +66,21 @@ $$
 
 where $\nabla_{\mathbf{R}_A}H_{jk}(\mathbf{R}(t))$ represents the spatial gradient of the Hamiltonian matrix elements, driving the classical nuclear motion on the average potential energy surface.
 
+### 4. Adiabatic Formulation and Nonadiabatic Coupling
+
+In ab initio molecular dynamics, electronic structure methods such as Configuration Interaction naturally yield adiabatic potential energy surfaces $E_k(\mathbf{R})$ and state gradients rather than diabatic states. In the adiabatic representation where the electronic state is expanded over adiabatic eigenstates with complex coefficients $a_k(t)$, the total electronic potential energy is the expectation value $E_{\text{pot}}=\sum_k |a_k(t)|^2 E_k(\mathbf{R})$. Applying the Hellmann–Feynman relation yields the mean-field adiabatic nuclear force acting on nucleus $A$ as
+
+$$
+\mathbf{F}_A=-\sum_k\rho_{kk}(t)\nabla_{\mathbf{R}_A}E_k(\mathbf{R})-\sum_{j\ne k}\text{Re}(\rho_{jk}(t))(E_k(\mathbf{R})-E_j(\mathbf{R}))\mathbf{d}_{jk,A}(\mathbf{R})
+$$
+
+where $\rho_{jk}(t)=a_j^*(t)a_k(t)$ is the electronic density matrix, $\nabla_{\mathbf{R}_A}E_k(\mathbf{R})$ is the adiabatic gradient of state $k$, and $\mathbf{d}_{jk,A}(\mathbf{R})=\langle\psi_j|\nabla_{\mathbf{R}_A}\psi_k\rangle$ is the nonadiabatic derivative coupling vector evaluated from cross-geometry determinant overlaps as detailed in the Configuration–Interaction documentation.
+
 ---
 
 ## III. Basis Transformations and Populations
 
-### 4. Initial State Setup and Projection
+### 5. Initial State Setup and Projection
 
 At the start of the simulation, we often know the active state in the adiabatic representation, where the states are eigenstates of the electronic Hamiltonian at the initial nuclear position. To set up the initial conditions, we diagonalize the initial Hamiltonian matrix to solve the eigenvalue equation
 
@@ -78,10 +88,10 @@ $$
 \mathbf{H}(\mathbf{R}(0))\mathbf{u}_a=E_a\mathbf{u}_a
 $$
 
-where $\mathbf{u}_a$ is the eigenvector representing the active adiabatic state $a$. The initial electronic coefficients in the diabatic basis are then set using the elements of the unitary transformation matrix $\mathbf{U}$ containing the eigenvectors as $c_j(0)=\mathbf{U}_{ja}$. During the dynamics, we can calculate the population fraction of any adiabatic state $m$ by projecting the diabatic coefficients back onto the adiabatic states as
+where $\mathbf{u}_a$ is the eigenvector representing the active adiabatic state $a$. The initial electronic coefficients in the diabatic basis are then set using the elements of the unitary transformation matrix $\mathbf{U}$ containing the eigenvectors as $c_j(0)=U_{ja}$. During the dynamics, we can calculate the population fraction of any adiabatic state $m$ by projecting the diabatic coefficients back onto the adiabatic states as
 
 $$
-P_m(t)=\left|\sum_j\mathbf{U}_{jm}(\mathbf{R}(t))c_j(t)\right|^2
+P_m(t)=\left|\sum_j U_{jm}(\mathbf{R}(t))c_j(t)\right|^2
 $$
 
 where $\mathbf{U}(\mathbf{R}(t))$ is the unitary matrix of eigenvectors at the current coordinates. If we are running the simulation in the diabatic basis, the population fraction of diabatic state $k$ is simply the squared magnitude of its coefficient
