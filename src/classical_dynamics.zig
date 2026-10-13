@@ -1338,11 +1338,11 @@ fn checkInvalidInput(opt: Options) !void {
             }
 
             if (ci.gradient) |grad| {
-                const grad_state = switch (grad) {
-                    inline else => |g| g.state,
+                const grad_states = switch (grad) {
+                    inline else => |g| g.states,
                 };
 
-                if (grad_state != null) {
+                if (grad_states != null) {
                     std.log.err("GRADIENT STATE MUST NOT BE SPECIFIED FOR AB INITIO POTENTIAL", .{});
 
                     return error.InvalidInput;

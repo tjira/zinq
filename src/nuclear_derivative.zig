@@ -21,109 +21,191 @@ const printf = @import("read_write.zig").printf;
 
 const A2BOHR = @import("constant.zig").A2BOHR;
 
-/// Computes the nuclear gradient of the electronic energy using central finite differences.
-pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
+/// Computes nuclear gradients of electronic states using central finite differences.
+pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, states: []const u32, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror![]Matrix(T) {
     const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
 
-    var grad = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
-    errdefer grad.deinit(gpa);
+    var grad = try gpa.alloc(Matrix(T), states.len);
+    errdefer gpa.free(grad);
+
+    var grad_done: usize = 0;
+
+    errdefer for (0..grad_done) |k| grad[k].deinit(gpa);
+
+    for (0..states.len) |k| {
+        grad[k] = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
+
+        grad_done += 1;
+    }
 
     const h = @as(T, @floatCast(opt.gradient.?.numeric.step));
 
-    const state = if (@hasField(@TypeOf(opt.gradient.?.numeric), "state")) (opt.gradient.?.numeric.state orelse 0) else 0;
-
-    if (log) try std.Io.File.stdout().writeStreamingAll(io, "\n");
+    if (log) try printf(io, "\n", .{});
 
     const nbf = if (generalized) 2 * sys.nbf else sys.nbf;
 
     var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
     defer Pg.deinit(gpa);
 
-    _ = try getE(T, io, runFn, opt, sys, .{}, null, &Pg, state, gpa);
+    var max_state: usize = 0;
+
+    for (states) |s| {
+        if (s > max_state) max_state = s;
+    }
+
+    const ep = try gpa.alloc(T, max_state + 1);
+    defer gpa.free(ep);
+
+    const em = try gpa.alloc(T, max_state + 1);
+    defer gpa.free(em);
+
+    try getEnergies(T, io, runFn, opt, sys, .{}, null, &Pg, max_state, ep, gpa);
 
     for (0..sys.atoms.len) |i| for (0..3) |j| {
         const d1, const d2 = .{ .{ i * 3 + j, h }, .{ i * 3 + j, -h } };
 
-        const ep = try getE(T, io, runFn, opt, sys, d1, Pg, null, state, gpa);
-        const em = try getE(T, io, runFn, opt, sys, d2, Pg, null, state, gpa);
+        try getEnergies(T, io, runFn, opt, sys, d1, Pg, null, max_state, ep, gpa);
+        try getEnergies(T, io, runFn, opt, sys, d2, Pg, null, max_state, em, gpa);
 
-        grad.ptr(i, j).* = (ep - em) / (2 * h);
+        for (states, 0..) |s, s_idx| {
+            grad[s_idx].ptr(i, j).* = (ep[s] - em[s]) / (2 * h);
 
-        if (log) {
-            const fmt = "DERIVATIVE OF ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
+            if (log) {
+                const sym = try getSymbol(sys.atoms[i]);
 
-            const sym = try getSymbol(sys.atoms[i]);
+                const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
 
-            const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
+                if (states.len > 1) {
+                    const fmt = "NUCLEAR GRADIENT STATE {d} FOR ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
 
-            try printf(io, fmt, .{ i, sym, dirs[j], grad.at(i, j) });
+                    try printf(io, fmt, .{ s, i, sym, dirs[j], grad[s_idx].at(i, j) });
+                }
+
+                if (states.len == 1) {
+                    const fmt = "NUCLEAR GRADIENT FOR ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
+
+                    try printf(io, fmt, .{ i, sym, dirs[j], grad[s_idx].at(i, j) });
+                }
+            }
         }
     };
 
     return grad;
 }
 
-/// Computes the nuclear Hessian matrix of the electronic energy using finite differences of energies.
-pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
+/// Computes nuclear Hessians of electronic states using finite differences of energies.
+pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, states: []const u32, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror![]Matrix(T) {
     const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
 
-    var hess = try Matrix(T).initZero(3 * sys.atoms.len, 3 * sys.atoms.len, gpa);
-    errdefer hess.deinit(gpa);
+    var hess = try gpa.alloc(Matrix(T), states.len);
+    errdefer gpa.free(hess);
+
+    var hess_done: usize = 0;
+
+    errdefer for (0..hess_done) |k| hess[k].deinit(gpa);
+
+    for (0..states.len) |k| {
+        hess[k] = try Matrix(T).initZero(3 * sys.atoms.len, 3 * sys.atoms.len, gpa);
+
+        hess_done += 1;
+    }
 
     const h = @as(T, @floatCast(opt.hessian.?.numeric.step));
 
-    const state = if (@hasField(@TypeOf(opt.hessian.?.numeric), "state")) opt.hessian.?.numeric.state else 0;
-
-    if (log) try std.Io.File.stdout().writeStreamingAll(io, "\n");
+    if (log) try printf(io, "\n", .{});
 
     const nbf = if (generalized) 2 * sys.nbf else sys.nbf;
 
     var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
     defer Pg.deinit(gpa);
 
-    const er = try getE(T, io, runFn, opt, sys, .{}, null, &Pg, state, gpa);
+    var max_state: usize = 0;
+
+    for (states) |s| {
+        if (s > max_state) max_state = s;
+    }
+
+    const er = try gpa.alloc(T, max_state + 1);
+    defer gpa.free(er);
+
+    const ep = try gpa.alloc(T, max_state + 1);
+    defer gpa.free(ep);
+
+    const em = try gpa.alloc(T, max_state + 1);
+    defer gpa.free(em);
+
+    const epp = try gpa.alloc(T, max_state + 1);
+    defer gpa.free(epp);
+
+    const epm = try gpa.alloc(T, max_state + 1);
+    defer gpa.free(epm);
+
+    const emp = try gpa.alloc(T, max_state + 1);
+    defer gpa.free(emp);
+
+    const emm = try gpa.alloc(T, max_state + 1);
+    defer gpa.free(emm);
+
+    try getEnergies(T, io, runFn, opt, sys, .{}, null, &Pg, max_state, er, gpa);
 
     for (0..3 * sys.atoms.len) |a| {
         const d1, const d2 = .{ .{ a, h }, .{ a, -h } };
 
-        const ep = try getE(T, io, runFn, opt, sys, d1, Pg, null, state, gpa);
-        const em = try getE(T, io, runFn, opt, sys, d2, Pg, null, state, gpa);
+        try getEnergies(T, io, runFn, opt, sys, d1, Pg, null, max_state, ep, gpa);
+        try getEnergies(T, io, runFn, opt, sys, d2, Pg, null, max_state, em, gpa);
 
-        hess.ptr(a, a).* = (ep - 2 * er + em) / (h * h);
+        for (states, 0..) |s, s_idx| {
+            hess[s_idx].ptr(a, a).* = (ep[s] - 2 * er[s] + em[s]) / (h * h);
 
-        if (log) {
-            const fmt = "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
+            if (log) {
+                const at = a / 3;
 
-            const sym = try getSymbol(sys.atoms[a / 3]);
+                const sym, const dirs = .{ try getSymbol(sys.atoms[at]), &[_][]const u8{ "'x'", "'y'", "'z'" } };
 
-            const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
+                if (states.len > 1) {
+                    const fmt = "NUCLEAR HESSIAN STATE {d} FOR ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
-            try printf(io, fmt, .{ a / 3, sym, dirs[a % 3], a / 3, sym, dirs[a % 3], hess.at(a, a) });
+                    try printf(io, fmt, .{ s, at, sym, dirs[a % 3], at, sym, dirs[a % 3], hess[s_idx].at(a, a) });
+                }
+
+                if (states.len == 1) {
+                    const fmt = "NUCLEAR HESSIAN FOR ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
+
+                    try printf(io, fmt, .{ at, sym, dirs[a % 3], at, sym, dirs[a % 3], hess[s_idx].at(a, a) });
+                }
+            }
         }
 
         for (a + 1..3 * sys.atoms.len) |b| {
-            const epp = try getE(T, io, runFn, opt, sys, .{ a, h, b, h }, Pg, null, state, gpa);
+            try getEnergies(T, io, runFn, opt, sys, .{ a, h, b, h }, Pg, null, max_state, epp, gpa);
+            try getEnergies(T, io, runFn, opt, sys, .{ a, h, b, -h }, Pg, null, max_state, epm, gpa);
+            try getEnergies(T, io, runFn, opt, sys, .{ a, -h, b, h }, Pg, null, max_state, emp, gpa);
+            try getEnergies(T, io, runFn, opt, sys, .{ a, -h, b, -h }, Pg, null, max_state, emm, gpa);
 
-            const epm = try getE(T, io, runFn, opt, sys, .{ a, h, b, -h }, Pg, null, state, gpa);
-            const emp = try getE(T, io, runFn, opt, sys, .{ a, -h, b, h }, Pg, null, state, gpa);
+            for (states, 0..) |s, s_idx| {
+                const val = (epp[s] - epm[s] - emp[s] + emm[s]) / (4 * h * h);
 
-            const emm = try getE(T, io, runFn, opt, sys, .{ a, -h, b, -h }, Pg, null, state, gpa);
+                hess[s_idx].ptr(a, b).* = val;
+                hess[s_idx].ptr(b, a).* = val;
 
-            const val = (epp - epm - emp + emm) / (4 * h * h);
+                if (log) {
+                    const sym_a = try getSymbol(sys.atoms[a / 3]);
+                    const sym_b = try getSymbol(sys.atoms[b / 3]);
 
-            hess.ptr(a, b).* = val;
-            hess.ptr(b, a).* = val;
+                    const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
 
-            if (log) {
-                const fmt = "SECOND DERIVATIVE OF ATOM {d:02} ({s:2}) DIR {s} AND " ++
-                    "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
+                    if (states.len > 1) {
+                        const fmt = "NUCLEAR HESSIAN STATE {d} FOR ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
-                const sym_a = try getSymbol(sys.atoms[a / 3]);
-                const sym_b = try getSymbol(sys.atoms[b / 3]);
+                        try printf(io, fmt, .{ s, a / 3, sym_a, dirs[a % 3], b / 3, sym_b, dirs[b % 3], val });
+                    }
 
-                const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
+                    if (states.len == 1) {
+                        const fmt = "NUCLEAR HESSIAN FOR ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
-                try printf(io, fmt, .{ a / 3, sym_a, dirs[a % 3], b / 3, sym_b, dirs[b % 3], val });
+                        try printf(io, fmt, .{ a / 3, sym_a, dirs[a % 3], b / 3, sym_b, dirs[b % 3], val });
+                    }
+                }
             }
         }
     }
@@ -131,19 +213,33 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
     return hess;
 }
 
-/// Computes nonadiabatic coupling vectors between electronic states using central finite differences.
-pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
+/// Computes nonadiabatic coupling vectors between state pairs using central finite differences.
+pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, pairs: []const [2]u32, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror![]Matrix(T) {
     const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
 
-    var nacv = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
-    errdefer nacv.deinit(gpa);
+    var nacvs = try gpa.alloc(Matrix(T), pairs.len);
+    errdefer gpa.free(nacvs);
+
+    var nacvs_done: usize = 0;
+
+    errdefer for (0..nacvs_done) |k| nacvs[k].deinit(gpa);
+
+    for (0..pairs.len) |k| {
+        nacvs[k] = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
+
+        nacvs_done += 1;
+    }
 
     const h = @as(T, @floatCast(opt.nacv.?.numeric.step));
 
-    const s_j = @as(usize, @intCast(opt.nacv.?.numeric.states[0]));
-    const s_k = @as(usize, @intCast(opt.nacv.?.numeric.states[1]));
+    var max_state: usize = 0;
 
-    if (log) try std.Io.File.stdout().writeStreamingAll(io, "\n");
+    for (pairs) |pair| {
+        if (pair[0] > max_state) max_state = pair[0];
+        if (pair[1] > max_state) max_state = pair[1];
+    }
+
+    if (log) try printf(io, "\n", .{});
 
     const nbf = if (generalized) 2 * sys.nbf else sys.nbf;
 
@@ -159,7 +255,7 @@ pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt:
     }
 
     if (comptime @hasField(@TypeOf(modified_opt), "nstate")) {
-        const required = @as(u32, @intCast(@max(s_j, s_k) + 1));
+        const required = @as(u32, @intCast(max_state + 1));
 
         if (modified_opt.nstate < required) {
             std.log.err("REQUESTED NACV STATE COUNT IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION", .{});
@@ -216,21 +312,30 @@ pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt:
 
     @memcpy(Pg.data, (if (@hasField(@TypeOf(res_ref), "hartree_fock")) res_ref.hartree_fock.P else res_ref.P).data);
 
-    if (res_ref.C.ncol() <= s_j or res_ref.C.ncol() <= s_k) {
+    if (res_ref.C.ncol() <= max_state) {
         std.log.err("STATE REQUESTED FOR NUMERICAL NACV IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION", .{});
 
         return error.InvalidInput;
     }
 
-    var c_j_ref = try Vector(T).init(res_ref.C.nrow(), gpa);
-    defer c_j_ref.deinit(gpa);
+    var c_ref = try gpa.alloc(Vector(T), max_state + 1);
 
-    var c_k_ref = try Vector(T).init(res_ref.C.nrow(), gpa);
-    defer c_k_ref.deinit(gpa);
+    var c_ref_done: usize = 0;
 
-    for (0..res_ref.C.nrow()) |r| {
-        c_j_ref.data[r] = res_ref.C.at(r, s_j);
-        c_k_ref.data[r] = res_ref.C.at(r, s_k);
+    defer {
+        for (0..c_ref_done) |k| c_ref[k].deinit(gpa);
+
+        gpa.free(c_ref);
+    }
+
+    for (0..max_state + 1) |k| {
+        c_ref[k] = try Vector(T).init(res_ref.C.nrow(), gpa);
+
+        c_ref_done += 1;
+
+        for (0..res_ref.C.nrow()) |r| {
+            c_ref[k].data[r] = res_ref.C.at(r, k);
+        }
     }
 
     var dets = try generateDets(sys.nel, 2 * sys.nbf, opt.excitations, gpa);
@@ -256,6 +361,49 @@ pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt:
     const nthreads = if (@hasField(@TypeOf(opt), "nthreads")) opt.nthreads else 1;
 
     const nsp = 2 * sys.nbf;
+
+    const C_ref = if (@hasField(@TypeOf(res_ref), "hartree_fock")) res_ref.hartree_fock.C else res_ref.C;
+
+    var C_ref_SO = if (generalized) C_ref else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_ref_SO.deinit(gpa);
+
+    if (!generalized) ao2so_coef(T, &C_ref_SO, C_ref);
+
+    var c_m = try gpa.alloc(Vector(T), max_state + 1);
+
+    var c_m_done: usize = 0;
+
+    defer {
+        for (0..c_m_done) |k| c_m[k].deinit(gpa);
+
+        gpa.free(c_m);
+    }
+
+    var c_p = try gpa.alloc(Vector(T), max_state + 1);
+
+    var c_p_done: usize = 0;
+
+    defer {
+        for (0..c_p_done) |k| c_p[k].deinit(gpa);
+
+        gpa.free(c_p);
+    }
+
+    for (0..max_state + 1) |k| {
+        c_m[k] = try Vector(T).init(res_ref.C.nrow(), gpa);
+
+        c_m_done += 1;
+
+        c_p[k] = try Vector(T).init(res_ref.C.nrow(), gpa);
+
+        c_p_done += 1;
+    }
+
+    var s_jk = try gpa.alloc(T, pairs.len);
+    defer gpa.free(s_jk);
+
+    var s_kj = try gpa.alloc(T, pairs.len);
+    defer gpa.free(s_kj);
 
     for (0..sys.atoms.len) |i| for (0..3) |j| {
         const coord_idx = i * 3 + j;
@@ -286,32 +434,15 @@ pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt:
         var res_p = try runFn(T, io, modified_opt, &sys_p, Pg, false, gpa);
         defer res_p.deinit(gpa);
 
-        var c_j_m = try Vector(T).init(res_m.C.nrow(), gpa);
-        defer c_j_m.deinit(gpa);
+        for (0..max_state + 1) |k| {
+            for (0..res_m.C.nrow()) |r| {
+                c_m[k].data[r] = res_m.C.at(r, k);
+            }
 
-        var c_k_m = try Vector(T).init(res_m.C.nrow(), gpa);
-        defer c_k_m.deinit(gpa);
-
-        for (0..res_m.C.nrow()) |r| {
-            c_j_m.data[r] = res_m.C.at(r, s_j);
-            c_k_m.data[r] = res_m.C.at(r, s_k);
+            for (0..res_p.C.nrow()) |r| {
+                c_p[k].data[r] = res_p.C.at(r, k);
+            }
         }
-
-        var c_j_p = try Vector(T).init(res_p.C.nrow(), gpa);
-        defer c_j_p.deinit(gpa);
-
-        var c_k_p = try Vector(T).init(res_p.C.nrow(), gpa);
-        defer c_k_p.deinit(gpa);
-
-        for (0..res_p.C.nrow()) |r| {
-            c_j_p.data[r] = res_p.C.at(r, s_j);
-            c_k_p.data[r] = res_p.C.at(r, s_k);
-        }
-
-        if (dot(T, c_j_m, c_j_ref) < 0) c_j_m.muls(-1);
-        if (dot(T, c_k_m, c_k_ref) < 0) c_k_m.muls(-1);
-        if (dot(T, c_j_p, c_j_ref) < 0) c_j_p.muls(-1);
-        if (dot(T, c_k_p, c_k_ref) < 0) c_k_p.muls(-1);
 
         var S_SO = try sys_m.overlapBetweenSpin(sys_p, nthreads, gpa);
         defer S_SO.deinit(gpa);
@@ -329,6 +460,49 @@ pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt:
 
         if (!generalized) ao2so_coef(T, &C_p_SO, C_p);
 
+        for (0..nsp) |p| {
+            var d_m: T = 0;
+            var d_p: T = 0;
+
+            for (0..nsp) |mu| {
+                d_m += C_m_SO.at(mu, p) * C_ref_SO.at(mu, p);
+                d_p += C_p_SO.at(mu, p) * C_ref_SO.at(mu, p);
+            }
+
+            if (d_m < 0) {
+                for (0..nsp) |mu| {
+                    C_m_SO.ptr(mu, p).* = -C_m_SO.at(mu, p);
+                }
+
+                for (0..dets.items.len) |a| {
+                    if (std.mem.indexOfScalar(usize, dets.items[a], p) != null) {
+                        for (0..max_state + 1) |k| {
+                            c_m[k].data[a] = -c_m[k].data[a];
+                        }
+                    }
+                }
+            }
+
+            if (d_p < 0) {
+                for (0..nsp) |mu| {
+                    C_p_SO.ptr(mu, p).* = -C_p_SO.at(mu, p);
+                }
+
+                for (0..dets.items.len) |a| {
+                    if (std.mem.indexOfScalar(usize, dets.items[a], p) != null) {
+                        for (0..max_state + 1) |k| {
+                            c_p[k].data[a] = -c_p[k].data[a];
+                        }
+                    }
+                }
+            }
+        }
+
+        for (0..max_state + 1) |k| {
+            if (dot(T, c_m[k], c_ref[k]) < 0) c_m[k].muls(-1);
+            if (dot(T, c_p[k], c_ref[k]) < 0) c_p[k].muls(-1);
+        }
+
         var tmp = try Matrix(T).init(nsp, nsp, gpa);
         defer tmp.deinit(gpa);
 
@@ -339,14 +513,24 @@ pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt:
 
         mm(T, &S_MO, C_m_SO, tmp, 1, 0, true, false);
 
-        var s_jk: T = 0;
-        var s_kj: T = 0;
+        @memset(s_jk, 0);
+        @memset(s_kj, 0);
 
         for (0..dets.items.len) |a| for (0..dets.items.len) |b| {
-            const prod_jk = c_j_m.data[a] * c_k_p.data[b];
-            const prod_kj = c_k_m.data[a] * c_j_p.data[b];
+            var any_active = false;
 
-            if (@abs(prod_jk) < 1e-15 and @abs(prod_kj) < 1e-15) continue;
+            for (pairs) |pair| {
+                const prod_jk = c_m[pair[0]].data[a] * c_p[pair[1]].data[b];
+                const prod_kj = c_m[pair[1]].data[a] * c_p[pair[0]].data[b];
+
+                if (@abs(prod_jk) >= 1e-15 or @abs(prod_kj) >= 1e-15) {
+                    any_active = true;
+
+                    break;
+                }
+            }
+
+            if (!any_active) continue;
 
             for (0..sys.nel) |r| for (0..sys.nel) |c| {
                 M.ptr(r, c).* = S_MO.at(dets.items[a][r], dets.items[b][c]);
@@ -354,26 +538,53 @@ pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt:
 
             const det = try determinant(T, &M, ipiv);
 
-            s_jk += prod_jk * det;
-            s_kj += prod_kj * det;
+            for (pairs, 0..) |pair, p_idx| {
+                const prod_jk = c_m[pair[0]].data[a] * c_p[pair[1]].data[b];
+                const prod_kj = c_m[pair[1]].data[a] * c_p[pair[0]].data[b];
+
+                s_jk[p_idx] += prod_jk * det;
+                s_kj[p_idx] += prod_kj * det;
+            }
         };
 
-        nacv.ptr(i, j).* = (s_jk - s_kj) / (4 * h);
+        for (pairs, 0..) |pair, p_idx| {
+            nacvs[p_idx].ptr(i, j).* = (s_jk[p_idx] - s_kj[p_idx]) / (4 * h);
 
-        if (log) {
-            const fmt = "NACV OF ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
+            if (log) {
+                const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
 
-            const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
+                const sym = try getSymbol(sys.atoms[i]);
 
-            try printf(io, fmt, .{ i, try getSymbol(sys.atoms[i]), dirs[j], nacv.at(i, j) });
+                if (pairs.len > 1) {
+                    const fmt = "NONADIABATIC COUPLING STATES {d}/{d} FOR ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
+
+                    try printf(io, fmt, .{ pair[0], pair[1], i, sym, dirs[j], nacvs[p_idx].at(i, j) });
+                }
+
+                if (pairs.len == 1) {
+                    const fmt = "NONADIABATIC COUPLING FOR ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
+
+                    try printf(io, fmt, .{ i, sym, dirs[j], nacvs[p_idx].at(i, j) });
+                }
+            }
         }
     };
 
-    return nacv;
+    return nacvs;
 }
 
 /// Evaluates the electronic energy for a perturbed molecular geometry.
 fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), perts: anytype, Pg: ?Matrix(T), P: ?*Matrix(T), state: usize, gpa: Allocator) !T {
+    const e = try gpa.alloc(T, state + 1);
+    defer gpa.free(e);
+
+    try getEnergies(T, io, runFn, opt, sys, perts, Pg, P, state, e, gpa);
+
+    return e[state];
+}
+
+/// Evaluates electronic state energies for a perturbed molecular geometry.
+fn getEnergies(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), perts: anytype, Pg: ?Matrix(T), P: ?*Matrix(T), max_state: usize, out: []T, gpa: Allocator) !void {
     std.debug.assert(@typeInfo(@TypeOf(perts)).@"struct".field_names.len % 2 == 0);
 
     var modified_opt = opt;
@@ -447,11 +658,11 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
     var res = try runFn(T, io, modified_opt, sys, Pg, false, gpa);
     defer res.deinit(gpa);
 
-    if (P) |out| {
-        @memcpy(out.data, (if (@hasField(@TypeOf(res), "hartree_fock")) res.hartree_fock.P else res.P).data);
+    if (P) |out_P| {
+        @memcpy(out_P.data, (if (@hasField(@TypeOf(res), "hartree_fock")) res.hartree_fock.P else res.P).data);
     }
 
-    if (res.energy.len <= state) {
+    if (res.energy.len <= max_state) {
         const msg = "STATE REQUESTED FOR NUMERICAL DERIVATIVE IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION";
 
         std.log.err(msg, .{});
@@ -459,5 +670,5 @@ fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Molecu
         return error.InvalidInput;
     }
 
-    return res.energy[state];
+    @memcpy(out[0 .. max_state + 1], res.energy[0 .. max_state + 1]);
 }

@@ -255,7 +255,11 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (opt.gradient) |gradopt| if (gradopt == .numeric) {
-        grad[0] = try calculateNumericalGradient(T, io, runFromSystem, opt, sys, log, gpa);
+        const num_grads = try calculateNumericalGradient(T, io, runFromSystem, opt, &.{0}, sys, log, gpa);
+        defer gpa.free(num_grads);
+
+        grad[0] = num_grads[0];
+
         errdefer grad[0].deinit(gpa);
 
         if (log) {
@@ -271,7 +275,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         grad[0].deinit(gpa);
     };
 
-    const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, energy[0], log, gpa);
+    const hess = try handleHessianAndFrequencies(T, io, opt, sys, energy[0], log, gpa);
 
     errdefer {
         if (opt.hessian) |_| hess[0].deinit(gpa);
@@ -388,15 +392,16 @@ fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Al
 }
 
 /// Computes the nuclear Hessian of the MP energy numerically and performs frequency and thermochemical analyses.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), energy: T, log: bool, gpa: Allocator) ![]Matrix(T) {
-    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
-    errdefer if (opt.hessian) |_| gpa.free(hess);
+fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), energy: T, log: bool, gpa: Allocator) anyerror![]Matrix(T) {
+    if (opt.hessian == null) return try gpa.alloc(Matrix(T), 0);
 
-    if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFn, opt, sys, log, gpa),
-    };
+    var hess = try calculateNumericalHessian(T, io, runFromSystem, opt, &.{0}, sys, log, gpa);
 
-    errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
+    errdefer {
+        for (0..hess.len) |k| hess[k].deinit(gpa);
+
+        gpa.free(hess);
+    }
 
     if (log and opt.frequency != null) {
         var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);

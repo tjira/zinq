@@ -333,7 +333,13 @@ fn AbInitio(comptime T: type) type {
                 },
 
                 .configuration_interaction => |opt| {
-                    var res = try ci_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+                    var run_opt = opt;
+
+                    run_opt.gradient, run_opt.hessian, run_opt.optimize = .{ null, null, null };
+
+                    run_opt.nacv, run_opt.frequency = .{ null, null };
+
+                    var res = try ci_runFromSystem(T, self.inpout, run_opt, @constCast(&self.msys), self.Pg, false, self.gpa);
                     defer res.deinit(self.gpa);
 
                     if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
@@ -385,9 +391,15 @@ fn AbInitio(comptime T: type) type {
                 .configuration_interaction => |opt| {
                     var run_opt = opt;
 
+                    run_opt.hessian, run_opt.optimize, run_opt.nacv = .{ null, null, null };
+
+                    run_opt.frequency = null;
+
+                    const active_state_arr = [_]u32{@intCast(active_state)};
+
                     if (run_opt.gradient) |*g| switch (g.*) {
-                        .analytic => |*a| a.state = @intCast(active_state),
-                        .numeric => |*num| num.state = @intCast(active_state),
+                        .analytic => |*a| a.states = &active_state_arr,
+                        .numeric => |*num| num.states = &active_state_arr,
                     };
 
                     var res = try ci_runFromSystem(T, self.inpout, run_opt, @constCast(&self.msys), self.Pg, false, self.gpa);

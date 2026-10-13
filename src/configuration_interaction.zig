@@ -86,26 +86,26 @@ const BfgsOptions = struct {
     threshold: f64 = 1e-4,
 };
 
-/// Analytical nuclear gradient evaluation settings for a specific state.
+/// Analytical nuclear gradient evaluation settings for specific electronic states.
 const GradientAnalyticOptions = struct {
-    state: ?u32 = null,
+    states: ?[]const u32 = null,
 };
 
 /// Finite difference displacement settings for numerical gradient evaluation.
 const GradientNumericOptions = struct {
-    state: ?u32 = null,
+    states: ?[]const u32 = null,
     step: f64 = 1e-5,
 };
 
 /// Finite difference displacement step for numerical Hessian evaluation.
 const HessianNumericOptions = struct {
-    state: u32 = 0,
+    states: ?[]const u32 = null,
     step: f64 = 1e-5,
 };
 
 /// Finite difference displacement step for numerical nonadiabatic coupling vector evaluation.
 const NacvNumericOptions = struct {
-    states: [2]u32 = .{ 0, 1 },
+    pairs: ?[]const [2]u32 = null,
     step: f64 = 1e-5,
 };
 
@@ -343,74 +343,123 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         }
     }
 
-    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
-    errdefer gpa.free(grad);
+    const grad_states = if (opt.gradient) |gradopt| switch (gradopt) {
+        inline else => |g| g.states orelse &[_]u32{0},
+    } else &[_]u32{};
 
-    if (opt.gradient) |gradopt| switch (gradopt) {
-        .analytic => |a| grad[0] = try gradient(T, hfres, C, dets, a.state orelse 0, gpa),
-        .numeric => grad[0] = try calculateNumericalGradient(T, io, runFromSystem, opt, sys, log, gpa),
-    };
+    var grad: []Matrix(T) = undefined;
 
-    errdefer if (opt.gradient) |_| grad[0].deinit(gpa);
-
-    if (log and opt.gradient != null) {
-        const state = switch (opt.gradient.?) {
-            inline else => |g| g.state orelse 0,
-        };
-
-        const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTIC" else "NUMERIC";
-
-        try printf(io, "\nCI STATE {d} {s} NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{ state, grad_type_str });
-
-        for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-            try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
-        };
+    if (opt.gradient == null) {
+        grad = try gpa.alloc(Matrix(T), 0);
     }
 
-    const state = if (opt.hessian) |h| h.numeric.state else 0;
-
-    const hess = try handleHessianAndFrequencies(T, io, opt, runFromSystem, sys, E.at(state), log, gpa);
+    if (opt.gradient) |gradopt| switch (gradopt) {
+        .analytic => grad = try gradient(T, hfres, C, dets, grad_states, gpa),
+        .numeric => grad = try calculateNumericalGradient(T, io, runFromSystem, opt, grad_states, sys, log, gpa),
+    };
 
     errdefer {
-        if (opt.hessian) |_| hess[0].deinit(gpa);
+        for (0..grad.len) |k| grad[k].deinit(gpa);
+
+        gpa.free(grad);
+    }
+
+    if (log and opt.gradient != null) {
+        const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTIC" else "NUMERIC";
+
+        for (grad_states, 0..) |state, i| {
+            try printf(io, "\nCI STATE {d} {s} NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{ state, grad_type_str });
+
+            for (0..grad[i].nrow()) |j| for (0..grad[i].ncol()) |k| {
+                try printf(io, "{d:20.14}{s}", .{ grad[i].at(j, k), if (k == 2) "\n" else " " });
+            };
+        }
+    }
+
+    const hess_states = if (opt.hessian) |hessopt| switch (hessopt) {
+        inline else => |h| h.states orelse &[_]u32{0},
+    } else &[_]u32{};
+
+    const hess = try handleHessianAndFrequencies(T, io, opt, sys, E.data, log, gpa);
+
+    errdefer {
+        for (0..hess.len) |k| hess[k].deinit(gpa);
 
         gpa.free(hess);
     }
 
-    var nacv = try gpa.alloc(Matrix(T), if (opt.nacv) |_| 1 else 0);
-    errdefer gpa.free(nacv);
+    const nacv_pairs = if (opt.nacv) |nacvopt| switch (nacvopt) {
+        inline else => |n| n.pairs orelse &[_][2]u32{.{ 0, 1 }},
+    } else &[_][2]u32{};
 
-    if (opt.nacv) |nacvopt| switch (nacvopt) {
-        .numeric => nacv[0] = try calculateNumericalNacv(T, io, runFromSystem, opt, sys, log, gpa),
+    var nacv: []Matrix(T) = undefined;
+
+    if (opt.nacv == null) {
+        nacv = try gpa.alloc(Matrix(T), 0);
+    }
+
+    if (opt.nacv) |nacvopt| if (nacvopt == .numeric) {
+        nacv = try calculateNumericalNacv(T, io, runFromSystem, opt, nacv_pairs, sys, log, gpa);
     };
 
-    errdefer if (opt.nacv) |_| nacv[0].deinit(gpa);
+    errdefer {
+        for (0..nacv.len) |k| nacv[k].deinit(gpa);
+
+        gpa.free(nacv);
+    }
 
     if (log and opt.nacv != null) {
-        const states = switch (opt.nacv.?) {
-            inline else => |n| n.states,
-        };
+        for (nacv_pairs, 0..) |pair, idx| {
+            const fmt = "\nCI NONADIABATIC COUPLING VECTOR BETWEEN STATES {d} AND {d} (1/a0)\n";
 
-        const fmt = "\nCI NONADIABATIC COUPLING VECTOR BETWEEN STATES {d} AND {d} (1/a0)\n";
+            try printf(io, fmt, .{ pair[0], pair[1] });
 
-        try printf(io, fmt, .{ states[0], states[1] });
+            for (0..nacv[idx].nrow()) |j| for (0..nacv[idx].ncol()) |k| {
+                try printf(io, "{d:20.14}{s}", .{ nacv[idx].at(j, k), if (k == 2) "\n" else " " });
+            };
+        }
+    }
 
-        for (0..nacv[0].nrow()) |j| for (0..nacv[0].ncol()) |k| {
-            try printf(io, "{d:20.14}{s}", .{ nacv[0].at(j, k), if (k == 2) "\n" else " " });
+    if (opt.write.gradient) |fname| {
+        if (grad.len == 1) {
+            try writeMatrix(T, io, fname, grad[0]);
+        }
+
+        if (grad.len > 1) for (grad, 0..) |g, idx| {
+            const out_name = try getStatePath(fname, grad_states[idx], gpa);
+            defer gpa.free(out_name);
+
+            try writeMatrix(T, io, out_name, g);
         };
     }
 
-    if (opt.write.gradient) |fname| if (grad.len > 0) {
-        try writeMatrix(T, io, fname, grad[0]);
-    };
+    if (opt.write.hessian) |fname| {
+        if (hess.len == 1) {
+            try writeMatrix(T, io, fname, hess[0]);
+        }
 
-    if (opt.write.hessian) |fname| if (hess.len > 0) {
-        try writeMatrix(T, io, fname, hess[0]);
-    };
+        if (hess.len > 1) for (hess, 0..) |h, idx| {
+            const out_name = try getStatePath(fname, hess_states[idx], gpa);
+            defer gpa.free(out_name);
 
-    if (opt.write.nacv) |fname| if (nacv.len > 0) {
-        try writeMatrix(T, io, fname, nacv[0]);
-    };
+            try writeMatrix(T, io, out_name, h);
+        };
+    }
+
+    if (opt.write.nacv) |fname| {
+        if (nacv.len == 1) {
+            try writeMatrix(T, io, fname, nacv[0]);
+        }
+
+        if (nacv.len > 1) for (nacv, 0..) |n, idx| {
+            const p0, const p1 = .{ nacv_pairs[idx][0], nacv_pairs[idx][1] };
+
+            const out_name = try getNacvPath(fname, p0, p1, gpa);
+            defer gpa.free(out_name);
+
+            try writeMatrix(T, io, out_name, n);
+        };
+    }
 
     if (opt.write.geometry) |fname| {
         try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
@@ -588,44 +637,64 @@ fn checkInvalidInput(opt: Options) !void {
     }
 
     if (opt.gradient) |gradopt| {
-        const grad_state = switch (gradopt) {
-            inline else => |g| g.state orelse 0,
+        const states = switch (gradopt) {
+            inline else => |g| g.states orelse &[_]u32{0},
         };
 
-        if (grad_state >= opt.nstate) {
+        if (states.len == 0) {
+            std.log.err("CI GRADIENT STATES LIST MUST NOT BE EMPTY", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (states) |s| if (s >= opt.nstate) {
             std.log.err("GRADIENT STATE MUST BE LESS THAN NUMBER OF STATES", .{});
 
             return error.InvalidInput;
-        }
+        };
     }
 
     if (opt.hessian) |hessopt| {
-        const hess_state = switch (hessopt) {
-            inline else => |h| h.state,
+        const states = switch (hessopt) {
+            inline else => |h| h.states orelse &[_]u32{0},
         };
 
-        if (hess_state >= opt.nstate) {
+        if (states.len == 0) {
+            std.log.err("CI HESSIAN STATES LIST MUST NOT BE EMPTY", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (states) |s| if (s >= opt.nstate) {
             std.log.err("HESSIAN STATE MUST BE LESS THAN NUMBER OF STATES", .{});
 
             return error.InvalidInput;
-        }
+        };
     }
 
     if (opt.nacv) |nacvopt| {
-        const states = switch (nacvopt) {
-            inline else => |n| n.states,
+        const pairs = switch (nacvopt) {
+            inline else => |n| n.pairs orelse &[_][2]u32{.{ 0, 1 }},
         };
 
-        if (states[0] == states[1]) {
-            std.log.err("NACV STATES MUST BE DISTINCT", .{});
+        if (pairs.len == 0) {
+            std.log.err("CI NACV PAIRS LIST MUST NOT BE EMPTY", .{});
 
             return error.InvalidInput;
         }
 
-        if (states[0] >= opt.nstate or states[1] >= opt.nstate) {
-            std.log.err("NACV STATES MUST BE LESS THAN NUMBER OF STATES", .{});
+        for (pairs) |pair| {
+            if (pair[0] == pair[1]) {
+                std.log.err("NACV STATES MUST BE DISTINCT", .{});
 
-            return error.InvalidInput;
+                return error.InvalidInput;
+            }
+
+            if (pair[0] >= opt.nstate or pair[1] >= opt.nstate) {
+                std.log.err("NACV STATES MUST BE LESS THAN NUMBER OF STATES", .{});
+
+                return error.InvalidInput;
+            }
         }
     }
 }
@@ -732,12 +801,36 @@ fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.
     return results;
 }
 
-/// Computes the analytic nuclear gradient of a specific CI state energy using dual number differentiation.
-fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: std.ArrayList([]const usize), state: usize, gpa: Allocator) !Matrix(T) {
+/// Derives output paths for nonadiabatic coupling vectors by inserting state pair indices before the file extension.
+fn getNacvPath(path: []const u8, p0: u32, p1: u32, gpa: Allocator) ![]const u8 {
+    const ext = std.fs.path.extension(path);
+
+    return try std.fmt.allocPrint(gpa, "{s}_{d}_{d}{s}", .{ path[0 .. path.len - ext.len], p0, p1, ext });
+}
+
+/// Derives output paths for state nuclear derivatives by inserting the state index before the file extension.
+fn getStatePath(path: []const u8, state: u32, gpa: Allocator) ![]const u8 {
+    const ext = std.fs.path.extension(path);
+
+    return try std.fmt.allocPrint(gpa, "{s}_{d}{s}", .{ path[0 .. path.len - ext.len], state, ext });
+}
+
+/// Computes analytic nuclear gradients of CI state energies using dual number differentiation.
+fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: std.ArrayList([]const usize), states: []const u32, gpa: Allocator) ![]Matrix(T) {
     const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
 
-    var grad = try nuclearRepulsionGradient(T, hfres.ints.sys, gpa);
-    errdefer grad.deinit(gpa);
+    var grads = try gpa.alloc(Matrix(T), states.len);
+    errdefer gpa.free(grads);
+
+    var grads_done: usize = 0;
+
+    errdefer for (0..grads_done) |k| grads[k].deinit(gpa);
+
+    for (0..states.len) |idx| {
+        grads[idx] = try nuclearRepulsionGradient(T, hfres.ints.sys, gpa);
+
+        grads_done += 1;
+    }
 
     var H_d = try Matrix(ScalarDual(T)).init(hfres.ints.H.?.nrow(), hfres.ints.H.?.ncol(), gpa);
     defer H_d.deinit(gpa);
@@ -785,40 +878,49 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: s
         };
 
         for (0..dets.items.len) |a| for (0..dets.items.len) |b| {
-            grad.ptr(i / 3, i % 3).* += C.at(a, state) * C.at(b, state) * H_CI_d.at(a, b).der;
+            const der = H_CI_d.at(a, b).der;
+
+            for (states, 0..) |s, s_idx| {
+                grads[s_idx].ptr(i / 3, i % 3).* += C.at(a, s) * C.at(b, s) * der;
+            }
         };
     }
 
-    return grad;
+    return grads;
 }
 
-/// Computes the nuclear Hessian of a CI state numerically and performs frequency and thermochemical analyses.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, runFn: anytype, sys: *MolecularSystem(T), energy: T, log: bool, gpa: Allocator) ![]Matrix(T) {
-    var hess = try gpa.alloc(Matrix(T), if (opt.hessian) |_| 1 else 0);
-    errdefer if (opt.hessian) |_| gpa.free(hess);
+/// Computes nuclear Hessians of CI states numerically and performs frequency and thermochemical analyses.
+fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), energies: []const T, log: bool, gpa: Allocator) ![]Matrix(T) {
+    if (opt.hessian == null) return try gpa.alloc(Matrix(T), 0);
 
-    if (opt.hessian) |hessopt| switch (hessopt) {
-        .numeric => hess[0] = try calculateNumericalHessian(T, io, runFn, opt, sys, log, gpa),
+    const states = switch (opt.hessian.?) {
+        inline else => |h| h.states orelse &[_]u32{0},
     };
 
-    errdefer if (opt.hessian) |_| hess[0].deinit(gpa);
+    var hess = try calculateNumericalHessian(T, io, runFromSystem, opt, states, sys, log, gpa);
+
+    errdefer {
+        for (0..hess.len) |k| hess[k].deinit(gpa);
+
+        gpa.free(hess);
+    }
 
     if (log and opt.frequency != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
-        defer freqs.deinit(gpa);
+        for (states, 0..) |state, idx| {
+            var freqs = try calculateHarmonicFrequencies(T, hess[idx], sys.*, gpa);
+            defer freqs.deinit(gpa);
 
-        const state = if (opt.hessian) |h| h.numeric.state else 0;
+            const method_str = try std.fmt.allocPrint(gpa, "CI STATE {d}", .{state});
+            defer gpa.free(method_str);
 
-        const method_str = try std.fmt.allocPrint(gpa, "CI STATE {d}", .{state});
-        defer gpa.free(method_str);
+            try printHarmonicFrequencies(T, io, freqs, method_str);
 
-        try printHarmonicFrequencies(T, io, freqs, method_str);
+            const mult = opt.hartree_fock.multiplicity;
 
-        const mult = opt.hartree_fock.multiplicity;
+            const thermo = try calculateThermochemistry(T, opt.frequency.?, sys.*, freqs, mult, gpa);
 
-        const thermo = try calculateThermochemistry(T, opt.frequency.?, sys.*, freqs, mult, gpa);
-
-        try printThermochemistry(T, io, opt.frequency.?, thermo, energy, method_str);
+            try printThermochemistry(T, io, opt.frequency.?, thermo, energies[state], method_str);
+        }
     }
 
     return hess;

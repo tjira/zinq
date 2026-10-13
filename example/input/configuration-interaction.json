@@ -6,6 +6,7 @@
                     "system" : "example/molecule/water.xyz",
                     "basis" : "builtin:sto-3g"
                 },
+                "nstate" : 2,
                 "optimize" : {
                     "bfgs" : {}
                 },
@@ -13,6 +14,9 @@
                     "analytic" : {}
                 },
                 "hessian" : {
+                    "numeric" : {}
+                },
+                "nacv" : {
                     "numeric" : {}
                 },
                 "frequency" : {}
