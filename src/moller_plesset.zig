@@ -24,6 +24,7 @@ const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculate
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
 const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
+const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const hartree_fock_run = @import("hartree_fock.zig").run;
@@ -255,7 +256,9 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (opt.gradient) |gradopt| if (gradopt == .numeric) {
-        const num_grads = try calculateNumericalGradient(T, io, runFromSystem, opt, &.{0}, sys, log, gpa);
+        const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
+
+        const num_grads = try calculateNumericalGradient(T, ctx, runFromSystem, opt, &.{0});
         defer gpa.free(num_grads);
 
         grad[0] = num_grads[0];
@@ -395,7 +398,9 @@ fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Al
 fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), energy: T, log: bool, gpa: Allocator) anyerror![]Matrix(T) {
     if (opt.hessian == null) return try gpa.alloc(Matrix(T), 0);
 
-    var hess = try calculateNumericalHessian(T, io, runFromSystem, opt, &.{0}, sys, log, gpa);
+    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
+
+    var hess = try calculateNumericalHessian(T, ctx, runFromSystem, opt, &.{0});
 
     errdefer {
         for (0..hess.len) |k| hess[k].deinit(gpa);

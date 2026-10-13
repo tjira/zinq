@@ -24,6 +24,7 @@ const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNu
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
 const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
 const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
+const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const dot = @import("linear_algebra.zig").dot;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const geigh = @import("linear_algebra.zig").geigh;
@@ -571,7 +572,9 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     if (opt.gradient) |gradopt| switch (gradopt) {
         .analytic => grad[0] = try gradient(T, ints, ws, opt.generalized, if (dft) |*d| d else null, opt.nthreads, gpa),
         .numeric => {
-            const num_grads = try calculateNumericalGradient(T, io, runFromSystem, opt, &.{0}, sys, log, gpa);
+            const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
+
+            const num_grads = try calculateNumericalGradient(T, ctx, runFromSystem, opt, &.{0});
             defer gpa.free(num_grads);
 
             grad[0] = num_grads[0];
@@ -960,7 +963,9 @@ fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), op
 fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), energy: T, log: bool, gpa: Allocator) anyerror![]Matrix(T) {
     if (opt.hessian == null) return try gpa.alloc(Matrix(T), 0);
 
-    var hess = try calculateNumericalHessian(T, io, runFromSystem, opt, &.{0}, sys, log, gpa);
+    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
+
+    var hess = try calculateNumericalHessian(T, ctx, runFromSystem, opt, &.{0});
 
     errdefer {
         for (0..hess.len) |k| hess[k].deinit(gpa);

@@ -27,6 +27,7 @@ const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNu
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
 const calculateNumericalNacv = @import("nuclear_derivative.zig").calculateNumericalNacv;
 const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
+const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const eigh = @import("linear_algebra.zig").eigh;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const hartree_fock_run = @import("hartree_fock.zig").run;
@@ -347,6 +348,8 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         inline else => |g| g.states orelse &[_]u32{0},
     } else &[_]u32{};
 
+    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
+
     var grad: []Matrix(T) = undefined;
 
     if (opt.gradient == null) {
@@ -355,7 +358,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     if (opt.gradient) |gradopt| switch (gradopt) {
         .analytic => grad = try gradient(T, hfres, C, dets, grad_states, gpa),
-        .numeric => grad = try calculateNumericalGradient(T, io, runFromSystem, opt, grad_states, sys, log, gpa),
+        .numeric => grad = try calculateNumericalGradient(T, ctx, runFromSystem, opt, grad_states),
     };
 
     errdefer {
@@ -398,8 +401,8 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         nacv = try gpa.alloc(Matrix(T), 0);
     }
 
-    if (opt.nacv) |nacvopt| if (nacvopt == .numeric) {
-        nacv = try calculateNumericalNacv(T, io, runFromSystem, opt, nacv_pairs, sys, log, gpa);
+    if (opt.nacv) |nacvopt| switch (nacvopt) {
+        .numeric => nacv = try calculateNumericalNacv(T, ctx, runFromSystem, opt, nacv_pairs),
     };
 
     errdefer {
@@ -897,7 +900,9 @@ fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: 
         inline else => |h| h.states orelse &[_]u32{0},
     };
 
-    var hess = try calculateNumericalHessian(T, io, runFromSystem, opt, states, sys, log, gpa);
+    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
+
+    var hess = try calculateNumericalHessian(T, ctx, runFromSystem, opt, states);
 
     errdefer {
         for (0..hess.len) |k| hess[k].deinit(gpa);

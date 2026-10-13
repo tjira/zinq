@@ -21,9 +21,16 @@ const printf = @import("read_write.zig").printf;
 
 const A2BOHR = @import("constant.zig").A2BOHR;
 
+/// Execution context encapsulating molecular system geometry, IO streams, memory allocator, and logging settings.
+pub fn DerivativeContext(comptime T: type) type {
+    return struct { gpa: Allocator, io: std.Io, log: bool = false, sys: *MolecularSystem(T) };
+}
+
 /// Computes nuclear gradients of electronic states using central finite differences.
-pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, states: []const u32, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror![]Matrix(T) {
+pub fn calculateNumericalGradient(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt: anytype, states: []const u32) anyerror![]Matrix(T) {
     const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
+
+    const io, const sys, const gpa, const log = .{ ctx.io, ctx.sys, ctx.gpa, ctx.log };
 
     var grad = try gpa.alloc(Matrix(T), states.len);
     errdefer gpa.free(grad);
@@ -59,13 +66,13 @@ pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, 
     const em = try gpa.alloc(T, max_state + 1);
     defer gpa.free(em);
 
-    try getEnergies(T, io, runFn, opt, sys, .{}, null, &Pg, max_state, ep, gpa);
+    try getEnergies(T, ctx, runFn, opt, .{}, null, &Pg, ep);
 
     for (0..sys.atoms.len) |i| for (0..3) |j| {
         const d1, const d2 = .{ .{ i * 3 + j, h }, .{ i * 3 + j, -h } };
 
-        try getEnergies(T, io, runFn, opt, sys, d1, Pg, null, max_state, ep, gpa);
-        try getEnergies(T, io, runFn, opt, sys, d2, Pg, null, max_state, em, gpa);
+        try getEnergies(T, ctx, runFn, opt, d1, Pg, null, ep);
+        try getEnergies(T, ctx, runFn, opt, d2, Pg, null, em);
 
         for (states, 0..) |s, s_idx| {
             grad[s_idx].ptr(i, j).* = (ep[s] - em[s]) / (2 * h);
@@ -94,8 +101,10 @@ pub fn calculateNumericalGradient(comptime T: type, io: std.Io, runFn: anytype, 
 }
 
 /// Computes nuclear Hessians of electronic states using finite differences of energies.
-pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, states: []const u32, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror![]Matrix(T) {
+pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt: anytype, states: []const u32) anyerror![]Matrix(T) {
     const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
+
+    const io, const sys, const gpa, const log = .{ ctx.io, ctx.sys, ctx.gpa, ctx.log };
 
     var hess = try gpa.alloc(Matrix(T), states.len);
     errdefer gpa.free(hess);
@@ -146,13 +155,13 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
     const emm = try gpa.alloc(T, max_state + 1);
     defer gpa.free(emm);
 
-    try getEnergies(T, io, runFn, opt, sys, .{}, null, &Pg, max_state, er, gpa);
+    try getEnergies(T, ctx, runFn, opt, .{}, null, &Pg, er);
 
     for (0..3 * sys.atoms.len) |a| {
         const d1, const d2 = .{ .{ a, h }, .{ a, -h } };
 
-        try getEnergies(T, io, runFn, opt, sys, d1, Pg, null, max_state, ep, gpa);
-        try getEnergies(T, io, runFn, opt, sys, d2, Pg, null, max_state, em, gpa);
+        try getEnergies(T, ctx, runFn, opt, d1, Pg, null, ep);
+        try getEnergies(T, ctx, runFn, opt, d2, Pg, null, em);
 
         for (states, 0..) |s, s_idx| {
             hess[s_idx].ptr(a, a).* = (ep[s] - 2 * er[s] + em[s]) / (h * h);
@@ -163,13 +172,15 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
                 const sym, const dirs = .{ try getSymbol(sys.atoms[at]), &[_][]const u8{ "'x'", "'y'", "'z'" } };
 
                 if (states.len > 1) {
-                    const fmt = "NUCLEAR HESSIAN STATE {d} FOR ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
+                    const fmt = "NUCLEAR HESSIAN STATE {d} FOR ATOM {d:02} ({s:2}) DIR {s} AND " ++
+                        "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
                     try printf(io, fmt, .{ s, at, sym, dirs[a % 3], at, sym, dirs[a % 3], hess[s_idx].at(a, a) });
                 }
 
                 if (states.len == 1) {
-                    const fmt = "NUCLEAR HESSIAN FOR ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
+                    const fmt = "NUCLEAR HESSIAN FOR ATOM {d:02} ({s:2}) DIR {s} AND " ++
+                        "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
                     try printf(io, fmt, .{ at, sym, dirs[a % 3], at, sym, dirs[a % 3], hess[s_idx].at(a, a) });
                 }
@@ -177,10 +188,10 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
         }
 
         for (a + 1..3 * sys.atoms.len) |b| {
-            try getEnergies(T, io, runFn, opt, sys, .{ a, h, b, h }, Pg, null, max_state, epp, gpa);
-            try getEnergies(T, io, runFn, opt, sys, .{ a, h, b, -h }, Pg, null, max_state, epm, gpa);
-            try getEnergies(T, io, runFn, opt, sys, .{ a, -h, b, h }, Pg, null, max_state, emp, gpa);
-            try getEnergies(T, io, runFn, opt, sys, .{ a, -h, b, -h }, Pg, null, max_state, emm, gpa);
+            try getEnergies(T, ctx, runFn, opt, .{ a, h, b, h }, Pg, null, epp);
+            try getEnergies(T, ctx, runFn, opt, .{ a, h, b, -h }, Pg, null, epm);
+            try getEnergies(T, ctx, runFn, opt, .{ a, -h, b, h }, Pg, null, emp);
+            try getEnergies(T, ctx, runFn, opt, .{ a, -h, b, -h }, Pg, null, emm);
 
             for (states, 0..) |s, s_idx| {
                 const val = (epp[s] - epm[s] - emp[s] + emm[s]) / (4 * h * h);
@@ -195,13 +206,15 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
                     const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
 
                     if (states.len > 1) {
-                        const fmt = "NUCLEAR HESSIAN STATE {d} FOR ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
+                        const fmt = "NUCLEAR HESSIAN STATE {d} FOR ATOM {d:02} ({s:2}) DIR {s} AND " ++
+                            "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
                         try printf(io, fmt, .{ s, a / 3, sym_a, dirs[a % 3], b / 3, sym_b, dirs[b % 3], val });
                     }
 
                     if (states.len == 1) {
-                        const fmt = "NUCLEAR HESSIAN FOR ATOM {d:02} ({s:2}) DIR {s} AND ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
+                        const fmt = "NUCLEAR HESSIAN FOR ATOM {d:02} ({s:2}) DIR {s} AND " ++
+                            "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
                         try printf(io, fmt, .{ a / 3, sym_a, dirs[a % 3], b / 3, sym_b, dirs[b % 3], val });
                     }
@@ -214,8 +227,10 @@ pub fn calculateNumericalHessian(comptime T: type, io: std.Io, runFn: anytype, o
 }
 
 /// Computes nonadiabatic coupling vectors between state pairs using central finite differences.
-pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, pairs: []const [2]u32, sys: *MolecularSystem(T), log: bool, gpa: Allocator) anyerror![]Matrix(T) {
+pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt: anytype, pairs: []const [2]u32) anyerror![]Matrix(T) {
     const generalized = if (@hasField(@TypeOf(opt), "hartree_fock")) opt.hartree_fock.generalized else opt.generalized;
+
+    const io, const sys, const gpa, const log = .{ ctx.io, ctx.sys, ctx.gpa, ctx.log };
 
     var nacvs = try gpa.alloc(Matrix(T), pairs.len);
     errdefer gpa.free(nacvs);
@@ -556,7 +571,8 @@ pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt:
                 const sym = try getSymbol(sys.atoms[i]);
 
                 if (pairs.len > 1) {
-                    const fmt = "NONADIABATIC COUPLING STATES {d}/{d} FOR ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
+                    const fmt = "NONADIABATIC COUPLING STATES {d}/{d} FOR ATOM {d:02} ({s:2}) " ++
+                        "IN DIRECTION {s}: {d:20.14}\n";
 
                     try printf(io, fmt, .{ pair[0], pair[1], i, sym, dirs[j], nacvs[p_idx].at(i, j) });
                 }
@@ -573,19 +589,13 @@ pub fn calculateNumericalNacv(comptime T: type, io: std.Io, runFn: anytype, opt:
     return nacvs;
 }
 
-/// Evaluates the electronic energy for a perturbed molecular geometry.
-fn getE(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), perts: anytype, Pg: ?Matrix(T), P: ?*Matrix(T), state: usize, gpa: Allocator) !T {
-    const e = try gpa.alloc(T, state + 1);
-    defer gpa.free(e);
-
-    try getEnergies(T, io, runFn, opt, sys, perts, Pg, P, state, e, gpa);
-
-    return e[state];
-}
-
 /// Evaluates electronic state energies for a perturbed molecular geometry.
-fn getEnergies(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), perts: anytype, Pg: ?Matrix(T), P: ?*Matrix(T), max_state: usize, out: []T, gpa: Allocator) !void {
+fn getEnergies(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt: anytype, perts: anytype, Pg: ?Matrix(T), P: ?*Matrix(T), out: []T) !void {
     std.debug.assert(@typeInfo(@TypeOf(perts)).@"struct".field_names.len % 2 == 0);
+
+    const io, const sys, const gpa = .{ ctx.io, ctx.sys, ctx.gpa };
+
+    const max_state = out.len - 1;
 
     var modified_opt = opt;
 
