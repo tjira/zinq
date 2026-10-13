@@ -129,6 +129,47 @@ extern "C" {
         }
     }
 
+    void oneelec_2sys(double *I, libint2::Engine &engine, const BasisSet &obs1, const BasisSet &obs2, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<Engine> engines(nthreads, engine);
+
+        size_t nbf1 = obs1.nbf(); size_t nbf2 = obs2.nbf();
+
+        auto sh2bf1 = obs1.shell2bf(); auto sh2bf2 = obs2.shell2bf();
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < obs1.size(); s1++) {
+            auto bf1_first = sh2bf1.at(s1);
+
+            for (size_t s2 = 0; s2 < obs2.size(); s2++) {
+                int id = omp_get_thread_num(); int idx = 0; auto bf2_first = sh2bf2.at(s2);
+
+                engines.at(id).compute(obs1.at(s1), obs2.at(s2));
+
+                const auto& res = engines.at(id).results();
+
+                if (res.at(0) == nullptr) continue;
+
+                for (size_t f1 = 0; f1 < obs1.at(s1).size(); f1++) {
+                    size_t bf1 = f1 + bf1_first;
+
+                    for (size_t f2 = 0; f2 < obs2.at(s2).size(); f2++, idx++) {
+                        size_t bf2 = f2 + bf2_first;
+
+                        I[bf1 * nbf2 + bf2] = res[0][idx];
+                    }
+                }
+            }
+        }
+    }
+
     void twoelec(double *I, libint2::Engine &engine, const BasisSet &obs, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -475,6 +516,18 @@ extern "C" {
         Engine engine(Operator::overlap, sys->obs.max_nprim(), sys->obs.max_l(), 0, 1e-14);
 
         oneelec(I, engine, sys->obs, nthreads); libint2::finalize();
+    }
+
+    void libint_overlap_2sys(double *I, SystemData *sys1, SystemData *sys2, size_t nthreads) {
+        if (!sys1 || !sys2) return; libint2::initialize();
+
+        size_t max_prim = std::max(sys1->obs.max_nprim(), sys2->obs.max_nprim());
+
+        int max_l = std::max(sys1->obs.max_l(), sys2->obs.max_l());
+
+        Engine engine(Operator::overlap, max_prim, max_l, 0, 1e-14);
+
+        oneelec_2sys(I, engine, sys1->obs, sys2->obs, nthreads); libint2::finalize();
     }
 }
 

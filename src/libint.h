@@ -19,6 +19,8 @@ void libint_kinetic(double *I, SystemData *sys, size_t nthreads);
 void libint_nuclear(double *I, SystemData *sys, size_t nthreads);
 void libint_overlap(double *I, SystemData *sys, size_t nthreads);
 
+void libint_overlap_2sys(double *I, SystemData *sys1, SystemData *sys2, size_t nthreads);
+
 void libint_coulomb_gradient_ghf(double *G, const double *P, double exch_factor, SystemData *sys, size_t nthreads);
 void libint_coulomb_gradient_rhf(double *G, const double *P, double exch_factor, SystemData *sys, size_t nthreads);
 

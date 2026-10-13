@@ -35,6 +35,50 @@ pub fn addScaledSlice(comptime T: type, n: usize, alpha: T, x: []const T, y: []T
     }
 }
 
+/// Computes the determinant of a square matrix using OpenBLAS LAPACK LU factorization.
+pub fn determinant(comptime T: type, A: *Matrix(T), ipiv: []i32) !T {
+    std.debug.assert(A.nrow() == A.ncol());
+    std.debug.assert(ipiv.len == A.nrow());
+
+    if (comptime primType(T) != f64) @compileError("DETERMINANT NOW ONLY SUPPORTS F64 NUMBERS");
+
+    const n = A.nrow();
+
+    if (n == 0) {
+        return 1;
+    }
+
+    if (n == 1) {
+        return A.at(0, 0);
+    }
+
+    if (n == 2) {
+        return A.at(0, 0) * A.at(1, 1) - A.at(0, 1) * A.at(1, 0);
+    }
+
+    lockLapack();
+
+    const info = lapacke.LAPACKE_dgetrf(ROW_MAJOR, @intCast(n), @intCast(n), A.data.ptr, @intCast(n), ipiv.ptr);
+
+    unlockLapack();
+
+    if (info < 0) {
+        return error.LapackError;
+    }
+
+    if (info > 0) return 0;
+
+    var det: T = 1;
+
+    for (0..n) |k| {
+        if (ipiv[k] != @as(i32, @intCast(k + 1))) det = -det;
+
+        det *= A.at(k, k);
+    }
+
+    return det;
+}
+
 /// Computes the dot product (inner product) of two vectors: x^T * y.
 pub fn dot(comptime T: type, x: Vector(T), y: Vector(T)) T {
     std.debug.assert(x.length() == y.length());

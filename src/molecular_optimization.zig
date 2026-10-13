@@ -37,6 +37,10 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
         run_opt.mulliken = false;
     }
 
+    if (comptime @hasField(@TypeOf(run_opt), "nacv")) {
+        run_opt.nacv = null;
+    }
+
     if (comptime @hasField(@TypeOf(run_opt), "wiberg")) {
         run_opt.wiberg = false;
     }
@@ -211,6 +215,10 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
 
     if (comptime @hasField(@TypeOf(run_opt), "mulliken")) {
         run_opt.mulliken = false;
+    }
+
+    if (comptime @hasField(@TypeOf(run_opt), "nacv")) {
+        run_opt.nacv = null;
     }
 
     if (comptime @hasField(@TypeOf(run_opt), "wiberg")) {

@@ -370,6 +370,33 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the cross-geometry overlap matrix between two different configurations of the system.
+        pub fn overlapBetween(self: @This(), other: @This(), nthreads: usize, gpa: Allocator) !Matrix(T) {
+            const I = try Matrix(T).initZero(self.nbf, other.nbf, gpa);
+            errdefer I.deinit(gpa);
+
+            libint.libint_overlap_2sys(I.data.ptr, self.ptr, other.ptr, nthreads);
+
+            return I;
+        }
+
+        /// Computes the spin-blocked cross-geometry overlap matrix between two configurations.
+        pub fn overlapBetweenSpin(self: @This(), other: @This(), nthreads: usize, gpa: Allocator) !Matrix(T) {
+            var S = try self.overlapBetween(other, nthreads, gpa);
+            defer S.deinit(gpa);
+
+            var I = try Matrix(T).initZero(2 * self.nbf, 2 * other.nbf, gpa);
+            errdefer I.deinit(gpa);
+
+            for (0..self.nbf) |i| for (0..other.nbf) |j| {
+                I.ptr(i, j).* = S.at(i, j);
+
+                I.ptr(i + self.nbf, j + other.nbf).* = S.at(i, j);
+            };
+
+            return I;
+        }
+
         /// Computes the first-order derivative of the basis function overlap matrix with respect to nuclear coordinates.
         pub fn overlapD1(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf };

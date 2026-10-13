@@ -87,3 +87,33 @@ Evaluating the derivative of each Hamiltonian matrix element $\frac{dH_{\text{CI
 First, the Coupled-Perturbed Hartree–Fock (CPHF) equations are solved to obtain the first-order response of the molecular orbitals to nuclear displacements. This yields the molecular orbital coefficient derivatives $\frac{d\mathbf{C}}{dx}$, which describe the geometric relaxation of the molecular orbital basis as the nuclei move.
 
 Second, rather than manually differentiating the four-index molecular orbital transformation and the determinant evaluation rules, the derivative of the CI Hamiltonian matrix is evaluated using forward-mode automatic differentiation. Seeding the atomic orbital core Hamiltonian $\mathbf{H}^{\text{core}}$, the two-electron repulsion integrals $\mathbf{g}$, and the molecular orbital coefficients $\mathbf{C}$ with their exact first-order derivatives ($\frac{d\mathbf{H}^{\text{core}}}{dx}$, $\frac{d\mathbf{g}}{dx}$, and $\frac{d\mathbf{C}}{dx}$) automatically propagates the derivatives through the integral transformation and Slater–Condon evaluation using dual numbers. The resulting dual component of the Hamiltonian matrix directly provides $\frac{dH_{\text{CI},ab}}{dx}$, which is contracted with the CI eigenvectors to complete the analytical nuclear gradient.
+
+### 6. Numerical Nonadiabatic Coupling Vectors
+
+Beyond diagonal forces on single electronic surfaces, transitions between distinct electronic states are mediated by nonadiabatic coupling vectors. For two adiabatic electronic states $j$ and $k$ with $j\ne k$, the nonadiabatic coupling vector with respect to the nuclear coordinate vector $\mathbf{R}$ is defined as
+
+$$
+\mathbf{d}_{jk}=\langle\Psi_j|\boldsymbol{\nabla}_\mathbf{R}\Psi_k\rangle
+$$
+
+which describes the first-order derivative coupling induced by nuclear kinetic motion and carries dimensions of inverse length ($a_0^{-1}$ in atomic units).
+
+In Configuration Interaction, each electronic state is expanded over the Slater determinant basis as $|\Psi_k(\mathbf{R})\rangle=\sum_a c_{ak}(\mathbf{R})|\Phi_a(\mathbf{R})\rangle$. Evaluating the coupling numerically using finite differences with displacement step $h$ along Cartesian coordinate $R_{A\alpha}$ via the cross-geometry wavefunction overlap yields
+
+$$
+d_{jk,A\alpha}\approx\frac{\langle\Psi_j(\mathbf{R}-h\mathbf{e}_{A\alpha})|\Psi_k(\mathbf{R}+h\mathbf{e}_{A\alpha})\rangle-\langle\Psi_j(\mathbf{R}+h\mathbf{e}_{A\alpha})|\Psi_k(\mathbf{R}-h\mathbf{e}_{A\alpha})\rangle}{4h}
+$$
+
+which achieves second-order accuracy and ensures strict antisymmetry such that $d_{jk,A\alpha}=-d_{kj,A\alpha}$.
+
+Each cross-geometry state overlap is evaluated over the displaced Slater determinants as
+
+$$
+\langle\Psi_j(\mathbf{R}^-)|\Psi_k(\mathbf{R}^+)\rangle=\sum_{a,b}c_{aj}(\mathbf{R}^-)c_{bk}(\mathbf{R}^+)\langle\Phi_a(\mathbf{R}^-)|\Phi_b(\mathbf{R}^+)\rangle
+$$
+
+where $\mathbf{R}^\pm=\mathbf{R}\pm h\mathbf{e}_{A\alpha}$, and the determinant overlap $\langle\Phi_a(\mathbf{R}^-)|\Phi_b(\mathbf{R}^+)\rangle=\det(\mathbf{M}_{ab})$ is evaluated using Löwdin's rule from the $N_{\text{elec}}\times N_{\text{elec}}$ submatrix of the molecular spin-orbital overlap matrix $\mathbf{S}^{\text{MO}}=\mathbf{C}(\mathbf{R}^-)^T\mathbf{S}^{\text{SO-AO}}(\mathbf{R}^-,\mathbf{R}^+)\mathbf{C}(\mathbf{R}^+)$. Because the atomic orbital overlap $\mathbf{S}^{\text{AO}}(\mathbf{R}^-,\mathbf{R}^+)$ is evaluated directly between the displaced nuclear configurations using two-center integral engines, this formulation rigorously accounts for atomic orbital displacement (Pulay) terms, molecular orbital relaxation, and CI configuration derivative couplings without truncation.
+
+By virtue of the symmetry of real electronic wavefunctions, the reverse overlap is equivalently evaluated as $\langle\Psi_j(\mathbf{R}^+)|\Psi_k(\mathbf{R}^-)\rangle=\langle\Psi_k(\mathbf{R}^-)|\Psi_j(\mathbf{R}^+)\rangle=\sum_{a,b}c_{ak}(\mathbf{R}^-)c_{bj}(\mathbf{R}^+)\langle\Phi_a(\mathbf{R}^-)|\Phi_b(\mathbf{R}^+)\rangle$, which enables the simultaneous accumulation of both directional overlaps from a single set of cross-geometry determinant overlaps $\det(\mathbf{M}_{ab})$.
+
+Because numerical diagonalization determines eigenvectors up to an arbitrary global sign $\pm 1$, phase continuity must be enforced across displaced geometries. The sign of each displaced eigenvector is aligned with the reference geometry eigenvector by requiring $\mathbf{c}_k(\mathbf{R}\pm h\mathbf{e}_{A\alpha})^T\mathbf{c}_k(\mathbf{R})>0$ before computing the state overlaps.

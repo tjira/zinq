@@ -25,6 +25,7 @@ const bfgs = @import("molecular_optimization.zig").bfgs;
 const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
+const calculateNumericalNacv = @import("nuclear_derivative.zig").calculateNumericalNacv;
 const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
 const eigh = @import("linear_algebra.zig").eigh;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
@@ -48,6 +49,7 @@ pub const Options = struct {
     gradient: ?GradientOptions = null,
     hartree_fock: HartreeFockOptions,
     hessian: ?HessianOptions = null,
+    nacv: ?NacvOptions = null,
     nstate: u32 = 1,
     nthreads: u32 = 1,
     optimize: ?OptimizeOptions = null,
@@ -63,6 +65,11 @@ pub const GradientOptions = union(enum) {
 /// Tagged union specifying CI nuclear Hessian calculation methods.
 pub const HessianOptions = union(enum) {
     numeric: HessianNumericOptions,
+};
+
+/// Tagged union specifying CI nonadiabatic coupling vector calculation methods.
+pub const NacvOptions = union(enum) {
+    numeric: NacvNumericOptions,
 };
 
 /// Tagged union specifying geometry optimization algorithms.
@@ -96,6 +103,12 @@ const HessianNumericOptions = struct {
     step: f64 = 1e-5,
 };
 
+/// Finite difference displacement step for numerical nonadiabatic coupling vector evaluation.
+const NacvNumericOptions = struct {
+    states: [2]u32 = .{ 0, 1 },
+    step: f64 = 1e-5,
+};
+
 /// Configuration options for steepest descent molecular geometry optimization.
 const SteepestDescentOptions = struct {
     gradient: GradientOptions = .{ .analytic = .{} },
@@ -104,11 +117,12 @@ const SteepestDescentOptions = struct {
     threshold: f64 = 1e-4,
 };
 
-/// Output file destinations for CI geometry, gradients, and Hessians.
+/// Output file destinations for CI geometry, gradients, Hessians, and nonadiabatic coupling vectors.
 const Write = struct {
     geometry: ?[]const u8 = null,
     gradient: ?[]const u8 = null,
     hessian: ?[]const u8 = null,
+    nacv: ?[]const u8 = null,
 };
 
 /// Holds CI results: reference SCF results, state energies, wavefunctions, and optional nuclear derivatives.
@@ -122,6 +136,7 @@ pub fn Result(comptime T: type) type {
 
         grad: []Matrix(T) = &.{},
         hess: []Matrix(T) = &.{},
+        nacv: []Matrix(T) = &.{},
 
         /// Frees all allocated memory associated with the CI results.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -142,6 +157,12 @@ pub fn Result(comptime T: type) type {
             }
 
             gpa.free(self.hess);
+
+            for (0..self.nacv.len) |i| {
+                self.nacv[i].deinit(gpa);
+            }
+
+            gpa.free(self.nacv);
         }
     };
 }
@@ -314,10 +335,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         }
 
         if (n_states > 1) {
-            try printf(io, "\nFINAL CI ENERGIES:\n", .{});
+            try printf(io, "\n", .{});
 
             for (0..n_states) |s| {
-                try printf(io, "STATE {d:2}: {d:.14} Eh\n", .{ s, E.at(s) });
+                try printf(io, "STATE {d:2} FINAL CI ENERGY: {d:.14} Eh\n", .{ s, E.at(s) });
             }
         }
     }
@@ -356,6 +377,29 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         gpa.free(hess);
     }
 
+    var nacv = try gpa.alloc(Matrix(T), if (opt.nacv) |_| 1 else 0);
+    errdefer gpa.free(nacv);
+
+    if (opt.nacv) |nacvopt| switch (nacvopt) {
+        .numeric => nacv[0] = try calculateNumericalNacv(T, io, runFromSystem, opt, sys, log, gpa),
+    };
+
+    errdefer if (opt.nacv) |_| nacv[0].deinit(gpa);
+
+    if (log and opt.nacv != null) {
+        const states = switch (opt.nacv.?) {
+            inline else => |n| n.states,
+        };
+
+        const fmt = "\nCI NONADIABATIC COUPLING VECTOR BETWEEN STATES {d} AND {d} (1/a0)\n";
+
+        try printf(io, fmt, .{ states[0], states[1] });
+
+        for (0..nacv[0].nrow()) |j| for (0..nacv[0].ncol()) |k| {
+            try printf(io, "{d:20.14}{s}", .{ nacv[0].at(j, k), if (k == 2) "\n" else " " });
+        };
+    }
+
     if (opt.write.gradient) |fname| if (grad.len > 0) {
         try writeMatrix(T, io, fname, grad[0]);
     };
@@ -364,11 +408,15 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         try writeMatrix(T, io, fname, hess[0]);
     };
 
+    if (opt.write.nacv) |fname| if (nacv.len > 0) {
+        try writeMatrix(T, io, fname, nacv[0]);
+    };
+
     if (opt.write.geometry) |fname| {
         try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
     }
 
-    return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C, .grad = grad, .hess = hess };
+    return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C, .grad = grad, .hess = hess, .nacv = nacv };
 }
 
 /// Computes the Hamiltonian matrix element between two Slater determinants using the Slater-Condon rules.
@@ -503,6 +551,12 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
+    if (opt.write.nacv != null and opt.nacv == null) {
+        std.log.err("NACV WRITE REQUESTED BUT NACV IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.frequency != null and opt.hessian == null) {
         std.log.err("FREQUENCY CALCULATION REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
 
@@ -552,6 +606,24 @@ fn checkInvalidInput(opt: Options) !void {
 
         if (hess_state >= opt.nstate) {
             std.log.err("HESSIAN STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        }
+    }
+
+    if (opt.nacv) |nacvopt| {
+        const states = switch (nacvopt) {
+            inline else => |n| n.states,
+        };
+
+        if (states[0] == states[1]) {
+            std.log.err("NACV STATES MUST BE DISTINCT", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (states[0] >= opt.nstate or states[1] >= opt.nstate) {
+            std.log.err("NACV STATES MUST BE LESS THAN NUMBER OF STATES", .{});
 
             return error.InvalidInput;
         }
