@@ -209,7 +209,7 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
     const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
         .potential = .{ .tully_1 = .{} },
-        .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
+        .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{ .coupling = .{ .hst = .{} } } } },
         .mass = &.{2000},
         .trajectories = 10,
         .iterations = 3000,
@@ -259,7 +259,7 @@ test "Adiabatic Fewest Switches on Tully's Second Potential" {
     const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
         .potential = .{ .tully_2 = .{} },
-        .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
+        .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{ .coupling = .{ .hst = .{} } } } },
         .mass = &.{2000},
         .trajectories = 10,
         .iterations = 3000,
@@ -309,7 +309,7 @@ test "Adiabatic Fewest Switches on Tully's Third Potential" {
     const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
         .potential = .{ .tully_3 = .{} },
-        .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
+        .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{ .coupling = .{ .hst = .{} } } } },
         .mass = &.{2000},
         .trajectories = 10,
         .iterations = 3000,
@@ -359,7 +359,7 @@ test "Adiabatic Fewest Switches on Time-Linear Potential" {
     const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
         .potential = .{ .time_linear = .{} },
-        .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
+        .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{ .coupling = .{ .hst = .{} } } } },
         .mass = &.{1},
         .trajectories = 10,
         .iterations = 2000,

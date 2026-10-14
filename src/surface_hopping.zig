@@ -16,9 +16,18 @@ pub const Options = union(enum) {
     landau_zener: LandauZenerOptions,
 };
 
+/// Tagged union selecting the time-derivative nonadiabatic coupling scheme.
+pub const CouplingOptions = union(enum) {
+    hst: HstOptions,
+};
+
+/// Options for Hammes-Schiffer-Tully antisymmetric wavefunction overlap coupling.
+pub const HstOptions = struct {};
+
 /// Options configuration for Tully's fewest switches surface hopping.
 const FewestSwitchesOptions = struct {
     alpha: ?f64 = null,
+    coupling: ?CouplingOptions = null,
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
     nstep: u32 = 10,
     seed: u32 = 1,
@@ -221,6 +230,7 @@ fn FewestSwitches(comptime T: type) type {
         itg: Integrator(Complex(T)),
 
         alpha: ?T,
+        coupling: ?std.meta.Tag(CouplingOptions),
 
         hamilton: Matrix(T),
         sigmatdc: Matrix(T),
@@ -231,6 +241,18 @@ fn FewestSwitches(comptime T: type) type {
             if (opt.alpha) |a| {
                 if (!adia or a < 0) return error.InvalidInput;
             }
+
+            if (adia and opt.coupling == null) {
+                return error.InvalidInput;
+            }
+
+            if (!adia and opt.coupling != null) {
+                return error.InvalidInput;
+            }
+
+            const coupling: ?std.meta.Tag(CouplingOptions) = if (opt.coupling) |c| switch (c) {
+                inline else => |_, tag| tag,
+            } else null;
 
             const cols = if (adia) nstate else nstate * nstate;
 
@@ -267,7 +289,15 @@ fn FewestSwitches(comptime T: type) type {
             const itg = try Integrator(Complex(T)).init(itg_tag, nstate, gpa);
             errdefer itg.deinit(gpa);
 
-            return .{ .alpha = opt.alpha, .coefics = coef, .hamilton = ham, .itg = itg, .sigmatdc = sigma, .uhist = uhist };
+            return .{
+                .alpha = opt.alpha,
+                .coefics = coef,
+                .coupling = coupling,
+                .hamilton = ham,
+                .itg = itg,
+                .sigmatdc = sigma,
+                .uhist = uhist,
+            };
         }
 
         /// Deallocates Tully fewest switches coefficients and integrator resources.
@@ -283,7 +313,7 @@ fn FewestSwitches(comptime T: type) type {
             self.itg.deinit(gpa);
         }
 
-        /// Computes adiabatic transition probabilities using Hammes-Schiffer-Tully coupling.
+        /// Computes adiabatic transition probabilities using time-derivative couplings.
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
             if (std.math.isNan(self.uhist[0].at(0, 0))) return;
 
@@ -295,7 +325,11 @@ fn FewestSwitches(comptime T: type) type {
                 const row_u_new = self.uhist[1].rowSlice(i);
                 const row_u_old = self.uhist[0].rowSlice(i);
 
-                hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, dt * @as(T, @floatFromInt(nstep)));
+                const eff_dt = dt * @as(T, @floatFromInt(nstep));
+
+                switch (self.coupling.?) {
+                    .hst => hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, eff_dt),
+                }
 
                 const int_ctx = .{ .ham = self.hamilton.rowSlice(i), .sigma = row_sigma };
 

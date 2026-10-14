@@ -1305,10 +1305,24 @@ fn checkInvalidInput(opt: Options) !void {
 
     if (opt.nonadiabatic) |na| switch (na) {
         .surface_hopping => |sh| switch (sh) {
-            .fewest_switches => |fs| if (fs.alpha != null and !opt.adiabatic) {
-                std.log.err("DECOHERENCE CORRECTION IS ONLY SUPPORTED FOR ADIABATIC SIMULATIONS", .{});
+            .fewest_switches => |fs| {
+                if (fs.alpha != null and !opt.adiabatic) {
+                    std.log.err("DECOHERENCE CORRECTION IS ONLY SUPPORTED FOR ADIABATIC SIMULATIONS", .{});
 
-                return error.InvalidInput;
+                    return error.InvalidInput;
+                }
+
+                if (opt.adiabatic and fs.coupling == null) {
+                    std.log.err("TIME-DERIVATIVE COUPLING MUST BE EXPLICITLY PROVIDED FOR ADIABATIC FSSH", .{});
+
+                    return error.InvalidInput;
+                }
+
+                if (!opt.adiabatic and fs.coupling != null) {
+                    std.log.err("TIME-DERIVATIVE COUPLING IS NOT SUPPORTED FOR DIABATIC SIMULATIONS", .{});
+
+                    return error.InvalidInput;
+                }
             },
 
             inline else => {},

@@ -13,7 +13,11 @@
                 },
                 "nonadiabatic" : {
                     "surface_hopping" : {
-                        "fewest_switches" : {}
+                        "fewest_switches" : {
+                            "coupling" : {
+                                "hst" : {}
+                            }
+                        }
                     }
                 },
                 "mass" : [1, 1],
