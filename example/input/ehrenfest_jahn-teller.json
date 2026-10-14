@@ -12,7 +12,11 @@
                     "jahn_teller" : {}
                 },
                 "nonadiabatic" : {
-                    "ehrenfest" : {}
+                    "ehrenfest" : {
+                        "coupling" : {
+                            "hst" : {}
+                        }
+                    }
                 },
                 "mass" : [1, 1],
                 "trajectories" : 1000,

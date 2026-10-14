@@ -42,6 +42,68 @@ const LandauZenerOptions = struct {
     seed: u32 = 1,
 };
 
+/// Calculates nonadiabatic coupling terms using Hammes-Schiffer-Tully approximation.
+pub fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T) void {
+    const nstate = std.math.sqrt(sigma.len);
+
+    for (0..nstate) |i| for (0..nstate) |j| {
+        var S_ij: T = 0;
+        var S_ji: T = 0;
+
+        for (0..nstate) |k| {
+            const U_t_ki = U_new[k * nstate + i];
+            const U_t_kj = U_new[k * nstate + j];
+
+            const U_old_ki = U_old[k * nstate + i];
+            const U_old_kj = U_old[k * nstate + j];
+
+            S_ij += U_t_ki * U_old_kj;
+            S_ji += U_t_kj * U_old_ki;
+        }
+
+        sigma[i * nstate + j] = (S_ji - S_ij) / (2 * dt);
+    };
+}
+
+/// Evaluates nonadiabatic time-derivative coupling matrix elements from nonadiabatic coupling vectors.
+pub fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, U: []const T, W: []const T, p: []const T, m: []const T) void {
+    const nstate = W.len;
+
+    for (0..nstate) |i| for (0..nstate) |j| {
+        if (i == j) {
+            sigma[i * nstate + j] = 0;
+
+            continue;
+        }
+
+        const dE = W[j] - W[i];
+
+        if (@abs(dE) < 1e-14) {
+            sigma[i * nstate + j] = 0;
+
+            continue;
+        }
+
+        var v_dot_grad: T = 0;
+
+        for (0..p.len) |alpha| {
+            const v_alpha = p[alpha] / m[alpha];
+
+            var grad_ij: T = 0;
+
+            for (0..nstate) |k| for (0..nstate) |l| {
+                const dV = grad_V[alpha * nstate * nstate + k * nstate + l];
+
+                grad_ij += U[k * nstate + i] * U[l * nstate + j] * dV;
+            };
+
+            v_dot_grad += v_alpha * grad_ij;
+        }
+
+        sigma[i * nstate + j] = v_dot_grad / dE;
+    };
+}
+
 /// Implements nonadiabatic state transitions via surface hopping algorithms.
 pub fn SurfaceHopping(comptime T: type) type {
     return struct {
@@ -609,68 +671,6 @@ fn LandauZener(comptime T: type) type {
                 self.history[2].ptr(i, j).* = H.at(i, j);
             };
         }
-    };
-}
-
-/// Calculates nonadiabatic coupling terms using Hammes-Schiffer-Tully approximation.
-fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T) void {
-    const nstate = std.math.sqrt(sigma.len);
-
-    for (0..nstate) |i| for (0..nstate) |j| {
-        var S_ij: T = 0;
-        var S_ji: T = 0;
-
-        for (0..nstate) |k| {
-            const U_t_ki = U_new[k * nstate + i];
-            const U_t_kj = U_new[k * nstate + j];
-
-            const U_old_ki = U_old[k * nstate + i];
-            const U_old_kj = U_old[k * nstate + j];
-
-            S_ij += U_t_ki * U_old_kj;
-            S_ji += U_t_kj * U_old_ki;
-        }
-
-        sigma[i * nstate + j] = (S_ji - S_ij) / (2 * dt);
-    };
-}
-
-/// Evaluates nonadiabatic time-derivative coupling matrix elements from nonadiabatic coupling vectors.
-fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, U: []const T, W: []const T, p: []const T, m: []const T) void {
-    const nstate = W.len;
-
-    for (0..nstate) |i| for (0..nstate) |j| {
-        if (i == j) {
-            sigma[i * nstate + j] = 0;
-
-            continue;
-        }
-
-        const dE = W[j] - W[i];
-
-        if (@abs(dE) < 1e-14) {
-            sigma[i * nstate + j] = 0;
-
-            continue;
-        }
-
-        var v_dot_grad: T = 0;
-
-        for (0..p.len) |alpha| {
-            const v_alpha = p[alpha] / m[alpha];
-
-            var grad_ij: T = 0;
-
-            for (0..nstate) |k| for (0..nstate) |l| {
-                const dV = grad_V[alpha * nstate * nstate + k * nstate + l];
-
-                grad_ij += U[k * nstate + i] * U[l * nstate + j] * dV;
-            };
-
-            v_dot_grad += v_alpha * grad_ij;
-        }
-
-        sigma[i * nstate + j] = v_dot_grad / dE;
     };
 }
 

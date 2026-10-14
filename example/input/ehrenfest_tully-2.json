@@ -12,7 +12,11 @@
                     "tully_2" : {}
                 },
                 "nonadiabatic" : {
-                    "ehrenfest" : {}
+                    "ehrenfest" : {
+                        "coupling" : {
+                            "hst" : {}
+                        }
+                    }
                 },
                 "mass" : [2000],
                 "trajectories" : 1000,

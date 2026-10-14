@@ -143,23 +143,11 @@ pub fn Ensemble(comptime T: type) type {
         }
 
         /// Computes the population fraction of trajectories occupying each electronic state.
-        pub fn pop(self: @This(), nstate: usize, coefs: ?Matrix(Complex(T)), U: ?Matrix(T), adia: bool, gpa: Allocator) !Vector(T) {
+        pub fn pop(self: @This(), nstate: usize, coefs: ?Matrix(Complex(T)), _: bool, gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(nstate, gpa);
 
             if (coefs) |coef| {
-                if (adia) for (0..self.r.nrow()) |i| for (0..nstate) |m| {
-                    var a_im = Complex(T).init(0, 0);
-
-                    for (0..nstate) |k| {
-                        const u_km, const c_ik = .{ U.?.at(i, k * nstate + m), coef.at(i, k) };
-
-                        a_im = a_im.add(Complex(T).init(c_ik.re * u_km, c_ik.im * u_km));
-                    }
-
-                    value.ptr(m).* += a_im.squaredMagnitude();
-                };
-
-                if (!adia) for (0..coef.nrow()) |i| for (0..nstate) |k| {
+                for (0..coef.nrow()) |i| for (0..nstate) |k| {
                     value.ptr(k).* += coef.at(i, k).squaredMagnitude();
                 };
 
@@ -739,11 +727,29 @@ fn GradientBuffer(comptime T: type) type {
                 if (coefs) |coef| {
                     var der: T = 0;
 
-                    for (0..nstate) |k| for (0..nstate) |l| {
-                        const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
+                    if (self.adia) {
+                        for (0..nstate) |m| for (0..nstate) |n| {
+                            const rho_mn = coef.at(i, m).conjugate().mul(coef.at(i, n)).re;
 
-                        der += rho_kl * self.grad_V.at(i, j * nstate * nstate + k * nstate + l);
-                    };
+                            for (0..nstate) |k| {
+                                const U_km = self.U.at(i, k * nstate + m);
+
+                                for (0..nstate) |l| {
+                                    const dV = self.grad_V.at(i, j * nstate * nstate + k * nstate + l);
+
+                                    der += rho_mn * U_km * self.U.at(i, l * nstate + n) * dV;
+                                }
+                            }
+                        };
+                    }
+
+                    if (!self.adia) {
+                        for (0..nstate) |k| for (0..nstate) |l| {
+                            const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
+
+                            der += rho_kl * self.grad_V.at(i, j * nstate * nstate + k * nstate + l);
+                        };
+                    }
 
                     ensemble.a.ptr(i, j).* = -der / ensemble.m[j];
                 }
@@ -779,11 +785,21 @@ fn GradientBuffer(comptime T: type) type {
             if (coefs) |coef| for (0..ensemble.r.nrow()) |i| {
                 var traj_epot: T = 0;
 
-                for (0..nstate) |k| for (0..nstate) |l| {
-                    const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
+                if (self.adia) {
+                    for (0..nstate) |k| {
+                        const rho_kk = coef.at(i, k).squaredMagnitude();
 
-                    traj_epot += rho_kl * self.V.at(i, k * nstate + l);
-                };
+                        traj_epot += rho_kk * self.W.at(i, k);
+                    }
+                }
+
+                if (!self.adia) {
+                    for (0..nstate) |k| for (0..nstate) |l| {
+                        const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
+
+                        traj_epot += rho_kl * self.V.at(i, k * nstate + l);
+                    };
+                }
 
                 sum += traj_epot;
             };
@@ -1033,7 +1049,7 @@ fn Observables(comptime T: type) type {
 
             const coefs = if (sim.propag.nonadia_dynamic) |n| (if (n == .ehrenfest) n.ehrenfest.coefics else null) else null;
 
-            if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefs, sim.gb.U, sim.gb.adia, gpa);
+            if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefs, sim.gb.adia, gpa);
 
             if (write.state_potential_energy != null) {
                 obs.state_epot = try sim.gb.epotState(sim.elpoten.nstate(), gpa);
@@ -1094,7 +1110,7 @@ fn Propagator(comptime T: type) type {
             };
 
             if (opt.nonadiabatic) |naopt| if (naopt == .ehrenfest) {
-                const eh = try Ehrenfest(T).init(naopt.ehrenfest, nstate, opt.trajectories, gpa);
+                const eh = try Ehrenfest(T).init(naopt.ehrenfest, nstate, opt.trajectories, opt.adiabatic, gpa);
 
                 nonadia_dynamic = .{ .ehrenfest = eh };
             };
@@ -1126,7 +1142,7 @@ fn Propagator(comptime T: type) type {
             try gb.update(ens.r, pot, time, ens.s.data);
 
             if (self.nonadia_dynamic) |*n| if (n.* == .ehrenfest) {
-                try n.ehrenfest.step(gb.V, self.dt);
+                try n.ehrenfest.step(ens, gb.V, gb.W, gb.U, gb.grad_V, self.dt);
             };
 
             const coefics = if (self.nonadia_dynamic) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
@@ -1328,7 +1344,19 @@ fn checkInvalidInput(opt: Options) !void {
             inline else => {},
         },
 
-        inline else => {},
+        .ehrenfest => |eh| {
+            if (opt.adiabatic and eh.coupling == null) {
+                std.log.err("TIME-DERIVATIVE COUPLING MUST BE EXPLICITLY PROVIDED FOR ADIABATIC EHRENFEST", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (!opt.adiabatic and eh.coupling != null) {
+                std.log.err("TIME-DERIVATIVE COUPLING IS NOT SUPPORTED FOR DIABATIC SIMULATIONS", .{});
+
+                return error.InvalidInput;
+            }
+        },
     };
 
     if (opt.potential == .ab_initio) switch (opt.potential.ab_initio.method) {
@@ -1451,7 +1479,8 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     };
 
     if (prop.nonadia_dynamic) |*n| if (n.* == .ehrenfest) {
-        n.ehrenfest.setInitialState(opt.initial_conditions.state, opt.adiabatic, gb.U);
+        n.ehrenfest.update(if (opt.adiabatic) gb.W else gb.V, gb.U);
+        n.ehrenfest.setInitialState(opt.initial_conditions.state);
     };
 
     const coefs = if (prop.nonadia_dynamic) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;

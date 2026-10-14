@@ -12,7 +12,11 @@
                     "time_linear" : {}
                 },
                 "nonadiabatic" : {
-                    "ehrenfest" : {}
+                    "ehrenfest" : {
+                        "coupling" : {
+                            "hst" : {}
+                        }
+                    }
                 },
                 "mass" : [1],
                 "trajectories" : 1000,
