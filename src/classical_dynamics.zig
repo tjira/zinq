@@ -1142,7 +1142,7 @@ fn Propagator(comptime T: type) type {
             }
 
             if (self.nonadia_dynamic) |*n| if (n.* == .surface_hopping) {
-                if (try n.surface_hopping.hop(ens, gb.V, gb.W, gb.U, self.dt)) {
+                if (try n.surface_hopping.hop(ens, gb.V, gb.W, gb.U, gb.grad_V, self.dt)) {
                     for (0..ens.s.length()) |i| if (ens.s.at(i) != n.surface_hopping.targets[i]) {
                         switch (pot) {
                             .ab_initio => |ab| {

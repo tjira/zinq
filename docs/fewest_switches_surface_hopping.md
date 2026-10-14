@@ -36,7 +36,13 @@ To integrate the electronic coefficients, the program propagates the quantum sta
 
 ### 3. Time-Derivative Couplings and Approximations
 
-In ab initio molecular dynamics using Configuration Interaction, the nonadiabatic time-derivative coupling matrix elements are evaluated directly from the nuclear velocity vector $\dot{\mathbf{R}}$ and the nonadiabatic derivative coupling vectors $\mathbf{d}_{ij}$ through the scalar product $\sigma_{ij}(t)=\dot{\mathbf{R}}\cdot\mathbf{d}_{ij}(t)$, where $\mathbf{d}_{ij}$ is computed from cross-geometry determinant overlaps as detailed in the Configuration–Interaction documentation. When simulating model Hamiltonians or when explicit derivative coupling vectors are not available, the codebase approximates the time-derivative couplings using the finite-difference wavefunction overlap scheme proposed by Hammes-Schiffer and Tully as
+In ab initio molecular dynamics using Configuration Interaction, the nonadiabatic time-derivative coupling matrix elements are evaluated directly from the nuclear velocity vector $\dot{\mathbf{R}}$ and the nonadiabatic derivative coupling vectors $\mathbf{d}_{ij}$ through the scalar product $\sigma_{ij}(t)=\dot{\mathbf{R}}\cdot\mathbf{d}_{ij}(t)$, where $\mathbf{d}_{ij}$ is computed from cross-geometry determinant overlaps as detailed in the Configuration–Interaction documentation. For model Hamiltonians, nonadiabatic coupling vectors $\mathbf{d}_{ij}$ are computed analytically in the coordinate-independent diabatic basis via the Hellmann–Feynman relation
+
+$$
+d_{ij,\alpha}=\frac{\sum_{k,l}U_{ki}U_{lj}\frac{\partial V_{kl}}{\partial R_\alpha}}{E_j-E_i}
+$$
+
+which directly yields the exact time-derivative coupling via $\sigma_{ij}(t)=\sum_\alpha\frac{P_\alpha}{M_\alpha}d_{ij,\alpha}$. Alternatively, when using wavefunction overlap coupling, the codebase approximates the time-derivative couplings using the finite-difference wavefunction overlap scheme proposed by Hammes-Schiffer and Tully as
 
 $$
 \sigma_{ij}(t)\approx\frac{S_{ji}-S_{ij}}{2\Delta t}

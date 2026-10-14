@@ -19,10 +19,14 @@ pub const Options = union(enum) {
 /// Tagged union selecting the time-derivative nonadiabatic coupling scheme.
 pub const CouplingOptions = union(enum) {
     hst: HstOptions,
+    nacv: NacvOptions,
 };
 
 /// Options for Hammes-Schiffer-Tully antisymmetric wavefunction overlap coupling.
 pub const HstOptions = struct {};
+
+/// Options for nonadiabatic coupling vectors time-derivative coupling.
+pub const NacvOptions = struct {};
 
 /// Options configuration for Tully's fewest switches surface hopping.
 const FewestSwitchesOptions = struct {
@@ -110,7 +114,7 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         /// Executes a surface hopping step, calculating transition probabilities and updating states.
-        pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), dt: T) !bool {
+        pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), grad_V: Matrix(T), dt: T) !bool {
             self.update(if (self.adia_alg) W else V, U);
 
             const subdt = dt / @as(T, @floatFromInt(self.nosteps));
@@ -120,7 +124,7 @@ pub fn SurfaceHopping(comptime T: type) type {
             }
 
             for (0..self.nosteps) |_| {
-                try self.calcProbs(ensemble, subdt);
+                try self.calcProbs(ensemble, grad_V, subdt);
 
                 self.calcTargetStates(ensemble);
             }
@@ -169,17 +173,22 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         /// Computes state transition probabilities at the current dynamics step.
-        fn calcProbs(self: *@This(), ensemble: *Ensemble(T), dt: T) !void {
+        fn calcProbs(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), dt: T) !void {
             self.probs.zero();
 
-            if (self.adia_alg) try self.calcProbsAdia(ensemble, dt);
-            if (!self.adia_alg) try self.calcProbsDia(ensemble, dt);
+            if (self.adia_alg) {
+                try self.calcProbsAdia(ensemble, grad_V, dt);
+            }
+
+            if (!self.adia_alg) {
+                try self.calcProbsDia(ensemble, dt);
+            }
         }
 
         /// Computes adiabatic representation state transition probabilities.
-        fn calcProbsAdia(self: *@This(), ensemble: *Ensemble(T), dt: T) !void {
+        fn calcProbsAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), dt: T) !void {
             switch (self.method) {
-                inline else => |*field| try field.calcProbsAdia(&self.probs, ensemble, self.nosteps, dt),
+                inline else => |*field| try field.calcProbsAdia(&self.probs, ensemble, grad_V, self.nosteps, dt),
             }
         }
 
@@ -230,11 +239,12 @@ fn FewestSwitches(comptime T: type) type {
         itg: Integrator(Complex(T)),
 
         alpha: ?T,
-        coupling: ?std.meta.Tag(CouplingOptions),
 
         hamilton: Matrix(T),
         sigmatdc: Matrix(T),
         uhist: [2]Matrix(T),
+
+        coupling: ?std.meta.Tag(CouplingOptions),
 
         /// Allocates and initializes wavefunction coefficients and Tully integrator.
         pub fn init(opt: anytype, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
@@ -314,7 +324,7 @@ fn FewestSwitches(comptime T: type) type {
         }
 
         /// Computes adiabatic transition probabilities using time-derivative couplings.
-        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), nstep: usize, dt: T) !void {
+        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), grad_V: Matrix(T), nstep: usize, dt: T) !void {
             if (std.math.isNan(self.uhist[0].at(0, 0))) return;
 
             for (0..ensemble.s.length()) |i| {
@@ -327,11 +337,14 @@ fn FewestSwitches(comptime T: type) type {
 
                 const eff_dt = dt * @as(T, @floatFromInt(nstep));
 
+                const ham = self.hamilton.rowSlice(i);
+
                 switch (self.coupling.?) {
                     .hst => hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, eff_dt),
+                    .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), row_u_new, ham, ensemble.p.rowSlice(i), ensemble.m),
                 }
 
-                const int_ctx = .{ .ham = self.hamilton.rowSlice(i), .sigma = row_sigma };
+                const int_ctx = .{ .ham = ham, .sigma = row_sigma };
 
                 self.itg.step(self.coefics.rowSlice(i), dt, int_ctx, coefDerAdia);
 
@@ -520,7 +533,7 @@ fn LandauZener(comptime T: type) type {
         }
 
         /// Computes transition probabilities from adiabatic energy level curvatures.
-        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
+        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: Matrix(T), _: usize, dt: T) !void {
             if (std.math.isNan(self.history[0].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {
@@ -619,6 +632,45 @@ fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []
         }
 
         sigma[i * nstate + j] = (S_ji - S_ij) / (2 * dt);
+    };
+}
+
+/// Evaluates nonadiabatic time-derivative coupling matrix elements from nonadiabatic coupling vectors.
+fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, U: []const T, W: []const T, p: []const T, m: []const T) void {
+    const nstate = W.len;
+
+    for (0..nstate) |i| for (0..nstate) |j| {
+        if (i == j) {
+            sigma[i * nstate + j] = 0;
+
+            continue;
+        }
+
+        const dE = W[j] - W[i];
+
+        if (@abs(dE) < 1e-14) {
+            sigma[i * nstate + j] = 0;
+
+            continue;
+        }
+
+        var v_dot_grad: T = 0;
+
+        for (0..p.len) |alpha| {
+            const v_alpha = p[alpha] / m[alpha];
+
+            var grad_ij: T = 0;
+
+            for (0..nstate) |k| for (0..nstate) |l| {
+                const dV = grad_V[alpha * nstate * nstate + k * nstate + l];
+
+                grad_ij += U[k * nstate + i] * U[l * nstate + j] * dV;
+            };
+
+            v_dot_grad += v_alpha * grad_ij;
+        }
+
+        sigma[i * nstate + j] = v_dot_grad / dE;
     };
 }
 
