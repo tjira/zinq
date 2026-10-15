@@ -47,5 +47,5 @@
 - [x] When active state is specified in NAMD input, ab initio potential still accepts gradient state. This should be fixed to prevent confusion.
 - [x] Check if Zig translate-c / Aro fixed the x86_64 long double array alignment bug to remove #define long in src/fftw.h.
 - [ ] Implement Wigner sampling of initial conditions (positions and momenta) for AIMD.
-- [ ] Track electronic wavefunction phases across consecutive molecular dynamics time steps in ab initio NAMD.
-- [ ] Decouple nonadiabatic coupling vector time-derivative coupling evaluation from the eigenvector history NaN check in adiabatic Ehrenfest and surface hopping propagation.
+- [x] Track electronic wavefunction phases across consecutive molecular dynamics time steps in ab initio NAMD.
+- [x] Decouple nonadiabatic coupling vector time-derivative coupling evaluation from the eigenvector history NaN check in adiabatic Ehrenfest and surface hopping propagation.

@@ -374,7 +374,7 @@ fn FewestSwitches(comptime T: type) type {
 
         /// Computes adiabatic transition probabilities using time-derivative couplings.
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), grad_V: Matrix(T), nstep: usize, dt: T) !void {
-            if (std.math.isNan(self.uhist[0].at(0, 0))) return;
+            if (self.coupling.? == .hst and std.math.isNan(self.uhist[0].at(0, 0))) return;
 
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);

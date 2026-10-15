@@ -191,7 +191,7 @@ pub fn Ehrenfest(comptime T: type) type {
 
         /// Integrates electronic coefficients in the adiabatic basis using time-derivative couplings.
         fn stepAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, dt: T) !void {
-            if (std.math.isNan(self.uhist[0].at(0, 0))) return;
+            if (self.coupling.? == .hst and std.math.isNan(self.uhist[0].at(0, 0))) return;
 
             const subdt = dt / @as(T, @floatFromInt(self.nosteps));
 

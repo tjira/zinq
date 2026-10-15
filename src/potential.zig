@@ -248,6 +248,7 @@ fn AbInitio(comptime T: type) type {
         msys: MolecularSystem(T),
 
         Pg: ?Matrix(T),
+        C: *?Matrix(T),
 
         /// Initializes the molecular system and electronic structure method configuration.
         pub fn init(io: std.Io, options: AbInitioOptions, gpa: Allocator) !@This() {
@@ -293,11 +294,20 @@ fn AbInitio(comptime T: type) type {
             var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
             errdefer Pg.deinit(gpa);
 
-            return .{ .gpa = gpa, .inpout = io, .options = options, .msys = msys, .Pg = Pg };
+            const C_prev = try gpa.create(?Matrix(T));
+            errdefer gpa.destroy(C_prev);
+
+            C_prev.* = null;
+
+            return .{ .gpa = gpa, .inpout = io, .options = options, .msys = msys, .Pg = Pg, .C = C_prev };
         }
 
         /// Deallocates molecular system resources and cached density matrix.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
+            if (self.C.*) |*c| c.deinit(gpa);
+
+            gpa.destroy(self.C);
+
             if (self.Pg) |*pg| pg.deinit(gpa);
 
             self.msys.deinit(gpa);
@@ -435,6 +445,37 @@ fn AbInitio(comptime T: type) type {
 
                     if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
 
+                    const flipped = try self.gpa.alloc(bool, n);
+                    defer self.gpa.free(flipped);
+
+                    @memset(flipped, false);
+
+                    if (self.C.*) |c_prev| {
+                        for (0..n) |k| {
+                            var overlap: T = 0;
+
+                            for (0..res.C.nrow()) |d| {
+                                overlap += res.C.at(d, k) * c_prev.at(d, k);
+                            }
+
+                            if (overlap < 0) {
+                                flipped[k] = true;
+
+                                for (0..res.C.nrow()) |d| {
+                                    res.C.ptr(d, k).* = -res.C.at(d, k);
+                                }
+                            }
+                        }
+                    }
+
+                    if (self.C.* == null) {
+                        self.C.* = try Matrix(T).init(res.C.nrow(), n, self.gpa);
+                    }
+
+                    for (0..n) |k| for (0..res.C.nrow()) |d| {
+                        self.C.*.?.ptr(d, k).* = res.C.at(d, k);
+                    };
+
                     @memset(V[0 .. n * n], 0);
 
                     @memset(grad_V[0 .. self.ndim() * n * n], 0);
@@ -461,8 +502,10 @@ fn AbInitio(comptime T: type) type {
                         for (pairs, 0..) |pair, idx| {
                             const p0, const p1 = .{ pair[0], pair[1] };
 
+                            const sign: T = if (flipped[p0] != flipped[p1]) -1 else 1;
+
                             for (0..self.ndim()) |j| {
-                                const val = res.nacv[idx].data[j];
+                                const val = sign * res.nacv[idx].data[j];
 
                                 grad_V[j * n * n + p0 * n + p1] = val;
                                 grad_V[j * n * n + p1 * n + p0] = -val;
