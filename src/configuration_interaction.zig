@@ -348,7 +348,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         inline else => |g| g.states orelse &[_]u32{0},
     } else &[_]u32{};
 
-    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
+    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = hfres.P };
 
     var grad: []Matrix(T) = undefined;
 
@@ -676,6 +676,12 @@ fn checkInvalidInput(opt: Options) !void {
     }
 
     if (opt.nacv) |nacvopt| {
+        if (opt.nstate < 2) {
+            std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR NACV CALCULATION", .{});
+
+            return error.InvalidInput;
+        }
+
         const pairs = switch (nacvopt) {
             inline else => |n| n.pairs orelse &[_][2]u32{.{ 0, 1 }},
         };

@@ -66,19 +66,11 @@ pub fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old
 }
 
 /// Evaluates nonadiabatic time-derivative coupling matrix elements from nonadiabatic coupling vectors.
-pub fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, U: []const T, W: []const T, p: []const T, m: []const T) void {
-    const nstate = W.len;
+pub fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, p: []const T, m: []const T) void {
+    const nstate = std.math.sqrt(sigma.len);
 
     for (0..nstate) |i| for (0..nstate) |j| {
         if (i == j) {
-            sigma[i * nstate + j] = 0;
-
-            continue;
-        }
-
-        const dE = W[j] - W[i];
-
-        if (@abs(dE) < 1e-14) {
             sigma[i * nstate + j] = 0;
 
             continue;
@@ -89,18 +81,10 @@ pub fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, U: []const 
         for (0..p.len) |alpha| {
             const v_alpha = p[alpha] / m[alpha];
 
-            var grad_ij: T = 0;
-
-            for (0..nstate) |k| for (0..nstate) |l| {
-                const dV = grad_V[alpha * nstate * nstate + k * nstate + l];
-
-                grad_ij += U[k * nstate + i] * U[l * nstate + j] * dV;
-            };
-
-            v_dot_grad += v_alpha * grad_ij;
+            v_dot_grad += v_alpha * grad_V[alpha * nstate * nstate + i * nstate + j];
         }
 
-        sigma[i * nstate + j] = v_dot_grad / dE;
+        sigma[i * nstate + j] = v_dot_grad;
     };
 }
 
@@ -403,7 +387,7 @@ fn FewestSwitches(comptime T: type) type {
 
                 switch (self.coupling.?) {
                     .hst => hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, eff_dt),
-                    .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), row_u_new, ham, ensemble.p.rowSlice(i), ensemble.m),
+                    .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), ensemble.p.rowSlice(i), ensemble.m),
                 }
 
                 const int_ctx = .{ .ham = ham, .sigma = row_sigma };

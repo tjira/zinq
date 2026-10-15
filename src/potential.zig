@@ -391,7 +391,7 @@ fn AbInitio(comptime T: type) type {
                 .configuration_interaction => |opt| {
                     var run_opt = opt;
 
-                    run_opt.hessian, run_opt.optimize, run_opt.nacv = .{ null, null, null };
+                    run_opt.hessian, run_opt.optimize = .{ null, null };
 
                     run_opt.frequency = null;
 
@@ -402,12 +402,23 @@ fn AbInitio(comptime T: type) type {
                         .numeric => |*num| num.states = &active_state_arr,
                     };
 
+                    const n = self.nstate();
+
+                    var auto_pairs: ?[][2]u32 = null;
+                    defer if (auto_pairs) |p| self.gpa.free(p);
+
+                    if (run_opt.nacv) |*nacvopt| switch (nacvopt.*) {
+                        inline else => |*num| {
+                            auto_pairs = try fillNacvPairs(n, self.gpa);
+
+                            num.pairs = auto_pairs;
+                        },
+                    };
+
                     var res = try ci_runFromSystem(T, self.inpout, run_opt, @constCast(&self.msys), self.Pg, false, self.gpa);
                     defer res.deinit(self.gpa);
 
                     if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
-
-                    const n = self.nstate();
 
                     @memset(V[0 .. n * n], 0);
 
@@ -419,6 +430,19 @@ fn AbInitio(comptime T: type) type {
 
                     for (0..self.ndim()) |j| {
                         grad_V[j * n * n + active_state * n + active_state] = res.grad[0].data[j];
+                    }
+
+                    if (auto_pairs) |pairs| {
+                        for (pairs, 0..) |pair, idx| {
+                            const p0, const p1 = .{ pair[0], pair[1] };
+
+                            for (0..self.ndim()) |j| {
+                                const val = res.nacv[idx].data[j];
+
+                                grad_V[j * n * n + p0 * n + p1] = val;
+                                grad_V[j * n * n + p1 * n + p0] = -val;
+                            }
+                        }
                     }
                 },
             }
@@ -444,23 +468,30 @@ fn AbInitio(comptime T: type) type {
         }
 
         /// Updates potential values and gradients for all batch trajectory coordinate rows.
-        pub fn updateGradients(self: @This(), comptime U: type, V: *Matrix(U), grad_V: *Matrix(U), r: Matrix(U), states: []const usize) !void {
-            if (comptime U != T) {
-                @panic("AB INITIO POTENTIAL ONLY SUPPORTS DIRECT FLOATING POINT GRADIENT UPDATE");
-            }
-
+        pub fn updateGradients(self: @This(), V: *Matrix(T), grad_V: *Matrix(T), r: Matrix(T), states: []const usize) !void {
             for (0..r.nrow()) |i| {
                 try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), states[i]);
             }
         }
 
         /// Updates potential value and gradient for a specific trajectory row and active electronic state.
-        pub fn updateTrajectoryGradient(self: @This(), comptime U: type, V: *Matrix(U), grad_V: *Matrix(U), r: Matrix(U), i: usize, active_state: usize) !void {
-            if (comptime U != T) {
-                @panic("AB INITIO POTENTIAL ONLY SUPPORTS DIRECT FLOATING POINT GRADIENT UPDATE");
-            }
-
+        pub fn updateTrajectoryGradient(self: @This(), V: *Matrix(T), grad_V: *Matrix(T), r: Matrix(T), i: usize, active_state: usize) !void {
             try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), active_state);
+        }
+
+        /// Generates all unique upper-triangular state index pairs for nonadiabatic coupling evaluation.
+        fn fillNacvPairs(n: usize, gpa: Allocator) ![][2]u32 {
+            const pairs = try gpa.alloc([2]u32, n * (n - 1) / 2);
+
+            var idx: usize = 0;
+
+            for (0..n) |i| for (i + 1..n) |j| {
+                pairs[idx] = .{ @intCast(i), @intCast(j) };
+
+                idx += 1;
+            };
+
+            return pairs;
         }
     };
 }

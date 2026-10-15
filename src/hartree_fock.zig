@@ -572,7 +572,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     if (opt.gradient) |gradopt| switch (gradopt) {
         .analytic => grad[0] = try gradient(T, ints, ws, opt.generalized, if (dft) |*d| d else null, opt.nthreads, gpa),
         .numeric => {
-            const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
+            const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = P };
 
             const num_grads = try calculateNumericalGradient(T, ctx, runFromSystem, opt, &.{0});
             defer gpa.free(num_grads);

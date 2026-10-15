@@ -23,7 +23,7 @@ const A2BOHR = @import("constant.zig").A2BOHR;
 
 /// Execution context encapsulating molecular system geometry, IO streams, memory allocator, and logging settings.
 pub fn DerivativeContext(comptime T: type) type {
-    return struct { gpa: Allocator, io: std.Io, log: bool = false, sys: *MolecularSystem(T) };
+    return struct { gpa: Allocator, io: std.Io, log: bool = false, sys: *MolecularSystem(T), Pg: ?Matrix(T) = null };
 }
 
 /// Computes nuclear gradients of electronic states using central finite differences.
@@ -66,7 +66,7 @@ pub fn calculateNumericalGradient(comptime T: type, ctx: DerivativeContext(T), r
     const em = try gpa.alloc(T, max_state + 1);
     defer gpa.free(em);
 
-    try getEnergies(T, ctx, runFn, opt, .{}, null, &Pg, ep);
+    try getEnergies(T, ctx, runFn, opt, .{}, ctx.Pg, &Pg, ep);
 
     for (0..sys.atoms.len) |i| for (0..3) |j| {
         const d1, const d2 = .{ .{ i * 3 + j, h }, .{ i * 3 + j, -h } };
@@ -155,7 +155,7 @@ pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), ru
     const emm = try gpa.alloc(T, max_state + 1);
     defer gpa.free(emm);
 
-    try getEnergies(T, ctx, runFn, opt, .{}, null, &Pg, er);
+    try getEnergies(T, ctx, runFn, opt, .{}, ctx.Pg, &Pg, er);
 
     for (0..3 * sys.atoms.len) |a| {
         const d1, const d2 = .{ .{ a, h }, .{ a, -h } };
@@ -322,7 +322,7 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         modified_opt.hartree_fock.write = .{};
     }
 
-    var res_ref = try runFn(T, io, modified_opt, sys, null, false, gpa);
+    var res_ref = try runFn(T, io, modified_opt, sys, ctx.Pg, false, gpa);
     defer res_ref.deinit(gpa);
 
     @memcpy(Pg.data, (if (@hasField(@TypeOf(res_ref), "hartree_fock")) res_ref.hartree_fock.P else res_ref.P).data);

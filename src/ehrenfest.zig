@@ -201,7 +201,7 @@ pub fn Ehrenfest(comptime T: type) type {
 
                 switch (self.coupling.?) {
                     .hst => hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, dt),
-                    .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), row_u_new, ham, p, m),
+                    .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), p, m),
                 }
 
                 const int_ctx = .{ .ham = ham, .sigma = row_sigma };

@@ -731,14 +731,14 @@ fn GradientBuffer(comptime T: type) type {
                         for (0..nstate) |m| for (0..nstate) |n| {
                             const rho_mn = coef.at(i, m).conjugate().mul(coef.at(i, n)).re;
 
-                            for (0..nstate) |k| {
-                                const U_km = self.U.at(i, k * nstate + m);
+                            if (m == n) {
+                                der += rho_mn * self.grad_V.at(i, j * nstate * nstate + m * nstate + n);
+                            }
 
-                                for (0..nstate) |l| {
-                                    const dV = self.grad_V.at(i, j * nstate * nstate + k * nstate + l);
+                            if (m != n) {
+                                const dE = self.W.at(i, n) - self.W.at(i, m);
 
-                                    der += rho_mn * U_km * self.U.at(i, l * nstate + n) * dV;
-                                }
+                                der += rho_mn * dE * self.grad_V.at(i, j * nstate * nstate + m * nstate + n);
                             }
                         };
                     }
@@ -755,17 +755,9 @@ fn GradientBuffer(comptime T: type) type {
                 }
 
                 if (coefs == null and self.adia) {
-                    var der: T = 0;
+                    const s = ensemble.s.at(i);
 
-                    for (0..nstate) |k| {
-                        const U_ka = self.U.at(i, k * nstate + ensemble.s.at(i));
-
-                        for (0..nstate) |l| {
-                            const U_la = self.U.at(i, l * nstate + ensemble.s.at(i));
-
-                            der += U_ka * U_la * self.grad_V.at(i, j * nstate * nstate + k * nstate + l);
-                        }
-                    }
+                    const der = self.grad_V.at(i, j * nstate * nstate + s * nstate + s);
 
                     ensemble.a.ptr(i, j).* = -der / ensemble.m[j];
                 }
@@ -834,7 +826,7 @@ fn GradientBuffer(comptime T: type) type {
         pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T, states: []const usize) !void {
             switch (pot) {
                 .ab_initio => |ab| {
-                    try ab.updateGradients(T, &self.V, &self.grad_V, r, states);
+                    try ab.updateGradients(&self.V, &self.grad_V, r, states);
 
                     if (self.adia) for (0..self.V.nrow()) |i| for (0..pot.nstate()) |k| {
                         self.W.ptr(i, k).* = self.V.at(i, k * pot.nstate() + k);
@@ -852,6 +844,8 @@ fn GradientBuffer(comptime T: type) type {
                         try eighBatch(T, &self.W, &self.U, self.V);
                     }
 
+                    const nstate = pot.nstate();
+
                     for (0..r.nrow()) |i| for (0..r.ncol()) |j| {
                         for (0..r.ncol()) |k| {
                             self.r_dual.ptr(i, k).* = ScalarDual(T).init(r.at(i, k), if (k == j) 1 else 0);
@@ -859,8 +853,37 @@ fn GradientBuffer(comptime T: type) type {
 
                         try pot.eval(ScalarDual(T), self.V_dual.rowSlice(i), self.r_dual.rowSlice(i), ScalarDual(T).init(time, 0));
 
-                        for (0..pot.nstate() * pot.nstate()) |k| {
-                            self.grad_V.ptr(i, j * pot.nstate() * pot.nstate() + k).* = self.V_dual.at(i, k).der;
+                        if (self.adia) {
+                            for (0..nstate) |k| for (0..nstate) |l| {
+                                var sum: T = 0;
+
+                                for (0..nstate) |a| for (0..nstate) |b| {
+                                    const u_ak = self.U.at(i, a * nstate + k);
+                                    const u_bl = self.U.at(i, b * nstate + l);
+
+                                    const d_ab = self.V_dual.at(i, a * nstate + b).der;
+
+                                    sum += u_ak * u_bl * d_ab;
+                                };
+
+                                if (k == l) {
+                                    self.grad_V.ptr(i, j * nstate * nstate + k * nstate + l).* = sum;
+                                }
+
+                                if (k != l) {
+                                    const dE = self.W.at(i, l) - self.W.at(i, k);
+
+                                    const val = if (@abs(dE) < 1e-14) 0 else sum / dE;
+
+                                    self.grad_V.ptr(i, j * nstate * nstate + k * nstate + l).* = val;
+                                }
+                            };
+                        }
+
+                        if (!self.adia) {
+                            for (0..nstate * nstate) |k| {
+                                self.grad_V.ptr(i, j * nstate * nstate + k).* = self.V_dual.at(i, k).der;
+                            }
                         }
                     };
                 },
@@ -1162,7 +1185,11 @@ fn Propagator(comptime T: type) type {
                     for (0..ens.s.length()) |i| if (ens.s.at(i) != n.surface_hopping.targets[i]) {
                         switch (pot) {
                             .ab_initio => |ab| {
-                                try ab.updateTrajectoryGradient(T, &gb.V, &gb.grad_V, ens.r, i, ens.s.at(i));
+                                try ab.updateTrajectoryGradient(&gb.V, &gb.grad_V, ens.r, i, ens.s.at(i));
+
+                                for (0..pot.nstate()) |k| {
+                                    gb.W.ptr(i, k).* = gb.V.at(i, k * pot.nstate() + k);
+                                }
                             },
 
                             inline else => {},
@@ -1308,10 +1335,32 @@ fn checkInvalidInput(opt: Options) !void {
             },
 
             .surface_hopping => |sh| switch (sh) {
-                .fewest_switches => {
-                    std.log.err("FSSH IS NOT SUPPORTED FOR AB INITIO POTENTIAL WITHOUT NACVS", .{});
+                .fewest_switches => |fs| {
+                    if (opt.potential.ab_initio.method != .configuration_interaction) {
+                        std.log.err("AB INITIO FSSH IS ONLY SUPPORTED WITH CONFIGURATION INTERACTION", .{});
 
-                    return error.InvalidInput;
+                        return error.InvalidInput;
+                    }
+
+                    const ci = opt.potential.ab_initio.method.configuration_interaction;
+
+                    if (ci.nstate < 2) {
+                        std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR FSSH", .{});
+
+                        return error.InvalidInput;
+                    }
+
+                    if (fs.coupling != null and fs.coupling.? != .nacv) {
+                        std.log.err("ONLY NACV COUPLING IS SUPPORTED FOR AB INITIO FSSH", .{});
+
+                        return error.InvalidInput;
+                    }
+
+                    if (ci.nacv == null) {
+                        std.log.err("NACV MUST BE CONFIGURED IN CONFIGURATION INTERACTION FOR FSSH", .{});
+
+                        return error.InvalidInput;
+                    }
                 },
 
                 inline else => {},
@@ -1389,6 +1438,24 @@ fn checkInvalidInput(opt: Options) !void {
 
                     return error.InvalidInput;
                 }
+            }
+
+            if (ci.nacv) |nacv| {
+                const nacv_pairs = switch (nacv) {
+                    inline else => |n| n.pairs,
+                };
+
+                if (nacv_pairs != null) {
+                    std.log.err("NACV PAIRS MUST NOT BE SPECIFIED FOR AB INITIO POTENTIAL", .{});
+
+                    return error.InvalidInput;
+                }
+            }
+
+            if (ci.nacv != null and ci.nstate < 2) {
+                std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR NACV CALCULATION", .{});
+
+                return error.InvalidInput;
             }
         },
     };
