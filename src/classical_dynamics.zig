@@ -823,7 +823,7 @@ fn GradientBuffer(comptime T: type) type {
         }
 
         /// Evaluates the potential and its gradients using automatic differentiation or direct ab initio evaluation.
-        pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T, states: []const usize) !void {
+        pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T, states: ?[]const usize) !void {
             switch (pot) {
                 .ab_initio => |ab| {
                     try ab.updateGradients(&self.V, &self.grad_V, r, states);
@@ -1162,10 +1162,12 @@ fn Propagator(comptime T: type) type {
                 ens.r.ptr(i, j).* += (ens.p.at(i, j) / ens.m[j]) * self.dt;
             };
 
-            try gb.update(ens.r, pot, time, ens.s.data);
+            const is_ehrenfest = self.nonadia_dynamic != null and self.nonadia_dynamic.? == .ehrenfest;
+
+            try gb.update(ens.r, pot, time, if (is_ehrenfest) null else ens.s.data);
 
             if (self.nonadia_dynamic) |*n| if (n.* == .ehrenfest) {
-                try n.ehrenfest.step(ens, gb.V, gb.W, gb.U, gb.grad_V, self.dt);
+                try n.ehrenfest.step(ens, gb.V, gb.W, gb.U, gb.grad_V, pot.isTd(), self.dt);
             };
 
             const coefics = if (self.nonadia_dynamic) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
@@ -1328,10 +1330,32 @@ fn checkInvalidInput(opt: Options) !void {
 
     if (opt.potential == .ab_initio and opt.nonadiabatic != null) {
         switch (opt.nonadiabatic.?) {
-            .ehrenfest => {
-                std.log.err("EHRENFEST DYNAMICS IS NOT SUPPORTED FOR AB INITIO POTENTIAL WITHOUT NACVS", .{});
+            .ehrenfest => |eh| {
+                if (opt.potential.ab_initio.method != .configuration_interaction) {
+                    std.log.err("AB INITIO EHRENFEST IS ONLY SUPPORTED WITH CONFIGURATION INTERACTION", .{});
 
-                return error.InvalidInput;
+                    return error.InvalidInput;
+                }
+
+                const ci = opt.potential.ab_initio.method.configuration_interaction;
+
+                if (ci.nstate < 2) {
+                    std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR EHRENFEST", .{});
+
+                    return error.InvalidInput;
+                }
+
+                if (eh.coupling != null and eh.coupling.? != .nacv) {
+                    std.log.err("ONLY NACV COUPLING IS SUPPORTED FOR AB INITIO EHRENFEST", .{});
+
+                    return error.InvalidInput;
+                }
+
+                if (ci.nacv == null) {
+                    std.log.err("NACV MUST BE CONFIGURED IN CONFIGURATION INTERACTION FOR EHRENFEST", .{});
+
+                    return error.InvalidInput;
+                }
             },
 
             .surface_hopping => |sh| switch (sh) {
@@ -1388,6 +1412,12 @@ fn checkInvalidInput(opt: Options) !void {
 
                     return error.InvalidInput;
                 }
+
+                if (fs.norm_tolerance) |tol| if (std.math.isNan(tol) or tol <= 0) {
+                    std.log.err("NORM TOLERANCE MUST BE POSITIVE", .{});
+
+                    return error.InvalidInput;
+                };
             },
 
             inline else => {},
@@ -1405,6 +1435,12 @@ fn checkInvalidInput(opt: Options) !void {
 
                 return error.InvalidInput;
             }
+
+            if (eh.norm_tolerance) |tol| if (std.math.isNan(tol) or tol <= 0) {
+                std.log.err("NORM TOLERANCE MUST BE POSITIVE", .{});
+
+                return error.InvalidInput;
+            };
         },
     };
 
@@ -1539,7 +1575,9 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         }
     }
 
-    try gb.update(ensemble.r, pot, 0, ensemble.s.data);
+    const is_ehrenfest = opt.nonadiabatic != null and opt.nonadiabatic.? == .ehrenfest;
+
+    try gb.update(ensemble.r, pot, 0, if (is_ehrenfest) null else ensemble.s.data);
 
     if (prop.nonadia_dynamic) |*n| if (n.* == .surface_hopping) {
         n.surface_hopping.update(if (opt.adiabatic) gb.W else gb.V, gb.U);

@@ -33,6 +33,7 @@ const FewestSwitchesOptions = struct {
     alpha: ?f64 = null,
     coupling: ?CouplingOptions = null,
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
+    norm_tolerance: ?f64 = 0.05,
     nstep: u32 = 10,
     seed: u32 = 1,
 };
@@ -285,6 +286,7 @@ fn FewestSwitches(comptime T: type) type {
         itg: Integrator(Complex(T)),
 
         alpha: ?T,
+        normt: ?T,
 
         hamilton: Matrix(T),
         sigmatdc: Matrix(T),
@@ -351,6 +353,7 @@ fn FewestSwitches(comptime T: type) type {
                 .coupling = coupling,
                 .hamilton = ham,
                 .itg = itg,
+                .normt = if (opt.norm_tolerance) |tol| @floatCast(tol) else null,
                 .sigmatdc = sigma,
                 .uhist = uhist,
             };
@@ -394,6 +397,18 @@ fn FewestSwitches(comptime T: type) type {
 
                 self.itg.step(self.coefics.rowSlice(i), dt, int_ctx, coefDerAdia);
 
+                if (self.normt) |tol| {
+                    var norm_val: T = 0;
+
+                    for (0..self.coefics.ncol()) |k| {
+                        norm_val += self.coefics.at(i, k).squaredMagnitude();
+                    }
+
+                    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > tol) {
+                        return error.NormDivergence;
+                    }
+                }
+
                 const rho_cc = self.coefics.at(i, c).squaredMagnitude();
 
                 if (rho_cc >= 1e-14) {
@@ -421,6 +436,18 @@ fn FewestSwitches(comptime T: type) type {
                 const int_ctx = .{ .ham = self.hamilton.rowSlice(i) };
 
                 self.itg.step(self.coefics.rowSlice(i), dt, int_ctx, coefDerDia);
+
+                if (self.normt) |tol| {
+                    var norm_val: T = 0;
+
+                    for (0..self.coefics.ncol()) |k| {
+                        norm_val += self.coefics.at(i, k).squaredMagnitude();
+                    }
+
+                    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > tol) {
+                        return error.NormDivergence;
+                    }
+                }
 
                 const rho_cc = self.coefics.at(i, c).squaredMagnitude();
 

@@ -521,12 +521,12 @@ test "Adiabatic Ehrenfest on Tully's Third Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 17.2790480559967430, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 21.1078788304509000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6453232089941093, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3546767780869843, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0581295221538242, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.1114488727828461, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 17.2790480965840450, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 21.1078788912937370, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6453232173199154, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3546764887651338, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0581295816836050, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.1114488734245425, TEST_TOLERANCE);
     // zig fmt: on
 }
 

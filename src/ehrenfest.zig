@@ -16,6 +16,7 @@ const nacvCoupling = @import("surface_hopping.zig").nacvCoupling;
 pub const Options = struct {
     coupling: ?CouplingOptions = null,
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
+    norm_tolerance: ?f64 = 0.05,
     nstep: u32 = 10,
 };
 
@@ -26,6 +27,7 @@ pub fn Ehrenfest(comptime T: type) type {
         itg: Integrator(Complex(T)),
 
         ham: Matrix(T),
+        norm_toler: ?T,
         nosteps: usize,
 
         sigmatdc: Matrix(T),
@@ -83,6 +85,7 @@ pub fn Ehrenfest(comptime T: type) type {
                 .coupling = coupling,
                 .ham = ham,
                 .itg = itg,
+                .norm_toler = if (opt.norm_tolerance) |tol| @floatCast(tol) else null,
                 .nosteps = opt.nstep,
                 .sigmatdc = sigmatdc,
                 .uhist = uhist,
@@ -111,11 +114,11 @@ pub fn Ehrenfest(comptime T: type) type {
         }
 
         /// Propagates electronic coefficients over nuclear time step dt in adiabatic or diabatic representation.
-        pub fn step(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), grad_V: Matrix(T), dt: T) !void {
+        pub fn step(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), grad_V: Matrix(T), is_td: bool, dt: T) !void {
             if (self.coupling != null) {
                 self.update(W, U);
 
-                try self.stepAdia(ensemble, grad_V, dt);
+                try self.stepAdia(ensemble, grad_V, is_td, dt);
             }
 
             if (self.coupling == null) {
@@ -156,6 +159,8 @@ pub fn Ehrenfest(comptime T: type) type {
 
         /// Computes time derivative of electronic coefficients in the adiabatic basis.
         fn coefDerAdia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
+            const e_ref = if (ctx.is_td) 0 else ctx.ham[0];
+
             for (0..ctx.ham.len) |i| {
                 var sum_sigma = Complex(T).init(0, 0);
 
@@ -165,7 +170,7 @@ pub fn Ehrenfest(comptime T: type) type {
                     sum_sigma = sum_sigma.add(sig.mul(y[j]));
                 }
 
-                dy[i] = Complex(T).init(0, -ctx.ham[i]).mul(y[i]).sub(sum_sigma);
+                dy[i] = Complex(T).init(0, -(ctx.ham[i] - e_ref)).mul(y[i]).sub(sum_sigma);
             }
         }
 
@@ -185,7 +190,7 @@ pub fn Ehrenfest(comptime T: type) type {
         }
 
         /// Integrates electronic coefficients in the adiabatic basis using time-derivative couplings.
-        fn stepAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), dt: T) !void {
+        fn stepAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, dt: T) !void {
             if (std.math.isNan(self.uhist[0].at(0, 0))) return;
 
             const subdt = dt / @as(T, @floatFromInt(self.nosteps));
@@ -204,10 +209,22 @@ pub fn Ehrenfest(comptime T: type) type {
                     .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), p, m),
                 }
 
-                const int_ctx = .{ .ham = ham, .sigma = row_sigma };
+                const int_ctx = .{ .ham = ham, .is_td = is_td, .sigma = row_sigma };
 
                 for (0..self.nosteps) |_| {
                     self.itg.step(self.coefics.rowSlice(i), subdt, int_ctx, coefDerAdia);
+                }
+
+                if (self.norm_toler) |tol| {
+                    var norm_val: T = 0;
+
+                    for (0..self.coefics.ncol()) |k| {
+                        norm_val += self.coefics.at(i, k).squaredMagnitude();
+                    }
+
+                    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > tol) {
+                        return error.NormDivergence;
+                    }
                 }
             }
         }
@@ -223,6 +240,20 @@ pub fn Ehrenfest(comptime T: type) type {
             for (0..self.nosteps) |_| for (0..self.coefics.nrow()) |i| {
                 self.itg.step(self.coefics.rowSlice(i), subdt, .{ .ham = self.ham.rowSlice(i) }, coefDerDia);
             };
+
+            if (self.norm_toler) |tol| {
+                for (0..self.coefics.nrow()) |i| {
+                    var norm_val: T = 0;
+
+                    for (0..self.coefics.ncol()) |k| {
+                        norm_val += self.coefics.at(i, k).squaredMagnitude();
+                    }
+
+                    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > tol) {
+                        return error.NormDivergence;
+                    }
+                }
+            }
         }
     };
 }

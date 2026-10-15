@@ -356,7 +356,7 @@ fn AbInitio(comptime T: type) type {
         }
 
         /// Evaluates the electronic energy and Cartesian nuclear gradients at coordinates r.
-        pub fn evalGrad(self: @This(), V: []T, grad_V: []T, r: []const T, active_state: usize) !void {
+        pub fn evalGrad(self: @This(), V: []T, grad_V: []T, r: []const T, active_state: ?usize) !void {
             @memcpy(self.msys.coors, r);
 
             libint.libint_update_coords(self.msys.ptr, self.msys.coors.ptr);
@@ -395,14 +395,29 @@ fn AbInitio(comptime T: type) type {
 
                     run_opt.frequency = null;
 
-                    const active_state_arr = [_]u32{@intCast(active_state)};
+                    const n = self.nstate();
 
-                    if (run_opt.gradient) |*g| switch (g.*) {
-                        .analytic => |*a| a.states = &active_state_arr,
-                        .numeric => |*num| num.states = &active_state_arr,
+                    var active_state_arr: [1]u32 = undefined;
+
+                    if (active_state) |s| {
+                        active_state_arr[0] = @intCast(s);
+                    }
+
+                    var all_states: ?[]u32 = null;
+                    defer if (all_states) |s| self.gpa.free(s);
+
+                    const grad_states = if (active_state != null) &active_state_arr else blk: {
+                        all_states = try self.gpa.alloc(u32, n);
+
+                        for (0..n) |k| all_states.?[k] = @intCast(k);
+
+                        break :blk all_states.?;
                     };
 
-                    const n = self.nstate();
+                    if (run_opt.gradient) |*g| switch (g.*) {
+                        .analytic => |*a| a.states = grad_states,
+                        .numeric => |*num| num.states = grad_states,
+                    };
 
                     var auto_pairs: ?[][2]u32 = null;
                     defer if (auto_pairs) |p| self.gpa.free(p);
@@ -428,8 +443,18 @@ fn AbInitio(comptime T: type) type {
                         V[k * n + k] = res.energy[k];
                     }
 
-                    for (0..self.ndim()) |j| {
-                        grad_V[j * n * n + active_state * n + active_state] = res.grad[0].data[j];
+                    if (res.grad.len > 0) {
+                        if (active_state) |s| {
+                            for (0..self.ndim()) |j| {
+                                grad_V[j * n * n + s * n + s] = res.grad[0].data[j];
+                            }
+                        }
+
+                        if (active_state == null) {
+                            for (0..n) |k| for (0..self.ndim()) |j| {
+                                grad_V[j * n * n + k * n + k] = res.grad[k].data[j];
+                            };
+                        }
                     }
 
                     if (auto_pairs) |pairs| {
@@ -468,9 +493,11 @@ fn AbInitio(comptime T: type) type {
         }
 
         /// Updates potential values and gradients for all batch trajectory coordinate rows.
-        pub fn updateGradients(self: @This(), V: *Matrix(T), grad_V: *Matrix(T), r: Matrix(T), states: []const usize) !void {
+        pub fn updateGradients(self: @This(), V: *Matrix(T), grad_V: *Matrix(T), r: Matrix(T), states: ?[]const usize) !void {
             for (0..r.nrow()) |i| {
-                try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), states[i]);
+                const s = if (states) |st| st[i] else null;
+
+                try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), s);
             }
         }
 
