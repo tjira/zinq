@@ -2,6 +2,24 @@
     "zinq" : [
         {
             "classical_dynamics" : {
+                "initial_conditions" : {
+                    "distribution" : {
+                        "wigner" : {
+                            "method" : {
+                                "moller_plesset" : {
+                                    "hartree_fock" : {
+                                        "basis" : "builtin:sto-3g",
+                                        "system" : "example/molecule/water.xyz"
+                                    },
+                                    "hessian" : {
+                                        "numeric" : {}
+                                    },
+                                    "frequency" : {}
+                                }
+                            }
+                        }
+                    }
+                },
                 "iterations" : 100,
                 "potential" : {
                     "ab_initio" : {
@@ -22,7 +40,7 @@
                     }
                 },
                 "time_step" : 10,
-                "trajectories" : 1
+                "trajectories" : 10
             }
         }
     ]

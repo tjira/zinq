@@ -9,6 +9,8 @@ const AbInitioWrite = @import("potential.zig").AbInitioWrite;
 const Ehrenfest = @import("ehrenfest.zig").Ehrenfest;
 const EhrenfestOptions = @import("ehrenfest.zig").Options;
 const Matrix = @import("tensor.zig").Matrix;
+const MethodOptions = @import("potential.zig").MethodOptions;
+const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Potential = @import("potential.zig").Potential;
 const PotentialOptions = @import("potential.zig").Options;
 const ScalarDual = @import("dual.zig").ScalarDual;
@@ -18,10 +20,14 @@ const Thermostat = @import("thermostat.zig").Thermostat;
 const ThermostatOptions = @import("thermostat.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 
+const calculateNormalModes = @import("frequency_analysis.zig").calculateNormalModes;
+const configuration_interaction = @import("configuration_interaction.zig");
 const eighBatch = @import("linear_algebra.zig").eighBatch;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 const getMass = @import("constant.zig").getMass;
 const getTrajectoryPath = @import("read_write.zig").getTrajectoryPath;
+const hartree_fock = @import("hartree_fock.zig");
+const moller_plesset = @import("moller_plesset.zig");
 const printf = @import("read_write.zig").printf;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 const writeXyzFrame = @import("read_write.zig").writeXyzFrame;
@@ -45,20 +51,37 @@ pub const Options = struct {
     write: Write = .{},
 };
 
+/// Tagged union defining mutually exclusive initial phase space probability distributions.
+pub const DistributionOptions = union(enum) {
+    maxwell_boltzmann: MaxwellBoltzmannOptions,
+    wigner: WignerOptions,
+};
+
+/// Parameters for classical thermal momentum sampling according to the Maxwell-Boltzmann distribution.
+pub const MaxwellBoltzmannOptions = struct {
+    temperature: f64 = 298.15,
+};
+
 /// Tagged union for multi-state non-adiabatic trajectory propagation methods.
 pub const NonadiabaticOptions = union(enum) {
     ehrenfest: EhrenfestOptions,
     surface_hopping: SurfaceHoppingOptions,
 };
 
-/// Initial phase space parameters and Gaussian width for trajectory sampling.
-const InitialConditions = struct {
+/// Parameters for quantum harmonic oscillator Wigner phase space distribution sampling.
+pub const WignerOptions = struct {
     gamma: ?[]const f64 = null,
+    method: ?MethodOptions = null,
+    temperature: f64 = 0.0,
+};
+
+/// Initial phase space parameters and distribution configuration for trajectory sampling.
+const InitialConditions = struct {
+    distribution: ?DistributionOptions = null,
     momentum: ?[]const f64 = null,
     position: ?[]const f64 = null,
     seed: u32 = 1,
     state: u32 = 0,
-    temperature: ?f64 = null,
 };
 
 /// Output paths for recording trajectory observables to disk during dynamics.
@@ -332,16 +355,26 @@ pub fn Ensemble(comptime T: type) type {
 
             const random = rng.random();
 
+            const gamma = if (ic.distribution) |dist| switch (dist) {
+                .wigner => |wig| wig.gamma,
+                inline else => null,
+            } else null;
+
+            const temperature = if (ic.distribution) |dist| switch (dist) {
+                .maxwell_boltzmann => |mb| mb.temperature,
+                inline else => null,
+            } else null;
+
             for (0..self.r.nrow()) |i| for (0..self.r.ncol()) |j| {
                 const r0 = if (ic.position) |r_pos| r_pos[j] else default_pos.?[j];
 
-                if (ic.gamma) |gamma| {
-                    const stdev = 1 / std.math.sqrt(2 * gamma[j]);
+                if (gamma) |gam| {
+                    const stdev = 1 / std.math.sqrt(2 * gam[j]);
 
                     self.r.ptr(i, j).* = r0 + stdev * random.floatNorm(T);
                 }
 
-                if (ic.gamma == null) {
+                if (gamma == null) {
                     self.r.ptr(i, j).* = r0;
                 }
             };
@@ -349,7 +382,7 @@ pub fn Ensemble(comptime T: type) type {
             for (0..self.p.nrow()) |i| for (0..self.p.ncol()) |j| {
                 const p0 = if (ic.momentum) |p_mom| p_mom[j] else 0;
 
-                if (ic.temperature) |t_val| {
+                if (temperature) |t_val| {
                     const stdev = std.math.sqrt(self.m[j] * @as(T, @floatCast(t_val)) / AU2K);
 
                     self.p.ptr(i, j).* = p0 + stdev * random.floatNorm(T);
@@ -357,8 +390,8 @@ pub fn Ensemble(comptime T: type) type {
                     continue;
                 }
 
-                if (ic.gamma) |gamma| {
-                    const stdev = std.math.sqrt(gamma[j] / 2);
+                if (gamma) |gam| {
+                    const stdev = std.math.sqrt(gam[j] / 2);
 
                     self.p.ptr(i, j).* = p0 + stdev * random.floatNorm(T);
 
@@ -1266,14 +1299,12 @@ fn SolveContext(comptime T: type) type {
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try checkInvalidInput(opt);
 
-    if (log) try std.Io.File.stdout().writeStreamingAll(io, "\nCLASSICAL DYNAMICS INIT: ");
-
     var timer = std.Io.Timestamp.now(io, .real);
 
     var sim = try init(T, io, opt, gpa);
     defer sim.deinit(gpa);
 
-    if (log) try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    if (log) try printf(io, "\nCLASSICAL DYNAMICS INIT: {f}\n", .{timer.untilNow(io, .real)});
 
     var obs = try solve(T, io, .{ .opt = opt, .sim = &sim, .log = log }, gpa, gpa);
     errdefer obs.deinit(gpa);
@@ -1343,13 +1374,129 @@ fn checkInvalidInput(opt: Options) !void {
 
             return error.InvalidInput;
         };
-
-        if (opt.initial_conditions.gamma) |gam| if (gam.len != pos.len) {
-            std.log.err("INITIAL GAMMA VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
-
-            return error.InvalidInput;
-        };
     }
+
+    if (opt.initial_conditions.distribution) |dist| switch (dist) {
+        .maxwell_boltzmann => |mb| {
+            if (std.math.isNan(mb.temperature) or mb.temperature < 0) {
+                std.log.err("MAXWELL-BOLTZMANN TEMPERATURE MUST BE NON-NEGATIVE", .{});
+
+                return error.InvalidInput;
+            }
+        },
+
+        .wigner => |wig| {
+            if (std.math.isNan(wig.temperature) or wig.temperature < 0) {
+                std.log.err("WIGNER TEMPERATURE MUST BE NON-NEGATIVE", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (wig.gamma != null and wig.method != null) {
+                std.log.err("GAMMA AND METHOD MUST NOT BE SPECIFIED SIMULTANEOUSLY FOR WIGNER SAMPLING", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (wig.gamma == null and wig.method == null) {
+                std.log.err("EITHER GAMMA OR METHOD MUST BE SPECIFIED FOR WIGNER SAMPLING", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (wig.gamma) |gam| {
+                if (opt.potential == .ab_initio) {
+                    std.log.err("GAMMA VECTOR IS NOT SUPPORTED FOR AB INITIO POTENTIAL", .{});
+
+                    return error.InvalidInput;
+                }
+
+                if (gam.len == 0) {
+                    std.log.err("WIGNER GAMMA VECTOR MUST NOT BE EMPTY", .{});
+
+                    return error.InvalidInput;
+                }
+
+                for (gam) |g| if (std.math.isNan(g) or g <= 0) {
+                    std.log.err("WIGNER GAMMA VALUES MUST BE GREATER THAN 0", .{});
+
+                    return error.InvalidInput;
+                };
+
+                if (opt.initial_conditions.position) |pos| if (gam.len != pos.len) {
+                    std.log.err("WIGNER GAMMA VECTOR MUST HAVE THE SAME LENGTH AS POSITION VECTOR", .{});
+
+                    return error.InvalidInput;
+                };
+            }
+
+            if (wig.method) |mopt| {
+                if (opt.potential != .ab_initio) {
+                    std.log.err("AB INITIO METHOD FOR WIGNER SAMPLING IS NOT SUPPORTED FOR MODEL POTENTIALS", .{});
+
+                    return error.InvalidInput;
+                }
+
+                const has_hessian = switch (mopt) {
+                    inline else => |m| m.hessian != null,
+                };
+
+                if (!has_hessian) {
+                    std.log.err("HESSIAN MUST BE CONFIGURED IN ELECTRONIC STRUCTURE METHOD FOR WIGNER SAMPLING", .{});
+
+                    return error.InvalidInput;
+                }
+
+                const has_frequency = switch (mopt) {
+                    inline else => |m| m.frequency != null,
+                };
+
+                if (!has_frequency) {
+                    std.log.err("FREQUENCY MUST BE CONFIGURED IN ELECTRONIC STRUCTURE METHOD FOR WIGNER SAMPLING", .{});
+
+                    return error.InvalidInput;
+                }
+
+                const has_gradient = switch (mopt) {
+                    inline else => |m| m.gradient != null,
+                };
+
+                if (has_gradient) {
+                    std.log.err("GRADIENT MUST NOT BE SPECIFIED IN ELECTRONIC STRUCTURE METHOD FOR WIGNER SAMPLING", .{});
+
+                    return error.InvalidInput;
+                }
+
+                if (mopt == .configuration_interaction) {
+                    const ci = mopt.configuration_interaction;
+
+                    if (ci.nacv != null) {
+                        std.log.err("NACV MUST NOT BE SPECIFIED IN CONFIGURATION INTERACTION FOR WIGNER SAMPLING", .{});
+
+                        return error.InvalidInput;
+                    }
+
+                    if (ci.hartree_fock.gradient != null) {
+                        std.log.err("GRADIENT MUST NOT BE SPECIFIED IN REFERENCE HARTREE-FOCK FOR WIGNER SAMPLING", .{});
+
+                        return error.InvalidInput;
+                    }
+
+                    if (ci.hessian) |hess| {
+                        const hess_states = switch (hess) {
+                            inline else => |h| h.states,
+                        };
+
+                        if (hess_states != null) {
+                            std.log.err("HESSIAN STATE MUST NOT BE SPECIFIED FOR WIGNER SAMPLING", .{});
+
+                            return error.InvalidInput;
+                        }
+                    }
+                }
+            }
+        },
+    };
 
     if (opt.initial_conditions.position == null and opt.potential != .ab_initio) {
         std.log.err("INITIAL POSITION VECTOR MUST BE PROVIDED FOR MODEL POTENTIALS", .{});
@@ -1598,14 +1745,30 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         inline else => null,
     };
 
-    ensemble.setGaussian(opt.initial_conditions, default_pos);
+    const is_ab_initio_wigner = if (opt.initial_conditions.distribution) |dist| switch (dist) {
+        .wigner => |wig| wig.method != null,
+        inline else => false,
+    } else false;
+
+    if (is_ab_initio_wigner) {
+        try sampleWignerAbInitio(T, io, &ensemble, opt, gpa);
+    }
+
+    if (!is_ab_initio_wigner) {
+        ensemble.setGaussian(opt.initial_conditions, default_pos);
+    }
 
     if (pot == .ab_initio) {
         ensemble.removeTranslation();
 
         _ = ensemble.removeRotation();
 
-        if (opt.initial_conditions.temperature) |t_val| {
+        const temp = if (opt.initial_conditions.distribution) |dist| switch (dist) {
+            .maxwell_boltzmann => |mb| mb.temperature,
+            inline else => null,
+        } else null;
+
+        if (temp) |t_val| {
             ensemble.rescaleTemperature(@floatCast(t_val));
         }
     }
@@ -1764,6 +1927,112 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, h
     try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 
     timer.* = std.Io.Timestamp.now(io, .real);
+}
+
+/// Samples initial Cartesian phase space coordinates from ab initio quantum harmonic oscillator Wigner distributions.
+fn sampleWignerAbInitio(comptime T: type, io: std.Io, ensemble: *Ensemble(T), opt: Options, gpa: Allocator) !void {
+    const wig = opt.initial_conditions.distribution.?.wigner;
+
+    switch (wig.method.?) {
+        .hartree_fock => |hf_opt| {
+            var res = try hartree_fock.run(T, io, hf_opt, true, gpa);
+            defer res.deinit(gpa);
+
+            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.ints.sys, opt, gpa);
+        },
+
+        .moller_plesset => |mp_opt| {
+            var res = try moller_plesset.run(T, io, mp_opt, true, gpa);
+            defer res.deinit(gpa);
+
+            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.hartree_fock.ints.sys, opt, gpa);
+        },
+
+        .configuration_interaction => |ci_opt| {
+            var res = try configuration_interaction.run(T, io, ci_opt, true, gpa);
+            defer res.deinit(gpa);
+
+            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.hartree_fock.ints.sys, opt, gpa);
+        },
+    }
+}
+
+/// Samples ensemble positions and momenta from normal modes computed from a molecular Hessian.
+fn sampleWignerFromHessian(comptime T: type, ensemble: *Ensemble(T), hess: Matrix(T), sys: MolecularSystem(T), opt: Options, gpa: Allocator) !void {
+    var nm = try calculateNormalModes(T, hess, sys, gpa);
+    defer nm.deinit(gpa);
+
+    const ndim, const ntraj = .{ sys.atoms.len * 3, ensemble.r.nrow() };
+
+    const temp = opt.initial_conditions.distribution.?.wigner.temperature;
+
+    var split_mix = std.Random.SplitMix64.init(opt.initial_conditions.seed);
+    var rng = std.Random.DefaultPrng.init(split_mix.next());
+
+    var sigma_Q = try gpa.alloc(T, ndim);
+    defer gpa.free(sigma_Q);
+
+    var sigma_P = try gpa.alloc(T, ndim);
+    defer gpa.free(sigma_P);
+
+    const random = rng.random();
+
+    for (0..ndim) |k| {
+        const omega_au = nm.freqs.at(k) / @sqrt(AMU2AU);
+
+        if (omega_au <= 1e-5) {
+            sigma_Q[k] = 0;
+            sigma_P[k] = 0;
+
+            continue;
+        }
+
+        if (temp > 1e-6) {
+            const coth = 1.0 / std.math.tanh(0.5 * (AU2K / temp) * omega_au);
+
+            sigma_Q[k] = std.math.sqrt(0.5 / omega_au * coth);
+            sigma_P[k] = std.math.sqrt(0.5 * omega_au * coth);
+        }
+
+        if (temp <= 1e-6) {
+            sigma_Q[k] = std.math.sqrt(0.5 / omega_au);
+            sigma_P[k] = std.math.sqrt(0.5 * omega_au);
+        }
+    }
+
+    var Q = try gpa.alloc(T, ndim);
+    defer gpa.free(Q);
+
+    var P_Q = try gpa.alloc(T, ndim);
+    defer gpa.free(P_Q);
+
+    for (0..ntraj) |i| {
+        ensemble.s.ptr(i).* = opt.initial_conditions.state;
+
+        for (0..ndim) |k| {
+            Q[k] = if (sigma_Q[k] > 0) sigma_Q[k] * random.floatNorm(T) else 0;
+
+            P_Q[k] = if (sigma_P[k] > 0) sigma_P[k] * random.floatNorm(T) else 0;
+        }
+
+        for (0..ndim) |a| {
+            var delta_r: T, var p_a: T = .{ 0, 0 };
+
+            for (0..ndim) |k| {
+                const u_ak = nm.modes.at(a, k);
+
+                delta_r += u_ak * Q[k];
+
+                p_a += u_ak * P_Q[k];
+            }
+
+            const sqrt_m = std.math.sqrt(ensemble.m[a]);
+
+            ensemble.r.ptr(i, a).* = sys.coors[a] + delta_r / sqrt_m;
+
+            ensemble.p.ptr(i, a).* = p_a * sqrt_m;
+        }
+    }
 }
 
 /// Propagates the classical equations of motion over the specified number of time steps.

@@ -42,13 +42,59 @@ for nuclear coordinates $\mathbf{r}_i$ of atom $i$, directing the nuclei towards
 
 ---
 
-## II. Non-Adiabatic Dynamics and Implementation
+## II. Initial Condition Sampling
 
-### 3. Ensemble Trajectory Management
+Generating realistic initial positions and momenta for molecular ensembles is essential for obtaining accurate thermodynamic averages and dynamical observables. In our codebase, initial conditions can be sampled according to classical thermal distributions or quantum phase space quasi-probability distributions.
+
+### 3. Maxwell–Boltzmann Momentum Sampling
+
+For classical thermal ensembles at a specified temperature $T$, nuclear coordinates are initially set to the reference equilibrium geometry $\mathbf{R}_0$, while nuclear momenta are sampled from the Maxwell–Boltzmann distribution
+$$
+P(\mathbf{P}_A)=\left(\frac{1}{2\pi M_A k_{\text{B}}T}\right)^{3/2}\exp\left(-\frac{\mathbf{P}_A^2}{2M_A k_{\text{B}}T}\right)
+$$
+where $M_A$ is the atomic mass of nucleus $A$ and $k_{\text{B}}$ is the Boltzmann constant. Each Cartesian momentum component is independently drawn from a univariate normal distribution with zero mean and variance $\sigma_{P,A}^2=M_A k_{\text{B}}T$. Following momentum sampling, the net linear momentum of the center of mass is subtracted to eliminate unphysical overall translational drift through space.
+
+### 4. Wigner Distribution Sampling
+
+In quantum molecular dynamics and nonadiabatic surface hopping, quantum nuclear zero-point energy and vibrational wavepacket delocalization are incorporated semiclassically by sampling initial positions and momenta from the Wigner distribution. For an ensemble of uncoupled quantum harmonic oscillators with normal mode frequencies $\omega_k$ at temperature $T$, the Wigner phase space density factorizes into independent Gaussian functions for each vibrational mode as
+$$
+\rho_{\text{W}}(Q_k,P_k)=\frac{1}{2\pi\sigma_{Q,k}\sigma_{P,k}}\exp\left(-\frac{Q_k^2}{2\sigma_{Q,k}^2}-\frac{P_k^2}{2\sigma_{P,k}^2}\right)
+$$
+where $Q_k$ and $P_k$ denote the mass-weighted normal coordinate and conjugate momentum. The coordinate variance is given by
+$$
+\sigma_{Q,k}^2=\frac{\hbar}{2\omega_k}\coth\left(\frac{\hbar\omega_k}{2k_{\text{B}}T}\right)
+$$
+and the conjugate momentum variance is given by
+$$
+\sigma_{P,k}^2=\frac{\hbar\omega_k}{2}\coth\left(\frac{\hbar\omega_k}{2k_{\text{B}}T}\right)
+$$
+which naturally recover the quantum harmonic zero-point fluctuations $\sigma_{Q,k}^2=\hbar/(2\omega_k)$ and $\sigma_{P,k}^2=\hbar\omega_k/2$ at zero temperature ($T=0$).
+
+For analytical model potentials, Gaussian spatial width parameters $\boldsymbol{\gamma}$ can be directly provided, where $\gamma_k=\omega_k/\hbar$, defining variances $\sigma_{Q,k}^2=1/(2\gamma_k)$ and $\sigma_{P,k}^2=\hbar^2\gamma_k/2$.
+
+For ab initio molecular systems, the vibrational frequencies and normal modes are determined from a harmonic vibrational frequency analysis. The mass-weighted Hessian matrix $\mathbf{H}^{\text{MW}}$ is evaluated at the optimized reference geometry $\mathbf{R}_0$ as
+$$
+H_{ia,jb}^{\text{MW}}=\frac{1}{\sqrt{M_a M_b}}\frac{\partial^2 V}{\partial R_{ia}\partial R_{jb}}
+$$
+and diagonalized to obtain normal mode frequencies $\omega_k=\sqrt{\lambda_k}$ and the orthonormal transformation matrix $\mathbf{L}$. Non-physical degrees of freedom corresponding to overall translation and rotation are discarded. Normal mode displacements $Q_k$ and momenta $P_k$ are independently sampled from Gaussian distributions with variances $\sigma_{Q,k}^2$ and $\sigma_{P,k}^2$, and transformed to Cartesian coordinates and momenta via
+$$
+\mathbf{R}=\mathbf{R}_0+\mathbf{M}^{-1/2}\mathbf{L}\mathbf{Q}
+$$
+and
+$$
+\mathbf{P}=\mathbf{M}^{1/2}\mathbf{L}\mathbf{P}_Q
+$$
+where $\mathbf{M}$ is the diagonal nuclear mass matrix. Center-of-mass linear and angular momenta are subsequently projected out to preserve rigid-body conservation laws during propagation.
+
+---
+
+## III. Non-Adiabatic Dynamics and Implementation
+
+### 5. Ensemble Trajectory Management
 
 In many simulations, running a single molecular trajectory is not enough to get reliable results because molecular behavior is statistical. To calculate observable properties (like average kinetic energy or chemical reaction rates), we run a large group of independent trajectories, which we call an ensemble. In our codebase, these trajectories are managed using an `Ensemble(T)` structure. This structure contains coordinate matrix `r`, momentum matrix `p`, and acceleration matrix `a` for all trajectories, along with a state vector `s` that stores the active electronic state index for each independent path.
 
-### 4. Nonadiabatic Trajectories and Surface Hopping
+### 6. Nonadiabatic Trajectories and Surface Hopping
 
 When a molecular system transitions between distinct electronic potential energy surfaces, the single-surface Born–Oppenheimer approximation breaks down. Zinq supports nonadiabatic trajectory propagation using mean-field Ehrenfest dynamics as well as stochastic surface hopping. In Ehrenfest dynamics, the classical nuclei propagate on an effective potential energy surface obtained as an expectation value over the active electronic states, which is described in detail in the [Ehrenfest Dynamics](ehrenfest_dynamics.md) documentation. In surface hopping simulations, each trajectory in the ensemble evolves on a single active electronic state and undergoes stochastic hops mediated by transition probabilities, as detailed in the [Fewest Switches Surface Hopping](fewest_switches_surface_hopping.md) and [Landau–Zener Surface Hopping](landau_zener_surface_hopping.md) guides. When an electronic hop is accepted, the nuclear momentum vector $\mathbf{p}$ is rescaled to conserve total energy using the energy scaling factor
 
@@ -58,7 +104,7 @@ $$
 
 where $E_{\text{kin}}$ is the nuclear kinetic energy and $\Delta E = E_j - E_c$ is the change in electronic potential energy. If the hop is energetically uphill and the available kinetic energy is insufficient ($\Delta E > E_{\text{kin}}$), the transition is rejected as a frustrated hop and the trajectory continues on its active state.
 
-### 5. Canonical Ensemble and Thermostats
+### 7. Canonical Ensemble and Thermostats
 
 To simulate molecular systems at constant temperature (the canonical NVT ensemble) rather than constant energy (the microcanonical NVE ensemble), our codebase implements temperature coupling through velocity rescaling and stochastic thermostats.
 

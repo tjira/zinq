@@ -31,6 +31,20 @@ pub const Options = struct {
     temperature: f64 = 298.15,
 };
 
+/// Holds mass-weighted harmonic vibrational frequencies and corresponding normal mode eigenvectors.
+pub fn NormalModes(comptime T: type) type {
+    return struct {
+        freqs: Vector(T),
+        modes: Matrix(T),
+
+        /// Deallocates memory associated with the normal mode frequencies and eigenvectors.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.freqs.deinit(gpa);
+            self.modes.deinit(gpa);
+        }
+    };
+}
+
 /// Thermodynamic state functions derived from molecular partition functions under the RRHO approximation.
 pub fn Thermochemistry(comptime T: type) type {
     return struct {
@@ -48,6 +62,14 @@ pub fn Thermochemistry(comptime T: type) type {
 
 /// Calculates mass-weighted harmonic vibrational frequencies and projects out translations and rotations.
 pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), sys: MolecularSystem(T), gpa: Allocator) !Vector(T) {
+    var nm = try calculateNormalModes(T, hessian, sys, gpa);
+    defer nm.modes.deinit(gpa);
+
+    return nm.freqs;
+}
+
+/// Calculates mass-weighted harmonic vibrational frequencies and normal modes with translations and rotations projected out.
+pub fn calculateNormalModes(comptime T: type, hessian: Matrix(T), sys: MolecularSystem(T), gpa: Allocator) !NormalModes(T) {
     std.debug.assert(hessian.nrow() == sys.atoms.len * 3);
 
     const atoms = sys.atoms;
@@ -227,7 +249,7 @@ pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), sys: M
     errdefer w.deinit(gpa);
 
     var u = try Matrix(T).init(hessian.nrow(), hessian.nrow(), gpa);
-    defer u.deinit(gpa);
+    errdefer u.deinit(gpa);
 
     try eigh(T, &w, &u, HM);
 
@@ -235,7 +257,7 @@ pub fn calculateHarmonicFrequencies(comptime T: type, hessian: Matrix(T), sys: M
         w.ptr(i).* = std.math.sign(w.at(i)) * std.math.sqrt(@abs(w.at(i)));
     }
 
-    return w;
+    return .{ .freqs = w, .modes = u };
 }
 
 /// Evaluates thermodynamic state functions and partition functions under the ideal gas and RRHO approximations.

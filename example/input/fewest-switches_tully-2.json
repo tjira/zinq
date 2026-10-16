@@ -5,7 +5,11 @@
                 "initial_conditions" : {
                     "position" : [-10],
                     "momentum" : [15],
-                    "gamma" : [2],
+                    "distribution" : {
+                        "wigner" : {
+                            "gamma" : [2]
+                        }
+                    },
                     "state" : 0
                 },
                 "potential" : {

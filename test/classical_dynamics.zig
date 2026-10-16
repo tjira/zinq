@@ -7,7 +7,12 @@ const TEST_TOLERANCE = 1e-8;
 
 test "Adiabatic Landau--Zener on Tully's First Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
@@ -32,7 +37,12 @@ test "Adiabatic Landau--Zener on Tully's First Potential" {
 
 test "Diabatic Landau--Zener on Tully's First Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
@@ -57,7 +67,12 @@ test "Diabatic Landau--Zener on Tully's First Potential" {
 
 test "Adiabatic Landau--Zener on Tully's Second Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
@@ -82,7 +97,12 @@ test "Adiabatic Landau--Zener on Tully's Second Potential" {
 
 test "Diabatic Landau--Zener on Tully's Second Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
@@ -107,7 +127,12 @@ test "Diabatic Landau--Zener on Tully's Second Potential" {
 
 test "Adiabatic Landau--Zener on Tully's Third Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
@@ -132,7 +157,12 @@ test "Adiabatic Landau--Zener on Tully's Third Potential" {
 
 test "Diabatic Landau--Zener on Tully's Third Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{2000},
@@ -157,7 +187,12 @@ test "Diabatic Landau--Zener on Tully's Third Potential" {
 
 test "Adiabatic Landau--Zener on Time-Linear Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{0},
+            .position = &.{0},
+            .state = 1,
+        },
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{1},
@@ -182,7 +217,12 @@ test "Adiabatic Landau--Zener on Time-Linear Potential" {
 
 test "Diabatic Landau--Zener on Time-Linear Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{0},
+            .position = &.{0},
+            .state = 1,
+        },
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .landau_zener = .{} } },
         .mass = &.{1},
@@ -207,7 +247,12 @@ test "Diabatic Landau--Zener on Time-Linear Potential" {
 
 test "Adiabatic Fewest Switches on Tully's First Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{ .coupling = .{ .hst = .{} } } } },
         .mass = &.{2000},
@@ -232,7 +277,12 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
 
 test "Diabatic Fewest Switches on Tully's First Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{2000},
@@ -257,7 +307,12 @@ test "Diabatic Fewest Switches on Tully's First Potential" {
 
 test "Adiabatic Fewest Switches on Tully's Second Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{ .coupling = .{ .hst = .{} } } } },
         .mass = &.{2000},
@@ -282,7 +337,12 @@ test "Adiabatic Fewest Switches on Tully's Second Potential" {
 
 test "Diabatic Fewest Switches on Tully's Second Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{2000},
@@ -307,7 +367,12 @@ test "Diabatic Fewest Switches on Tully's Second Potential" {
 
 test "Adiabatic Fewest Switches on Tully's Third Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{ .coupling = .{ .hst = .{} } } } },
         .mass = &.{2000},
@@ -332,7 +397,12 @@ test "Adiabatic Fewest Switches on Tully's Third Potential" {
 
 test "Diabatic Fewest Switches on Tully's Third Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{2000},
@@ -357,7 +427,12 @@ test "Diabatic Fewest Switches on Tully's Third Potential" {
 
 test "Adiabatic Fewest Switches on Time-Linear Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{0},
+            .position = &.{0},
+            .state = 1,
+        },
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{ .coupling = .{ .hst = .{} } } } },
         .mass = &.{1},
@@ -382,7 +457,12 @@ test "Adiabatic Fewest Switches on Time-Linear Potential" {
 
 test "Diabatic Fewest Switches on Time-Linear Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{0},
+            .position = &.{0},
+            .state = 1,
+        },
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{} } },
         .mass = &.{1},
@@ -407,7 +487,12 @@ test "Diabatic Fewest Switches on Time-Linear Potential" {
 
 test "Adiabatic Ehrenfest on Tully's First Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{ .coupling = .{ .hst = .{} } } },
         .mass = &.{2000},
@@ -432,7 +517,12 @@ test "Adiabatic Ehrenfest on Tully's First Potential" {
 
 test "Diabatic Ehrenfest on Tully's First Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_1 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{2000},
@@ -457,7 +547,12 @@ test "Diabatic Ehrenfest on Tully's First Potential" {
 
 test "Adiabatic Ehrenfest on Tully's Second Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{ .coupling = .{ .hst = .{} } } },
         .mass = &.{2000},
@@ -482,7 +577,12 @@ test "Adiabatic Ehrenfest on Tully's Second Potential" {
 
 test "Diabatic Ehrenfest on Tully's Second Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_2 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{2000},
@@ -507,7 +607,12 @@ test "Diabatic Ehrenfest on Tully's Second Potential" {
 
 test "Adiabatic Ehrenfest on Tully's Third Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{ .coupling = .{ .hst = .{} } } },
         .mass = &.{2000},
@@ -532,7 +637,12 @@ test "Adiabatic Ehrenfest on Tully's Third Potential" {
 
 test "Diabatic Ehrenfest on Tully's Third Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+        },
         .potential = .{ .tully_3 = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{2000},
@@ -557,7 +667,12 @@ test "Diabatic Ehrenfest on Tully's Third Potential" {
 
 test "Adiabatic Ehrenfest on Time-Linear Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{0},
+            .position = &.{0},
+            .state = 1,
+        },
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .ehrenfest = .{ .coupling = .{ .hst = .{} } } },
         .mass = &.{1},
@@ -582,7 +697,12 @@ test "Adiabatic Ehrenfest on Time-Linear Potential" {
 
 test "Diabatic Ehrenfest on Time-Linear Potential" {
     const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{0}, .momentum = &.{0}, .gamma = &.{2}, .state = 1 },
+        .initial_conditions = .{
+            .distribution = .{ .wigner = .{ .gamma = &.{2} } },
+            .momentum = &.{0},
+            .position = &.{0},
+            .state = 1,
+        },
         .potential = .{ .time_linear = .{} },
         .nonadiabatic = .{ .ehrenfest = .{} },
         .mass = &.{1},
