@@ -771,6 +771,29 @@ fn checkInvalidInput(opt: Options) !void {
             }
         }
     }
+
+    if (opt.optimize) |optopt| {
+        const gradopt = switch (optopt) {
+            .bfgs => |b| b.gradient,
+            .steepest_descent => |s| s.gradient,
+        };
+
+        const states = switch (gradopt) {
+            inline else => |g| g.states orelse &[_]u32{0},
+        };
+
+        if (states.len != 1) {
+            std.log.err("EXACTLY ONE STATE MUST BE SPECIFIED FOR GEOMETRY OPTIMIZATION", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (states[0] >= opt.nstate) {
+            std.log.err("OPTIMIZATION STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        }
+    }
 }
 
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.

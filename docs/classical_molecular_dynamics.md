@@ -49,41 +49,55 @@ Generating realistic initial positions and momenta for molecular ensembles is es
 ### 3. Maxwell–Boltzmann Momentum Sampling
 
 For classical thermal ensembles at a specified temperature $T$, nuclear coordinates are initially set to the reference equilibrium geometry $\mathbf{R}_0$, while nuclear momenta are sampled from the Maxwell–Boltzmann distribution
+
 $$
 P(\mathbf{P}_A)=\left(\frac{1}{2\pi M_A k_{\text{B}}T}\right)^{3/2}\exp\left(-\frac{\mathbf{P}_A^2}{2M_A k_{\text{B}}T}\right)
 $$
+
 where $M_A$ is the atomic mass of nucleus $A$ and $k_{\text{B}}$ is the Boltzmann constant. Each Cartesian momentum component is independently drawn from a univariate normal distribution with zero mean and variance $\sigma_{P,A}^2=M_A k_{\text{B}}T$. Following momentum sampling, the net linear momentum of the center of mass is subtracted to eliminate unphysical overall translational drift through space.
 
 ### 4. Wigner Distribution Sampling
 
 In quantum molecular dynamics and nonadiabatic surface hopping, quantum nuclear zero-point energy and vibrational wavepacket delocalization are incorporated semiclassically by sampling initial positions and momenta from the Wigner distribution. For an ensemble of uncoupled quantum harmonic oscillators with normal mode frequencies $\omega_k$ at temperature $T$, the Wigner phase space density factorizes into independent Gaussian functions for each vibrational mode as
+
 $$
 \rho_{\text{W}}(Q_k,P_k)=\frac{1}{2\pi\sigma_{Q,k}\sigma_{P,k}}\exp\left(-\frac{Q_k^2}{2\sigma_{Q,k}^2}-\frac{P_k^2}{2\sigma_{P,k}^2}\right)
 $$
+
 where $Q_k$ and $P_k$ denote the mass-weighted normal coordinate and conjugate momentum. The coordinate variance is given by
+
 $$
 \sigma_{Q,k}^2=\frac{\hbar}{2\omega_k}\coth\left(\frac{\hbar\omega_k}{2k_{\text{B}}T}\right)
 $$
+
 and the conjugate momentum variance is given by
+
 $$
 \sigma_{P,k}^2=\frac{\hbar\omega_k}{2}\coth\left(\frac{\hbar\omega_k}{2k_{\text{B}}T}\right)
 $$
+
 which naturally recover the quantum harmonic zero-point fluctuations $\sigma_{Q,k}^2=\hbar/(2\omega_k)$ and $\sigma_{P,k}^2=\hbar\omega_k/2$ at zero temperature ($T=0$).
 
 For analytical model potentials, Gaussian spatial width parameters $\boldsymbol{\gamma}$ can be directly provided, where $\gamma_k=\omega_k/\hbar$, defining variances $\sigma_{Q,k}^2=1/(2\gamma_k)$ and $\sigma_{P,k}^2=\hbar^2\gamma_k/2$.
 
 For ab initio molecular systems, the vibrational frequencies and normal modes are determined from a harmonic vibrational frequency analysis. The mass-weighted Hessian matrix $\mathbf{H}^{\text{MW}}$ is evaluated at the optimized reference geometry $\mathbf{R}_0$ as
+
 $$
 H_{ia,jb}^{\text{MW}}=\frac{1}{\sqrt{M_a M_b}}\frac{\partial^2 V}{\partial R_{ia}\partial R_{jb}}
 $$
+
 and diagonalized to obtain normal mode frequencies $\omega_k=\sqrt{\lambda_k}$ and the orthonormal transformation matrix $\mathbf{L}$. Non-physical degrees of freedom corresponding to overall translation and rotation are discarded. Normal mode displacements $Q_k$ and momenta $P_k$ are independently sampled from Gaussian distributions with variances $\sigma_{Q,k}^2$ and $\sigma_{P,k}^2$, and transformed to Cartesian coordinates and momenta via
+
 $$
 \mathbf{R}=\mathbf{R}_0+\mathbf{M}^{-1/2}\mathbf{L}\mathbf{Q}
 $$
+
 and
+
 $$
 \mathbf{P}=\mathbf{M}^{1/2}\mathbf{L}\mathbf{P}_Q
 $$
+
 where $\mathbf{M}$ is the diagonal nuclear mass matrix. Center-of-mass linear and angular momenta are subsequently projected out to preserve rigid-body conservation laws during propagation.
 
 ---

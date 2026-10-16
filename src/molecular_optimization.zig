@@ -108,7 +108,9 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
             const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
             defer gpa.free(time_str);
 
-            try printf(io, fmt, .{ i + 1, res.energy[0], rms_grad, max_grad, time_str });
+            const energy = getOptimizedEnergy(run_opt, res.energy);
+
+            try printf(io, fmt, .{ i + 1, energy, rms_grad, max_grad, time_str });
         }
 
         const P = try (if (comptime is_hf) res.hartree_fock.P else res.P).clone(gpa);
@@ -275,7 +277,9 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
             const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
             defer gpa.free(time_str);
 
-            try printf(io, fmt, .{ i + 1, res.energy[0], rms_grad, max_grad, time_str });
+            const energy = getOptimizedEnergy(run_opt, res.energy);
+
+            try printf(io, fmt, .{ i + 1, energy, rms_grad, max_grad, time_str });
         }
 
         const P = try (if (comptime is_hf) res.hartree_fock.P else res.P).clone(gpa);
@@ -296,4 +300,27 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
     } else return error.OptimizationDidNotConverge;
 
     return guess_density.?;
+}
+
+/// Retrieves the target electronic state energy for geometry optimization logging.
+fn getOptimizedEnergy(opt: anytype, energies: anytype) @TypeOf(energies[0]) {
+    const state: usize = blk: {
+        if (!comptime @hasField(@TypeOf(opt), "gradient")) break :blk 0;
+        
+        const gradopt = opt.gradient orelse break :blk 0;
+        
+        switch (gradopt) {
+            inline else => |g| {
+                if (!comptime @hasField(@TypeOf(g), "states")) break :blk 0;
+                
+                const states = g.states orelse break :blk 0;
+
+                if (states.len > 0) break :blk states[0];
+                
+                break :blk 0;
+            },
+        }
+    };
+
+    return if (state < energies.len) energies[state] else energies[0];
 }

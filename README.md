@@ -48,27 +48,39 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 ### Time-Independent Quantum Mechanics
 
 * **Integrals over Gaussian Basis Functions**  
-  Compute integrals over Gaussian basis functions from .xyz geometries and basis files.
+  Compute 1- and 2-electron integrals, dipole moments, and geometric derivative integrals.
 
 * **Hartree–Fock Methods**  
-  Perform restricted or generalized Hartree-Fock calculation with DIIS accelerator.
-
-* **Post-Hartree–Fock Methods**  
-  Use variety of selected perturbative or variational post-Hartree–Fock methods.
+  Perform restricted or generalized Hartree–Fock calculations with DIIS acceleration.
 
 * **Density Functional Theory**  
-  Use variety of exchange-correlation functionals for density functional theory calculations.
+  Evaluate Kohn–Sham DFT using LDA, GGA, and meta-GGA functionals on molecular grids.
+
+* **Post-Hartree–Fock Methods**  
+  Perform arbitrary-order Møller–Plesset perturbation theory and arbitrary-excitation CI.
+
+* **Nuclear Derivatives & Vibrational Analysis**  
+  Compute analytic or numerical Hessians, harmonic vibrational frequencies, and normal modes.
+
+* **Molecular Geometry Optimization**  
+  Optimize molecular structures using BFGS quasi-Newton and steepest descent algorithms.
+
+* **Population Analysis & Properties**  
+  Calculate Mulliken, Löwdin, Mayer, and Wiberg populations, dipole moments, and polarizabilities.
 
 ### Time-Dependent Quantum Mechanics
 
-* **Quantum Dynamics**  
-  Simulate wavepacket dynamics in arbitrary dimensions and across multiple electronic states.
+* **Quantum Wavepacket Dynamics**  
+  Simulate multidimensional wavepacket dynamics using split-operator FFT propagation.
 
-* **Surface Hopping**  
-  Run nonadiabatic dynamics with various surface hopping algorithms.
+* **Trajectory Surface Hopping**  
+  Run nonadiabatic dynamics using fewest switches (FSSH) and Landau–Zener algorithms.
 
 * **Ehrenfest Dynamics**  
-Perform mean-field nonadiabatic simulations with continuous electronic-nuclear coupling.
+  Perform mean-field nonadiabatic simulations with continuous electronic-nuclear coupling.
+
+* **Classical Molecular Dynamics**  
+  Propagate trajectories with thermostats and sample Maxwell–Boltzmann or ab initio Wigner ensembles.
 
 ## Citation
 
