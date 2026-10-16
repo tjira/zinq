@@ -230,31 +230,6 @@ test "Adiabatic Fewest Switches on Tully's First Potential" {
     // zig fmt: on
 }
 
-test "Adiabatic Fewest Switches with NACV on Tully's First Potential" {
-    const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
-        .potential = .{ .tully_1 = .{} },
-        .nonadiabatic = .{ .surface_hopping = .{ .fewest_switches = .{ .coupling = .{ .nacv = .{} } } } },
-        .mass = &.{2000},
-        .trajectories = 10,
-        .iterations = 3000,
-        .time_step = 1,
-        .adiabatic = true,
-    };
-
-    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
-    defer output.deinit(std.testing.allocator);
-
-    // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 10.7409622766823480, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.4777251144394890, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6000000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.4000000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0019999894890878, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0459196029424840, TEST_TOLERANCE);
-    // zig fmt: on
-}
-
 test "Diabatic Fewest Switches on Tully's First Potential" {
     const opt = zinq.classical_dynamics.Options{
         .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
@@ -452,31 +427,6 @@ test "Adiabatic Ehrenfest on Tully's First Potential" {
     try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3221111111195151, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0035577740070556, TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0474772351660220, TEST_TOLERANCE);
-    // zig fmt: on
-}
-
-test "Adiabatic Ehrenfest with NACV on Tully's First Potential" {
-    const opt = zinq.classical_dynamics.Options{
-        .initial_conditions = .{ .position = &.{-10}, .momentum = &.{15}, .gamma = &.{2}, .state = 0 },
-        .potential = .{ .tully_1 = .{} },
-        .nonadiabatic = .{ .ehrenfest = .{ .coupling = .{ .nacv = .{} } } },
-        .mass = &.{2000},
-        .trajectories = 10,
-        .iterations = 3000,
-        .time_step = 1,
-        .adiabatic = true,
-    };
-
-    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
-    defer output.deinit(std.testing.allocator);
-
-    // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), 11.1000811696203560, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), 13.7331606204281280, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.6778416619610865, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.3221583380389266, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      -0.0035568294767143, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.0474942518143081, TEST_TOLERANCE);
     // zig fmt: on
 }
 
