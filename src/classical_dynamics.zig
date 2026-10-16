@@ -1405,6 +1405,12 @@ fn checkInvalidInput(opt: Options) !void {
             }
 
             if (wig.gamma) |gam| {
+                if (wig.temperature > 0) {
+                    std.log.err("TEMPERATURE IS NOT SUPPORTED FOR WIGNER SAMPLING WITH GAMMA", .{});
+
+                    return error.InvalidInput;
+                }
+
                 if (opt.potential == .ab_initio) {
                     std.log.err("GAMMA VECTOR IS NOT SUPPORTED FOR AB INITIO POTENTIAL", .{});
 
@@ -1433,6 +1439,18 @@ fn checkInvalidInput(opt: Options) !void {
             if (wig.method) |mopt| {
                 if (opt.potential != .ab_initio) {
                     std.log.err("AB INITIO METHOD FOR WIGNER SAMPLING IS NOT SUPPORTED FOR MODEL POTENTIALS", .{});
+
+                    return error.InvalidInput;
+                }
+
+                if (opt.initial_conditions.position != null) {
+                    std.log.err("INITIAL POSITION MUST NOT BE SPECIFIED FOR AB INITIO WIGNER SAMPLING", .{});
+
+                    return error.InvalidInput;
+                }
+
+                if (opt.initial_conditions.momentum != null) {
+                    std.log.err("INITIAL MOMENTUM MUST NOT BE SPECIFIED FOR AB INITIO WIGNER SAMPLING", .{});
 
                     return error.InvalidInput;
                 }
