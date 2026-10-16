@@ -1613,6 +1613,12 @@ fn checkInvalidInput(opt: Options) !void {
                     return error.InvalidInput;
                 }
 
+                if (fs.reflect_frustrated and (fs.coupling == null or fs.coupling.? != .nacv)) {
+                    std.log.err("FRUSTRATED HOP REFLECTION REQUIRES NACV TIME-DERIVATIVE COUPLING", .{});
+
+                    return error.InvalidInput;
+                }
+
                 if (fs.norm_tolerance) |tol| if (std.math.isNan(tol) or tol <= 0) {
                     std.log.err("NORM TOLERANCE MUST BE POSITIVE", .{});
 

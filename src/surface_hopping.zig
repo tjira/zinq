@@ -35,6 +35,7 @@ const FewestSwitchesOptions = struct {
     integrator: std.meta.Tag(Integrator(f64).Method) = .rk4,
     norm_tolerance: ?f64 = 0.05,
     nstep: u32 = 10,
+    reflect_frustrated: bool = false,
     seed: u32 = 1,
 };
 
@@ -49,6 +50,8 @@ pub fn SurfaceHopping(comptime T: type) type {
         adia_alg: bool,
         method: Method,
         nosteps: usize,
+
+        reflect_frustrated: bool,
 
         probs: Matrix(T),
         targets: []usize,
@@ -72,6 +75,11 @@ pub fn SurfaceHopping(comptime T: type) type {
             const nstep = switch (options) {
                 .fewest_switches => |field| field.nstep,
                 inline else => 1,
+            };
+
+            const reflect_frustrated = switch (options) {
+                .fewest_switches => |field| field.reflect_frustrated,
+                inline else => false,
             };
 
             var split_mix = std.Random.SplitMix64.init(seed);
@@ -98,6 +106,8 @@ pub fn SurfaceHopping(comptime T: type) type {
             sh.adia_alg = adia;
             sh.method = method;
             sh.nosteps = nstep;
+
+            sh.reflect_frustrated = reflect_frustrated;
 
             sh.rng, sh.probs, sh.targets = .{ rng, probs, targets };
 
@@ -130,7 +140,7 @@ pub fn SurfaceHopping(comptime T: type) type {
                 self.calcTargetStates(ensemble);
             }
 
-            return self.applyTargets(ensemble, W);
+            return self.applyTargets(ensemble, W, grad_V);
         }
 
         /// Updates Hamiltonian and unitary transformation histories for hopping evaluation.
@@ -140,20 +150,22 @@ pub fn SurfaceHopping(comptime T: type) type {
             }
         }
 
-        /// Applies state transitions with isotropic nuclear momentum rescaling for conservation.
-        fn applyTargets(self: *@This(), ensemble: *Ensemble(T), W: Matrix(T)) bool {
-            var any_hop = false;
+        /// Applies state transitions with momentum rescaling along coupling vectors or isotropically.
+        fn applyTargets(self: *@This(), ensemble: *Ensemble(T), W: Matrix(T), grad_V: Matrix(T)) bool {
+            var any_hop, const nstate = .{ false, W.ncol() };
 
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
 
                 if (self.adia_alg and self.targets[i] != c) {
-                    const E_new = W.at(i, self.targets[i]);
+                    const target = self.targets[i];
 
-                    const enough_energy = rescaleMomentumIsotropic(T, ensemble, i, E_new - W.at(i, c));
+                    const dE = W.at(i, target) - W.at(i, c);
+
+                    const enough_energy = rescaleMomentum(T, ensemble, i, c, target, dE, grad_V, nstate, self.reflect_frustrated);
 
                     if (enough_energy) {
-                        ensemble.s.ptr(i).* = self.targets[i];
+                        ensemble.s.ptr(i).* = target;
 
                         self.targets[i], any_hop = .{ c, true };
                     }
@@ -267,6 +279,10 @@ fn FewestSwitches(comptime T: type) type {
             const coupling: ?std.meta.Tag(CouplingOptions) = if (opt.coupling) |c| switch (c) {
                 inline else => |_, tag| tag,
             } else null;
+
+            if (opt.reflect_frustrated and (coupling == null or coupling.? != .nacv)) {
+                return error.InvalidInput;
+            }
 
             const cols = if (adia) nstate else nstate * nstate;
 
@@ -674,6 +690,52 @@ pub fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, p: []const 
 
         sigma[i * nstate + j] = v_dot_grad;
     };
+}
+
+/// Rescales nuclear momentum along nonadiabatic coupling vectors or isotropically to conserve total energy.
+fn rescaleMomentum(comptime T: type, ensemble: *Ensemble(T), traj: usize, c: usize, k: usize, dE: T, grad_V: Matrix(T), nstate: usize, reflect: bool) bool {
+    var a: T = 0;
+    var b: T = 0;
+
+    for (0..ensemble.p.ncol()) |j| {
+        const d_j, const m_j = .{ grad_V.at(traj, j * nstate * nstate + c * nstate + k), ensemble.m[j] };
+
+        a += 0.5 * d_j * d_j / m_j;
+
+        b += (ensemble.p.at(traj, j) / m_j) * d_j;
+    }
+
+    if (a < 1e-14) {
+        return rescaleMomentumIsotropic(T, ensemble, traj, dE);
+    }
+
+    const discriminant = b * b - 4 * a * dE;
+
+    if (discriminant >= 0) {
+        const sgn_b: T = (if (b < 0) -1 else 1);
+
+        const gamma = (-b + sgn_b * std.math.sqrt(discriminant)) / (2 * a);
+
+        for (0..ensemble.p.ncol()) |j| {
+            const d_j = grad_V.at(traj, j * nstate * nstate + c * nstate + k);
+
+            ensemble.p.ptr(traj, j).* += gamma * d_j;
+        }
+
+        return true;
+    }
+
+    if (reflect) {
+        const factor = b / a;
+
+        for (0..ensemble.p.ncol()) |j| {
+            const d_j = grad_V.at(traj, j * nstate * nstate + c * nstate + k);
+
+            ensemble.p.ptr(traj, j).* -= factor * d_j;
+        }
+    }
+
+    return false;
 }
 
 /// Rescales nuclear momentum isotropically to conserve total energy after hopping.
