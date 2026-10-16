@@ -78,23 +78,23 @@ where $\rho_{jk}(t)=a_j^*(t)a_k(t)$ is the electronic density matrix, $\nabla_{\
 
 ---
 
-## III. Basis Transformations and Populations
+## III. Electronic State Representation and Populations
 
-### 5. Initial State Setup and Projection
+### 5. Initial State Setup and Populations
 
-At the start of the simulation, we often know the active state in the adiabatic representation, where the states are eigenstates of the electronic Hamiltonian at the initial nuclear position. To set up the initial conditions, we diagonalize the initial Hamiltonian matrix to solve the eigenvalue equation
-
-$$
-\mathbf{H}(\mathbf{R}(0))\mathbf{u}_a=E_a\mathbf{u}_a
-$$
-
-where $\mathbf{u}_a$ is the eigenvector representing the active adiabatic state $a$. The initial electronic coefficients in the diabatic basis are then set using the elements of the unitary transformation matrix $\mathbf{U}$ containing the eigenvectors as $c_j(0)=U_{ja}$. During the dynamics, we can calculate the population fraction of any adiabatic state $m$ by projecting the diabatic coefficients back onto the adiabatic states as
+When conducting Ehrenfest dynamics directly in the adiabatic basis, the state amplitudes $a_k(t)$ represent the expansion coefficients in the local adiabatic eigenbasis. The initial conditions for an active adiabatic state $a$ are directly initialized as
 
 $$
-P_m(t)=\left|\sum_j U_{jm}(\mathbf{R}(t))c_j(t)\right|^2
+a_k(0)=\delta_{ka}
 $$
 
-where $\mathbf{U}(\mathbf{R}(t))$ is the unitary matrix of eigenvectors at the current coordinates. If we are running the simulation in the diabatic basis, the population fraction of diabatic state $k$ is simply the squared magnitude of its coefficient
+and the population fraction of any adiabatic state $m$ at time $t$ is given by
+
+$$
+P_m(t)=|a_m(t)|^2
+$$
+
+without requiring coordinate-dependent basis transformations. When conducting dynamics in the diabatic basis, the electronic state is expanded in fixed diabatic basis functions with initial coefficients $c_j(0)=\delta_{ja}$, and the population fraction of diabatic state $k$ is given by
 
 $$
 P_k(t)=|c_k(t)|^2

@@ -475,11 +475,19 @@ const AbInitioStreamWriter = struct {
 
             if (self.files_epot != null or self.files_etot != null) {
                 if (coefs) |coef| {
-                    for (0..nstate) |l| for (0..nstate) |m| {
-                        const rho_lm = coef.at(k, l).conjugate().mul(coef.at(k, m)).re;
+                    if (gb.adia) {
+                        for (0..nstate) |l| {
+                            epot += coef.at(k, l).squaredMagnitude() * gb.W.at(k, l);
+                        }
+                    }
 
-                        epot += rho_lm * gb.V.at(k, l * nstate + m);
-                    };
+                    if (!gb.adia) {
+                        for (0..nstate) |l| for (0..nstate) |m| {
+                            const rho_lm = coef.at(k, l).conjugate().mul(coef.at(k, m)).re;
+
+                            epot += rho_lm * gb.V.at(k, l * nstate + m);
+                        };
+                    }
                 }
 
                 if (coefs == null and gb.adia) {
@@ -560,7 +568,7 @@ const AbInitioStreamWriter = struct {
     }
 
     /// Appends the current step's electronic state populations to trajectory files.
-    pub fn writePopulation(self: @This(), io: std.Io, comptime T: type, ensemble: Ensemble(T), gb: GradientBuffer(T), nstate: usize, coefs: ?Matrix(Complex(T)), time: T) !void {
+    pub fn writePopulation(self: @This(), io: std.Io, comptime T: type, ensemble: Ensemble(T), nstate: usize, coefs: ?Matrix(Complex(T)), time: T) !void {
         if (self.files_pop) |files| {
             var buffer: [65536]u8 = undefined;
 
@@ -573,21 +581,7 @@ const AbInitioStreamWriter = struct {
                     var pop_m: T = 0;
 
                     if (coefs) |coef| {
-                        if (gb.adia) {
-                            var a_km = Complex(T).init(0, 0);
-
-                            for (0..nstate) |l| {
-                                const u_lm, const c_kl = .{ gb.U.at(k, l * nstate + m), coef.at(k, l) };
-
-                                a_km = a_km.add(Complex(T).init(c_kl.re * u_lm, c_kl.im * u_lm));
-                            }
-
-                            pop_m = a_km.squaredMagnitude();
-                        }
-
-                        if (!gb.adia) {
-                            pop_m = coef.at(k, m).squaredMagnitude();
-                        }
+                        pop_m = coef.at(k, m).squaredMagnitude();
                     }
 
                     if (coefs == null) {
@@ -682,6 +676,7 @@ fn GradientBuffer(comptime T: type) type {
         W: Matrix(T),
         U: Matrix(T),
 
+        U_prev: Matrix(T),
         grad_V: Matrix(T),
 
         /// Allocates memory for dual numbers and gradients needed in force evaluations.
@@ -701,10 +696,26 @@ fn GradientBuffer(comptime T: type) type {
             var U = try Matrix(T).init(ntraj, nstate * nstate, gpa);
             errdefer U.deinit(gpa);
 
+            var U_prev = try Matrix(T).init(ntraj, nstate * nstate, gpa);
+            errdefer U_prev.deinit(gpa);
+
+            U_prev.fill(std.math.nan(T));
+
             const grad_V = try Matrix(T).init(ntraj, ndim * nstate * nstate, gpa);
             errdefer grad_V.deinit(gpa);
 
-            return .{ .r_dual = r_dual, .V_dual = V_dual, .V = V, .W = W, .U = U, .grad_V = grad_V, .adia = adia };
+            return .{
+                .r_dual = r_dual,
+                .V_dual = V_dual,
+                .U_prev = U_prev,
+                .grad_V = grad_V,
+
+                .V = V,
+                .W = W,
+                .U = U,
+
+                .adia = adia,
+            };
         }
 
         /// Deallocates gradient matrices, eigenvalues, and eigenvectors.
@@ -715,6 +726,7 @@ fn GradientBuffer(comptime T: type) type {
             self.V.deinit(gpa);
             self.W.deinit(gpa);
             self.U.deinit(gpa);
+            self.U_prev.deinit(gpa);
 
             self.grad_V.deinit(gpa);
         }
@@ -842,6 +854,22 @@ fn GradientBuffer(comptime T: type) type {
 
                     if (self.adia) {
                         try eighBatch(T, &self.W, &self.U, self.V);
+
+                        if (!std.math.isNan(self.U_prev.at(0, 0))) {
+                            for (0..self.U.nrow()) |i| for (0..pot.nstate()) |k| {
+                                var overlap: T = 0;
+
+                                for (0..pot.nstate()) |a| {
+                                    overlap += self.U.at(i, a * pot.nstate() + k) * self.U_prev.at(i, a * pot.nstate() + k);
+                                }
+
+                                if (overlap < 0) for (0..pot.nstate()) |a| {
+                                    self.U.ptr(i, a * pot.nstate() + k).* = -self.U.at(i, a * pot.nstate() + k);
+                                };
+                            };
+                        }
+
+                        @memcpy(self.U_prev.data, self.U.data);
                     }
 
                     const nstate = pot.nstate();
@@ -1783,7 +1811,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
 
             try sw.writeEnergy(io, T, ctx.sim.ensemble, ctx.sim.gb, nstate, coefs, time);
 
-            try sw.writePopulation(io, T, ctx.sim.ensemble, ctx.sim.gb, nstate, coefs, time);
+            try sw.writePopulation(io, T, ctx.sim.ensemble, nstate, coefs, time);
         }
 
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));

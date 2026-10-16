@@ -126,7 +126,7 @@ pub fn Ehrenfest(comptime T: type) type {
             }
         }
 
-        /// Updates Hamiltonian history and aligns eigenvectors for phase consistency.
+        /// Updates Hamiltonian history and eigenvector history for coupling evaluation.
         pub fn update(self: *@This(), H: Matrix(T), U: Matrix(T)) void {
             for (0..H.nrow()) |i| for (0..H.ncol()) |j| {
                 self.ham.ptr(i, j).* = H.at(i, j);
@@ -139,22 +139,6 @@ pub fn Ehrenfest(comptime T: type) type {
 
                 self.uhist[1].ptr(i, j).* = U.at(i, j);
             };
-
-            if (!std.math.isNan(self.uhist[0].at(0, 0))) {
-                const nstate = self.coefics.ncol();
-
-                for (0..self.uhist[0].nrow()) |i| for (0..nstate) |j| {
-                    var overlap: T = 0;
-
-                    for (0..nstate) |k| {
-                        overlap += self.uhist[1].at(i, k * nstate + j) * self.uhist[0].at(i, k * nstate + j);
-                    }
-
-                    if (overlap < 0) for (0..nstate) |k| {
-                        self.uhist[1].ptr(i, k * nstate + j).* = -self.uhist[1].at(i, k * nstate + j);
-                    };
-                };
-            }
         }
 
         /// Computes time derivative of electronic coefficients in the adiabatic basis.
