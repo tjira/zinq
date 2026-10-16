@@ -168,6 +168,58 @@ pub fn Result(comptime T: type) type {
     };
 }
 
+/// Aligns molecular orbital and CI state phases with a reference step to preserve wavefunction continuity.
+pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev: ?Matrix(T), ci_prev: ?Matrix(T), dets: []const []const usize, gen: bool, flipped: ?[]bool) void {
+    if (mo_prev) |prev| {
+        for (0..C_mo.ncol()) |p| {
+            var mo_overlap: T = 0;
+
+            for (0..C_mo.nrow()) |mu| {
+                mo_overlap += C_mo.at(mu, p) * prev.at(mu, p);
+            }
+
+            if (mo_overlap < 0) {
+                for (0..C_mo.nrow()) |mu| {
+                    C_mo.ptr(mu, p).* = -C_mo.at(mu, p);
+                }
+
+                for (dets, 0..) |det, d| {
+                    var flip_det = std.mem.indexOfScalar(usize, det, p) != null;
+
+                    if (!gen) {
+                        const has_a = std.mem.indexOfScalar(usize, det, 2 * p + 0) != null;
+                        const has_b = std.mem.indexOfScalar(usize, det, 2 * p + 1) != null;
+
+                        flip_det = has_a != has_b;
+                    }
+
+                    if (flip_det) for (0..C_ci.ncol()) |k| {
+                        C_ci.ptr(d, k).* = -C_ci.at(d, k);
+                    };
+                }
+            }
+        }
+    }
+
+    if (ci_prev) |prev| {
+        for (0..C_ci.ncol()) |k| {
+            var overlap: T = 0;
+
+            for (0..C_ci.nrow()) |d| {
+                overlap += C_ci.at(d, k) * prev.at(d, k);
+            }
+
+            if (overlap < 0) {
+                if (flipped) |f| f[k] = true;
+
+                for (0..C_ci.nrow()) |d| {
+                    C_ci.ptr(d, k).* = -C_ci.at(d, k);
+                }
+            }
+        }
+    }
+}
+
 /// Generates excited Slater determinants up to specified excitation levels from a Hartree-Fock reference.
 pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Allocator) !std.ArrayList([]const usize) {
     var dets = std.ArrayList([]const usize).empty;
@@ -226,6 +278,21 @@ pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Alloc
     }
 
     return dets;
+}
+
+/// Generates all unique upper-triangular state index pairs for nonadiabatic coupling evaluation.
+pub fn generatePairs(n: usize, gpa: Allocator) ![][2]u32 {
+    const pairs = try gpa.alloc([2]u32, n * (n - 1) / 2);
+
+    var idx: usize = 0;
+
+    for (0..n) |i| for (i + 1..n) |j| {
+        pairs[idx] = .{ @intCast(i), @intCast(j) };
+
+        idx += 1;
+    };
+
+    return pairs;
 }
 
 /// Performs a CI calculation on a molecular system specified by file paths.

@@ -15,9 +15,11 @@ const MollerPlessetOptions = @import("moller_plesset.zig").Options;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
+const alignPhases = @import("configuration_interaction.zig").alignPhases;
 const ci_runFromSystem = @import("configuration_interaction.zig").runFromSystem;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const generateDets = @import("configuration_interaction.zig").generateDets;
+const generatePairs = @import("configuration_interaction.zig").generatePairs;
 const hf_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const isDual = @import("value.zig").isDual;
 const mp_runFromSystem = @import("moller_plesset.zig").runFromSystem;
@@ -268,9 +270,7 @@ fn AbInitio(comptime T: type) type {
             };
 
             const has_grad = switch (options.method) {
-                .configuration_interaction => |opt| opt.gradient != null,
-                .hartree_fock => |opt| opt.gradient != null,
-                .moller_plesset => |opt| opt.gradient != null,
+                inline else => |opt| opt.gradient != null,
             };
 
             if (!has_grad) {
@@ -345,56 +345,11 @@ fn AbInitio(comptime T: type) type {
             self.msys.deinit(gpa);
         }
 
-        /// Evaluates the electronic energy at nuclear coordinates r.
-        pub fn eval(self: @This(), comptime U: type, V: []U, r: []const U, _: U) !void {
-            if (comptime U != T) {
-                @panic("AB INITIO POTENTIAL ONLY SUPPORTS DIRECT FLOATING POINT EVALUATION");
-            }
+        /// Throws an error as direct potential evaluation without trajectory gradients is unsupported.
+        pub fn eval(_: @This(), comptime _: type, _: anytype, _: anytype, _: anytype) !void {
+            std.log.err("DIRECT EVALUATION IS NOT SUPPORTED FOR AB INITIO POTENTIAL", .{});
 
-            @memcpy(self.msys.coors, r);
-
-            libint.libint_update_coords(self.msys.ptr, self.msys.coors.ptr);
-
-            switch (self.options.method) {
-                .hartree_fock => |opt| {
-                    var res = try hf_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
-                    defer res.deinit(self.gpa);
-
-                    if (self.Pg) |pg| @memcpy(pg.data, res.P.data);
-
-                    V[0] = res.energy[0];
-                },
-
-                .moller_plesset => |opt| {
-                    var res = try mp_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
-                    defer res.deinit(self.gpa);
-
-                    if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
-
-                    V[0] = res.energy[0];
-                },
-
-                .configuration_interaction => |opt| {
-                    var run_opt = opt;
-
-                    run_opt.gradient, run_opt.hessian, run_opt.optimize = .{ null, null, null };
-
-                    run_opt.nacv, run_opt.frequency = .{ null, null };
-
-                    var res = try ci_runFromSystem(T, self.inpout, run_opt, @constCast(&self.msys), self.Pg, false, self.gpa);
-                    defer res.deinit(self.gpa);
-
-                    if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
-
-                    const n = self.nstate();
-
-                    @memset(V[0 .. n * n], 0);
-
-                    for (0..n) |k| {
-                        V[k * n + k] = res.energy[k];
-                    }
-                },
-            }
+            return error.InvalidInput;
         }
 
         /// Evaluates the electronic energy and Cartesian nuclear gradients at coordinates r.
@@ -404,8 +359,8 @@ fn AbInitio(comptime T: type) type {
             libint.libint_update_coords(self.msys.ptr, self.msys.coors.ptr);
 
             switch (self.options.method) {
-                .hartree_fock => |opt| try self.evalGradHf(V, grad_V, opt),
-                .moller_plesset => |opt| try self.evalGradMp(V, grad_V, opt),
+                .hartree_fock => |opt| try self.evalGradSingle(V, grad_V, opt, hf_runFromSystem),
+                .moller_plesset => |opt| try self.evalGradSingle(V, grad_V, opt, mp_runFromSystem),
                 .configuration_interaction => |opt| try self.evalGradCi(V, grad_V, opt, active_state, traj),
             }
         }
@@ -441,93 +396,6 @@ fn AbInitio(comptime T: type) type {
         /// Updates potential value and gradient for a specific trajectory row and active electronic state.
         pub fn updateTrajectoryGradient(self: @This(), V: *Matrix(T), grad_V: *Matrix(T), r: Matrix(T), i: usize, active_state: usize) !void {
             try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), active_state, i);
-        }
-
-        /// Aligns CI electronic state phases with previous trajectory step and tracks state flips.
-        fn alignCiPhases(self: @This(), C_ci: *Matrix(T), flipped: []bool, traj: usize) !void {
-            while (self.C_ci.items.len <= traj) try self.C_ci.append(self.gpa, null);
-
-            const n = C_ci.ncol();
-
-            if (self.C_ci.items[traj]) |c_prev| {
-                for (0..n) |k| {
-                    var overlap: T = 0;
-
-                    for (0..C_ci.nrow()) |d| {
-                        overlap += C_ci.at(d, k) * c_prev.at(d, k);
-                    }
-
-                    if (overlap < 0) {
-                        flipped[k] = true;
-
-                        for (0..C_ci.nrow()) |d| {
-                            C_ci.ptr(d, k).* = -C_ci.at(d, k);
-                        }
-                    }
-                }
-            }
-
-            if (self.C_ci.items[traj] == null) {
-                self.C_ci.items[traj] = try Matrix(T).init(C_ci.nrow(), n, self.gpa);
-            }
-
-            for (0..n) |k| for (0..C_ci.nrow()) |d| {
-                self.C_ci.items[traj].?.ptr(d, k).* = C_ci.at(d, k);
-            };
-        }
-
-        /// Aligns molecular orbital phases with previous trajectory step and updates CI determinants.
-        fn alignMoPhases(self: @This(), C_mo: *Matrix(T), C_ci: *Matrix(T), opt: ConfigurationInteractionOptions, traj: usize) !void {
-            while (self.C_mo.items.len <= traj) try self.C_mo.append(self.gpa, null);
-
-            if (self.C_mo.items[traj]) |mo_prev| {
-                var dets = try generateDets(self.msys.nel, 2 * self.msys.nbf, opt.excitations, self.gpa);
-
-                defer {
-                    for (0..dets.items.len) |idx| self.gpa.free(dets.items[idx]);
-
-                    dets.deinit(self.gpa);
-                }
-
-                const gen = opt.hartree_fock.generalized;
-
-                for (0..C_mo.ncol()) |p| {
-                    var mo_overlap: T = 0;
-
-                    for (0..C_mo.nrow()) |mu| {
-                        mo_overlap += C_mo.at(mu, p) * mo_prev.at(mu, p);
-                    }
-
-                    if (mo_overlap < 0) {
-                        for (0..C_mo.nrow()) |mu| {
-                            C_mo.ptr(mu, p).* = -C_mo.at(mu, p);
-                        }
-
-                        for (0..dets.items.len) |d| {
-                            var flip_det = std.mem.indexOfScalar(usize, dets.items[d], p) != null;
-
-                            if (!gen) {
-                                const has_a = std.mem.indexOfScalar(usize, dets.items[d], 2 * p + 0) != null;
-                                const has_b = std.mem.indexOfScalar(usize, dets.items[d], 2 * p + 1) != null;
-
-                                flip_det = has_a != has_b;
-                            }
-
-                            if (flip_det) for (0..C_ci.ncol()) |k| {
-                                C_ci.ptr(d, k).* = -C_ci.at(d, k);
-                            };
-                        }
-                    }
-                }
-            }
-
-            if (self.C_mo.items[traj] == null) {
-                self.C_mo.items[traj] = try Matrix(T).init(C_mo.nrow(), C_mo.ncol(), self.gpa);
-            }
-
-            for (0..C_mo.ncol()) |p| for (0..C_mo.nrow()) |mu| {
-                self.C_mo.items[traj].?.ptr(mu, p).* = C_mo.at(mu, p);
-            };
         }
 
         /// Evaluates CI electronic energies, state nuclear gradients, and nonadiabatic couplings.
@@ -567,7 +435,7 @@ fn AbInitio(comptime T: type) type {
 
             if (run_opt.nacv) |*nacvopt| switch (nacvopt.*) {
                 inline else => |*num| {
-                    auto_pairs = try fillNacvPairs(n, self.gpa);
+                    auto_pairs = try generatePairs(n, self.gpa);
 
                     num.pairs = auto_pairs;
                 },
@@ -578,14 +446,37 @@ fn AbInitio(comptime T: type) type {
 
             if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
 
-            try self.alignMoPhases(&res.hartree_fock.C, &res.C, opt, traj);
+            while (self.C_mo.items.len <= traj) try self.C_mo.append(self.gpa, null);
+            while (self.C_ci.items.len <= traj) try self.C_ci.append(self.gpa, null);
 
             const flipped = try self.gpa.alloc(bool, n);
             defer self.gpa.free(flipped);
 
             @memset(flipped, false);
 
-            try self.alignCiPhases(&res.C, flipped, traj);
+            const gen = opt.hartree_fock.generalized;
+
+            var dets = try generateDets(self.msys.nel, 2 * self.msys.nbf, opt.excitations, self.gpa);
+
+            defer {
+                for (0..dets.items.len) |idx| self.gpa.free(dets.items[idx]);
+
+                dets.deinit(self.gpa);
+            }
+
+            alignPhases(T, &res.hartree_fock.C, &res.C, self.C_mo.items[traj], self.C_ci.items[traj], dets.items, gen, flipped);
+
+            if (self.C_mo.items[traj] == null) {
+                self.C_mo.items[traj] = try Matrix(T).init(res.hartree_fock.C.nrow(), res.hartree_fock.C.ncol(), self.gpa);
+            }
+
+            @memcpy(self.C_mo.items[traj].?.data, res.hartree_fock.C.data);
+
+            if (self.C_ci.items[traj] == null) {
+                self.C_ci.items[traj] = try Matrix(T).init(res.C.nrow(), res.C.ncol(), self.gpa);
+            }
+
+            @memcpy(self.C_ci.items[traj].?.data, res.C.data);
 
             @memset(V[0 .. n * n], 0);
 
@@ -625,47 +516,18 @@ fn AbInitio(comptime T: type) type {
             }
         }
 
-        /// Evaluates Hartree-Fock electronic energy and nuclear gradients.
-        fn evalGradHf(self: @This(), V: []T, grad_V: []T, opt: HartreeFockOptions) !void {
-            var res = try hf_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+        /// Evaluates electronic energy and nuclear gradients for single-reference electronic structure methods.
+        fn evalGradSingle(self: @This(), V: []T, grad_V: []T, opt: anytype, comptime runFn: anytype) !void {
+            var res = try runFn(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
             defer res.deinit(self.gpa);
 
-            if (self.Pg) |pg| @memcpy(pg.data, res.P.data);
+            const P = if (@hasField(@TypeOf(res), "hartree_fock")) res.hartree_fock.P else res.P;
+
+            if (self.Pg) |pg| @memcpy(pg.data, P.data);
 
             V[0] = res.energy[0];
 
-            for (0..self.ndim()) |j| {
-                grad_V[j] = res.grad[0].data[j];
-            }
-        }
-
-        /// Evaluates Moller-Plesset electronic energy and nuclear gradients.
-        fn evalGradMp(self: @This(), V: []T, grad_V: []T, opt: MollerPlessetOptions) !void {
-            var res = try mp_runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
-            defer res.deinit(self.gpa);
-
-            if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
-
-            V[0] = res.energy[0];
-
-            for (0..self.ndim()) |j| {
-                grad_V[j] = res.grad[0].data[j];
-            }
-        }
-
-        /// Generates all unique upper-triangular state index pairs for nonadiabatic coupling evaluation.
-        fn fillNacvPairs(n: usize, gpa: Allocator) ![][2]u32 {
-            const pairs = try gpa.alloc([2]u32, n * (n - 1) / 2);
-
-            var idx: usize = 0;
-
-            for (0..n) |i| for (i + 1..n) |j| {
-                pairs[idx] = .{ @intCast(i), @intCast(j) };
-
-                idx += 1;
-            };
-
-            return pairs;
+            @memcpy(grad_V[0..self.ndim()], res.grad[0].data[0..self.ndim()]);
         }
     };
 }
