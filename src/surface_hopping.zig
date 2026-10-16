@@ -189,7 +189,9 @@ pub fn SurfaceHopping(comptime T: type) type {
         /// Computes adiabatic representation state transition probabilities.
         fn calcProbsAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, step_idx: usize, dt: T) !void {
             switch (self.method) {
-                inline else => |*field| try field.calcProbsAdia(&self.probs, ensemble, grad_V, is_td, step_idx, self.nosteps, dt),
+                inline else => |*field| {
+                    try field.calcProbsAdia(&self.probs, ensemble, grad_V, is_td, step_idx, self.nosteps, dt);
+                },
             }
         }
 

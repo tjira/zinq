@@ -22,7 +22,6 @@ const eighBatch = @import("linear_algebra.zig").eighBatch;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 const getMass = @import("constant.zig").getMass;
 const getTrajectoryPath = @import("read_write.zig").getTrajectoryPath;
-const norm = @import("linear_algebra.zig").norm;
 const printf = @import("read_write.zig").printf;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 const writeXyzFrame = @import("read_write.zig").writeXyzFrame;
@@ -860,7 +859,9 @@ fn GradientBuffer(comptime T: type) type {
                                 var overlap: T = 0;
 
                                 for (0..pot.nstate()) |a| {
-                                    overlap += self.U.at(i, a * pot.nstate() + k) * self.U_prev.at(i, a * pot.nstate() + k);
+                                    const u_k = self.U.at(i, a * pot.nstate() + k);
+
+                                    overlap += u_k * self.U_prev.at(i, a * pot.nstate() + k);
                                 }
 
                                 if (overlap < 0) for (0..pot.nstate()) |a| {
@@ -879,7 +880,9 @@ fn GradientBuffer(comptime T: type) type {
                             self.r_dual.ptr(i, k).* = ScalarDual(T).init(r.at(i, k), if (k == j) 1 else 0);
                         }
 
-                        try pot.eval(ScalarDual(T), self.V_dual.rowSlice(i), self.r_dual.rowSlice(i), ScalarDual(T).init(time, 0));
+                        const v_row, const r_row = .{ self.V_dual.rowSlice(i), self.r_dual.rowSlice(i) };
+
+                        try pot.eval(ScalarDual(T), v_row, r_row, ScalarDual(T).init(time, 0));
 
                         if (self.adia) {
                             for (0..nstate) |k| for (0..nstate) |l| {
@@ -1098,7 +1101,9 @@ fn Observables(comptime T: type) type {
             if (calc.mom) obs.mom = try sim.ensemble.mom(gpa);
             if (calc.pos) obs.pos = try sim.ensemble.pos(gpa);
 
-            const coefs = if (sim.propag.nonadia_dynamic) |n| (if (n == .ehrenfest) n.ehrenfest.coefics else null) else null;
+            const nonadia = sim.propag.nonadia_dynamic;
+
+            const coefs = if (nonadia) |n| (if (n == .ehrenfest) n.ehrenfest.coefics else null) else null;
 
             if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefs, gpa);
 
@@ -1198,7 +1203,9 @@ fn Propagator(comptime T: type) type {
                 try n.ehrenfest.step(ens, gb.V, gb.W, gb.U, gb.grad_V, pot.isTd(), self.dt);
             };
 
-            const coefics = if (self.nonadia_dynamic) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
+            const nonadia = self.nonadia_dynamic;
+
+            const coefics = if (nonadia) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
 
             gb.apply(ens, pot, coefics);
 
@@ -1225,9 +1232,9 @@ fn Propagator(comptime T: type) type {
                             inline else => {},
                         }
                     };
-                }
 
-                gb.apply(ens, pot, null);
+                    gb.apply(ens, pot, null);
+                }
             };
         }
     };

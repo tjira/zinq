@@ -13,13 +13,10 @@ const Vector = @import("tensor.zig").Vector;
 const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const determinant = @import("linear_algebra.zig").determinant;
 const dot = @import("linear_algebra.zig").dot;
-const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const getSymbol = @import("constant.zig").getSymbol;
 const mm = @import("linear_algebra.zig").mm;
 const printf = @import("read_write.zig").printf;
-
-const A2BOHR = @import("constant.zig").A2BOHR;
 
 /// Execution context encapsulating molecular system geometry, IO streams, memory allocator, and logging settings.
 pub fn DerivativeContext(comptime T: type) type {

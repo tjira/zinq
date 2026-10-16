@@ -13,7 +13,6 @@ const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const MollerPlessetOptions = @import("moller_plesset.zig").Options;
 const Value = @import("value.zig").Value;
-const Vector = @import("tensor.zig").Vector;
 
 const alignPhases = @import("configuration_interaction.zig").alignPhases;
 const ci_runFromSystem = @import("configuration_interaction.zig").runFromSystem;
@@ -464,10 +463,12 @@ fn AbInitio(comptime T: type) type {
                 dets.deinit(self.gpa);
             }
 
-            alignPhases(T, &res.hartree_fock.C, &res.C, self.C_mo.items[traj], self.C_ci.items[traj], dets.items, gen, flipped);
+            const hf_C, const ci_C = .{ &res.hartree_fock.C, &res.C };
+
+            alignPhases(T, hf_C, ci_C, self.C_mo.items[traj], self.C_ci.items[traj], dets.items, gen, flipped);
 
             if (self.C_mo.items[traj] == null) {
-                self.C_mo.items[traj] = try Matrix(T).init(res.hartree_fock.C.nrow(), res.hartree_fock.C.ncol(), self.gpa);
+                self.C_mo.items[traj] = try Matrix(T).init(hf_C.nrow(), hf_C.ncol(), self.gpa);
             }
 
             @memcpy(self.C_mo.items[traj].?.data, res.hartree_fock.C.data);

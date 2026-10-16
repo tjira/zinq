@@ -30,7 +30,6 @@ const calculateThermochemistry = @import("frequency_analysis.zig").calculateTher
 const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const eigh = @import("linear_algebra.zig").eigh;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
-const hartree_fock_run = @import("hartree_fock.zig").run;
 const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
 const primType = @import("value.zig").primType;
@@ -40,8 +39,6 @@ const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 const writeXyzFile = @import("read_write.zig").writeXyzFile;
 const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
-
-const AU2CM = @import("constant.zig").AU2CM;
 
 /// Configurations for the CI calculation, excitation levels, optimization, and derivative settings.
 pub const Options = struct {
