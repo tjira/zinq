@@ -331,8 +331,6 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         }
     }
 
-    try checkInvalidInput(opt);
-
     const generalized, var hf_opt = .{ opt.hartree_fock.generalized, opt.hartree_fock };
 
     if (opt.gradient != null and opt.gradient.? == .analytic) {

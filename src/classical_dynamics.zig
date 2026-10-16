@@ -1480,7 +1480,7 @@ fn checkInvalidInput(opt: Options) !void {
                 };
 
                 if (has_gradient) {
-                    std.log.err("GRADIENT MUST NOT BE SPECIFIED IN ELECTRONIC STRUCTURE METHOD FOR WIGNER SAMPLING", .{});
+                    std.log.err("GRADIENT MUST NOT BE SPECIFIED IN ELECTRONIC STRUCTURE FOR WIGNER SAMPLING", .{});
 
                     return error.InvalidInput;
                 }
@@ -1495,7 +1495,7 @@ fn checkInvalidInput(opt: Options) !void {
                     }
 
                     if (ci.hartree_fock.gradient != null) {
-                        std.log.err("GRADIENT MUST NOT BE SPECIFIED IN REFERENCE HARTREE-FOCK FOR WIGNER SAMPLING", .{});
+                        std.log.err("GRADIENT MUST NOT BE SPECIFIED IN HARTREE-FOCK FOR WIGNER SAMPLING", .{});
 
                         return error.InvalidInput;
                     }
