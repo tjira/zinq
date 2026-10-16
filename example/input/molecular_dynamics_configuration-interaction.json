@@ -29,7 +29,6 @@
                                     "basis" : "builtin:sto-3g",
                                     "system" : "example/molecule/water.xyz"
                                 },
-                                "nstate" : 2,
                                 "gradient" : {
                                     "analytic" : {}
                                 }

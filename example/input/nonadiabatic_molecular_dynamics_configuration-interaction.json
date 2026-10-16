@@ -1,0 +1,61 @@
+{
+    "zinq" : [
+        {
+            "classical_dynamics" : {
+                "initial_conditions" : {
+                    "distribution" : {
+                        "wigner" : {
+                            "method" : {
+                                "configuration_interaction" : {
+                                    "hartree_fock" : {
+                                        "basis" : "builtin:sto-3g",
+                                        "system" : "example/molecule/H2.xyz"
+                                    },
+                                    "hessian" : {
+                                        "numeric" : {}
+                                    },
+                                    "frequency" : {}
+                                }
+                            }
+                        }
+                    },
+                    "state" : 1
+                },
+                "iterations" : 100,
+                "potential" : {
+                    "ab_initio" : {
+                        "method" : {
+                            "configuration_interaction" : {
+                                "hartree_fock" : {
+                                    "basis" : "builtin:sto-3g",
+                                    "system" : "example/molecule/H2.xyz"
+                                },
+                                "nstate" : 2,
+                                "gradient" : {
+                                    "analytic" : {}
+                                },
+                                "nacv" : {
+                                    "numeric" : {}
+                                }
+                            }
+                        },
+                        "write" : {
+                            "position_trajectory" : "trajectory.xyz"
+                        }
+                    }
+                },
+                "nonadiabatic" : {
+                    "surface_hopping" : {
+                        "fewest_switches" : {
+                            "coupling" : {
+                                "nacv" : {}
+                            }
+                        }
+                    }
+                },
+                "time_step" : 1,
+                "trajectories" : 10
+            }
+        }
+    ]
+}
