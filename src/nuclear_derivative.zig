@@ -420,6 +420,24 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
     var s_kj = try gpa.alloc(T, pairs.len);
     defer gpa.free(s_kj);
 
+    var prods_jk = try gpa.alloc(T, pairs.len);
+    defer gpa.free(prods_jk);
+
+    var prods_kj = try gpa.alloc(T, pairs.len);
+    defer gpa.free(prods_kj);
+
+    var tmp = try Matrix(T).init(nsp, nsp, gpa);
+    defer tmp.deinit(gpa);
+
+    var S_MO = try Matrix(T).init(nsp, nsp, gpa);
+    defer S_MO.deinit(gpa);
+
+    var C_m_buf = if (!generalized) try Matrix(T).initZero(nsp, nsp, gpa) else undefined;
+    defer if (!generalized) C_m_buf.deinit(gpa);
+
+    var C_p_buf = if (!generalized) try Matrix(T).initZero(nsp, nsp, gpa) else undefined;
+    defer if (!generalized) C_p_buf.deinit(gpa);
+
     for (0..sys.atoms.len) |i| for (0..3) |j| {
         const coord_idx = i * 3 + j;
 
@@ -465,13 +483,11 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         const C_m = if (@hasField(@TypeOf(res_m), "hartree_fock")) res_m.hartree_fock.C else res_m.C;
         const C_p = if (@hasField(@TypeOf(res_p), "hartree_fock")) res_p.hartree_fock.C else res_p.C;
 
-        var C_m_SO = if (generalized) C_m else try Matrix(T).initZero(nsp, nsp, gpa);
-        defer if (!generalized) C_m_SO.deinit(gpa);
+        var C_m_SO = if (generalized) C_m else C_m_buf;
 
         if (!generalized) ao2so_coef(T, &C_m_SO, C_m);
 
-        var C_p_SO = if (generalized) C_p else try Matrix(T).initZero(nsp, nsp, gpa);
-        defer if (!generalized) C_p_SO.deinit(gpa);
+        var C_p_SO = if (generalized) C_p else C_p_buf;
 
         if (!generalized) ao2so_coef(T, &C_p_SO, C_p);
 
@@ -518,13 +534,7 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
             if (dot(T, c_p[k], c_ref[k]) < 0) c_p[k].muls(-1);
         }
 
-        var tmp = try Matrix(T).init(nsp, nsp, gpa);
-        defer tmp.deinit(gpa);
-
         mm(T, &tmp, S_SO, C_p_SO, 1, 0, false, false);
-
-        var S_MO = try Matrix(T).init(nsp, nsp, gpa);
-        defer S_MO.deinit(gpa);
 
         mm(T, &S_MO, C_m_SO, tmp, 1, 0, true, false);
 
@@ -534,14 +544,12 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         for (0..dets.items.len) |a| for (0..dets.items.len) |b| {
             var any_active = false;
 
-            for (pairs) |pair| {
-                const prod_jk = c_m[pair[0]].data[a] * c_p[pair[1]].data[b];
-                const prod_kj = c_m[pair[1]].data[a] * c_p[pair[0]].data[b];
+            for (pairs, 0..) |pair, p_idx| {
+                prods_jk[p_idx] = c_m[pair[0]].data[a] * c_p[pair[1]].data[b];
+                prods_kj[p_idx] = c_m[pair[1]].data[a] * c_p[pair[0]].data[b];
 
-                if (@abs(prod_jk) >= 1e-15 or @abs(prod_kj) >= 1e-15) {
+                if (@abs(prods_jk[p_idx]) >= 1e-15 or @abs(prods_kj[p_idx]) >= 1e-15) {
                     any_active = true;
-
-                    break;
                 }
             }
 
@@ -553,12 +561,9 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
 
             const det = try determinant(T, &M, ipiv);
 
-            for (pairs, 0..) |pair, p_idx| {
-                const prod_jk = c_m[pair[0]].data[a] * c_p[pair[1]].data[b];
-                const prod_kj = c_m[pair[1]].data[a] * c_p[pair[0]].data[b];
-
-                s_jk[p_idx] += prod_jk * det;
-                s_kj[p_idx] += prod_kj * det;
+            for (0..pairs.len) |p_idx| {
+                s_jk[p_idx] += prods_jk[p_idx] * det;
+                s_kj[p_idx] += prods_kj[p_idx] * det;
             }
         };
 

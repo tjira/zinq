@@ -184,13 +184,12 @@ pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev
                 }
 
                 for (dets, 0..) |det, d| {
-                    var flip_det = std.mem.indexOfScalar(usize, det, p) != null;
+                    const indexOf = std.mem.indexOfScalar;
 
-                    if (!gen) {
-                        const has_a = std.mem.indexOfScalar(usize, det, 2 * p + 0) != null;
-                        const has_b = std.mem.indexOfScalar(usize, det, 2 * p + 1) != null;
+                    var flip_det = (indexOf(usize, det, 2 * p) != null) != (indexOf(usize, det, 2 * p + 1) != null);
 
-                        flip_det = has_a != has_b;
+                    if (gen) {
+                        flip_det = indexOf(usize, det, p) != null;
                     }
 
                     if (flip_det) for (0..C_ci.ncol()) |k| {
@@ -210,7 +209,9 @@ pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev
             }
 
             if (overlap < 0) {
-                if (flipped) |f| f[k] = true;
+                if (flipped) |f| if (k < f.len) {
+                    f[k] = true;
+                };
 
                 for (0..C_ci.nrow()) |d| {
                     C_ci.ptr(d, k).* = -C_ci.at(d, k);

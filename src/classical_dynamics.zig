@@ -143,7 +143,7 @@ pub fn Ensemble(comptime T: type) type {
         }
 
         /// Computes the population fraction of trajectories occupying each electronic state.
-        pub fn pop(self: @This(), nstate: usize, coefs: ?Matrix(Complex(T)), _: bool, gpa: Allocator) !Vector(T) {
+        pub fn pop(self: @This(), nstate: usize, coefs: ?Matrix(Complex(T)), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(nstate, gpa);
 
             if (coefs) |coef| {
@@ -1100,7 +1100,7 @@ fn Observables(comptime T: type) type {
 
             const coefs = if (sim.propag.nonadia_dynamic) |n| (if (n == .ehrenfest) n.ehrenfest.coefics else null) else null;
 
-            if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefs, sim.gb.adia, gpa);
+            if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefs, gpa);
 
             if (write.state_potential_energy != null) {
                 obs.state_epot = try sim.gb.epotState(sim.elpoten.nstate(), gpa);
@@ -1211,7 +1211,7 @@ fn Propagator(comptime T: type) type {
             }
 
             if (self.nonadia_dynamic) |*n| if (n.* == .surface_hopping) {
-                if (try n.surface_hopping.hop(ens, gb.V, gb.W, gb.U, gb.grad_V, self.dt)) {
+                if (try n.surface_hopping.hop(ens, gb.V, gb.W, gb.U, gb.grad_V, pot.isTd(), self.dt)) {
                     for (0..ens.s.length()) |i| if (ens.s.at(i) != n.surface_hopping.targets[i]) {
                         switch (pot) {
                             .ab_initio => |ab| {

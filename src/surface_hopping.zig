@@ -43,52 +43,6 @@ const LandauZenerOptions = struct {
     seed: u32 = 1,
 };
 
-/// Calculates nonadiabatic coupling terms using Hammes-Schiffer-Tully approximation.
-pub fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T) void {
-    const nstate = std.math.sqrt(sigma.len);
-
-    for (0..nstate) |i| for (0..nstate) |j| {
-        var S_ij: T = 0;
-        var S_ji: T = 0;
-
-        for (0..nstate) |k| {
-            const U_t_ki = U_new[k * nstate + i];
-            const U_t_kj = U_new[k * nstate + j];
-
-            const U_old_ki = U_old[k * nstate + i];
-            const U_old_kj = U_old[k * nstate + j];
-
-            S_ij += U_t_ki * U_old_kj;
-            S_ji += U_t_kj * U_old_ki;
-        }
-
-        sigma[i * nstate + j] = (S_ji - S_ij) / (2 * dt);
-    };
-}
-
-/// Evaluates nonadiabatic time-derivative coupling matrix elements from nonadiabatic coupling vectors.
-pub fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, p: []const T, m: []const T) void {
-    const nstate = std.math.sqrt(sigma.len);
-
-    for (0..nstate) |i| for (0..nstate) |j| {
-        if (i == j) {
-            sigma[i * nstate + j] = 0;
-
-            continue;
-        }
-
-        var v_dot_grad: T = 0;
-
-        for (0..p.len) |alpha| {
-            const v_alpha = p[alpha] / m[alpha];
-
-            v_dot_grad += v_alpha * grad_V[alpha * nstate * nstate + i * nstate + j];
-        }
-
-        sigma[i * nstate + j] = v_dot_grad;
-    };
-}
-
 /// Implements nonadiabatic state transitions via surface hopping algorithms.
 pub fn SurfaceHopping(comptime T: type) type {
     return struct {
@@ -161,7 +115,7 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         /// Executes a surface hopping step, calculating transition probabilities and updating states.
-        pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), grad_V: Matrix(T), dt: T) !bool {
+        pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), grad_V: Matrix(T), is_td: bool, dt: T) !bool {
             self.update(if (self.adia_alg) W else V, U);
 
             const subdt = dt / @as(T, @floatFromInt(self.nosteps));
@@ -170,8 +124,8 @@ pub fn SurfaceHopping(comptime T: type) type {
                 self.targets[i] = ensemble.s.at(i);
             }
 
-            for (0..self.nosteps) |_| {
-                try self.calcProbs(ensemble, grad_V, subdt);
+            for (0..self.nosteps) |step_idx| {
+                try self.calcProbs(ensemble, grad_V, is_td, step_idx, subdt);
 
                 self.calcTargetStates(ensemble);
             }
@@ -220,11 +174,11 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         /// Computes state transition probabilities at the current dynamics step.
-        fn calcProbs(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), dt: T) !void {
+        fn calcProbs(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, step_idx: usize, dt: T) !void {
             self.probs.zero();
 
             if (self.adia_alg) {
-                try self.calcProbsAdia(ensemble, grad_V, dt);
+                try self.calcProbsAdia(ensemble, grad_V, is_td, step_idx, dt);
             }
 
             if (!self.adia_alg) {
@@ -233,9 +187,9 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         /// Computes adiabatic representation state transition probabilities.
-        fn calcProbsAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), dt: T) !void {
+        fn calcProbsAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, step_idx: usize, dt: T) !void {
             switch (self.method) {
-                inline else => |*field| try field.calcProbsAdia(&self.probs, ensemble, grad_V, self.nosteps, dt),
+                inline else => |*field| try field.calcProbsAdia(&self.probs, ensemble, grad_V, is_td, step_idx, self.nosteps, dt),
             }
         }
 
@@ -373,7 +327,7 @@ fn FewestSwitches(comptime T: type) type {
         }
 
         /// Computes adiabatic transition probabilities using time-derivative couplings.
-        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), grad_V: Matrix(T), nstep: usize, dt: T) !void {
+        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, step_idx: usize, nstep: usize, dt: T) !void {
             if (self.coupling.? == .hst and std.math.isNan(self.uhist[0].at(0, 0))) return;
 
             for (0..ensemble.s.length()) |i| {
@@ -388,26 +342,18 @@ fn FewestSwitches(comptime T: type) type {
 
                 const ham = self.hamilton.rowSlice(i);
 
-                switch (self.coupling.?) {
-                    .hst => hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, eff_dt),
-                    .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), ensemble.p.rowSlice(i), ensemble.m),
+                if (step_idx == 0) {
+                    switch (self.coupling.?) {
+                        .hst => hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, eff_dt),
+                        .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), ensemble.p.rowSlice(i), ensemble.m),
+                    }
                 }
 
-                const int_ctx = .{ .ham = ham, .sigma = row_sigma };
+                const int_ctx = .{ .ham = ham, .is_td = is_td, .sigma = row_sigma };
 
                 self.itg.step(self.coefics.rowSlice(i), dt, int_ctx, coefDerAdia);
 
-                if (self.normt) |tol| {
-                    var norm_val: T = 0;
-
-                    for (0..self.coefics.ncol()) |k| {
-                        norm_val += self.coefics.at(i, k).squaredMagnitude();
-                    }
-
-                    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > tol) {
-                        return error.NormDivergence;
-                    }
-                }
+                try checkNorm(T, self.coefics.rowSlice(i), self.normt);
 
                 const rho_cc = self.coefics.at(i, c).squaredMagnitude();
 
@@ -437,17 +383,7 @@ fn FewestSwitches(comptime T: type) type {
 
                 self.itg.step(self.coefics.rowSlice(i), dt, int_ctx, coefDerDia);
 
-                if (self.normt) |tol| {
-                    var norm_val: T = 0;
-
-                    for (0..self.coefics.ncol()) |k| {
-                        norm_val += self.coefics.at(i, k).squaredMagnitude();
-                    }
-
-                    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > tol) {
-                        return error.NormDivergence;
-                    }
-                }
+                try checkNorm(T, self.coefics.rowSlice(i), self.normt);
 
                 const rho_cc = self.coefics.at(i, c).squaredMagnitude();
 
@@ -471,6 +407,8 @@ fn FewestSwitches(comptime T: type) type {
             for (0..H.nrow()) |i| for (0..H.ncol()) |j| {
                 self.hamilton.ptr(i, j).* = H.at(i, j);
             };
+
+            if (self.coupling == null) return;
 
             for (0..self.uhist[0].nrow()) |i| for (0..self.uhist[0].ncol()) |j| {
                 self.uhist[0].ptr(i, j).* = self.uhist[1].at(i, j);
@@ -520,38 +458,6 @@ fn FewestSwitches(comptime T: type) type {
             self.coefics.ptr(traj, c).re *= renorm;
             self.coefics.ptr(traj, c).im *= renorm;
         }
-
-        /// Computes time derivative of electronic coefficients in the adiabatic basis.
-        fn coefDerAdia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
-            for (0..ctx.ham.len) |i| {
-                var sum_sigma = Complex(T).init(0, 0);
-
-                for (0..ctx.ham.len) |j| {
-                    const sig = Complex(T).init(ctx.sigma[i * ctx.ham.len + j], 0);
-
-                    sum_sigma = sum_sigma.add(sig.mul(y[j]));
-                }
-
-                dy[i] = Complex(T).init(0, -ctx.ham[i]).mul(y[i]).sub(sum_sigma);
-            }
-        }
-
-        /// Computes time derivative of electronic coefficients in the diabatic basis.
-        fn coefDerDia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
-            const nstate = std.math.sqrt(ctx.ham.len);
-
-            for (0..nstate) |i| {
-                var sum = Complex(T).init(0, 0);
-
-                for (0..nstate) |j| {
-                    const term = y[j].mul(Complex(T).init(0, -ctx.ham[i * nstate + j]));
-
-                    sum = sum.add(term);
-                }
-
-                dy[i] = sum;
-            }
-        }
     };
 }
 
@@ -590,7 +496,7 @@ fn LandauZener(comptime T: type) type {
         }
 
         /// Computes transition probabilities from adiabatic energy level curvatures.
-        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: Matrix(T), _: usize, dt: T) !void {
+        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: Matrix(T), _: bool, _: usize, _: usize, dt: T) !void {
             if (std.math.isNan(self.history[0].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {
@@ -666,6 +572,105 @@ fn LandauZener(comptime T: type) type {
                 self.history[2].ptr(i, j).* = H.at(i, j);
             };
         }
+    };
+}
+
+/// Validates electronic state coefficient normalization against a tolerance threshold.
+pub fn checkNorm(comptime T: type, coefs: []const Complex(T), tol: ?T) !void {
+    const t = tol orelse return;
+
+    var norm_val: T = 0;
+
+    for (coefs) |c| {
+        norm_val += c.squaredMagnitude();
+    }
+
+    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > t) {
+        return error.NormDivergence;
+    }
+}
+
+/// Computes time derivative of electronic coefficients in the adiabatic basis.
+pub fn coefDerAdia(ctx: anytype, y: anytype, dy: anytype) void {
+    const e_ref = if (ctx.is_td) 0 else ctx.ham[0];
+
+    const T = @TypeOf(y[0].re);
+
+    for (0..ctx.ham.len) |i| {
+        var sum_sigma = Complex(T).init(0, 0);
+
+        for (0..ctx.ham.len) |j| {
+            const sig = Complex(T).init(ctx.sigma[i * ctx.ham.len + j], 0);
+
+            sum_sigma = sum_sigma.add(sig.mul(y[j]));
+        }
+
+        dy[i] = Complex(T).init(0, -(ctx.ham[i] - e_ref)).mul(y[i]).sub(sum_sigma);
+    }
+}
+
+/// Computes time derivative of electronic coefficients in the diabatic basis.
+pub fn coefDerDia(ctx: anytype, y: anytype, dy: anytype) void {
+    const nstate = std.math.sqrt(ctx.ham.len);
+
+    const T = @TypeOf(y[0].re);
+
+    for (0..nstate) |i| {
+        var sum = Complex(T).init(0, 0);
+
+        for (0..nstate) |j| {
+            const term = y[j].mul(Complex(T).init(0, -ctx.ham[i * nstate + j]));
+
+            sum = sum.add(term);
+        }
+
+        dy[i] = sum;
+    }
+}
+
+/// Calculates nonadiabatic coupling terms using Hammes-Schiffer-Tully approximation.
+pub fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T) void {
+    const nstate = std.math.sqrt(sigma.len);
+
+    for (0..nstate) |i| for (0..nstate) |j| {
+        var S_ij: T = 0;
+        var S_ji: T = 0;
+
+        for (0..nstate) |k| {
+            const U_t_ki = U_new[k * nstate + i];
+            const U_t_kj = U_new[k * nstate + j];
+
+            const U_old_ki = U_old[k * nstate + i];
+            const U_old_kj = U_old[k * nstate + j];
+
+            S_ij += U_t_ki * U_old_kj;
+            S_ji += U_t_kj * U_old_ki;
+        }
+
+        sigma[i * nstate + j] = (S_ji - S_ij) / (2 * dt);
+    };
+}
+
+/// Evaluates nonadiabatic time-derivative coupling matrix elements from nonadiabatic coupling vectors.
+pub fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, p: []const T, m: []const T) void {
+    const nstate = std.math.sqrt(sigma.len);
+
+    for (0..nstate) |i| for (0..nstate) |j| {
+        if (i == j) {
+            sigma[i * nstate + j] = 0;
+
+            continue;
+        }
+
+        var v_dot_grad: T = 0;
+
+        for (0..p.len) |alpha| {
+            const v_alpha = p[alpha] / m[alpha];
+
+            v_dot_grad += v_alpha * grad_V[alpha * nstate * nstate + i * nstate + j];
+        }
+
+        sigma[i * nstate + j] = v_dot_grad;
     };
 }
 

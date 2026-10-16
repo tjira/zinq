@@ -9,6 +9,9 @@ const Ensemble = @import("classical_dynamics.zig").Ensemble;
 const Integrator = @import("integrator.zig").Integrator;
 const Matrix = @import("tensor.zig").Matrix;
 
+const checkNorm = @import("surface_hopping.zig").checkNorm;
+const coefDerAdia = @import("surface_hopping.zig").coefDerAdia;
+const coefDerDia = @import("surface_hopping.zig").coefDerDia;
 const hammesSchifferTully = @import("surface_hopping.zig").hammesSchifferTully;
 const nacvCoupling = @import("surface_hopping.zig").nacvCoupling;
 
@@ -141,38 +144,6 @@ pub fn Ehrenfest(comptime T: type) type {
             };
         }
 
-        /// Computes time derivative of electronic coefficients in the adiabatic basis.
-        fn coefDerAdia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
-            const e_ref = if (ctx.is_td) 0 else ctx.ham[0];
-
-            for (0..ctx.ham.len) |i| {
-                var sum_sigma = Complex(T).init(0, 0);
-
-                for (0..ctx.ham.len) |j| {
-                    const sig = Complex(T).init(ctx.sigma[i * ctx.ham.len + j], 0);
-
-                    sum_sigma = sum_sigma.add(sig.mul(y[j]));
-                }
-
-                dy[i] = Complex(T).init(0, -(ctx.ham[i] - e_ref)).mul(y[i]).sub(sum_sigma);
-            }
-        }
-
-        /// Computes time derivative of electronic coefficients in the diabatic basis.
-        fn coefDerDia(ctx: anytype, y: []const Complex(T), dy: []Complex(T)) void {
-            const nstate = std.math.sqrt(ctx.ham.len);
-
-            for (0..nstate) |i| {
-                var sum = Complex(T).init(0, 0);
-
-                for (0..nstate) |j| {
-                    sum = sum.add(y[j].mul(Complex(T).init(0, -ctx.ham[i * nstate + j])));
-                }
-
-                dy[i] = sum;
-            }
-        }
-
         /// Integrates electronic coefficients in the adiabatic basis using time-derivative couplings.
         fn stepAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, dt: T) !void {
             if (self.coupling.? == .hst and std.math.isNan(self.uhist[0].at(0, 0))) return;
@@ -199,17 +170,7 @@ pub fn Ehrenfest(comptime T: type) type {
                     self.itg.step(self.coefics.rowSlice(i), subdt, int_ctx, coefDerAdia);
                 }
 
-                if (self.norm_toler) |tol| {
-                    var norm_val: T = 0;
-
-                    for (0..self.coefics.ncol()) |k| {
-                        norm_val += self.coefics.at(i, k).squaredMagnitude();
-                    }
-
-                    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > tol) {
-                        return error.NormDivergence;
-                    }
-                }
+                try checkNorm(T, self.coefics.rowSlice(i), self.norm_toler);
             }
         }
 
@@ -225,18 +186,8 @@ pub fn Ehrenfest(comptime T: type) type {
                 self.itg.step(self.coefics.rowSlice(i), subdt, .{ .ham = self.ham.rowSlice(i) }, coefDerDia);
             };
 
-            if (self.norm_toler) |tol| {
-                for (0..self.coefics.nrow()) |i| {
-                    var norm_val: T = 0;
-
-                    for (0..self.coefics.ncol()) |k| {
-                        norm_val += self.coefics.at(i, k).squaredMagnitude();
-                    }
-
-                    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > tol) {
-                        return error.NormDivergence;
-                    }
-                }
+            for (0..self.coefics.nrow()) |i| {
+                try checkNorm(T, self.coefics.rowSlice(i), self.norm_toler);
             }
         }
     };

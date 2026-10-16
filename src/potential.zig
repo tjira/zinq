@@ -449,7 +449,7 @@ fn AbInitio(comptime T: type) type {
             while (self.C_mo.items.len <= traj) try self.C_mo.append(self.gpa, null);
             while (self.C_ci.items.len <= traj) try self.C_ci.append(self.gpa, null);
 
-            const flipped = try self.gpa.alloc(bool, n);
+            const flipped = try self.gpa.alloc(bool, res.C.ncol());
             defer self.gpa.free(flipped);
 
             @memset(flipped, false);
