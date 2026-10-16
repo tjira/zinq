@@ -48,25 +48,25 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 ### Time-Independent Quantum Mechanics
 
 * **Integrals over Gaussian Basis Functions**  
-  Compute 1- and 2-electron integrals, dipole moments, and geometric derivative integrals.
+  Compute 1- and 2-electron integrals and geometric derivative integrals.
 
 * **Hartree–Fock Methods**  
   Perform restricted or generalized Hartree–Fock calculations with DIIS acceleration.
 
 * **Density Functional Theory**  
-  Evaluate Kohn–Sham DFT using LDA, GGA, and meta-GGA functionals on molecular grids.
+  Evaluate Kohn–Sham DFT using LDA, GGA, meta-GGA, and hybrid functionals on molecular grids.
 
 * **Post-Hartree–Fock Methods**  
   Perform arbitrary-order Møller–Plesset perturbation theory and arbitrary-excitation CI.
 
 * **Nuclear Derivatives & Vibrational Analysis**  
-  Compute analytic or numerical Hessians, harmonic vibrational frequencies, and normal modes.
+  Compute analytic or numerical gradients, numerical Hessians, harmonic vibrational frequencies, and normal modes.
 
 * **Molecular Geometry Optimization**  
   Optimize molecular structures using BFGS quasi-Newton and steepest descent algorithms.
 
-* **Population Analysis & Properties**  
-  Calculate Mulliken, Löwdin, Mayer, and Wiberg populations, dipole moments, and polarizabilities.
+* **Population Analysis & Bond Orders**  
+  Calculate Mulliken and Löwdin populations, and Mayer and Wiberg bond orders.
 
 ### Time-Dependent Quantum Mechanics
 
@@ -80,7 +80,7 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
   Perform mean-field nonadiabatic simulations with continuous electronic-nuclear coupling.
 
 * **Classical Molecular Dynamics**  
-  Propagate trajectories with thermostats and sample Maxwell–Boltzmann or ab initio Wigner ensembles.
+  Propagate trajectories with thermostats and sample Maxwell–Boltzmann or Wigner ensembles.
 
 ## Citation
 
