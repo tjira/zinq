@@ -72,7 +72,7 @@ pub const NonadiabaticOptions = union(enum) {
 pub const WignerOptions = struct {
     gamma: ?[]const f64 = null,
     method: ?MethodOptions = null,
-    temperature: f64 = 298.15,
+    temperature: ?f64 = null,
 };
 
 /// Initial phase space parameters and distribution configuration for trajectory sampling.
@@ -1386,11 +1386,11 @@ fn checkInvalidInput(opt: Options) !void {
         },
 
         .wigner => |wig| {
-            if (std.math.isNan(wig.temperature) or wig.temperature < 0) {
+            if (wig.temperature) |t| if (std.math.isNan(t) or t < 0) {
                 std.log.err("WIGNER TEMPERATURE MUST BE NON-NEGATIVE", .{});
 
                 return error.InvalidInput;
-            }
+            };
 
             if (wig.gamma != null and wig.method != null) {
                 std.log.err("GAMMA AND METHOD MUST NOT BE SPECIFIED SIMULTANEOUSLY FOR WIGNER SAMPLING", .{});
@@ -1405,7 +1405,7 @@ fn checkInvalidInput(opt: Options) !void {
             }
 
             if (wig.gamma) |gam| {
-                if (wig.temperature > 0) {
+                if (wig.temperature != null) {
                     std.log.err("TEMPERATURE IS NOT SUPPORTED FOR WIGNER SAMPLING WITH GAMMA", .{});
 
                     return error.InvalidInput;
@@ -2026,7 +2026,7 @@ fn sampleWignerFromHessian(comptime T: type, ensemble: *Ensemble(T), hess: Matri
 
     const ndim, const ntraj = .{ sys.atoms.len * 3, ensemble.r.nrow() };
 
-    const temp = opt.initial_conditions.distribution.?.wigner.temperature;
+    const temp = opt.initial_conditions.distribution.?.wigner.temperature orelse 0;
 
     var split_mix = std.Random.SplitMix64.init(opt.initial_conditions.seed);
     var rng = std.Random.DefaultPrng.init(split_mix.next());
