@@ -91,6 +91,7 @@ const Write = struct {
     population: ?[]const u8 = null,
     position: ?[]const u8 = null,
     potential_energy: ?[]const u8 = null,
+    state_coefficient: ?[]const u8 = null,
     state_potential_energy: ?[]const u8 = null,
     temperature: ?[]const u8 = null,
     total_energy: ?[]const u8 = null,
@@ -402,6 +403,19 @@ pub fn Ensemble(comptime T: type) type {
             };
         }
 
+        /// Computes the ensemble-averaged electronic state coefficient magnitudes for fewest switches.
+        pub fn stateCoef(self: @This(), nstate: usize, coefs: Matrix(Complex(T)), gpa: Allocator) !Vector(T) {
+            var value = try Vector(T).initZero(nstate, gpa);
+
+            for (0..coefs.nrow()) |i| for (0..nstate) |k| {
+                value.ptr(k).* += coefs.at(i, k).squaredMagnitude();
+            };
+
+            value.divs(@floatFromInt(self.r.nrow()));
+
+            return value;
+        }
+
         /// Calculates the instantaneous kinetic temperature of the ensemble in Kelvin.
         pub fn temp(self: @This()) T {
             return (2 * self.ekin() / @as(T, @floatFromInt(self.ndof))) * AU2K;
@@ -432,6 +446,7 @@ const AbInitioStreamWriter = struct {
     files_pop: ?[]std.Io.File = null,
     files_pos: ?[]std.Io.File = null,
 
+    files_state_coef: ?[]std.Io.File = null,
     files_state_epot: ?[]std.Io.File = null,
 
     /// Initializes and opens trajectory output files on disk for configured properties.
@@ -457,6 +472,10 @@ const AbInitioStreamWriter = struct {
 
         if (write.potential_energy) |path| {
             self.files_epot = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
+        }
+
+        if (write.state_coefficient) |path| {
+            self.files_state_coef = try initMatrixFiles(io, path, ntraj, nstep, nstate + 1, gpa);
         }
 
         if (write.state_potential_energy) |path| {
@@ -621,6 +640,29 @@ const AbInitioStreamWriter = struct {
                     }
 
                     try writer.interface.print(" {d:20.14}", .{pop_m});
+                }
+
+                try writer.interface.print("\n", .{});
+
+                try writer.interface.flush();
+            }
+        }
+    }
+
+    /// Appends the current step's electronic state coefficient magnitudes to trajectory files.
+    pub fn writeStateCoefficient(self: @This(), io: std.Io, comptime T: type, nstate: usize, coefs: ?Matrix(Complex(T)), time: T) !void {
+        if (self.files_state_coef) |files| {
+            var buffer: [65536]u8 = undefined;
+
+            for (0..files.len) |k| {
+                var writer = files[k].writerStreaming(io, &buffer);
+
+                try writer.interface.print("{d:20.14}", .{time});
+
+                for (0..nstate) |m| {
+                    const c2 = if (coefs) |coef| coef.at(k, m).squaredMagnitude() else 0;
+
+                    try writer.interface.print(" {d:20.14}", .{c2});
                 }
 
                 try writer.interface.print("\n", .{});
@@ -963,6 +1005,7 @@ fn History(comptime T: type) type {
         mom: ?Matrix(T) = null,
         pop: ?Matrix(T) = null,
 
+        state_coef: ?Matrix(T) = null,
         state_epot: ?Matrix(T) = null,
 
         epot: ?Matrix(T) = null,
@@ -991,6 +1034,10 @@ fn History(comptime T: type) type {
                 hist.pop = try Matrix(T).init(iters, nstate, gpa);
             }
 
+            if (write.state_coefficient != null) {
+                hist.state_coef = try Matrix(T).init(iters, nstate, gpa);
+            }
+
             if (write.state_potential_energy != null) {
                 hist.state_epot = try Matrix(T).init(iters, nstate, gpa);
             }
@@ -1010,6 +1057,7 @@ fn History(comptime T: type) type {
             if (self.mom) |*mom| mom.deinit(gpa);
             if (self.pop) |*pop| pop.deinit(gpa);
 
+            if (self.state_coef) |*state_coef| state_coef.deinit(gpa);
             if (self.state_epot) |*state_epot| state_epot.deinit(gpa);
 
             if (self.epot) |*epot| epot.deinit(gpa);
@@ -1032,6 +1080,10 @@ fn History(comptime T: type) type {
 
             if (self.pop) |*pop| if (obs.pop) |v| {
                 for (0..v.length()) |j| pop.ptr(step_idx, j).* = v.at(j);
+            };
+
+            if (self.state_coef) |*state_coef| if (obs.state_coef) |v| {
+                for (0..v.length()) |j| state_coef.ptr(step_idx, j).* = v.at(j);
             };
 
             if (self.state_epot) |*state_epot| if (obs.state_epot) |v| {
@@ -1077,6 +1129,10 @@ fn History(comptime T: type) type {
                 try writeMatrixLspace(T, io, path, self.epot.?.takeRows(self.index), 0, end);
             }
 
+            if (write.state_coefficient) |path| {
+                try writeMatrixLspace(T, io, path, self.state_coef.?.takeRows(self.index), 0, end);
+            }
+
             if (write.state_potential_energy) |path| {
                 try writeMatrixLspace(T, io, path, self.state_epot.?.takeRows(self.index), 0, end);
             }
@@ -1103,6 +1159,7 @@ fn Observables(comptime T: type) type {
         mom: ?Vector(T) = null,
         pop: ?Vector(T) = null,
 
+        state_coef: ?Vector(T) = null,
         state_epot: ?Vector(T) = null,
 
         epot: ?T = null,
@@ -1140,6 +1197,12 @@ fn Observables(comptime T: type) type {
 
             if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefs, gpa);
 
+            if (write.state_coefficient != null) {
+                if (sim.propag.coefs()) |c_coefs| {
+                    obs.state_coef = try sim.ensemble.stateCoef(sim.elpoten.nstate(), c_coefs, gpa);
+                }
+            }
+
             if (write.state_potential_energy != null) {
                 obs.state_epot = try sim.gb.epotState(sim.elpoten.nstate(), gpa);
             }
@@ -1165,6 +1228,7 @@ fn Observables(comptime T: type) type {
             if (self.mom) |*mom| mom.deinit(gpa);
             if (self.pop) |*pop| pop.deinit(gpa);
 
+            if (self.state_coef) |*state_coef| state_coef.deinit(gpa);
             if (self.state_epot) |*state_epot| state_epot.deinit(gpa);
         }
     };
@@ -1214,6 +1278,16 @@ fn Propagator(comptime T: type) type {
             if (self.nonadia_dynamic) |*namd| switch (namd.*) {
                 inline else => |*n| n.deinit(gpa),
             };
+        }
+
+        /// Returns electronic wavefunction coefficients for nonadiabatic dynamics if active.
+        pub fn coefs(self: @This()) ?Matrix(Complex(T)) {
+            if (self.nonadia_dynamic) |n| switch (n) {
+                .surface_hopping => |sh| return sh.coefs(),
+                inline else => return null,
+            };
+
+            return null;
         }
 
         /// Integrates equations of motion using the Velocity Verlet algorithm.
@@ -1669,6 +1743,23 @@ fn checkInvalidInput(opt: Options) !void {
             };
         },
     };
+
+    const has_ab_coef = if (opt.potential == .ab_initio) opt.potential.ab_initio.write.state_coefficient != null else false;
+
+    const has_state_coef = opt.write.state_coefficient != null or has_ab_coef;
+
+    if (has_state_coef) {
+        const is_fewest_switches = if (opt.nonadiabatic) |na| switch (na) {
+            .surface_hopping => |sh| sh == .fewest_switches,
+            inline else => false,
+        } else false;
+
+        if (!is_fewest_switches) {
+            std.log.err("STATE COEFFICIENT OUTPUT IS ONLY SUPPORTED WITH FEWEST SWITCHES", .{});
+
+            return error.InvalidInput;
+        }
+    }
 
     if (opt.potential == .ab_initio) switch (opt.potential.ab_initio.method) {
         .hartree_fock => if (opt.initial_conditions.state > 0) {
@@ -2150,6 +2241,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
             try sw.writeEnergy(io, T, ctx.sim.ensemble, ctx.sim.gb, nstate, coefs, time);
 
             try sw.writePopulation(io, T, ctx.sim.ensemble, nstate, coefs, time);
+            try sw.writeStateCoefficient(io, T, nstate, prop.coefs(), time);
         }
 
         const is_log_step = ctx.log and ((i % ctx.opt.log_interval == 0) or (i == ctx.opt.iterations));

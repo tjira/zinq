@@ -56,6 +56,7 @@ pub const AbInitioWrite = struct {
     population: ?[]const u8 = null,
     position_trajectory: ?[]const u8 = null,
     potential_energy: ?[]const u8 = null,
+    state_coefficient: ?[]const u8 = null,
     state_potential_energy: ?[]const u8 = null,
     temperature: ?[]const u8 = null,
     total_energy: ?[]const u8 = null,

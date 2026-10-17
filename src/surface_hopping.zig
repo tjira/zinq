@@ -124,6 +124,14 @@ pub fn SurfaceHopping(comptime T: type) type {
             }
         }
 
+        /// Returns electronic wavefunction coefficients for nonadiabatic state transitions.
+        pub fn coefs(self: @This()) ?Matrix(Complex(T)) {
+            return switch (self.method) {
+                .fewest_switches => |fs| fs.coefics,
+                inline else => null,
+            };
+        }
+
         /// Executes a surface hopping step, calculating transition probabilities and updating states.
         pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), grad_V: Matrix(T), is_td: bool, dt: T) !bool {
             self.update(if (self.adia_alg) W else V, U);
