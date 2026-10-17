@@ -4,20 +4,7 @@
             "classical_dynamics" : {
                 "initial_conditions" : {
                     "distribution" : {
-                        "wigner" : {
-                            "method" : {
-                                "configuration_interaction" : {
-                                    "hartree_fock" : {
-                                        "basis" : "builtin:sto-3g",
-                                        "system" : "example/molecule/H2.xyz"
-                                    },
-                                    "hessian" : {
-                                        "numeric" : {}
-                                    },
-                                    "frequency" : {}
-                                }
-                            }
-                        }
+                        "wigner" : {}
                     },
                     "state" : 1
                 },

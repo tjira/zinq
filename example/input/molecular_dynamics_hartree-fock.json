@@ -4,18 +4,7 @@
             "classical_dynamics" : {
                 "initial_conditions" : {
                     "distribution" : {
-                        "wigner" : {
-                            "method" : {
-                                "hartree_fock" : {
-                                    "basis" : "builtin:sto-3g",
-                                    "system" : "example/molecule/water.xyz",
-                                    "hessian" : {
-                                        "numeric" : {}
-                                    },
-                                    "frequency" : {}
-                                }
-                            }
-                        }
+                        "wigner" : {}
                     }
                 },
                 "iterations" : 100,

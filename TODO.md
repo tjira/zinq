@@ -55,6 +55,5 @@
 - [x] Add kinetic energy guard in isotropic momentum rescaling to prevent division by zero and NaN momentum.
 - [x] Handle zero active state amplitude in Granucci-Persico decoherence to prevent norm depletion and divergence.
 - [x] Disable nonadiabatic coupling evaluation in AbInitio when updating active-state gradient after a surface hop.
-- [ ] Export trajectory-resolved and ensemble-averaged electronic state populations in Fewest Switches.
-- [ ] Allow ab initio Wigner sampling to inherit the method and molecular system from the potential configuration.
+- [x] Allow ab initio Wigner sampling to inherit the method and molecular system from the potential configuration.
 - [x] Validate that Granucci-Persico decoherence parameter alpha is positive and non-NaN.

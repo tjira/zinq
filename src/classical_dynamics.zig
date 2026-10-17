@@ -72,7 +72,7 @@ pub const NonadiabaticOptions = union(enum) {
 pub const WignerOptions = struct {
     gamma: ?[]const f64 = null,
     method: ?MethodOptions = null,
-    temperature: f64 = 0.0,
+    temperature: f64 = 298.15,
 };
 
 /// Initial phase space parameters and distribution configuration for trajectory sampling.
@@ -1398,7 +1398,7 @@ fn checkInvalidInput(opt: Options) !void {
                 return error.InvalidInput;
             }
 
-            if (wig.gamma == null and wig.method == null) {
+            if (wig.gamma == null and wig.method == null and opt.potential != .ab_initio) {
                 std.log.err("EITHER GAMMA OR METHOD MUST BE SPECIFIED FOR WIGNER SAMPLING", .{});
 
                 return error.InvalidInput;
@@ -1436,13 +1436,7 @@ fn checkInvalidInput(opt: Options) !void {
                 };
             }
 
-            if (wig.method) |mopt| {
-                if (opt.potential != .ab_initio) {
-                    std.log.err("AB INITIO METHOD FOR WIGNER SAMPLING IS NOT SUPPORTED FOR MODEL POTENTIALS", .{});
-
-                    return error.InvalidInput;
-                }
-
+            if (wig.method != null or opt.potential == .ab_initio) {
                 if (opt.initial_conditions.position != null) {
                     std.log.err("INITIAL POSITION MUST NOT BE SPECIFIED FOR AB INITIO WIGNER SAMPLING", .{});
 
@@ -1451,6 +1445,14 @@ fn checkInvalidInput(opt: Options) !void {
 
                 if (opt.initial_conditions.momentum != null) {
                     std.log.err("INITIAL MOMENTUM MUST NOT BE SPECIFIED FOR AB INITIO WIGNER SAMPLING", .{});
+
+                    return error.InvalidInput;
+                }
+            }
+
+            if (wig.method) |mopt| {
+                if (opt.potential != .ab_initio) {
+                    std.log.err("AB INITIO METHOD FOR WIGNER SAMPLING IS NOT SUPPORTED FOR MODEL POTENTIALS", .{});
 
                     return error.InvalidInput;
                 }
@@ -1750,6 +1752,26 @@ fn checkInvalidInput(opt: Options) !void {
     };
 }
 
+/// Derives electronic structure options for Wigner sampling from explicit settings or potential configuration.
+fn getWignerMethod(opt: Options) MethodOptions {
+    if (opt.initial_conditions.distribution.?.wigner.method) |m| {
+        return m;
+    }
+
+    var method = opt.potential.ab_initio.method;
+
+    switch (method) {
+        inline else => |*m| {
+            m.hessian = .{ .numeric = .{} };
+            m.frequency = .{};
+            m.gradient = null;
+            if (@hasField(@TypeOf(m.*), "nacv")) m.nacv = null;
+        },
+    }
+
+    return method;
+}
+
 /// Initializes the simulation state, potential, and initial ensemble.
 fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationState(T) {
     var pot = try Potential(T).init(io, opt.potential, gpa);
@@ -1788,7 +1810,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     };
 
     const is_ab_initio_wigner = if (opt.initial_conditions.distribution) |dist| switch (dist) {
-        .wigner => |wig| wig.method != null,
+        .wigner => |wig| wig.method != null or opt.potential == .ab_initio,
         inline else => false,
     } else false;
 
@@ -1973,9 +1995,7 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, h
 
 /// Samples initial Cartesian phase space coordinates from ab initio quantum harmonic oscillator Wigner distributions.
 fn sampleWignerAbInitio(comptime T: type, io: std.Io, ensemble: *Ensemble(T), opt: Options, gpa: Allocator) !void {
-    const wig = opt.initial_conditions.distribution.?.wigner;
-
-    switch (wig.method.?) {
+    switch (getWignerMethod(opt)) {
         .hartree_fock => |hf_opt| {
             var res = try hartree_fock.run(T, io, hf_opt, true, gpa);
             defer res.deinit(gpa);

@@ -60,7 +60,7 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
   Perform arbitrary-order Møller–Plesset perturbation theory and arbitrary-excitation CI.
 
 * **Nuclear Derivatives & Vibrational Analysis**  
-  Compute analytic or numerical gradients, numerical Hessians, harmonic vibrational frequencies, and normal modes.
+  Compute analytic or numerical gradients, numerical Hessians, and harmonic vibrational frequencies.
 
 * **Molecular Geometry Optimization**  
   Optimize molecular structures using BFGS quasi-Newton and steepest descent algorithms.
