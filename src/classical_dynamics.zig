@@ -2256,7 +2256,9 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
 
             const coefs = if (prop.nonadia_dynamic) |n| (if (n == .ehrenfest) n.ehrenfest.coefics else null) else null;
 
-            const s = if (prop.nonadia_dynamic != null) ctx.sim.ensemble.s else null;
+            const is_sh = prop.nonadia_dynamic != null and prop.nonadia_dynamic.? == .surface_hopping;
+
+            const s = if (is_sh) ctx.sim.ensemble.s else null;
 
             try sw.writeFrame(io, T, atoms, ctx.sim.ensemble.r, s, time);
 

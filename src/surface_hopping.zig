@@ -387,6 +387,8 @@ fn FewestSwitches(comptime T: type) type {
 
                 const e_curr = self.hamilton.at(traj, c);
 
+                var delta_rho: T = 0;
+
                 for (0..self.coefics.ncol()) |j| {
                     if (j == c) continue;
 
@@ -398,17 +400,15 @@ fn FewestSwitches(comptime T: type) type {
 
                     const d = std.math.exp(-0.5 * dt / tau);
 
+                    const rho_j = self.coefics.at(traj, j).squaredMagnitude();
+
+                    delta_rho += rho_j * (1 - d * d);
+
                     self.coefics.ptr(traj, j).re *= d;
                     self.coefics.ptr(traj, j).im *= d;
                 }
 
-                var sum_norm: T = 1;
-
-                for (0..self.coefics.ncol()) |j| if (j != c) {
-                    sum_norm -= self.coefics.at(traj, j).squaredMagnitude();
-                };
-
-                const renorm = std.math.sqrt(@max(0, sum_norm) / rho_cc);
+                const renorm = std.math.sqrt((rho_cc + delta_rho) / rho_cc);
 
                 self.coefics.ptr(traj, c).re *= renorm;
                 self.coefics.ptr(traj, c).im *= renorm;
