@@ -49,3 +49,12 @@
 - [x] Implement Wigner sampling of initial conditions (positions and momenta) for AIMD.
 - [x] Track electronic wavefunction phases across consecutive molecular dynamics time steps in ab initio NAMD.
 - [x] Decouple nonadiabatic coupling vector time-derivative coupling evaluation from the eigenvector history NaN check in adiabatic Ehrenfest and surface hopping propagation.
+- [x] Store initial SCF guess density matrix per trajectory in AbInitio to avoid cross-trajectory contamination.
+- [x] Default ab initio potential gradient to analytic in MD or validate that gradients are explicitly configured.
+- [x] Subtract net center-of-mass linear momentum after Maxwell-Boltzmann sampling to eliminate unphysical drift.
+- [x] Add kinetic energy guard in isotropic momentum rescaling to prevent division by zero and NaN momentum.
+- [x] Handle zero active state amplitude in Granucci-Persico decoherence to prevent norm depletion and divergence.
+- [x] Disable nonadiabatic coupling evaluation in AbInitio when updating active-state gradient after a surface hop.
+- [ ] Export trajectory-resolved and ensemble-averaged electronic state populations in Fewest Switches.
+- [ ] Allow ab initio Wigner sampling to inherit the method and molecular system from the potential configuration.
+- [x] Validate that Granucci-Persico decoherence parameter alpha is positive and non-NaN.

@@ -1522,6 +1522,18 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
+    if (opt.potential == .ab_initio) {
+        const has_grad = switch (opt.potential.ab_initio.method) {
+            inline else => |m| m.gradient != null,
+        };
+
+        if (!has_grad) {
+            std.log.err("GRADIENT CALCULATION IS MANDATORY FOR AB INITIO POTENTIAL", .{});
+
+            return error.InvalidInput;
+        }
+    }
+
     if (opt.potential == .ab_initio and !opt.adiabatic) {
         std.log.err("DIABATIC SIMULATION IS NOT SUPPORTED FOR AB INITIO POTENTIAL", .{});
 
@@ -1600,6 +1612,12 @@ fn checkInvalidInput(opt: Options) !void {
 
                     return error.InvalidInput;
                 }
+
+                if (fs.alpha) |a| if (std.math.isNan(a) or a <= 0) {
+                    std.log.err("DECOHERENCE PARAMETER ALPHA MUST BE POSITIVE", .{});
+
+                    return error.InvalidInput;
+                };
 
                 if (opt.adiabatic and fs.coupling == null) {
                     std.log.err("TIME-DERIVATIVE COUPLING MUST BE EXPLICITLY PROVIDED FOR ADIABATIC FSSH", .{});

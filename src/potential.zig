@@ -249,22 +249,21 @@ fn AbInitio(comptime T: type) type {
         options: AbInitioOptions,
         msys: MolecularSystem(T),
 
-        Pg: ?Matrix(T),
+        Pg: *std.ArrayList(?Matrix(T)),
 
         C_ci: *std.ArrayList(?Matrix(T)),
         C_mo: *std.ArrayList(?Matrix(T)),
 
         /// Initializes the molecular system and electronic structure method configuration.
         pub fn init(io: std.Io, options: AbInitioOptions, gpa: Allocator) !@This() {
-            const sys_file, const basis_name, const charge, const multi, const gen = switch (options.method) {
-                .hartree_fock => |opt| .{ opt.system, opt.basis, opt.charge, opt.multiplicity, opt.generalized },
+            const sys_file, const basis_name, const charge, const multi = switch (options.method) {
+                .hartree_fock => |opt| .{ opt.system, opt.basis, opt.charge, opt.multiplicity },
 
                 inline else => |opt| .{
                     opt.hartree_fock.system,
                     opt.hartree_fock.basis,
                     opt.hartree_fock.charge,
                     opt.hartree_fock.multiplicity,
-                    opt.hartree_fock.generalized,
                 },
             };
 
@@ -291,11 +290,6 @@ fn AbInitio(comptime T: type) type {
                 try std.Io.Dir.cwd().deleteFile(io, basis_path);
             }
 
-            const nbf = if (gen) 2 * msys.nbf else msys.nbf;
-
-            var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
-            errdefer Pg.deinit(gpa);
-
             const C_ci_list = try gpa.create(std.ArrayList(?Matrix(T)));
             errdefer gpa.destroy(C_ci_list);
 
@@ -306,13 +300,18 @@ fn AbInitio(comptime T: type) type {
 
             C_mo_list.* = .empty;
 
+            const Pg_list = try gpa.create(std.ArrayList(?Matrix(T)));
+            errdefer gpa.destroy(Pg_list);
+
+            Pg_list.* = .empty;
+
             return .{
                 .options = options,
 
                 .inpout = io,
                 .msys = msys,
 
-                .Pg = Pg,
+                .Pg = Pg_list,
 
                 .C_ci = C_ci_list,
                 .C_mo = C_mo_list,
@@ -339,7 +338,13 @@ fn AbInitio(comptime T: type) type {
 
             gpa.destroy(self.C_ci);
 
-            if (self.Pg) |*pg| pg.deinit(gpa);
+            for (self.Pg.items) |*p| {
+                if (p.*) |*m| m.deinit(gpa);
+            }
+
+            self.Pg.deinit(gpa);
+
+            gpa.destroy(self.Pg);
 
             self.msys.deinit(gpa);
         }
@@ -352,15 +357,15 @@ fn AbInitio(comptime T: type) type {
         }
 
         /// Evaluates the electronic energy and Cartesian nuclear gradients at coordinates r.
-        pub fn evalGrad(self: @This(), V: []T, grad_V: []T, r: []const T, active_state: ?usize, traj: usize) !void {
+        pub fn evalGrad(self: @This(), V: []T, grad_V: []T, r: []const T, active_state: ?usize, traj: usize, eval_nacv: bool) !void {
             @memcpy(self.msys.coors, r);
 
             libint.libint_update_coords(self.msys.ptr, self.msys.coors.ptr);
 
             switch (self.options.method) {
-                .hartree_fock => |opt| try self.evalGradSingle(V, grad_V, opt, hf_runFromSystem),
-                .moller_plesset => |opt| try self.evalGradSingle(V, grad_V, opt, mp_runFromSystem),
-                .configuration_interaction => |opt| try self.evalGradCi(V, grad_V, opt, active_state, traj),
+                .hartree_fock => |opt| try self.evalGradSingle(V, grad_V, opt, hf_runFromSystem, traj),
+                .moller_plesset => |opt| try self.evalGradSingle(V, grad_V, opt, mp_runFromSystem, traj),
+                .configuration_interaction => |opt| try self.evalGradCi(V, grad_V, opt, active_state, traj, eval_nacv),
             }
         }
 
@@ -388,22 +393,26 @@ fn AbInitio(comptime T: type) type {
             for (0..r.nrow()) |i| {
                 const s = if (states) |st| st[i] else null;
 
-                try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), s, i);
+                try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), s, i, true);
             }
         }
 
         /// Updates potential value and gradient for a specific trajectory row and active electronic state.
         pub fn updateTrajectoryGradient(self: @This(), V: *Matrix(T), grad_V: *Matrix(T), r: Matrix(T), i: usize, active_state: usize) !void {
-            try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), active_state, i);
+            try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), active_state, i, false);
         }
 
         /// Evaluates CI electronic energies, state nuclear gradients, and nonadiabatic couplings.
-        fn evalGradCi(self: @This(), V: []T, grad_V: []T, opt: ConfigurationInteractionOptions, active_state: ?usize, traj: usize) !void {
+        fn evalGradCi(self: @This(), V: []T, grad_V: []T, opt: ConfigurationInteractionOptions, active_state: ?usize, traj: usize, eval_nacv: bool) !void {
             var run_opt = opt;
 
             run_opt.hessian, run_opt.optimize = .{ null, null };
 
             run_opt.frequency = null;
+
+            if (!eval_nacv) {
+                run_opt.nacv = null;
+            }
 
             const n = self.nstate();
 
@@ -440,10 +449,16 @@ fn AbInitio(comptime T: type) type {
                 },
             };
 
-            var res = try ci_runFromSystem(T, self.inpout, run_opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+            while (self.Pg.items.len <= traj) try self.Pg.append(self.gpa, null);
+
+            var res = try ci_runFromSystem(T, self.inpout, run_opt, @constCast(&self.msys), self.Pg.items[traj], false, self.gpa);
             defer res.deinit(self.gpa);
 
-            if (self.Pg) |pg| @memcpy(pg.data, res.hartree_fock.P.data);
+            if (self.Pg.items[traj] == null) {
+                self.Pg.items[traj] = try Matrix(T).init(res.hartree_fock.P.nrow(), res.hartree_fock.P.ncol(), self.gpa);
+            }
+
+            @memcpy(self.Pg.items[traj].?.data, res.hartree_fock.P.data);
 
             while (self.C_mo.items.len <= traj) try self.C_mo.append(self.gpa, null);
             while (self.C_ci.items.len <= traj) try self.C_ci.append(self.gpa, null);
@@ -518,13 +533,19 @@ fn AbInitio(comptime T: type) type {
         }
 
         /// Evaluates electronic energy and nuclear gradients for single-reference electronic structure methods.
-        fn evalGradSingle(self: @This(), V: []T, grad_V: []T, opt: anytype, comptime runFn: anytype) !void {
-            var res = try runFn(T, self.inpout, opt, @constCast(&self.msys), self.Pg, false, self.gpa);
+        fn evalGradSingle(self: @This(), V: []T, grad_V: []T, opt: anytype, comptime runFn: anytype, traj: usize) !void {
+            while (self.Pg.items.len <= traj) try self.Pg.append(self.gpa, null);
+
+            var res = try runFn(T, self.inpout, opt, @constCast(&self.msys), self.Pg.items[traj], false, self.gpa);
             defer res.deinit(self.gpa);
 
             const P = if (@hasField(@TypeOf(res), "hartree_fock")) res.hartree_fock.P else res.P;
 
-            if (self.Pg) |pg| @memcpy(pg.data, P.data);
+            if (self.Pg.items[traj] == null) {
+                self.Pg.items[traj] = try Matrix(T).init(P.nrow(), P.ncol(), self.gpa);
+            }
+
+            @memcpy(self.Pg.items[traj].?.data, P.data);
 
             V[0] = res.energy[0];
 

@@ -265,7 +265,7 @@ fn FewestSwitches(comptime T: type) type {
         /// Allocates and initializes wavefunction coefficients and Tully integrator.
         pub fn init(opt: anytype, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
             if (opt.alpha) |a| {
-                if (!adia or a < 0) return error.InvalidInput;
+                if (!adia or std.math.isNan(a) or a <= 0) return error.InvalidInput;
             }
 
             if (adia and opt.coupling == null) {
@@ -449,6 +449,10 @@ fn FewestSwitches(comptime T: type) type {
 
             const c = ensemble.s.at(traj);
 
+            const rho_cc = self.coefics.at(traj, c).squaredMagnitude();
+
+            if (rho_cc < 1e-14) return;
+
             const e_curr = self.hamilton.at(traj, c);
 
             for (0..self.coefics.ncol()) |j| {
@@ -471,7 +475,7 @@ fn FewestSwitches(comptime T: type) type {
                 sum_norm -= self.coefics.at(traj, j).squaredMagnitude();
             };
 
-            const renorm = std.math.sqrt(@max(0, sum_norm) / (self.coefics.at(traj, c).squaredMagnitude() + 1e-14));
+            const renorm = std.math.sqrt(@max(0, sum_norm) / rho_cc);
 
             self.coefics.ptr(traj, c).re *= renorm;
             self.coefics.ptr(traj, c).im *= renorm;
@@ -746,19 +750,25 @@ fn rescaleMomentumIsotropic(comptime T: type, ensemble: *Ensemble(T), i: usize, 
         ekin_old += ensemble.p.at(i, j) * ensemble.p.at(i, j) / (2 * ensemble.m[j]);
     }
 
-    if (ekin_old < 1e-14) {
+    if (std.math.isNan(ekin_old) or ekin_old < 1e-14 or std.math.isNan(dE)) {
         return false;
     }
 
     const ekin_new = ekin_old - dE;
 
-    if (ekin_new >= 0) {
-        for (0..ensemble.p.ncol()) |j| {
-            ensemble.p.ptr(i, j).* *= std.math.sqrt(ekin_new / ekin_old);
-        }
-
-        return true;
+    if (std.math.isNan(ekin_new) or ekin_new < 1e-14) {
+        return false;
     }
 
-    return false;
+    const factor = std.math.sqrt(ekin_new / ekin_old);
+
+    if (std.math.isNan(factor)) {
+        return false;
+    }
+
+    for (0..ensemble.p.ncol()) |j| {
+        ensemble.p.ptr(i, j).* *= factor;
+    }
+
+    return true;
 }
