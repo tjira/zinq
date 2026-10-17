@@ -18,7 +18,13 @@ pub fn getTrajectoryPath(path: []const u8, i: usize, ntraj: usize, gpa: std.mem.
 
     const ext = std.fs.path.extension(path);
 
-    return try std.fmt.allocPrint(gpa, "{s}_{d}{s}", .{ path[0 .. path.len - ext.len], i, ext });
+    const width = std.math.log10_int(ntraj) + 1;
+
+    var num_buf: [32]u8 = undefined;
+
+    const len = std.fmt.printInt(&num_buf, i, 10, .lower, .{ .width = width, .fill = '0' });
+
+    return try std.fmt.allocPrint(gpa, "{s}_{s}{s}", .{ path[0 .. path.len - ext.len], num_buf[0..len], ext });
 }
 
 /// Formats and prints a string to standard output, flushing the writer buffer.
@@ -218,7 +224,7 @@ pub fn writeXyzFrame(comptime T: type, writer: anytype, atoms: []const i32, coor
 pub fn writeXyzMomentumFrame(comptime T: type, writer: anytype, atoms: []const i32, mom: []const T, time: T) !void {
     try writer.interface.print("{d}\nTIME = {d:.4} a.u. = {d:.4} fs\n", .{ atoms.len, time, time * AU2FS });
 
-    const conv = AU2FS / (AMU2AU * A2BOHR);
+    const conv = 1.0 / (AMU2AU * A2BOHR * AU2FS);
 
     for (0..atoms.len) |i| {
         var sym: []const u8 = "X";

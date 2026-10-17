@@ -1541,16 +1541,6 @@ fn checkInvalidInput(opt: Options) !void {
                     return error.InvalidInput;
                 }
 
-                const has_frequency = switch (mopt) {
-                    inline else => |m| m.frequency != null,
-                };
-
-                if (!has_frequency) {
-                    std.log.err("FREQUENCY MUST BE CONFIGURED IN ELECTRONIC STRUCTURE METHOD FOR WIGNER SAMPLING", .{});
-
-                    return error.InvalidInput;
-                }
-
                 const has_gradient = switch (mopt) {
                     inline else => |m| m.gradient != null,
                 };
@@ -1868,7 +1858,6 @@ fn getWignerMethod(opt: Options) MethodOptions {
     switch (method) {
         inline else => |*m| {
             m.hessian = .{ .numeric = .{} };
-            m.frequency = .{};
             m.gradient = null;
             if (@hasField(@TypeOf(m.*), "nacv")) m.nacv = null;
         },
