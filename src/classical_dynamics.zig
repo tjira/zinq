@@ -403,7 +403,7 @@ pub fn Ensemble(comptime T: type) type {
             };
         }
 
-        /// Computes the ensemble-averaged electronic state coefficient magnitudes for fewest switches.
+        /// Computes the ensemble-averaged electronic state coefficient magnitudes for nonadiabatic dynamics.
         pub fn stateCoef(self: @This(), nstate: usize, coefs: Matrix(Complex(T)), gpa: Allocator) !Vector(T) {
             var value = try Vector(T).initZero(nstate, gpa);
 
@@ -569,7 +569,7 @@ const AbInitioStreamWriter = struct {
             }
 
             if (self.files_temp) |files| {
-                const temp_val = (2 * ekin / @as(T, @floatFromInt(ensemble.p.ncol()))) * AU2K;
+                const temp_val = (2 * ekin / @as(T, @floatFromInt(ensemble.ndof))) * AU2K;
 
                 var writer = files[k].writerStreaming(io, &buffer);
 
@@ -1284,7 +1284,7 @@ fn Propagator(comptime T: type) type {
         pub fn coefs(self: @This()) ?Matrix(Complex(T)) {
             if (self.nonadia_dynamic) |n| switch (n) {
                 .surface_hopping => |sh| return sh.coefs(),
-                inline else => return null,
+                .ehrenfest => |eh| return eh.coefs(),
             };
 
             return null;
@@ -1749,13 +1749,13 @@ fn checkInvalidInput(opt: Options) !void {
     const has_state_coef = opt.write.state_coefficient != null or has_ab_coef;
 
     if (has_state_coef) {
-        const is_fewest_switches = if (opt.nonadiabatic) |na| switch (na) {
+        const has_coefs = if (opt.nonadiabatic) |na| switch (na) {
             .surface_hopping => |sh| sh == .fewest_switches,
-            inline else => false,
+            .ehrenfest => true,
         } else false;
 
-        if (!is_fewest_switches) {
-            std.log.err("STATE COEFFICIENT OUTPUT IS ONLY SUPPORTED WITH FEWEST SWITCHES", .{});
+        if (!has_coefs) {
+            std.log.err("STATE COEFFICIENT OUTPUT IS ONLY SUPPORTED WITH FEWEST SWITCHES OR EHRENFEST", .{});
 
             return error.InvalidInput;
         }

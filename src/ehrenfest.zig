@@ -107,6 +107,11 @@ pub fn Ehrenfest(comptime T: type) type {
             self.uhist[1].deinit(gpa);
         }
 
+        /// Returns electronic wavefunction coefficients for nonadiabatic Ehrenfest dynamics.
+        pub fn coefs(self: @This()) Matrix(Complex(T)) {
+            return self.coefics;
+        }
+
         /// Initializes the active electronic state amplitude with unit norm.
         pub fn setInitialState(self: *@This(), istate: usize) void {
             self.coefics.zero();
