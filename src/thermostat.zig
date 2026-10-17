@@ -38,6 +38,8 @@ pub fn Berendsen(comptime T: type) type {
 
         /// Applies velocity rescaling to trajectory momenta to couple with thermal bath.
         pub fn apply(self: *@This(), p: *Matrix(T), m: []const T, ndof: usize, frac: T) void {
+            if (ndof == 0) return;
+
             const ndim = p.ncol();
 
             const eff_dt_over_tau = frac * self.dt_over_tau;

@@ -23,6 +23,7 @@ const hf_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const isDual = @import("value.zig").isDual;
 const mp_runFromSystem = @import("moller_plesset.zig").runFromSystem;
 const readMatrix = @import("read_write.zig").readMatrix;
+const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 
 const CM2EV = @import("constant.zig").CM2EV;
 const EV2AU = @import("constant.zig").EV2AU;
@@ -257,7 +258,11 @@ fn AbInitio(comptime T: type) type {
 
         /// Initializes the molecular system and electronic structure method configuration.
         pub fn init(io: std.Io, options: AbInitioOptions, gpa: Allocator) !@This() {
-            const sys_file, const basis_name, const charge, const multi = switch (options.method) {
+            var clean_opt = options;
+
+            clean_opt.method = stripSecondaryOptions(options.method, .{ .gradient = true, .nacv = true });
+
+            const sys_file, const basis_name, const charge, const multi = switch (clean_opt.method) {
                 .hartree_fock => |opt| .{ opt.system, opt.basis, opt.charge, opt.multiplicity },
 
                 inline else => |opt| .{
@@ -268,7 +273,7 @@ fn AbInitio(comptime T: type) type {
                 },
             };
 
-            const has_grad = switch (options.method) {
+            const has_grad = switch (clean_opt.method) {
                 inline else => |opt| opt.gradient != null,
             };
 
@@ -307,7 +312,7 @@ fn AbInitio(comptime T: type) type {
             Pg_list.* = .empty;
 
             return .{
-                .options = options,
+                .options = clean_opt,
 
                 .inpout = io,
                 .msys = msys,
@@ -406,10 +411,6 @@ fn AbInitio(comptime T: type) type {
         /// Evaluates CI electronic energies, state nuclear gradients, and nonadiabatic couplings.
         fn evalGradCi(self: @This(), V: []T, grad_V: []T, opt: ConfigurationInteractionOptions, active_state: ?usize, traj: usize, eval_nacv: bool) !void {
             var run_opt = opt;
-
-            run_opt.hessian, run_opt.optimize = .{ null, null };
-
-            run_opt.frequency = null;
 
             if (!eval_nacv) {
                 run_opt.nacv = null;

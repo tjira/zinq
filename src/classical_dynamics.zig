@@ -29,6 +29,7 @@ const getTrajectoryPath = @import("read_write.zig").getTrajectoryPath;
 const hartree_fock = @import("hartree_fock.zig");
 const moller_plesset = @import("moller_plesset.zig");
 const printf = @import("read_write.zig").printf;
+const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 const writeXyzFrame = @import("read_write.zig").writeXyzFrame;
 const writeXyzMomentumFrame = @import("read_write.zig").writeXyzMomentumFrame;
@@ -418,6 +419,8 @@ pub fn Ensemble(comptime T: type) type {
 
         /// Calculates the instantaneous kinetic temperature of the ensemble in Kelvin.
         pub fn temp(self: @This()) T {
+            if (self.ndof == 0) return 0;
+
             return (2 * self.ekin() / @as(T, @floatFromInt(self.ndof))) * AU2K;
         }
     };
@@ -569,7 +572,9 @@ const AbInitioStreamWriter = struct {
             }
 
             if (self.files_temp) |files| {
-                const temp_val = (2 * ekin / @as(T, @floatFromInt(ensemble.ndof))) * AU2K;
+                const ndof_t = @as(T, @floatFromInt(ensemble.ndof));
+
+                const temp_val = if (ensemble.ndof == 0) 0 else (2 * ekin / ndof_t) * AU2K;
 
                 var writer = files[k].writerStreaming(io, &buffer);
 
@@ -589,14 +594,16 @@ const AbInitioStreamWriter = struct {
     }
 
     /// Appends the current step's nuclear coordinates to trajectory files.
-    pub fn writeFrame(self: @This(), io: std.Io, comptime T: type, atoms: []const i32, r: Matrix(T), time: T) !void {
+    pub fn writeFrame(self: @This(), io: std.Io, comptime T: type, atoms: []const i32, r: Matrix(T), s: ?Vector(usize), time: T) !void {
         if (self.files_pos) |files| {
             var buffer: [65536]u8 = undefined;
 
             for (0..files.len) |k| {
                 var writer = files[k].writerStreaming(io, &buffer);
 
-                try writeXyzFrame(T, &writer, atoms, r.rowSlice(k), time);
+                const state = if (s) |st| st.at(k) else null;
+
+                try writeXyzFrame(T, &writer, atoms, r.rowSlice(k), time, state);
 
                 try writer.interface.flush();
             }
@@ -604,14 +611,16 @@ const AbInitioStreamWriter = struct {
     }
 
     /// Appends the current step's nuclear momentum vectors to trajectory files.
-    pub fn writeMomentumFrame(self: @This(), io: std.Io, comptime T: type, atoms: []const i32, p: Matrix(T), time: T) !void {
+    pub fn writeMomentumFrame(self: @This(), io: std.Io, comptime T: type, atoms: []const i32, p: Matrix(T), s: ?Vector(usize), time: T) !void {
         if (self.files_mom) |files| {
             var buffer: [65536]u8 = undefined;
 
             for (0..files.len) |k| {
                 var writer = files[k].writerStreaming(io, &buffer);
 
-                try writeXyzMomentumFrame(T, &writer, atoms, p.rowSlice(k), time);
+                const state = if (s) |st| st.at(k) else null;
+
+                try writeXyzMomentumFrame(T, &writer, atoms, p.rowSlice(k), time, state);
 
                 try writer.interface.flush();
             }
@@ -1850,17 +1859,13 @@ fn checkInvalidInput(opt: Options) !void {
 /// Derives electronic structure options for Wigner sampling from explicit settings or potential configuration.
 fn getWignerMethod(opt: Options) MethodOptions {
     if (opt.initial_conditions.distribution.?.wigner.method) |m| {
-        return m;
+        return stripSecondaryOptions(m, .{ .hessian = true });
     }
 
-    var method = opt.potential.ab_initio.method;
+    var method = stripSecondaryOptions(opt.potential.ab_initio.method, .{});
 
     switch (method) {
-        inline else => |*m| {
-            m.hessian = .{ .numeric = .{} };
-            m.gradient = null;
-            if (@hasField(@TypeOf(m.*), "nacv")) m.nacv = null;
-        },
+        inline else => |*m| m.hessian = .{ .numeric = .{} },
     }
 
     return method;
@@ -2251,14 +2256,18 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
 
             const coefs = if (prop.nonadia_dynamic) |n| (if (n == .ehrenfest) n.ehrenfest.coefics else null) else null;
 
-            try sw.writeFrame(io, T, atoms, ctx.sim.ensemble.r, time);
+            const s = if (prop.nonadia_dynamic != null) ctx.sim.ensemble.s else null;
 
-            try sw.writeMomentumFrame(io, T, atoms, ctx.sim.ensemble.p, time);
+            try sw.writeFrame(io, T, atoms, ctx.sim.ensemble.r, s, time);
+
+            try sw.writeMomentumFrame(io, T, atoms, ctx.sim.ensemble.p, s, time);
+
             try sw.writeStatePotentialEnergy(io, T, ctx.sim.gb, nstate, time);
 
             try sw.writeEnergy(io, T, ctx.sim.ensemble, ctx.sim.gb, nstate, coefs, time);
 
             try sw.writePopulation(io, T, ctx.sim.ensemble, nstate, coefs, time);
+
             try sw.writeStateCoefficient(io, T, nstate, prop.coefs(), time);
         }
 

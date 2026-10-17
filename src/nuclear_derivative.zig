@@ -258,13 +258,7 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
     var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
     defer Pg.deinit(gpa);
 
-    var modified_opt = opt;
-
-    modified_opt.gradient, modified_opt.hessian, modified_opt.optimize = .{ null, null, null };
-
-    if (comptime @hasField(@TypeOf(modified_opt), "nacv")) {
-        modified_opt.nacv = null;
-    }
+    const modified_opt = stripSecondaryOptions(opt, .{});
 
     if (comptime @hasField(@TypeOf(modified_opt), "nstate")) {
         const required = @as(u32, @intCast(max_state + 1));
@@ -274,49 +268,6 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
 
             return error.InvalidInput;
         }
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "frequency")) {
-        modified_opt.frequency = null;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "lowdin")) {
-        modified_opt.lowdin = false;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "mayer")) {
-        modified_opt.mayer = false;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "mulliken")) {
-        modified_opt.mulliken = false;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "wiberg")) {
-        modified_opt.wiberg = false;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "response")) {
-        modified_opt.response = null;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "write")) {
-        modified_opt.write = .{};
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "hartree_fock")) {
-        modified_opt.hartree_fock.frequency = null;
-
-        modified_opt.hartree_fock.gradient = null;
-        modified_opt.hartree_fock.response = null;
-
-        modified_opt.hartree_fock.hessian = null;
-        modified_opt.hartree_fock.lowdin = false;
-        modified_opt.hartree_fock.wiberg = false;
-
-        modified_opt.hartree_fock.mayer, modified_opt.hartree_fock.mulliken = .{ false, false };
-
-        modified_opt.hartree_fock.write = .{};
     }
 
     var res_ref = try runFn(T, io, modified_opt, sys, ctx.Pg, false, gpa);
@@ -591,64 +542,66 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
     return nacvs;
 }
 
+/// Strips secondary calculation blocks and property requests from electronic structure options.
+pub fn stripSecondaryOptions(opt: anytype, preserve: anytype) @TypeOf(opt) {
+    if (@typeInfo(@TypeOf(opt)) == .@"union") {
+        return switch (opt) {
+            inline else => |m, tag| @unionInit(@TypeOf(opt), @tagName(tag), stripSecondaryOptions(m, preserve)),
+        };
+    }
+
+    var clean = opt;
+
+    const preserve_grad = if (comptime @hasField(@TypeOf(preserve), "gradient")) preserve.gradient else false;
+
+    const preserve_hess = if (comptime @hasField(@TypeOf(preserve), "hessian")) preserve.hessian else false;
+
+    const preserve_nacv = if (comptime @hasField(@TypeOf(preserve), "nacv")) preserve.nacv else false;
+
+    if (comptime @hasField(@TypeOf(clean), "optimize")) {
+        clean.optimize = null;
+    }
+
+    if (comptime @hasField(@TypeOf(clean), "frequency")) {
+        clean.frequency = null;
+    }
+
+    if (comptime @hasField(@TypeOf(clean), "response")) {
+        clean.response = null;
+    }
+
+    if (comptime @hasField(@TypeOf(clean), "write")) {
+        clean.write = .{};
+    }
+
+    if (!preserve_grad and comptime @hasField(@TypeOf(clean), "gradient")) {
+        clean.gradient = null;
+    }
+
+    if (!preserve_hess and comptime @hasField(@TypeOf(clean), "hessian")) {
+        clean.hessian = null;
+    }
+
+    if (!preserve_nacv and comptime @hasField(@TypeOf(clean), "nacv")) {
+        clean.nacv = null;
+    }
+
+    inline for (.{"lowdin", "mayer", "mulliken", "wiberg"}) |pop| {
+        if (comptime @hasField(@TypeOf(clean), pop)) @field(clean, pop) = false;
+    }
+
+    if (comptime @hasField(@TypeOf(clean), "hartree_fock")) {
+        clean.hartree_fock = stripSecondaryOptions(clean.hartree_fock, .{});
+    }
+
+    return clean;
+}
+
 /// Evaluates electronic state energies for a perturbed molecular geometry.
 fn getEnergies(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt: anytype, perts: anytype, Pg: ?Matrix(T), P: ?*Matrix(T), out: []T) !void {
     std.debug.assert(@typeInfo(@TypeOf(perts)).@"struct".field_names.len % 2 == 0);
 
-    const io, const sys, const gpa = .{ ctx.io, ctx.sys, ctx.gpa };
-
-    const max_state = out.len - 1;
-
-    var modified_opt = opt;
-
-    modified_opt.gradient, modified_opt.hessian, modified_opt.optimize = .{ null, null, null };
-
-    if (comptime @hasField(@TypeOf(modified_opt), "nacv")) {
-        modified_opt.nacv = null;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "frequency")) {
-        modified_opt.frequency = null;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "lowdin")) {
-        modified_opt.lowdin = false;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "mayer")) {
-        modified_opt.mayer = false;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "mulliken")) {
-        modified_opt.mulliken = false;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "wiberg")) {
-        modified_opt.wiberg = false;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "response")) {
-        modified_opt.response = null;
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "write")) {
-        modified_opt.write = .{};
-    }
-
-    if (comptime @hasField(@TypeOf(modified_opt), "hartree_fock")) {
-        modified_opt.hartree_fock.frequency = null;
-
-        modified_opt.hartree_fock.gradient = null;
-        modified_opt.hartree_fock.response = null;
-
-        modified_opt.hartree_fock.hessian = null;
-        modified_opt.hartree_fock.lowdin = false;
-        modified_opt.hartree_fock.wiberg = false;
-
-        modified_opt.hartree_fock.mayer, modified_opt.hartree_fock.mulliken = .{ false, false };
-
-        modified_opt.hartree_fock.write = .{};
-    }
+    const modified_opt, const sys = .{ stripSecondaryOptions(opt, .{}), ctx.sys };
 
     var original_coors: [@typeInfo(@TypeOf(perts)).@"struct".field_names.len / 2]T = undefined;
 
@@ -667,14 +620,14 @@ fn getEnergies(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt:
         libint.libint_update_coords(sys.ptr, sys.coors.ptr);
     }
 
-    var res = try runFn(T, io, modified_opt, sys, Pg, false, gpa);
-    defer res.deinit(gpa);
+    var res = try runFn(T, ctx.io, modified_opt, sys, Pg, false, ctx.gpa);
+    defer res.deinit(ctx.gpa);
 
     if (P) |out_P| {
         @memcpy(out_P.data, (if (@hasField(@TypeOf(res), "hartree_fock")) res.hartree_fock.P else res.P).data);
     }
 
-    if (res.energy.len <= max_state) {
+    if (res.energy.len <= out.len - 1) {
         const msg = "STATE REQUESTED FOR NUMERICAL DERIVATIVE IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION";
 
         std.log.err(msg, .{});
@@ -682,5 +635,5 @@ fn getEnergies(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt:
         return error.InvalidInput;
     }
 
-    @memcpy(out[0 .. max_state + 1], res.energy[0 .. max_state + 1]);
+    @memcpy(out, res.energy[0..out.len]);
 }

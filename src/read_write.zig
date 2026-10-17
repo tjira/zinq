@@ -22,7 +22,7 @@ pub fn getTrajectoryPath(path: []const u8, i: usize, ntraj: usize, gpa: std.mem.
 
     var num_buf: [32]u8 = undefined;
 
-    const len = std.fmt.printInt(&num_buf, i, 10, .lower, .{ .width = width, .fill = '0' });
+    const len = std.fmt.printInt(&num_buf, i + 1, 10, .lower, .{ .width = width, .fill = '0' });
 
     return try std.fmt.allocPrint(gpa, "{s}_{s}{s}", .{ path[0 .. path.len - ext.len], num_buf[0..len], ext });
 }
@@ -201,9 +201,15 @@ pub fn writeXyzFile(comptime T: type, io: std.Io, fname: []const u8, atoms: []co
     try writer.interface.flush();
 }
 
-/// Appends a single XYZ frame to a writer stream with atomic coordinates and timestamp.
-pub fn writeXyzFrame(comptime T: type, writer: anytype, atoms: []const i32, coors: []const T, time: T) !void {
-    try writer.interface.print("{d}\nTIME = {d:.4} a.u. = {d:.4} fs\n", .{ atoms.len, time, time * AU2FS });
+/// Appends a single XYZ frame to a writer stream with atomic coordinates, timestamp, and optional electronic state.
+pub fn writeXyzFrame(comptime T: type, writer: anytype, atoms: []const i32, coors: []const T, time: T, state: ?usize) !void {
+    if (state) |s| {
+        try writer.interface.print("{d}\nTIME = {d:.4} a.u. = {d:.4} fs, STATE = {d}\n", .{ atoms.len, time, time * AU2FS, s });
+    }
+
+    if (state == null) {
+        try writer.interface.print("{d}\nTIME = {d:.4} a.u. = {d:.4} fs\n", .{ atoms.len, time, time * AU2FS });
+    }
 
     for (0..atoms.len) |i| {
         var sym: []const u8 = "X";
@@ -220,9 +226,15 @@ pub fn writeXyzFrame(comptime T: type, writer: anytype, atoms: []const i32, coor
     }
 }
 
-/// Appends a single XYZ frame to a writer stream with atomic momentum vectors and timestamp.
-pub fn writeXyzMomentumFrame(comptime T: type, writer: anytype, atoms: []const i32, mom: []const T, time: T) !void {
-    try writer.interface.print("{d}\nTIME = {d:.4} a.u. = {d:.4} fs\n", .{ atoms.len, time, time * AU2FS });
+/// Appends XYZ frame to a writer stream with atomic momentum vectors, timestamp, and optional electronic state.
+pub fn writeXyzMomentumFrame(comptime T: type, writer: anytype, atoms: []const i32, mom: []const T, time: T, state: ?usize) !void {
+    if (state) |s| {
+        try writer.interface.print("{d}\nTIME = {d:.4} a.u. = {d:.4} fs, STATE = {d}\n", .{ atoms.len, time, time * AU2FS, s });
+    }
+
+    if (state == null) {
+        try writer.interface.print("{d}\nTIME = {d:.4} a.u. = {d:.4} fs\n", .{ atoms.len, time, time * AU2FS });
+    }
 
     const conv = 1.0 / (AMU2AU * A2BOHR * AU2FS);
 
