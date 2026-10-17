@@ -1197,7 +1197,7 @@ fn Observables(comptime T: type) type {
 
             if (calc.pop) obs.pop = try sim.ensemble.pop(sim.elpoten.nstate(), coefs, gpa);
 
-            if (write.state_coefficient != null) {
+            if (write.state_coefficient != null or (log and sim.propag.coefs() != null)) {
                 if (sim.propag.coefs()) |c_coefs| {
                     obs.state_coef = try sim.ensemble.stateCoef(sim.elpoten.nstate(), c_coefs, gpa);
                 }
@@ -1263,7 +1263,7 @@ fn Propagator(comptime T: type) type {
             };
 
             if (opt.nonadiabatic) |naopt| if (naopt == .ehrenfest) {
-                const eh = try Ehrenfest(T).init(naopt.ehrenfest, nstate, opt.trajectories, opt.adiabatic, gpa);
+                const eh = try Ehrenfest(T).init(naopt.ehrenfest, nstate, opt.trajectories, istate, opt.adiabatic, gpa);
 
                 nonadia_dynamic = .{ .ehrenfest = eh };
             };
@@ -1384,7 +1384,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     errdefer obs.deinit(gpa);
 
     if (log) {
-        try printFinalPop(T, io, obs);
+        try printFinalPop(T, io, obs, opt);
     }
 
     return .{ .observables = obs };
@@ -1675,7 +1675,21 @@ fn checkInvalidInput(opt: Options) !void {
                     }
                 },
 
-                inline else => {},
+                .landau_zener => {
+                    if (opt.potential.ab_initio.method != .configuration_interaction) {
+                        std.log.err("AB INITIO LANDAU-ZENER IS ONLY SUPPORTED WITH CONFIGURATION INTERACTION", .{});
+
+                        return error.InvalidInput;
+                    }
+
+                    const ci = opt.potential.ab_initio.method.configuration_interaction;
+
+                    if (ci.nstate < 2) {
+                        std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR LANDAU-ZENER", .{});
+
+                        return error.InvalidInput;
+                    }
+                },
             },
         }
     }
@@ -1938,7 +1952,6 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
 
     if (prop.nonadia_dynamic) |*n| if (n.* == .ehrenfest) {
         n.ehrenfest.update(if (opt.adiabatic) gb.W else gb.V, gb.U);
-        n.ehrenfest.setInitialState(opt.initial_conditions.state);
     };
 
     const coefs = if (prop.nonadia_dynamic) |*n| (if (n.* == .ehrenfest) &n.ehrenfest.coefics else null) else null;
@@ -1949,12 +1962,28 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
 }
 
 /// Prints the final population fractions of electronic states to stdout.
-fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T)) !void {
+fn printFinalPop(comptime T: type, io: std.Io, obs: Observables(T), opt: Options) !void {
+    if (opt.nonadiabatic == null) return;
+
     if (obs.pop) |pop| {
+        if (pop.length() <= 1) return;
+
         try std.Io.File.stdout().writeStreamingAll(io, "\n");
 
+        const na = opt.nonadiabatic.?;
+
+        const is_fssh = na == .surface_hopping and na.surface_hopping == .fewest_switches;
+
         for (0..pop.length()) |i| {
-            try printf(io, "FINAL POPULATION OF ELECTRONIC STATE {d:02}: {d:.8}\n", .{ i, pop.at(i) });
+            if (is_fssh and obs.state_coef != null) {
+                const fmt = "FINAL POPULATION OF ELECTRONIC STATE {d:02}: {d:.8} (COEF: {d:.8})\n";
+
+                try printf(io, fmt, .{ i, pop.at(i), obs.state_coef.?.at(i) });
+            }
+
+            if (!is_fssh or obs.state_coef == null) {
+                try printf(io, "FINAL POPULATION OF ELECTRONIC STATE {d:02}: {d:.8}\n", .{ i, pop.at(i) });
+            }
         }
     }
 }

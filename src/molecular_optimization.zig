@@ -306,17 +306,17 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
 fn getOptimizedEnergy(opt: anytype, energies: anytype) @TypeOf(energies[0]) {
     const state: usize = blk: {
         if (!comptime @hasField(@TypeOf(opt), "gradient")) break :blk 0;
-        
+
         const gradopt = opt.gradient orelse break :blk 0;
-        
+
         switch (gradopt) {
             inline else => |g| {
                 if (!comptime @hasField(@TypeOf(g), "states")) break :blk 0;
-                
+
                 const states = g.states orelse break :blk 0;
 
                 if (states.len > 0) break :blk states[0];
-                
+
                 break :blk 0;
             },
         }

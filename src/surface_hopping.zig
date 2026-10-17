@@ -148,13 +148,27 @@ pub fn SurfaceHopping(comptime T: type) type {
                 self.calcTargetStates(ensemble);
             }
 
-            return self.applyTargets(ensemble, W, grad_V);
+            const any_hop = self.applyTargets(ensemble, W, grad_V);
+
+            if (self.adia_alg) {
+                self.applyDecoherence(ensemble, dt);
+            }
+
+            return any_hop;
         }
 
         /// Updates Hamiltonian and unitary transformation histories for hopping evaluation.
         pub fn update(self: *@This(), H: Matrix(T), U: Matrix(T)) void {
             switch (self.method) {
                 inline else => |*field| field.update(H, U),
+            }
+        }
+
+        /// Damps electronic coefficients using the Granucci-Persico decoherence correction.
+        fn applyDecoherence(self: *@This(), ensemble: *Ensemble(T), dt: T) void {
+            switch (self.method) {
+                .fewest_switches => |*fs| fs.applyDecoherence(ensemble, dt),
+                inline else => {},
             }
         }
 
@@ -352,6 +366,55 @@ fn FewestSwitches(comptime T: type) type {
             self.itg.deinit(gpa);
         }
 
+        /// Damps nonadiabatic electronic state amplitudes according to the Granucci-Persico decoherence time.
+        pub fn applyDecoherence(self: *@This(), ensemble: *Ensemble(T), dt: T) void {
+            const alpha = self.alpha orelse return;
+
+            for (0..ensemble.s.length()) |traj| {
+                var ekin: T = 0;
+
+                for (0..ensemble.p.ncol()) |j| {
+                    ekin += ensemble.p.at(traj, j) * ensemble.p.at(traj, j) / (2 * ensemble.m[j]);
+                }
+
+                if (ekin <= 1e-4) continue;
+
+                const c = ensemble.s.at(traj);
+
+                const rho_cc = self.coefics.at(traj, c).squaredMagnitude();
+
+                if (rho_cc < 1e-14) continue;
+
+                const e_curr = self.hamilton.at(traj, c);
+
+                for (0..self.coefics.ncol()) |j| {
+                    if (j == c) continue;
+
+                    const delta_e = @abs(self.hamilton.at(traj, j) - e_curr);
+
+                    if (delta_e < 1e-14) continue;
+
+                    const tau = (1 + alpha / ekin) / delta_e;
+
+                    const d = std.math.exp(-0.5 * dt / tau);
+
+                    self.coefics.ptr(traj, j).re *= d;
+                    self.coefics.ptr(traj, j).im *= d;
+                }
+
+                var sum_norm: T = 1;
+
+                for (0..self.coefics.ncol()) |j| if (j != c) {
+                    sum_norm -= self.coefics.at(traj, j).squaredMagnitude();
+                };
+
+                const renorm = std.math.sqrt(@max(0, sum_norm) / rho_cc);
+
+                self.coefics.ptr(traj, c).re *= renorm;
+                self.coefics.ptr(traj, c).im *= renorm;
+            }
+        }
+
         /// Computes adiabatic transition probabilities using time-derivative couplings.
         pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, step_idx: usize, nstep: usize, dt: T) !void {
             if (self.coupling.? == .hst and std.math.isNan(self.uhist[0].at(0, 0))) return;
@@ -395,8 +458,6 @@ fn FewestSwitches(comptime T: type) type {
                         probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
                     }
                 }
-
-                self.applyDecoherence(ensemble, i, dt);
             }
         }
 
@@ -441,52 +502,6 @@ fn FewestSwitches(comptime T: type) type {
 
                 self.uhist[1].ptr(i, j).* = U.at(i, j);
             };
-        }
-
-        /// Damps nonadiabatic electronic state amplitudes according to the Granucci-Persico decoherence time.
-        fn applyDecoherence(self: *@This(), ensemble: *Ensemble(T), traj: usize, dt: T) void {
-            const alpha = self.alpha orelse return;
-
-            var ekin: T = 0;
-
-            for (0..ensemble.p.ncol()) |j| {
-                ekin += ensemble.p.at(traj, j) * ensemble.p.at(traj, j) / (2 * ensemble.m[j]);
-            }
-
-            if (ekin <= 1e-4) return;
-
-            const c = ensemble.s.at(traj);
-
-            const rho_cc = self.coefics.at(traj, c).squaredMagnitude();
-
-            if (rho_cc < 1e-14) return;
-
-            const e_curr = self.hamilton.at(traj, c);
-
-            for (0..self.coefics.ncol()) |j| {
-                if (j == c) continue;
-
-                const delta_e = @abs(self.hamilton.at(traj, j) - e_curr);
-
-                if (delta_e < 1e-14) continue;
-
-                const tau = (1 + alpha / ekin) / delta_e;
-                const d = std.math.exp(-0.5 * dt / tau);
-
-                self.coefics.ptr(traj, j).re *= d;
-                self.coefics.ptr(traj, j).im *= d;
-            }
-
-            var sum_norm: T = 1;
-
-            for (0..self.coefics.ncol()) |j| if (j != c) {
-                sum_norm -= self.coefics.at(traj, j).squaredMagnitude();
-            };
-
-            const renorm = std.math.sqrt(@max(0, sum_norm) / rho_cc);
-
-            self.coefics.ptr(traj, c).re *= renorm;
-            self.coefics.ptr(traj, c).im *= renorm;
         }
     };
 }

@@ -497,7 +497,9 @@ fn AbInitio(comptime T: type) type {
 
             @memset(V[0 .. n * n], 0);
 
-            @memset(grad_V[0 .. self.ndim() * n * n], 0);
+            if (eval_nacv) {
+                @memset(grad_V[0 .. self.ndim() * n * n], 0);
+            }
 
             for (0..n) |k| {
                 V[k * n + k] = res.energy[k];

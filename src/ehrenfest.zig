@@ -39,7 +39,7 @@ pub fn Ehrenfest(comptime T: type) type {
         coupling: ?std.meta.Tag(CouplingOptions),
 
         /// Allocates and initializes electronic coefficients, Hamiltonian histories, and Runge-Kutta integrator.
-        pub fn init(opt: Options, nstate: usize, ntraj: usize, adia: bool, gpa: std.mem.Allocator) !@This() {
+        pub fn init(opt: Options, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: std.mem.Allocator) !@This() {
             if (adia and opt.coupling == null) {
                 return error.InvalidInput;
             }
@@ -52,6 +52,10 @@ pub fn Ehrenfest(comptime T: type) type {
             errdefer coef.deinit(gpa);
 
             coef.zero();
+
+            for (0..ntraj) |i| {
+                coef.ptr(i, istate).* = Complex(T).init(1, 0);
+            }
 
             const cols = if (adia) nstate else nstate * nstate;
 
@@ -110,15 +114,6 @@ pub fn Ehrenfest(comptime T: type) type {
         /// Returns electronic wavefunction coefficients for nonadiabatic Ehrenfest dynamics.
         pub fn coefs(self: @This()) Matrix(Complex(T)) {
             return self.coefics;
-        }
-
-        /// Initializes the active electronic state amplitude with unit norm.
-        pub fn setInitialState(self: *@This(), istate: usize) void {
-            self.coefics.zero();
-
-            for (0..self.coefics.nrow()) |i| {
-                self.coefics.ptr(i, istate).* = Complex(T).init(1, 0);
-            }
         }
 
         /// Propagates electronic coefficients over nuclear time step dt in adiabatic or diabatic representation.
