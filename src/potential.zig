@@ -44,40 +44,15 @@ pub const Options = union(enum) {
     tully_3: Tully3Options,
 };
 
-/// Ab initio electronic structure method configuration and trajectory output options.
-pub const AbInitioOptions = struct {
-    method: MethodOptions,
-    write: AbInitioWrite = .{},
-};
-
-/// Output file destinations for ab initio potential trajectories.
-pub const AbInitioWrite = struct {
-    kinetic_energy: ?[]const u8 = null,
-    momentum: ?[]const u8 = null,
-    population: ?[]const u8 = null,
-    position: ?[]const u8 = null,
-    potential_energy: ?[]const u8 = null,
-    state_coefficient: ?[]const u8 = null,
-    state_potential_energy: ?[]const u8 = null,
-    temperature: ?[]const u8 = null,
-    total_energy: ?[]const u8 = null,
-
-    /// Returns true if at least one trajectory property is configured for output.
-    pub fn any(self: @This()) bool {
-        inline for (@typeInfo(@This()).@"struct".field_names) |name| {
-            if (@field(self, name) != null) return true;
-        }
-
-        return false;
-    }
-};
-
-/// Available electronic structure methods for on-the-fly potential evaluation.
-pub const MethodOptions = union(enum) {
+/// Electronic structure method configuration for on-the-fly ab initio potential evaluations.
+pub const AbInitioOptions = union(enum) {
     configuration_interaction: ConfigurationInteractionOptions,
     hartree_fock: HartreeFockOptions,
     moller_plesset: MollerPlessetOptions,
 };
+
+/// Available electronic structure methods for on-the-fly potential evaluation.
+pub const MethodOptions = AbInitioOptions;
 
 /// User-defined analytical potential matrix elements and coordinate dimension.
 const CustomOptions = struct {
@@ -258,11 +233,9 @@ fn AbInitio(comptime T: type) type {
 
         /// Initializes the molecular system and electronic structure method configuration.
         pub fn init(io: std.Io, options: AbInitioOptions, gpa: Allocator) !@This() {
-            var clean_opt = options;
+            const clean_opt = stripSecondaryOptions(options, .{ .gradient = true, .nacv = true });
 
-            clean_opt.method = stripSecondaryOptions(options.method, .{ .gradient = true, .nacv = true });
-
-            const sys_file, const basis_name, const charge, const multi = switch (clean_opt.method) {
+            const sys_file, const basis_name, const charge, const multi = switch (clean_opt) {
                 .hartree_fock => |opt| .{ opt.system, opt.basis, opt.charge, opt.multiplicity },
 
                 inline else => |opt| .{
@@ -273,7 +246,7 @@ fn AbInitio(comptime T: type) type {
                 },
             };
 
-            const has_grad = switch (clean_opt.method) {
+            const has_grad = switch (clean_opt) {
                 inline else => |opt| opt.gradient != null,
             };
 
@@ -368,7 +341,7 @@ fn AbInitio(comptime T: type) type {
 
             libint.libint_update_coords(self.msys.ptr, self.msys.coors.ptr);
 
-            switch (self.options.method) {
+            switch (self.options) {
                 .hartree_fock => |opt| try self.evalGradSingle(V, grad_V, opt, hf_runFromSystem, traj),
                 .moller_plesset => |opt| try self.evalGradSingle(V, grad_V, opt, mp_runFromSystem, traj),
                 .configuration_interaction => |opt| try self.evalGradCi(V, grad_V, opt, active_state, traj, eval_nacv),
@@ -387,7 +360,7 @@ fn AbInitio(comptime T: type) type {
 
         /// Returns the number of electronic states in the ab initio calculation.
         pub fn nstate(self: @This()) usize {
-            return switch (self.options.method) {
+            return switch (self.options) {
                 .configuration_interaction => |opt| opt.nstate,
 
                 inline else => 1,

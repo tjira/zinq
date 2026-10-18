@@ -5,7 +5,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
-const AbInitioWrite = @import("potential.zig").AbInitioWrite;
 const Ehrenfest = @import("ehrenfest.zig").Ehrenfest;
 const EhrenfestOptions = @import("ehrenfest.zig").Options;
 const Matrix = @import("tensor.zig").Matrix;
@@ -48,6 +47,7 @@ pub const Options = struct {
     mass: ?[]const f64 = null,
     nonadiabatic: ?NonadiabaticOptions = null,
     potential: PotentialOptions,
+    stream: Stream = .{},
     thermostat: ?ThermostatOptions = null,
     time_step: f64,
     trajectories: u32,
@@ -85,6 +85,19 @@ const InitialConditions = struct {
     position: ?[]const f64 = null,
     seed: u32 = 1,
     state: u32 = 0,
+};
+
+/// Output file destinations for streaming trajectory observables to disk during dynamics.
+const Stream = struct {
+    kinetic_energy: ?[]const u8 = null,
+    momentum: ?[]const u8 = null,
+    population: ?[]const u8 = null,
+    position: ?[]const u8 = null,
+    potential_energy: ?[]const u8 = null,
+    state_coefficient: ?[]const u8 = null,
+    state_potential_energy: ?[]const u8 = null,
+    temperature: ?[]const u8 = null,
+    total_energy: ?[]const u8 = null,
 };
 
 /// Output paths for recording trajectory observables to disk during dynamics.
@@ -440,8 +453,8 @@ pub fn Result(comptime T: type) type {
     };
 }
 
-/// Manages streaming output files for multi-trajectory ab initio property logging.
-const AbInitioStreamWriter = struct {
+/// Manages real-time streaming output files for multi-trajectory observable logging during dynamics.
+const StreamWriter = struct {
     files_ekin: ?[]std.Io.File = null,
     files_epot: ?[]std.Io.File = null,
     files_etot: ?[]std.Io.File = null,
@@ -455,43 +468,55 @@ const AbInitioStreamWriter = struct {
     files_state_epot: ?[]std.Io.File = null,
 
     /// Initializes and opens trajectory output files on disk for configured properties.
-    pub fn init(io: std.Io, write: AbInitioWrite, ntraj: usize, nstep: usize, nstate: usize, gpa: Allocator) !@This() {
+    pub fn init(io: std.Io, stream: Stream, atoms: []const i32, ndim: usize, ntraj: usize, nstep: usize, nstate: usize, gpa: Allocator) !?@This() {
+        const any_stream = inline for (@typeInfo(Stream).@"struct".field_names) |name| {
+            if (@field(stream, name) != null) break true;
+        } else false;
+
+        if (!any_stream) return null;
+
         var self = @This(){};
         errdefer self.deinit(io, gpa);
 
-        if (write.kinetic_energy) |path| {
+        if (stream.kinetic_energy) |path| {
             self.files_ekin = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
         }
 
-        if (write.momentum) |path| {
-            self.files_mom = try initFiles(io, path, ntraj, gpa);
+        if (stream.momentum) |path| {
+            self.files_mom = if (atoms.len > 0)
+                try initFiles(io, path, ntraj, gpa)
+            else
+                try initMatrixFiles(io, path, ntraj, nstep, ndim + 1, gpa);
         }
 
-        if (write.population) |path| {
+        if (stream.population) |path| {
             self.files_pop = try initMatrixFiles(io, path, ntraj, nstep, nstate + 1, gpa);
         }
 
-        if (write.position) |path| {
-            self.files_pos = try initFiles(io, path, ntraj, gpa);
+        if (stream.position) |path| {
+            self.files_pos = if (atoms.len > 0)
+                try initFiles(io, path, ntraj, gpa)
+            else
+                try initMatrixFiles(io, path, ntraj, nstep, ndim + 1, gpa);
         }
 
-        if (write.potential_energy) |path| {
+        if (stream.potential_energy) |path| {
             self.files_epot = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
         }
 
-        if (write.state_coefficient) |path| {
+        if (stream.state_coefficient) |path| {
             self.files_state_coef = try initMatrixFiles(io, path, ntraj, nstep, nstate + 1, gpa);
         }
 
-        if (write.state_potential_energy) |path| {
+        if (stream.state_potential_energy) |path| {
             self.files_state_epot = try initMatrixFiles(io, path, ntraj, nstep, nstate + 1, gpa);
         }
 
-        if (write.temperature) |path| {
+        if (stream.temperature) |path| {
             self.files_temp = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
         }
 
-        if (write.total_energy) |path| {
+        if (stream.total_energy) |path| {
             self.files_etot = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
         }
 
@@ -595,7 +620,7 @@ const AbInitioStreamWriter = struct {
         }
     }
 
-    /// Appends the current step's nuclear coordinates to trajectory files.
+    /// Appends the current step's coordinates to trajectory files in XYZ or space-separated format.
     pub fn writeFrame(self: @This(), io: std.Io, comptime T: type, atoms: []const i32, r: Matrix(T), s: ?Vector(usize), time: T) !void {
         if (self.files_pos) |files| {
             var buffer: [65536]u8 = undefined;
@@ -603,16 +628,28 @@ const AbInitioStreamWriter = struct {
             for (0..files.len) |k| {
                 var writer = files[k].writerStreaming(io, &buffer);
 
-                const state = if (s) |st| st.at(k) else null;
+                if (atoms.len > 0) {
+                    const state = if (s) |st| st.at(k) else null;
 
-                try writeXyzFrame(T, &writer, atoms, r.rowSlice(k), time, state);
+                    try writeXyzFrame(T, &writer, atoms, r.rowSlice(k), time, state);
+                }
+
+                if (atoms.len == 0) {
+                    try writer.interface.print("{d:20.14}", .{time});
+
+                    for (0..r.ncol()) |j| {
+                        try writer.interface.print(" {d:20.14}", .{r.at(k, j)});
+                    }
+
+                    try writer.interface.print("\n", .{});
+                }
 
                 try writer.interface.flush();
             }
         }
     }
 
-    /// Appends the current step's nuclear momentum vectors to trajectory files.
+    /// Appends the current step's momentum vectors to trajectory files in XYZ or space-separated format.
     pub fn writeMomentumFrame(self: @This(), io: std.Io, comptime T: type, atoms: []const i32, p: Matrix(T), s: ?Vector(usize), time: T) !void {
         if (self.files_mom) |files| {
             var buffer: [65536]u8 = undefined;
@@ -620,9 +657,21 @@ const AbInitioStreamWriter = struct {
             for (0..files.len) |k| {
                 var writer = files[k].writerStreaming(io, &buffer);
 
-                const state = if (s) |st| st.at(k) else null;
+                if (atoms.len > 0) {
+                    const state = if (s) |st| st.at(k) else null;
 
-                try writeXyzMomentumFrame(T, &writer, atoms, p.rowSlice(k), time, state);
+                    try writeXyzMomentumFrame(T, &writer, atoms, p.rowSlice(k), time, state);
+                }
+
+                if (atoms.len == 0) {
+                    try writer.interface.print("{d:20.14}", .{time});
+
+                    for (0..p.ncol()) |j| {
+                        try writer.interface.print(" {d:20.14}", .{p.at(k, j)});
+                    }
+
+                    try writer.interface.print("\n", .{});
+                }
 
                 try writer.interface.flush();
             }
@@ -1612,7 +1661,7 @@ fn checkInvalidInput(opt: Options) !void {
     }
 
     if (opt.potential == .ab_initio) {
-        const has_grad = switch (opt.potential.ab_initio.method) {
+        const has_grad = switch (opt.potential.ab_initio) {
             inline else => |m| m.gradient != null,
         };
 
@@ -1632,13 +1681,13 @@ fn checkInvalidInput(opt: Options) !void {
     if (opt.potential == .ab_initio and opt.nonadiabatic != null) {
         switch (opt.nonadiabatic.?) {
             .ehrenfest => |eh| {
-                if (opt.potential.ab_initio.method != .configuration_interaction) {
+                if (opt.potential.ab_initio != .configuration_interaction) {
                     std.log.err("AB INITIO EHRENFEST IS ONLY SUPPORTED WITH CONFIGURATION INTERACTION", .{});
 
                     return error.InvalidInput;
                 }
 
-                const ci = opt.potential.ab_initio.method.configuration_interaction;
+                const ci = opt.potential.ab_initio.configuration_interaction;
 
                 if (ci.nstate < 2) {
                     std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR EHRENFEST", .{});
@@ -1661,13 +1710,13 @@ fn checkInvalidInput(opt: Options) !void {
 
             .surface_hopping => |sh| switch (sh) {
                 .fewest_switches => |fs| {
-                    if (opt.potential.ab_initio.method != .configuration_interaction) {
+                    if (opt.potential.ab_initio != .configuration_interaction) {
                         std.log.err("AB INITIO FSSH IS ONLY SUPPORTED WITH CONFIGURATION INTERACTION", .{});
 
                         return error.InvalidInput;
                     }
 
-                    const ci = opt.potential.ab_initio.method.configuration_interaction;
+                    const ci = opt.potential.ab_initio.configuration_interaction;
 
                     if (ci.nstate < 2) {
                         std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR FSSH", .{});
@@ -1689,13 +1738,13 @@ fn checkInvalidInput(opt: Options) !void {
                 },
 
                 .landau_zener => {
-                    if (opt.potential.ab_initio.method != .configuration_interaction) {
+                    if (opt.potential.ab_initio != .configuration_interaction) {
                         std.log.err("AB INITIO LANDAU-ZENER IS ONLY SUPPORTED WITH CONFIGURATION INTERACTION", .{});
 
                         return error.InvalidInput;
                     }
 
-                    const ci = opt.potential.ab_initio.method.configuration_interaction;
+                    const ci = opt.potential.ab_initio.configuration_interaction;
 
                     if (ci.nstate < 2) {
                         std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR LANDAU-ZENER", .{});
@@ -1771,9 +1820,7 @@ fn checkInvalidInput(opt: Options) !void {
         },
     };
 
-    const has_ab_coef = if (opt.potential == .ab_initio) opt.potential.ab_initio.write.state_coefficient != null else false;
-
-    const has_state_coef = opt.write.state_coefficient != null or has_ab_coef;
+    const has_state_coef = opt.write.state_coefficient != null or opt.stream.state_coefficient != null;
 
     if (has_state_coef) {
         const has_coefs = if (opt.nonadiabatic) |na| switch (na) {
@@ -1788,7 +1835,7 @@ fn checkInvalidInput(opt: Options) !void {
         }
     }
 
-    if (opt.potential == .ab_initio) switch (opt.potential.ab_initio.method) {
+    if (opt.potential == .ab_initio) switch (opt.potential.ab_initio) {
         .hartree_fock => if (opt.initial_conditions.state > 0) {
             std.log.err("REQUESTED ELECTRONIC STATE IS NOT SUPPORTED FOR HARTREE-FOCK POTENTIAL", .{});
 
@@ -1876,7 +1923,7 @@ fn getWignerMethod(opt: Options) MethodOptions {
         return stripSecondaryOptions(m, .{ .hessian = true });
     }
 
-    var method = stripSecondaryOptions(opt.potential.ab_initio.method, .{});
+    var method = stripSecondaryOptions(opt.potential.ab_initio, .{});
 
     switch (method) {
         inline else => |*m| m.hessian = .{ .numeric = .{} },
@@ -2239,18 +2286,9 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
         inline else => &.{},
     };
 
-    var stream_writer: ?AbInitioStreamWriter = null;
+    const nrow, const iters = .{ ctx.sim.ensemble.r.nrow(), ctx.opt.iterations + 1 };
 
-    if (ctx.sim.elpoten == .ab_initio) {
-        const ab = ctx.sim.elpoten.ab_initio;
-
-        if (ab.options.write.any()) {
-            const nrow, const iters = .{ ctx.sim.ensemble.r.nrow(), ctx.opt.iterations + 1 };
-
-            stream_writer = try AbInitioStreamWriter.init(io, ab.options.write, nrow, iters, nstate, gpa);
-        }
-    }
-
+    var stream_writer = try StreamWriter.init(io, ctx.opt.stream, atoms, ndim, nrow, iters, nstate, gpa);
     defer if (stream_writer) |*sw| sw.deinit(io, gpa);
 
     var hist = try History(T).init(ndim, nstate, ctx.opt.iterations + 1, ctx.opt.write, gpa);

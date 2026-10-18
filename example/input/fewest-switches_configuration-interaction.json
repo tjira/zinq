@@ -11,23 +11,18 @@
                 "iterations" : 100,
                 "potential" : {
                     "ab_initio" : {
-                        "method" : {
-                            "configuration_interaction" : {
-                                "hartree_fock" : {
-                                    "basis" : "builtin:sto-3g",
-                                    "system" : "example/molecule/H2.xyz"
-                                },
-                                "nstate" : 2,
-                                "gradient" : {
-                                    "analytic" : {}
-                                },
-                                "nacv" : {
-                                    "numeric" : {}
-                                }
+                        "configuration_interaction" : {
+                            "hartree_fock" : {
+                                "basis" : "builtin:sto-3g",
+                                "system" : "example/molecule/H2.xyz"
+                            },
+                            "nstate" : 2,
+                            "gradient" : {
+                                "analytic" : {}
+                            },
+                            "nacv" : {
+                                "numeric" : {}
                             }
-                        },
-                        "write" : {
-                            "position" : "trajectory.xyz"
                         }
                     }
                 },
@@ -39,6 +34,9 @@
                             }
                         }
                     }
+                },
+                "stream" : {
+                    "position" : "trajectory.xyz"
                 },
                 "time_step" : 1,
                 "trajectories" : 10
