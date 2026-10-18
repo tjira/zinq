@@ -4,12 +4,12 @@ const std = @import("std");
 
 const Matrix = @import("tensor.zig").Matrix;
 
+const getSymbol = @import("constant.zig").getSymbol;
 const isComplex = @import("value.zig").isComplex;
 const primType = @import("value.zig").primType;
 
 const A2BOHR = @import("constant.zig").A2BOHR;
 const AMU2AU = @import("constant.zig").AMU2AU;
-const AN2SM = @import("constant.zig").AN2SM;
 const AU2FS = @import("constant.zig").AU2FS;
 
 /// Resolves the trajectory output path with automatic numerical suffixing when ntraj > 1.
@@ -44,11 +44,7 @@ pub fn printGeometry(comptime T: type, io: std.Io, atoms: []const i32, coors: []
     try printf(io, "\n{s}\n", .{header});
 
     for (0..atoms.len) |i| {
-        var sym: []const u8 = "X";
-
-        if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atoms[i])) |j| {
-            sym = AN2SM.kvs.keys[j];
-        }
+        const sym = getSymbol(atoms[i]) catch "X";
 
         const x = coors[3 * i + 0] / A2BOHR;
         const y = coors[3 * i + 1] / A2BOHR;
@@ -185,11 +181,7 @@ pub fn writeXyzFile(comptime T: type, io: std.Io, fname: []const u8, atoms: []co
     try writer.interface.print("{d}\n\n", .{atoms.len});
 
     for (0..atoms.len) |i| {
-        var sym: []const u8 = "X";
-
-        if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atoms[i])) |j| {
-            sym = AN2SM.kvs.keys[j];
-        }
+        const sym = getSymbol(atoms[i]) catch "X";
 
         const x = coors[3 * i + 0] / A2BOHR;
         const y = coors[3 * i + 1] / A2BOHR;
@@ -212,11 +204,7 @@ pub fn writeXyzFrame(comptime T: type, writer: anytype, atoms: []const i32, coor
     }
 
     for (0..atoms.len) |i| {
-        var sym: []const u8 = "X";
-
-        if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atoms[i])) |j| {
-            sym = AN2SM.kvs.keys[j];
-        }
+        const sym = getSymbol(atoms[i]) catch "X";
 
         const x = coors[3 * i + 0] / A2BOHR;
         const y = coors[3 * i + 1] / A2BOHR;
@@ -239,11 +227,7 @@ pub fn writeXyzMomentumFrame(comptime T: type, writer: anytype, atoms: []const i
     const conv = 1.0 / (AMU2AU * A2BOHR * AU2FS);
 
     for (0..atoms.len) |i| {
-        var sym: []const u8 = "X";
-
-        if (std.mem.indexOfScalar(i32, AN2SM.kvs.values[0..AN2SM.kvs.len], atoms[i])) |j| {
-            sym = AN2SM.kvs.keys[j];
-        }
+        const sym = getSymbol(atoms[i]) catch "X";
 
         const px = mom[3 * i + 0] * conv;
         const py = mom[3 * i + 1] * conv;

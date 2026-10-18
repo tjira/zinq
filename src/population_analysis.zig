@@ -6,6 +6,7 @@ const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const SpinBlocks = @import("spin_analysis.zig").SpinBlocks;
 const Vector = @import("tensor.zig").Vector;
 
 const dot = @import("linear_algebra.zig").dot;
@@ -18,25 +19,8 @@ const printf = @import("read_write.zig").printf;
 pub fn lowdin(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !Vector(T) {
     const n = S.nrow();
 
-    var eigvals = try Vector(T).init(n, gpa);
-    defer eigvals.deinit(gpa);
-
-    var U = try Matrix(T).init(n, n, gpa);
-    defer U.deinit(gpa);
-
-    try eigh(T, &eigvals, &U, S);
-
-    var U_scaled = try Matrix(T).init(n, n, gpa);
-    defer U_scaled.deinit(gpa);
-
-    for (0..n) |i| for (0..n) |j| {
-        U_scaled.ptr(i, j).* = U.at(i, j) * @sqrt(@max(0, eigvals.at(j)));
-    };
-
-    var Shalf = try Matrix(T).init(n, n, gpa);
+    var Shalf = try matrixSquareRoot(T, S, gpa);
     defer Shalf.deinit(gpa);
-
-    mm(T, &Shalf, U_scaled, U, 1.0, 0.0, false, true);
 
     var SP = try Matrix(T).init(n, n, gpa);
     defer SP.deinit(gpa);
@@ -98,21 +82,8 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
     }
 
     if (is_gen) {
-        var P_a = try Matrix(T).init(nbf, nbf, gpa);
-        defer P_a.deinit(gpa);
-
-        var P_b = try Matrix(T).init(nbf, nbf, gpa);
-        defer P_b.deinit(gpa);
-
-        var P_ab = try Matrix(T).init(nbf, nbf, gpa);
-        defer P_ab.deinit(gpa);
-
-        for (0..nbf) |i| for (0..nbf) |j| {
-            P_a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
-            P_b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
-
-            P_ab.ptr(i, j).* = P.at(i + 0 * nbf, j + 1 * nbf);
-        };
+        var blocks = try SpinBlocks(T).init(P, nbf, gpa);
+        defer blocks.deinit(gpa);
 
         var PS_a = try Matrix(T).init(nbf, nbf, gpa);
         defer PS_a.deinit(gpa);
@@ -123,10 +94,10 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
         var PS_ab = try Matrix(T).init(nbf, nbf, gpa);
         defer PS_ab.deinit(gpa);
 
-        mm(T, &PS_a, P_a, S_spatial, 1, 0, false, false);
-        mm(T, &PS_b, P_b, S_spatial, 1, 0, false, false);
+        mm(T, &PS_a, blocks.a, S_spatial, 1, 0, false, false);
+        mm(T, &PS_b, blocks.b, S_spatial, 1, 0, false, false);
 
-        mm(T, &PS_ab, P_ab, S_spatial, 1, 0, false, false);
+        mm(T, &PS_ab, blocks.ab, S_spatial, 1, 0, false, false);
 
         for (0..nbf) |u| {
             const at_u: usize = @intCast(sys.bf2at[u]);
@@ -229,25 +200,8 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
         S_spatial.ptr(i, j).* = S.at(i, j);
     };
 
-    var eigvals = try Vector(T).init(nbf, gpa);
-    defer eigvals.deinit(gpa);
-
-    var U = try Matrix(T).init(nbf, nbf, gpa);
-    defer U.deinit(gpa);
-
-    try eigh(T, &eigvals, &U, S_spatial);
-
-    var U_scaled = try Matrix(T).init(nbf, nbf, gpa);
-    defer U_scaled.deinit(gpa);
-
-    for (0..nbf) |i| for (0..nbf) |j| {
-        U_scaled.ptr(i, j).* = U.at(i, j) * @sqrt(@max(0, eigvals.at(j)));
-    };
-
-    var Shalf = try Matrix(T).init(nbf, nbf, gpa);
+    var Shalf = try matrixSquareRoot(T, S_spatial, gpa);
     defer Shalf.deinit(gpa);
-
-    mm(T, &Shalf, U_scaled, U, 1, 0, false, true);
 
     var bo = try Matrix(T).initZero(sys.atoms.len, sys.atoms.len, gpa);
     errdefer bo.deinit(gpa);
@@ -279,21 +233,8 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
     }
 
     if (is_gen) {
-        var P_a = try Matrix(T).init(nbf, nbf, gpa);
-        defer P_a.deinit(gpa);
-
-        var P_b = try Matrix(T).init(nbf, nbf, gpa);
-        defer P_b.deinit(gpa);
-
-        var P_ab = try Matrix(T).init(nbf, nbf, gpa);
-        defer P_ab.deinit(gpa);
-
-        for (0..nbf) |i| for (0..nbf) |j| {
-            P_a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
-            P_b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
-
-            P_ab.ptr(i, j).* = P.at(i + 0 * nbf, j + 1 * nbf);
-        };
+        var blocks = try SpinBlocks(T).init(P, nbf, gpa);
+        defer blocks.deinit(gpa);
 
         var SP_a = try Matrix(T).init(nbf, nbf, gpa);
         defer SP_a.deinit(gpa);
@@ -304,10 +245,10 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
         var SP_ab = try Matrix(T).init(nbf, nbf, gpa);
         defer SP_ab.deinit(gpa);
 
-        mm(T, &SP_a, Shalf, P_a, 1, 0, false, false);
-        mm(T, &SP_b, Shalf, P_b, 1, 0, false, false);
+        mm(T, &SP_a, Shalf, blocks.a, 1, 0, false, false);
+        mm(T, &SP_b, Shalf, blocks.b, 1, 0, false, false);
 
-        mm(T, &SP_ab, Shalf, P_ab, 1, 0, false, false);
+        mm(T, &SP_ab, Shalf, blocks.ab, 1, 0, false, false);
 
         var P_ortho_a = try Matrix(T).init(nbf, nbf, gpa);
         defer P_ortho_a.deinit(gpa);
@@ -341,4 +282,31 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
     }
 
     return bo;
+}
+
+/// Computes the symmetric square root of a positive semi-definite matrix using spectral decomposition.
+fn matrixSquareRoot(comptime T: type, S: Matrix(T), gpa: Allocator) !Matrix(T) {
+    const n = S.nrow();
+
+    var eigvals = try Vector(T).init(n, gpa);
+    defer eigvals.deinit(gpa);
+
+    var U = try Matrix(T).init(n, n, gpa);
+    defer U.deinit(gpa);
+
+    try eigh(T, &eigvals, &U, S);
+
+    var U_scaled = try Matrix(T).init(n, n, gpa);
+    defer U_scaled.deinit(gpa);
+
+    for (0..n) |i| for (0..n) |j| {
+        U_scaled.ptr(i, j).* = U.at(i, j) * @sqrt(@max(0, eigvals.at(j)));
+    };
+
+    var Shalf = try Matrix(T).init(n, n, gpa);
+    errdefer Shalf.deinit(gpa);
+
+    mm(T, &Shalf, U_scaled, U, 1, 0, false, true);
+
+    return Shalf;
 }

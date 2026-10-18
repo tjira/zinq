@@ -9,6 +9,51 @@ const Matrix = @import("tensor.zig").Matrix;
 const mm = @import("linear_algebra.zig").mm;
 const printf = @import("read_write.zig").printf;
 
+/// Holds spin-resolved blocks of a generalized single-particle density matrix.
+pub fn SpinBlocks(comptime T: type) type {
+    return struct {
+        a: Matrix(T),
+        b: Matrix(T),
+
+        ab: Matrix(T),
+        ba: Matrix(T),
+
+        /// Extracts alpha, beta, and cross spin blocks from a generalized matrix.
+        pub fn init(P: Matrix(T), nbf: usize, gpa: Allocator) !@This() {
+            var a = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer a.deinit(gpa);
+
+            var b = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer b.deinit(gpa);
+
+            var ab = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer ab.deinit(gpa);
+
+            var ba = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer ba.deinit(gpa);
+
+            for (0..nbf) |i| for (0..nbf) |j| {
+                a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
+                b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
+
+                ab.ptr(i, j).* = P.at(i + 0 * nbf, j + 1 * nbf);
+                ba.ptr(i, j).* = P.at(i + 1 * nbf, j + 0 * nbf);
+            };
+
+            return .{ .a = a, .b = b, .ab = ab, .ba = ba };
+        }
+
+        /// Deallocates memory associated with the four spin-block matrices.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.a.deinit(gpa);
+            self.b.deinit(gpa);
+
+            self.ab.deinit(gpa);
+            self.ba.deinit(gpa);
+        }
+    };
+}
+
 /// Evaluates the total spin squared expectation value <S^2> from the generalized density matrix.
 pub fn calculateTotalSpin(comptime T: type, P: Matrix(T), S: Matrix(T), gpa: Allocator) !T {
     const nbf = if (S.shape[0] == P.shape[0]) S.shape[0] / 2 else S.shape[0];
@@ -16,27 +61,13 @@ pub fn calculateTotalSpin(comptime T: type, P: Matrix(T), S: Matrix(T), gpa: All
     std.debug.assert(P.shape[0] == 2 * nbf);
     std.debug.assert(P.shape[1] == 2 * nbf);
 
-    var P_a = try Matrix(T).init(nbf, nbf, gpa);
-    defer P_a.deinit(gpa);
-
-    var P_b = try Matrix(T).init(nbf, nbf, gpa);
-    defer P_b.deinit(gpa);
-
-    var P_ab = try Matrix(T).init(nbf, nbf, gpa);
-    defer P_ab.deinit(gpa);
-
-    var P_ba = try Matrix(T).init(nbf, nbf, gpa);
-    defer P_ba.deinit(gpa);
+    var blocks = try SpinBlocks(T).init(P, nbf, gpa);
+    defer blocks.deinit(gpa);
 
     var S_spatial = try Matrix(T).init(nbf, nbf, gpa);
     defer S_spatial.deinit(gpa);
 
     for (0..nbf) |i| for (0..nbf) |j| {
-        P_a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
-        P_b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
-        P_ab.ptr(i, j).* = P.at(i + 0 * nbf, j + 1 * nbf);
-        P_ba.ptr(i, j).* = P.at(i + 1 * nbf, j + 0 * nbf);
-
         S_spatial.ptr(i, j).* = S.at(i, j);
     };
 
@@ -52,11 +83,11 @@ pub fn calculateTotalSpin(comptime T: type, P: Matrix(T), S: Matrix(T), gpa: All
     var BAS = try Matrix(T).init(nbf, nbf, gpa);
     defer BAS.deinit(gpa);
 
-    mm(T, &AS, P_a, S_spatial, 1, 0, false, false);
-    mm(T, &BS, P_b, S_spatial, 1, 0, false, false);
+    mm(T, &AS, blocks.a, S_spatial, 1, 0, false, false);
+    mm(T, &BS, blocks.b, S_spatial, 1, 0, false, false);
 
-    mm(T, &ABS, P_ab, S_spatial, 1, 0, false, false);
-    mm(T, &BAS, P_ba, S_spatial, 1, 0, false, false);
+    mm(T, &ABS, blocks.ab, S_spatial, 1, 0, false, false);
+    mm(T, &BAS, blocks.ba, S_spatial, 1, 0, false, false);
 
     var n_a: T = 0;
     var n_b: T = 0;
