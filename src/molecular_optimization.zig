@@ -12,58 +12,17 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
 const mmv = @import("linear_algebra.zig").mmv;
 const printf = @import("read_write.zig").printf;
+const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 
 /// Performs molecular geometry optimization using the Broyden-Fletcher-Goldfarb-Shanno (BFGS) quasi-Newton method.
 pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
-    var run_opt, const is_hf = .{ opt, @hasField(@TypeOf(opt), "hartree_fock") };
+    const is_hf = @hasField(@TypeOf(opt), "hartree_fock");
 
     const bfgs_opt = opt.optimize.?.bfgs;
 
-    run_opt.hessian, run_opt.optimize, run_opt.gradient = .{ null, null, bfgs_opt.gradient };
+    var run_opt = stripSecondaryOptions(opt, .{});
 
-    if (comptime @hasField(@TypeOf(run_opt), "frequency")) {
-        run_opt.frequency = null;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "lowdin")) {
-        run_opt.lowdin = false;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "mayer")) {
-        run_opt.mayer = false;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "mulliken")) {
-        run_opt.mulliken = false;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "nacv")) {
-        run_opt.nacv = null;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "wiberg")) {
-        run_opt.wiberg = false;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "response")) {
-        run_opt.response = null;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "write")) {
-        run_opt.write = .{};
-    }
-
-    if (comptime is_hf) {
-        run_opt.hartree_fock.frequency, run_opt.hartree_fock.response = .{ null, null };
-
-        run_opt.hartree_fock.hessian = null;
-        run_opt.hartree_fock.lowdin = false;
-        run_opt.hartree_fock.wiberg = false;
-
-        run_opt.hartree_fock.mayer, run_opt.hartree_fock.mulliken = .{ false, false };
-
-        run_opt.hartree_fock.write = .{};
-    }
+    run_opt.gradient = bfgs_opt.gradient;
 
     if (bfgs_opt.iterations > 0 and log) {
         const fmt = "\nBFGS OPTIMIZATION\n{s:4} {s:20} {s:9} {s:9} {s:9}\n";
@@ -197,55 +156,13 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
 
 /// Optimizes molecular geometry by walking in the direction of the steepest descent negative energy gradient.
 pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
-    var run_opt, const is_hf = .{ opt, @hasField(@TypeOf(opt), "hartree_fock") };
+    const is_hf = @hasField(@TypeOf(opt), "hartree_fock");
 
     const sd_opt = opt.optimize.?.steepest_descent;
 
-    run_opt.hessian, run_opt.optimize, run_opt.gradient = .{ null, null, sd_opt.gradient };
+    var run_opt = stripSecondaryOptions(opt, .{});
 
-    if (comptime @hasField(@TypeOf(run_opt), "frequency")) {
-        run_opt.frequency = null;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "lowdin")) {
-        run_opt.lowdin = false;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "mayer")) {
-        run_opt.mayer = false;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "mulliken")) {
-        run_opt.mulliken = false;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "nacv")) {
-        run_opt.nacv = null;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "wiberg")) {
-        run_opt.wiberg = false;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "response")) {
-        run_opt.response = null;
-    }
-
-    if (comptime @hasField(@TypeOf(run_opt), "write")) {
-        run_opt.write = .{};
-    }
-
-    if (comptime is_hf) {
-        run_opt.hartree_fock.frequency, run_opt.hartree_fock.response = .{ null, null };
-
-        run_opt.hartree_fock.hessian = null;
-        run_opt.hartree_fock.lowdin = false;
-        run_opt.hartree_fock.wiberg = false;
-
-        run_opt.hartree_fock.mayer, run_opt.hartree_fock.mulliken = .{ false, false };
-
-        run_opt.hartree_fock.write = .{};
-    }
+    run_opt.gradient = sd_opt.gradient;
 
     if (sd_opt.iterations > 0 and log) {
         const fmt = "\nSTEEPEST DESCENT OPTIMIZATION\n{s:4} {s:20} {s:9} {s:9} {s:9}\n";
