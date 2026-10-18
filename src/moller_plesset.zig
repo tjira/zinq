@@ -301,6 +301,21 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = hess };
 }
 
+/// Evaluates Hamiltonian matrix elements over all Slater determinant pairs using Slater-Condon rules.
+fn buildCiMatrix(comptime T: type, dets: []const []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
+    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
+    errdefer H_CI.deinit(gpa);
+
+    for (0..dets.len) |i| for (i..dets.len) |j| {
+        const val = slater(T, dets[i], dets[j], H_MS, g_MS);
+
+        H_CI.ptr(i, j).* = val;
+        H_CI.ptr(j, i).* = val;
+    };
+
+    return H_CI;
+}
+
 /// Validates Moller-Plesset inputs for method requirements and minimum perturbation order.
 fn checkInvalidInput(opt: Options) !void {
     if (opt.hartree_fock.integral_direct) {
@@ -493,15 +508,8 @@ fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T
         dets.deinit(gpa);
     }
 
-    var H_CI = try Matrix(T).init(dets.items.len, dets.items.len, gpa);
+    var H_CI = try buildCiMatrix(T, dets.items, H_MS, g_MS, gpa);
     defer H_CI.deinit(gpa);
-
-    for (0..dets.items.len) |i| for (i..dets.items.len) |j| {
-        const val = slater(T, dets.items[i], dets.items[j], H_MS, g_MS);
-
-        H_CI.ptr(i, j).* = val;
-        H_CI.ptr(j, i).* = val;
-    };
 
     var E0 = try gpa.alloc(Value(T), dets.items.len);
     defer gpa.free(E0);
@@ -516,7 +524,14 @@ fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T
         E0[i] = sum;
     }
 
-    var C_coeff = try gpa.alloc(Value(T), (order + 1) * dets.items.len);
+    return try solveRayleighSchrodinger(T, H_CI, E0, order, gpa);
+}
+
+/// Solves Rayleigh-Schrödinger perturbation equations iteratively up to the requested perturbation order.
+fn solveRayleighSchrodinger(comptime T: type, H_CI: Matrix(T), E0: []const Value(T), order: usize, gpa: Allocator) ![]T {
+    const ndets = E0.len;
+
+    var C_coeff = try gpa.alloc(Value(T), (order + 1) * ndets);
     defer gpa.free(C_coeff);
 
     @memset(C_coeff, Value(T).fromFloat(0));
@@ -534,8 +549,8 @@ fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T
         if (k > 1) {
             var sum = Value(T).fromFloat(0);
 
-            for (1..dets.items.len) |j| {
-                sum = sum.add(Value(T).init(H_CI.at(0, j)).mul(C_coeff[(k - 1) * dets.items.len + j]));
+            for (1..ndets) |j| {
+                sum = sum.add(Value(T).init(H_CI.at(0, j)).mul(C_coeff[(k - 1) * ndets + j]));
             }
 
             E[k] = sum;
@@ -543,21 +558,21 @@ fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T
 
         if (k == order) break;
 
-        for (1..dets.items.len) |i| {
+        for (1..ndets) |i| {
             var term1 = Value(T).fromFloat(0);
             var term3 = Value(T).fromFloat(0);
 
-            for (0..dets.items.len) |j| {
-                term1 = term1.add(Value(T).init(H_CI.at(i, j)).mul(C_coeff[(k - 1) * dets.items.len + j]));
+            for (0..ndets) |j| {
+                term1 = term1.add(Value(T).init(H_CI.at(i, j)).mul(C_coeff[(k - 1) * ndets + j]));
             }
 
-            const term2 = E0[i].mul(C_coeff[(k - 1) * dets.items.len + i]);
+            const term2 = E0[i].mul(C_coeff[(k - 1) * ndets + i]);
 
             for (1..k + 1) |j| {
-                term3 = term3.add(E[j].mul(C_coeff[(k - j) * dets.items.len + i]));
+                term3 = term3.add(E[j].mul(C_coeff[(k - j) * ndets + i]));
             }
 
-            C_coeff[k * dets.items.len + i] = term1.sub(term2).sub(term3).div(E0[0].sub(E0[i]));
+            C_coeff[k * ndets + i] = term1.sub(term2).sub(term3).div(E0[0].sub(E0[i]));
         }
     }
 

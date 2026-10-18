@@ -536,114 +536,14 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
 /// Computes the Hamiltonian matrix element between two Slater determinants using the Slater-Condon rules.
 pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
-    var diff_A: [2]usize = undefined;
-    var diff_B: [2]usize = undefined;
+    const diff = findDeterminantDifferences(A, B) orelse return Value(T).fromFloat(0).val;
 
-    var diff_a_len: usize = 0;
-    var diff_b_len: usize = 0;
+    const s_A = signOfExcitations(A, diff.a[0..diff.len]);
+    const s_B = signOfExcitations(B, diff.b[0..diff.len]);
 
-    var idx_a: usize = 0;
-    var idx_b: usize = 0;
+    const phase = @as(primType(T), @floatFromInt(s_A * s_B));
 
-    while (idx_a < A.len and idx_b < B.len) {
-        switch (std.math.order(A[idx_a], B[idx_b])) {
-            .lt => {
-                if (diff_a_len == 2) {
-                    return Value(T).fromFloat(0).val;
-                }
-
-                diff_A[diff_a_len] = A[idx_a];
-
-                diff_a_len, idx_a = .{ diff_a_len + 1, idx_a + 1 };
-            },
-            .gt => {
-                if (diff_b_len == 2) {
-                    return Value(T).fromFloat(0).val;
-                }
-
-                diff_B[diff_b_len] = B[idx_b];
-
-                diff_b_len, idx_b = .{ diff_b_len + 1, idx_b + 1 };
-            },
-            .eq => {
-                idx_a += 1;
-                idx_b += 1;
-            },
-        }
-    }
-
-    while (idx_a < A.len) : (idx_a += 1) {
-        if (diff_a_len == 2) {
-            return Value(T).fromFloat(0).val;
-        }
-
-        diff_A[diff_a_len] = A[idx_a];
-
-        diff_a_len += 1;
-    }
-
-    while (idx_b < B.len) : (idx_b += 1) {
-        if (diff_b_len == 2) {
-            return Value(T).fromFloat(0).val;
-        }
-
-        diff_B[diff_b_len] = B[idx_b];
-
-        diff_b_len += 1;
-    }
-
-    const s_A = signOfExcitations(A, diff_A[0..diff_a_len]);
-    const s_B = signOfExcitations(B, diff_B[0..diff_b_len]);
-
-    if (diff_a_len == 0) {
-        var sum = Value(T).fromFloat(0);
-
-        for (0..A.len) |i| {
-            sum = sum.add(Value(T).init(H_MS.at(A[i], A[i])));
-        }
-
-        for (0..A.len) |i| for (i + 1..A.len) |j| {
-            const idx_i = A[i];
-            const idx_j = A[j];
-
-            const term1 = Value(T).init(g_MS.at(.{ idx_i, idx_j, idx_i, idx_j }));
-            const term2 = Value(T).init(g_MS.at(.{ idx_i, idx_j, idx_j, idx_i }));
-
-            sum = sum.add(term1.sub(term2));
-        };
-
-        return sum.val;
-    }
-
-    if (diff_a_len == 1) {
-        const m = diff_A[0];
-        const p = diff_B[0];
-
-        var term = Value(T).init(H_MS.at(m, p));
-
-        for (0..A.len) |i| if (A[i] != m) {
-            const term1 = Value(T).init(g_MS.at(.{ m, A[i], p, A[i] }));
-            const term2 = Value(T).init(g_MS.at(.{ m, A[i], A[i], p }));
-
-            term = term.add(term1.sub(term2));
-        };
-
-        return term.muls(@as(primType(T), @floatFromInt(s_A * s_B))).val;
-    }
-
-    if (diff_a_len == 2) {
-        const m = diff_A[0];
-        const n = diff_A[1];
-        const p = diff_B[0];
-        const q = diff_B[1];
-
-        const term1 = Value(T).init(g_MS.at(.{ m, n, p, q }));
-        const term2 = Value(T).init(g_MS.at(.{ m, n, q, p }));
-
-        return term1.sub(term2).muls(@as(primType(T), @floatFromInt(s_A * s_B))).val;
-    }
-
-    return Value(T).fromFloat(0).val;
+    return evaluateSlaterCondon(T, A, diff.a, diff.b, diff.len, phase, H_MS, g_MS);
 }
 
 /// Validates input options for physical consistency and method requirements.
@@ -843,6 +743,109 @@ fn computeCiStates(comptime T: type, io: ?std.Io, generalized: bool, hfres: Hart
     }
 
     return .{ E, C };
+}
+
+/// Evaluates Hamiltonian matrix elements between Slater determinants using the Slater-Condon excitation rules.
+fn evaluateSlaterCondon(comptime T: type, A: []const usize, diff_a: [2]usize, diff_b: [2]usize, len: usize, phase: primType(T), H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
+    switch (len) {
+        0 => {
+            var sum = Value(T).fromFloat(0);
+
+            for (0..A.len) |i| {
+                sum = sum.add(Value(T).init(H_MS.at(A[i], A[i])));
+            }
+
+            for (0..A.len) |i| for (i + 1..A.len) |j| {
+                const idx_i, const idx_j = .{ A[i], A[j] };
+
+                const term1 = Value(T).init(g_MS.at(.{ idx_i, idx_j, idx_i, idx_j }));
+                const term2 = Value(T).init(g_MS.at(.{ idx_i, idx_j, idx_j, idx_i }));
+
+                sum = sum.add(term1.sub(term2));
+            };
+
+            return sum.val;
+        },
+        1 => {
+            const m, const p = .{ diff_a[0], diff_b[0] };
+
+            var term = Value(T).init(H_MS.at(m, p));
+
+            for (0..A.len) |i| if (A[i] != m) {
+                const term1 = Value(T).init(g_MS.at(.{ m, A[i], p, A[i] }));
+                const term2 = Value(T).init(g_MS.at(.{ m, A[i], A[i], p }));
+
+                term = term.add(term1.sub(term2));
+            };
+
+            return term.muls(phase).val;
+        },
+        2 => {
+            const m, const n = .{ diff_a[0], diff_a[1] };
+            const p, const q = .{ diff_b[0], diff_b[1] };
+
+            const term1 = Value(T).init(g_MS.at(.{ m, n, p, q }));
+            const term2 = Value(T).init(g_MS.at(.{ m, n, q, p }));
+
+            return term1.sub(term2).muls(phase).val;
+        },
+        else => return Value(T).fromFloat(0).val,
+    }
+}
+
+/// Compares two Slater determinants and extracts orbital differences when excitation degree is at most two.
+fn findDeterminantDifferences(A: []const usize, B: []const usize) ?struct { a: [2]usize, b: [2]usize, len: usize } {
+    var diff_A: [2]usize = undefined;
+    var diff_B: [2]usize = undefined;
+
+    var diff_a_len: usize = 0;
+    var diff_b_len: usize = 0;
+
+    var idx_a: usize = 0;
+    var idx_b: usize = 0;
+
+    while (idx_a < A.len and idx_b < B.len) {
+        switch (std.math.order(A[idx_a], B[idx_b])) {
+            .lt => {
+                if (diff_a_len == 2) return null;
+
+                diff_A[diff_a_len] = A[idx_a];
+
+                diff_a_len, idx_a = .{ diff_a_len + 1, idx_a + 1 };
+            },
+            .gt => {
+                if (diff_b_len == 2) return null;
+
+                diff_B[diff_b_len] = B[idx_b];
+
+                diff_b_len, idx_b = .{ diff_b_len + 1, idx_b + 1 };
+            },
+            .eq => {
+                idx_a += 1;
+                idx_b += 1;
+            },
+        }
+    }
+
+    while (idx_a < A.len) : (idx_a += 1) {
+        if (diff_a_len == 2) return null;
+
+        diff_A[diff_a_len] = A[idx_a];
+
+        diff_a_len += 1;
+    }
+
+    while (idx_b < B.len) : (idx_b += 1) {
+        if (diff_b_len == 2) return null;
+
+        diff_B[diff_b_len] = B[idx_b];
+
+        diff_b_len += 1;
+    }
+
+    if (diff_a_len != diff_b_len) return null;
+
+    return .{ .a = diff_A, .b = diff_B, .len = diff_a_len };
 }
 
 /// Generates all k-combinations from a set of size n, representing orbital indices.

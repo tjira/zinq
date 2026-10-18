@@ -1034,17 +1034,9 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
     for (0..opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
-        if (dft) |pot| {
-            try getFock(T, ws.F, ints, ws.P.*, opt, pot, gpa);
+        try getFock(T, ws.F, ints, ws.P.*, opt, dft, gpa);
 
-            e_new = getEnergy(T, ints, ws.F.*, ws.P.*, pot) + VN;
-        }
-
-        if (dft == null) {
-            try getFock(T, ws.F, ints, ws.P.*, opt, null, gpa);
-
-            e_new = getEnergy(T, ints, ws.F.*, ws.P.*, null) + VN;
-        }
+        e_new = getEnergy(T, ints, ws.F.*, ws.P.*, dft) + VN;
 
         if (opt.diis != null and opt.diis.? > 0 and i > 0) {
             var e_diis = try Matrix(T).init(nbf, nbf, gpa);
