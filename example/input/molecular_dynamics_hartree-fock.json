@@ -20,7 +20,7 @@
                             }
                         },
                         "write" : {
-                            "position_trajectory" : "trajectory.xyz"
+                            "position" : "trajectory.xyz"
                         }
                     }
                 },

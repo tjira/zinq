@@ -253,6 +253,40 @@ pub fn writeXyzMomentumFrame(comptime T: type, writer: anytype, atoms: []const i
     }
 }
 
+/// Writes trajectory momentum vectors across all simulation time steps to a file in standard multi-frame XYZ format.
+pub fn writeXyzMomentumTrajectory(comptime T: type, io: std.Io, fname: []const u8, atoms: []const i32, P: Matrix(T), dt: primType(T)) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
+    defer file.close(io);
+
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
+
+    for (0..P.nrow()) |i| {
+        const time = dt * @as(primType(T), @floatFromInt(i));
+
+        try writeXyzMomentumFrame(T, &writer, atoms, P.rowSlice(i), time, null);
+    }
+
+    try writer.interface.flush();
+}
+
+/// Writes trajectory coordinates across all simulation time steps to a file in standard multi-frame XYZ format.
+pub fn writeXyzTrajectory(comptime T: type, io: std.Io, fname: []const u8, atoms: []const i32, R: Matrix(T), dt: primType(T)) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
+    defer file.close(io);
+
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
+
+    for (0..R.nrow()) |i| {
+        const time = dt * @as(primType(T), @floatFromInt(i));
+
+        try writeXyzFrame(T, &writer, atoms, R.rowSlice(i), time, null);
+    }
+
+    try writer.interface.flush();
+}
+
 /// Writes a single real or complex floating-point element to the output writer stream.
 fn writeElement(writer: anytype, val: anytype) !void {
     if (comptime isComplex(@TypeOf(val))) {

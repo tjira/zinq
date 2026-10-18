@@ -33,6 +33,8 @@ const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOp
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 const writeXyzFrame = @import("read_write.zig").writeXyzFrame;
 const writeXyzMomentumFrame = @import("read_write.zig").writeXyzMomentumFrame;
+const writeXyzMomentumTrajectory = @import("read_write.zig").writeXyzMomentumTrajectory;
+const writeXyzTrajectory = @import("read_write.zig").writeXyzTrajectory;
 
 const AMU2AU = @import("constant.zig").AMU2AU;
 const AU2K = @import("constant.zig").AU2K;
@@ -461,7 +463,7 @@ const AbInitioStreamWriter = struct {
             self.files_ekin = try initMatrixFiles(io, path, ntraj, nstep, 2, gpa);
         }
 
-        if (write.momentum_trajectory) |path| {
+        if (write.momentum) |path| {
             self.files_mom = try initFiles(io, path, ntraj, gpa);
         }
 
@@ -469,7 +471,7 @@ const AbInitioStreamWriter = struct {
             self.files_pop = try initMatrixFiles(io, path, ntraj, nstep, nstate + 1, gpa);
         }
 
-        if (write.position_trajectory) |path| {
+        if (write.position) |path| {
             self.files_pos = try initFiles(io, path, ntraj, gpa);
         }
 
@@ -1119,15 +1121,27 @@ fn History(comptime T: type) type {
         }
 
         /// Writes the accumulated history of dynamics observables to output files.
-        pub fn exportWrite(self: *@This(), io: std.Io, dt: f64, write: Write) !void {
+        pub fn exportWrite(self: *@This(), io: std.Io, atoms: []const i32, dt: f64, write: Write) !void {
             const end = dt * @as(T, @floatFromInt(self.index - 1));
 
             if (write.position) |path| {
-                try writeMatrixLspace(T, io, path, self.pos.?.takeRows(self.index), 0, end);
+                if (atoms.len > 0) {
+                    try writeXyzTrajectory(T, io, path, atoms, self.pos.?.takeRows(self.index), @floatCast(dt));
+                }
+
+                if (atoms.len == 0) {
+                    try writeMatrixLspace(T, io, path, self.pos.?.takeRows(self.index), 0, end);
+                }
             }
 
             if (write.momentum) |path| {
-                try writeMatrixLspace(T, io, path, self.mom.?.takeRows(self.index), 0, end);
+                if (atoms.len > 0) {
+                    try writeXyzMomentumTrajectory(T, io, path, atoms, self.mom.?.takeRows(self.index), @floatCast(dt));
+                }
+
+                if (atoms.len == 0) {
+                    try writeMatrixLspace(T, io, path, self.mom.?.takeRows(self.index), 0, end);
+                }
             }
 
             if (write.population) |path| {
@@ -2285,7 +2299,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
         }
     }
 
-    try hist.exportWrite(io, ctx.opt.time_step, ctx.opt.write);
+    try hist.exportWrite(io, atoms, ctx.opt.time_step, ctx.opt.write);
 
     return try Observables(T).init(ctx.sim.*, ctx.opt.write, true, has_thermo, gpa);
 }
