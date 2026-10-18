@@ -1937,6 +1937,12 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     var pot = try Potential(T).init(io, opt.potential, gpa);
     errdefer pot.deinit(gpa);
 
+    if (opt.initial_conditions.state >= pot.nstate()) {
+        std.log.err("REQUESTED ELECTRONIC STATE EXCEEDS NUMBER OF AVAILABLE STATES", .{});
+
+        return error.InvalidInput;
+    }
+
     const mass = try gpa.alloc(T, pot.ndim());
     defer gpa.free(mass);
 

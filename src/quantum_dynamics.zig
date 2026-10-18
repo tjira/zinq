@@ -1388,6 +1388,12 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     var pot = try Potential(T).init(io, opt.potential, gpa);
     errdefer pot.deinit(gpa);
 
+    if (opt.initial_conditions.state >= pot.nstate()) {
+        std.log.err("REQUESTED ELECTRONIC STATE EXCEEDS NUMBER OF AVAILABLE STATES", .{});
+
+        return error.InvalidInput;
+    }
+
     const dt = if (opt.imaginary) |_| Complex(T).init(0, -opt.time_step) else Complex(T).init(opt.time_step, 0);
 
     const plan_mode = switch (opt.fft.plan) {
