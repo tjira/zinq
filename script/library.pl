@@ -389,6 +389,9 @@ sub compile_fftw {
         $generic ? "-DENABLE_AVX=OFF" : "-DENABLE_AVX=ON",
     );
 
+    # FIX COMPILATION ON WINDOWS
+    push @args, "-DCMAKE_C_FLAGS=-DWITH_OUR_MALLOC=1" if $target =~ /windows/;
+
     # RUN CONFIGURE
     system(@args) == 0 or die "FFTW CONFIGURE FAILED";
 
