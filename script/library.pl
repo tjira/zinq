@@ -331,27 +331,43 @@ sub compile_openblas {
     # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
     chdir "lib/openblas" or die "CANNOT CHDIR TO 'lib/openblas': $!";
 
-    # DEFINE COMPILE ARGUMENTS
+    # MAP TARGET ARCHITECTURE AND OPERATING SYSTEM TO CMAKE CONVENTIONS
+    my $system_name = $target =~ /macos/i   ? "Darwin"  :
+                      $target =~ /windows/i ? "Windows" :
+                                              "Linux"   ;
+
+    # MAP TARGET ARCHITECTURE TO CMAKE CONVENTIONS
+    my $system_proc = $target =~ /aarch64/i ? "arm64" : "x86_64";
+
+    # DETERMINE BASE TARGET FOR OPENBLAS
+    my $base_target = $system_proc eq "arm64" ? "ARMV8" : "CORE2";
+
+    # CONFIGURE COMMAND
     my @args = (
-        "HOSTCC=gcc",
-        "NOFORTRAN=1",
-        "NO_SHARED=1",
-        "USE_THREAD=1",
-        "NUM_THREADS=128",
-        "PREFIX=$prefix",
-        $generic ? "TARGET=GENERIC" : "DYNAMIC_ARCH=1"
+        "cmake",
+        "-B", "build",
+        "-DCMAKE_AR=$pwd/zigar",
+        "-DCMAKE_RANLIB=$pwd/zigranlib",
+        "-DCMAKE_SYSTEM_NAME=$system_name",
+        "-DCMAKE_SYSTEM_PROCESSOR=$system_proc",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_INSTALL_PREFIX=$prefix",
+        "-DBUILD_TESTING=OFF",
+        "-DC_LAPACK=ON",
+        "-DNOFORTRAN=ON",
+        "-DUSE_THREAD=ON",
+        "-DNUM_THREADS=128",
+        $generic ? "-DTARGET=generic" : ("-DDYNAMIC_ARCH=ON", "-DTARGET=$base_target"),
     );
 
-    # PATCH MAKEFILE.RULE TO REMOVE PROFILING ON WINDOWS
-    if ($target =~ /windows/) {
-        system("perl", "-pi", "-e", "s/COMMON_PROF = -pg/COMMON_PROF =/g", "Makefile.rule");
-    }
+    # RUN CONFIGURE
+    system(@args) == 0 or die "OPENBLAS CONFIGURE FAILED";
 
-    # RUN MAKE
-    system("make", @args, "-j", $cores, "libs", "shared") == 0 or die "OPENBLAS MAKE FAILED";
+    # RUN BUILD
+    system("cmake", "--build", "build", "--target", "openblas_static", "--parallel", $cores) == 0 or die "OPENBLAS BUILD FAILED";
 
     # INSTALL THE LIBRARY
-    system("make", @args, "install") == 0 or die "OPENBLAS INSTALL FAILED";
+    system("cmake", "--install", "build") == 0 or die "OPENBLAS INSTALL FAILED";
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";

@@ -537,7 +537,6 @@ pub fn Wavefunction(comptime T: type) type {
         /// Transforms the wavefunction between position and momentum space.
         pub fn fft(self: *@This(), comptime sign: i32) void {
             for (0..self.W.nrow()) |i| {
-
                 if (self.W.ncol() == 1) {
                     fftArray(T, self.W.rowSlice(i), self.W.rowSlice(i), sign);
                 }
