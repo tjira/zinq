@@ -15,8 +15,8 @@ my @lib_names = qw(eigen libint libxc openblas exprtk openmp);
 # DEFINE BUILD OPTIONS
 my (%build, $generic);
 
-# DEFINE DEFAULT TARGET AND HOST
-my $target = qx(uname -m); chomp $target; $target .= "-$^O"; my $host = $target;
+# DEFINE DEFAULT TARGET
+my $target = qx(uname -m); chomp $target; $target .= "-$^O";
 
 # GET THE NUMBER OF CPU CORES
 my $cores = qx(nproc --all); chomp $cores; $cores ||= 1;
@@ -49,12 +49,12 @@ create_compiler_wrappers($target, $pwd);
 rmtree("lib") if -d "lib";
 
 # COMPILE EACH PROGRAM
-compile_exprtk  ($prefix,                $pwd          ) if $build{exprtk};
-compile_eigen   ($prefix, $cores,        $pwd          ) if $build{eigen};
-compile_libint  ($prefix, $cores,        $pwd          ) if $build{libint};
-compile_libxc   ($prefix, $cores, $host, $pwd          ) if $build{libxc};
-compile_openblas($prefix, $cores,        $pwd, $generic) if $build{openblas};
-compile_openmp  ($prefix, $cores,        $pwd          ) if $build{openmp};
+compile_exprtk  ($prefix,         $pwd          ) if $build{exprtk};
+compile_eigen   ($prefix, $cores, $pwd          ) if $build{eigen};
+compile_libint  ($prefix, $cores, $pwd          ) if $build{libint};
+compile_libxc   ($prefix, $cores, $pwd          ) if $build{libxc};
+compile_openblas($prefix, $cores, $pwd, $generic) if $build{openblas};
+compile_openmp  ($prefix, $cores, $pwd          ) if $build{openmp};
 
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
@@ -280,7 +280,7 @@ sub compile_libint {
 
 sub compile_libxc {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $host, $pwd) = @_;
+    my ($prefix, $cores, $pwd) = @_;
 
     # DEFINE THE URL FOR THE LIBXC SOURCE ARCHIVE
     my $url = "https://gitlab.com/libxc/libxc/-/archive/7.1.2/libxc-7.1.2.tar.bz2";
@@ -291,30 +291,28 @@ sub compile_libxc {
     # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
     chdir "lib/libxc" or die "CANNOT CHDIR TO 'lib/libxc': $!";
 
-    # RUN AUTORECONF
-    system("autoreconf", "-i") == 0 or die "LIBXC AUTORECONF FAILED";
-
     # CONFIGURE COMMAND
     my @args = (
-        "./configure",
-        "--disable-fortran",
-        "--host=$host",
-        "--prefix=$prefix",
-        "--enable-static",
-        "--disable-shared"
+        "cmake",
+        "-B", "build",
+        "-DCMAKE_AR=$pwd/zigar",
+        "-DCMAKE_RANLIB=$pwd/zigranlib",
+        "-DBUILD_SHARED_LIBS=False",
+        "-DBUILD_TESTING=False",
+        "-DENABLE_FORTRAN=False",
+        "-DENABLE_PYTHON=False",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_INSTALL_PREFIX=$prefix"
     );
 
     # RUN CONFIGURE
     system(@args) == 0 or die "LIBXC CONFIGURE FAILED";
 
-    # RUN MAKE
-    system("make", "-C", "src", "-j", $cores) == 0 or die "LIBXC MAKE FAILED";
+    # RUN BUILD
+    system("cmake", "--build", "build", "--parallel", $cores) == 0 or die "LIBXC BUILD FAILED";
 
     # INSTALL THE LIBRARY
-    system("make", "-C", "src", "install") == 0 or die "LIBXC INSTALL FAILED";
-
-    # INSTALL THE HEADERS
-    system("make", "install-includeHEADERS") == 0 or die "LIBXC INSTALL HEADERS FAILED";
+    system("cmake", "--install", "build") == 0 or die "LIBXC INSTALL FAILED";
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
