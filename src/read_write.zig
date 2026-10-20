@@ -1,8 +1,11 @@
-//! Utility functions for reading and writing matrix data, printing formatted output, and exporting molecular geometries in XYZ format.
+//! Utility functions for reading and writing matrix and tensor data, formatted printing, and molecular coordinates.
 
 const std = @import("std");
 
+const Complex = std.math.Complex;
+
 const Matrix = @import("tensor.zig").Matrix;
+const Tensor = @import("tensor.zig").Tensor;
 
 const getSymbol = @import("constant.zig").getSymbol;
 const isComplex = @import("value.zig").isComplex;
@@ -37,6 +40,19 @@ pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     try writer.interface.flush();
 }
 
+/// Prints complex matrix dimensions and space-separated elements to standard output.
+pub fn printComplexMatrix(comptime T: type, io: std.Io, A: Matrix(Complex(primType(T)))) !void {
+    try printComplexTensor(T, 2, io, A.asTensor());
+}
+
+/// Prints multi-dimensional complex tensor dimensions and space-separated elements to standard output.
+pub fn printComplexTensor(comptime T: type, comptime N: usize, io: std.Io, A: Tensor(Complex(primType(T)), N)) !void {
+    var buffer: [65536]u8 = undefined;
+    var writer = std.Io.File.stdout().writer(io, &buffer);
+
+    try writeComplexTensorWriter(T, N, &writer, A);
+}
+
 /// Formats and prints atomic symbols and 3D nuclear coordinates in angstroms to standard output.
 pub fn printGeometry(comptime T: type, io: std.Io, atoms: []const i32, coors: []const T, title: ?[]const u8) !void {
     const header = title orelse "MOLECULAR GEOMETRY (Å)";
@@ -54,16 +70,50 @@ pub fn printGeometry(comptime T: type, io: std.Io, atoms: []const i32, coors: []
     }
 }
 
-/// Prints matrix dimensions and space-separated elements to standard output.
+/// Prints real or complex matrix dimensions and elements to standard output.
 pub fn printMatrix(comptime T: type, io: std.Io, A: Matrix(T)) !void {
+    if (comptime isComplex(T)) {
+        try printComplexMatrix(primType(T), io, A);
+    }
+
+    if (comptime !isComplex(T)) {
+        try printRealMatrix(T, io, A);
+    }
+}
+
+/// Prints real matrix dimensions and space-separated elements to standard output.
+pub fn printRealMatrix(comptime T: type, io: std.Io, A: Matrix(T)) !void {
+    try printRealTensor(T, 2, io, A.asTensor());
+}
+
+/// Prints multi-dimensional real tensor dimensions and space-separated elements to standard output.
+pub fn printRealTensor(comptime T: type, comptime N: usize, io: std.Io, A: Tensor(T, N)) !void {
     var buffer: [65536]u8 = undefined;
     var writer = std.Io.File.stdout().writer(io, &buffer);
 
-    try writeMatrixWriter(T, &writer, A);
+    try writeRealTensorWriter(T, N, &writer, A);
 }
 
-/// Reads a matrix from a text file, parsing the header dimensions and space-separated floating-point elements.
-pub fn readMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Matrix(T) {
+/// Prints multi-dimensional real or complex tensor dimensions and elements to standard output.
+pub fn printTensor(comptime T: type, comptime N: usize, io: std.Io, A: Tensor(T, N)) !void {
+    if (comptime isComplex(T)) {
+        try printComplexTensor(primType(T), N, io, A);
+    }
+
+    if (comptime !isComplex(T)) {
+        try printRealTensor(T, N, io, A);
+    }
+}
+
+/// Reads a complex matrix from a text file, parsing dimensions and complex elements.
+pub fn readComplexMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Matrix(Complex(primType(T))) {
+    const ten = try readComplexTensor(T, 2, io, path, allocator);
+
+    return ten.asMatrix();
+}
+
+/// Reads a complex multi-dimensional tensor from a file, parsing header shape and elements.
+pub fn readComplexTensor(comptime T: type, comptime N: usize, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Tensor(Complex(primType(T)), N) {
     var file = try std.Io.Dir.cwd().openFile(io, path, .{});
     defer file.close(io);
 
@@ -72,40 +122,164 @@ pub fn readMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std
 
     var hdr_it = std.mem.tokenizeAny(u8, try reader.interface.takeDelimiterInclusive('\n'), " \t\r\n");
 
-    const nrow = try std.fmt.parseInt(usize, hdr_it.next() orelse return error.InvalidFormat, 10);
-    const ncol = try std.fmt.parseInt(usize, hdr_it.next() orelse return error.InvalidFormat, 10);
+    var shape: [N]usize = undefined;
 
-    var A = try Matrix(T).init(nrow, ncol, allocator);
+    inline for (0..N) |d| {
+        shape[d] = try std.fmt.parseInt(usize, hdr_it.next() orelse return error.InvalidRank, 10);
+    }
+
+    if (hdr_it.next() != null) return error.InvalidRank;
+
+    var A = try Tensor(Complex(primType(T)), N).init(shape, allocator);
+    errdefer A.deinit(allocator);
+
+    var i: usize, var pending_re: ?primType(T) = .{ 0, null };
+
+    while (true) {
+        const line = reader.interface.takeDelimiterExclusive('\n') catch break;
+
+        reader.interface.toss(1);
+
+        var line_it = std.mem.tokenizeAny(u8, std.mem.trim(u8, line, "\r"), " \t");
+
+        while (line_it.next()) |elem| {
+            const val = try std.fmt.parseFloat(primType(T), elem);
+
+            if (pending_re) |re| {
+                if (i >= A.data.len) return error.InvalidDataLength;
+
+                A.data[i] = Complex(primType(T)).init(re, val);
+
+                i, pending_re = .{ i + 1, null };
+            }
+
+            if (pending_re == null) {
+                pending_re = val;
+            }
+        }
+    }
+
+    if (pending_re != null or i != A.data.len) return error.IncompleteData;
+
+    return A;
+}
+
+/// Reads a real or complex matrix from a text file, parsing dimensions and elements.
+pub fn readMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Matrix(T) {
+    if (comptime isComplex(T)) {
+        return try readComplexMatrix(primType(T), io, path, allocator);
+    }
+
+    if (comptime !isComplex(T)) {
+        return try readRealMatrix(T, io, path, allocator);
+    }
+}
+
+/// Reads a real matrix from a text file, parsing dimensions and floating-point elements.
+pub fn readRealMatrix(comptime T: type, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Matrix(T) {
+    const ten = try readRealTensor(T, 2, io, path, allocator);
+
+    return ten.asMatrix();
+}
+
+/// Reads a multi-dimensional real tensor from a text file, parsing shape and elements.
+pub fn readRealTensor(comptime T: type, comptime N: usize, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Tensor(T, N) {
+    var file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+
+    var buffer: [65536]u8 = undefined;
+    var reader = file.reader(io, &buffer);
+
+    var hdr_it = std.mem.tokenizeAny(u8, try reader.interface.takeDelimiterInclusive('\n'), " \t\r\n");
+
+    var shape: [N]usize = undefined;
+
+    inline for (0..N) |d| {
+        shape[d] = try std.fmt.parseInt(usize, hdr_it.next() orelse return error.InvalidRank, 10);
+    }
+
+    if (hdr_it.next() != null) return error.InvalidRank;
+
+    var A = try Tensor(T, N).init(shape, allocator);
     errdefer A.deinit(allocator);
 
     var i: usize = 0;
 
     while (true) {
-        const line = reader.interface.takeDelimiterExclusive('\n') catch {
-            break;
-        };
+        const line = reader.interface.takeDelimiterExclusive('\n') catch break;
 
         reader.interface.toss(1);
 
-        var line_iterator = std.mem.tokenizeAny(u8, std.mem.trim(u8, line, "\r"), " ");
+        var line_it = std.mem.tokenizeAny(u8, std.mem.trim(u8, line, "\r"), " \t");
 
-        while (line_iterator.next()) |element| : (i += 1) {
-            A.data[i] = try std.fmt.parseFloat(T, element);
+        while (line_it.next()) |elem| : (i += 1) {
+            if (i >= A.data.len) return error.InvalidDataLength;
+
+            A.data[i] = try std.fmt.parseFloat(T, elem);
         }
     }
+
+    if (i != A.data.len) return error.IncompleteData;
 
     return A;
 }
 
-/// Writes matrix dimensions and space-separated elements to a file, handling real or complex numbers.
-pub fn writeMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T)) !void {
+/// Reads a multi-dimensional real or complex tensor from a text file.
+pub fn readTensor(comptime T: type, comptime N: usize, io: std.Io, path: []const u8, allocator: std.mem.Allocator) !Tensor(T, N) {
+    if (comptime isComplex(T)) {
+        return try readComplexTensor(primType(T), N, io, path, allocator);
+    }
+
+    if (comptime !isComplex(T)) {
+        return try readRealTensor(T, N, io, path, allocator);
+    }
+}
+
+/// Reads the header line of a tensor data file and determines the dimensional rank.
+pub fn readTensorRank(io: std.Io, path: []const u8) !usize {
+    var file = try std.Io.Dir.cwd().openFile(io, path, .{});
+    defer file.close(io);
+
+    var buffer: [65536]u8 = undefined;
+    var reader = file.reader(io, &buffer);
+
+    const hdr_line = try reader.interface.takeDelimiterInclusive('\n');
+    var hdr_it = std.mem.tokenizeAny(u8, hdr_line, " \t\r\n");
+
+    var rank: usize = 0;
+
+    while (hdr_it.next()) |_| rank += 1;
+
+    if (rank == 0) return error.InvalidFormat;
+
+    return rank;
+}
+
+/// Writes complex matrix dimensions and elements to a file in standardized representation.
+pub fn writeComplexMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(Complex(primType(T)))) !void {
+    try writeComplexTensor(T, 2, io, fname, A.asTensor());
+}
+
+/// Writes a multi-dimensional complex tensor to a file, serializing shape and elements.
+pub fn writeComplexTensor(comptime T: type, comptime N: usize, io: std.Io, fname: []const u8, A: Tensor(Complex(primType(T)), N)) !void {
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
 
     var buffer: [65536]u8 = undefined;
     var writer = file.writer(io, &buffer);
 
-    try writeMatrixWriter(T, &writer, A);
+    try writeComplexTensorWriter(T, N, &writer, A);
+}
+
+/// Writes matrix dimensions and space-separated elements to a file, handling real or complex.
+pub fn writeMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T)) !void {
+    if (comptime isComplex(T)) {
+        try writeComplexMatrix(primType(T), io, fname, A);
+    }
+
+    if (comptime !isComplex(T)) {
+        try writeRealMatrix(T, io, fname, A);
+    }
 }
 
 /// Horizontally concatenates two matrices and writes the merged matrix to a file.
@@ -168,6 +342,33 @@ pub fn writeMatrixLspace(comptime T: type, io: std.Io, fname: []const u8, A: Mat
     }
 
     try writer.interface.flush();
+}
+
+/// Writes real matrix dimensions and space-separated elements to a file.
+pub fn writeRealMatrix(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T)) !void {
+    try writeRealTensor(T, 2, io, fname, A.asTensor());
+}
+
+/// Writes a multi-dimensional real tensor to a file, serializing the shape and elements.
+pub fn writeRealTensor(comptime T: type, comptime N: usize, io: std.Io, fname: []const u8, A: Tensor(T, N)) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
+    defer file.close(io);
+
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
+
+    try writeRealTensorWriter(T, N, &writer, A);
+}
+
+/// Writes a multi-dimensional real or complex tensor to a file.
+pub fn writeTensor(comptime T: type, comptime N: usize, io: std.Io, fname: []const u8, A: Tensor(T, N)) !void {
+    if (comptime isComplex(T)) {
+        try writeComplexTensor(primType(T), N, io, fname, A);
+    }
+
+    if (comptime !isComplex(T)) {
+        try writeRealTensor(T, N, io, fname, A);
+    }
 }
 
 /// Writes atomic symbols and 3D nuclear coordinates to a file in standard XYZ format.
@@ -271,6 +472,23 @@ pub fn writeXyzTrajectory(comptime T: type, io: std.Io, fname: []const u8, atoms
     try writer.interface.flush();
 }
 
+/// Writes multi-dimensional complex tensor dimensions and elements to a buffered writer stream.
+fn writeComplexTensorWriter(comptime T: type, comptime N: usize, writer: anytype, A: Tensor(Complex(primType(T)), N)) !void {
+    inline for (0..N) |d| {
+        try writer.interface.print("{d}{s}", .{ A.shape[d], if (d == N - 1) "\n" else " " });
+    }
+
+    const mat = A.asMatrix();
+
+    for (0..mat.nrow()) |i| for (0..mat.ncol()) |j| {
+        try writeElement(writer, mat.at(i, j));
+
+        try writer.interface.print("{s}", .{if (j == mat.ncol() - 1) "\n" else " "});
+    };
+
+    try writer.interface.flush();
+}
+
 /// Writes a single real or complex floating-point element to the output writer stream.
 fn writeElement(writer: anytype, val: anytype) !void {
     if (comptime isComplex(@TypeOf(val))) {
@@ -282,16 +500,18 @@ fn writeElement(writer: anytype, val: anytype) !void {
     }
 }
 
-/// Writes matrix dimensions and space-separated elements to a buffered writer stream.
-fn writeMatrixWriter(comptime T: type, writer: anytype, A: Matrix(T)) !void {
-    const ncol = if (comptime isComplex(T)) 2 * A.ncol() else A.ncol();
+/// Writes multi-dimensional real tensor dimensions and elements to a buffered writer stream.
+fn writeRealTensorWriter(comptime T: type, comptime N: usize, writer: anytype, A: Tensor(T, N)) !void {
+    inline for (0..N) |d| {
+        try writer.interface.print("{d}{s}", .{ A.shape[d], if (d == N - 1) "\n" else " " });
+    }
 
-    try writer.interface.print("{d} {d}\n", .{ A.nrow(), ncol });
+    const mat = A.asMatrix();
 
-    for (0..A.nrow()) |i| for (0..A.ncol()) |j| {
-        try writeElement(writer, A.at(i, j));
+    for (0..mat.nrow()) |i| for (0..mat.ncol()) |j| {
+        try writeElement(writer, mat.at(i, j));
 
-        try writer.interface.print("{s}", .{if (j == A.ncol() - 1) "\n" else " "});
+        try writer.interface.print("{s}", .{if (j == mat.ncol() - 1) "\n" else " "});
     };
 
     try writer.interface.flush();

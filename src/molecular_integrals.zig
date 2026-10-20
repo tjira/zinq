@@ -11,6 +11,7 @@ const Tensor = @import("tensor.zig").Tensor;
 
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
+const writeTensor = @import("read_write.zig").writeTensor;
 
 /// Configuration parameters specifying molecular geometry, basis sets, spin properties, and task selectors for integral calculation.
 pub const Options = struct {
@@ -388,7 +389,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     if (opt.write.coulomb) |fname| {
         const g = ints.g orelse return error.CoulombMatrixNotCalculated;
 
-        try writeMatrix(T, io, fname, g.asMatrix());
+        try writeTensor(T, 4, io, fname, g);
 
         if (log) try printf(io, "COULOMB INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -448,7 +449,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     if (opt.write.coulomb_d1) |fname| {
         const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
 
-        try writeMatrix(T, io, fname, dg.asMatrix());
+        try writeTensor(T, 5, io, fname, dg);
 
         if (log) try printf(io, "COULOMB DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
