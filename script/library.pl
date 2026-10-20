@@ -103,8 +103,8 @@ sub create_compiler_wrappers {
     # DEFINE WRAPPER CONTENTS
     my %wrappers = (
         zigar     => "#!/usr/bin/env bash\n\n$zig ar                      \"\$@\"\n",
-        zigcc     => "#!/usr/bin/env bash\n\n$zig cc     --target=$target \"\$@\"\n",
-        zigcpp    => "#!/usr/bin/env bash\n\n$zig c++    --target=$target \"\$@\"\n",
+        zigcc     => "#!/usr/bin/env bash\n\n$zig cc  -w --target=$target \"\$@\"\n",
+        zigcpp    => "#!/usr/bin/env bash\n\n$zig c++ -w --target=$target \"\$@\"\n",
         zigranlib => "#!/usr/bin/env bash\n\n$zig ranlib                  \"\$@\"\n",
     );
 
@@ -160,6 +160,8 @@ sub compile_eigen {
     # CONFIGURE COMMAND
     my @args = (
         "cmake",
+        "--log-level", "ERROR",
+        "-Wno-author",
         "-B", "build",
         "-DCMAKE_AR=$pwd/zigar",
         "-DCMAKE_RANLIB=$pwd/zigranlib",
@@ -200,6 +202,8 @@ sub compile_libint {
     # CONFIGURE LIBINT COMPILER
     my @compiler_args = (
         "cmake",
+        "--log-level", "ERROR",
+        "-Wno-author",
         "-B", "build",
         "-DLIBINT2_ENABLE_ONEBODY=1",
         "-DLIBINT2_ENABLE_ERI=1",
@@ -247,9 +251,12 @@ sub compile_libint {
     # CONFIGURE TARGET LIBINT LIBRARY
     my @args = (
         "cmake",
+        "--log-level", "ERROR",
+        "-Wno-author",
         "-B", "build",
         "-DCMAKE_AR=$pwd/zigar",
         "-DCMAKE_RANLIB=$pwd/zigranlib",
+        "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INSTALL_PREFIX=$prefix",
         "-DBUILD_SHARED_LIBS=False",
         "-DBUILD_TESTING=False",
@@ -294,6 +301,8 @@ sub compile_libxc {
     # CONFIGURE COMMAND
     my @args = (
         "cmake",
+        "--log-level", "ERROR",
+        "-Wno-author",
         "-B", "build",
         "-DCMAKE_AR=$pwd/zigar",
         "-DCMAKE_RANLIB=$pwd/zigranlib",
@@ -332,19 +341,16 @@ sub compile_openblas {
     chdir "lib/openblas" or die "CANNOT CHDIR TO 'lib/openblas': $!";
 
     # MAP TARGET ARCHITECTURE AND OPERATING SYSTEM TO CMAKE CONVENTIONS
-    my $system_name = $target =~ /macos/i   ? "Darwin"  :
-                      $target =~ /windows/i ? "Windows" :
-                                              "Linux"   ;
+    my $system_name = $target =~ /windows/i ? "Windows" : $target =~ /macos/i ? "Darwin" : "Linux";
 
     # MAP TARGET ARCHITECTURE TO CMAKE CONVENTIONS
     my $system_proc = $target =~ /aarch64/i ? "arm64" : "x86_64";
 
-    # DETERMINE BASE TARGET FOR OPENBLAS
-    my $base_target = $system_proc eq "arm64" ? "ARMV8" : "CORE2";
-
     # CONFIGURE COMMAND
     my @args = (
         "cmake",
+        "--log-level", "ERROR",
+        "-Wno-author",
         "-B", "build",
         "-DCMAKE_AR=$pwd/zigar",
         "-DCMAKE_RANLIB=$pwd/zigranlib",
@@ -352,12 +358,17 @@ sub compile_openblas {
         "-DCMAKE_SYSTEM_PROCESSOR=$system_proc",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INSTALL_PREFIX=$prefix",
+        "-DBUILD_SHARED_LIBS=OFF",
         "-DBUILD_TESTING=OFF",
         "-DC_LAPACK=ON",
         "-DNOFORTRAN=ON",
         "-DUSE_THREAD=ON",
         "-DNUM_THREADS=128",
-        $generic ? "-DTARGET=generic" : ("-DDYNAMIC_ARCH=ON", "-DTARGET=$base_target"),
+        $generic ? "-DDYNAMIC_ARCH=OFF" : "-DDYNAMIC_ARCH=ON",
+        $generic ? "-DNO_AVX2=ON"       : "-DNO_AVX2=OFF",
+        $generic ? "-DNO_AVX512=ON"     : "-DNO_AVX512=OFF",
+        $generic ? "-DNO_AVX=ON"        : "-DNO_AVX=OFF",
+        $generic ? "-DTARGET=GENERIC"   : "-DTARGET=CORE2",
     );
 
     # RUN CONFIGURE
@@ -424,6 +435,8 @@ sub compile_openmp {
     # CONFIGURE COMMAND
     my @args = (
         "cmake",
+        "--log-level", "ERROR",
+        "-Wno-author",
         "-B", "build",
         "-S", "runtimes",
         "-DCMAKE_AR=$pwd/zigar",
