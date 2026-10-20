@@ -368,7 +368,7 @@ sub compile_openblas {
         $generic ? "-DNO_AVX2=ON"       : "-DNO_AVX2=OFF",
         $generic ? "-DNO_AVX512=ON"     : "-DNO_AVX512=OFF",
         $generic ? "-DNO_AVX=ON"        : "-DNO_AVX=OFF",
-        $generic ? "-DTARGET=GENERIC"   : "-DTARGET=CORE2",
+        $generic ? "-DTARGET=generic"   : "-DTARGET=CORE2",
     );
 
     # RUN CONFIGURE
