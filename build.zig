@@ -74,14 +74,14 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     module.addIncludePath(.{ .cwd_relative = dir1 });
     module.addIncludePath(.{ .cwd_relative = dir2 });
 
-    const lin_flags, const win_flags = .{ &.{ "-fopenmp", "-DNDEBUG" }, &.{"-D__GXX_ABI_VERSION=1004"} };
+    const lin_flags, const win_flags = .{ &.{ "-fopenmp" }, &.{"-D__GXX_ABI_VERSION=1004"} };
 
     const flags: []const []const u8 = if (is_linux) lin_flags else if (is_windows) win_flags else &.{};
 
     module.addCSourceFile(.{ .file = b.path("src/libint.cpp"), .flags = flags });
     module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });
 
-    const libs = [_][]const u8{ "fftw3", "int2", "openblas", "xc" };
+    const libs = [_][]const u8{ "int2", "openblas", "xc" };
 
     for (libs) |lib| {
         module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static });
@@ -91,7 +91,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
         module.linkSystemLibrary("omp", .{ .preferred_link_mode = .static });
     }
 
-    inline for (.{ "cblas", "exprtk", "fftw", "lapacke", "libint", "libxc" }) |name| {
+    inline for (.{ "cblas", "exprtk", "lapacke", "libint", "libxc" }) |name| {
         module.addImport(name, translateHeader(b, module, b.path("src/" ++ name ++ ".h"), dir1));
     }
 }

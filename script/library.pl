@@ -10,7 +10,7 @@ use File::Copy   qw(move copy       );
 use Getopt::Long qw(GetOptions      );
 
 # DEFINE LIBRARY NAMES
-my @lib_names = qw(eigen libint libxc openblas fftw exprtk openmp);
+my @lib_names = qw(eigen libint libxc openblas exprtk openmp);
 
 # DEFINE BUILD OPTIONS
 my (%build, $generic);
@@ -54,7 +54,6 @@ compile_eigen   ($prefix, $cores,        $pwd          ) if $build{eigen};
 compile_libint  ($prefix, $cores,        $pwd          ) if $build{libint};
 compile_libxc   ($prefix, $cores, $host, $pwd          ) if $build{libxc};
 compile_openblas($prefix, $cores,        $pwd, $generic) if $build{openblas};
-compile_fftw    ($prefix, $cores, $host, $pwd, $generic) if $build{fftw};
 compile_openmp  ($prefix, $cores,        $pwd          ) if $build{openmp};
 
 # REMOVE COMPILER WRAPPERS
@@ -355,59 +354,6 @@ sub compile_openblas {
 
     # INSTALL THE LIBRARY
     system("make", @args, "install") == 0 or die "OPENBLAS INSTALL FAILED";
-
-    # CHANGE BACK TO ORIGINAL DIRECTORY
-    chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
-}
-
-sub compile_fftw {
-    # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $host, $pwd, $generic) = @_;
-
-    # DEFINE THE URL FOR THE FFTW SOURCE ARCHIVE
-    my $url = "https://www.fftw.org/fftw-3.3.11.tar.gz";
-
-    # DOWNLOAD AND EXTRACT THE LIBRARY
-    download_library($url, "fftw");
-
-    # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
-    chdir "lib/fftw" or die "CANNOT CHDIR TO 'lib/fftw': $!";
-
-    # CONFIGURE COMMAND
-    my @args = (
-        "cmake",
-        "-B", "build",
-        "-DCMAKE_AR=$pwd/zigar",
-        "-DCMAKE_RANLIB=$pwd/zigranlib",
-        "-DCMAKE_POLICY_VERSION_MINIMUM=3.5",
-        "-DBUILD_SHARED_LIBS=OFF",
-        "-DBUILD_TESTS=OFF",
-        "-DDISABLE_FORTRAN=ON",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=$prefix",
-        $generic ? "-DENABLE_SSE2=OFF" : "-DENABLE_SSE2=ON",
-        $generic ? "-DENABLE_AVX=OFF" : "-DENABLE_AVX=ON",
-    );
-
-    # FIX COMPILATION ON WINDOWS
-    push @args, "-DCMAKE_C_FLAGS=-DWITH_OUR_MALLOC=1" if $target =~ /windows/;
-
-    # RUN CONFIGURE
-    system(@args) == 0 or die "FFTW CONFIGURE FAILED";
-
-    # BUILD THE LIBRARY
-    system("cmake", "--build", "build", "--parallel", $cores) == 0 or die "FFTW BUILD FAILED";
-
-    # INSTALL THE LIBRARY
-    system("cmake", "--install", "build") == 0 or die "FFTW INSTALL FAILED";
-
-    # PATCH FFTW3.H TO DISABLE __float128 ON WINDOWS
-    if ($target =~ /windows/) {
-        system("perl", "-pi", "-e", "s/#if \\(__GNUC__ > 4/#if 0 && (__GNUC__ > 4/g", "$prefix/include/fftw3.h");
-    }
-
-    # PATCH FFTW3.H TO DISABLE LONG DOUBLE
-    system("perl", "-pi", "-e", "s/.*FFTW_MANGLE_LONG_DOUBLE.*//g", "$prefix/include/fftw3.h");
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";

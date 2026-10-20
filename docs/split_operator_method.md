@@ -54,7 +54,7 @@ $$
 \tilde{\psi}''(\mathbf{k})=\exp\left(-\frac{i\hbar k^2}{2m}\Delta t\right)\tilde{\psi}'(\mathbf{k})
 $$
 
-where $m$ is the mass of the particle and $\mathbf{k}$ is the wavevector representing momentum. Our codebase implements these transforms by interfacing with the FFTW library, which generates optimized plans to run the multidimensional Fourier transforms as quickly as possible.
+where $m$ is the mass of the particle and $\mathbf{k}$ is the wavevector representing momentum. Our codebase implements these transforms using a native multi-dimensional radix-2 Cooley-Tukey fast Fourier transform algorithm with bit-reversal indexing and stride-based dimensional decomposition.
 
 ---
 

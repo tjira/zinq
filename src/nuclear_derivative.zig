@@ -586,7 +586,7 @@ pub fn stripSecondaryOptions(opt: anytype, preserve: anytype) @TypeOf(opt) {
         clean.nacv = null;
     }
 
-    inline for (.{"lowdin", "mayer", "mulliken", "wiberg"}) |pop| {
+    inline for (.{ "lowdin", "mayer", "mulliken", "wiberg" }) |pop| {
         if (comptime @hasField(@TypeOf(clean), pop)) @field(clean, pop) = false;
     }
 

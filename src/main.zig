@@ -4,7 +4,6 @@ const builtin = @import("builtin");
 const config = @import("config");
 const std = @import("std");
 
-const fftw = cimport.fftw;
 const libint = cimport.libint;
 const libxc = cimport.libxc;
 const cblas = cimport.cblas;
@@ -95,10 +94,6 @@ pub fn main(init: std.process.Init) !void {
     const openblas_v = std.mem.trim(u8, cblas.OPENBLAS_VERSION, "OpenBLAS ");
 
     try printf(init.io, "OPENBLAS: v{s}, ", .{openblas_v});
-
-    const fftw_v = std.mem.trim(u8, std.mem.span(fftw.fftw_version), "fftw-");
-
-    try printf(init.io, "FFTW: v{s}, ", .{fftw_v});
 
     try printf(init.io, "LIBINT: v{s}, LIBXC: v{s}\n", .{ libint.LIBINT_VERSION, libxc.xc_version_string() });
 

@@ -1,8 +1,6 @@
-//! Wrapper around FFTW for performing fast Fourier transforms on multi-dimensional complex arrays.
+//! Computes discrete Fourier transforms on multi-dimensional complex arrays using Cooley-Tukey algorithm.
 
 const std = @import("std");
-
-const fftw = @import("cimport.zig").fftw;
 
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
@@ -18,8 +16,6 @@ const readComplexTensor = @import("read_write.zig").readComplexTensor;
 const readTensor = @import("read_write.zig").readTensor;
 const readTensorRank = @import("read_write.zig").readTensorRank;
 const writeComplexTensor = @import("read_write.zig").writeComplexTensor;
-
-var fftw_lock = std.atomic.Value(bool).init(false);
 
 /// Configuration parameters for loading, executing, and saving discrete Fourier transforms.
 pub const Options = struct {
@@ -59,61 +55,6 @@ pub const TensorSource = union(enum) {
     random: RandomOptions,
 };
 
-/// Returns an FFT plan type that encapsulates execution details for discrete Fourier transforms.
-pub fn FftPlan(comptime T: type) type {
-    return struct {
-        plan: fftw.fftw_plan,
-        sign: i32,
-
-        /// Initializes a discrete Fourier transform plan for the specified shape, direction, and planning mode.
-        pub fn init(arr: []T, shape: []i32, sign: i32, mode: u32) !@This() {
-            if (comptime primType(T) != f64) @compileError("FFTW NOW ONLY SUPPORTS F64 NUMBERS");
-
-            const ptr = @as([*c]fftw.fftw_complex, @ptrCast(arr.ptr));
-
-            lockFftw();
-
-            const plan = fftw.fftw_plan_dft(@intCast(shape.len), shape.ptr, ptr, ptr, sign, mode);
-
-            unlockFftw();
-
-            return .{ .plan = plan orelse return error.PlanCreationFailed, .sign = sign };
-        }
-
-        /// Destroys the FFTW plan, releasing all internal resources and plans.
-        pub fn deinit(self: @This()) void {
-            lockFftw();
-
-            fftw.fftw_destroy_plan(self.plan);
-
-            unlockFftw();
-        }
-
-        /// Creates a duplicate of the existing FFTW plan with identical transform properties.
-        pub fn clone(self: @This()) !@This() {
-            lockFftw();
-
-            const plan = fftw.fftw_copy_plan(self.plan);
-
-            unlockFftw();
-
-            return .{ .plan = plan orelse return error.PlanDuplicationFailed, .sign = self.sign };
-        }
-
-        /// Executes the DFT in-place and applies normalization (1/N) if computing an inverse transform.
-        pub fn execute(self: @This(), arr: []T) void {
-            const ptr = @as([*c]fftw.fftw_complex, @ptrCast(arr.ptr));
-
-            fftw.fftw_execute_dft(self.plan, ptr, ptr);
-
-            if (self.sign == 1) for (0..arr.len) |i| {
-                arr[i].re /= @as(f64, @floatFromInt(arr.len));
-                arr[i].im /= @as(f64, @floatFromInt(arr.len));
-            };
-        }
-    };
-}
-
 /// Generic container holding the computed Fourier transformed tensor.
 pub fn Result(comptime T: type) type {
     return struct {
@@ -126,10 +67,116 @@ pub fn Result(comptime T: type) type {
     };
 }
 
-/// Locks the FFTW library for thread-safe operations, preventing concurrent access to shared resources.
-pub fn lockFftw() void {
-    while (fftw_lock.swap(true, .acquire)) {
-        std.Thread.yield() catch {};
+/// Computes the one-dimensional discrete Fourier transform using the radix-2 Cooley-Tukey algorithm.
+pub fn fft(comptime T: type, output: []Complex(T), input: []const Complex(T), comptime exp: i32) void {
+    std.debug.assert(output.len == input.len);
+
+    if (output.len <= 1) return;
+
+    if (output.ptr != input.ptr) {
+        @memcpy(output, input);
+    }
+
+    std.debug.assert(std.math.isPowerOfTwo(output.len));
+
+    const n, const shift = .{ output.len, @as(u6, @intCast(@bitSizeOf(usize) - @ctz(output.len))) };
+
+    for (0..n) |i| {
+        const j = @bitReverse(i) >> shift;
+
+        if (i < j) {
+            const temp = output[i];
+
+            output[i], output[j] = .{ output[j], temp };
+        }
+    }
+
+    var len: usize = 2;
+
+    while (len <= n) : (len <<= 1) {
+        const angle = (if (comptime exp == -1) -2.0 else 2.0) * std.math.pi / @as(T, @floatFromInt(len));
+
+        var i: usize, const half = .{ 0, len >> 1 };
+
+        const w_step = Complex(T).init(@cos(angle), @sin(angle));
+
+        while (i < n) : (i += len) {
+            var w = Complex(T).init(1, 0);
+
+            for (0..half) |j| {
+                const u, const v = .{ output[i + j], output[i + j + half].mul(w) };
+
+                output[i + j], output[i + j + half] = .{ u.add(v), u.sub(v) };
+
+                w = w.mul(w_step);
+            }
+        }
+    }
+
+    if (comptime exp == 1) {
+        const inv_n = @as(T, 1) / @as(T, @floatFromInt(n));
+
+        for (output) |*val| {
+            val.re *= inv_n;
+            val.im *= inv_n;
+        }
+    }
+}
+
+/// Computes the multi-dimensional discrete Fourier transform across arbitrary spatial axes using scratch line memory.
+pub fn fftn(comptime T: type, output: []Complex(T), input: []const Complex(T), shape: []const usize, comptime exp: i32, scratch: []Complex(T)) void {
+    std.debug.assert(output.len == input.len);
+
+    if (shape.len == 0 or output.len == 0) return;
+
+    if (output.ptr != input.ptr) {
+        @memcpy(output, input);
+    }
+
+    if (shape.len == 1) {
+        fft(T, output, output, exp);
+
+        return;
+    }
+
+    var stride_after: usize, var d: usize = .{ 1, shape.len };
+
+    while (d > 0) {
+        d -= 1;
+
+        const n_d = shape[d];
+
+        if (n_d <= 1) continue;
+
+        var stride_before: usize = 1;
+
+        for (0..d) |k| stride_before *= shape[k];
+
+        if (stride_after == 1) for (0..stride_before) |p| {
+            const base = p * n_d;
+
+            fft(T, output[base .. base + n_d], output[base .. base + n_d], exp);
+        };
+
+        if (stride_after > 1) {
+            std.debug.assert(scratch.len >= n_d);
+
+            for (0..stride_before) |p| {
+                const p_offset = p * n_d * stride_after;
+
+                for (0..stride_after) |s| {
+                    const base = p_offset + s;
+
+                    for (0..n_d) |k| scratch[k] = output[base + k * stride_after];
+
+                    fft(T, scratch[0..n_d], scratch[0..n_d], exp);
+
+                    for (0..n_d) |k| output[base + k * stride_after] = scratch[k];
+                }
+            }
+        }
+
+        stride_after *= n_d;
     }
 }
 
@@ -144,11 +191,6 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         inline 1...5 => |N| return try runRank(T, N, io, opt, log, gpa),
         else => return error.UnsupportedRank,
     }
-}
-
-/// Unlocks the FFTW library, allowing other threads to access shared resources after completing operations.
-pub fn unlockFftw() void {
-    fftw_lock.store(false, .release);
 }
 
 /// Initializes a complex tensor from an input file or procedurally sampled distribution.
@@ -235,14 +277,7 @@ fn runRank(comptime T: type, comptime N: usize, io: std.Io, opt: Options, log: b
         try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
     }
 
-    var shape_i32: [N]i32 = undefined;
-
-    inline for (0..N) |i| shape_i32[i] = @intCast(A.shape[i]);
-
-    const dir = @intFromEnum(opt.direction);
-
-    var plan = try FftPlan(Complex(primType(T))).init(A.data, &shape_i32, dir, fftw.FFTW_ESTIMATE);
-    defer plan.deinit();
+    const dir = @backingInt(opt.direction);
 
     if (log) {
         try printf(io, "EXECUTE TRANSFORM: ", .{});
@@ -250,7 +285,18 @@ fn runRank(comptime T: type, comptime N: usize, io: std.Io, opt: Options, log: b
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    plan.execute(A.data);
+    var max_dim: usize = 0;
+
+    for (A.shape) |dim| max_dim = @max(max_dim, dim);
+
+    const scratch = try gpa.alloc(Complex(primType(T)), if (N > 1) max_dim else 0);
+    defer gpa.free(scratch);
+
+    if (dir == -1) {
+        fftn(primType(T), A.data, A.data, &A.shape, -1, scratch);
+    } else {
+        fftn(primType(T), A.data, A.data, &A.shape, 1, scratch);
+    }
 
     if (log) {
         try printf(io, "{f}\n", .{timer.untilNow(io, .real)});

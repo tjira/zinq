@@ -7,7 +7,8 @@ const Complex = std.math.Complex;
 
 const Grid = @import("wavepacket.zig").Grid;
 const Matrix = @import("tensor.zig").Matrix;
-const FftPlan = @import("fourier_transform.zig").FftPlan;
+const fft = @import("fourier_transform.zig").fft;
+const fftn = @import("fourier_transform.zig").fftn;
 const Potential = @import("potential.zig").Potential;
 
 const eighSlice = @import("linear_algebra.zig").eighSlice;
@@ -122,7 +123,7 @@ pub fn FluxAnalysis(comptime T: type) type {
         }
 
         /// Computes transition probabilities by integrating flux of energy-resolved wavefunctions at a dividing surface.
-        pub fn run(self: @This(), grid: Grid(T), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), plans: [2]FftPlan(Complex(T)), gpa: Allocator) !Matrix(T) {
+        pub fn run(self: @This(), grid: Grid(T), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), gpa: Allocator) !Matrix(T) {
             var npoint: usize = 1;
 
             while (try std.math.powi(usize, npoint, grid.ncol()) != grid.nrow()) {
@@ -137,7 +138,13 @@ pub fn FluxAnalysis(comptime T: type) type {
             var temp_phi = try gpa.alloc(Complex(T), grid.nrow());
             defer gpa.free(temp_phi);
 
-            const ffft_plan, const ifft_plan = plans;
+            const shape = try gpa.alloc(usize, grid.ncol());
+            defer gpa.free(shape);
+
+            @memset(shape, npoint);
+
+            const scratch = try gpa.alloc(Complex(T), if (grid.ncol() > 1) npoint else 0);
+            defer gpa.free(scratch);
 
             for (0..grid.ncol()) |d| {
                 const s_d = std.math.pow(usize, npoint, grid.ncol() - 1 - d);
@@ -179,13 +186,25 @@ pub fn FluxAnalysis(comptime T: type) type {
                             temp_phi[j] = flux_acc.at(row, j);
                         }
 
-                        ffft_plan.execute(temp_phi);
+                        if (grid.ncol() == 1) {
+                            fft(T, temp_phi, temp_phi, -1);
+                        }
+
+                        if (grid.ncol() > 1) {
+                            fftn(T, temp_phi, temp_phi, shape, -1, scratch);
+                        }
 
                         for (0..grid.nrow()) |m_idx| {
                             temp_phi[m_idx] = temp_phi[m_idx].mul(Complex(T).init(0, grid.getK(m_idx, d)));
                         }
 
-                        ifft_plan.execute(temp_phi);
+                        if (grid.ncol() == 1) {
+                            fft(T, temp_phi, temp_phi, 1);
+                        }
+
+                        if (grid.ncol() > 1) {
+                            fftn(T, temp_phi, temp_phi, shape, 1, scratch);
+                        }
 
                         const factor = grid.dr * k_inc * self.dt * self.dt / (m * self.mass[d] * dx_d * ak);
 

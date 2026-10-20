@@ -5,11 +5,12 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
-const FftPlan = @import("fourier_transform.zig").FftPlan;
 const Matrix = @import("tensor.zig").Matrix;
 const Potential = @import("potential.zig").Potential;
 const Vector = @import("tensor.zig").Vector;
 
+const fftArray = @import("fourier_transform.zig").fft;
+const fftn = @import("fourier_transform.zig").fftn;
 const eighBatch = @import("linear_algebra.zig").eighBatch;
 const eighSlice = @import("linear_algebra.zig").eighSlice;
 
@@ -454,55 +455,52 @@ pub const InitialConditions = struct {
     state: u32 = 0,
 };
 
-/// Representation of a multi-state wavepacket and its Fourier transform plans.
+/// Representation of a multi-state wavepacket and its grid-based quantum state vectors.
 pub fn Wavefunction(comptime T: type) type {
     return struct {
         W: Matrix(Complex(T)),
+        scratch: []Complex(T),
 
-        ffft: FftPlan(Complex(T)),
-        ifft: FftPlan(Complex(T)),
+        shape: []usize,
 
-        /// Allocates wavefunction components and plans forward and backward FFTs.
-        pub fn init(ndim: usize, nstate: usize, npoint: usize, plan_mode: u32, gpa: Allocator) !@This() {
+        /// Allocates wavefunction components and preallocates multidimensional Fourier transform buffers.
+        pub fn init(ndim: usize, nstate: usize, npoint: usize, gpa: Allocator) !@This() {
             var W = try Matrix(Complex(T)).init(nstate, std.math.pow(usize, npoint, ndim), gpa);
             errdefer W.deinit(gpa);
 
-            const shape = try gpa.alloc(i32, ndim);
-            defer gpa.free(shape);
+            const shape = try gpa.alloc(usize, ndim);
+            errdefer gpa.free(shape);
 
-            for (0..shape.len) |i| {
-                shape[i] = @as(i32, @intCast(npoint));
-            }
+            @memset(shape, npoint);
 
-            var ffft = try FftPlan(Complex(T)).init(W.rowSlice(0), shape, -1, plan_mode);
-            errdefer ffft.deinit();
+            const scratch = try gpa.alloc(Complex(T), if (ndim > 1) npoint else 0);
+            errdefer gpa.free(scratch);
 
-            var ifft = try FftPlan(Complex(T)).init(W.rowSlice(0), shape, 1, plan_mode);
-            errdefer ifft.deinit();
-
-            return .{ .W = W, .ffft = ffft, .ifft = ifft };
+            return .{ .W = W, .scratch = scratch, .shape = shape };
         }
 
-        /// Deallocates wavefunction array and FFT plans.
+        /// Deallocates wavefunction array and Fourier transform buffers.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.W.deinit(gpa);
 
-            self.ffft.deinit();
-            self.ifft.deinit();
+            gpa.free(self.scratch);
+            gpa.free(self.shape);
         }
 
-        /// Clones the wavefunction and its FFT plans into a new structure.
+        /// Clones the wavefunction and its transform parameters into a new structure.
         pub fn clone(self: @This(), gpa: Allocator) !@This() {
-            const ffft = try self.ffft.clone();
-            errdefer ffft.deinit();
+            const shape = try gpa.alloc(usize, self.shape.len);
+            errdefer gpa.free(shape);
 
-            const ifft = try self.ifft.clone();
-            errdefer ifft.deinit();
+            @memcpy(shape, self.shape);
+
+            const scratch = try gpa.alloc(Complex(T), self.scratch.len);
+            errdefer gpa.free(scratch);
 
             const W = try self.W.clone(gpa);
             errdefer W.deinit(gpa);
 
-            return .{ .W = W, .ffft = ffft, .ifft = ifft };
+            return .{ .W = W, .scratch = scratch, .shape = shape };
         }
 
         /// Computes kinetic energy expectation value in momentum space.
@@ -539,9 +537,14 @@ pub fn Wavefunction(comptime T: type) type {
         /// Transforms the wavefunction between position and momentum space.
         pub fn fft(self: *@This(), comptime sign: i32) void {
             for (0..self.W.nrow()) |i| {
-                const slice = self.W.rowSlice(i);
 
-                if (comptime sign == -1) self.ffft.execute(slice) else self.ifft.execute(slice);
+                if (self.W.ncol() == 1) {
+                    fftArray(T, self.W.rowSlice(i), self.W.rowSlice(i), sign);
+                }
+
+                if (self.W.ncol() > 1) {
+                    fftn(T, self.W.rowSlice(i), self.W.rowSlice(i), self.shape, sign, self.scratch);
+                }
             }
         }
 

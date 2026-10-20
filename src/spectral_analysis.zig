@@ -2,47 +2,24 @@
 
 const std = @import("std");
 
-const fftw = @import("cimport.zig").fftw;
-
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
-const lockFftw = @import("fourier_transform.zig").lockFftw;
-const unlockFftw = @import("fourier_transform.zig").unlockFftw;
-
 const Vector = @import("tensor.zig").Vector;
+
+const fft = @import("fourier_transform.zig").fft;
 
 /// Calculates the spectrum by Fourier transforming a windowed and zero-padded autocorrelation function.
 pub fn calcSpectrum(comptime T: type, acf: Vector(Complex(T)), dt: T, padding: usize, thresh: T, gpa: Allocator) !struct { Vector(Complex(T)), Vector(T) } {
-    const flags, const decay = .{ fftw.FFTW_ESTIMATE | fftw.FFTW_PRESERVE_INPUT, -@log(thresh) };
+    const decay = -@log(thresh);
 
-    var acfp = try Vector(Complex(T)).initZero(acf.length() + padding, gpa);
+    const n = try std.math.ceilPowerOfTwo(usize, @max((acf.length() + padding - 1) * 2, 2));
+
+    var acfp = try Vector(Complex(T)).initZero(n / 2 + 1, gpa);
     errdefer acfp.deinit(gpa);
 
-    var spec = try Vector(T).init((acfp.length() - 1) * 2, gpa);
+    var spec = try Vector(T).init(n, gpa);
     errdefer spec.deinit(gpa);
-
-    const inptr = @as([*c]fftw.fftw_complex, @ptrCast(acfp.data.ptr));
-
-    const err = error.PlanCreationFailed;
-
-    lockFftw();
-
-    const plan = fftw.fftw_plan_dft_c2r_1d(@intCast(spec.length()), inptr, spec.data.ptr, flags) orelse {
-        unlockFftw();
-
-        return err;
-    };
-
-    unlockFftw();
-
-    defer {
-        lockFftw();
-
-        fftw.fftw_destroy_plan(plan);
-
-        unlockFftw();
-    }
 
     for (0..acf.length()) |i| {
         const x = @as(T, @floatFromInt(i)) / @as(T, @floatFromInt(acf.length()));
@@ -52,10 +29,29 @@ pub fn calcSpectrum(comptime T: type, acf: Vector(Complex(T)), dt: T, padding: u
         acfp.ptr(i).* = Complex(T).init(acf.at(i).re * window, acf.at(i).im * window);
     }
 
-    fftw.fftw_execute(plan);
+    var full = try gpa.alloc(Complex(T), n);
+    defer gpa.free(full);
 
-    for (0..spec.length() / 2) |i| {
-        const j, const temp = .{ i + spec.length() / 2, spec.at(i) };
+    for (0..n / 2 + 1) |k| {
+        full[k] = acfp.at(k);
+    }
+
+    for (n / 2 + 1..n) |k| {
+        const orig = full[n - k];
+
+        full[k] = Complex(T).init(orig.re, -orig.im);
+    }
+
+    fft(T, full, full, 1);
+
+    const n_flt = @as(T, @floatFromInt(n));
+
+    for (0..n) |i| {
+        spec.ptr(i).* = full[i].re * n_flt;
+    }
+
+    for (0..n / 2) |i| {
+        const j, const temp = .{ i + n / 2, spec.at(i) };
 
         spec.ptr(i).*, spec.ptr(j).* = .{ spec.at(j) * dt, temp * dt };
     }

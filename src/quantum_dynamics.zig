@@ -2,12 +2,9 @@
 
 const std = @import("std");
 
-const fftw = @import("cimport.zig").fftw;
-
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
-const FftPlan = @import("fourier_transform.zig").FftPlan;
 const FluxAnalysis = @import("flux_analysis.zig").FluxAnalysis;
 const Grid = @import("wavepacket.zig").Grid;
 const Hamiltonian = @import("wavepacket.zig").Hamiltonian;
@@ -28,7 +25,6 @@ const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 pub const Options = struct {
     absorbing_potential: ?AbsorbingPotential = null,
     adiabatic: bool = false,
-    fft: Fft = .{},
     flux_analysis: ?FluxAnalysisOptions = null,
     grid: GridOptions,
     imaginary: ?Imaginary = null,
@@ -62,11 +58,6 @@ const AbsorbingPotential = struct {
     exponent: f64 = 0.001,
     stop_norm: ?f64 = null,
     track_population: bool = false,
-};
-
-/// Fast Fourier Transform execution planner configuration for momentum space conversion.
-const Fft = struct {
-    plan: enum { estimate, measure, patient, exhaustive } = .measure,
 };
 
 /// Quantum flux analysis settings for computing energy-resolved transmission cross sections.
@@ -317,7 +308,7 @@ fn History(comptime T: type) type {
         }
 
         /// Writes the accumulated history and calculated spectra to output files.
-        pub fn exportWrite(self: *@This(), io: std.Io, grid: Grid(T), opt: Options, pot: Potential(T), plans: [2]FftPlan(Complex(T)), gpa: Allocator) !?Matrix(T) {
+        pub fn exportWrite(self: *@This(), io: std.Io, grid: Grid(T), opt: Options, pot: Potential(T), gpa: Allocator) !?Matrix(T) {
             const dt, const end = .{ opt.time_step, opt.time_step * @as(T, @floatFromInt(self.index - 1)) };
 
             if (opt.write.acf) |path| {
@@ -398,7 +389,7 @@ fn History(comptime T: type) type {
                 var fa = try FluxAnalysis(T).init(opt, pot, gpa);
                 defer fa.deinit(gpa);
 
-                var sigma = try fa.run(grid, self.wfn_init.?, self.flux_acc.?, plans, gpa);
+                var sigma = try fa.run(grid, self.wfn_init.?, self.flux_acc.?, gpa);
                 errdefer sigma.deinit(gpa);
 
                 if (flux_opt.write.cross_section) |path| {
@@ -1396,17 +1387,10 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
 
     const dt = if (opt.imaginary) |_| Complex(T).init(0, -opt.time_step) else Complex(T).init(opt.time_step, 0);
 
-    const plan_mode = switch (opt.fft.plan) {
-        .estimate => fftw.FFTW_ESTIMATE,
-        .measure => fftw.FFTW_MEASURE,
-        .patient => fftw.FFTW_PATIENT,
-        .exhaustive => fftw.FFTW_EXHAUSTIVE,
-    };
-
     var grid = try Grid(T).init(opt.grid.bounds, opt.grid.npoint, opt.grid.cylindrical, !opt.memory.grid, gpa);
     errdefer grid.deinit(gpa);
 
-    var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, plan_mode, gpa);
+    var wfn = try Wavefunction(T).init(pot.ndim(), pot.nstate(), opt.grid.npoint, gpa);
     errdefer wfn.deinit(gpa);
 
     const mass = try gpa.alloc(T, opt.mass.len);
@@ -1725,9 +1709,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Re
         };
     }
 
-    const plans = .{ ctx.sim.wfn.ffft, ctx.sim.wfn.ifft };
-
-    const maybe_sigma = try hist.exportWrite(io, ctx.sim.wfn_kpgrids, opt, ctx.sim.epoten, plans, gpa);
+    const maybe_sigma = try hist.exportWrite(io, ctx.sim.wfn_kpgrids, opt, ctx.sim.epoten, gpa);
 
     var result: Result(T) = .{ .observables = .empty, .cross_section = maybe_sigma };
     errdefer result.deinit(gpa);
