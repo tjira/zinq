@@ -346,6 +346,9 @@ sub compile_openblas {
     # MAP TARGET ARCHITECTURE TO CMAKE CONVENTIONS
     my $system_proc = $target =~ /aarch64/i ? "arm64" : "x86_64";
 
+    # DETERMINE BASE TARGET FOR OPENBLAS
+    my $base_target = $system_proc eq "arm64" ? "ARMV8" : "CORE2";
+
     # CONFIGURE COMMAND
     my @args = (
         "cmake",
@@ -364,11 +367,11 @@ sub compile_openblas {
         "-DNOFORTRAN=ON",
         "-DUSE_THREAD=ON",
         "-DNUM_THREADS=128",
+        "-DTARGET=$base_target",
         $generic ? "-DDYNAMIC_ARCH=OFF" : "-DDYNAMIC_ARCH=ON",
         $generic ? "-DNO_AVX2=ON"       : "-DNO_AVX2=OFF",
         $generic ? "-DNO_AVX512=ON"     : "-DNO_AVX512=OFF",
         $generic ? "-DNO_AVX=ON"        : "-DNO_AVX=OFF",
-        $generic ? "-DTARGET=generic"   : "-DTARGET=CORE2",
     );
 
     # RUN CONFIGURE
