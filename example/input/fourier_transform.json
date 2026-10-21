@@ -18,7 +18,7 @@
                     "file" : "A.mat"
                 },
                 "write" : {
-                    "tensor" : "AFFT.mat"
+                    "tensor" : "B.mat"
                 }
             }
         }
