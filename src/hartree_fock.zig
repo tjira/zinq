@@ -417,7 +417,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
-        .spin = opt.generalized,
+        .generalized = opt.generalized,
         .charge = opt.charge,
         .multiplicity = opt.multiplicity,
         .nthreads = opt.nthreads,

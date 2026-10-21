@@ -9,6 +9,7 @@ const StringHashMap = std.StringHashMap;
 const fourier_transform = @import("fourier_transform.zig");
 const hartree_fock = @import("hartree_fock.zig");
 const main = @import("main.zig");
+const molecular_integrals = @import("molecular_integrals.zig");
 const moller_plesset = @import("moller_plesset.zig");
 const tensor = @import("tensor.zig");
 
@@ -49,6 +50,7 @@ pub const Parser = struct {
         \\  hf            RUN HARTREE-FOCK METHOD DIRECTLY ON MOLECULAR COORDINATES
         \\  mform         FORMAT INPUT MATRIX OR TENSOR FILE TO STANDARDIZED ZINQ NOTATION
         \\  mm            PERFORM MATRIX MULTIPLICATION ON INPUT MATRIX FILES
+        \\  molint        CALCULATE MOLECULAR INTEGRALS DIRECTLY ON MOLECULAR COORDINATES
         \\  mp            RUN MOLLER-PLESSET PERTURBATION THEORY ON MOLECULAR COORDINATES
         \\  randn         GENERATE PSEUDORANDOM GAUSSIAN MATRICES
         \\
@@ -144,6 +146,36 @@ pub const Parser = struct {
         \\ARGUMENTS:
         \\  file_a / shape        FIRST INPUT MATRIX FILE OR RANDOM MATRIX SHAPE
         \\  file_b / shape        SECOND INPUT MATRIX FILE OR RANDOM MATRIX SHAPE
+        \\
+    ;
+
+    /// Help message for the molecular integrals subcommand, detailing usage, options, and arguments.
+    pub const help_molint =
+        \\
+        \\USAGE: zinq molint [ARGUMENTS] [OPTIONS]
+        \\
+        \\OPTIONS:
+        \\  -b, --basis           SPECIFY BASIS SET (DEFAULT: STO-3G)
+        \\  -c, --charge          SPECIFY CHARGE (DEFAULT: 0)
+        \\  -n, --nthreads        NUMBER OF THREADS (DEFAULT: 1)
+        \\  -s, --multiplicity    SPECIFY MULTIPLICITY (DEFAULT: 1)
+        \\  --coulomb             CALCULATE COULOMB REPULSION INTEGRALS
+        \\  --coulomb-d1          CALCULATE COULOMB REPULSION DERIVATIVES
+        \\  --generalized         ENABLE SPIN-ORBITAL BASIS CALCULATION
+        \\  --hamiltonian         CALCULATE CORE HAMILTONIAN INTEGRALS
+        \\  --hamiltonian-d1      CALCULATE CORE HAMILTONIAN DERIVATIVES
+        \\  --kinetic             CALCULATE KINETIC ENERGY INTEGRALS
+        \\  --kinetic-d1          CALCULATE KINETIC ENERGY DERIVATIVES
+        \\  --nuclear             CALCULATE NUCLEAR ATTRACTION INTEGRALS
+        \\  --nuclear-d1          CALCULATE NUCLEAR ATTRACTION DERIVATIVES
+        \\  --output              WRITE CALCULATED INTEGRALS TO FILES
+        \\  --overlap             CALCULATE OVERLAP INTEGRALS
+        \\  --overlap-d1          CALCULATE OVERLAP DERIVATIVES
+        \\  --print               PRINT CALCULATED INTEGRALS TO TERMINAL
+        \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
+        \\
+        \\ARGUMENTS:
+        \\  file                  XYZ FILE DESCRIBING MOLECULE
         \\
     ;
 
@@ -829,6 +861,186 @@ pub const Parser = struct {
         defer result.deinit(gpa);
     }
 
+    /// Evaluates molecular orbital integrals and nuclear derivatives from parsed CLI options.
+    pub fn runMolint(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
+        const allowed_options = &.{
+            "-b",
+            "--basis",
+            "-c",
+            "--charge",
+            "-n",
+            "--nthreads",
+            "-s",
+            "--multiplicity",
+        };
+
+        const allowed_flags = &.{
+            "--coulomb",
+            "--coulomb-d1",
+            "--generalized",
+            "--hamiltonian",
+            "--hamiltonian-d1",
+            "--kinetic",
+            "--kinetic-d1",
+            "--nuclear",
+            "--nuclear-d1",
+            "--output",
+            "--overlap",
+            "--overlap-d1",
+            "--print",
+        };
+
+        const parsed = try parseArgs(io, sub.args, arena, allowed_options, allowed_flags);
+
+        if (parsed.options.contains("-h") or parsed.options.contains("--help")) {
+            try runHelp(io, help_molint);
+
+            return;
+        }
+
+        if (parsed.positional.len > 1) {
+            try printf(io, "MULTIPLE MOLECULE FILES SPECIFIED FOR 'molint' SUBCOMMAND\n", .{});
+
+            return error.MultipleMoleculeFiles;
+        }
+
+        if (parsed.positional.len == 0) {
+            try printf(io, "MOLECULE FILE IS REQUIRED FOR 'molint' SUBCOMMAND\n", .{});
+
+            return error.MissingMoleculeFile;
+        }
+
+        const basis_opt = parsed.options.get("-b") orelse parsed.options.get("--basis");
+
+        if (basis_opt) |b| if (b.len == 0) {
+            try printf(io, "MISSING VALUE FOR BASIS OPTION\n", .{});
+
+            return error.MissingBasisValue;
+        };
+
+        const basis_resolved = try std.fmt.allocPrint(arena, "builtin:{s}", .{basis_opt orelse "sto-3g"});
+
+        const multiplicity_opt = parsed.options.get("-s") orelse parsed.options.get("--multiplicity");
+
+        if (multiplicity_opt) |s| if (s.len == 0) {
+            try printf(io, "MISSING VALUE FOR MULTIPLICITY OPTION\n", .{});
+
+            return error.MissingMultiplicityValue;
+        };
+
+        const multiplicity = if (multiplicity_opt) |s| blk: {
+            const val = std.fmt.parseInt(u32, s, 10) catch |err| {
+                try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
+
+                return err;
+            };
+
+            if (val == 0) {
+                try printf(io, "INVALID VALUE FOR MULTIPLICITY OPTION\n", .{});
+
+                return error.InvalidMultiplicity;
+            }
+
+            break :blk val;
+        } else 1;
+
+        const charge_opt = parsed.options.get("-c") orelse parsed.options.get("--charge");
+
+        if (charge_opt) |c| if (c.len == 0) {
+            try printf(io, "MISSING VALUE FOR CHARGE OPTION\n", .{});
+
+            return error.MissingChargeValue;
+        };
+
+        const charge = if (charge_opt) |c| std.fmt.parseInt(i32, c, 10) catch |err| {
+            try printf(io, "INVALID VALUE FOR CHARGE OPTION\n", .{});
+
+            return err;
+        } else 0;
+
+        const nthreads_opt = parsed.options.get("-n") orelse parsed.options.get("--nthreads");
+
+        if (nthreads_opt) |t| if (t.len == 0) {
+            try printf(io, "MISSING VALUE FOR NTHREADS OPTION\n", .{});
+
+            return error.MissingNthreadsValue;
+        };
+
+        const nthreads = if (nthreads_opt) |t| blk: {
+            const val = std.fmt.parseInt(u32, t, 10) catch |err| {
+                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+
+                return err;
+            };
+
+            if (val == 0) {
+                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+
+                return error.InvalidNthreads;
+            }
+
+            break :blk val;
+        } else 1;
+
+        const calc = molecular_integrals.Calculate{
+            .coulomb = parsed.options.contains("--coulomb"),
+            .coulomb_d1 = parsed.options.contains("--coulomb-d1"),
+            .hamiltonian = parsed.options.contains("--hamiltonian"),
+            .hamiltonian_d1 = parsed.options.contains("--hamiltonian-d1"),
+            .kinetic = parsed.options.contains("--kinetic"),
+            .kinetic_d1 = parsed.options.contains("--kinetic-d1"),
+            .nuclear = parsed.options.contains("--nuclear"),
+            .nuclear_d1 = parsed.options.contains("--nuclear-d1"),
+            .overlap = parsed.options.contains("--overlap"),
+            .overlap_d1 = parsed.options.contains("--overlap-d1"),
+        };
+
+        const output = parsed.options.contains("--output");
+
+        const write = molecular_integrals.Write{
+            .coulomb = if (output and calc.coulomb) "J.mat" else null,
+            .coulomb_d1 = if (output and calc.coulomb_d1) "dJ.mat" else null,
+            .hamiltonian = if (output and calc.hamiltonian) "H.mat" else null,
+            .hamiltonian_d1 = if (output and calc.hamiltonian_d1) "dH.mat" else null,
+            .kinetic = if (output and calc.kinetic) "T.mat" else null,
+            .kinetic_d1 = if (output and calc.kinetic_d1) "dT.mat" else null,
+            .nuclear = if (output and calc.nuclear) "V.mat" else null,
+            .nuclear_d1 = if (output and calc.nuclear_d1) "dV.mat" else null,
+            .overlap = if (output and calc.overlap) "S.mat" else null,
+            .overlap_d1 = if (output and calc.overlap_d1) "dS.mat" else null,
+        };
+
+        const print = parsed.options.contains("--print");
+
+        const log = molecular_integrals.Log{
+            .coulomb = print and calc.coulomb,
+            .coulomb_d1 = print and calc.coulomb_d1,
+            .hamiltonian = print and calc.hamiltonian,
+            .hamiltonian_d1 = print and calc.hamiltonian_d1,
+            .kinetic = print and calc.kinetic,
+            .kinetic_d1 = print and calc.kinetic_d1,
+            .nuclear = print and calc.nuclear,
+            .nuclear_d1 = print and calc.nuclear_d1,
+            .overlap = print and calc.overlap,
+            .overlap_d1 = print and calc.overlap_d1,
+        };
+
+        const opt = molecular_integrals.Options{
+            .basis = basis_resolved,
+            .calculate = calc,
+            .charge = charge,
+            .generalized = parsed.options.contains("--generalized"),
+            .log = log,
+            .multiplicity = multiplicity,
+            .nthreads = nthreads,
+            .system = parsed.positional[0],
+            .write = write,
+        };
+
+        var result = try molecular_integrals.run(f64, io, opt, true, gpa);
+        defer result.deinit(gpa);
+    }
+
     /// Projects Hartree-Fock reference states into perturbed Møller-Plesset correlation spaces.
     pub fn runMollerPlesset(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         const allowed_options = &.{
@@ -1051,6 +1263,7 @@ pub const Parser = struct {
             .hf => try runHartreeFock(io, gpa, arena, sub),
             .mform => try runFormat(io, gpa, arena, sub),
             .mm => try runMatmul(io, gpa, arena, sub),
+            .molint => try runMolint(io, gpa, arena, sub),
             .mp => try runMollerPlesset(io, gpa, arena, sub),
             .randn => try runRandn(io, gpa, arena, sub),
         }
@@ -1103,6 +1316,10 @@ pub const Parser = struct {
 
         if (std.mem.eql(u8, args[1], "mm")) {
             return .{ .subcommand = .{ .name = .mm, .args = args[2..] } };
+        }
+
+        if (std.mem.eql(u8, args[1], "molint")) {
+            return .{ .subcommand = .{ .name = .molint, .args = args[2..] } };
         }
 
         if (std.mem.eql(u8, args[1], "mp")) {
@@ -1204,6 +1421,7 @@ pub const Subcommand = enum {
     hf,
     mform,
     mm,
+    molint,
     mp,
     randn,
 };

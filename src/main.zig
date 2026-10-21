@@ -59,6 +59,7 @@ const Options = struct {
         fourier_transform: fourier_transform.Options,
         hartree_fock: hartree_fock.Options,
         molecular_integrals: molecular_integrals.Options,
+        molint: molecular_integrals.Options,
         moller_plesset: moller_plesset.Options,
         potential_plot: potential_plot.Options,
         quantum_dynamics: quantum_dynamics.Options,
@@ -73,6 +74,7 @@ const Handlers = struct {
     pub const fourier_transform = @import("fourier_transform.zig");
     pub const hartree_fock = @import("hartree_fock.zig");
     pub const molecular_integrals = @import("molecular_integrals.zig");
+    pub const molint = @import("molecular_integrals.zig");
     pub const moller_plesset = @import("moller_plesset.zig");
     pub const potential_plot = @import("potential_plot.zig");
     pub const quantum_dynamics = @import("quantum_dynamics.zig");

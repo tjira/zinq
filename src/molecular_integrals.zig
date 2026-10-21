@@ -9,6 +9,8 @@ const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Tensor = @import("tensor.zig").Tensor;
 
+const printMatrix = @import("read_write.zig").printMatrix;
+const printTensor = @import("read_write.zig").printTensor;
 const printf = @import("read_write.zig").printf;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 const writeTensor = @import("read_write.zig").writeTensor;
@@ -18,15 +20,16 @@ pub const Options = struct {
     basis: []const u8,
     calculate: Calculate = .{},
     charge: i32 = 0,
+    generalized: bool = false,
+    log: Log = .{},
     multiplicity: u32 = 1,
     nthreads: u32 = 1,
-    spin: bool = false,
     system: []const u8,
     write: Write = .{},
 };
 
 /// Specifier of boolean flags to select which one-electron and two-electron molecular integrals and derivatives to compute.
-const Calculate = struct {
+pub const Calculate = struct {
     coulomb: bool = true,
     coulomb_d1: bool = false,
     hamiltonian: bool = true,
@@ -36,6 +39,20 @@ const Calculate = struct {
     nuclear: bool = true,
     nuclear_d1: bool = false,
     overlap: bool = true,
+    overlap_d1: bool = false,
+};
+
+/// Flags specifying which calculated molecular integrals and derivatives to print to standard output.
+pub const Log = struct {
+    coulomb: bool = false,
+    coulomb_d1: bool = false,
+    hamiltonian: bool = false,
+    hamiltonian_d1: bool = false,
+    kinetic: bool = false,
+    kinetic_d1: bool = false,
+    nuclear: bool = false,
+    nuclear_d1: bool = false,
+    overlap: bool = false,
     overlap_d1: bool = false,
 };
 
@@ -167,7 +184,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     var timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.overlap) {
-        ints.S = if (opt.spin) try sys.overlapSpin(opt.nthreads, gpa) else try sys.overlap(opt.nthreads, gpa);
+        ints.S = if (opt.generalized) try sys.overlapSpin(opt.nthreads, gpa) else try sys.overlap(opt.nthreads, gpa);
 
         if (log) try printf(io, "OVERLAP INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -175,7 +192,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.kinetic or opt.calculate.hamiltonian) {
-        ints.K = if (opt.spin) try sys.kineticSpin(opt.nthreads, gpa) else try sys.kinetic(opt.nthreads, gpa);
+        ints.K = if (opt.generalized) try sys.kineticSpin(opt.nthreads, gpa) else try sys.kinetic(opt.nthreads, gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -183,7 +200,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.nuclear or opt.calculate.hamiltonian) {
-        ints.V = if (opt.spin) try sys.nuclearSpin(opt.nthreads, gpa) else try sys.nuclear(opt.nthreads, gpa);
+        ints.V = if (opt.generalized) try sys.nuclearSpin(opt.nthreads, gpa) else try sys.nuclear(opt.nthreads, gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -191,7 +208,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.coulomb) {
-        ints.g = if (opt.spin) try sys.coulombSpin(opt.nthreads, gpa) else try sys.coulomb(opt.nthreads, gpa);
+        ints.g = if (opt.generalized) try sys.coulombSpin(opt.nthreads, gpa) else try sys.coulomb(opt.nthreads, gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -219,7 +236,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.overlap_d1) {
-        ints.dS = if (opt.spin) try sys.overlapD1Spin(opt.nthreads, gpa) else try sys.overlapD1(opt.nthreads, gpa);
+        ints.dS = if (opt.generalized)
+            try sys.overlapD1Spin(opt.nthreads, gpa)
+        else
+            try sys.overlapD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "OVERLAP INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -227,7 +247,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.kinetic_d1 or opt.calculate.hamiltonian_d1) {
-        ints.dK = if (opt.spin) try sys.kineticD1Spin(opt.nthreads, gpa) else try sys.kineticD1(opt.nthreads, gpa);
+        ints.dK = if (opt.generalized)
+            try sys.kineticD1Spin(opt.nthreads, gpa)
+        else
+            try sys.kineticD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "KINETIC INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -235,7 +258,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.nuclear_d1 or opt.calculate.hamiltonian_d1) {
-        ints.dV = if (opt.spin) try sys.nuclearD1Spin(opt.nthreads, gpa) else try sys.nuclearD1(opt.nthreads, gpa);
+        ints.dV = if (opt.generalized)
+            try sys.nuclearD1Spin(opt.nthreads, gpa)
+        else
+            try sys.nuclearD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -243,7 +269,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.coulomb_d1) {
-        ints.dg = if (opt.spin) try sys.coulombD1Spin(opt.nthreads, gpa) else try sys.coulombD1(opt.nthreads, gpa);
+        ints.dg = if (opt.generalized)
+            try sys.coulombD1Spin(opt.nthreads, gpa)
+        else
+            try sys.coulombD1(opt.nthreads, gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -255,6 +284,8 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
             ints.dH.?.ptr(.{ k, i, j }).* = ints.dK.?.at(.{ k, i, j }) + ints.dV.?.at(.{ k, i, j });
         };
     }
+
+    try printIntegrals(T, io, opt, ints);
 
     try writeIntegralsToFiles(T, io, opt, ints, log);
 
@@ -277,6 +308,66 @@ fn checkInvalidInput(opt: Options) !void {
 
     if (opt.nthreads == 0) {
         std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.coulomb and !opt.calculate.coulomb) {
+        std.log.err("COULOMB INTEGRALS PRINT REQUESTED BUT COULOMB INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.coulomb_d1 and !opt.calculate.coulomb_d1) {
+        std.log.err("COULOMB DERIVATIVE PRINT REQUESTED BUT COULOMB DERIVATIVE IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.hamiltonian and !opt.calculate.hamiltonian) {
+        std.log.err("HAMILTONIAN INTEGRALS PRINT REQUESTED BUT HAMILTONIAN INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.hamiltonian_d1 and !opt.calculate.hamiltonian_d1) {
+        std.log.err("HAMILTONIAN DERIVATIVE PRINT REQUESTED BUT HAMILTONIAN DERIVATIVE IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.kinetic and !opt.calculate.kinetic) {
+        std.log.err("KINETIC INTEGRALS PRINT REQUESTED BUT KINETIC INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.kinetic_d1 and !opt.calculate.kinetic_d1) {
+        std.log.err("KINETIC DERIVATIVE PRINT REQUESTED BUT KINETIC DERIVATIVE IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.nuclear and !opt.calculate.nuclear) {
+        std.log.err("NUCLEAR INTEGRALS PRINT REQUESTED BUT NUCLEAR INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.nuclear_d1 and !opt.calculate.nuclear_d1) {
+        std.log.err("NUCLEAR DERIVATIVE PRINT REQUESTED BUT NUCLEAR DERIVATIVE IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.overlap and !opt.calculate.overlap) {
+        std.log.err("OVERLAP INTEGRALS PRINT REQUESTED BUT OVERLAP INTEGRALS ARE NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.log.overlap_d1 and !opt.calculate.overlap_d1) {
+        std.log.err("OVERLAP DERIVATIVE PRINT REQUESTED BUT OVERLAP DERIVATIVE IS NOT CALCULATED", .{});
 
         return error.InvalidInput;
     }
@@ -342,6 +433,89 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
+/// Prints requested molecular integral matrices and derivative tensors to standard output.
+fn printIntegrals(comptime T: type, io: std.Io, opt: Options, ints: Result(T)) !void {
+    if (opt.log.overlap) {
+        const S = ints.S orelse return error.OverlapMatrixNotCalculated;
+
+        try printf(io, "\nOVERLAP INTEGRALS:\n", .{});
+
+        try printMatrix(T, io, S);
+    }
+
+    if (opt.log.kinetic) {
+        const K = ints.K orelse return error.KineticMatrixNotCalculated;
+
+        try printf(io, "\nKINETIC INTEGRALS:\n", .{});
+
+        try printMatrix(T, io, K);
+    }
+
+    if (opt.log.nuclear) {
+        const V = ints.V orelse return error.NuclearMatrixNotCalculated;
+
+        try printf(io, "\nNUCLEAR INTEGRALS:\n", .{});
+
+        try printMatrix(T, io, V);
+    }
+
+    if (opt.log.coulomb) {
+        const g = ints.g orelse return error.CoulombMatrixNotCalculated;
+
+        try printf(io, "\nCOULOMB INTEGRALS:\n", .{});
+
+        try printTensor(T, 4, io, g);
+    }
+
+    if (opt.log.hamiltonian) {
+        const H = ints.H orelse return error.HamiltonianNotCalculated;
+
+        try printf(io, "\nHMATRIX INTEGRALS:\n", .{});
+
+        try printMatrix(T, io, H);
+    }
+
+    if (opt.log.overlap_d1) {
+        const dS = ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated;
+
+        try printf(io, "\nOVERLAP DERIVATIVE INTEGRALS:\n", .{});
+
+        try printTensor(T, 3, io, dS);
+    }
+
+    if (opt.log.kinetic_d1) {
+        const dK = ints.dK orelse return error.KineticDerivativeMatrixNotCalculated;
+
+        try printf(io, "\nKINETIC DERIVATIVE INTEGRALS:\n", .{});
+
+        try printTensor(T, 3, io, dK);
+    }
+
+    if (opt.log.nuclear_d1) {
+        const dV = ints.dV orelse return error.NuclearDerivativeMatrixNotCalculated;
+
+        try printf(io, "\nNUCLEAR DERIVATIVE INTEGRALS:\n", .{});
+
+        try printTensor(T, 3, io, dV);
+    }
+
+    if (opt.log.coulomb_d1) {
+        const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
+
+        try printf(io, "\nCOULOMB DERIVATIVE INTEGRALS:\n", .{});
+
+        try printTensor(T, 5, io, dg);
+    }
+
+    if (opt.log.hamiltonian_d1) {
+        const dH = ints.dH orelse return error.HamiltonianDerivativeNotCalculated;
+
+        try printf(io, "\nHMATRIX DERIVATIVE INTEGRALS:\n", .{});
+
+        try printTensor(T, 3, io, dH);
+    }
+}
+
 /// Exports calculated molecular integral and derivative tensors to target files specified in options.
 fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Result(T), log: bool) !void {
     const any_write = blk: {
@@ -399,7 +573,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
 
         try writeMatrix(T, io, fname, H);
 
-        if (log) try printf(io, "HAMILTONIAN INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
+        if (log) try printf(io, "HMATRIX INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
     const any_deriv_write = blk: {
@@ -459,6 +633,6 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
 
         try writeMatrix(T, io, fname, dH.asMatrix());
 
-        if (log) try printf(io, "HAMILTONIAN DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
+        if (log) try printf(io, "HMATRIX DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 }
