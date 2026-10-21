@@ -10,10 +10,17 @@ const Value = @import("value.zig").Value;
 
 const eigh = @import("linear_algebra.zig").eigh;
 const mm = @import("linear_algebra.zig").mm;
-const printf = @import("read_write.zig").printf;
+const printComplexTensor = @import("read_write.zig").printComplexTensor;
 const printMatrix = @import("read_write.zig").printMatrix;
+const printRealTensor = @import("read_write.zig").printRealTensor;
+const printf = @import("read_write.zig").printf;
+const readComplexTensor = @import("read_write.zig").readComplexTensor;
 const readMatrix = @import("read_write.zig").readMatrix;
+const readRealTensor = @import("read_write.zig").readRealTensor;
+const readTensorRank = @import("read_write.zig").readTensorRank;
+const writeComplexTensor = @import("read_write.zig").writeComplexTensor;
 const writeMatrix = @import("read_write.zig").writeMatrix;
+const writeRealTensor = @import("read_write.zig").writeRealTensor;
 
 /// Configuration options for executing tensor and matrix transformations from data files.
 pub const Options = struct {
@@ -47,8 +54,9 @@ pub const FormatLog = struct {
 
 /// Parameters, logging preferences, and output destinations for matrix formatting.
 pub const FormatOptions = struct {
-    matrix: []const u8,
+    complex: bool = false,
     log: FormatLog = .{},
+    matrix: []const u8,
     write: FormatWrite = .{},
 };
 
@@ -602,46 +610,14 @@ pub fn runEig(comptime T: type, io: std.Io, opt: EigOptions, log: bool, gpa: All
     return Result(T){ .tensors = tensors };
 }
 
-/// Formats an input matrix from a file to standardized representation and saves it.
+/// Formats an input tensor from a file to standardized representation and saves it.
 pub fn runFormat(comptime T: type, io: std.Io, opt: FormatOptions, log: bool, gpa: Allocator) !Result(T) {
-    if (log) {
-        try printf(io, "\nREAD MATRIX: ", .{});
+    const rank = try readTensorRank(io, opt.matrix);
+
+    switch (rank) {
+        inline 1...5 => |N| return try runFormatRank(T, N, io, opt, log, gpa),
+        else => return error.UnsupportedRank,
     }
-
-    var timer = std.Io.Timestamp.now(io, .real);
-
-    var A = try readMatrix(T, io, opt.matrix, gpa);
-    errdefer A.deinit(gpa);
-
-    if (log) {
-        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
-    }
-
-    const output_path = opt.write.matrix orelse opt.matrix;
-
-    if (log) {
-        try printf(io, "\nWRITE MATRIX: ", .{});
-    }
-
-    timer = std.Io.Timestamp.now(io, .real);
-
-    try writeMatrix(T, io, output_path, A);
-
-    if (log) {
-        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
-    }
-
-    if (opt.log.matrix) {
-        try printf(io, "\nMATRIX:\n", .{});
-
-        try printMatrix(T, io, A);
-    }
-
-    const tensors = try gpa.alloc(Matrix(T), 1);
-
-    tensors[0] = A;
-
-    return Result(T){ .tensors = tensors };
 }
 
 /// Executes matrix-matrix multiplication on input files using BLAS GEMM and exports the product.
@@ -811,4 +787,90 @@ fn initMatrix(comptime T: type, io: std.Io, source: MatrixSource, gpa: Allocator
             return res.tensors[0];
         },
     }
+}
+
+/// Reads an N-dimensional complex tensor from disk, formats it, and writes to target file.
+fn runFormatComplex(comptime T: type, comptime N: usize, io: std.Io, opt: FormatOptions, log: bool, gpa: Allocator) !Result(T) {
+    if (log) {
+        try printf(io, "\nREAD TENSOR: ", .{});
+    }
+
+    var timer = std.Io.Timestamp.now(io, .real);
+
+    var A = try readComplexTensor(T, N, io, opt.matrix, gpa);
+    defer A.deinit(gpa);
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    const output_path = opt.write.matrix orelse opt.matrix;
+
+    if (log) {
+        try printf(io, "SAVE TENSOR: ", .{});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    try writeComplexTensor(T, N, io, output_path, A);
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    if (opt.log.matrix) {
+        try printf(io, "\nTENSOR:\n", .{});
+
+        try printComplexTensor(T, N, io, A);
+    }
+
+    const tensors = try gpa.alloc(Matrix(T), 0);
+
+    return Result(T){ .tensors = tensors };
+}
+
+/// Reads an N-dimensional tensor from disk, standardizes formatting, and writes to target file.
+fn runFormatRank(comptime T: type, comptime N: usize, io: std.Io, opt: FormatOptions, log: bool, gpa: Allocator) !Result(T) {
+    if (opt.complex) {
+        return try runFormatComplex(T, N, io, opt, log, gpa);
+    }
+
+    if (log) {
+        try printf(io, "\nREAD TENSOR: ", .{});
+    }
+
+    var timer = std.Io.Timestamp.now(io, .real);
+
+    var A = try readRealTensor(T, N, io, opt.matrix, gpa);
+    errdefer A.deinit(gpa);
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    const output_path = opt.write.matrix orelse opt.matrix;
+
+    if (log) {
+        try printf(io, "SAVE TENSOR: ", .{});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    try writeRealTensor(T, N, io, output_path, A);
+
+    if (log) {
+        try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    if (opt.log.matrix) {
+        try printf(io, "\nTENSOR:\n", .{});
+
+        try printRealTensor(T, N, io, A);
+    }
+
+    const tensors = try gpa.alloc(Matrix(T), 1);
+
+    tensors[0] = A.asMatrix();
+
+    return Result(T){ .tensors = tensors };
 }

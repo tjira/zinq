@@ -151,9 +151,7 @@ pub fn readComplexTensor(comptime T: type, comptime N: usize, io: std.Io, path: 
                 A.data[i] = Complex(primType(T)).init(re, val);
 
                 i, pending_re = .{ i + 1, null };
-            }
-
-            if (pending_re == null) {
+            } else {
                 pending_re = val;
             }
         }

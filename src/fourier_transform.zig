@@ -220,6 +220,8 @@ fn initComplexTensor(comptime T: type, comptime N: usize, io: std.Io, source: Te
 fn randomComplexTensor(comptime T: type, comptime N: usize, io: std.Io, opt: RandomOptions, complex: bool, gpa: Allocator) !Tensor(Complex(primType(T)), N) {
     if (opt.shape.len != N) return error.InvalidRank;
 
+    for (opt.shape) |dim| if (!std.math.isPowerOfTwo(dim)) return error.InvalidDimension;
+
     var shape: [N]usize = undefined;
 
     inline for (0..N) |i| shape[i] = opt.shape[i];
@@ -276,6 +278,12 @@ fn runRank(comptime T: type, comptime N: usize, io: std.Io, opt: Options, log: b
     if (log) {
         try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
     }
+
+    for (A.shape) |dim| if (!std.math.isPowerOfTwo(dim)) {
+        try printf(io, "TENSOR DIMENSIONS MUST BE POWERS OF TWO\n", .{});
+
+        return error.InvalidDimension;
+    };
 
     const dir = @backingInt(opt.direction);
 

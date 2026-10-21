@@ -6,8 +6,9 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
 
-const main = @import("main.zig");
+const fourier_transform = @import("fourier_transform.zig");
 const hartree_fock = @import("hartree_fock.zig");
+const main = @import("main.zig");
 const moller_plesset = @import("moller_plesset.zig");
 const tensor = @import("tensor.zig");
 
@@ -44,8 +45,9 @@ pub const Parser = struct {
         \\
         \\SUBCOMMANDS:
         \\  eig           CALCULATE EIGENVALUES AND EIGENVECTORS OF SYMMETRIC MATRIX
+        \\  fft           PERFORM FAST FOURIER TRANSFORM ON TENSOR DATA
         \\  hf            RUN HARTREE-FOCK METHOD DIRECTLY ON MOLECULAR COORDINATES
-        \\  mform         FORMAT INPUT MATRIX FILE TO STANDARDIZED ZINQ NOTATION
+        \\  mform         FORMAT INPUT MATRIX OR TENSOR FILE TO STANDARDIZED ZINQ NOTATION
         \\  mm            PERFORM MATRIX MULTIPLICATION ON INPUT MATRIX FILES
         \\  mp            RUN MOLLER-PLESSET PERTURBATION THEORY ON MOLECULAR COORDINATES
         \\  randn         GENERATE PSEUDORANDOM GAUSSIAN MATRICES
@@ -70,6 +72,25 @@ pub const Parser = struct {
         \\
     ;
 
+    /// Help message for the discrete Fourier transform subcommand, detailing usage, options, and arguments.
+    pub const help_fft =
+        \\
+        \\USAGE: zinq fft [ARGUMENTS] [OPTIONS]
+        \\
+        \\OPTIONS:
+        \\  -o, --output          OUTPUT FILE PATH TO SAVE RESULT TENSOR
+        \\  -s, --seed            SPECIFY PSEUDORANDOM SEED (DEFAULT: 0)
+        \\  --complex             TREAT INPUT OR GENERATED TENSOR AS COMPLEX
+        \\  --inverse             PERFORM INVERSE FOURIER TRANSFORM
+        \\  --random              GENERATE RANDOM TENSOR OF GIVEN SHAPE
+        \\  --print               PRINT RESULT TENSOR TO TERMINAL
+        \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
+        \\
+        \\ARGUMENTS:
+        \\  file / shape...       INPUT TENSOR FILE OR RANDOM TENSOR SHAPE DIMENSIONS
+        \\
+    ;
+
     /// Help message for the Hartree-Fock subcommand, detailing usage, options, and arguments.
     pub const help_hf =
         \\
@@ -89,18 +110,19 @@ pub const Parser = struct {
         \\
     ;
 
-    /// Help message for the matrix formatting subcommand, detailing usage, options, and arguments.
+    /// Help message for the matrix and tensor formatting subcommand, detailing usage, options, and arguments.
     pub const help_mform =
         \\
         \\USAGE: zinq mform [ARGUMENTS] [OPTIONS]
         \\
         \\OPTIONS:
-        \\  -o, --output          OUTPUT FILE PATH TO SAVE FORMATTED MATRIX
-        \\  --print               PRINT FORMATTED MATRIX TO TERMINAL
+        \\  -o, --output          OUTPUT FILE PATH TO SAVE FORMATTED TENSOR
+        \\  --complex             TREAT TENSOR DATA AS COMPLEX NUMBERS
+        \\  --print               PRINT FORMATTED TENSOR TO TERMINAL
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
-        \\  file                  INPUT MATRIX FILE
+        \\  file                  INPUT MATRIX OR TENSOR FILE
         \\
     ;
 
@@ -305,12 +327,132 @@ pub const Parser = struct {
         defer result.deinit(gpa);
     }
 
+    /// Executes discrete Fourier transform $\mathcal{F}[\mathbf{A}]$ on input or random tensors from parsed options.
+    pub fn runFft(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
+        const allowed_options = &.{
+            "-o",
+            "--output",
+            "-s",
+            "--seed",
+        };
+
+        const allowed_flags = &.{
+            "--complex",
+            "--inverse",
+            "--print",
+            "--random",
+        };
+
+        const parsed = try parseArgs(io, sub.args, arena, allowed_options, allowed_flags);
+
+        if (parsed.options.contains("-h") or parsed.options.contains("--help")) {
+            try runHelp(io, help_fft);
+
+            return;
+        }
+
+        const is_random = parsed.options.contains("--random");
+
+        if (!is_random) {
+            if (parsed.positional.len > 1) {
+                try printf(io, "TOO MANY TENSOR FILES SPECIFIED FOR 'fft' SUBCOMMAND\n", .{});
+
+                return error.TooManyArguments;
+            }
+
+            if (parsed.positional.len == 0) {
+                try printf(io, "TENSOR FILE IS REQUIRED FOR 'fft' SUBCOMMAND\n", .{});
+
+                return error.MissingTensorFile;
+            }
+        }
+
+        if (is_random) {
+            if (parsed.positional.len == 0) {
+                try printf(io, "SHAPE ARGUMENTS ARE REQUIRED FOR RANDOM 'fft' SUBCOMMAND\n", .{});
+
+                return error.MissingShapeArgument;
+            }
+
+            if (parsed.positional.len > 5) {
+                try printf(io, "TOO MANY SHAPE ARGUMENTS SPECIFIED FOR 'fft' SUBCOMMAND\n", .{});
+
+                return error.TooManyArguments;
+            }
+        }
+
+        const output_opt = parsed.options.get("-o") orelse parsed.options.get("--output");
+
+        if (output_opt) |o| if (o.len == 0) {
+            try printf(io, "MISSING VALUE FOR OUTPUT OPTION\n", .{});
+
+            return error.MissingOutputValue;
+        };
+
+        const seed_opt = parsed.options.get("-s") orelse parsed.options.get("--seed");
+
+        if (seed_opt) |s| if (s.len == 0) {
+            try printf(io, "MISSING VALUE FOR SEED OPTION\n", .{});
+
+            return error.MissingSeedValue;
+        };
+
+        const seed = if (seed_opt) |s| std.fmt.parseInt(u64, s, 10) catch |err| {
+            try printf(io, "INVALID VALUE FOR SEED OPTION\n", .{});
+
+            return err;
+        } else 0;
+
+        var tensor_source: fourier_transform.TensorSource = undefined;
+
+        if (is_random) {
+            const shape = try arena.alloc(usize, parsed.positional.len);
+
+            for (parsed.positional, 0..) |pos, i| {
+                shape[i] = std.fmt.parseInt(usize, pos, 10) catch |err| {
+                    try printf(io, "INVALID VALUE FOR SHAPE ARGUMENT\n", .{});
+
+                    return err;
+                };
+
+                if (shape[i] == 0) {
+                    try printf(io, "INVALID VALUE FOR SHAPE ARGUMENT\n", .{});
+
+                    return error.InvalidDimension;
+                }
+
+                if (!std.math.isPowerOfTwo(shape[i])) {
+                    try printf(io, "SHAPE ARGUMENTS MUST BE POWERS OF TWO\n", .{});
+
+                    return error.InvalidDimension;
+                }
+            }
+
+            tensor_source = .{ .random = .{ .seed = seed, .shape = shape } };
+        }
+
+        if (!is_random) {
+            tensor_source = .{ .file = parsed.positional[0] };
+        }
+
+        const opt = fourier_transform.Options{
+            .complex = parsed.options.contains("--complex"),
+            .direction = if (parsed.options.contains("--inverse")) .backward else .forward,
+            .log = .{ .tensor = parsed.options.contains("--print") },
+            .tensor = tensor_source,
+            .write = .{ .tensor = output_opt },
+        };
+
+        var result = try fourier_transform.run(f64, io, opt, true, gpa);
+        defer result.deinit(gpa);
+    }
+
     /// Iteratively simulates physical systems described by the parsed json files.
     pub fn runFiles(io: std.Io, gpa: Allocator, arena: Allocator, files: []const []const u8) !void {
         for (files) |e| try main.run(f64, io, e, gpa, arena);
     }
 
-    /// Reads matrix data from disk, standardizes formatting, and writes to target file.
+    /// Reads tensor data from disk, standardizes formatting, and writes to target file.
     pub fn runFormat(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         const allowed_options = &.{
             "-o",
@@ -318,6 +460,7 @@ pub const Parser = struct {
         };
 
         const allowed_flags = &.{
+            "--complex",
             "--print",
         };
 
@@ -330,15 +473,15 @@ pub const Parser = struct {
         }
 
         if (parsed.positional.len > 1) {
-            try printf(io, "MULTIPLE MATRIX FILES SPECIFIED\n", .{});
+            try printf(io, "MULTIPLE TENSOR FILES SPECIFIED\n", .{});
 
-            return error.MultipleMatrixFiles;
+            return error.MultipleTensorFiles;
         }
 
         if (parsed.positional.len == 0) {
-            try printf(io, "MATRIX FILE IS REQUIRED FOR 'mform' SUBCOMMAND\n", .{});
+            try printf(io, "TENSOR FILE IS REQUIRED FOR 'mform' SUBCOMMAND\n", .{});
 
-            return error.MissingMatrixFile;
+            return error.MissingTensorFile;
         }
 
         const output_opt = parsed.options.get("-o") orelse parsed.options.get("--output");
@@ -350,6 +493,7 @@ pub const Parser = struct {
         };
 
         const opt = tensor.FormatOptions{
+            .complex = parsed.options.contains("--complex"),
             .log = .{ .matrix = parsed.options.contains("--print") },
             .matrix = parsed.positional[0],
             .write = .{ .matrix = output_opt },
@@ -903,6 +1047,7 @@ pub const Parser = struct {
     pub fn runSubcommand(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         switch (sub.name) {
             .eig => try runEig(io, gpa, arena, sub),
+            .fft => try runFft(io, gpa, arena, sub),
             .hf => try runHartreeFock(io, gpa, arena, sub),
             .mform => try runFormat(io, gpa, arena, sub),
             .mm => try runMatmul(io, gpa, arena, sub),
@@ -942,6 +1087,10 @@ pub const Parser = struct {
 
         if (std.mem.eql(u8, args[1], "eig")) {
             return .{ .subcommand = .{ .name = .eig, .args = args[2..] } };
+        }
+
+        if (std.mem.eql(u8, args[1], "fft")) {
+            return .{ .subcommand = .{ .name = .fft, .args = args[2..] } };
         }
 
         if (std.mem.eql(u8, args[1], "hf")) {
@@ -1051,6 +1200,7 @@ pub const Parser = struct {
 /// Option representations for subcommands executed in physical basis space.
 pub const Subcommand = enum {
     eig,
+    fft,
     hf,
     mform,
     mm,

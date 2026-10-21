@@ -1,0 +1,26 @@
+{
+    "zinq" : [
+        {
+            "tensor" : {
+                "operation" : {
+                    "random" : {
+                        "shape" : [512, 512],
+                        "write" : {
+                            "matrix" : "A.mat"
+                        }
+                    }
+                }
+            }
+        },
+        {
+            "fourier_transform" : {
+                "tensor" : {
+                    "file" : "A.mat"
+                },
+                "write" : {
+                    "tensor" : "AFFT.mat"
+                }
+            }
+        }
+    ]
+}
