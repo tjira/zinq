@@ -142,6 +142,25 @@ sub clean_compiler_wrappers {
     delete $ENV{RANLIB};
 }
 
+sub cmake_common_options {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $pwd) = @_;
+
+    # RETURN COMMON CMAKE OPTIONS
+    return (
+        "cmake",
+        "--log-level", "ERROR",
+        "-Wno-author",
+        "-B", "build",
+        "-DCMAKE_AR=$pwd/zigar",
+        "-DCMAKE_RANLIB=$pwd/zigranlib",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_INSTALL_PREFIX=$prefix",
+        "-DBUILD_SHARED_LIBS=False",
+        "-DBUILD_TESTING=False",
+    );
+}
+
 # LIBRARY COMPILATION FUNCTIONS ========================================================================================
 
 sub compile_eigen {
@@ -159,16 +178,7 @@ sub compile_eigen {
 
     # CONFIGURE COMMAND
     my @args = (
-        "cmake",
-        "--log-level", "ERROR",
-        "-Wno-author",
-        "-B", "build",
-        "-DCMAKE_AR=$pwd/zigar",
-        "-DCMAKE_RANLIB=$pwd/zigranlib",
-        "-DBUILD_SHARED_LIBS=False",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=$prefix",
-        "-DCMAKE_PREFIX_PATH=$prefix",
+        cmake_common_options($prefix, $pwd),
         "-DEIGEN_BUILD_BLAS=False",
         "-DEIGEN_BUILD_LAPACK=False"
     );
@@ -201,12 +211,9 @@ sub compile_libint {
 
     # CONFIGURE LIBINT COMPILER
     my @compiler_args = (
-        "cmake",
-        "--log-level", "ERROR",
-        "-Wno-author",
-        "-B", "build",
-        "-DLIBINT2_ENABLE_ONEBODY=1",
+        cmake_common_options($prefix, $pwd),
         "-DLIBINT2_ENABLE_ERI=1",
+        "-DLIBINT2_ENABLE_ONEBODY=1",
         "-DLIBINT2_MAX_AM=4"
     );
 
@@ -250,16 +257,7 @@ sub compile_libint {
 
     # CONFIGURE TARGET LIBINT LIBRARY
     my @args = (
-        "cmake",
-        "--log-level", "ERROR",
-        "-Wno-author",
-        "-B", "build",
-        "-DCMAKE_AR=$pwd/zigar",
-        "-DCMAKE_RANLIB=$pwd/zigranlib",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=$prefix",
-        "-DBUILD_SHARED_LIBS=False",
-        "-DBUILD_TESTING=False",
+        cmake_common_options($prefix, $pwd),
         "-DCMAKE_DISABLE_FIND_PACKAGE_Boost=True"
     );
 
@@ -300,18 +298,9 @@ sub compile_libxc {
 
     # CONFIGURE COMMAND
     my @args = (
-        "cmake",
-        "--log-level", "ERROR",
-        "-Wno-author",
-        "-B", "build",
-        "-DCMAKE_AR=$pwd/zigar",
-        "-DCMAKE_RANLIB=$pwd/zigranlib",
-        "-DBUILD_SHARED_LIBS=False",
-        "-DBUILD_TESTING=False",
+        cmake_common_options($prefix, $pwd),
         "-DENABLE_FORTRAN=False",
-        "-DENABLE_PYTHON=False",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=$prefix"
+        "-DENABLE_PYTHON=False"
     );
 
     # RUN CONFIGURE
@@ -351,27 +340,17 @@ sub compile_openblas {
 
     # CONFIGURE COMMAND
     my @args = (
-        "cmake",
-        "--log-level", "ERROR",
-        "-Wno-author",
-        "-B", "build",
-        "-DCMAKE_AR=$pwd/zigar",
-        "-DCMAKE_RANLIB=$pwd/zigranlib",
+        cmake_common_options($prefix, $pwd),
+        "-DBUILD_STATIC_LIBS=ON",
         "-DCMAKE_SYSTEM_NAME=$system_name",
         "-DCMAKE_SYSTEM_PROCESSOR=$system_proc",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=$prefix",
-        "-DBUILD_SHARED_LIBS=OFF",
-        "-DBUILD_TESTING=OFF",
         "-DC_LAPACK=ON",
         "-DNOFORTRAN=ON",
-        "-DUSE_THREAD=ON",
+        "-DNO_AFFINITY=ON",
         "-DNUM_THREADS=128",
         "-DTARGET=$base_target",
+        "-DUSE_THREAD=ON",
         $generic ? "-DDYNAMIC_ARCH=OFF" : "-DDYNAMIC_ARCH=ON",
-        $generic ? "-DNO_AVX2=ON"       : "-DNO_AVX2=OFF",
-        $generic ? "-DNO_AVX512=ON"     : "-DNO_AVX512=OFF",
-        $generic ? "-DNO_AVX=ON"        : "-DNO_AVX=OFF",
         $target =~ /windows/i ? "-DMINGW64=ON" : (),
     );
 
@@ -438,23 +417,16 @@ sub compile_openmp {
 
     # CONFIGURE COMMAND
     my @args = (
-        "cmake",
-        "--log-level", "ERROR",
-        "-Wno-author",
-        "-B", "build",
+        cmake_common_options($prefix, $pwd),
         "-S", "runtimes",
-        "-DCMAKE_AR=$pwd/zigar",
-        "-DCMAKE_RANLIB=$pwd/zigranlib",
-        "-DCMAKE_BUILD_TYPE=Release",
-        "-DCMAKE_INSTALL_PREFIX=$prefix",
-        "-DLLVM_ENABLE_RUNTIMES=openmp",
         "-DLIBOMP_ENABLE_SHARED=OFF",
+        "-DLIBOMP_FORTRAN_MODULES=OFF",
+        "-DLIBOMP_INSTALL_ALIASES=OFF",
+        "-DLIBOMP_OMPD_SUPPORT=OFF",
+        "-DLLVM_ENABLE_RUNTIMES=openmp",
+        "-DLLVM_INCLUDE_TESTS=OFF",
         "-DOPENMP_ENABLE_LIBOMPTARGET=OFF",
         "-DOPENMP_ENABLE_OMPT_TOOLS=OFF",
-        "-DLIBOMP_OMPD_SUPPORT=OFF",
-        "-DLIBOMP_INSTALL_ALIASES=OFF",
-        "-DLLVM_INCLUDE_TESTS=OFF",
-        "-DLIBOMP_FORTRAN_MODULES=OFF",
     );
 
     # RUN CONFIGURE
