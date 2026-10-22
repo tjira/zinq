@@ -15,7 +15,7 @@ const PotentialOptions = @import("potential.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 const Wavefunction = @import("wavepacket.zig").Wavefunction;
 
-const addScaledSlice = @import("linear_algebra.zig").addScaledSlice;
+const axpy = @import("linear_algebra.zig").axpy;
 const calcSpectrum = @import("spectral_analysis.zig").calcSpectrum;
 const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
@@ -263,7 +263,11 @@ fn History(comptime T: type) type {
 
                         const row = ei * wfn.W.nrow() + f;
 
-                        addScaledSlice(Complex(T), wfn_row.len, phase, wfn_row, accum.rowSlice(row));
+                        var y_vec = Vector(Complex(T)).fromSlice(accum.rowSlice(row));
+
+                        const x_vec = Vector(Complex(T)).fromSlice(wfn_row);
+
+                        axpy(Complex(T), &y_vec, x_vec, phase);
                     }
                 }
             }

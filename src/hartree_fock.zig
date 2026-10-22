@@ -16,8 +16,8 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
-const addScaled = @import("linear_algebra.zig").addScaled;
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
+const axpy = @import("linear_algebra.zig").axpy;
 const bfgs = @import("molecular_optimization.zig").bfgs;
 const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
 const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
@@ -27,13 +27,12 @@ const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
 const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const dot = @import("linear_algebra.zig").dot;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
-const geigh = @import("linear_algebra.zig").geigh;
+const gemm = @import("linear_algebra.zig").gemm;
+const getrf = @import("linear_algebra.zig").getrf;
+const getrs = @import("linear_algebra.zig").getrs;
 const getSymbol = @import("constant.zig").getSymbol;
 const lowdin = @import("population_analysis.zig").lowdin;
-const luFactorize = @import("linear_algebra.zig").luFactorize;
-const luSolve = @import("linear_algebra.zig").luSolve;
 const mayer = @import("population_analysis.zig").mayer;
-const mm = @import("linear_algebra.zig").mm;
 const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
 const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").runFromSystem;
@@ -49,6 +48,7 @@ const printTotalSpin = @import("spin_analysis.zig").printTotalSpin;
 const printWibergBondOrders = @import("population_analysis.zig").printWibergBondOrders;
 const printf = @import("read_write.zig").printf;
 const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
+const sygvd = @import("linear_algebra.zig").sygvd;
 const wiberg = @import("population_analysis.zig").wiberg;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 const writeXyzFile = @import("read_write.zig").writeXyzFile;
@@ -248,19 +248,19 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
     const ipiv = try gpa.alloc(i32, fck_hist.len + 1);
     defer gpa.free(ipiv);
 
-    try luFactorize(T, &B, ipiv);
+    try getrf(T, &B, ipiv);
 
     var c = try Matrix(T).init(fck_hist.len + 1, 1, gpa);
     defer c.deinit(gpa);
 
-    try luSolve(T, &c, B, ipiv, b);
+    try getrs(T, &c, B, ipiv, b);
 
     F.zero();
 
     for (0..fck_hist.len) |i| {
         var f_vec = F.asVector();
 
-        addScaled(T, c.at(i, 0), fck_hist[i].asVector(), &f_vec);
+        axpy(T, &f_vec, fck_hist[i].asVector(), c.at(i, 0));
     }
 
     if (symmetric) F.symmetrize();
@@ -495,7 +495,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     if (guess_p == null) {
         @memcpy(B.data, ints.S.?.data);
 
-        try geigh(T, &e, &C, ints.H.?, &B);
+        try sygvd(T, &e, &C, ints.H.?, &B);
 
         _ = getDensity(T, &P, C, nocc, opt.generalized);
     }
@@ -867,12 +867,12 @@ fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Ma
     var FP = try Matrix(T).init(nbf, nbf, gpa);
     defer FP.deinit(gpa);
 
-    mm(T, &FP, F, P, 1, 0, false, false);
+    gemm(T, &FP, F, P, 1, 0, false, false);
 
     var FPS = try Matrix(T).init(nbf, nbf, gpa);
     defer FPS.deinit(gpa);
 
-    mm(T, &FPS, FP, S, 1, 0, false, false);
+    gemm(T, &FPS, FP, S, 1, 0, false, false);
 
     for (0..nbf) |i| for (0..nbf) |j| {
         err.ptr(i, j).* = FPS.at(i, j) - FPS.at(j, i);
@@ -1094,7 +1094,7 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
 
         @memcpy(B.data, ints.S.?.data);
 
-        try geigh(T, ws.e, ws.C, ws.F.*, &B);
+        try sygvd(T, ws.e, ws.C, ws.F.*, &B);
 
         const delta_energy, const p_rm = .{ @abs(e_new - e_old), getDensity(T, ws.P, ws.C.*, nocc, opt.generalized) };
 

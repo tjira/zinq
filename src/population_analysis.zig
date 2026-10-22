@@ -10,10 +10,10 @@ const SpinBlocks = @import("spin_analysis.zig").SpinBlocks;
 const Vector = @import("tensor.zig").Vector;
 
 const dot = @import("linear_algebra.zig").dot;
-const eigh = @import("linear_algebra.zig").eigh;
+const gemm = @import("linear_algebra.zig").gemm;
 const getSymbol = @import("constant.zig").getSymbol;
-const mm = @import("linear_algebra.zig").mm;
 const printf = @import("read_write.zig").printf;
+const syevd = @import("linear_algebra.zig").syevd;
 
 /// Computes Löwdin net atomic charges using symmetric orthogonalization of the overlap matrix.
 pub fn lowdin(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !Vector(T) {
@@ -25,7 +25,7 @@ pub fn lowdin(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
     var SP = try Matrix(T).init(n, n, gpa);
     defer SP.deinit(gpa);
 
-    mm(T, &SP, Shalf, P, 1.0, 0.0, false, false);
+    gemm(T, &SP, Shalf, P, 1.0, 0.0, false, false);
 
     var net_populations = try gpa.alloc(T, sys.atoms.len);
     defer gpa.free(net_populations);
@@ -66,7 +66,7 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
         var PS = try Matrix(T).init(nbf, nbf, gpa);
         defer PS.deinit(gpa);
 
-        mm(T, &PS, P, S_spatial, 1, 0, false, false);
+        gemm(T, &PS, P, S_spatial, 1, 0, false, false);
 
         for (0..nbf) |u| {
             const at_u: usize = @intCast(sys.bf2at[u]);
@@ -94,10 +94,10 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
         var PS_ab = try Matrix(T).init(nbf, nbf, gpa);
         defer PS_ab.deinit(gpa);
 
-        mm(T, &PS_a, blocks.a, S_spatial, 1, 0, false, false);
-        mm(T, &PS_b, blocks.b, S_spatial, 1, 0, false, false);
+        gemm(T, &PS_a, blocks.a, S_spatial, 1, 0, false, false);
+        gemm(T, &PS_b, blocks.b, S_spatial, 1, 0, false, false);
 
-        mm(T, &PS_ab, blocks.ab, S_spatial, 1, 0, false, false);
+        gemm(T, &PS_ab, blocks.ab, S_spatial, 1, 0, false, false);
 
         for (0..nbf) |u| {
             const at_u: usize = @intCast(sys.bf2at[u]);
@@ -210,12 +210,12 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
         var SP = try Matrix(T).init(nbf, nbf, gpa);
         defer SP.deinit(gpa);
 
-        mm(T, &SP, Shalf, P, 1, 0, false, false);
+        gemm(T, &SP, Shalf, P, 1, 0, false, false);
 
         var P_ortho = try Matrix(T).init(nbf, nbf, gpa);
         defer P_ortho.deinit(gpa);
 
-        mm(T, &P_ortho, SP, Shalf, 1, 0, false, false);
+        gemm(T, &P_ortho, SP, Shalf, 1, 0, false, false);
 
         for (0..nbf) |u| {
             const at_u: usize = @intCast(sys.bf2at[u]);
@@ -245,10 +245,10 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
         var SP_ab = try Matrix(T).init(nbf, nbf, gpa);
         defer SP_ab.deinit(gpa);
 
-        mm(T, &SP_a, Shalf, blocks.a, 1, 0, false, false);
-        mm(T, &SP_b, Shalf, blocks.b, 1, 0, false, false);
+        gemm(T, &SP_a, Shalf, blocks.a, 1, 0, false, false);
+        gemm(T, &SP_b, Shalf, blocks.b, 1, 0, false, false);
 
-        mm(T, &SP_ab, Shalf, blocks.ab, 1, 0, false, false);
+        gemm(T, &SP_ab, Shalf, blocks.ab, 1, 0, false, false);
 
         var P_ortho_a = try Matrix(T).init(nbf, nbf, gpa);
         defer P_ortho_a.deinit(gpa);
@@ -259,10 +259,10 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
         var P_ortho_ab = try Matrix(T).init(nbf, nbf, gpa);
         defer P_ortho_ab.deinit(gpa);
 
-        mm(T, &P_ortho_a, SP_a, Shalf, 1, 0, false, false);
-        mm(T, &P_ortho_b, SP_b, Shalf, 1, 0, false, false);
+        gemm(T, &P_ortho_a, SP_a, Shalf, 1, 0, false, false);
+        gemm(T, &P_ortho_b, SP_b, Shalf, 1, 0, false, false);
 
-        mm(T, &P_ortho_ab, SP_ab, Shalf, 1, 0, false, false);
+        gemm(T, &P_ortho_ab, SP_ab, Shalf, 1, 0, false, false);
 
         for (0..nbf) |u| {
             const at_u: usize = @intCast(sys.bf2at[u]);
@@ -294,7 +294,7 @@ fn matrixSquareRoot(comptime T: type, S: Matrix(T), gpa: Allocator) !Matrix(T) {
     var U = try Matrix(T).init(n, n, gpa);
     defer U.deinit(gpa);
 
-    try eigh(T, &eigvals, &U, S);
+    try syevd(T, &eigvals, &U, S);
 
     var U_scaled = try Matrix(T).init(n, n, gpa);
     defer U_scaled.deinit(gpa);
@@ -306,7 +306,7 @@ fn matrixSquareRoot(comptime T: type, S: Matrix(T), gpa: Allocator) !Matrix(T) {
     var Shalf = try Matrix(T).init(n, n, gpa);
     errdefer Shalf.deinit(gpa);
 
-    mm(T, &Shalf, U_scaled, U, 1, 0, false, true);
+    gemm(T, &Shalf, U_scaled, U, 1, 0, false, true);
 
     return Shalf;
 }

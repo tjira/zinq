@@ -11,11 +11,11 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
-const determinant = @import("linear_algebra.zig").determinant;
+const det = @import("linear_algebra.zig").det;
 const dot = @import("linear_algebra.zig").dot;
+const gemm = @import("linear_algebra.zig").gemm;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const getSymbol = @import("constant.zig").getSymbol;
-const mm = @import("linear_algebra.zig").mm;
 const printf = @import("read_write.zig").printf;
 
 /// Execution context encapsulating molecular system geometry, IO streams, memory allocator, and logging settings.
@@ -482,9 +482,9 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
             if (dot(T, c_p[k], c_ref[k]) < 0) c_p[k].muls(-1);
         }
 
-        mm(T, &tmp, S_SO, C_p_SO, 1, 0, false, false);
+        gemm(T, &tmp, S_SO, C_p_SO, 1, 0, false, false);
 
-        mm(T, &S_MO, C_m_SO, tmp, 1, 0, true, false);
+        gemm(T, &S_MO, C_m_SO, tmp, 1, 0, true, false);
 
         @memset(s_jk, 0);
         @memset(s_kj, 0);
@@ -507,11 +507,11 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
                 M.ptr(r, c).* = S_MO.at(dets.items[a][r], dets.items[b][c]);
             };
 
-            const det = try determinant(T, &M, ipiv);
+            const d = try det(T, &M, ipiv);
 
             for (0..pairs.len) |p_idx| {
-                s_jk[p_idx] += prods_jk[p_idx] * det;
-                s_kj[p_idx] += prods_kj[p_idx] * det;
+                s_jk[p_idx] += prods_jk[p_idx] * d;
+                s_kj[p_idx] += prods_kj[p_idx] * d;
             }
         };
 

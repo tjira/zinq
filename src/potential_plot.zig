@@ -9,8 +9,8 @@ const Matrix = @import("tensor.zig").Matrix;
 const Potential = @import("potential.zig").Potential;
 const PotentialOptions = @import("potential.zig").Options;
 
-const eighBatch = @import("linear_algebra.zig").eighBatch;
 const printf = @import("read_write.zig").printf;
+const syevdBatch = @import("linear_algebra.zig").syevdBatch;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 
 /// Configuration options for evaluating and exporting potential energy matrices on a grid.
@@ -81,7 +81,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.adiabatic) {
-        try eighBatch(T, &W.?, &C.?, U);
+        try syevdBatch(T, &W.?, &C.?, U);
 
         U.zero();
 

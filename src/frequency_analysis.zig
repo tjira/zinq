@@ -8,11 +8,10 @@ const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Vector = @import("tensor.zig").Vector;
 
-const eigh = @import("linear_algebra.zig").eigh;
-const eighSlice = @import("linear_algebra.zig").eighSlice;
+const gemm = @import("linear_algebra.zig").gemm;
 const getMass = @import("constant.zig").getMass;
-const mm = @import("linear_algebra.zig").mm;
 const printf = @import("read_write.zig").printf;
+const syevd = @import("linear_algebra.zig").syevd;
 
 const a0 = @import("constant.zig").a0;
 const h = @import("constant.zig").h;
@@ -135,7 +134,11 @@ pub fn calculateNormalModes(comptime T: type, hessian: Matrix(T), sys: Molecular
 
         var inertia_ev: [3]T, var inertia_vecs: [9]T = .{ undefined, undefined };
 
-        try eighSlice(T, &inertia_ev, &inertia_vecs, &I_tensor);
+        var ev = Vector(T).fromSlice(&inertia_ev);
+
+        var evec = Matrix(T).fromSlice(3, 3, &inertia_vecs);
+
+        try syevd(T, &ev, &evec, Matrix(T).fromSlice(3, 3, &I_tensor));
 
         var G = try gpa.alloc(T, atoms.len * 3);
         defer gpa.free(G);
@@ -241,8 +244,8 @@ pub fn calculateNormalModes(comptime T: type, hessian: Matrix(T), sys: Molecular
         var H_temp = try Matrix(T).init(atoms.len * 3, atoms.len * 3, gpa);
         defer H_temp.deinit(gpa);
 
-        mm(T, &H_temp, P_mat, HM, 1, 0, false, false);
-        mm(T, &HM, H_temp, P_mat, 1, 0, false, false);
+        gemm(T, &H_temp, P_mat, HM, 1, 0, false, false);
+        gemm(T, &HM, H_temp, P_mat, 1, 0, false, false);
     }
 
     var w = try Vector(T).init(atoms.len * 3, gpa);
@@ -251,7 +254,7 @@ pub fn calculateNormalModes(comptime T: type, hessian: Matrix(T), sys: Molecular
     var u = try Matrix(T).init(hessian.nrow(), hessian.nrow(), gpa);
     errdefer u.deinit(gpa);
 
-    try eigh(T, &w, &u, HM);
+    try syevd(T, &w, &u, HM);
 
     for (0..hessian.nrow()) |i| {
         w.ptr(i).* = std.math.sign(w.at(i)) * std.math.sqrt(@abs(w.at(i)));
@@ -306,7 +309,10 @@ pub fn calculateThermochemistry(comptime T: type, opt: Options, sys: MolecularSy
 
     var inertia_ev: [3]T, var inertia_vecs: [9]T = .{ undefined, undefined };
 
-    try eighSlice(T, &inertia_ev, &inertia_vecs, &I_tensor);
+    var ev = Vector(T).fromSlice(&inertia_ev);
+    var evec = Matrix(T).fromSlice(3, 3, &inertia_vecs);
+
+    try syevd(T, &ev, &evec, Matrix(T).fromSlice(3, 3, &I_tensor));
 
     const conv_I = mu * a0 * a0;
 

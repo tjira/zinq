@@ -6,7 +6,7 @@ const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
 
-const mm = @import("linear_algebra.zig").mm;
+const gemm = @import("linear_algebra.zig").gemm;
 const printf = @import("read_write.zig").printf;
 
 /// Holds spin-resolved blocks of a generalized single-particle density matrix.
@@ -83,11 +83,11 @@ pub fn calculateTotalSpin(comptime T: type, P: Matrix(T), S: Matrix(T), gpa: All
     var BAS = try Matrix(T).init(nbf, nbf, gpa);
     defer BAS.deinit(gpa);
 
-    mm(T, &AS, blocks.a, S_spatial, 1, 0, false, false);
-    mm(T, &BS, blocks.b, S_spatial, 1, 0, false, false);
+    gemm(T, &AS, blocks.a, S_spatial, 1, 0, false, false);
+    gemm(T, &BS, blocks.b, S_spatial, 1, 0, false, false);
 
-    mm(T, &ABS, blocks.ab, S_spatial, 1, 0, false, false);
-    mm(T, &BAS, blocks.ba, S_spatial, 1, 0, false, false);
+    gemm(T, &ABS, blocks.ab, S_spatial, 1, 0, false, false);
+    gemm(T, &BAS, blocks.ba, S_spatial, 1, 0, false, false);
 
     var n_a: T = 0;
     var n_b: T = 0;

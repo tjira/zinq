@@ -21,14 +21,14 @@ const Vector = @import("tensor.zig").Vector;
 
 const calculateNormalModes = @import("frequency_analysis.zig").calculateNormalModes;
 const configuration_interaction = @import("configuration_interaction.zig");
-const eighBatch = @import("linear_algebra.zig").eighBatch;
-const eighSlice = @import("linear_algebra.zig").eighSlice;
 const getMass = @import("constant.zig").getMass;
 const getTrajectoryPath = @import("read_write.zig").getTrajectoryPath;
 const hartree_fock = @import("hartree_fock.zig");
 const moller_plesset = @import("moller_plesset.zig");
 const printf = @import("read_write.zig").printf;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
+const syevd = @import("linear_algebra.zig").syevd;
+const syevdBatch = @import("linear_algebra.zig").syevdBatch;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 const writeXyzFrame = @import("read_write.zig").writeXyzFrame;
 const writeXyzMomentumFrame = @import("read_write.zig").writeXyzMomentumFrame;
@@ -274,7 +274,11 @@ pub fn Ensemble(comptime T: type) type {
 
                 var ev: [3]T, var evec: [9]T = .{ undefined, undefined };
 
-                eighSlice(T, &ev, &evec, &I_tensor) catch continue;
+                var ev_vec = Vector(T).fromSlice(&ev);
+
+                var evec_mat = Matrix(T).fromSlice(3, 3, &evec);
+
+                syevd(T, &ev_vec, &evec_mat, Matrix(T).fromSlice(3, 3, &I_tensor)) catch continue;
 
                 var omega: [3]T, var cur_axes: usize = .{ .{ 0, 0, 0 }, 0 };
 
@@ -987,7 +991,7 @@ fn GradientBuffer(comptime T: type) type {
                     try pot.evalBatch(T, &self.V, r, time);
 
                     if (self.adia) {
-                        try eighBatch(T, &self.W, &self.U, self.V);
+                        try syevdBatch(T, &self.W, &self.U, self.V);
 
                         if (!std.math.isNan(self.U_prev.at(0, 0))) {
                             for (0..self.U.nrow()) |i| for (0..pot.nstate()) |k| {

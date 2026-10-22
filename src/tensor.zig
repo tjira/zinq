@@ -8,8 +8,7 @@ const Allocator = std.mem.Allocator;
 
 const Value = @import("value.zig").Value;
 
-const eigh = @import("linear_algebra.zig").eigh;
-const mm = @import("linear_algebra.zig").mm;
+const gemm = @import("linear_algebra.zig").gemm;
 const printComplexTensor = @import("read_write.zig").printComplexTensor;
 const printMatrix = @import("read_write.zig").printMatrix;
 const printRealTensor = @import("read_write.zig").printRealTensor;
@@ -18,6 +17,7 @@ const readComplexTensor = @import("read_write.zig").readComplexTensor;
 const readMatrix = @import("read_write.zig").readMatrix;
 const readRealTensor = @import("read_write.zig").readRealTensor;
 const readTensorRank = @import("read_write.zig").readTensorRank;
+const syevd = @import("linear_algebra.zig").syevd;
 const writeComplexTensor = @import("read_write.zig").writeComplexTensor;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 const writeRealTensor = @import("read_write.zig").writeRealTensor;
@@ -565,7 +565,7 @@ pub fn runEig(comptime T: type, io: std.Io, opt: EigOptions, log: bool, gpa: All
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    try eigh(T, &W, &U, A);
+    try syevd(T, &W, &U, A);
 
     if (log) {
         try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
@@ -658,7 +658,7 @@ pub fn runMatmul(comptime T: type, io: std.Io, opt: MatmulOptions, log: bool, gp
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    mm(T, &C, A, B, opt.alpha, opt.beta, opt.trans_a, opt.trans_b);
+    gemm(T, &C, A, B, opt.alpha, opt.beta, opt.trans_a, opt.trans_b);
 
     if (log) {
         try printf(io, "{f}\n", .{timer.untilNow(io, .real)});

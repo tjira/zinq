@@ -2,7 +2,9 @@
 
 const std = @import("std");
 
-const mmSlice = @import("linear_algebra.zig").mmSlice;
+const Matrix = @import("tensor.zig").Matrix;
+
+const gemm = @import("linear_algebra.zig").gemm;
 const primType = @import("value.zig").primType;
 
 /// Specification plan storing tensor index permutations and contraction dimensionality.
@@ -76,25 +78,35 @@ pub fn contract(comptime T: type, comptime spec: []const u8, C: anytype, A: anyt
     const b_slice, const b_buf = try prepareSlice(T, nb, b_ten, plan.perm_b, plan.trans_b, gpa);
     defer if (b_buf) |buf| (gpa.?).free(buf);
 
+    const rows_a = if (plan.trans_a) k else m;
+    const cols_a = if (plan.trans_a) m else k;
+    const rows_b = if (plan.trans_b) n else k;
+    const cols_b = if (plan.trans_b) k else n;
+
+    const A_mat = Matrix(T).fromSlice(rows_a, cols_a, @constCast(a_slice));
+    const B_mat = Matrix(T).fromSlice(rows_b, cols_b, @constCast(b_slice));
+
     if (isIdentity(plan.perm_c)) {
-        return mmSlice(T, c_ten.data, a_slice, b_slice, m, n, k, alpha, beta, plan.trans_a, plan.trans_b);
+        var C_mat = Matrix(T).fromSlice(m, n, c_ten.data);
+
+        return gemm(T, &C_mat, A_mat, B_mat, alpha, beta, plan.trans_a, plan.trans_b);
     }
 
     const alloc = gpa orelse return error.AllocatorRequired;
 
-    const c_buf = try alloc.alloc(T, c_ten.data.len);
-    defer alloc.free(c_buf);
+    var C_buf = try Matrix(T).init(m, n, alloc);
+    defer C_buf.deinit(alloc);
 
-    mmSlice(T, c_buf, a_slice, b_slice, m, n, k, alpha, 0, plan.trans_a, plan.trans_b);
+    gemm(T, &C_buf, A_mat, B_mat, alpha, 0, plan.trans_a, plan.trans_b);
 
     if (beta == 0) {
-        return permuteSlice(T, nc, c_ten.data, c_buf, shape_gemm, plan.perm_c);
+        return permuteSlice(T, nc, c_ten.data, C_buf.data, shape_gemm, plan.perm_c);
     }
 
     const c_perm = try alloc.alloc(T, c_ten.data.len);
     defer alloc.free(c_perm);
 
-    permuteSlice(T, nc, c_perm, c_buf, shape_gemm, plan.perm_c);
+    permuteSlice(T, nc, c_perm, C_buf.data, shape_gemm, plan.perm_c);
 
     for (c_ten.data, c_perm) |*c, p| c.* = p + beta * c.*;
 }

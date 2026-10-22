@@ -28,7 +28,6 @@ const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNum
 const calculateNumericalNacv = @import("nuclear_derivative.zig").calculateNumericalNacv;
 const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
 const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
-const eigh = @import("linear_algebra.zig").eigh;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
@@ -36,9 +35,10 @@ const primType = @import("value.zig").primType;
 const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printThermochemistry = @import("frequency_analysis.zig").printThermochemistry;
 const printf = @import("read_write.zig").printf;
+const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
+const syevd = @import("linear_algebra.zig").syevd;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 const writeXyzFile = @import("read_write.zig").writeXyzFile;
-const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 
 /// Configurations for the CI calculation, excitation levels, optimization, and derivative settings.
 pub const Options = struct {
@@ -1045,7 +1045,7 @@ fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocat
     var C = try Matrix(T).initZero(H_CI.shape[0], H_CI.shape[0], gpa);
     errdefer C.deinit(gpa);
 
-    try eigh(T, &E, &C, H_CI);
+    try syevd(T, &E, &C, H_CI);
 
     for (0..E.length()) |i| {
         E.ptr(i).* += VN;

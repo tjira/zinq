@@ -7,11 +7,12 @@ const Complex = std.math.Complex;
 
 const Grid = @import("wavepacket.zig").Grid;
 const Matrix = @import("tensor.zig").Matrix;
+const Potential = @import("potential.zig").Potential;
+const Vector = @import("tensor.zig").Vector;
+
 const fft = @import("fourier_transform.zig").fft;
 const fftn = @import("fourier_transform.zig").fftn;
-const Potential = @import("potential.zig").Potential;
-
-const eighSlice = @import("linear_algebra.zig").eighSlice;
+const syevd = @import("linear_algebra.zig").syevd;
 const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
 /// Holds all parameter configuration, input matrices, and grid references required for computing transition probabilities.
@@ -34,10 +35,10 @@ pub fn FluxAnalysis(comptime T: type) type {
 
         /// Computes the reactant asymptotic threshold energy (potential energy plus transversal zero-point energy).
         pub fn getThreshold(opt: anytype, pot: Potential(T), gpa: Allocator) !T {
-            const V_arr = try gpa.alloc(T, pot.nstate() * pot.nstate());
-            defer gpa.free(V_arr);
+            var V = try Matrix(T).init(pot.nstate(), pot.nstate(), gpa);
+            defer V.deinit(gpa);
 
-            try pot.eval(T, V_arr, opt.initial_conditions.position, 0);
+            try pot.eval(T, V.data, opt.initial_conditions.position, 0);
 
             if (opt.j_quantum_number > 0) {
                 const j = @as(T, @floatFromInt(opt.j_quantum_number));
@@ -45,26 +46,26 @@ pub fn FluxAnalysis(comptime T: type) type {
                 const m, const r = .{ opt.mass[0], opt.initial_conditions.position[0] };
 
                 for (0..pot.nstate()) |s| {
-                    V_arr[s * pot.nstate() + s] += if (r != 0) j * (j + 1) / (2 * m * r * r) else 0;
+                    V.ptr(s, s).* += if (r != 0) j * (j + 1) / (2 * m * r * r) else 0;
                 }
             }
 
             var Vreact: T = 0;
 
             if (opt.initial_conditions.adiabatic) {
-                const U_arr = try gpa.alloc(T, pot.nstate() * pot.nstate());
-                defer gpa.free(U_arr);
+                var U = try Matrix(T).init(pot.nstate(), pot.nstate(), gpa);
+                defer U.deinit(gpa);
 
-                const W_arr = try gpa.alloc(T, pot.nstate());
-                defer gpa.free(W_arr);
+                var W = try Vector(T).init(pot.nstate(), gpa);
+                defer W.deinit(gpa);
 
-                try eighSlice(T, W_arr, U_arr, V_arr);
+                try syevd(T, &W, &U, V);
 
-                Vreact = W_arr[opt.initial_conditions.state];
+                Vreact = W.at(opt.initial_conditions.state);
             }
 
             if (!opt.initial_conditions.adiabatic) {
-                Vreact = V_arr[opt.initial_conditions.state * pot.nstate() + opt.initial_conditions.state];
+                Vreact = V.at(opt.initial_conditions.state, opt.initial_conditions.state);
             }
 
             var e_perp: T = 0;

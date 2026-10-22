@@ -11,8 +11,8 @@ const Vector = @import("tensor.zig").Vector;
 
 const fftArray = @import("fourier_transform.zig").fft;
 const fftn = @import("fourier_transform.zig").fftn;
-const eighBatch = @import("linear_algebra.zig").eighBatch;
-const eighSlice = @import("linear_algebra.zig").eighSlice;
+const syevd = @import("linear_algebra.zig").syevd;
+const syevdBatch = @import("linear_algebra.zig").syevdBatch;
 
 /// Generates a multidimensional discrete coordinate and momentum space grid.
 pub fn Grid(comptime T: type) type {
@@ -179,9 +179,10 @@ pub fn Hamiltonian(comptime T: type) type {
         cylindric: bool,
         j_quantn: usize,
 
-        w_buf: ?[]T,
-        u_buf: ?[]T,
-        v_buf: ?[]T,
+        w_buf: ?Vector(T),
+        u_buf: ?Matrix(T),
+        v_buf: ?Matrix(T),
+
         r_buf: ?[]T,
 
         /// Allocates and computes kinetic and potential operator matrix elements.
@@ -194,14 +195,14 @@ pub fn Hamiltonian(comptime T: type) type {
             if (optimize_memory) {
                 const nstate = pot.nstate();
 
-                const w_buf = try gpa.alloc(T, nstate);
-                errdefer gpa.free(w_buf);
+                var w_buf = try Vector(T).init(nstate, gpa);
+                errdefer w_buf.deinit(gpa);
 
-                const u_buf = try gpa.alloc(T, nstate * nstate);
-                errdefer gpa.free(u_buf);
+                var u_buf = try Matrix(T).init(nstate, nstate, gpa);
+                errdefer u_buf.deinit(gpa);
 
-                const v_buf = try gpa.alloc(T, nstate * nstate);
-                errdefer gpa.free(v_buf);
+                var v_buf = try Matrix(T).init(nstate, nstate, gpa);
+                errdefer v_buf.deinit(gpa);
 
                 const r_buf = try gpa.alloc(T, grid.ncol());
                 errdefer gpa.free(r_buf);
@@ -270,9 +271,9 @@ pub fn Hamiltonian(comptime T: type) type {
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             gpa.free(self.mass);
 
-            if (self.w_buf) |buf| gpa.free(buf);
-            if (self.u_buf) |buf| gpa.free(buf);
-            if (self.v_buf) |buf| gpa.free(buf);
+            if (self.w_buf) |*w| w.deinit(gpa);
+            if (self.u_buf) |*u| u.deinit(gpa);
+            if (self.v_buf) |*v| v.deinit(gpa);
             if (self.r_buf) |buf| gpa.free(buf);
 
             if (self.V) |*V| V.deinit(gpa);
@@ -302,22 +303,20 @@ pub fn Hamiltonian(comptime T: type) type {
                 return .{ self.W.?.rowSlice(i), U.rowSlice(i), self.V.?.rowSlice(i) };
             }
 
-            const w = self.w_buf.?;
-            const u = self.u_buf.?;
-            const v = self.v_buf.?;
-
             _ = try self.getV(grid, pot, t, i);
 
-            try eighSlice(T, w, u, v);
+            var w, var u, const v = .{ self.w_buf.?, self.u_buf.?, self.v_buf.? };
 
-            return .{ w, u, v };
+            try syevd(T, &w, &u, v);
+
+            return .{ w.data, u.data, v.data };
         }
 
         /// Computes or retrieves potential energy matrix elements at grid coordinate index i.
         pub fn getV(self: @This(), grid: Grid(T), pot: Potential(T), t: T, i: usize) ![]const T {
             if (self.V) |V| return V.rowSlice(i);
 
-            const buffer, const r_coords = .{ self.v_buf.?, self.r_buf.? };
+            const buffer, const r_coords = .{ self.v_buf.?.data, self.r_buf.? };
 
             for (0..grid.ncol()) |j| {
                 const val = grid.getR(i, j);
@@ -417,7 +416,7 @@ pub fn Hamiltonian(comptime T: type) type {
                 }
             }
 
-            try eighBatch(T, &self.W.?, &self.U.?, self.V.?);
+            try syevdBatch(T, &self.W.?, &self.U.?, self.V.?);
 
             if (grid.ncol() == 1) for (1..grid.nrow()) |i| for (0..pot.nstate()) |j| {
                 var overlap: T = 0;

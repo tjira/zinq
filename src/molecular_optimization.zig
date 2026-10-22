@@ -10,7 +10,7 @@ const Matrix = @import("tensor.zig").Matrix;
 const Vector = @import("tensor.zig").Vector;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
-const mmv = @import("linear_algebra.zig").mmv;
+const gemv = @import("linear_algebra.zig").gemv;
 const printf = @import("read_write.zig").printf;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 
@@ -116,7 +116,7 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
                 var u = try Vector(T).init(s.length(), gpa);
                 defer u.deinit(gpa);
 
-                mmv(T, &u, H, y, 1, 0, false);
+                gemv(T, &u, H, y, 1, 0, false);
 
                 var y_dot_u: T = 0;
 
@@ -142,7 +142,7 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
         var p = try Vector(T).init(3 * sys.atoms.len, gpa);
         defer p.deinit(gpa);
 
-        mmv(T, &p, H, g_new.asVector(), -1, 0, false);
+        gemv(T, &p, H, g_new.asVector(), -1, 0, false);
 
         for (0..p.length()) |j| {
             sys.coors[j] += bfgs_opt.step * p.at(j);
