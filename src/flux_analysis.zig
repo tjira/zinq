@@ -20,6 +20,8 @@ pub fn FluxAnalysis(comptime T: type) type {
         mass: []const T,
         gmma: []const T,
 
+        asymptotic_offset: T,
+
         e_min: T,
         e_max: T,
         initk: T,
@@ -58,6 +60,8 @@ pub fn FluxAnalysis(comptime T: type) type {
 
             ctx.e_min = @floatCast(flux_opt.e_min);
             ctx.e_max = @floatCast(flux_opt.e_max);
+
+            ctx.asymptotic_offset = @floatCast(flux_opt.asymptotic_offset);
 
             ctx.npoint, ctx.logarithmic = .{ flux_opt.npoint, flux_opt.logarithmic };
 
@@ -104,16 +108,6 @@ pub fn FluxAnalysis(comptime T: type) type {
             defer V.deinit(gpa);
 
             try pot.eval(T, V.data, opt.initial_conditions.position, 0);
-
-            if (opt.j_quantum_number > 0) {
-                const j = @as(T, @floatFromInt(opt.j_quantum_number));
-
-                const m, const r = .{ opt.mass[0], opt.initial_conditions.position[0] };
-
-                for (0..pot.nstate()) |s| {
-                    V.ptr(s, s).* += if (r != 0) j * (j + 1) / (2 * m * r * r) else 0;
-                }
-            }
 
             var Vreact: T = 0;
 
@@ -188,11 +182,13 @@ pub fn FluxAnalysis(comptime T: type) type {
                 for (0..ne) |ei| {
                     const E = self.getCollisionEnergy(ei);
 
-                    if (E <= 0) {
+                    const E_local = E - self.asymptotic_offset;
+
+                    if (E_local <= 0) {
                         continue;
                     }
 
-                    const k_inc = std.math.sqrt(2 * m * E);
+                    const k_inc = std.math.sqrt(2 * m * E_local);
 
                     const exp_arg = -std.math.pow(T, k_inc - self.initk, @as(T, 2)) / (self.gmma[0]);
                     const ak = std.math.sqrt(4 * std.math.pi / self.gmma[0]) * std.math.exp(exp_arg);

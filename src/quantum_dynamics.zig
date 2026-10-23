@@ -61,6 +61,7 @@ const AbsorbingPotential = struct {
 
 /// Quantum flux analysis settings for computing energy-resolved transmission cross sections.
 const FluxAnalysisOptions = struct {
+    asymptotic_offset: f64 = 0,
     e_max: f64,
     e_min: f64,
     flux_bounds: []const [2]f64,
@@ -1264,6 +1265,12 @@ fn checkInvalidInput(opt: Options) !void {
             return error.InvalidInput;
         }
 
+        if (flux.asymptotic_offset >= flux.e_max) {
+            std.log.err("FLUX ANALYSIS ASYMPTOTIC OFFSET MUST BE LESS THAN E_MAX", .{});
+
+            return error.InvalidInput;
+        }
+
         if (flux.npoint < 2) {
             std.log.err("FLUX ANALYSIS NPOINT MUST BE AT LEAST 2", .{});
 
@@ -1559,7 +1566,9 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
 
         if (fa.logarithmic) {
             try writeMatrixLogspace(T, io, cs, t, e_min, e_max);
-        } else {
+        }
+
+        if (!fa.logarithmic) {
             try writeMatrixLinspace(T, io, cs, t, e_min, e_max);
         }
     };
@@ -1569,12 +1578,11 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
 
 /// Propagates the wavepacket over the specified iterations using split-operator steps.
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Result(T) {
-    const opt = ctx.opt;
+    const opt, var e_thrs: T = .{ ctx.opt, 0 };
 
-    const e_thrs = if (opt.flux_analysis != null)
-        try FluxAnalysis(T).getThreshold(opt, ctx.sim.epoten, gpa)
-    else
-        0;
+    if (opt.flux_analysis) |fa| {
+        e_thrs = (try FluxAnalysis(T).getThreshold(opt, ctx.sim.epoten, gpa)) - fa.asymptotic_offset;
+    }
 
     const ndim, const nstate, const npoint = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate(), opt.grid.npoint };
 
