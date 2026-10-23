@@ -84,11 +84,11 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     const libs = [_][]const u8{ "int2", "openblas", "xc" };
 
     for (libs) |lib| {
-        module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static });
+        module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static, .use_pkg_config = .no });
     }
 
     if (is_linux) {
-        module.linkSystemLibrary("omp", .{ .preferred_link_mode = .static });
+        module.linkSystemLibrary("omp", .{ .preferred_link_mode = .static, .use_pkg_config = .no });
     }
 
     inline for (.{ "cblas", "exprtk", "lapacke", "libint", "libxc" }) |name| {

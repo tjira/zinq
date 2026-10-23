@@ -524,8 +524,6 @@ fn PartialWaveContext(comptime T: type) type {
 
         j_max: u32,
 
-        timer: std.Io.Timestamp,
-
         /// Propagates partial wavepackets concurrently and accumulates state-resolved reaction cross sections.
         pub fn worker(self: *@This(), io: std.Io, opt: Options, log: bool, gpa: Allocator, thread_sigma: ?*Matrix(T)) void {
             const pw = opt.partial_waves.?;
@@ -539,6 +537,8 @@ fn PartialWaveContext(comptime T: type) type {
                 const j = self.next_j.fetchAdd(pw.step, .monotonic);
 
                 if (j > self.j_max) break;
+
+                const timer = std.Io.Timestamp.now(io, .real);
 
                 _ = arena.reset(.retain_capacity);
 
@@ -628,13 +628,11 @@ fn PartialWaveContext(comptime T: type) type {
                         std.Thread.yield() catch {};
                     }
 
-                    const elapsed = self.timer.untilNow(io, .real);
+                    const elapsed = timer.untilNow(io, .real);
 
                     const fmt = "{d:06} {d:7} {d:12.6} {e:12.3} {e:12.3} {f}\n";
 
                     printf(io, fmt, .{ done - 1, j, v_cent, p_peak, p_integ, elapsed }) catch {};
-
-                    self.timer = std.Io.Timestamp.now(io, .real);
 
                     self.mutx.store(false, .release);
                 }
@@ -1505,9 +1503,7 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
         s.* = .{ .data = &.{}, .shape = .{ 0, 0 } };
     };
 
-    const timer = std.Io.Timestamp.now(io, .real);
-
-    var ctx = PartialWaveContext(T){ .j_max = j_max, .next_j = .init(0), .timer = timer };
+    var ctx = PartialWaveContext(T){ .j_max = j_max, .next_j = .init(0) };
 
     if (nthreads == 1) {
         ctx.worker(io, opt, log, gpa, if (thread_sigmas) |sigmas| &sigmas[0] else null);
