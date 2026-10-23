@@ -43,11 +43,9 @@ pub const Options = struct {
 
 /// Configuration options for sweeping and summing over partial waves J.
 pub const PartialWaveOptions = struct {
-    j_max: u32,
-    j_min: u32 = 0,
-    j_step: u32 = 1,
     log_interval: u32 = 1,
-    stop_condition: ?PartialWaveStopCondition = null,
+    max: ?u32 = null,
+    step: u32 = 1,
     threads: ?u32 = null,
     write: PartialWaveWrite = .{},
 };
@@ -91,12 +89,6 @@ const Memory = struct {
     grid: bool = true,
     potential: bool = true,
     propagator: bool = true,
-};
-
-/// Convergence criteria for terminating partial wave expansion over total angular momentum J.
-const PartialWaveStopCondition = struct {
-    consecutive_steps: u32 = 3,
-    tolerance: f64 = 1e-6,
 };
 
 /// Output file paths for recording total scattering cross sections.
@@ -530,8 +522,7 @@ fn PartialWaveContext(comptime T: type) type {
         completed: std.atomic.Value(u32) = .init(0),
         mutx: std.atomic.Value(bool) = .init(false),
 
-        is_done: ?[]bool = null,
-        task_peaks: ?[]T = null,
+        j_max: u32,
 
         timer: std.Io.Timestamp,
 
@@ -539,17 +530,15 @@ fn PartialWaveContext(comptime T: type) type {
         pub fn worker(self: *@This(), io: std.Io, opt: Options, log: bool, gpa: Allocator, thread_sigma: ?*Matrix(T)) void {
             const pw = opt.partial_waves.?;
 
-            const dj = @as(T, @floatFromInt(pw.j_step));
-
             var arena = std.heap.ArenaAllocator.init(gpa);
             defer arena.deinit();
 
-            const tasks = (pw.j_max - pw.j_min) / pw.j_step + 1;
+            const tasks = self.j_max / pw.step + 1;
 
             while (true) {
-                const j = self.next_j.fetchAdd(pw.j_step, .monotonic);
+                const j = self.next_j.fetchAdd(pw.step, .monotonic);
 
-                if (j > pw.j_max) break;
+                if (j > self.j_max) break;
 
                 _ = arena.reset(.retain_capacity);
 
@@ -610,6 +599,8 @@ fn PartialWaveContext(comptime T: type) type {
                             sigma.* = Matrix(T).initZero(s_j.nrow(), s_j.ncol(), gpa) catch continue;
                         }
 
+                        const dj = @as(T, @floatFromInt(pw.step));
+
                         const factor = dj * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
 
                         for (0..s_j.nrow()) |ei| {
@@ -622,42 +613,6 @@ fn PartialWaveContext(comptime T: type) type {
                             }
                         }
                     }
-                }
-
-                if (pw.stop_condition) |sc| {
-                    const idx = (j - pw.j_min) / pw.j_step;
-
-                    while (self.mutx.swap(true, .acquire)) {
-                        std.Thread.yield() catch {};
-                    }
-
-                    self.task_peaks.?[idx], self.is_done.?[idx] = .{ p_peak, true };
-
-                    const k = sc.consecutive_steps;
-
-                    if (k <= tasks) {
-                        const min_s, const max_s = .{ if (idx + 1 >= k) idx + 1 - k else 0, @min(idx, tasks - k) };
-
-                        for (min_s..max_s + 1) |s| {
-                            var stop = true;
-
-                            for (s..s + k) |i| {
-                                if (!self.is_done.?[i] or self.task_peaks.?[i] >= @as(T, @floatCast(sc.tolerance))) {
-                                    stop = false;
-
-                                    break;
-                                }
-                            }
-
-                            if (stop) {
-                                self.next_j.store(pw.j_max + 1, .release);
-
-                                break;
-                            }
-                        }
-                    }
-
-                    self.mutx.store(false, .release);
                 }
 
                 const r_0, const m_0 = .{ opt.initial_conditions.position[0], opt.mass[0] };
@@ -1134,14 +1089,8 @@ fn checkInvalidInput(opt: Options) !void {
             return error.InvalidInput;
         }
 
-        if (pw.j_min > pw.j_max) {
-            std.log.err("PARTIAL WAVES J_MIN MUST BE LESS THAN OR EQUAL TO J_MAX", .{});
-
-            return error.InvalidInput;
-        }
-
-        if (pw.j_step == 0) {
-            std.log.err("PARTIAL WAVES J_STEP MUST BE GREATER THAN 0", .{});
+        if (pw.step == 0) {
+            std.log.err("PARTIAL WAVES STEP MUST BE GREATER THAN 0", .{});
 
             return error.InvalidInput;
         }
@@ -1156,20 +1105,6 @@ fn checkInvalidInput(opt: Options) !void {
             std.log.err("PARTIAL WAVES REQUIRE FLUX ANALYSIS TO BE CONFIGURED", .{});
 
             return error.InvalidInput;
-        }
-
-        if (pw.stop_condition) |sc| {
-            if (sc.consecutive_steps == 0) {
-                std.log.err("PARTIAL WAVES STOP CONDITION CONSECUTIVE STEPS MUST BE GREATER THAN 0", .{});
-
-                return error.InvalidInput;
-            }
-
-            if (sc.tolerance < 0) {
-                std.log.err("PARTIAL WAVES STOP CONDITION TOLERANCE MUST BE NON-NEGATIVE", .{});
-
-                return error.InvalidInput;
-            }
         }
     }
 
@@ -1534,8 +1469,13 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, t
 /// Computes total reactive cross sections by summing partial wave contributions across angular momentum states.
 fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     const pw = opt.partial_waves.?;
+    const fa = opt.flux_analysis.?;
 
-    const nthreads = @min(pw.threads orelse 1, (pw.j_max - pw.j_min) / pw.j_step + 1);
+    const k_max = std.math.sqrt(2 * opt.mass[0] * fa.e_max);
+
+    const j_max = pw.max orelse @max(@as(u32, @intFromFloat(@ceil(k_max * fa.flux_bounds[0][1]))), 1);
+
+    const nthreads = @min(pw.threads orelse 1, j_max / pw.step + 1);
 
     if (nthreads < 1) {
         std.log.err("PARTIAL WAVES THREAD COUNT MUST BE GREATER THAN 0", .{});
@@ -1544,7 +1484,7 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
     }
 
     if (log) {
-        const params = .{ pw.j_min, pw.j_max, pw.j_step, nthreads };
+        const params = .{ 0, j_max, pw.step, nthreads };
 
         try printf(io, "\nPARTIAL-WAVES RUNS FROM J={d} TO J={d} WITH STEP {d} USING {d} THREADS\n", params);
 
@@ -1565,19 +1505,9 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
         s.* = .{ .data = &.{}, .shape = .{ 0, 0 } };
     };
 
-    const tasks = (pw.j_max - pw.j_min) / pw.j_step + 1;
-
-    const is_done = if (pw.stop_condition != null) try gpa.alloc(bool, tasks) else null;
-    defer if (is_done) |d| gpa.free(d);
-
-    const tp = if (pw.stop_condition != null) try gpa.alloc(T, tasks) else null;
-    defer if (tp) |p| gpa.free(p);
-
-    if (is_done) |d| @memset(d, false);
-
     const timer = std.Io.Timestamp.now(io, .real);
 
-    var ctx = PartialWaveContext(T){ .is_done = is_done, .next_j = .init(pw.j_min), .task_peaks = tp, .timer = timer };
+    var ctx = PartialWaveContext(T){ .j_max = j_max, .next_j = .init(0), .timer = timer };
 
     if (nthreads == 1) {
         ctx.worker(io, opt, log, gpa, if (thread_sigmas) |sigmas| &sigmas[0] else null);
@@ -1606,8 +1536,6 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
     };
 
     if (total) |t| if (pw.write.cross_section) |cs| {
-        const fa = opt.flux_analysis.?;
-
         try writeMatrixLspace(T, io, cs, t, fa.e_min, fa.e_max);
     };
 

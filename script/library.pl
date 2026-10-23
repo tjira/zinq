@@ -74,8 +74,11 @@ sub download_library {
     # GET EXISTING PATHS IN LIB TO DETECT NEWLY EXTRACTED CONTENT
     my %before = map {$_ => 1} glob("lib/*");
 
-    # COMMAND TO DOWNLOAD AND EXTRACT THE ARCHIVE USING BSDTAR
-    my $cmd = "curl -sL -A 'Mozilla/5.0' '$url' | bsdtar -x -f - -C lib";
+    # DETERMINE TAR FLAGS BASED ON URL
+    my $tar_flags = $url =~ /\.tar\.bz2$|\.tbz2$/ ? "-xjf" : $url =~ /\.tar\.xz$|\.txz$/ ? "-xJf" : "-xzf";
+
+    # COMMAND TO DOWNLOAD AND EXTRACT THE ARCHIVE USING TAR
+    my $cmd = "curl -sL -A 'Mozilla/5.0' '$url' | tar $tar_flags - -C lib";
 
     # EXECUTE THE COMMAND AND CHECK FOR SUCCESS
     system($cmd) == 0 or die "FAILED TO DOWNLOAD/EXTRACT '$dest_name' FROM '$url'";
