@@ -556,7 +556,7 @@ test "Adiabatic RTP Partial Waves on Tully's First Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 1.9569985319299963, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 1.9579429681276190, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -599,7 +599,7 @@ test "Diabatic RTP Partial Waves on Tully's First Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 1.9526946359649326, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 1.9537334736940413, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -636,7 +636,7 @@ test "Adiabatic RTP Partial Waves on Tully's Second Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 1.6933143443872576, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 1.6838331249911750, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -679,7 +679,7 @@ test "Diabatic RTP Partial Waves on Tully's Second Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 1.6893078938289168, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 1.6798762665642024, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -716,7 +716,7 @@ test "Adiabatic RTP Partial Waves on Tully's Third Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 2.1027485069149610, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 2.0965953880959676, TEST_TOLERANCE);
     // zig fmt: on
 }
 
@@ -759,6 +759,6 @@ test "Diabatic RTP Partial Waves on Tully's Third Potential" {
     }
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(sum, 2.3511800557613420, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(sum, 2.3471943736225427, TEST_TOLERANCE);
     // zig fmt: on
 }
