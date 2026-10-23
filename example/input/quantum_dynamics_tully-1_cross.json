@@ -30,7 +30,7 @@
                     "flux_bounds" : [[-15, 15]],
                     "e_min" : 0.00025,
                     "e_max" : 0.225,
-                    "e_step" : 0.001,
+                    "npoint" : 100,
                     "write" : {
                         "cross_section" : "CROSS_QD.mat"
                     }

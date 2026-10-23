@@ -19,7 +19,8 @@ const axpy = @import("linear_algebra.zig").axpy;
 const calcSpectrum = @import("spectral_analysis.zig").calcSpectrum;
 const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
-const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
+const writeMatrixLinspace = @import("read_write.zig").writeMatrixLinspace;
+const writeMatrixLogspace = @import("read_write.zig").writeMatrixLogspace;
 
 /// Configuration options for split-operator quantum dynamics wavepacket propagation on a grid.
 pub const Options = struct {
@@ -62,8 +63,9 @@ const AbsorbingPotential = struct {
 const FluxAnalysisOptions = struct {
     e_max: f64,
     e_min: f64,
-    e_step: f64,
     flux_bounds: []const [2]f64,
+    logarithmic: bool = false,
+    npoint: usize,
     write: FluxAnalysisWrite = .{},
 };
 
@@ -162,6 +164,7 @@ fn History(comptime T: type) type {
 
         flux_acc: ?Matrix(Complex(T)) = null,
         wfn_init: ?Matrix(Complex(T)) = null,
+        e_thrs: T = 0,
 
         index: usize = 0,
 
@@ -205,7 +208,7 @@ fn History(comptime T: type) type {
             }
 
             if (opt.flux_analysis) |flux_opt| {
-                const n = @as(usize, @intFromFloat(@round((flux_opt.e_max - flux_opt.e_min) / flux_opt.e_step))) + 1;
+                const n = flux_opt.npoint;
 
                 hist.flux_acc = try Matrix(Complex(T)).initZero(n * nstate, wfn_nrow, gpa);
 
@@ -249,7 +252,7 @@ fn History(comptime T: type) type {
                     const wfn_row = wfn.W.rowSlice(f);
 
                     for (0..self.flux_acc.?.nrow() / wfn.W.nrow()) |ei| {
-                        const E = flux_opt.e_min + @as(T, @floatFromInt(ei)) * flux_opt.e_step;
+                        const E = FluxAnalysis(T).getCollisionEnergy(flux_opt, ei) + self.e_thrs;
 
                         const phase = Complex(T).init(std.math.cos(E * t), std.math.sin(E * t));
 
@@ -308,35 +311,35 @@ fn History(comptime T: type) type {
             const dt, const end = .{ opt.time_step, opt.time_step * @as(T, @floatFromInt(self.index - 1)) };
 
             if (opt.write.acf) |path| {
-                try writeMatrixLspace(Complex(T), io, path, self.acf.?.takeRows(self.index).asMatrix(), 0, end);
+                try writeMatrixLinspace(Complex(T), io, path, self.acf.?.takeRows(self.index).asMatrix(), 0, end);
             }
 
             if (opt.write.position) |path| {
-                try writeMatrixLspace(T, io, path, self.pos.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.pos.?.takeRows(self.index), 0, end);
             }
 
             if (opt.write.momentum) |path| {
-                try writeMatrixLspace(T, io, path, self.mom.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.mom.?.takeRows(self.index), 0, end);
             }
 
             if (opt.write.population) |path| {
-                try writeMatrixLspace(T, io, path, self.pop.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.pop.?.takeRows(self.index), 0, end);
             }
 
             if (opt.write.potential_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.epot.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.epot.?.takeRows(self.index), 0, end);
             }
 
             if (opt.write.kinetic_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.ekin.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.ekin.?.takeRows(self.index), 0, end);
             }
 
             if (opt.write.norm) |path| {
-                try writeMatrixLspace(T, io, path, self.norm.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.norm.?.takeRows(self.index), 0, end);
             }
 
             if (opt.write.total_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.etot.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.etot.?.takeRows(self.index), 0, end);
             }
 
             if (opt.write.wavefunction) |path| {
@@ -369,27 +372,33 @@ fn History(comptime T: type) type {
                 if (spec.write.acf) |path| {
                     const pad = dt * @as(T, @floatFromInt(spec.padding));
 
-                    try writeMatrixLspace(Complex(T), io, path, acfpd.asMatrix(), 0, end + pad);
+                    try writeMatrixLinspace(Complex(T), io, path, acfpd.asMatrix(), 0, end + pad);
                 }
 
                 if (spec.write.spectrum) |path| {
                     const nyquist, const nt = .{ std.math.pi / dt, @as(T, @floatFromInt(sigma.length())) };
 
-                    try writeMatrixLspace(T, io, path, sigma.asMatrix(), -nyquist, nyquist * (nt - 2) / nt);
+                    try writeMatrixLinspace(T, io, path, sigma.asMatrix(), -nyquist, nyquist * (nt - 2) / nt);
                 }
             }
 
             var result_sigma: ?Matrix(T) = null;
 
             if (opt.flux_analysis) |flux_opt| {
-                var fa = try FluxAnalysis(T).init(opt, pot, gpa);
+                var fa = try FluxAnalysis(T).init(opt, gpa);
                 defer fa.deinit(gpa);
 
                 var sigma = try fa.run(grid, self.wfn_init.?, self.flux_acc.?, gpa);
                 errdefer sigma.deinit(gpa);
 
                 if (flux_opt.write.cross_section) |path| {
-                    try writeMatrixLspace(T, io, path, sigma, flux_opt.e_min - fa.e_thrs, flux_opt.e_max - fa.e_thrs);
+                    const e_min: T, const e_max: T = .{ @floatCast(flux_opt.e_min), @floatCast(flux_opt.e_max) };
+
+                    if (flux_opt.logarithmic) {
+                        try writeMatrixLogspace(T, io, path, sigma, e_min, e_max);
+                    } else {
+                        try writeMatrixLinspace(T, io, path, sigma, e_min, e_max);
+                    }
                 }
 
                 result_sigma = sigma;
@@ -580,7 +589,11 @@ fn PartialWaveContext(comptime T: type) type {
                 if (res.cross_section) |*s_j| {
                     const fa = opt.flux_analysis.?;
 
+                    var p_prev: T, var e_prev: T = .{ 0, FluxAnalysis(T).getCollisionEnergy(fa, 0) };
+
                     for (0..s_j.nrow()) |ei| {
+                        const e_curr = FluxAnalysis(T).getCollisionEnergy(fa, ei);
+
                         var p_row: T = 0;
 
                         for (0..s_j.ncol()) |col| {
@@ -591,7 +604,11 @@ fn PartialWaveContext(comptime T: type) type {
 
                         if (p_row > p_peak) p_peak = p_row;
 
-                        p_integ += p_row * fa.e_step;
+                        if (ei > 0) {
+                            p_integ += 0.5 * (p_prev + p_row) * (e_curr - e_prev);
+                        }
+
+                        p_prev, e_prev = .{ p_row, e_curr };
                     }
 
                     if (thread_sigma) |sigma| {
@@ -604,7 +621,7 @@ fn PartialWaveContext(comptime T: type) type {
                         const factor = dj * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
 
                         for (0..s_j.nrow()) |ei| {
-                            const E = fa.e_min + @as(T, @floatFromInt(ei)) * fa.e_step;
+                            const E = FluxAnalysis(T).getCollisionEnergy(fa, ei);
 
                             if (E <= 0) continue;
 
@@ -1247,8 +1264,14 @@ fn checkInvalidInput(opt: Options) !void {
             return error.InvalidInput;
         }
 
-        if (flux.e_step <= 0) {
-            std.log.err("FLUX ANALYSIS E_STEP MUST BE GREATER THAN 0", .{});
+        if (flux.npoint < 2) {
+            std.log.err("FLUX ANALYSIS NPOINT MUST BE AT LEAST 2", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (flux.logarithmic and flux.e_min <= 0) {
+            std.log.err("LOGARITHMIC FLUX ANALYSIS REQUIRES POSITIVE E_MIN", .{});
 
             return error.InvalidInput;
         }
@@ -1532,7 +1555,13 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
     };
 
     if (total) |t| if (pw.write.cross_section) |cs| {
-        try writeMatrixLspace(T, io, cs, t, fa.e_min, fa.e_max);
+        const e_min: T, const e_max: T = .{ @floatCast(fa.e_min), @floatCast(fa.e_max) };
+
+        if (fa.logarithmic) {
+            try writeMatrixLogspace(T, io, cs, t, e_min, e_max);
+        } else {
+            try writeMatrixLinspace(T, io, cs, t, e_min, e_max);
+        }
     };
 
     return Result(T){ .observables = .empty, .cross_section = total };
@@ -1540,14 +1569,12 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
 
 /// Propagates the wavepacket over the specified iterations using split-operator steps.
 fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Result(T) {
-    var opt = ctx.opt;
+    const opt = ctx.opt;
 
-    if (opt.flux_analysis) |*fa| {
-        const e_thrs = try FluxAnalysis(T).getThreshold(opt, ctx.sim.epoten, gpa);
-
-        fa.e_min += e_thrs;
-        fa.e_max += e_thrs;
-    }
+    const e_thrs = if (opt.flux_analysis != null)
+        try FluxAnalysis(T).getThreshold(opt, ctx.sim.epoten, gpa)
+    else
+        0;
 
     const ndim, const nstate, const npoint = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate(), opt.grid.npoint };
 
@@ -1563,6 +1590,8 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Re
 
     var hist = try History(T).init(ndim, nstate, npoint, opt.iterations + 1, opt.write, c_acf, opt, gpa);
     defer hist.deinit(gpa);
+
+    hist.e_thrs = e_thrs;
 
     if (opt.initial_conditions.adiabatic) {
         try ctx.sim.wfn.toDia(ctx.sim.hams, ctx.sim.wfn_kpgrids, ctx.sim.epoten, 0, gpa);

@@ -33,7 +33,13 @@ test "Adiabatic RTP on Tully's First Potential" {
 test "Diabatic RTP on Tully's First Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+            .gamma = &.{2},
+            .adiabatic = false,
+        },
         .potential = .{ .tully_1 = .{} },
         .mass = &.{2000},
         .iterations = 2000,
@@ -83,7 +89,13 @@ test "Adiabatic RTP on Tully's Second Potential" {
 test "Diabatic RTP on Tully's Second Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+            .gamma = &.{2},
+            .adiabatic = false,
+        },
         .potential = .{ .tully_2 = .{} },
         .mass = &.{2000},
         .iterations = 2000,
@@ -133,7 +145,13 @@ test "Adiabatic RTP on Tully's Third Potential" {
 test "Diabatic RTP on Tully's Third Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 512 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+            .gamma = &.{2},
+            .adiabatic = false,
+        },
         .potential = .{ .tully_3 = .{} },
         .mass = &.{2000},
         .iterations = 2000,
@@ -285,7 +303,7 @@ test "Adiabatic RTP Cross Section on Tully's First Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.005,
             .e_max = 0.225,
-            .e_step = 0.01,
+            .npoint = 23,
         },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -310,7 +328,13 @@ test "Adiabatic RTP Cross Section on Tully's First Potential" {
 test "Diabatic RTP Cross Section on Tully's First Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 256 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+            .gamma = &.{2},
+            .adiabatic = false,
+        },
         .potential = .{ .tully_1 = .{} },
         .absorbing_potential = .{
             .bounds = &.{.{ -18, 18 }},
@@ -321,7 +345,7 @@ test "Diabatic RTP Cross Section on Tully's First Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.005,
             .e_max = 0.225,
-            .e_step = 0.01,
+            .npoint = 23,
         },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -357,7 +381,7 @@ test "Adiabatic RTP Cross Section on Tully's Second Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.04,
             .e_max = 0.24,
-            .e_step = 0.01,
+            .npoint = 21,
         },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -382,7 +406,13 @@ test "Adiabatic RTP Cross Section on Tully's Second Potential" {
 test "Diabatic RTP Cross Section on Tully's Second Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 256 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+            .gamma = &.{2},
+            .adiabatic = false,
+        },
         .potential = .{ .tully_2 = .{} },
         .absorbing_potential = .{
             .bounds = &.{.{ -18, 18 }},
@@ -393,7 +423,7 @@ test "Diabatic RTP Cross Section on Tully's Second Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.04,
             .e_max = 0.24,
-            .e_step = 0.01,
+            .npoint = 21,
         },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -429,7 +459,7 @@ test "Adiabatic RTP Cross Section on Tully's Third Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.005,
             .e_max = 0.225,
-            .e_step = 0.01,
+            .npoint = 23,
         },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -454,7 +484,13 @@ test "Adiabatic RTP Cross Section on Tully's Third Potential" {
 test "Diabatic RTP Cross Section on Tully's Third Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 256 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+            .gamma = &.{2},
+            .adiabatic = false,
+        },
         .potential = .{ .tully_3 = .{} },
         .absorbing_potential = .{
             .bounds = &.{.{ -18, 18 }},
@@ -465,7 +501,7 @@ test "Diabatic RTP Cross Section on Tully's Third Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.005,
             .e_max = 0.225,
-            .e_step = 0.01,
+            .npoint = 23,
         },
         .mass = &.{2000},
         .iterations = 1000000,
@@ -501,7 +537,7 @@ test "Adiabatic RTP Partial Waves on Tully's First Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.005,
             .e_max = 0.225,
-            .e_step = 0.01,
+            .npoint = 23,
         },
         .partial_waves = .{ .max = 1 },
         .mass = &.{2000},
@@ -527,7 +563,13 @@ test "Adiabatic RTP Partial Waves on Tully's First Potential" {
 test "Diabatic RTP Partial Waves on Tully's First Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 256 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+            .gamma = &.{2},
+            .adiabatic = false,
+        },
         .potential = .{ .tully_1 = .{} },
         .absorbing_potential = .{
             .bounds = &.{.{ -18, 18 }},
@@ -538,7 +580,7 @@ test "Diabatic RTP Partial Waves on Tully's First Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.005,
             .e_max = 0.225,
-            .e_step = 0.01,
+            .npoint = 23,
         },
         .partial_waves = .{ .max = 1 },
         .mass = &.{2000},
@@ -575,7 +617,7 @@ test "Adiabatic RTP Partial Waves on Tully's Second Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.04,
             .e_max = 0.24,
-            .e_step = 0.01,
+            .npoint = 21,
         },
         .partial_waves = .{ .max = 1 },
         .mass = &.{2000},
@@ -601,7 +643,13 @@ test "Adiabatic RTP Partial Waves on Tully's Second Potential" {
 test "Diabatic RTP Partial Waves on Tully's Second Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 256 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+            .gamma = &.{2},
+            .adiabatic = false,
+        },
         .potential = .{ .tully_2 = .{} },
         .absorbing_potential = .{
             .bounds = &.{.{ -18, 18 }},
@@ -612,7 +660,7 @@ test "Diabatic RTP Partial Waves on Tully's Second Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.04,
             .e_max = 0.24,
-            .e_step = 0.01,
+            .npoint = 21,
         },
         .partial_waves = .{ .max = 1 },
         .mass = &.{2000},
@@ -649,7 +697,7 @@ test "Adiabatic RTP Partial Waves on Tully's Third Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.005,
             .e_max = 0.225,
-            .e_step = 0.01,
+            .npoint = 23,
         },
         .partial_waves = .{ .max = 1 },
         .mass = &.{2000},
@@ -675,7 +723,13 @@ test "Adiabatic RTP Partial Waves on Tully's Third Potential" {
 test "Diabatic RTP Partial Waves on Tully's Third Potential" {
     const opt = zinq.quantum_dynamics.Options{
         .grid = .{ .bounds = &.{.{ -24, 32 }}, .npoint = 256 },
-        .initial_conditions = .{ .momentum = &.{15}, .position = &.{-10}, .state = 0, .gamma = &.{2}, .adiabatic = false },
+        .initial_conditions = .{
+            .momentum = &.{15},
+            .position = &.{-10},
+            .state = 0,
+            .gamma = &.{2},
+            .adiabatic = false,
+        },
         .potential = .{ .tully_3 = .{} },
         .absorbing_potential = .{
             .bounds = &.{.{ -18, 18 }},
@@ -686,7 +740,7 @@ test "Diabatic RTP Partial Waves on Tully's Third Potential" {
             .flux_bounds = &.{.{ -15, 15 }},
             .e_min = 0.005,
             .e_max = 0.225,
-            .e_step = 0.01,
+            .npoint = 23,
         },
         .partial_waves = .{ .max = 1 },
         .mass = &.{2000},

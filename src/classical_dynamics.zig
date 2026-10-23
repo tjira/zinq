@@ -29,7 +29,7 @@ const printf = @import("read_write.zig").printf;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 const syevd = @import("linear_algebra.zig").syevd;
 const syevdBatch = @import("linear_algebra.zig").syevdBatch;
-const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
+const writeMatrixLinspace = @import("read_write.zig").writeMatrixLinspace;
 const writeXyzFrame = @import("read_write.zig").writeXyzFrame;
 const writeXyzMomentumFrame = @import("read_write.zig").writeXyzMomentumFrame;
 const writeXyzMomentumTrajectory = @import("read_write.zig").writeXyzMomentumTrajectory;
@@ -1183,7 +1183,7 @@ fn History(comptime T: type) type {
                 }
 
                 if (atoms.len == 0) {
-                    try writeMatrixLspace(T, io, path, self.pos.?.takeRows(self.index), 0, end);
+                    try writeMatrixLinspace(T, io, path, self.pos.?.takeRows(self.index), 0, end);
                 }
             }
 
@@ -1193,36 +1193,36 @@ fn History(comptime T: type) type {
                 }
 
                 if (atoms.len == 0) {
-                    try writeMatrixLspace(T, io, path, self.mom.?.takeRows(self.index), 0, end);
+                    try writeMatrixLinspace(T, io, path, self.mom.?.takeRows(self.index), 0, end);
                 }
             }
 
             if (write.population) |path| {
-                try writeMatrixLspace(T, io, path, self.pop.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.pop.?.takeRows(self.index), 0, end);
             }
 
             if (write.potential_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.epot.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.epot.?.takeRows(self.index), 0, end);
             }
 
             if (write.state_coefficient) |path| {
-                try writeMatrixLspace(T, io, path, self.state_coef.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.state_coef.?.takeRows(self.index), 0, end);
             }
 
             if (write.state_potential_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.state_epot.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.state_epot.?.takeRows(self.index), 0, end);
             }
 
             if (write.kinetic_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.ekin.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.ekin.?.takeRows(self.index), 0, end);
             }
 
             if (write.temperature) |path| {
-                try writeMatrixLspace(T, io, path, self.temp.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.temp.?.takeRows(self.index), 0, end);
             }
 
             if (write.total_energy) |path| {
-                try writeMatrixLspace(T, io, path, self.etot.?.takeRows(self.index), 0, end);
+                try writeMatrixLinspace(T, io, path, self.etot.?.takeRows(self.index), 0, end);
             }
         }
     };

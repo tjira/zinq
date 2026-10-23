@@ -13,7 +13,6 @@ const Vector = @import("tensor.zig").Vector;
 const fft = @import("fourier_transform.zig").fft;
 const fftn = @import("fourier_transform.zig").fftn;
 const syevd = @import("linear_algebra.zig").syevd;
-const writeMatrixLspace = @import("read_write.zig").writeMatrixLspace;
 
 /// Holds all parameter configuration, input matrices, and grid references required for computing transition probabilities.
 pub fn FluxAnalysis(comptime T: type) type {
@@ -25,13 +24,79 @@ pub fn FluxAnalysis(comptime T: type) type {
         e_max: T,
         initk: T,
 
-        e_thrs: T,
-        e_step: T,
         weight: T,
 
         flux_bounds: []const [2]T,
 
+        npoint: usize,
+        logarithmic: bool,
+
         dt: T,
+
+        /// Initializes flux analysis parameters and allocates momentum and boundary vectors.
+        pub fn init(opt: anytype, gpa: Allocator) !@This() {
+            const flux_opt = opt.flux_analysis.?;
+
+            const mass = try gpa.dupe(T, opt.mass);
+            errdefer gpa.free(mass);
+
+            const gammas = try gpa.dupe(T, opt.initial_conditions.gamma);
+            errdefer gpa.free(gammas);
+
+            const f_bounds = try gpa.dupe([2]T, flux_opt.flux_bounds);
+            errdefer gpa.free(f_bounds);
+
+            var r_perp: T = 1;
+
+            for (1..gammas.len) |i| if (!(opt.grid.cylindrical and i == gammas.len - 1)) {
+                r_perp *= std.math.sqrt(gammas[i] / std.math.pi);
+            };
+
+            const weight = if (opt.grid.cylindrical) (std.math.pi / gammas[gammas.len - 1]) / r_perp else 1 / r_perp;
+
+            var ctx: @This() = undefined;
+
+            ctx.e_min = @floatCast(flux_opt.e_min);
+            ctx.e_max = @floatCast(flux_opt.e_max);
+
+            ctx.npoint, ctx.logarithmic = .{ flux_opt.npoint, flux_opt.logarithmic };
+
+            ctx.dt = @floatCast(opt.time_step);
+
+            ctx.gmma, ctx.weight, ctx.mass, ctx.flux_bounds = .{ gammas, weight, mass, f_bounds };
+
+            ctx.initk = @abs(opt.initial_conditions.momentum[0]);
+
+            return ctx;
+        }
+
+        /// Deallocates the dynamically allocated slices in the context.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            gpa.free(self.mass);
+            gpa.free(self.gmma);
+
+            gpa.free(self.flux_bounds);
+        }
+
+        /// Computes the collision energy for the given index.
+        pub fn getCollisionEnergy(opt: anytype, i: usize) T {
+            if (opt.npoint <= 1) return @floatCast(opt.e_min);
+
+            const fi = @as(T, @floatFromInt(i));
+
+            const fn_minus_1 = @as(T, @floatFromInt(opt.npoint - 1));
+
+            if (opt.logarithmic) {
+                const log_min = std.math.log10(@as(T, @floatCast(opt.e_min)));
+                const log_max = std.math.log10(@as(T, @floatCast(opt.e_max)));
+
+                return std.math.pow(T, 10, log_min + fi * (log_max - log_min) / fn_minus_1);
+            }
+
+            const e_min: T, const e_max: T = .{ @floatCast(opt.e_min), @floatCast(opt.e_max) };
+
+            return e_min + fi * (e_max - e_min) / fn_minus_1;
+        }
 
         /// Computes the reactant asymptotic threshold energy (potential energy plus transversal zero-point energy).
         pub fn getThreshold(opt: anytype, pot: Potential(T), gpa: Allocator) !T {
@@ -79,50 +144,6 @@ pub fn FluxAnalysis(comptime T: type) type {
             return Vreact + e_perp;
         }
 
-        /// Extracts necessary parameters and computes reactant potential energy directly during initialization.
-        pub fn init(opt: anytype, pot: Potential(T), gpa: Allocator) !@This() {
-            const flux_opt = opt.flux_analysis.?;
-
-            const e_thrs = try getThreshold(opt, pot, gpa);
-
-            const mass = try gpa.dupe(T, opt.mass);
-            errdefer gpa.free(mass);
-
-            const gammas = try gpa.dupe(T, opt.initial_conditions.gamma);
-            errdefer gpa.free(gammas);
-
-            const f_bounds = try gpa.dupe([2]T, flux_opt.flux_bounds);
-            errdefer gpa.free(f_bounds);
-
-            var r_perp: T = 1;
-
-            for (1..gammas.len) |i| if (!(opt.grid.cylindrical and i == gammas.len - 1)) {
-                r_perp *= std.math.sqrt(gammas[i] / std.math.pi);
-            };
-
-            const weight = if (opt.grid.cylindrical) (std.math.pi / gammas[gammas.len - 1]) / r_perp else 1 / r_perp;
-
-            var ctx: @This() = undefined;
-
-            ctx.e_min = flux_opt.e_min;
-            ctx.e_max = flux_opt.e_max;
-
-            ctx.e_step, ctx.dt, ctx.e_thrs = .{ flux_opt.e_step, opt.time_step, e_thrs };
-            ctx.gmma, ctx.weight, ctx.mass, ctx.flux_bounds = .{ gammas, weight, mass, f_bounds };
-
-            ctx.initk = @abs(opt.initial_conditions.momentum[0]);
-
-            return ctx;
-        }
-
-        /// Deallocates the dynamically allocated slices in the context.
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            gpa.free(self.mass);
-            gpa.free(self.gmma);
-
-            gpa.free(self.flux_bounds);
-        }
-
         /// Computes transition probabilities by integrating flux of energy-resolved wavefunctions at a dividing surface.
         pub fn run(self: @This(), grid: Grid(T), wfn_init: Matrix(Complex(T)), flux_acc: Matrix(Complex(T)), gpa: Allocator) !Matrix(T) {
             var npoint: usize = 1;
@@ -131,7 +152,7 @@ pub fn FluxAnalysis(comptime T: type) type {
                 npoint += 1;
             }
 
-            const ne = @as(usize, @intFromFloat(@round((self.e_max - self.e_min) / self.e_step))) + 1;
+            const ne = self.npoint;
 
             var sigma = try Matrix(T).initZero(ne, wfn_init.nrow(), gpa);
             errdefer sigma.deinit(gpa);
@@ -165,13 +186,13 @@ pub fn FluxAnalysis(comptime T: type) type {
                 const dx_d, const m = .{ grid.getR(s_d, d) - grid.getR(0, d), self.mass[0] };
 
                 for (0..ne) |ei| {
-                    const E = self.e_min + @as(T, @floatFromInt(ei)) * self.e_step;
+                    const E = self.getCollisionEnergy(ei);
 
-                    if (E <= self.e_thrs) {
+                    if (E <= 0) {
                         continue;
                     }
 
-                    const k_inc = std.math.sqrt(2 * m * (E - self.e_thrs));
+                    const k_inc = std.math.sqrt(2 * m * E);
 
                     const exp_arg = -std.math.pow(T, k_inc - self.initk, @as(T, 2)) / (self.gmma[0]);
                     const ak = std.math.sqrt(4 * std.math.pi / self.gmma[0]) * std.math.exp(exp_arg);

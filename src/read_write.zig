@@ -316,7 +316,7 @@ pub fn writeMatrixHjoin(comptime T: type, io: std.Io, fname: []const u8, A: Matr
 }
 
 /// Writes a matrix to a file prepended with an evenly spaced coordinate/time grid column.
-pub fn writeMatrixLspace(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), start: primType(T), end: primType(T)) !void {
+pub fn writeMatrixLinspace(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), start: primType(T), end: primType(T)) !void {
     var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
     defer file.close(io);
 
@@ -331,6 +331,37 @@ pub fn writeMatrixLspace(comptime T: type, io: std.Io, fname: []const u8, A: Mat
 
     for (0..A.nrow()) |i| {
         try writer.interface.print("{d:20.14} ", .{start + dt * @as(primType(T), @floatFromInt(i))});
+
+        for (0..A.ncol()) |j| {
+            try writeElement(&writer, A.at(i, j));
+
+            try writer.interface.print("{s}", .{if (j == A.ncol() - 1) "\n" else " "});
+        }
+    }
+
+    try writer.interface.flush();
+}
+
+/// Writes a matrix to a file prepended with a logarithmically spaced coordinate grid column.
+pub fn writeMatrixLogspace(comptime T: type, io: std.Io, fname: []const u8, A: Matrix(T), start: primType(T), end: primType(T)) !void {
+    var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
+    defer file.close(io);
+
+    var buffer: [65536]u8 = undefined;
+    var writer = file.writer(io, &buffer);
+
+    const ncol = if (comptime isComplex(T)) 2 * A.ncol() else A.ncol();
+
+    try writer.interface.print("{d} {d}\n", .{ A.nrow(), ncol + 1 });
+
+    const log_start, const log_end = .{ std.math.log10(start), std.math.log10(end) };
+
+    const dt = if (A.nrow() > 1) (log_end - log_start) / @as(primType(T), @floatFromInt(A.nrow() - 1)) else 0;
+
+    for (0..A.nrow()) |i| {
+        const val = std.math.pow(primType(T), 10, log_start + dt * @as(primType(T), @floatFromInt(i)));
+
+        try writer.interface.print("{d:20.14} ", .{val});
 
         for (0..A.ncol()) |j| {
             try writeElement(&writer, A.at(i, j));
