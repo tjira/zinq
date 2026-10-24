@@ -198,7 +198,7 @@ pub fn FluxAnalysis(comptime T: type) type {
                     }
 
                     for (0..wfn_init.nrow()) |f| {
-                        const row, var sum: T = .{ ei * wfn_init.nrow() + f, 0 };
+                        const row, var sum: T = .{ f * ne + ei, 0 };
 
                         for (0..grid.nrow()) |j| {
                             temp_phi[j] = flux_acc.at(row, j);

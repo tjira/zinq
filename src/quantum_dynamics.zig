@@ -15,8 +15,8 @@ const PotentialOptions = @import("potential.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 const Wavefunction = @import("wavepacket.zig").Wavefunction;
 
-const axpy = @import("linear_algebra.zig").axpy;
 const calcSpectrum = @import("spectral_analysis.zig").calcSpectrum;
+const geru = @import("linear_algebra.zig").geru;
 const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLinspace = @import("read_write.zig").writeMatrixLinspace;
@@ -164,6 +164,7 @@ fn History(comptime T: type) type {
         wfn: ?Matrix(T) = null,
 
         flux_acc: ?Matrix(Complex(T)) = null,
+        flux_phs: ?Vector(Complex(T)) = null,
         wfn_init: ?Matrix(Complex(T)) = null,
         e_thrs: T = 0,
 
@@ -213,6 +214,8 @@ fn History(comptime T: type) type {
 
                 hist.flux_acc = try Matrix(Complex(T)).initZero(n * nstate, wfn_nrow, gpa);
 
+                hist.flux_phs = try Vector(Complex(T)).init(n, gpa);
+
                 hist.wfn_init = try Matrix(Complex(T)).init(nstate, wfn_nrow, gpa);
             }
 
@@ -234,6 +237,7 @@ fn History(comptime T: type) type {
             if (self.wfn) |*wfn| wfn.deinit(gpa);
 
             if (self.flux_acc) |*flux_acc| flux_acc.deinit(gpa);
+            if (self.flux_phs) |*flux_phs| flux_phs.deinit(gpa);
             if (self.wfn_init) |*wfn_init| wfn_init.deinit(gpa);
         }
 
@@ -247,24 +251,22 @@ fn History(comptime T: type) type {
             };
 
             if (self.flux_acc) |*accum| {
-                const flux_opt = opt.flux_analysis.?;
+                const flux_opt, const phases = .{ opt.flux_analysis.?, self.flux_phs.? };
 
-                for (0..wfn.W.nrow()) |f| {
-                    const wfn_row = wfn.W.rowSlice(f);
+                const n_energies, const n_states, const n_grid = .{ phases.length(), wfn.W.nrow(), wfn.W.ncol() };
 
-                    for (0..self.flux_acc.?.nrow() / wfn.W.nrow()) |ei| {
-                        const E = FluxAnalysis(T).getCollisionEnergy(flux_opt, ei) + self.e_thrs;
+                for (0..n_energies) |ei| {
+                    const E = FluxAnalysis(T).getCollisionEnergy(flux_opt, ei) + self.e_thrs;
 
-                        const phase = Complex(T).init(std.math.cos(E * t), std.math.sin(E * t));
+                    phases.data[ei] = Complex(T).init(std.math.cos(E * t), std.math.sin(E * t));
+                }
 
-                        const row = ei * wfn.W.nrow() + f;
+                for (0..n_states) |f| {
+                    const offset = f * n_energies * n_grid;
 
-                        var y_vec = Vector(Complex(T)).fromSlice(accum.rowSlice(row));
+                    var a_mat = Matrix(Complex(T)).fromSlice(n_energies, n_grid, accum.data[offset .. offset + n_energies * n_grid]);
 
-                        const x_vec = Vector(Complex(T)).fromSlice(wfn_row);
-
-                        axpy(Complex(T), &y_vec, x_vec, phase);
-                    }
+                    geru(Complex(T), &a_mat, phases, wfn.W.row(f), Complex(T).init(1, 0));
                 }
             }
 

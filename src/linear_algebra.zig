@@ -98,6 +98,14 @@ pub fn gemv(comptime T: type, y: *Vector(T), A: Matrix(T), x: Vector(T), alpha: 
     gemvSlice(T, y.data, A.data, x.data, A.nrow(), A.ncol(), alpha, beta, ta);
 }
 
+/// Performs a rank-1 outer product matrix update: A = alpha * x * y^T + A (GER operation).
+pub fn geru(comptime T: type, A: *Matrix(T), x: Vector(T), y: Vector(T), alpha: T) void {
+    std.debug.assert(A.nrow() == x.length());
+    std.debug.assert(A.ncol() == y.length());
+
+    geruSlice(T, A.data, x.data, y.data, A.nrow(), A.ncol(), alpha);
+}
+
 /// Computes the LU factorization of a square matrix with partial pivoting: P * A = L * U.
 pub fn getrf(comptime T: type, A: *Matrix(T), ipiv: []i32) !void {
     std.debug.assert(A.nrow() == A.ncol());
@@ -225,6 +233,26 @@ fn gemvSlice(comptime T: type, y: []T, A: []const T, x: []const T, m: usize, n: 
     const ni: i32 = @intCast(n);
 
     cblas.cblas_dgemv(cblas.CblasRowMajor, trans, mi, ni, alpha, A.ptr, ni, x.ptr, 1, beta, y.ptr, 1);
+}
+
+/// Performs a rank-1 outer product update on a row-major matrix slice using CBLAS dger or zgeru.
+fn geruSlice(comptime T: type, A: []T, x: []const T, y: []const T, m: usize, n: usize, alpha: T) void {
+    std.debug.assert(A.len == m * n);
+    std.debug.assert(x.len == m);
+    std.debug.assert(y.len == n);
+
+    if (comptime primType(T) != f64) @compileError("GERU ONLY SUPPORTS F64 NUMBERS");
+
+    const mi: i32 = @intCast(m);
+    const ni: i32 = @intCast(n);
+
+    if (comptime T == f64) {
+        cblas.cblas_dger(cblas.CblasRowMajor, mi, ni, alpha, x.ptr, 1, y.ptr, 1, A.ptr, ni);
+    }
+
+    if (comptime isComplex(T)) {
+        cblas.cblas_zgeru(cblas.CblasRowMajor, mi, ni, &alpha, x.ptr, 1, y.ptr, 1, A.ptr, ni);
+    }
 }
 
 /// Computes the LU factorization of a matrix slice using LAPACKE dgetrf.
