@@ -1128,6 +1128,12 @@ fn checkInvalidInput(opt: Options) !void {
 
             return error.InvalidInput;
         }
+
+        if (opt.flux_analysis) |fa| if (fa.flux_bounds.len > 0 and fa.flux_bounds[0][1] <= 0) {
+            std.log.err("PARTIAL WAVES REQUIRE POSITIVE FLUX BOUND", .{});
+
+            return error.InvalidInput;
+        };
     }
 
     if (opt.potential == .ab_initio) {
@@ -1260,13 +1266,13 @@ fn checkInvalidInput(opt: Options) !void {
         };
 
         if (flux.e_min < 0) {
-            std.log.err("FLUX ANALYSIS E_MIN MUST BE GREATER THAN 0", .{});
+            std.log.err("FLUX ANALYSIS E_MIN MUST BE NON-NEGATIVE", .{});
 
             return error.InvalidInput;
         }
 
         if (flux.e_max <= flux.e_min) {
-            std.log.err("FLUX ANALYSIS E_MAX MUST BE GREATER OR EQUAL THAN E_MIN", .{});
+            std.log.err("FLUX ANALYSIS E_MAX MUST BE GREATER THAN E_MIN", .{});
 
             return error.InvalidInput;
         }
