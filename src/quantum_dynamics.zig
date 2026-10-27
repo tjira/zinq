@@ -264,7 +264,9 @@ fn History(comptime T: type) type {
                 for (0..n_states) |f| {
                     const offset = f * n_energies * n_grid;
 
-                    var a_mat = Matrix(Complex(T)).fromSlice(n_energies, n_grid, accum.data[offset .. offset + n_energies * n_grid]);
+                    const slice = accum.data[offset .. offset + n_energies * n_grid];
+
+                    var a_mat = Matrix(Complex(T)).fromSlice(n_energies, n_grid, slice);
 
                     geru(Complex(T), &a_mat, phases, wfn.W.row(f), Complex(T).init(1, 0));
                 }
@@ -623,8 +625,10 @@ fn PartialWaveContext(comptime T: type) type {
 
                         const factor = dj * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
 
+                        const asymp: T = @floatCast(fa.asymptotic_offset);
+
                         for (0..s_j.nrow()) |ei| {
-                            const E = FluxAnalysis(T).getCollisionEnergy(fa, ei);
+                            const E = FluxAnalysis(T).getCollisionEnergy(fa, ei) - asymp;
 
                             if (E <= 0) continue;
 
@@ -1583,7 +1587,9 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Re
     const opt, var e_thrs: T = .{ ctx.opt, 0 };
 
     if (opt.flux_analysis) |fa| {
-        e_thrs = (try FluxAnalysis(T).getThreshold(opt, ctx.sim.epoten, gpa)) - fa.asymptotic_offset;
+        const asymp: T = @floatCast(fa.asymptotic_offset);
+
+        e_thrs = (try FluxAnalysis(T).getThreshold(opt, ctx.sim.epoten, gpa)) - asymp;
     }
 
     const ndim, const nstate, const npoint = .{ ctx.sim.epoten.ndim(), ctx.sim.epoten.nstate(), opt.grid.npoint };
