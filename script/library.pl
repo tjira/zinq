@@ -8,12 +8,13 @@ use File::Path   qw(make_path rmtree);
 use Cwd          qw(getcwd          );
 use File::Copy   qw(move copy       );
 use Getopt::Long qw(GetOptions      );
+use JSON::PP     qw(decode_json     );
 
 # DEFINE LIBRARY NAMES
 my @lib_names = qw(eigen libint libxc openblas exprtk openmp);
 
 # DEFINE BUILD OPTIONS
-my (%build, $generic);
+my (%build, %versions, $generic);
 
 # DEFINE DEFAULT TARGET
 my $target = qx(uname -m); chomp $target; $target .= "-$^O";
@@ -56,13 +57,16 @@ compile_libxc   ($prefix, $cores, $pwd          ) if $build{libxc};
 compile_openblas($prefix, $cores, $pwd, $generic) if $build{openblas};
 compile_openmp  ($prefix, $cores, $pwd          ) if $build{openmp};
 
+# WRITE LIBRARY VERSIONS METADATA
+write_versions_json($prefix, \%versions);
+
 # REMOVE COMPILER WRAPPERS
 clean_compiler_wrappers();
 
 # CLEAN LIBRARIES
 rmtree("lib") if -d "lib";
 
-# LIBRARY DOWNLOAD AND CLONING FUNCTIONS ===============================================================================
+# LIBRARY CLONING FUNCTIONS ============================================================================================
 
 sub clone_library {
     # EXTRACT ARGUMENTS
@@ -79,38 +83,61 @@ sub clone_library {
 
     # CHECKOUT THE SPECIFIC COMMIT
     system("git", "-C", "lib/$dest_name", "checkout", $commit) == 0 or die "FAILED TO CHECKOUT '$commit'";
+
+    # RECORD FORMATTED LIBRARY VERSION
+    $versions{$dest_name} = get_library_version($dest_name);
 }
 
-sub download_library {
+sub get_library_version {
     # EXTRACT ARGUMENTS
-    my ($url, $dest_name) = @_;
+    my ($dest_name) = @_;
 
-    # CREATE LIB DIRECTORY IF IT DOESN'T EXIST
-    make_path("lib") if ! -d "lib";
+    # RUN GIT DESCRIBE TO GET VERSION TAG WITH EIGHT DIGIT HASH ABBREVIATION
+    my $ver = qx(git -C lib/$dest_name describe --tags --always --abbrev=8 2>/dev/null);
 
-    # GET EXISTING PATHS IN LIB TO DETECT NEWLY EXTRACTED CONTENT
-    my %before = map {$_ => 1} glob("lib/*");
+    # REMOVE TRAILING NEWLINE FROM VERSION STRING
+    chomp $ver;
 
-    # DETERMINE TAR FLAGS BASED ON URL
-    my $tar_flags = $url =~ /\.tar\.bz2$|\.tbz2$/ ? "-xjf" : $url =~ /\.tar\.xz$|\.txz$/ ? "-xJf" : "-xzf";
+    # NORMALIZE LLVMORG PREFIX IF PRESENT
+    $ver =~ s/^llvmorg-/v/;
 
-    # COMMAND TO DOWNLOAD AND EXTRACT THE ARCHIVE USING TAR
-    my $cmd = "curl -sL -A 'Mozilla/5.0' '$url' | tar $tar_flags - -C lib";
+    # ENSURE LEADING V PREFIX
+    $ver = "v$ver" if $ver !~ /^v/ && $ver =~ /^\d+\./;
 
-    # EXECUTE THE COMMAND AND CHECK FOR SUCCESS
-    system($cmd) == 0 or die "FAILED TO DOWNLOAD/EXTRACT '$dest_name' FROM '$url'";
+    # FORMAT DISTANCE DELIMITERS TO PLUS AND DOT
+    $ver =~ s/-(\d+)-g/+$1.g/;
 
-    # FIND THE EXTRACTED PATH
-    my @paths = grep {!$before{$_}} glob("lib/*");
+    # TRUNCATE HEX HASH TO EIGHT CHARACTERS
+    $ver =~ s/(\.g|^)([0-9a-f]{8})[0-9a-f]*$/$1$2/;
 
-    # CHECK IF THE EXTRACTED PATH WAS FOUND
-    die "EXTRACTED PATH FOR '$dest_name' NOT FOUND" unless @paths;
+    # RETURN FORMATTED VERSION
+    return $ver || "UNKNOWN";
+}
 
-    # REMOVE ANY EXISTING DIRECTORY WITH THE DESTINATION NAME
-    rmtree("lib/$dest_name") if -d "lib/$dest_name";
+sub write_versions_json {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $versions) = @_;
 
-    # RENAME THE EXTRACTED PATH TO THE DESTINATION NAME
-    move($paths[0], "lib/$dest_name") or die "FAILED TO MOVE '$paths[0]' TO 'lib/$dest_name': $!";
+    # CREATE PREFIX DIRECTORY IF IT DOESN'T EXIST
+    make_path($prefix) if ! -d $prefix;
+
+    # DEFINE FILE PATH
+    my $file = "$prefix/versions.json";
+
+    # READ AND DECODE EXISTING VERSIONS IF FILE EXISTS
+    my %merged = -s $file ? %{decode_json(qx(cat '$file'))} : ();
+
+    # MERGE NEW VERSIONS
+    $merged{$_} = $versions->{$_} for keys %$versions;
+
+    # OPEN FILE FOR WRITING
+    open my $fh, '>', $file or die "CANNOT OPEN '$file': $!";
+
+    # WRITE MERGED VERSIONS AS PRETTY-PRINTED JSON
+    print $fh JSON::PP->new->pretty->sort_by->encode(\%merged);
+
+    # CLOSE FILE
+    close $fh;
 }
 
 sub create_compiler_wrappers {
@@ -187,13 +214,14 @@ sub compile_eigen {
     # EXTRACT ARGUMENTS
     my ($prefix, $cores, $pwd) = @_;
 
-    # DEFINE THE URL FOR THE EIGEN SOURCE ARCHIVE
-    my $url = "https://gitlab.com/libeigen/eigen/-/archive/5.0.0/eigen-5.0.0.tar.gz";
+    # DEFINE THE URL AND COMMIT FOR THE EIGEN REPOSITORY
+    my $url    =    "https://gitlab.com/libeigen/eigen.git";
+    my $commit = "1c67c09148a0eef07bf3278f351e75b92196c3af";
 
-    # DOWNLOAD AND EXTRACT THE LIBRARY
-    download_library($url, "eigen");
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "eigen");
 
-    # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
+    # CHANGE DIRECTORY TO THE CLONED LIBRARY
     chdir "lib/eigen" or die "CANNOT CHDIR TO 'lib/eigen': $!";
 
     # CONFIGURE COMMAND

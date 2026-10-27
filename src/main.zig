@@ -4,8 +4,6 @@ const builtin = @import("builtin");
 const config = @import("config");
 const std = @import("std");
 
-const libint = cimport.libint;
-const libxc = cimport.libxc;
 const cblas = cimport.cblas;
 
 const Allocator = std.mem.Allocator;
@@ -93,11 +91,9 @@ pub fn main(init: std.process.Init) !void {
 
     try printf(init.io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}\n\n", .{ v_major, v_minor, v_patch, config.version });
 
-    const openblas_v = std.mem.trim(u8, cblas.OPENBLAS_VERSION, "OpenBLAS ");
+    try printf(init.io, "OPENBLAS: {s}, ", .{config.openblas_version});
 
-    try printf(init.io, "OPENBLAS: v{s}, ", .{openblas_v});
-
-    try printf(init.io, "LIBINT: v{s}, LIBXC: v{s}\n", .{ libint.LIBINT_VERSION, libxc.xc_version_string() });
+    try printf(init.io, "LIBINT: {s}, LIBXC: {s}\n", .{ config.libint_version, config.libxc_version });
 
     const args = try init.minimal.args.toSlice(init.arena.allocator());
 

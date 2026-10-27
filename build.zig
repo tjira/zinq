@@ -1,11 +1,27 @@
 const std = @import("std");
 
+/// Stores version metadata for third-party quantum chemical and numerical libraries.
+const LibraryVersions = struct { libint: []const u8 = "UNKNOWN", libxc: []const u8 = "UNKNOWN", openblas: []const u8 = "UNKNOWN" };
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
 
     const zinq_module = try setupZinq(b, b.standardOptimizeOption(.{}), target);
 
     setupTests(b, zinq_module);
+}
+
+/// Extracts numerical library version identifiers from target dependency metadata.
+fn getLibraryVersions(b: *std.Build, ext: []const u8) LibraryVersions {
+    const path = std.fmt.allocPrint(b.allocator, "{s}/versions.json", .{ext}) catch return .{};
+
+    const content = std.Io.Dir.cwd().readFileAlloc(b.graph.io, path, b.allocator, .unlimited) catch return .{};
+
+    const options: std.json.ParseOptions = .{ .ignore_unknown_fields = true };
+
+    const parsed = std.json.parseFromSlice(LibraryVersions, b.allocator, content, options) catch return .{};
+
+    return parsed.value;
 }
 
 fn getTriple(b: *std.Build, target: std.Build.ResolvedTarget) ![]const u8 {
@@ -138,9 +154,21 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
 
     try linkDependencies(b, zinq_module);
 
-    const options = b.addOptions();
+    const arch, const os = .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag) };
+
+    const ext = try std.fmt.allocPrint(b.allocator, "external-{s}-{s}", .{ arch, os });
+
+    const options, const lib_versions = .{ b.addOptions(), getLibraryVersions(b, ext) };
 
     options.addOption([]const u8, "version", try getVersion(b));
+
+    const l1, const l2, const l3 = .{ "libint_version", "libxc_version", "openblas_version" };
+
+    const v1, const v2, const v3 = .{ lib_versions.libint, lib_versions.libxc, lib_versions.openblas };
+
+    options.addOption([]const u8, l1, v1);
+    options.addOption([]const u8, l2, v2);
+    options.addOption([]const u8, l3, v3);
 
     zinq_module.addOptions("config", options);
 
