@@ -62,7 +62,24 @@ clean_compiler_wrappers();
 # CLEAN LIBRARIES
 rmtree("lib") if -d "lib";
 
-# LIBRARY DOWNLOAD AND EXTRACTION FUNCTION =============================================================================
+# LIBRARY DOWNLOAD AND CLONING FUNCTIONS ===============================================================================
+
+sub clone_library {
+    # EXTRACT ARGUMENTS
+    my ($url, $commit, $dest_name) = @_;
+
+    # CREATE LIB DIRECTORY IF IT DOESN'T EXIST
+    make_path("lib") if ! -d "lib";
+
+    # REMOVE ANY EXISTING DIRECTORY WITH THE DESTINATION NAME
+    rmtree("lib/$dest_name") if -d "lib/$dest_name";
+
+    # CLONE THE REPOSITORY
+    system("git", "clone", $url, "lib/$dest_name") == 0 or die "FAILED TO CLONE '$url'";
+
+    # CHECKOUT THE SPECIFIC COMMIT
+    system("git", "-C", "lib/$dest_name", "checkout", $commit) == 0 or die "FAILED TO CHECKOUT '$commit'";
+}
 
 sub download_library {
     # EXTRACT ARGUMENTS
@@ -200,13 +217,14 @@ sub compile_libint {
     # EXTRACT ARGUMENTS
     my ($prefix, $cores, $pwd) = @_;
 
-    # DEFINE THE URL FOR THE LIBINT SOURCE ARCHIVE
-    my $url = "https://github.com/evaleev/libint/archive/refs/tags/v2.13.1.tar.gz";
+    # DEFINE THE URL AND COMMIT FOR THE LIBINT REPOSITORY
+    my $url    =    "https://github.com/evaleev/libint.git";
+    my $commit = "c77850a982244b84d8df5bb7b94ae15cee1a4263";
 
-    # DOWNLOAD AND EXTRACT THE LIBRARY
-    download_library($url, "libint");
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "libint");
 
-    # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
+    # CHANGE DIRECTORY TO THE CLONED LIBRARY
     chdir "lib/libint" or die "CANNOT CHDIR TO 'lib/libint': $!";
 
     # SAVE CURRENT ENVIRONMENT VARIABLES TO RESTORE LATER
@@ -290,13 +308,14 @@ sub compile_libxc {
     # EXTRACT ARGUMENTS
     my ($prefix, $cores, $pwd) = @_;
 
-    # DEFINE THE URL FOR THE LIBXC SOURCE ARCHIVE
-    my $url = "https://gitlab.com/libxc/libxc/-/archive/7.1.2/libxc-7.1.2.tar.bz2";
+    # DEFINE THE URL AND COMMIT FOR THE LIBXC REPOSITORY
+    my $url    =       "https://gitlab.com/libxc/libxc.git";
+    my $commit = "5a35cb5c3f43fa73c714078b7a8f835ee2f42526";
 
-    # DOWNLOAD AND EXTRACT THE LIBRARY
-    download_library($url, "libxc");
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "libxc");
 
-    # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
+    # CHANGE DIRECTORY TO THE CLONED LIBRARY
     chdir "lib/libxc" or die "CANNOT CHDIR TO 'lib/libxc': $!";
 
     # CONFIGURE COMMAND
@@ -323,13 +342,14 @@ sub compile_openblas {
     # EXTRACT ARGUMENTS
     my ($prefix, $cores, $pwd, $generic) = @_;
 
-    # DEFINE THE URL FOR THE OPENBLAS SOURCE ARCHIVE
-    my $url = "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.34/OpenBLAS-0.3.34.tar.gz";
+    # DEFINE THE URL AND COMMIT FOR THE OPENBLAS REPOSITORY
+    my $url    = "https://github.com/OpenMathLib/OpenBLAS.git";
+    my $commit =    "02a59042b41b95e3c60433bed654975d3197e01f";
 
-    # DOWNLOAD AND EXTRACT THE LIBRARY
-    download_library($url, "openblas");
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "openblas");
 
-    # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
+    # CHANGE DIRECTORY TO THE CLONED LIBRARY
     chdir "lib/openblas" or die "CANNOT CHDIR TO 'lib/openblas': $!";
 
     # MAP TARGET ARCHITECTURE AND OPERATING SYSTEM TO CMAKE CONVENTIONS
@@ -375,23 +395,12 @@ sub compile_exprtk {
     # EXTRACT ARGUMENTS
     my ($prefix, $pwd) = @_;
 
-    # DEFINE THE URL OF THE EXPRTK SOURCE ZIP FILE
-    my $url = "https://www.partow.net/downloads/exprtk.zip";
+    # DEFINE THE URL AND COMMIT FOR THE EXPRTK REPOSITORY
+    my $url    = "https://github.com/ArashPartow/exprtk.git";
+    my $commit =  "1e4a80b5ec9b4832ed59c6faa65f625a01b18ef0";
 
-    # CREATE LIB DIRECTORY IF IT DOESN'T EXIST
-    make_path("lib") if ! -d "lib";
-
-    # DEFINE THE PATH TO THE ZIP FILE
-    my $zip_file = "lib/exprtk.zip";
-
-    # DOWNLOAD THE ZIP FILE WITH A USER-AGENT HEADER
-    system("curl", "-L", "-A", "Mozilla/5.0", "--retry", "3", "-o", $zip_file, $url) == 0 or die "FAILED TO DOWNLOAD EXPRTK";
-
-    # UNPACK THE ZIP FILE
-    system("unzip", "-q", "-d", "lib", $zip_file) == 0 or die "FAILED TO UNPACK EXPRTK";
-
-    # REMOVE THE ZIP FILE
-    unlink $zip_file or warn "COULD NOT REMOVE '$zip_file': $!";
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "exprtk");
 
     # CREATE INCLUDE DIRECTORY IF IT DOESN'T EXIST
     make_path("$prefix/include") if ! -d "$prefix/include";
@@ -410,13 +419,14 @@ sub compile_openmp {
     # CHECK IF THE TARGET IS LINUX, RETURN IF NOT
     return unless $target =~ /linux/;
 
-    # DEFINE THE URL FOR THE OPENMP SOURCE ARCHIVE
-    my $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-23.1.1/llvm-project-23.1.1.src.tar.xz";
+    # DEFINE THE URL AND COMMIT FOR THE LLVM REPOSITORY
+    my $url    = "https://github.com/llvm/llvm-project.git";
+    my $commit = "0bb039df436dee7400ebfebf80a302344c075142";
 
-    # DOWNLOAD AND EXTRACT THE LIBRARY
-    download_library($url, "llvm");
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "llvm");
 
-    # CHANGE DIRECTORY TO THE EXTRACTED LIBRARY
+    # CHANGE DIRECTORY TO THE CLONED LIBRARY
     chdir "lib/llvm" or die "CANNOT CHDIR TO 'lib/llvm': $!";
 
     # CONFIGURE COMMAND
