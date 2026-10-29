@@ -532,6 +532,7 @@ fn Observables(comptime T: type) type {
 fn PartialWaveContext(comptime T: type) type {
     return struct {
         next_j: std.atomic.Value(u32),
+        in_mutx: std.Io.Mutex = .init,
 
         completed: std.atomic.Value(u32) = .init(0),
         mutx: std.atomic.Value(bool) = .init(false),
@@ -573,11 +574,17 @@ fn PartialWaveContext(comptime T: type) type {
                     fa.write.cross_section = injectAngularFname(p, j, alloc) catch null;
                 };
 
+                self.in_mutx.lockUncancelable(io);
+
                 var sim = init(T, io, opt_j, alloc) catch |err| {
+                    self.in_mutx.unlock(io);
+
                     std.log.err("FAILED TO INITIALIZE SIMULATION FOR J={d} ({s})", .{ j, @errorName(err) });
 
                     continue;
                 };
+
+                self.in_mutx.unlock(io);
 
                 defer sim.deinit(alloc);
 

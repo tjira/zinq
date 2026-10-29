@@ -400,7 +400,6 @@ sub compile_openblas {
         "-DNO_AFFINITY=ON",
         "-DNUM_THREADS=128",
         "-DTARGET=$base_target",
-        "-DUSE_LOCKING=ON",
         "-DUSE_THREAD=ON",
         $generic ? "-DDYNAMIC_ARCH=OFF" : "-DDYNAMIC_ARCH=ON",
         $target =~ /windows/i ? "-DMINGW64=ON" : (),
