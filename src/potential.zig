@@ -6,6 +6,7 @@ const libint = @import("cimport.zig").libint;
 
 const Allocator = std.mem.Allocator;
 
+const CasscfOptions = @import("casscf.zig").Options;
 const ConfigurationInteractionOptions = @import("configuration_interaction.zig").Options;
 const Expression = @import("exprtk.zig").Expression;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
@@ -15,8 +16,10 @@ const MollerPlessetOptions = @import("moller_plesset.zig").Options;
 const Value = @import("value.zig").Value;
 
 const alignPhases = @import("configuration_interaction.zig").alignPhases;
+const casscf_runFromSystem = @import("casscf.zig").runFromSystem;
 const ci_runFromSystem = @import("configuration_interaction.zig").runFromSystem;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
+const generateCasDets = @import("configuration_interaction.zig").generateCasDets;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const generatePairs = @import("configuration_interaction.zig").generatePairs;
 const hf_runFromSystem = @import("hartree_fock.zig").runFromSystem;
@@ -46,6 +49,7 @@ pub const Options = union(enum) {
 
 /// Electronic structure method configuration for on-the-fly ab initio potential evaluations.
 pub const AbInitioOptions = union(enum) {
+    casscf: CasscfOptions,
     configuration_interaction: ConfigurationInteractionOptions,
     hartree_fock: HartreeFockOptions,
     moller_plesset: MollerPlessetOptions,
@@ -342,9 +346,10 @@ fn AbInitio(comptime T: type) type {
             libint.libint_update_coords(self.msys.ptr, self.msys.coors.ptr);
 
             switch (self.options) {
+                .casscf => |opt| try self.evalGradCasscf(V, grad_V, opt, active_state, traj, eval_nacv),
+                .configuration_interaction => |opt| try self.evalGradCi(V, grad_V, opt, active_state, traj, eval_nacv),
                 .hartree_fock => |opt| try self.evalGradSingle(V, grad_V, opt, hf_runFromSystem, traj),
                 .moller_plesset => |opt| try self.evalGradSingle(V, grad_V, opt, mp_runFromSystem, traj),
-                .configuration_interaction => |opt| try self.evalGradCi(V, grad_V, opt, active_state, traj, eval_nacv),
             }
         }
 
@@ -361,6 +366,7 @@ fn AbInitio(comptime T: type) type {
         /// Returns the number of electronic states in the ab initio calculation.
         pub fn nstate(self: @This()) usize {
             return switch (self.options) {
+                .casscf => |opt| opt.nstate,
                 .configuration_interaction => |opt| opt.nstate,
 
                 inline else => 1,
@@ -379,6 +385,136 @@ fn AbInitio(comptime T: type) type {
         /// Updates potential value and gradient for a specific trajectory row and active electronic state.
         pub fn updateTrajectoryGradient(self: @This(), V: *Matrix(T), grad_V: *Matrix(T), r: Matrix(T), i: usize, active_state: usize) !void {
             try self.evalGrad(V.rowSlice(i), grad_V.rowSlice(i), r.rowSlice(i), active_state, i, false);
+        }
+
+        /// Evaluates CASSCF electronic energies, state nuclear gradients, and nonadiabatic couplings.
+        fn evalGradCasscf(self: @This(), V: []T, grad_V: []T, opt: CasscfOptions, active_state: ?usize, traj: usize, eval_nacv: bool) !void {
+            var run_opt = opt;
+
+            if (!eval_nacv) {
+                run_opt.nacv = null;
+            }
+
+            const n = self.nstate();
+
+            var active_state_arr: [1]u32 = undefined;
+
+            if (active_state) |s| {
+                active_state_arr[0] = @intCast(s);
+            }
+
+            var all_states: ?[]u32 = null;
+            defer if (all_states) |s| self.gpa.free(s);
+
+            const grad_states = if (active_state != null) &active_state_arr else blk: {
+                all_states = try self.gpa.alloc(u32, n);
+
+                for (0..n) |k| all_states.?[k] = @intCast(k);
+
+                break :blk all_states.?;
+            };
+
+            if (run_opt.gradient) |*g| switch (g.*) {
+                .analytic => |*a| a.states = grad_states,
+                .numeric => |*num| num.states = grad_states,
+            };
+
+            var auto_pairs: ?[][2]u32 = null;
+            defer if (auto_pairs) |p| self.gpa.free(p);
+
+            if (run_opt.nacv) |*nacvopt| switch (nacvopt.*) {
+                inline else => |*num| {
+                    auto_pairs = try generatePairs(n, self.gpa);
+
+                    num.pairs = auto_pairs;
+                },
+            };
+
+            while (self.Pg.items.len <= traj) try self.Pg.append(self.gpa, null);
+
+            const msys, const prev_Pg = .{ @constCast(&self.msys), self.Pg.items[traj] };
+
+            var res = try casscf_runFromSystem(T, self.inpout, run_opt, msys, prev_Pg, false, self.gpa);
+            defer res.deinit(self.gpa);
+
+            const P = res.hartree_fock.P;
+
+            if (self.Pg.items[traj] == null) {
+                self.Pg.items[traj] = try Matrix(T).init(P.nrow(), P.ncol(), self.gpa);
+            }
+
+            @memcpy(self.Pg.items[traj].?.data, P.data);
+
+            while (self.C_mo.items.len <= traj) try self.C_mo.append(self.gpa, null);
+            while (self.C_ci.items.len <= traj) try self.C_ci.append(self.gpa, null);
+
+            const flipped = try self.gpa.alloc(bool, res.C_ci.ncol());
+            defer self.gpa.free(flipped);
+
+            @memset(flipped, false);
+
+            const ncore, const mult = .{ (self.msys.nel - opt.active_electrons) / 2, opt.hartree_fock.multiplicity };
+
+            var dets = try generateCasDets(ncore, opt.active_orbitals, opt.active_electrons, mult, self.gpa);
+
+            defer {
+                for (0..dets.items.len) |idx| self.gpa.free(dets.items[idx]);
+
+                dets.deinit(self.gpa);
+            }
+
+            alignPhases(T, &res.C, &res.C_ci, self.C_mo.items[traj], self.C_ci.items[traj], dets.items, false, flipped);
+
+            if (self.C_mo.items[traj] == null) {
+                self.C_mo.items[traj] = try Matrix(T).init(res.C.nrow(), res.C.ncol(), self.gpa);
+            }
+
+            @memcpy(self.C_mo.items[traj].?.data, res.C.data);
+
+            if (self.C_ci.items[traj] == null) {
+                self.C_ci.items[traj] = try Matrix(T).init(res.C_ci.nrow(), res.C_ci.ncol(), self.gpa);
+            }
+
+            @memcpy(self.C_ci.items[traj].?.data, res.C_ci.data);
+
+            @memset(V[0 .. n * n], 0);
+
+            if (eval_nacv) {
+                @memset(grad_V[0 .. self.ndim() * n * n], 0);
+            }
+
+            for (0..n) |k| {
+                V[k * n + k] = res.energy[k];
+            }
+
+            if (res.grad.len > 0) {
+                if (active_state) |s| {
+                    for (0..self.ndim()) |j| {
+                        grad_V[j * n * n + s * n + s] = res.grad[0].data[j];
+                    }
+                }
+
+                if (active_state == null) {
+                    for (0..n) |k| for (0..self.ndim()) |j| {
+                        grad_V[j * n * n + k * n + k] = res.grad[k].data[j];
+                    };
+                }
+            }
+
+            if (auto_pairs) |pairs| {
+                for (pairs, 0..) |pair, idx| {
+                    const p0, const p1 = .{ pair[0], pair[1] };
+
+                    const sign: T = if (flipped[p0] != flipped[p1]) -1 else 1;
+
+                    for (0..self.ndim()) |j| {
+                        const val = sign * res.nacv[idx].data[j];
+
+                        grad_V[j * n * n + p0 * n + p1] = val;
+                        grad_V[j * n * n + p1 * n + p0] = -val;
+                    }
+                }
+            }
         }
 
         /// Evaluates CI electronic energies, state nuclear gradients, and nonadiabatic couplings.
@@ -429,16 +565,18 @@ fn AbInitio(comptime T: type) type {
             var res = try ci_runFromSystem(T, self.inpout, run_opt, @constCast(&self.msys), self.Pg.items[traj], false, self.gpa);
             defer res.deinit(self.gpa);
 
+            const P = res.hartree_fock.P;
+
             if (self.Pg.items[traj] == null) {
-                self.Pg.items[traj] = try Matrix(T).init(res.hartree_fock.P.nrow(), res.hartree_fock.P.ncol(), self.gpa);
+                self.Pg.items[traj] = try Matrix(T).init(P.nrow(), P.ncol(), self.gpa);
             }
 
-            @memcpy(self.Pg.items[traj].?.data, res.hartree_fock.P.data);
+            @memcpy(self.Pg.items[traj].?.data, P.data);
 
             while (self.C_mo.items.len <= traj) try self.C_mo.append(self.gpa, null);
             while (self.C_ci.items.len <= traj) try self.C_ci.append(self.gpa, null);
 
-            const flipped = try self.gpa.alloc(bool, res.C.ncol());
+            const flipped = try self.gpa.alloc(bool, res.C_ci.ncol());
             defer self.gpa.free(flipped);
 
             @memset(flipped, false);
@@ -453,7 +591,7 @@ fn AbInitio(comptime T: type) type {
                 dets.deinit(self.gpa);
             }
 
-            const hf_C, const ci_C = .{ &res.hartree_fock.C, &res.C };
+            const hf_C, const ci_C = .{ &res.hartree_fock.C, &res.C_ci };
 
             alignPhases(T, hf_C, ci_C, self.C_mo.items[traj], self.C_ci.items[traj], dets.items, gen, flipped);
 
@@ -464,10 +602,10 @@ fn AbInitio(comptime T: type) type {
             @memcpy(self.C_mo.items[traj].?.data, res.hartree_fock.C.data);
 
             if (self.C_ci.items[traj] == null) {
-                self.C_ci.items[traj] = try Matrix(T).init(res.C.nrow(), res.C.ncol(), self.gpa);
+                self.C_ci.items[traj] = try Matrix(T).init(res.C_ci.nrow(), res.C_ci.ncol(), self.gpa);
             }
 
-            @memcpy(self.C_ci.items[traj].?.data, res.C.data);
+            @memcpy(self.C_ci.items[traj].?.data, res.C_ci.data);
 
             @memset(V[0 .. n * n], 0);
 

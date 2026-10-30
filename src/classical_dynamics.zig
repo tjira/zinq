@@ -20,6 +20,7 @@ const ThermostatOptions = @import("thermostat.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 
 const calculateNormalModes = @import("frequency_analysis.zig").calculateNormalModes;
+const casscf = @import("casscf.zig");
 const configuration_interaction = @import("configuration_interaction.zig");
 const getMass = @import("constant.zig").getMass;
 const getTrajectoryPath = @import("read_write.zig").getTrajectoryPath;
@@ -1685,15 +1686,24 @@ fn checkInvalidInput(opt: Options) !void {
     if (opt.potential == .ab_initio and opt.nonadiabatic != null) {
         switch (opt.nonadiabatic.?) {
             .ehrenfest => |eh| {
-                if (opt.potential.ab_initio != .configuration_interaction) {
-                    std.log.err("AB INITIO EHRENFEST IS ONLY SUPPORTED WITH CONFIGURATION INTERACTION", .{});
+                const is_valid = switch (opt.potential.ab_initio) {
+                    .casscf, .configuration_interaction => true,
+                    else => false,
+                };
+
+                if (!is_valid) {
+                    std.log.err("AB INITIO EHRENFEST IS ONLY SUPPORTED WITH CASSCF OR CONFIGURATION INTERACTION", .{});
 
                     return error.InvalidInput;
                 }
 
-                const ci = opt.potential.ab_initio.configuration_interaction;
+                const nstate, const has_nacv = switch (opt.potential.ab_initio) {
+                    .casscf => |c| .{ c.nstate, c.nacv != null },
+                    .configuration_interaction => |ci| .{ ci.nstate, ci.nacv != null },
+                    else => unreachable,
+                };
 
-                if (ci.nstate < 2) {
+                if (nstate < 2) {
                     std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR EHRENFEST", .{});
 
                     return error.InvalidInput;
@@ -1705,8 +1715,8 @@ fn checkInvalidInput(opt: Options) !void {
                     return error.InvalidInput;
                 }
 
-                if (ci.nacv == null) {
-                    std.log.err("NACV MUST BE CONFIGURED IN CONFIGURATION INTERACTION FOR EHRENFEST", .{});
+                if (!has_nacv) {
+                    std.log.err("NACV MUST BE CONFIGURED FOR EHRENFEST", .{});
 
                     return error.InvalidInput;
                 }
@@ -1714,15 +1724,24 @@ fn checkInvalidInput(opt: Options) !void {
 
             .surface_hopping => |sh| switch (sh) {
                 .fewest_switches => |fs| {
-                    if (opt.potential.ab_initio != .configuration_interaction) {
-                        std.log.err("AB INITIO FSSH IS ONLY SUPPORTED WITH CONFIGURATION INTERACTION", .{});
+                    const is_valid = switch (opt.potential.ab_initio) {
+                        .casscf, .configuration_interaction => true,
+                        else => false,
+                    };
+
+                    if (!is_valid) {
+                        std.log.err("AB INITIO FSSH IS ONLY SUPPORTED WITH CASSCF OR CONFIGURATION INTERACTION", .{});
 
                         return error.InvalidInput;
                     }
 
-                    const ci = opt.potential.ab_initio.configuration_interaction;
+                    const nstate, const has_nacv = switch (opt.potential.ab_initio) {
+                        .casscf => |c| .{ c.nstate, c.nacv != null },
+                        .configuration_interaction => |ci| .{ ci.nstate, ci.nacv != null },
+                        else => unreachable,
+                    };
 
-                    if (ci.nstate < 2) {
+                    if (nstate < 2) {
                         std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR FSSH", .{});
 
                         return error.InvalidInput;
@@ -1734,23 +1753,32 @@ fn checkInvalidInput(opt: Options) !void {
                         return error.InvalidInput;
                     }
 
-                    if (ci.nacv == null) {
-                        std.log.err("NACV MUST BE CONFIGURED IN CONFIGURATION INTERACTION FOR FSSH", .{});
+                    if (!has_nacv) {
+                        std.log.err("NACV MUST BE CONFIGURED FOR FSSH", .{});
 
                         return error.InvalidInput;
                     }
                 },
 
                 .landau_zener => {
-                    if (opt.potential.ab_initio != .configuration_interaction) {
-                        std.log.err("AB INITIO LANDAU-ZENER IS ONLY SUPPORTED WITH CONFIGURATION INTERACTION", .{});
+                    const is_valid = switch (opt.potential.ab_initio) {
+                        .casscf, .configuration_interaction => true,
+                        else => false,
+                    };
+
+                    if (!is_valid) {
+                        std.log.err("LANDAU-ZENER ONLY SUPPORTS CASSCF OR CONFIGURATION INTERACTION", .{});
 
                         return error.InvalidInput;
                     }
 
-                    const ci = opt.potential.ab_initio.configuration_interaction;
+                    const nstate = switch (opt.potential.ab_initio) {
+                        .casscf => |c| c.nstate,
+                        .configuration_interaction => |ci| ci.nstate,
+                        else => unreachable,
+                    };
 
-                    if (ci.nstate < 2) {
+                    if (nstate < 2) {
                         std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR LANDAU-ZENER", .{});
 
                         return error.InvalidInput;
@@ -1840,26 +1868,14 @@ fn checkInvalidInput(opt: Options) !void {
     }
 
     if (opt.potential == .ab_initio) switch (opt.potential.ab_initio) {
-        .hartree_fock => if (opt.initial_conditions.state > 0) {
-            std.log.err("REQUESTED ELECTRONIC STATE IS NOT SUPPORTED FOR HARTREE-FOCK POTENTIAL", .{});
-
-            return error.InvalidInput;
-        },
-
-        .moller_plesset => if (opt.initial_conditions.state > 0) {
-            std.log.err("REQUESTED ELECTRONIC STATE IS NOT SUPPORTED FOR MOLLER-PLESSET POTENTIAL", .{});
-
-            return error.InvalidInput;
-        },
-
-        .configuration_interaction => |ci| {
-            if (opt.initial_conditions.state >= ci.nstate) {
-                std.log.err("REQUESTED ELECTRONIC STATE EXCEEDS NUMBER OF CONFIGURATION INTERACTION STATES", .{});
+        inline .casscf, .configuration_interaction => |cas_or_ci| {
+            if (opt.initial_conditions.state >= cas_or_ci.nstate) {
+                std.log.err("REQUESTED ELECTRONIC STATE EXCEEDS NUMBER OF ELECTRONIC STATES", .{});
 
                 return error.InvalidInput;
             }
 
-            if (ci.gradient) |grad| {
+            if (cas_or_ci.gradient) |grad| {
                 const grad_states = switch (grad) {
                     inline else => |g| g.states,
                 };
@@ -1871,7 +1887,7 @@ fn checkInvalidInput(opt: Options) !void {
                 }
             }
 
-            if (ci.nacv) |nacv| {
+            if (cas_or_ci.nacv) |nacv| {
                 const nacv_pairs = switch (nacv) {
                     inline else => |n| n.pairs,
                 };
@@ -1883,11 +1899,23 @@ fn checkInvalidInput(opt: Options) !void {
                 }
             }
 
-            if (ci.nacv != null and ci.nstate < 2) {
+            if (cas_or_ci.nacv != null and cas_or_ci.nstate < 2) {
                 std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR NACV CALCULATION", .{});
 
                 return error.InvalidInput;
             }
+        },
+
+        .hartree_fock => if (opt.initial_conditions.state > 0) {
+            std.log.err("REQUESTED ELECTRONIC STATE IS NOT SUPPORTED FOR HARTREE-FOCK POTENTIAL", .{});
+
+            return error.InvalidInput;
+        },
+
+        .moller_plesset => if (opt.initial_conditions.state > 0) {
+            std.log.err("REQUESTED ELECTRONIC STATE IS NOT SUPPORTED FOR MOLLER-PLESSET POTENTIAL", .{});
+
+            return error.InvalidInput;
         },
     };
 
@@ -2181,6 +2209,20 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, h
 /// Samples initial Cartesian phase space coordinates from ab initio quantum harmonic oscillator Wigner distributions.
 fn sampleWignerAbInitio(comptime T: type, io: std.Io, ensemble: *Ensemble(T), opt: Options, gpa: Allocator) !void {
     switch (getWignerMethod(opt)) {
+        .casscf => |cas_opt| {
+            var res = try casscf.run(T, io, cas_opt, true, gpa);
+            defer res.deinit(gpa);
+
+            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.hartree_fock.ints.sys, opt, gpa);
+        },
+
+        .configuration_interaction => |ci_opt| {
+            var res = try configuration_interaction.run(T, io, ci_opt, true, gpa);
+            defer res.deinit(gpa);
+
+            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.hartree_fock.ints.sys, opt, gpa);
+        },
+
         .hartree_fock => |hf_opt| {
             var res = try hartree_fock.run(T, io, hf_opt, true, gpa);
             defer res.deinit(gpa);
@@ -2190,13 +2232,6 @@ fn sampleWignerAbInitio(comptime T: type, io: std.Io, ensemble: *Ensemble(T), op
 
         .moller_plesset => |mp_opt| {
             var res = try moller_plesset.run(T, io, mp_opt, true, gpa);
-            defer res.deinit(gpa);
-
-            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.hartree_fock.ints.sys, opt, gpa);
-        },
-
-        .configuration_interaction => |ci_opt| {
-            var res = try configuration_interaction.run(T, io, ci_opt, true, gpa);
             defer res.deinit(gpa);
 
             try sampleWignerFromHessian(T, ensemble, res.hess[0], res.hartree_fock.ints.sys, opt, gpa);

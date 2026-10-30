@@ -8,6 +8,7 @@ const cblas = cimport.cblas;
 
 const Allocator = std.mem.Allocator;
 
+pub const casscf = @import("casscf.zig");
 pub const cimport = @import("cimport.zig");
 pub const classical_dynamics = @import("classical_dynamics.zig");
 pub const configuration_interaction = @import("configuration_interaction.zig");
@@ -52,6 +53,7 @@ const printf = read_write.printf;
 /// Parsed configuration options representing target molecular dynamics or electronic structure jobs.
 const Options = struct {
     zinq: []union(enum) {
+        casscf: casscf.Options,
         classical_dynamics: classical_dynamics.Options,
         configuration_interaction: configuration_interaction.Options,
         fourier_transform: fourier_transform.Options,
@@ -67,6 +69,7 @@ const Options = struct {
 
 /// Simulation runner handlers for classical dynamics, Hartree-Fock, and quantum dynamics.
 const Handlers = struct {
+    pub const casscf = @import("casscf.zig");
     pub const classical_dynamics = @import("classical_dynamics.zig");
     pub const configuration_interaction = @import("configuration_interaction.zig");
     pub const fourier_transform = @import("fourier_transform.zig");

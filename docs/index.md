@@ -9,7 +9,7 @@ Whether you are a beginner looking to understand the core physics of molecular s
 The documentation is organized into four main sections to help you find the information you need.
 
 * **Mathematical Foundations** explains the underlying mathematical tools used throughout the library, such as dual numbers for exact automatic differentiation and Runge–Kutta methods for solving ordinary differential equations.
-* **Electronic Structure** describes the methods used to calculate the static energy, forces, and states of electrons in molecules, including Hartree–Fock theory, Density Functional Theory, Møller–Plesset perturbation theory, and Configuration–Interaction methods.
+* **Electronic Structure** describes the methods used to calculate the static energy, forces, and states of electrons in molecules, including Hartree–Fock theory, Density Functional Theory, Møller–Plesset perturbation theory, Configuration–Interaction methods, and Complete Active Space Self-Consistent Field theory.
 * **Molecular Properties and Optimization** covers algorithms for exploring potential energy surfaces and analyzing molecular electronic structure, including quasi-Newton geometry optimization, harmonic vibrational frequency and thermochemical analysis, and atomic population and bond order analyses.
 * **Time Evolution and Dynamics** explains how we simulate the movements of molecules and quantum wavepackets over time, covering classical molecular dynamics, Ehrenfest dynamics, surface hopping, and grid-based split-operator wavepacket propagation.
 

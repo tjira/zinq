@@ -6,6 +6,7 @@ const cblas = @import("cimport.zig").cblas;
 
 const Allocator = std.mem.Allocator;
 
+const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
@@ -27,7 +28,6 @@ const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNu
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
 const calculateNumericalNacv = @import("nuclear_derivative.zig").calculateNumericalNacv;
 const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
-const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
@@ -128,7 +128,7 @@ pub fn Result(comptime T: type) type {
     return struct {
         hartree_fock: HartreeFockResult(T),
 
-        C: Matrix(T),
+        C_ci: Matrix(T),
 
         energy: []T,
 
@@ -140,8 +140,7 @@ pub fn Result(comptime T: type) type {
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.hartree_fock.deinit(gpa);
 
-            self.C.deinit(gpa);
-
+            self.C_ci.deinit(gpa);
             gpa.free(self.energy);
 
             for (0..self.grad.len) |i| {
@@ -218,6 +217,335 @@ pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev
     }
 }
 
+/// Builds active-space 1-particle and 2-particle reduced density matrices from CAS-CI coefficients.
+pub fn buildActiveRdm(comptime T: type, dets: []const []const usize, C_ci: Matrix(T), state: usize, ncore: usize, nact: usize, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+    var D_act = try Matrix(T).initZero(nact, nact, gpa);
+    errdefer D_act.deinit(gpa);
+
+    var d_act = try Tensor(T, 4).initZero(.{ nact, nact, nact, nact }, gpa);
+    errdefer d_act.deinit(gpa);
+
+    for (0..dets.len) |i| for (0..dets.len) |j| {
+        const c_prod = C_ci.at(i, state) * C_ci.at(j, state);
+
+        if (@abs(c_prod) < 1e-15) continue;
+
+        const diff = findDeterminantDifferences(dets[i], dets[j]) orelse continue;
+
+        const sA = signOfExcitations(dets[i], diff.a[0..diff.len]);
+        const sB = signOfExcitations(dets[j], diff.b[0..diff.len]);
+
+        const phase: T = if (diff.len > 0) @as(T, @floatFromInt(sA * sB)) else 1;
+
+        if (diff.len == 0) {
+            for (0..nact) |u| {
+                const pa = 2 * (ncore + u) + 0;
+                const pb = 2 * (ncore + u) + 1;
+
+                const occ_a = std.mem.indexOfScalar(usize, dets[i], pa) != null;
+                const occ_b = std.mem.indexOfScalar(usize, dets[i], pb) != null;
+
+                if (occ_a) D_act.ptr(u, u).* += c_prod;
+                if (occ_b) D_act.ptr(u, u).* += c_prod;
+
+                if (occ_a and occ_b) d_act.ptr(.{ u, u, u, u }).* += 2 * c_prod;
+
+                for (0..nact) |w| if (u != w) {
+                    const qa = 2 * (ncore + w) + 0;
+                    const qb = 2 * (ncore + w) + 1;
+
+                    const w_a = std.mem.indexOfScalar(usize, dets[i], qa) != null;
+                    const w_b = std.mem.indexOfScalar(usize, dets[i], qb) != null;
+
+                    const nu: T = (if (occ_a) @as(T, 1) else @as(T, 0)) + (if (occ_b) @as(T, 1) else @as(T, 0));
+
+                    const nw: T = (if (w_a) @as(T, 1) else @as(T, 0)) + (if (w_b) @as(T, 1) else @as(T, 0));
+
+                    d_act.ptr(.{ u, u, w, w }).* += nu * nw * c_prod;
+
+                    var exch: T = 0;
+
+                    if (occ_a and w_a) exch += 1;
+                    if (occ_b and w_b) exch += 1;
+
+                    d_act.ptr(.{ u, w, w, u }).* -= exch * c_prod;
+                };
+            }
+        }
+
+        if (diff.len == 1) {
+            const p = diff.a[0];
+            const q = diff.b[0];
+
+            if (p >= 2 * ncore and q >= 2 * ncore) {
+                const u = (p / 2) - ncore;
+                const v = (q / 2) - ncore;
+
+                if (u < nact and v < nact and (p % 2 == q % 2)) {
+                    D_act.ptr(u, v).* += c_prod * phase;
+
+                    for (0..nact) |w| {
+                        const ka = 2 * (ncore + w) + 0;
+                        const kb = 2 * (ncore + w) + 1;
+
+                        const w_a = std.mem.indexOfScalar(usize, dets[i], ka) != null;
+                        const w_b = std.mem.indexOfScalar(usize, dets[i], kb) != null;
+
+                        const nw: T = (if (w_a) @as(T, 1) else @as(T, 0)) + (if (w_b) @as(T, 1) else @as(T, 0));
+
+                        d_act.ptr(.{ u, v, w, w }).* += nw * c_prod * phase;
+
+                        var exch: T = 0;
+
+                        if ((p % 2 == 0) and w_a and ka != p and ka != q) exch += 1;
+                        if ((p % 2 == 1) and w_b and kb != p and kb != q) exch += 1;
+
+                        d_act.ptr(.{ u, w, w, v }).* -= exch * c_prod * phase;
+                    }
+                }
+            }
+        }
+
+        if (diff.len == 2) {
+            const p = diff.a[0];
+            const q = diff.a[1];
+            const r = diff.b[0];
+            const s = diff.b[1];
+
+            if (p >= 2 * ncore and q >= 2 * ncore and r >= 2 * ncore and s >= 2 * ncore) {
+                const up = (p / 2) - ncore;
+                const uq = (q / 2) - ncore;
+                const ur = (r / 2) - ncore;
+                const us = (s / 2) - ncore;
+
+                if (up < nact and uq < nact and ur < nact and us < nact) {
+                    if ((p % 2 == r % 2) and (q % 2 == s % 2)) {
+                        d_act.ptr(.{ up, ur, uq, us }).* += c_prod * phase;
+                    }
+
+                    if ((p % 2 == s % 2) and (q % 2 == r % 2)) {
+                        d_act.ptr(.{ up, us, uq, ur }).* -= c_prod * phase;
+                    }
+                }
+            }
+        }
+    };
+
+    return .{ D_act, d_act };
+}
+
+/// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
+pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+    var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
+
+    var H_MS, var g_MS = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
+
+    defer {
+        H_MS.deinit(gpa);
+        g_MS.deinit(gpa);
+    }
+
+    if (io) |out| {
+        try printf(out, " {f}\nCI MATRIX ASSEMBLY TIME:", .{timer.untilNow(out, .real)});
+
+        timer = std.Io.Timestamp.now(out, .real);
+    }
+
+    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
+    defer H_CI.deinit(gpa);
+
+    for (0..dets.len) |i| for (i..dets.len) |j| {
+        const val = slater(T, dets[i], dets[j], H_MS, g_MS);
+
+        H_CI.ptr(i, j).* = val;
+        H_CI.ptr(j, i).* = val;
+    };
+
+    if (io) |out| {
+        try printf(out, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(out, .real)});
+        timer = std.Io.Timestamp.now(out, .real);
+    }
+
+    var E, var C_ci = try solveEigenvalueProblem(T, H_CI, VN, gpa);
+
+    errdefer {
+        E.deinit(gpa);
+        C_ci.deinit(gpa);
+    }
+
+    if (io) |out| {
+        try printf(out, " {f}\n", .{timer.untilNow(out, .real)});
+    }
+
+    return .{ E, C_ci };
+}
+
+/// Compares two Slater determinants and extracts orbital differences when excitation degree is at most two.
+pub fn findDeterminantDifferences(A: []const usize, B: []const usize) ?struct { a: [2]usize, b: [2]usize, len: usize } {
+    var diff_A: [2]usize = undefined;
+    var diff_B: [2]usize = undefined;
+
+    var diff_a_len: usize = 0;
+    var diff_b_len: usize = 0;
+
+    var idx_a: usize = 0;
+    var idx_b: usize = 0;
+
+    while (idx_a < A.len and idx_b < B.len) {
+        switch (std.math.order(A[idx_a], B[idx_b])) {
+            .lt => {
+                if (diff_a_len == 2) return null;
+
+                diff_A[diff_a_len] = A[idx_a];
+
+                diff_a_len, idx_a = .{ diff_a_len + 1, idx_a + 1 };
+            },
+            .gt => {
+                if (diff_b_len == 2) return null;
+
+                diff_B[diff_b_len] = B[idx_b];
+
+                diff_b_len, idx_b = .{ diff_b_len + 1, idx_b + 1 };
+            },
+            .eq => {
+                idx_a += 1;
+                idx_b += 1;
+            },
+        }
+    }
+
+    while (idx_a < A.len) : (idx_a += 1) {
+        if (diff_a_len == 2) return null;
+
+        diff_A[diff_a_len] = A[idx_a];
+
+        diff_a_len += 1;
+    }
+
+    while (idx_b < B.len) : (idx_b += 1) {
+        if (diff_b_len == 2) return null;
+
+        diff_B[diff_b_len] = B[idx_b];
+
+        diff_b_len += 1;
+    }
+
+    if (diff_a_len != diff_b_len) return null;
+
+    return .{ .a = diff_A, .b = diff_B, .len = diff_a_len };
+}
+
+/// Generates complete active space determinants preserving closed-shell core occupations.
+pub fn generateCasDets(ncore: usize, nact: usize, nact_el: usize, mult: u32, gpa: Allocator) !std.ArrayList([]const usize) {
+    var dets = std.ArrayList([]const usize).empty;
+
+    errdefer {
+        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
+
+        dets.deinit(gpa);
+    }
+
+    if ((nact_el + mult - 1) % 2 != 0) return error.InvalidInput;
+
+    const n_alpha = (nact_el + mult - 1) / 2;
+
+    const n_beta = nact_el - n_alpha;
+
+    if (n_alpha > nact or n_beta > nact) return error.InvalidInput;
+
+    var alpha_combs = try generateCombinations(nact, n_alpha, 0, gpa);
+
+    defer {
+        for (0..alpha_combs.items.len) |i| gpa.free(alpha_combs.items[i]);
+
+        alpha_combs.deinit(gpa);
+    }
+
+    var beta_combs = try generateCombinations(nact, n_beta, 0, gpa);
+
+    defer {
+        for (0..beta_combs.items.len) |i| gpa.free(beta_combs.items[i]);
+
+        beta_combs.deinit(gpa);
+    }
+
+    const nel = 2 * ncore + nact_el;
+
+    for (alpha_combs.items) |ac| for (beta_combs.items) |bc| {
+        const det = try gpa.alloc(usize, nel);
+        errdefer gpa.free(det);
+
+        for (0..2 * ncore) |k| {
+            det[k] = k;
+        }
+
+        for (ac, 0..) |a, k| {
+            det[2 * ncore + k] = 2 * (ncore + a);
+        }
+
+        for (bc, 0..) |b, k| {
+            det[2 * ncore + n_alpha + k] = 2 * (ncore + b) + 1;
+        }
+
+        std.mem.sort(usize, det, {}, std.sort.asc(usize));
+
+        try dets.append(gpa, det);
+    };
+
+    return dets;
+}
+
+/// Generates all k-combinations from a set of size n, representing orbital indices.
+pub fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.ArrayList([]const usize) {
+    var results: std.ArrayList([]const usize) = .empty;
+
+    errdefer {
+        for (0..results.items.len) |i| gpa.free(results.items[i]);
+
+        results.deinit(gpa);
+    }
+
+    if (k > n) return results;
+
+    if (k == 0) {
+        try results.append(gpa, try gpa.alloc(usize, 0));
+
+        return results;
+    }
+
+    var current = try gpa.alloc(usize, k);
+    defer gpa.free(current);
+
+    for (0..k) |i| {
+        current[i] = i;
+    }
+
+    while (true) {
+        const copy = try gpa.alloc(usize, k);
+        errdefer gpa.free(copy);
+
+        for (0..k) |i| {
+            copy[i] = current[i] + offset;
+        }
+
+        try results.append(gpa, copy);
+
+        var i: usize = k - 1;
+
+        while (current[i] == n - k + i) : (i -= 1) {
+            if (i == 0) return results;
+        }
+
+        current[i] += 1;
+
+        for (i + 1..k) |j| {
+            current[j] = current[j - 1] + 1;
+        }
+    }
+
+    return results;
+}
+
 /// Generates excited Slater determinants up to specified excitation levels from a Hartree-Fock reference.
 pub fn generateDets(nel: usize, nsp: usize, excitations: []const u32, gpa: Allocator) !std.ArrayList([]const usize) {
     var dets = std.ArrayList([]const usize).empty;
@@ -291,6 +619,20 @@ pub fn generatePairs(n: usize, gpa: Allocator) ![][2]u32 {
     };
 
     return pairs;
+}
+
+/// Derives output paths for nonadiabatic coupling vectors by inserting state pair indices before the file extension.
+pub fn getNacvPath(path: []const u8, p0: u32, p1: u32, gpa: Allocator) ![]const u8 {
+    const ext = std.fs.path.extension(path);
+
+    return try std.fmt.allocPrint(gpa, "{s}_{d}_{d}{s}", .{ path[0 .. path.len - ext.len], p0, p1, ext });
+}
+
+/// Derives output paths for state nuclear derivatives by inserting the state index before the file extension.
+pub fn getStatePath(path: []const u8, state: u32, gpa: Allocator) ![]const u8 {
+    const ext = std.fs.path.extension(path);
+
+    return try std.fmt.allocPrint(gpa, "{s}_{d}{s}", .{ path[0 .. path.len - ext.len], state, ext });
 }
 
 /// Performs a CI calculation on a molecular system specified by file paths.
@@ -380,15 +722,14 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nORBITAL TRANSFORMS TIME:", params);
     }
 
-    var E, var C = blk: {
-        const res = try computeCiStates(T, if (log) io else null, generalized, hfres, dets.items, gpa);
+    const nrep = try hfres.ints.sys.nrep();
 
-        break :blk .{ res[0], res[1] };
-    };
+    var E, var C_ci = try computeCi(T, if (log) io else null, hfres.C, hfres.ints, dets.items, nrep, generalized, gpa);
 
     errdefer {
         E.deinit(gpa);
-        C.deinit(gpa);
+
+        C_ci.deinit(gpa);
     }
 
     if (log) {
@@ -420,7 +761,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (opt.gradient) |gradopt| switch (gradopt) {
-        .analytic => grad = try gradient(T, hfres, C, dets, grad_states, gpa),
+        .analytic => grad = try gradient(T, hfres, C_ci, dets, grad_states, gpa),
         .numeric => grad = try calculateNumericalGradient(T, ctx, runFromSystem, opt, grad_states),
     };
 
@@ -531,7 +872,18 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
     }
 
-    return Result(T){ .hartree_fock = hfres, .energy = E.data, .C = C, .grad = grad, .hess = hess, .nacv = nacv };
+    return Result(T){ .hartree_fock = hfres, .energy = E.data, .C_ci = C_ci, .grad = grad, .hess = hess, .nacv = nacv };
+}
+
+/// Computes the permutation sign (+1 or -1) associated with mapping two determinants via orbital excitations.
+pub fn signOfExcitations(S: []const usize, U: []const usize) i2 {
+    var exp: usize = 0;
+
+    for (0..U.len) |j| {
+        exp += std.mem.indexOfScalar(usize, S, U[j]).? - j;
+    }
+
+    return if (exp % 2 == 0) 1 else -1;
 }
 
 /// Computes the Hamiltonian matrix element between two Slater determinants using the Slater-Condon rules.
@@ -544,6 +896,61 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
     const phase = @as(primType(T), @floatFromInt(s_A * s_B));
 
     return evaluateSlaterCondon(T, A, diff.a, diff.b, diff.len, phase, H_MS, g_MS);
+}
+
+/// Diagonalizes the CI Hamiltonian matrix to yield state energies and coefficients.
+pub fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+    var E = try Vector(T).init(H_CI.shape[0], gpa);
+    errdefer E.deinit(gpa);
+
+    var C_ci = try Matrix(T).initZero(H_CI.shape[0], H_CI.shape[0], gpa);
+    errdefer C_ci.deinit(gpa);
+
+    try syevd(T, &E, &C_ci, H_CI);
+
+    for (0..E.length()) |i| {
+        E.ptr(i).* += VN;
+    }
+
+    return .{ E, C_ci };
+}
+
+/// Transforms one- and two-electron integrals from the atomic orbital basis to the molecular spin-orbital basis.
+pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+    const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
+
+    var C_SO = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_SO.deinit(gpa);
+
+    if (!generalized) {
+        ao2so_coef(T, &C_SO, C);
+    }
+
+    var H_SO = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) H_SO.deinit(gpa);
+
+    if (!generalized) {
+        ao2so_pp(T, &H_SO, H);
+    }
+
+    var g_SO = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer if (!generalized) g_SO.deinit(gpa);
+
+    if (!generalized) {
+        ao2so_pppp(T, &g_SO, g);
+    }
+
+    var H_MS = try Matrix(T).init(nsp, nsp, gpa);
+    errdefer H_MS.deinit(gpa);
+
+    ao2mo_pp(T, &H_MS, H_SO, C_SO);
+
+    var g_MS = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
+    errdefer g_MS.deinit(gpa);
+
+    try ao2mo_pppp(T, &g_MS, g_SO, C_SO, gpa);
+
+    return .{ H_MS, g_MS };
 }
 
 /// Validates input options for physical consistency and method requirements.
@@ -694,57 +1101,6 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
-/// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
-fn computeCiStates(comptime T: type, io: ?std.Io, generalized: bool, hfres: HartreeFockResult(T), dets: []const []const usize, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
-    var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
-
-    var H_MS, var g_MS = try transformInts(T, hfres.C, hfres.ints.H.?, hfres.ints.g.?, generalized, gpa);
-
-    defer {
-        H_MS.deinit(gpa);
-        g_MS.deinit(gpa);
-    }
-
-    if (io) |out| {
-        try printf(out, " {f}\nCI MATRIX ASSEMBLY TIME:", .{timer.untilNow(out, .real)});
-    }
-
-    if (io) |out| {
-        timer = std.Io.Timestamp.now(out, .real);
-    }
-
-    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
-    defer H_CI.deinit(gpa);
-
-    for (0..dets.len) |i| for (i..dets.len) |j| {
-        const val = slater(T, dets[i], dets[j], H_MS, g_MS);
-
-        H_CI.ptr(i, j).* = val;
-        H_CI.ptr(j, i).* = val;
-    };
-
-    if (io) |out| {
-        try printf(out, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(out, .real)});
-    }
-
-    if (io) |out| {
-        timer = std.Io.Timestamp.now(out, .real);
-    }
-
-    var E, var C = try solveEigenvalueProblem(T, H_CI, try hfres.ints.sys.nrep(), gpa);
-
-    errdefer {
-        E.deinit(gpa);
-        C.deinit(gpa);
-    }
-
-    if (io) |out| {
-        try printf(out, " {f}\n", .{timer.untilNow(out, .real)});
-    }
-
-    return .{ E, C };
-}
-
 /// Evaluates Hamiltonian matrix elements between Slater determinants using the Slater-Condon excitation rules.
 fn evaluateSlaterCondon(comptime T: type, A: []const usize, diff_a: [2]usize, diff_b: [2]usize, len: usize, phase: primType(T), H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
     switch (len) {
@@ -793,128 +1149,8 @@ fn evaluateSlaterCondon(comptime T: type, A: []const usize, diff_a: [2]usize, di
     }
 }
 
-/// Compares two Slater determinants and extracts orbital differences when excitation degree is at most two.
-fn findDeterminantDifferences(A: []const usize, B: []const usize) ?struct { a: [2]usize, b: [2]usize, len: usize } {
-    var diff_A: [2]usize = undefined;
-    var diff_B: [2]usize = undefined;
-
-    var diff_a_len: usize = 0;
-    var diff_b_len: usize = 0;
-
-    var idx_a: usize = 0;
-    var idx_b: usize = 0;
-
-    while (idx_a < A.len and idx_b < B.len) {
-        switch (std.math.order(A[idx_a], B[idx_b])) {
-            .lt => {
-                if (diff_a_len == 2) return null;
-
-                diff_A[diff_a_len] = A[idx_a];
-
-                diff_a_len, idx_a = .{ diff_a_len + 1, idx_a + 1 };
-            },
-            .gt => {
-                if (diff_b_len == 2) return null;
-
-                diff_B[diff_b_len] = B[idx_b];
-
-                diff_b_len, idx_b = .{ diff_b_len + 1, idx_b + 1 };
-            },
-            .eq => {
-                idx_a += 1;
-                idx_b += 1;
-            },
-        }
-    }
-
-    while (idx_a < A.len) : (idx_a += 1) {
-        if (diff_a_len == 2) return null;
-
-        diff_A[diff_a_len] = A[idx_a];
-
-        diff_a_len += 1;
-    }
-
-    while (idx_b < B.len) : (idx_b += 1) {
-        if (diff_b_len == 2) return null;
-
-        diff_B[diff_b_len] = B[idx_b];
-
-        diff_b_len += 1;
-    }
-
-    if (diff_a_len != diff_b_len) return null;
-
-    return .{ .a = diff_A, .b = diff_B, .len = diff_a_len };
-}
-
-/// Generates all k-combinations from a set of size n, representing orbital indices.
-fn generateCombinations(n: usize, k: usize, offset: usize, gpa: Allocator) !std.ArrayList([]const usize) {
-    var results: std.ArrayList([]const usize) = .empty;
-
-    errdefer {
-        for (0..results.items.len) |i| gpa.free(results.items[i]);
-
-        results.deinit(gpa);
-    }
-
-    if (k > n) return results;
-
-    if (k == 0) {
-        try results.append(gpa, try gpa.alloc(usize, 0));
-
-        return results;
-    }
-
-    var current = try gpa.alloc(usize, k);
-    defer gpa.free(current);
-
-    for (0..k) |i| {
-        current[i] = i;
-    }
-
-    while (true) {
-        const copy = try gpa.alloc(usize, k);
-        errdefer gpa.free(copy);
-
-        for (0..k) |i| {
-            copy[i] = current[i] + offset;
-        }
-
-        try results.append(gpa, copy);
-
-        var i: usize = k - 1;
-
-        while (current[i] == n - k + i) : (i -= 1) {
-            if (i == 0) return results;
-        }
-
-        current[i] += 1;
-
-        for (i + 1..k) |j| {
-            current[j] = current[j - 1] + 1;
-        }
-    }
-
-    return results;
-}
-
-/// Derives output paths for nonadiabatic coupling vectors by inserting state pair indices before the file extension.
-fn getNacvPath(path: []const u8, p0: u32, p1: u32, gpa: Allocator) ![]const u8 {
-    const ext = std.fs.path.extension(path);
-
-    return try std.fmt.allocPrint(gpa, "{s}_{d}_{d}{s}", .{ path[0 .. path.len - ext.len], p0, p1, ext });
-}
-
-/// Derives output paths for state nuclear derivatives by inserting the state index before the file extension.
-fn getStatePath(path: []const u8, state: u32, gpa: Allocator) ![]const u8 {
-    const ext = std.fs.path.extension(path);
-
-    return try std.fmt.allocPrint(gpa, "{s}_{d}{s}", .{ path[0 .. path.len - ext.len], state, ext });
-}
-
 /// Computes analytic nuclear gradients of CI state energies using dual number differentiation.
-fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: std.ArrayList([]const usize), states: []const u32, gpa: Allocator) ![]Matrix(T) {
+fn gradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matrix(T), dets: std.ArrayList([]const usize), states: []const u32, gpa: Allocator) ![]Matrix(T) {
     const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
 
     var grads = try gpa.alloc(Matrix(T), states.len);
@@ -965,21 +1201,13 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), dets: s
             g_MS_d.deinit(gpa);
         }
 
-        var H_CI_d = try Matrix(ScalarDual(T)).init(dets.items.len, dets.items.len, gpa);
-        defer H_CI_d.deinit(gpa);
-
         for (0..dets.items.len) |a| for (a..dets.items.len) |b| {
+            const factor: T = if (a == b) 1 else 2;
+
             const val = slater(ScalarDual(T), dets.items[a], dets.items[b], H_MS_d, g_MS_d);
 
-            H_CI_d.ptr(a, b).* = val;
-            H_CI_d.ptr(b, a).* = val;
-        };
-
-        for (0..dets.items.len) |a| for (0..dets.items.len) |b| {
-            const der = H_CI_d.at(a, b).der;
-
             for (states, 0..) |s, s_idx| {
-                grads[s_idx].ptr(i / 3, i % 3).* += C.at(a, s) * C.at(b, s) * der;
+                grads[s_idx].ptr(i / 3, i % 3).* += factor * C_ci.at(a, s) * C_ci.at(b, s) * val.der;
             }
         };
     }
@@ -1024,70 +1252,4 @@ fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: 
     }
 
     return hess;
-}
-
-/// Computes the permutation sign (+1 or -1) associated with mapping two determinants via orbital excitations.
-fn signOfExcitations(S: []const usize, U: []const usize) i2 {
-    var exp: usize = 0;
-
-    for (0..U.len) |j| {
-        exp += std.mem.indexOfScalar(usize, S, U[j]).? - j;
-    }
-
-    return if (exp % 2 == 0) 1 else -1;
-}
-
-/// Diagonalizes the CI Hamiltonian matrix to yield state energies and coefficients.
-fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
-    var E = try Vector(T).init(H_CI.shape[0], gpa);
-    errdefer E.deinit(gpa);
-
-    var C = try Matrix(T).initZero(H_CI.shape[0], H_CI.shape[0], gpa);
-    errdefer C.deinit(gpa);
-
-    try syevd(T, &E, &C, H_CI);
-
-    for (0..E.length()) |i| {
-        E.ptr(i).* += VN;
-    }
-
-    return .{ E, C };
-}
-
-/// Transforms one- and two-electron integrals from the atomic orbital basis to the molecular spin-orbital basis.
-fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
-    const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
-
-    var C_SO = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) C_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_coef(T, &C_SO, C);
-    }
-
-    var H_SO = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) H_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_pp(T, &H_SO, H);
-    }
-
-    var g_SO = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
-    defer if (!generalized) g_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_pppp(T, &g_SO, g);
-    }
-
-    var H_MS = try Matrix(T).init(nsp, nsp, gpa);
-    errdefer H_MS.deinit(gpa);
-
-    ao2mo_pp(T, &H_MS, H_SO, C_SO);
-
-    var g_MS = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
-    errdefer g_MS.deinit(gpa);
-
-    try ao2mo_pppp(T, &g_MS, g_SO, C_SO, gpa);
-
-    return .{ H_MS, g_MS };
 }

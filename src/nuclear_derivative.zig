@@ -14,6 +14,7 @@ const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const det = @import("linear_algebra.zig").det;
 const dot = @import("linear_algebra.zig").dot;
 const gemm = @import("linear_algebra.zig").gemm;
+const generateCasDets = @import("configuration_interaction.zig").generateCasDets;
 const generateDets = @import("configuration_interaction.zig").generateDets;
 const getSymbol = @import("constant.zig").getSymbol;
 const printf = @import("read_write.zig").printf;
@@ -275,7 +276,9 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
 
     @memcpy(Pg.data, (if (@hasField(@TypeOf(res_ref), "hartree_fock")) res_ref.hartree_fock.P else res_ref.P).data);
 
-    if (res_ref.C.ncol() <= max_state) {
+    const C_ci_ref = res_ref.C_ci;
+
+    if (C_ci_ref.ncol() <= max_state) {
         std.log.err("STATE REQUESTED FOR NUMERICAL NACV IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION", .{});
 
         return error.InvalidInput;
@@ -292,16 +295,26 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
     }
 
     for (0..max_state + 1) |k| {
-        c_ref[k] = try Vector(T).init(res_ref.C.nrow(), gpa);
+        c_ref[k] = try Vector(T).init(C_ci_ref.nrow(), gpa);
 
         c_ref_done += 1;
 
-        for (0..res_ref.C.nrow()) |r| {
-            c_ref[k].data[r] = res_ref.C.at(r, k);
+        for (0..C_ci_ref.nrow()) |r| {
+            c_ref[k].data[r] = C_ci_ref.at(r, k);
         }
     }
 
-    var dets = try generateDets(sys.nel, 2 * sys.nbf, opt.excitations, gpa);
+    var dets: std.ArrayList([]const usize) = undefined;
+
+    if (comptime @hasField(@TypeOf(opt), "active_electrons")) {
+        const ncore, const mult = .{ (sys.nel - opt.active_electrons) / 2, opt.hartree_fock.multiplicity };
+
+        dets = try generateCasDets(ncore, opt.active_orbitals, opt.active_electrons, mult, gpa);
+    }
+
+    if (!comptime @hasField(@TypeOf(opt), "active_electrons")) {
+        dets = try generateDets(sys.nel, 2 * sys.nbf, opt.excitations, gpa);
+    }
 
     defer {
         for (0..dets.items.len) |i| gpa.free(dets.items[i]);
@@ -325,7 +338,7 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
 
     const nsp = 2 * sys.nbf;
 
-    const C_ref = if (@hasField(@TypeOf(res_ref), "hartree_fock")) res_ref.hartree_fock.C else res_ref.C;
+    const C_ref = if (comptime @hasField(@TypeOf(res_ref), "C")) res_ref.C else res_ref.hartree_fock.C;
 
     var C_ref_SO = if (generalized) C_ref else try Matrix(T).initZero(nsp, nsp, gpa);
     defer if (!generalized) C_ref_SO.deinit(gpa);
@@ -353,11 +366,11 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
     }
 
     for (0..max_state + 1) |k| {
-        c_m[k] = try Vector(T).init(res_ref.C.nrow(), gpa);
+        c_m[k] = try Vector(T).init(C_ci_ref.nrow(), gpa);
 
         c_m_done += 1;
 
-        c_p[k] = try Vector(T).init(res_ref.C.nrow(), gpa);
+        c_p[k] = try Vector(T).init(C_ci_ref.nrow(), gpa);
 
         c_p_done += 1;
     }
@@ -416,20 +429,23 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         defer res_p.deinit(gpa);
 
         for (0..max_state + 1) |k| {
-            for (0..res_m.C.nrow()) |r| {
-                c_m[k].data[r] = res_m.C.at(r, k);
+            const C_ci_m = res_m.C_ci;
+            const C_ci_p = res_p.C_ci;
+
+            for (0..C_ci_m.nrow()) |r| {
+                c_m[k].data[r] = C_ci_m.at(r, k);
             }
 
-            for (0..res_p.C.nrow()) |r| {
-                c_p[k].data[r] = res_p.C.at(r, k);
+            for (0..C_ci_p.nrow()) |r| {
+                c_p[k].data[r] = C_ci_p.at(r, k);
             }
         }
 
         var S_SO = try sys_m.overlapBetweenSpin(sys_p, nthreads, gpa);
         defer S_SO.deinit(gpa);
 
-        const C_m = if (@hasField(@TypeOf(res_m), "hartree_fock")) res_m.hartree_fock.C else res_m.C;
-        const C_p = if (@hasField(@TypeOf(res_p), "hartree_fock")) res_p.hartree_fock.C else res_p.C;
+        const C_m = if (comptime @hasField(@TypeOf(res_m), "C")) res_m.C else res_m.hartree_fock.C;
+        const C_p = if (comptime @hasField(@TypeOf(res_p), "C")) res_p.C else res_p.hartree_fock.C;
 
         var C_m_SO = if (generalized) C_m else C_m_buf;
 

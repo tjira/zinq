@@ -1,4 +1,5 @@
 test {
+    _ = @import("casscf.zig");
     _ = @import("classical_dynamics.zig");
     _ = @import("configuration_interaction.zig");
     _ = @import("hartree_fock.zig");

@@ -163,3 +163,29 @@ V_{\text{eff}}(r,z)=V(r,z)-\frac{\hbar^2}{8\mu_r r^2}
 $$
 
 which can be solved using standard FFT algorithms. To satisfy the physical boundary condition where the wavefunction must be zero at $r=0$, the radial grid is extended symmetrically to negative values spanning $[-R_{\max}, R_{\max}]$, and the initial wavefunction is constructed with odd symmetry as $\psi(r,z)=\text{sgn}(r)\sqrt{|r|}\Psi(r,z)$. The Cartesian kinetic energy propagator preserves this odd symmetry, guaranteeing that the wavefunction remains zero at $r=0$.
+
+### 7. Partial Wave Expansion and Total Reaction Cross Section
+
+To determine total integral reactive scattering cross sections in three-dimensional collisional dynamics, the scattering wavefunction is decomposed into partial waves indexed by the total angular momentum quantum number $J$. For each partial wave channel $J$, the effective potential on the radial coordinate $r$ receives an additional orbital centrifugal barrier defined as
+
+$$
+V_{\text{cent}}(r)=\frac{\hbar^2 J(J+1)}{2\mu r^2}
+$$
+
+where $\mu$ is the collision reduced mass along the radial reaction coordinate and $\hbar=1$ in atomic units. This centrifugal barrier suppresses reactivity at large impact parameters corresponding to high angular momenta, ensuring that the partial wave series converges within a finite number of partial waves $J \le J_{\max}$.
+
+The maximum angular momentum $J_{\max}$ required to achieve convergence can either be supplied explicitly or estimated automatically from the maximum collision energy $E_{\max}$ and the potential barrier peak height $V_{\text{peak}}$ located at $r_{\text{peak}}$ as
+
+$$
+J_{\max}=\left\lceil\sqrt{2\mu\max(1.1E_{\max}-V_{\text{peak}}, 0)}\,r_{\text{peak}}\right\rceil+4
+$$
+
+which guarantees that all open classical impact parameters capable of overcoming the effective potential barrier are captured in the dynamics.
+
+For each angular momentum $J$, the time-dependent wavepacket is propagated on the spatial grid using the split-operator method with the centrifugal term added directly to the diagonal potential energy operator. The energy-resolved reaction probability $P_J(E)$ is extracted at the dividing surface via time-to-energy Fourier transform flux analysis. The total integral reaction cross section $\sigma(E)$ is then computed by summing the degeneracy-weighted partial wave contributions as
+
+$$
+\sigma(E)=\frac{\pi}{2\mu E}\sum_{J=0}^{J_{\max}}(2J+1)\Delta J\,P_J(E)
+$$
+
+where $2J+1$ is the spatial degeneracy factor associated with the magnetic quantum number $M_J$, $E$ is the asymptotic collision energy measured relative to the reactant threshold, and $\Delta J$ is the angular momentum sampling step. Because each partial wave simulation is completely decoupled from the others, the evaluation over angular momentum channels is parallelized dynamically across multiple worker threads using atomic counters, yielding high computational throughput while preserving full quantum coherence within each partial wave channel.

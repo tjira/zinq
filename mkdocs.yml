@@ -23,6 +23,7 @@ nav:
       - Dual Numbers: dual_numbers.md
       - Runge–Kutta Methods: runge_kutta.md
   - Electronic Structure:
+      - Complete Active Space Self-Consistent Field: casscf.md
       - Density Functional Theory: density_functional_theory.md
       - Hartree–Fock Method: hartree_fock.md
       - Møller–Plesset Perturbation Theory: moller_plesset.md
