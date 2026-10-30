@@ -1360,6 +1360,45 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
+/// Evaluates the maximum partial wave from the peak of the bare interaction potential barrier.
+fn estimateMaxJ(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !u32 {
+    const fa, const npoint = .{ opt.flux_analysis.?, opt.grid.npoint };
+
+    const dr = (opt.grid.bounds[0][1] - opt.grid.bounds[0][0]) / @as(f64, @floatFromInt(npoint - 1));
+
+    const r_0, const r_flux = .{ opt.initial_conditions.position[0], fa.flux_bounds[0][1] };
+
+    var pot = try Potential(T).init(io, opt.potential, gpa);
+    defer pot.deinit(gpa);
+
+    const v_buf = try gpa.alloc(T, pot.nstate() * pot.nstate());
+    defer gpa.free(v_buf);
+
+    const r_min, const r_max = .{ @min(r_0, r_flux), @max(r_0, r_flux) };
+
+    const s_idx = opt.initial_conditions.state * (pot.nstate() + 1);
+
+    var v_peak: f64, var r_peak: f64 = .{ -std.math.inf(f64), @abs(r_flux) };
+
+    for (0..npoint) |i| {
+        const r = opt.grid.bounds[0][0] + @as(f64, @floatFromInt(i)) * dr;
+
+        if (r < r_min or r > r_max) continue;
+
+        const r_t: T = @floatCast(r);
+
+        try pot.eval(T, v_buf, &.{r_t}, 0);
+
+        const v: f64 = @floatCast(v_buf[s_idx]);
+
+        if (v > v_peak) v_peak, r_peak = .{ v, @max(@abs(r), dr) };
+    }
+
+    const k_eff = std.math.sqrt(2 * opt.mass[0] * @max(1.1 * fa.e_max - v_peak, 0));
+
+    return @max(@as(u32, @intFromFloat(@ceil(k_eff * r_peak))) + 4, 1);
+}
+
 /// Initializes the grid, wavefunction, Hamiltonian, and Fourier plans.
 fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationState(T) {
     var pot = try Potential(T).init(io, opt.potential, gpa);
@@ -1518,9 +1557,7 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
     const pw = opt.partial_waves.?;
     const fa = opt.flux_analysis.?;
 
-    const k_max = std.math.sqrt(2 * opt.mass[0] * fa.e_max);
-
-    const j_max = pw.max orelse @max(@as(u32, @intFromFloat(@ceil(k_max * fa.flux_bounds[0][1]))), 1);
+    const j_max = if (pw.max) |m| m else try estimateMaxJ(T, io, opt, gpa);
 
     const nthreads = @min(pw.threads orelse 1, j_max / pw.step + 1);
 
