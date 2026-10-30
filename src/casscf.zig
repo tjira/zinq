@@ -59,6 +59,7 @@ pub const Options = struct {
     nstate: u32 = 1,
     nthreads: u32 = 1,
     optimize: ?OptimizeOptions = null,
+    orbital_threshold: f64 = 1e-6,
     threshold: f64 = 1e-8,
     write: Write = .{},
 };
@@ -339,14 +340,14 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
             try printf(io, fmt, .{ iter + 1, ci_E, de, grad_norm, time_str });
         }
 
-        if (iter > 0 and e_diff < opt.threshold and grad_norm < @max(10 * opt.threshold, 1e-5)) {
+        if (iter > 0 and e_diff < opt.threshold and grad_norm < opt.orbital_threshold) {
             break;
         }
 
         if (iter < opt.iterations - 1) {
             try computeOrbitalStep(T, &C, g_orb, F_diag, D_act, ncore, nact, gpa);
         }
-    }
+    } else return error.CasscfDidNotConverge;
 
     try canonicalizeOrbitals(T, &C, hfres.ints, ncore, nact, gpa);
 
@@ -674,7 +675,7 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
-    if (opt.nthreads == 0 or opt.iterations == 0 or opt.threshold <= 0 or opt.nstate == 0) {
+    if (opt.nthreads == 0 or opt.iterations == 0 or opt.threshold <= 0 or opt.orbital_threshold <= 0 or opt.nstate == 0) {
         std.log.err("INVALID THREADS, ITERATIONS, THRESHOLD, OR NSTATE", .{});
 
         return error.InvalidInput;
