@@ -60,7 +60,7 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
   Perform arbitrary-order Møller–Plesset perturbation theory and arbitrary-excitation CI.
 
 * **Multireference Methods**  
-  Perform Complete Active Space Self-Consistent Field (CASSCF) calculations with simultaneous orbital and CI optimization.
+  Perform CASSCF calculations with simultaneous orbital and CI optimization.
 
 * **Nuclear Derivatives & Vibrational Analysis**  
   Compute analytic or numerical gradients, numerical Hessians, and harmonic vibrational frequencies.
