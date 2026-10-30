@@ -57,3 +57,4 @@
 - [x] Disable nonadiabatic coupling evaluation in AbInitio when updating active-state gradient after a surface hop.
 - [x] Allow ab initio Wigner sampling to inherit the method and molecular system from the potential configuration.
 - [x] Validate that Granucci-Persico decoherence parameter alpha is positive and non-NaN.
+- [ ] Implement electronic state tracking (root following via CI wavefunction overlaps) in CASSCF and excited-state dynamics to prevent root flipping at crossings.

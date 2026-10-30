@@ -80,13 +80,13 @@ pub fn calculateNumericalGradient(comptime T: type, ctx: DerivativeContext(T), r
 
                 const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
 
-                if (states.len > 1) {
+                if (comptime @hasField(@TypeOf(opt), "nstate")) {
                     const fmt = "NUCLEAR GRADIENT STATE {d} FOR ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
 
                     try printf(io, fmt, .{ s, i, sym, dirs[j], grad[s_idx].at(i, j) });
                 }
 
-                if (states.len == 1) {
+                if (!comptime @hasField(@TypeOf(opt), "nstate")) {
                     const fmt = "NUCLEAR GRADIENT FOR ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
 
                     try printf(io, fmt, .{ i, sym, dirs[j], grad[s_idx].at(i, j) });
@@ -169,14 +169,14 @@ pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), ru
 
                 const sym, const dirs = .{ try getSymbol(sys.atoms[at]), &[_][]const u8{ "'x'", "'y'", "'z'" } };
 
-                if (states.len > 1) {
+                if (comptime @hasField(@TypeOf(opt), "nstate")) {
                     const fmt = "NUCLEAR HESSIAN STATE {d} FOR ATOM {d:02} ({s:2}) DIR {s} AND " ++
                         "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
                     try printf(io, fmt, .{ s, at, sym, dirs[a % 3], at, sym, dirs[a % 3], hess[s_idx].at(a, a) });
                 }
 
-                if (states.len == 1) {
+                if (!comptime @hasField(@TypeOf(opt), "nstate")) {
                     const fmt = "NUCLEAR HESSIAN FOR ATOM {d:02} ({s:2}) DIR {s} AND " ++
                         "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
@@ -203,14 +203,14 @@ pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), ru
 
                     const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
 
-                    if (states.len > 1) {
+                    if (comptime @hasField(@TypeOf(opt), "nstate")) {
                         const fmt = "NUCLEAR HESSIAN STATE {d} FOR ATOM {d:02} ({s:2}) DIR {s} AND " ++
                             "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
                         try printf(io, fmt, .{ s, a / 3, sym_a, dirs[a % 3], b / 3, sym_b, dirs[b % 3], val });
                     }
 
-                    if (states.len == 1) {
+                    if (!comptime @hasField(@TypeOf(opt), "nstate")) {
                         const fmt = "NUCLEAR HESSIAN FOR ATOM {d:02} ({s:2}) DIR {s} AND " ++
                             "ATOM {d:02} ({s:2}) DIR {s}: {d:20.14}\n";
 
@@ -539,18 +539,10 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
 
                 const sym = try getSymbol(sys.atoms[i]);
 
-                if (pairs.len > 1) {
-                    const fmt = "NONADIABATIC COUPLING STATES {d}/{d} FOR ATOM {d:02} ({s:2}) " ++
-                        "IN DIRECTION {s}: {d:20.14}\n";
+                const fmt = "NONADIABATIC COUPLING STATES {d}/{d} FOR ATOM {d:02} ({s:2}) " ++
+                    "IN DIRECTION {s}: {d:20.14}\n";
 
-                    try printf(io, fmt, .{ pair[0], pair[1], i, sym, dirs[j], nacvs[p_idx].at(i, j) });
-                }
-
-                if (pairs.len == 1) {
-                    const fmt = "NONADIABATIC COUPLING FOR ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
-
-                    try printf(io, fmt, .{ i, sym, dirs[j], nacvs[p_idx].at(i, j) });
-                }
+                try printf(io, fmt, .{ pair[0], pair[1], i, sym, dirs[j], nacvs[p_idx].at(i, j) });
             }
         }
     };

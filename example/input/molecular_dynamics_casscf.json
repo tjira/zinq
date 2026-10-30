@@ -1,0 +1,34 @@
+{
+    "zinq" : [
+        {
+            "classical_dynamics" : {
+                "initial_conditions" : {
+                    "distribution" : {
+                        "wigner" : {}
+                    }
+                },
+                "iterations" : 100,
+                "potential" : {
+                    "ab_initio" : {
+                        "casscf" : {
+                            "hartree_fock" : {
+                                "basis" : "builtin:sto-3g",
+                                "system" : "example/molecule/H2.xyz"
+                            },
+                            "active_electrons" : 2,
+                            "active_orbitals" : 2,
+                            "gradient" : {
+                                "analytic" : {}
+                            }
+                        }
+                    }
+                },
+                "stream" : {
+                    "position" : "trajectory.xyz"
+                },
+                "time_step" : 10,
+                "trajectories" : 10
+            }
+        }
+    ]
+}

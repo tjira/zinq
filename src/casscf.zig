@@ -59,8 +59,9 @@ pub const Options = struct {
     nstate: u32 = 1,
     nthreads: u32 = 1,
     optimize: ?OptimizeOptions = null,
-    orbital_threshold: f64 = 1e-4,
+    orbital_threshold: f64 = 1e-6,
     threshold: f64 = 1e-8,
+    weights: ?[]const f64 = null,
     write: Write = .{},
 };
 
@@ -115,6 +116,12 @@ const HessianNumericOptions = struct {
 const NacvNumericOptions = struct {
     pairs: ?[]const [2]u32 = null,
     step: f64 = 1e-5,
+};
+
+/// Orbital index pair representing a non-redundant rotation parameter between subspaces.
+const OrbitalPair = struct {
+    p: usize,
+    q: usize,
 };
 
 /// Configuration options for steepest descent molecular geometry optimization.
@@ -280,6 +287,25 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     @memcpy(C.data, hfres.C.data);
 
+    const weights = try gpa.alloc(T, opt.nstate);
+    defer gpa.free(weights);
+
+    if (opt.weights) |user_w| {
+        var w_sum: f64 = 0;
+
+        for (user_w) |w| w_sum += w;
+
+        for (0..opt.nstate) |s| {
+            weights[s] = @floatCast(user_w[s] / w_sum);
+        }
+    }
+
+    if (opt.weights == null) {
+        const uniform_w = 1.0 / @as(T, @floatFromInt(opt.nstate));
+
+        @memset(weights, uniform_w);
+    }
+
     var prev_energy: T = 0;
 
     for (0..opt.iterations) |iter| {
@@ -293,17 +319,41 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
             C_ci.deinit(gpa);
         }
 
-        const ci_E = all_E.at(0);
+        var sa_E: T = 0;
 
-        const e_diff = if (iter == 0) ci_E else @abs(ci_E - prev_energy);
+        for (0..opt.nstate) |s| {
+            sa_E += weights[s] * all_E.at(s);
+        }
 
-        prev_energy = ci_E;
+        const e_diff = if (iter == 0) sa_E else @abs(sa_E - prev_energy);
 
-        var D_act, var d_act = try buildActiveRdm(T, dets.items, C_ci, 0, ncore, nact, gpa);
+        prev_energy = sa_E;
 
-        defer {
-            D_act.deinit(gpa);
-            d_act.deinit(gpa);
+        var D_act = try Matrix(T).initZero(nact, nact, gpa);
+        defer D_act.deinit(gpa);
+
+        var d_act = try Tensor(T, 4).initZero(.{ nact, nact, nact, nact }, gpa);
+        defer d_act.deinit(gpa);
+
+        for (0..opt.nstate) |s| {
+            const ws = weights[s];
+
+            if (ws == 0) continue;
+
+            var D_s, var d_s = try buildActiveRdm(T, dets.items, C_ci, s, ncore, nact, gpa);
+
+            defer {
+                D_s.deinit(gpa);
+                d_s.deinit(gpa);
+            }
+
+            for (0..D_act.data.len) |idx| {
+                D_act.data[idx] += ws * D_s.data[idx];
+            }
+
+            for (0..d_act.data.len) |idx| {
+                d_act.data[idx] += ws * d_s.data[idx];
+            }
         }
 
         var H_mo = try Matrix(T).init(nmo, nmo, gpa);
@@ -337,7 +387,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
             const de = if (iter == 0) 0 else e_diff;
 
-            try printf(io, fmt, .{ iter + 1, ci_E, de, grad_norm, time_str });
+            try printf(io, fmt, .{ iter + 1, sa_E, de, grad_norm, time_str });
         }
 
         if (iter > 0 and e_diff < opt.threshold and grad_norm < opt.orbital_threshold) {
@@ -360,21 +410,26 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
         final_C_ci.deinit(gpa);
     }
-    const final_energy = final_energies.at(0);
 
     if (log) {
         const n_states = @min(opt.nstate, final_energies.length());
 
         if (n_states == 1) {
-            try printf(io, "\nFINAL CASSCF ENERGY: {d:.14} Eh\n", .{final_energy});
+            try printf(io, "\nFINAL CASSCF ENERGY: {d:.14} Eh\n", .{final_energies.at(0)});
         }
 
         if (n_states > 1) {
             try printf(io, "\n", .{});
 
+            var final_sa_E: T = 0;
+
             for (0..n_states) |s| {
+                final_sa_E += weights[s] * final_energies.at(s);
+
                 try printf(io, "STATE {d:2} FINAL CASSCF ENERGY: {d:.14} Eh\n", .{ s, final_energies.at(s) });
             }
+
+            try printf(io, "\nSTATE-AVERAGED FINAL CASSCF ENERGY: {d:.14} Eh\n", .{final_sa_E});
         }
     }
 
@@ -391,7 +446,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (opt.gradient) |gradopt| switch (gradopt) {
-        .analytic => grad = try gradient(T, hfres, C, final_C_ci, dets.items, grad_states, gpa),
+        .analytic => grad = try gradient(T, hfres, C, final_C_ci, dets.items, weights, ncore, nact, grad_states, gpa),
         .numeric => grad = try calculateNumericalGradient(T, ctx, runFromSystem, opt, grad_states),
     };
 
@@ -405,17 +460,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTIC" else "NUMERIC";
 
         for (grad_states, 0..) |s, idx| {
-            if (grad_states.len > 1) {
-                const fmt = "\nCASSCF {s} GRADIENT FOR STATE {d} (Eh/a0)\n";
-
-                try printf(io, fmt, .{ grad_type_str, s });
-            }
-
-            if (grad_states.len == 1) {
-                const fmt = "\nCASSCF {s} GRADIENT (Eh/a0)\n";
-
-                try printf(io, fmt, .{grad_type_str});
-            }
+            try printf(io, "\nCASSCF STATE {d} {s} NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{ s, grad_type_str });
 
             for (0..grad[idx].nrow()) |j| for (0..grad[idx].ncol()) |k| {
                 try printf(io, "{d:20.14}{s}", .{ grad[idx].at(j, k), if (k == 2) "\n" else " " });
@@ -570,6 +615,67 @@ fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), F_diag: *Vector(T),
     }
 }
 
+/// Evaluates the exact analytic orbital Hessian of the state-averaged energy with respect to orbital rotations.
+fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, ncore: usize, nact: usize, gpa: Allocator) !void {
+    const nmo, const nrot = .{ H_mo.ncol(), pairs.len };
+
+    var dH = try Matrix(T).initZero(nmo, nmo, gpa);
+    defer dH.deinit(gpa);
+
+    var dg = try Tensor(T, 4).initZero(.{ nmo, nmo, nmo, nmo }, gpa);
+    defer dg.deinit(gpa);
+
+    var dF_gen = try Matrix(T).initZero(nmo, nmo, gpa);
+    defer dF_gen.deinit(gpa);
+
+    var dF_diag = try Vector(T).init(nmo, gpa);
+    defer dF_diag.deinit(gpa);
+
+    for (pairs, 0..) |pair_j, j| {
+        const p, const q = .{ pair_j.p, pair_j.q };
+
+        @memset(dH.data, 0);
+
+        for (0..nmo) |idx| {
+            dH.ptr(p, idx).* += H_mo.at(q, idx);
+            dH.ptr(q, idx).* -= H_mo.at(p, idx);
+            dH.ptr(idx, p).* += H_mo.at(idx, q);
+            dH.ptr(idx, q).* -= H_mo.at(idx, p);
+        }
+
+        @memset(dg.data, 0);
+
+        for (0..nmo) |idx_a| for (0..nmo) |idx_b| for (0..nmo) |idx_c| {
+            dg.ptr(.{ p, idx_a, idx_b, idx_c }).* += g_mo.at(.{ q, idx_a, idx_b, idx_c });
+            dg.ptr(.{ q, idx_a, idx_b, idx_c }).* -= g_mo.at(.{ p, idx_a, idx_b, idx_c });
+
+            dg.ptr(.{ idx_a, p, idx_b, idx_c }).* += g_mo.at(.{ idx_a, q, idx_b, idx_c });
+            dg.ptr(.{ idx_a, q, idx_b, idx_c }).* -= g_mo.at(.{ idx_a, p, idx_b, idx_c });
+
+            dg.ptr(.{ idx_a, idx_b, p, idx_c }).* += g_mo.at(.{ idx_a, idx_b, q, idx_c });
+            dg.ptr(.{ idx_a, idx_b, q, idx_c }).* -= g_mo.at(.{ idx_a, idx_b, p, idx_c });
+
+            dg.ptr(.{ idx_a, idx_b, idx_c, p }).* += g_mo.at(.{ idx_a, idx_b, idx_c, q });
+            dg.ptr(.{ idx_a, idx_b, idx_c, q }).* -= g_mo.at(.{ idx_a, idx_b, idx_c, p });
+        };
+
+        @memset(dF_gen.data, 0);
+
+        try buildGeneralizedFock(T, &dF_gen, &dF_diag, dH, dg, D_act, d_act, ncore, nact, gpa);
+
+        for (pairs, 0..) |pair_i, i| {
+            A.ptr(i, j).* = 2 * (dF_gen.at(pair_i.p, pair_i.q) - dF_gen.at(pair_i.q, pair_i.p));
+        }
+    }
+
+    for (0..nrot) |i| for (i + 1..nrot) |j| {
+        const avg = 0.5 * (A.at(i, j) + A.at(j, i));
+
+        A.ptr(i, j).* = avg;
+        A.ptr(j, i).* = avg;
+    };
+}
+
 /// Canonicalizes core and virtual orbital blocks by diagonalizing their respective Fock matrices.
 fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, ncore: usize, nact: usize, gpa: Allocator) !void {
     const nmo = C.ncol();
@@ -675,10 +781,38 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
-    if (opt.nthreads == 0 or opt.iterations == 0 or opt.threshold <= 0 or opt.orbital_threshold <= 0 or opt.nstate == 0) {
+    if (opt.nthreads == 0 or opt.iterations == 0 or opt.threshold <= 0 or
+        opt.orbital_threshold <= 0 or opt.nstate == 0)
+    {
         std.log.err("INVALID THREADS, ITERATIONS, THRESHOLD, OR NSTATE", .{});
 
         return error.InvalidInput;
+    }
+
+    if (opt.weights) |weights| {
+        if (weights.len != opt.nstate) {
+            std.log.err("CASSCF WEIGHTS COUNT MUST MATCH NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        }
+
+        var sum: f64 = 0;
+
+        for (weights) |w| {
+            if (w < 0) {
+                std.log.err("CASSCF STATE WEIGHTS MUST BE NON-NEGATIVE", .{});
+
+                return error.InvalidInput;
+            }
+
+            sum += w;
+        }
+
+        if (sum <= 0) {
+            std.log.err("CASSCF STATE WEIGHTS SUM MUST BE GREATER THAN ZERO", .{});
+
+            return error.InvalidInput;
+        }
     }
 
     if (opt.write.gradient != null and opt.gradient == null) {
@@ -879,8 +1013,35 @@ fn computeOrbitalStep(comptime T: type, C: *Matrix(T), g_orb: Matrix(T), F_diag:
     @memcpy(C.data, C_new.data);
 }
 
+/// Enumerates non-redundant orbital pairs across core-virtual, active-virtual, and core-active subspaces.
+fn getNonRedundantPairs(ncore: usize, nact: usize, nmo: usize, gpa: Allocator) ![]OrbitalPair {
+    const total = ncore * (nmo - ncore - nact) + nact * (nmo - ncore - nact) + ncore * nact;
+
+    var pairs, var idx: usize = .{ try gpa.alloc(OrbitalPair, total), 0 };
+
+    for (0..ncore) |j| for (ncore + nact..nmo) |b| {
+        pairs[idx] = .{ .p = b, .q = j };
+
+        idx += 1;
+    };
+
+    for (ncore..ncore + nact) |u| for (ncore + nact..nmo) |b| {
+        pairs[idx] = .{ .p = b, .q = u };
+
+        idx += 1;
+    };
+
+    for (0..ncore) |j| for (ncore..ncore + nact) |u| {
+        pairs[idx] = .{ .p = u, .q = j };
+
+        idx += 1;
+    };
+
+    return pairs;
+}
+
 /// Computes analytic nuclear gradients of CASSCF state energies using dual number differentiation.
-fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: Matrix(T), dets: []const []const usize, states: []const u32, gpa: Allocator) ![]Matrix(T) {
+fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: Matrix(T), dets: []const []const usize, weights: []const T, ncore: usize, nact: usize, states: []const u32, gpa: Allocator) ![]Matrix(T) {
     var grads = try gpa.alloc(Matrix(T), states.len);
     errdefer gpa.free(grads);
 
@@ -897,6 +1058,102 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: M
     const nmo = C.ncol();
 
     const natoms = hfres.ints.sys.atoms.len;
+
+    const pairs = try getNonRedundantPairs(ncore, nact, nmo, gpa);
+    defer gpa.free(pairs);
+
+    const nrot = pairs.len;
+
+    var D_act_SA = try Matrix(T).initZero(nact, nact, gpa);
+    defer D_act_SA.deinit(gpa);
+
+    var d_act_SA = try Tensor(T, 4).initZero(.{ nact, nact, nact, nact }, gpa);
+    defer d_act_SA.deinit(gpa);
+
+    for (0..weights.len) |s| {
+        const ws = weights[s];
+
+        if (ws == 0) continue;
+
+        var D_s, var d_s = try buildActiveRdm(T, dets, C_ci, s, ncore, nact, gpa);
+
+        defer {
+            D_s.deinit(gpa);
+            d_s.deinit(gpa);
+        }
+
+        for (0..D_act_SA.data.len) |k| D_act_SA.data[k] += ws * D_s.data[k];
+        for (0..d_act_SA.data.len) |k| d_act_SA.data[k] += ws * d_s.data[k];
+    }
+
+    var Z_mat = try gpa.alloc(Matrix(T), states.len);
+
+    defer {
+        for (0..states.len) |k| Z_mat[k].deinit(gpa);
+
+        gpa.free(Z_mat);
+    }
+
+    if (weights.len > 1 and nrot > 0) {
+        var H_mo_conv = try Matrix(T).init(nmo, nmo, gpa);
+        defer H_mo_conv.deinit(gpa);
+
+        ao2mo_pp(T, &H_mo_conv, hfres.ints.H.?, C);
+
+        var g_mo_conv = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
+        defer g_mo_conv.deinit(gpa);
+
+        try ao2mo_pppp(T, &g_mo_conv, hfres.ints.g.?, C, gpa);
+
+        var A_SA = try Matrix(T).initZero(nrot, nrot, gpa);
+        defer A_SA.deinit(gpa);
+
+        try buildOrbitalHessian(T, &A_SA, H_mo_conv, g_mo_conv, D_act_SA, d_act_SA, pairs, ncore, nact, gpa);
+
+        var F_gen_s = try Matrix(T).initZero(nmo, nmo, gpa);
+        defer F_gen_s.deinit(gpa);
+
+        var F_diag_s = try Vector(T).init(nmo, gpa);
+        defer F_diag_s.deinit(gpa);
+
+        const ipiv = try gpa.alloc(i32, nrot);
+        defer gpa.free(ipiv);
+
+        var A_LU = try Matrix(T).init(nrot, nrot, gpa);
+        defer A_LU.deinit(gpa);
+
+        @memcpy(A_LU.data, A_SA.data);
+
+        try getrf(T, &A_LU, ipiv);
+
+        for (states, 0..) |s, s_idx| {
+            Z_mat[s_idx] = try Matrix(T).initZero(nrot, 1, gpa);
+
+            var D_s, var d_s = try buildActiveRdm(T, dets, C_ci, s, ncore, nact, gpa);
+
+            defer {
+                D_s.deinit(gpa);
+                d_s.deinit(gpa);
+            }
+
+            try buildGeneralizedFock(T, &F_gen_s, &F_diag_s, H_mo_conv, g_mo_conv, D_s, d_s, ncore, nact, gpa);
+
+            var neg_g = try Matrix(T).init(nrot, 1, gpa);
+            defer neg_g.deinit(gpa);
+
+            for (pairs, 0..) |pair, i| {
+                neg_g.ptr(i, 0).* = -2 * (F_gen_s.at(pair.p, pair.q) - F_gen_s.at(pair.q, pair.p));
+            }
+
+            try getrs(T, &Z_mat[s_idx], A_LU, ipiv, neg_g);
+        }
+    }
+
+    if (weights.len == 1 or nrot == 0) {
+        for (states, 0..) |_, s_idx| {
+            Z_mat[s_idx] = try Matrix(T).initZero(nrot, 1, gpa);
+        }
+    }
 
     var H_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
     defer H_d.deinit(gpa);
@@ -966,6 +1223,42 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: M
                 grads[s_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(d1, s) * C_ci.at(d2, s) * val.der;
             }
         };
+
+        if (weights.len > 1 and nrot > 0) {
+            var dH_mo = try Matrix(T).init(nmo, nmo, gpa);
+            defer dH_mo.deinit(gpa);
+
+            var dg_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
+            defer dg_mo.deinit(gpa);
+
+            for (0..nmo) |p| for (0..nmo) |q| {
+                dH_mo.ptr(p, q).* = H_MS_d.at(2 * p, 2 * q).der;
+            };
+
+            for (0..nmo) |p| for (0..nmo) |q| for (0..nmo) |r| for (0..nmo) |s| {
+                dg_mo.ptr(.{ p, q, r, s }).* = g_MS_d.at(.{ 2 * p, 2 * q, 2 * r, 2 * s }).der;
+            };
+
+            var dF_gen = try Matrix(T).initZero(nmo, nmo, gpa);
+            defer dF_gen.deinit(gpa);
+
+            var dF_diag = try Vector(T).init(nmo, gpa);
+            defer dF_diag.deinit(gpa);
+
+            try buildGeneralizedFock(T, &dF_gen, &dF_diag, dH_mo, dg_mo, D_act_SA, d_act_SA, ncore, nact, gpa);
+
+            for (states, 0..) |_, s_idx| {
+                var resp: T = 0;
+
+                for (pairs, 0..) |pair, k| {
+                    const B_k = 2 * (dF_gen.at(pair.p, pair.q) - dF_gen.at(pair.q, pair.p));
+
+                    resp += Z_mat[s_idx].at(k, 0) * B_k;
+                }
+
+                grads[s_idx].ptr(coord / 3, coord % 3).* -= resp;
+            }
+        }
     }
 
     return grads;

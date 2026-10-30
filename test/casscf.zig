@@ -22,14 +22,14 @@ test "CASSCF(2, 2) on Water with Analytical Gradient (STO-3G)" {
 
     // zig fmt: off
     const expected_grad = [_]f64{
-         0.0003680201154452,  0.0001259449883660,  0.0001476416756960,
-        -0.0002498870943641,  0.0002759871083754, -0.0002046069694993,
-        -0.0001181330210927, -0.0004019320967471,  0.0000569652938030,
+        -0.0034503490701551, -0.0011984580335957, -0.0013791045175785,
+         0.0020502567616785, -0.0010960352028815,  0.0013414661508448,
+         0.0014000923084667,  0.0022944932364693,  0.0000376383667331,
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-74.9671422267358900, res.energy[0], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5823356594350700, res.energy[1], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.9607593092007400, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5994698247005200, res.energy[1], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
@@ -59,14 +59,14 @@ test "CASSCF(2, 2) on Water with Numerical Nonadiabatic Coupling Vectors (STO-3G
 
     // zig fmt: off
     const expected_nacv = [_]f64{
-         0.0000000071154264, -0.0000000053290852, -0.0000000073865912,
-         0.0000000022172157,  0.0000000019238401, -0.0000000030282720,
-        -0.0000000033168700,  0.0000000079157723,  0.0000000006134596,
+        -0.0000000020580018,  0.0000000048290234,  0.0000000016759061,
+         0.0000000034045267,  0.0000000005827526,  0.0000000034607395,
+         0.0000000008063784, -0.0000000005184780,  0.0000000010674211,
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-74.9671422267358900, res.energy[0], TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(-74.5823356594350700, res.energy[1], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.9607593092007400, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5994698247005200, res.energy[1], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_nacv[0], res.nacv[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_nacv[1], res.nacv[0].at(0, 1), TEST_TOLERANCE);

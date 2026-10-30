@@ -1,0 +1,46 @@
+{
+    "zinq" : [
+        {
+            "classical_dynamics" : {
+                "initial_conditions" : {
+                    "distribution" : {
+                        "wigner" : {}
+                    },
+                    "state" : 1
+                },
+                "iterations" : 100,
+                "potential" : {
+                    "ab_initio" : {
+                        "casscf" : {
+                            "hartree_fock" : {
+                                "basis" : "builtin:sto-3g",
+                                "system" : "example/molecule/H2.xyz"
+                            },
+                            "active_electrons" : 2,
+                            "active_orbitals" : 2,
+                            "nstate" : 2,
+                            "gradient" : {
+                                "analytic" : {}
+                            },
+                            "nacv" : {
+                                "numeric" : {}
+                            }
+                        }
+                    }
+                },
+                "nonadiabatic" : {
+                    "ehrenfest" : {
+                        "coupling" : {
+                            "nacv" : {}
+                        }
+                    }
+                },
+                "stream" : {
+                    "position" : "trajectory.xyz"
+                },
+                "time_step" : 1,
+                "trajectories" : 10
+            }
+        }
+    ]
+}
