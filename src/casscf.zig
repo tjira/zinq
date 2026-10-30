@@ -59,7 +59,7 @@ pub const Options = struct {
     nstate: u32 = 1,
     nthreads: u32 = 1,
     optimize: ?OptimizeOptions = null,
-    orbital_threshold: f64 = 1e-6,
+    orbital_threshold: f64 = 1e-4,
     threshold: f64 = 1e-8,
     write: Write = .{},
 };
