@@ -583,7 +583,16 @@ fn AbInitio(comptime T: type) type {
 
             const gen = opt.hartree_fock.generalized;
 
-            var dets = try generateDets(self.msys.nel, 2 * self.msys.nbf, opt.excitations, self.gpa);
+            var dets = switch (opt.space) {
+                .cas => |c| blk: {
+                    const ncore = (self.msys.nel - c.active_electrons) / 2;
+
+                    const mult = opt.hartree_fock.multiplicity;
+
+                    break :blk try generateCasDets(ncore, c.active_orbitals, c.active_electrons, mult, self.gpa);
+                },
+                .excitations => |ex| try generateDets(self.msys.nel, 2 * self.msys.nbf, ex, self.gpa),
+            };
 
             defer {
                 for (0..dets.items.len) |idx| self.gpa.free(dets.items[idx]);

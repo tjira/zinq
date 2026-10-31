@@ -40,9 +40,8 @@ const syevd = @import("linear_algebra.zig").syevd;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 const writeXyzFile = @import("read_write.zig").writeXyzFile;
 
-/// Configurations for the CI calculation, excitation levels, optimization, and derivative settings.
+/// Configurations for CI determinant subspaces, active spaces, optimization, and derivative settings.
 pub const Options = struct {
-    excitations: []const u32 = &.{ 1, 2 },
     frequency: ?FrequencyOptions = null,
     gradient: ?GradientOptions = null,
     hartree_fock: HartreeFockOptions,
@@ -51,7 +50,14 @@ pub const Options = struct {
     nstate: u32 = 1,
     nthreads: u32 = 1,
     optimize: ?OptimizeOptions = null,
+    space: SpaceOptions = .{ .excitations = &.{ 1, 2 } },
     write: Write = .{},
+};
+
+/// Active space dimensions specifying active electrons and active orbitals for CASCI calculations.
+pub const CasSpaceOptions = struct {
+    active_electrons: u32,
+    active_orbitals: u32,
 };
 
 /// Options for computing CI energy gradients analytically or numerically for a specific electronic state.
@@ -74,6 +80,12 @@ pub const NacvOptions = union(enum) {
 pub const OptimizeOptions = union(enum) {
     bfgs: BfgsOptions,
     steepest_descent: SteepestDescentOptions,
+};
+
+/// Tagged union specifying determinant subspace selection via CAS or excitation levels.
+pub const SpaceOptions = union(enum) {
+    cas: CasSpaceOptions,
+    excitations: []const u32,
 };
 
 /// Configuration options for BFGS quasi-Newton molecular geometry optimization.
@@ -690,19 +702,61 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
-    if (log) {
-        try printf(io, "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCI EXCITATIONS CONSIDERED: [", .{timer.untilNow(io, .real)});
+    if (opt.space == .cas) {
+        const c = opt.space.cas;
 
-        for (0..opt.excitations.len) |i| {
-            try printf(io, "{d}{s}", .{ opt.excitations[i], if (i == opt.excitations.len - 1) "]" else ", " });
+        const nel, const nact_el, const nact = .{ hfres.ints.sys.nel, c.active_electrons, c.active_orbitals };
+
+        if (nact_el > nel or (nel - nact_el) % 2 != 0) {
+            std.log.err("ACTIVE ELECTRONS MUST BE LESS THAN OR EQUAL TO TOTAL ELECTRONS WITH CLOSED SHELL CORE", .{});
+
+            return error.InvalidInput;
         }
 
-        try printf(io, "\n\nSLATER DETERMINANT TIME:", .{});
+        const ncore = (nel - nact_el) / 2;
+
+        const nmo = if (generalized) hfres.C.ncol() / 2 else hfres.C.ncol();
+
+        if (ncore + nact > nmo) {
+            std.log.err("ACTIVE PLUS CORE ORBITALS EXCEED MOLECULAR ORBITAL COUNT", .{});
+
+            return error.InvalidInput;
+        }
+    }
+
+    if (log) {
+        switch (opt.space) {
+            .cas => |c| {
+                const fmt = "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCASCI SPACE: CAS({d}, {d})\n\nSLATER DETERMINANT TIME:";
+
+                try printf(io, fmt, .{ timer.untilNow(io, .real), c.active_electrons, c.active_orbitals });
+            },
+            .excitations => |ex| {
+                const fmt = "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCI EXCITATIONS CONSIDERED: [";
+
+                try printf(io, fmt, .{timer.untilNow(io, .real)});
+
+                for (0..ex.len) |i| {
+                    try printf(io, "{d}{s}", .{ ex[i], if (i == ex.len - 1) "]" else ", " });
+                }
+
+                try printf(io, "\n\nSLATER DETERMINANT TIME:", .{});
+            },
+        }
     }
 
     timer = std.Io.Timestamp.now(io, .real);
 
-    var dets = try generateDets(hfres.ints.sys.nel, 2 * hfres.ints.sys.nbf, opt.excitations, gpa);
+    var dets = switch (opt.space) {
+        .cas => |c| blk: {
+            const ncore = (hfres.ints.sys.nel - c.active_electrons) / 2;
+
+            const mult = opt.hartree_fock.multiplicity;
+
+            break :blk try generateCasDets(ncore, c.active_orbitals, c.active_electrons, mult, gpa);
+        },
+        .excitations => |ex| try generateDets(hfres.ints.sys.nel, 2 * hfres.ints.sys.nbf, ex, gpa),
+    };
 
     defer {
         for (0..dets.items.len) |i| gpa.free(dets.items[i]);
@@ -985,17 +1039,28 @@ fn checkInvalidInput(opt: Options) !void {
         return error.InvalidInput;
     }
 
-    if (opt.excitations.len == 0) {
-        std.log.err("CI EXCITATIONS LIST MUST NOT BE EMPTY", .{});
+    switch (opt.space) {
+        .cas => |c| {
+            if (c.active_electrons == 0 or c.active_orbitals == 0) {
+                std.log.err("CASCI ACTIVE ELECTRONS AND ACTIVE ORBITALS MUST BE GREATER THAN 0", .{});
 
-        return error.InvalidInput;
+                return error.InvalidInput;
+            }
+        },
+        .excitations => |ex| {
+            if (ex.len == 0) {
+                std.log.err("CI EXCITATIONS LIST MUST NOT BE EMPTY", .{});
+
+                return error.InvalidInput;
+            }
+
+            for (ex) |k| if (k == 0) {
+                std.log.err("CI EXCITATION LEVEL MUST BE GREATER THAN 0", .{});
+
+                return error.InvalidInput;
+            };
+        },
     }
-
-    for (opt.excitations) |k| if (k == 0) {
-        std.log.err("CI EXCITATION LEVEL MUST BE GREATER THAN 0", .{});
-
-        return error.InvalidInput;
-    };
 
     if (opt.nthreads == 0) {
         std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});

@@ -312,8 +312,21 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         dets = try generateCasDets(ncore, opt.active_orbitals, opt.active_electrons, mult, gpa);
     }
 
-    if (!comptime @hasField(@TypeOf(opt), "active_electrons")) {
-        dets = try generateDets(sys.nel, 2 * sys.nbf, opt.excitations, gpa);
+    if (comptime @hasField(@TypeOf(opt), "space")) {
+        dets = switch (opt.space) {
+            .cas => |c| blk: {
+                const ncore, const mult = .{ (sys.nel - c.active_electrons) / 2, opt.hartree_fock.multiplicity };
+
+                break :blk try generateCasDets(ncore, c.active_orbitals, c.active_electrons, mult, gpa);
+            },
+            .excitations => |ex| try generateDets(sys.nel, 2 * sys.nbf, ex, gpa),
+        };
+    }
+
+    if (!comptime @hasField(@TypeOf(opt), "active_electrons") and !@hasField(@TypeOf(opt), "space")) {
+        std.log.err("NACV CALCULATION REQUIRES EITHER ACTIVE SPACE OR EXCITATION SPACE SPECIFICATION", .{});
+
+        return error.InvalidInput;
     }
 
     defer {

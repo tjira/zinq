@@ -9,7 +9,7 @@ test "Restricted CIS on Water with Analytical Gradient (STO-3G)" {
             .system = "example/molecule/water.xyz",
             .basis = "builtin:sto-3g",
         },
-        .excitations = &.{1},
+        .space = .{ .excitations = &.{1} },
         .gradient = .{ .analytic = .{} },
     };
 
@@ -48,7 +48,7 @@ test "Generalized CIS on Water with Analytical Gradient (STO-3G)" {
             .basis = "builtin:sto-3g",
             .generalized = true,
         },
-        .excitations = &.{1},
+        .space = .{ .excitations = &.{1} },
         .gradient = .{ .analytic = .{} },
     };
 
@@ -87,7 +87,7 @@ test "Restricted CISD on Water with Analytical Gradient (STO-3G)" {
             .basis = "builtin:sto-3g",
             .diis = null,
         },
-        .excitations = &.{ 1, 2 },
+        .space = .{ .excitations = &.{ 1, 2 } },
         .gradient = .{ .analytic = .{} },
     };
 
@@ -127,7 +127,7 @@ test "Generalized CISD on Water with Analytical Gradient (STO-3G)" {
             .generalized = true,
             .diis = null,
         },
-        .excitations = &.{ 1, 2 },
+        .space = .{ .excitations = &.{ 1, 2 } },
         .gradient = .{ .analytic = .{} },
     };
 
@@ -147,6 +147,89 @@ test "Generalized CISD on Water with Analytical Gradient (STO-3G)" {
     try std.testing.expectApproxEqAbs(-74.6224197033477600, res.energy[2], TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(-74.6224197033477000, res.energy[3], TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(-74.5642383862388600, res.energy[4], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
+test "Restricted CASCI(2, 2) on Water with Analytical Gradient (STO-3G)" {
+    const opt = zinq.configuration_interaction.Options{
+        .hartree_fock = .{
+            .system = "example/molecule/water.xyz",
+            .basis = "builtin:sto-3g",
+        },
+        .space = .{
+            .cas = .{
+                .active_electrons = 2,
+                .active_orbitals = 2,
+            },
+        },
+        .nstate = 2,
+        .gradient = .{ .analytic = .{} },
+    };
+
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+        -0.0000502940916258, -0.0000190526019582, -0.0000196455021886,
+         0.0000092064654927,  0.0000889232831214, -0.0000210670833004,
+         0.0000410876244518, -0.0000698706818709,  0.0000407125851463,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-74.9671384470571100, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5822026773010000, res.energy[1], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
+test "Generalized CASCI(2, 2) on Water with Analytical Gradient (STO-3G)" {
+    const opt = zinq.configuration_interaction.Options{
+        .hartree_fock = .{
+            .system = "example/molecule/water.xyz",
+            .basis = "builtin:sto-3g",
+            .generalized = true,
+        },
+        .space = .{
+            .cas = .{
+                .active_electrons = 2,
+                .active_orbitals = 2,
+            },
+        },
+        .nstate = 2,
+        .gradient = .{ .analytic = .{} },
+    };
+
+    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+        -0.0000502940914740, -0.0000190526027297, -0.0000196455018898,
+         0.0000092064651186,  0.0000889232833729, -0.0000210670835596,
+         0.0000410876276478, -0.0000698706820921,  0.0000407125851075,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-74.9671384470570500, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.5822026772735000, res.energy[1], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
