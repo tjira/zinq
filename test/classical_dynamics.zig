@@ -206,12 +206,12 @@ test "Adiabatic Landau--Zener on Time-Linear Potential" {
     defer output.deinit(std.testing.allocator);
 
     // zig fmt: off
-    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), -10.933662718651488, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), -0.7260653668261500, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),  0.2000000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),  0.8000000000000000, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.epot.?,      60.0119988002399367, TEST_TOLERANCE);
-    try std.testing.expectApproxEqAbs(output.observables.ekin.?,       1.6087210520063333, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), -10.9336627186514880, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0),  -0.7260653668261500, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(0),   0.2000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pop.?.at(1),   0.8000000000000000, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.epot.?,       60.0119988002399367, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,        1.6087210520063333, TEST_TOLERANCE);
     // zig fmt: on
 }
 

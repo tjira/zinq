@@ -943,7 +943,7 @@ fn computeOrbitalStep(comptime T: type, C: *Matrix(T), g_orb: Matrix(T), F_diag:
     for (0..ncore) |j| for (ncore + nact..nmo) |b| {
         var denom = 4 * (F_diag.at(b) - F_diag.at(j));
 
-        if (denom < 0.1) denom = 0.1;
+        if (@abs(denom) < 0.1) denom = if (denom < 0) -0.1 else 0.1;
 
         var step = -g_orb.at(b, j) / denom;
 
@@ -961,7 +961,7 @@ fn computeOrbitalStep(comptime T: type, C: *Matrix(T), g_orb: Matrix(T), F_diag:
         for (ncore + nact..nmo) |b| {
             var denom = 2 * Duu * (F_diag.at(b) - F_diag.at(u));
 
-            if (denom < 0.1) denom = 0.1;
+            if (@abs(denom) < 0.1) denom = if (denom < 0) -0.1 else 0.1;
 
             var step = -g_orb.at(b, u) / denom;
 
@@ -974,7 +974,7 @@ fn computeOrbitalStep(comptime T: type, C: *Matrix(T), g_orb: Matrix(T), F_diag:
         for (0..ncore) |j| {
             var denom = 2 * (2 - Duu) * (F_diag.at(u) - F_diag.at(j));
 
-            if (denom < 0.1) denom = 0.1;
+            if (@abs(denom) < 0.1) denom = if (denom < 0) -0.1 else 0.1;
 
             var step = -g_orb.at(u, j) / denom;
 

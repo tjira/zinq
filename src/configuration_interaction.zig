@@ -303,16 +303,21 @@ pub fn buildActiveRdm(comptime T: type, dets: []const []const usize, C_ci: Matri
                         const w_a = std.mem.indexOfScalar(usize, dets[i], ka) != null;
                         const w_b = std.mem.indexOfScalar(usize, dets[i], kb) != null;
 
-                        const nw: T = (if (w_a) @as(T, 1) else @as(T, 0)) + (if (w_b) @as(T, 1) else @as(T, 0));
+                        const occ_ka = w_a and ka != p and ka != q;
+                        const occ_kb = w_b and kb != p and kb != q;
+
+                        const nw: T = (if (occ_ka) @as(T, 1) else @as(T, 0)) + (if (occ_kb) @as(T, 1) else @as(T, 0));
 
                         d_act.ptr(.{ u, v, w, w }).* += nw * c_prod * phase;
+                        d_act.ptr(.{ w, w, u, v }).* += nw * c_prod * phase;
 
                         var exch: T = 0;
 
-                        if ((p % 2 == 0) and w_a and ka != p and ka != q) exch += 1;
-                        if ((p % 2 == 1) and w_b and kb != p and kb != q) exch += 1;
+                        if ((p % 2 == 0) and occ_ka) exch += 1;
+                        if ((p % 2 == 1) and occ_kb) exch += 1;
 
                         d_act.ptr(.{ u, w, w, v }).* -= exch * c_prod * phase;
+                        d_act.ptr(.{ w, v, u, w }).* -= exch * c_prod * phase;
                     }
                 }
             }
@@ -333,10 +338,12 @@ pub fn buildActiveRdm(comptime T: type, dets: []const []const usize, C_ci: Matri
                 if (up < nact and uq < nact and ur < nact and us < nact) {
                     if ((p % 2 == r % 2) and (q % 2 == s % 2)) {
                         d_act.ptr(.{ up, ur, uq, us }).* += c_prod * phase;
+                        d_act.ptr(.{ uq, us, up, ur }).* += c_prod * phase;
                     }
 
                     if ((p % 2 == s % 2) and (q % 2 == r % 2)) {
                         d_act.ptr(.{ up, us, uq, ur }).* -= c_prod * phase;
+                        d_act.ptr(.{ uq, ur, up, us }).* -= c_prod * phase;
                     }
                 }
             }
