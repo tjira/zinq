@@ -5,6 +5,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
+const electronic_structure = @import("electronic_structure.zig");
+
 const Ehrenfest = @import("ehrenfest.zig").Ehrenfest;
 const EhrenfestOptions = @import("ehrenfest.zig").Options;
 const Matrix = @import("tensor.zig").Matrix;
@@ -20,12 +22,8 @@ const ThermostatOptions = @import("thermostat.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 
 const calculateNormalModes = @import("frequency_analysis.zig").calculateNormalModes;
-const casscf = @import("casscf.zig");
-const configuration_interaction = @import("configuration_interaction.zig");
 const getMass = @import("constant.zig").getMass;
 const getTrajectoryPath = @import("read_write.zig").getTrajectoryPath;
-const hartree_fock = @import("hartree_fock.zig");
-const moller_plesset = @import("moller_plesset.zig");
 const printf = @import("read_write.zig").printf;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 const syevd = @import("linear_algebra.zig").syevd;
@@ -1379,7 +1377,7 @@ fn Propagator(comptime T: type) type {
                 ens.r.ptr(i, j).* += (ens.p.at(i, j) / ens.m[j]) * self.dt;
             };
 
-            const is_ehrenfest = self.nonadia_dynamic != null and self.nonadia_dynamic.? == .ehrenfest;
+            const is_ehrenfest = if (self.nonadia_dynamic) |nd| nd == .ehrenfest else false;
 
             try gb.update(ens.r, pot, time, if (is_ehrenfest) null else ens.s.data);
 
@@ -1709,11 +1707,11 @@ fn checkInvalidInput(opt: Options) !void {
                     return error.InvalidInput;
                 }
 
-                if (eh.coupling != null and eh.coupling.? != .nacv) {
+                if (eh.coupling) |c| if (c != .nacv) {
                     std.log.err("ONLY NACV COUPLING IS SUPPORTED FOR AB INITIO EHRENFEST", .{});
 
                     return error.InvalidInput;
-                }
+                };
 
                 if (!has_nacv) {
                     std.log.err("NACV MUST BE CONFIGURED FOR EHRENFEST", .{});
@@ -1747,11 +1745,11 @@ fn checkInvalidInput(opt: Options) !void {
                         return error.InvalidInput;
                     }
 
-                    if (fs.coupling != null and fs.coupling.? != .nacv) {
+                    if (fs.coupling) |c| if (c != .nacv) {
                         std.log.err("ONLY NACV COUPLING IS SUPPORTED FOR AB INITIO FSSH", .{});
 
                         return error.InvalidInput;
-                    }
+                    };
 
                     if (!has_nacv) {
                         std.log.err("NACV MUST BE CONFIGURED FOR FSSH", .{});
@@ -2035,7 +2033,7 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
         }
     }
 
-    const is_ehrenfest = opt.nonadiabatic != null and opt.nonadiabatic.? == .ehrenfest;
+    const is_ehrenfest = if (opt.nonadiabatic) |na| na == .ehrenfest else false;
 
     try gb.update(ensemble.r, pot, 0, if (is_ehrenfest) null else ensemble.s.data);
 
@@ -2209,32 +2207,13 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, h
 /// Samples initial Cartesian phase space coordinates from ab initio quantum harmonic oscillator Wigner distributions.
 fn sampleWignerAbInitio(comptime T: type, io: std.Io, ensemble: *Ensemble(T), opt: Options, gpa: Allocator) !void {
     switch (getWignerMethod(opt)) {
-        .casscf => |cas_opt| {
-            var res = try casscf.run(T, io, cas_opt, true, gpa);
+        inline else => |m_opt| {
+            var res = try electronic_structure.run(T, io, m_opt, true, gpa);
             defer res.deinit(gpa);
 
-            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.hartree_fock.ints.sys, opt, gpa);
-        },
+            const sys = if (@hasField(@TypeOf(res), "hartree_fock")) res.hartree_fock.ints.sys else res.ints.sys;
 
-        .configuration_interaction => |ci_opt| {
-            var res = try configuration_interaction.run(T, io, ci_opt, true, gpa);
-            defer res.deinit(gpa);
-
-            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.hartree_fock.ints.sys, opt, gpa);
-        },
-
-        .hartree_fock => |hf_opt| {
-            var res = try hartree_fock.run(T, io, hf_opt, true, gpa);
-            defer res.deinit(gpa);
-
-            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.ints.sys, opt, gpa);
-        },
-
-        .moller_plesset => |mp_opt| {
-            var res = try moller_plesset.run(T, io, mp_opt, true, gpa);
-            defer res.deinit(gpa);
-
-            try sampleWignerFromHessian(T, ensemble, res.hess[0], res.hartree_fock.ints.sys, opt, gpa);
+            try sampleWignerFromHessian(T, ensemble, res.hess[0], sys, opt, gpa);
         },
     }
 }
@@ -2353,7 +2332,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator, _: 
 
             const coefs = if (prop.nonadia_dynamic) |n| (if (n == .ehrenfest) n.ehrenfest.coefics else null) else null;
 
-            const is_sh = prop.nonadia_dynamic != null and prop.nonadia_dynamic.? == .surface_hopping;
+            const is_sh = if (prop.nonadia_dynamic) |nd| nd == .surface_hopping else false;
 
             const s = if (is_sh) ctx.sim.ensemble.s else null;
 

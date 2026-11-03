@@ -6,7 +6,6 @@ const cblas = @import("cimport.zig").cblas;
 
 const Allocator = std.mem.Allocator;
 
-const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
@@ -19,32 +18,17 @@ const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
 const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
-const bfgs = @import("molecular_optimization.zig").bfgs;
 const buildActiveRdm = @import("configuration_interaction.zig").buildActiveRdm;
-const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
-const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
-const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
-const calculateNumericalNacv = @import("nuclear_derivative.zig").calculateNumericalNacv;
-const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
 const computeCi = @import("configuration_interaction.zig").computeCi;
-const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
-const generateCasDets = @import("configuration_interaction.zig").generateCasDets;
 const gemm = @import("linear_algebra.zig").gemm;
-const getNacvPath = @import("configuration_interaction.zig").getNacvPath;
+const generateCasDets = @import("configuration_interaction.zig").generateCasDets;
 const getrf = @import("linear_algebra.zig").getrf;
 const getrs = @import("linear_algebra.zig").getrs;
-const getStatePath = @import("configuration_interaction.zig").getStatePath;
-const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
-const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
-const printThermochemistry = @import("frequency_analysis.zig").printThermochemistry;
 const printf = @import("read_write.zig").printf;
 const slater = @import("configuration_interaction.zig").slater;
-const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 const syevd = @import("linear_algebra.zig").syevd;
 const transformInts = @import("configuration_interaction.zig").transformInts;
-const writeMatrix = @import("read_write.zig").writeMatrix;
-const writeXyzFile = @import("read_write.zig").writeXyzFile;
 
 /// Configurations for CASSCF active space dimensions, iterations, and derivative calculations.
 pub const Options = struct {
@@ -146,7 +130,8 @@ pub fn Result(comptime T: type) type {
     return struct {
         hartree_fock: HartreeFockResult(T),
 
-        C: Matrix(T),
+        C_mo: Matrix(T),
+        C_ci: Matrix(T),
 
         energy: []T,
 
@@ -154,89 +139,209 @@ pub fn Result(comptime T: type) type {
         hess: []Matrix(T) = &.{},
         nacv: []Matrix(T) = &.{},
 
-        C_ci: Matrix(T),
-
         /// Frees all allocated memory associated with the CASSCF results.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.hartree_fock.deinit(gpa);
 
-            self.C.deinit(gpa);
-
+            self.C_mo.deinit(gpa);
             self.C_ci.deinit(gpa);
-
             gpa.free(self.energy);
 
             for (0..self.grad.len) |i| {
                 self.grad[i].deinit(gpa);
             }
 
-            gpa.free(self.grad);
+            if (self.grad.len > 0) gpa.free(self.grad);
 
             for (0..self.hess.len) |i| {
                 self.hess[i].deinit(gpa);
             }
 
-            gpa.free(self.hess);
+            if (self.hess.len > 0) gpa.free(self.hess);
 
             for (0..self.nacv.len) |i| {
                 self.nacv[i].deinit(gpa);
             }
 
-            gpa.free(self.nacv);
+            if (self.nacv.len > 0) gpa.free(self.nacv);
         }
     };
 }
 
-/// Performs a CASSCF calculation on a molecular system specified by file paths.
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
+/// Validates input configuration for consistency, orbital ranges, and active space limits.
+pub fn checkInvalidInput(opt: Options) !void {
+    if (opt.hartree_fock.integral_direct) {
+        std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR CASSCF", .{});
 
-    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
-
-    const basis_path = try exportIfBuiltin(io, opt.hartree_fock.basis, gpa);
-
-    defer if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
-        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
-    };
-
-    const charge, const multi = .{ opt.hartree_fock.charge, opt.hartree_fock.multiplicity };
-
-    var sys = try MolecularSystem(T).init(io, opt.hartree_fock.system, basis_path, charge, multi, gpa);
-    defer sys.deinit(gpa);
-
-    if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
-        try std.Io.Dir.cwd().deleteFile(io, basis_path);
+        return error.InvalidInput;
     }
 
-    return try runFromSystem(T, io, opt, &sys, null, log, gpa);
-}
+    if (opt.active_electrons == 0 or opt.active_orbitals == 0) {
+        std.log.err("CASSCF ACTIVE ELECTRONS AND ACTIVE ORBITALS MUST BE GREATER THAN 0", .{});
 
-/// Executes the CASSCF optimization algorithm on a provided MolecularSystem instance.
-pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
+        return error.InvalidInput;
+    }
 
-    var final_Pg: ?Matrix(T) = null;
-    defer if (final_Pg) |*p| p.deinit(gpa);
+    const nt, const ni, const ns = .{ opt.nthreads == 0, opt.iterations == 0, opt.nstate == 0 };
 
-    if (opt.optimize) |o| {
-        switch (o) {
-            .steepest_descent => final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa),
-            .bfgs => final_Pg = try bfgs(T, io, runFromSystem, opt, sys, Pg, log, gpa),
+    if (nt or ni or opt.threshold <= 0 or opt.orbital_threshold <= 0 or ns) {
+        std.log.err("INVALID THREADS, ITERATIONS, THRESHOLD, OR NSTATE", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.weights) |weights| {
+        if (weights.len != opt.nstate) {
+            std.log.err("CASSCF WEIGHTS COUNT MUST MATCH NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        }
+
+        var sum: f64 = 0;
+
+        for (weights) |w| {
+            if (w < 0) {
+                std.log.err("CASSCF STATE WEIGHTS MUST BE NON-NEGATIVE", .{});
+
+                return error.InvalidInput;
+            }
+
+            sum += w;
+        }
+
+        if (sum <= 0) {
+            std.log.err("CASSCF STATE WEIGHTS SUM MUST BE GREATER THAN ZERO", .{});
+
+            return error.InvalidInput;
         }
     }
 
-    var timer = std.Io.Timestamp.now(io, .real);
+    if (opt.write.gradient != null and opt.gradient == null) {
+        std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
 
-    var hf_opt = opt.hartree_fock;
-
-    if (opt.gradient != null and opt.gradient.? == .analytic) {
-        hf_opt.gradient = .{ .analytic = .{} };
+        return error.InvalidInput;
     }
 
-    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, final_Pg orelse Pg, log, gpa);
+    if (opt.write.hessian != null and opt.hessian == null) {
+        std.log.err("HESSIAN WRITE REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.nacv != null and opt.nacv == null) {
+        std.log.err("NACV WRITE REQUESTED BUT NACV IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.frequency != null and opt.hessian == null) {
+        std.log.err("FREQUENCY CALCULATION REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.gradient) |gradopt| {
+        const states = switch (gradopt) {
+            inline else => |g| g.states orelse &[_]u32{0},
+        };
+
+        if (states.len == 0) {
+            std.log.err("CASSCF GRADIENT STATES LIST MUST NOT BE EMPTY", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (states) |s| if (s >= opt.nstate) {
+            std.log.err("GRADIENT STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        };
+    }
+
+    if (opt.hessian) |hessopt| {
+        const states = switch (hessopt) {
+            inline else => |h| h.states orelse &[_]u32{0},
+        };
+
+        if (states.len == 0) {
+            std.log.err("CASSCF HESSIAN STATES LIST MUST NOT BE EMPTY", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (states) |s| if (s >= opt.nstate) {
+            std.log.err("HESSIAN STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        };
+    }
+
+    if (opt.nacv) |nacvopt| {
+        if (opt.nstate < 2) {
+            std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR NACV CALCULATION", .{});
+
+            return error.InvalidInput;
+        }
+
+        const pairs = switch (nacvopt) {
+            inline else => |n| n.pairs orelse &[_][2]u32{.{ 0, 1 }},
+        };
+
+        if (pairs.len == 0) {
+            std.log.err("CASSCF NACV PAIRS LIST MUST NOT BE EMPTY", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (pairs) |pair| {
+            if (pair[0] == pair[1]) {
+                std.log.err("NACV STATES MUST BE DISTINCT", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (pair[0] >= opt.nstate or pair[1] >= opt.nstate) {
+                std.log.err("NACV STATES MUST BE LESS THAN NUMBER OF STATES", .{});
+
+                return error.InvalidInput;
+            }
+        }
+    }
+
+    if (opt.optimize) |optopt| {
+        const gradopt = switch (optopt) {
+            .bfgs => |b| b.gradient,
+            .steepest_descent => |s| s.gradient,
+        };
+
+        const states = switch (gradopt) {
+            inline else => |g| g.states orelse &[_]u32{0},
+        };
+
+        if (states.len != 1) {
+            std.log.err("EXACTLY ONE STATE MUST BE SPECIFIED FOR GEOMETRY OPTIMIZATION", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (states[0] >= opt.nstate) {
+            std.log.err("OPTIMIZATION STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        }
+    }
+}
+
+/// Solves the Complete Active Space Self-Consistent Field equations to optimize orbitals and CI states.
+pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), log: bool, gpa: Allocator) !Result(T) {
+    _ = sys;
+
+    var hfres = ref;
     errdefer hfres.deinit(gpa);
 
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
+
+    var timer = std.Io.Timestamp.now(io, .real);
 
     const nel, const nact_el, const nact = .{ hfres.ints.sys.nel, opt.active_electrons, opt.active_orbitals };
 
@@ -246,7 +351,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         return error.InvalidInput;
     }
 
-    const ncore, const nmo = .{ (nel - nact_el) / 2, hfres.C.ncol() };
+    const ncore, const nmo = .{ (nel - nact_el) / 2, hfres.C_mo.ncol() };
 
     if (ncore + nact > nmo) {
         std.log.err("ACTIVE PLUS CORE ORBITALS EXCEED MOLECULAR ORBITAL COUNT", .{});
@@ -282,10 +387,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         try printf(io, fmt, .{ "ITER", "TOTAL ENERGY (Eh)", "|DE| (Eh)", "MAX(G)", "TIME" });
     }
 
-    var C = try Matrix(T).init(hfres.C.nrow(), hfres.C.ncol(), gpa);
+    var C = try Matrix(T).init(hfres.C_mo.nrow(), hfres.C_mo.ncol(), gpa);
     errdefer C.deinit(gpa);
 
-    @memcpy(C.data, hfres.C.data);
+    @memcpy(C.data, hfres.C_mo.data);
 
     const weights = try gpa.alloc(T, opt.nstate);
     defer gpa.free(weights);
@@ -433,117 +538,30 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         }
     }
 
-    const grad_states = if (opt.gradient) |gradopt| switch (gradopt) {
-        inline else => |g| g.states orelse &[_]u32{0},
-    } else &[_]u32{};
-
-    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = hfres.P };
-
-    var grad: []Matrix(T) = undefined;
-
-    if (opt.gradient == null) {
-        grad = try gpa.alloc(Matrix(T), 0);
-    }
-
-    if (opt.gradient) |gradopt| switch (gradopt) {
-        .analytic => grad = try gradient(T, hfres, C, final_C_ci, dets.items, weights, ncore, nact, grad_states, gpa),
-        .numeric => grad = try calculateNumericalGradient(T, ctx, runFromSystem, opt, grad_states),
-    };
+    var grad: []Matrix(T) = &.{};
 
     errdefer {
         for (0..grad.len) |k| grad[k].deinit(gpa);
 
-        gpa.free(grad);
+        if (grad.len > 0) gpa.free(grad);
     }
 
-    if (log and opt.gradient != null) {
-        const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTIC" else "NUMERIC";
+    if (opt.gradient) |g| switch (g) {
+        .analytic => |a| {
+            const states = a.states orelse &[_]u32{0};
 
-        for (grad_states, 0..) |s, idx| {
-            try printf(io, "\nCASSCF STATE {d} {s} NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{ s, grad_type_str });
-
-            for (0..grad[idx].nrow()) |j| for (0..grad[idx].ncol()) |k| {
-                try printf(io, "{d:20.14}{s}", .{ grad[idx].at(j, k), if (k == 2) "\n" else " " });
-            };
-        }
-    }
-
-    const hess = try handleHessianAndFrequencies(T, io, opt, sys, final_energies.data, log, gpa);
-
-    const nacv_pairs = if (opt.nacv) |nacvopt| switch (nacvopt) {
-        inline else => |n| n.pairs orelse &[_][2]u32{.{ 0, 1 }},
-    } else &[_][2]u32{};
-
-    var nacv: []Matrix(T) = undefined;
-
-    if (opt.nacv == null) {
-        nacv = try gpa.alloc(Matrix(T), 0);
-    }
-
-    if (opt.nacv) |nacvopt| switch (nacvopt) {
-        .numeric => nacv = try calculateNumericalNacv(T, ctx, runFromSystem, opt, nacv_pairs),
+            grad = try gradient(T, hfres, C, final_C_ci, dets.items, weights, ncore, nact, states, gpa);
+        },
+        .numeric => {},
     };
-
-    errdefer {
-        for (0..nacv.len) |k| nacv[k].deinit(gpa);
-
-        gpa.free(nacv);
-    }
-
-    if (log and opt.nacv != null) {
-        for (nacv_pairs, 0..) |pair, idx| {
-            const fmt = "\nCASSCF NONADIABATIC COUPLING VECTOR BETWEEN STATES {d} AND {d} (1/a0)\n";
-            try printf(io, fmt, .{ pair[0], pair[1] });
-
-            for (0..nacv[idx].nrow()) |j| for (0..nacv[idx].ncol()) |k| {
-                try printf(io, "{d:20.14}{s}", .{ nacv[idx].at(j, k), if (k == 2) "\n" else " " });
-            };
-        }
-    }
-
-    if (opt.write.gradient) |fname| {
-        if (grad.len == 1) {
-            try writeMatrix(T, io, fname, grad[0]);
-        }
-
-        if (grad.len > 1) for (grad, 0..) |g, idx| {
-            const path = try getStatePath(fname, grad_states[idx], gpa);
-            defer gpa.free(path);
-
-            try writeMatrix(T, io, path, g);
-        };
-    }
-
-    if (opt.write.nacv) |fname| {
-        if (nacv.len == 1) {
-            try writeMatrix(T, io, fname, nacv[0]);
-        }
-
-        if (nacv.len > 1) for (nacv, 0..) |n, idx| {
-            const p0, const p1 = .{ nacv_pairs[idx][0], nacv_pairs[idx][1] };
-
-            const path = try getNacvPath(fname, p0, p1, gpa);
-            defer gpa.free(path);
-
-            try writeMatrix(T, io, path, n);
-        };
-    }
-
-    if (opt.write.orbitals) |fname| {
-        try writeMatrix(T, io, fname, C);
-    }
-
-    if (opt.write.geometry) |fname| {
-        try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
-    }
 
     return Result(T){
         .hartree_fock = hfres,
         .energy = final_energies.data,
-        .C = C,
+        .C_mo = C,
         .grad = grad,
-        .hess = hess,
-        .nacv = nacv,
+        .hess = &.{},
+        .nacv = &.{},
         .C_ci = final_C_ci,
     };
 }
@@ -764,147 +782,6 @@ fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, ncore: u
         for (0..nbf) |mu| for (0..nvirt) |a| {
             C.ptr(mu, v_start + a).* = C_new.at(mu, a);
         };
-    }
-}
-
-/// Validates input configuration for consistency, orbital ranges, and active space limits.
-fn checkInvalidInput(opt: Options) !void {
-    if (opt.hartree_fock.integral_direct) {
-        std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR CASSCF", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.active_electrons == 0 or opt.active_orbitals == 0) {
-        std.log.err("CASSCF ACTIVE ELECTRONS AND ACTIVE ORBITALS MUST BE GREATER THAN 0", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.nthreads == 0 or opt.iterations == 0 or opt.threshold <= 0 or
-        opt.orbital_threshold <= 0 or opt.nstate == 0)
-    {
-        std.log.err("INVALID THREADS, ITERATIONS, THRESHOLD, OR NSTATE", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.weights) |weights| {
-        if (weights.len != opt.nstate) {
-            std.log.err("CASSCF WEIGHTS COUNT MUST MATCH NUMBER OF STATES", .{});
-
-            return error.InvalidInput;
-        }
-
-        var sum: f64 = 0;
-
-        for (weights) |w| {
-            if (w < 0) {
-                std.log.err("CASSCF STATE WEIGHTS MUST BE NON-NEGATIVE", .{});
-
-                return error.InvalidInput;
-            }
-
-            sum += w;
-        }
-
-        if (sum <= 0) {
-            std.log.err("CASSCF STATE WEIGHTS SUM MUST BE GREATER THAN ZERO", .{});
-
-            return error.InvalidInput;
-        }
-    }
-
-    if (opt.write.gradient != null and opt.gradient == null) {
-        std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.hessian != null and opt.hessian == null) {
-        std.log.err("HESSIAN WRITE REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.nacv != null and opt.nacv == null) {
-        std.log.err("NACV WRITE REQUESTED BUT NACV IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.frequency != null and opt.hessian == null) {
-        std.log.err("FREQUENCY CALCULATION REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.gradient) |gradopt| {
-        const states = switch (gradopt) {
-            inline else => |g| g.states orelse &[_]u32{0},
-        };
-
-        if (states.len == 0) {
-            std.log.err("CASSCF GRADIENT STATES LIST MUST NOT BE EMPTY", .{});
-
-            return error.InvalidInput;
-        }
-
-        for (states) |s| if (s >= opt.nstate) {
-            std.log.err("GRADIENT STATE MUST BE LESS THAN NUMBER OF STATES", .{});
-
-            return error.InvalidInput;
-        };
-    }
-
-    if (opt.hessian) |hessopt| {
-        const states = switch (hessopt) {
-            inline else => |h| h.states orelse &[_]u32{0},
-        };
-
-        if (states.len == 0) {
-            std.log.err("CASSCF HESSIAN STATES LIST MUST NOT BE EMPTY", .{});
-
-            return error.InvalidInput;
-        }
-
-        for (states) |s| if (s >= opt.nstate) {
-            std.log.err("HESSIAN STATE MUST BE LESS THAN NUMBER OF STATES", .{});
-
-            return error.InvalidInput;
-        };
-    }
-
-    if (opt.nacv) |nacvopt| {
-        if (opt.nstate < 2) {
-            std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR NACV CALCULATION", .{});
-
-            return error.InvalidInput;
-        }
-
-        const pairs = switch (nacvopt) {
-            inline else => |n| n.pairs orelse &[_][2]u32{.{ 0, 1 }},
-        };
-
-        if (pairs.len == 0) {
-            std.log.err("CASSCF NACV PAIRS LIST MUST NOT BE EMPTY", .{});
-
-            return error.InvalidInput;
-        }
-
-        for (pairs) |pair| {
-            if (pair[0] == pair[1]) {
-                std.log.err("NACV STATES MUST BE DISTINCT", .{});
-
-                return error.InvalidInput;
-            }
-
-            if (pair[0] >= opt.nstate or pair[1] >= opt.nstate) {
-                std.log.err("NACV STATES MUST BE LESS THAN NUMBER OF STATES", .{});
-
-                return error.InvalidInput;
-            }
-        }
     }
 }
 
@@ -1262,43 +1139,4 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: M
     }
 
     return grads;
-}
-
-/// Computes numerical nuclear Hessians for CASSCF states and conducts frequency and thermochemical analysis.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), energies: []const T, log: bool, gpa: Allocator) ![]Matrix(T) {
-    if (opt.hessian == null) return try gpa.alloc(Matrix(T), 0);
-
-    const states = switch (opt.hessian.?) {
-        inline else => |h| h.states orelse &[_]u32{0},
-    };
-
-    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
-
-    var hess = try calculateNumericalHessian(T, ctx, runFromSystem, opt, states);
-
-    errdefer {
-        for (0..hess.len) |k| hess[k].deinit(gpa);
-
-        gpa.free(hess);
-    }
-
-    if (log and opt.frequency != null) {
-        for (states, 0..) |state, idx| {
-            var freqs = try calculateHarmonicFrequencies(T, hess[idx], sys.*, gpa);
-            defer freqs.deinit(gpa);
-
-            const method_str = try std.fmt.allocPrint(gpa, "CASSCF STATE {d}", .{state});
-            defer gpa.free(method_str);
-
-            try printHarmonicFrequencies(T, io, freqs, method_str);
-
-            const mult = opt.hartree_fock.multiplicity;
-
-            const thermo = try calculateThermochemistry(T, opt.frequency.?, sys.*, freqs, mult, gpa);
-
-            try printThermochemistry(T, io, opt.frequency.?, thermo, energies[state], method_str);
-        }
-    }
-
-    return hess;
 }

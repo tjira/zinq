@@ -10,7 +10,7 @@ test "Restricted Hartree-Fock on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -42,7 +42,7 @@ test "Restricted Hartree-Fock on Water with Integral-Direct Analytical Gradient 
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -74,7 +74,7 @@ test "Generalized Hartree-Fock on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -107,7 +107,7 @@ test "Generalized Hartree-Fock on Water with Integral-Direct Analytical Gradient
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.hartree_fock.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off

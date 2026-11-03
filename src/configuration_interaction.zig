@@ -6,7 +6,6 @@ const cblas = @import("cimport.zig").cblas;
 
 const Allocator = std.mem.Allocator;
 
-const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
@@ -22,23 +21,10 @@ const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
 const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const ao2so_pp = @import("integral_transform.zig").ao2so_pp;
 const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
-const bfgs = @import("molecular_optimization.zig").bfgs;
-const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
-const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
-const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
-const calculateNumericalNacv = @import("nuclear_derivative.zig").calculateNumericalNacv;
-const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
-const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
-const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
 const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
 const primType = @import("value.zig").primType;
-const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
-const printThermochemistry = @import("frequency_analysis.zig").printThermochemistry;
 const printf = @import("read_write.zig").printf;
-const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 const syevd = @import("linear_algebra.zig").syevd;
-const writeMatrix = @import("read_write.zig").writeMatrix;
-const writeXyzFile = @import("read_write.zig").writeXyzFile;
 
 /// Configurations for CI determinant subspaces, active spaces, optimization, and derivative settings.
 pub const Options = struct {
@@ -159,19 +145,19 @@ pub fn Result(comptime T: type) type {
                 self.grad[i].deinit(gpa);
             }
 
-            gpa.free(self.grad);
+            if (self.grad.len > 0) gpa.free(self.grad);
 
             for (0..self.hess.len) |i| {
                 self.hess[i].deinit(gpa);
             }
 
-            gpa.free(self.hess);
+            if (self.hess.len > 0) gpa.free(self.hess);
 
             for (0..self.nacv.len) |i| {
                 self.nacv[i].deinit(gpa);
             }
 
-            gpa.free(self.nacv);
+            if (self.nacv.len > 0) gpa.free(self.nacv);
         }
     };
 }
@@ -353,6 +339,165 @@ pub fn buildActiveRdm(comptime T: type, dets: []const []const usize, C_ci: Matri
     return .{ D_act, d_act };
 }
 
+/// Validates input options for physical consistency and method requirements.
+pub fn checkInvalidInput(opt: Options) !void {
+    if (opt.hartree_fock.integral_direct) {
+        std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR CONFIGURATION INTERACTION", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.gradient != null and opt.gradient == null) {
+        std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.hessian != null and opt.hessian == null) {
+        std.log.err("HESSIAN WRITE REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.write.nacv != null and opt.nacv == null) {
+        std.log.err("NACV WRITE REQUESTED BUT NACV IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.frequency != null and opt.hessian == null) {
+        std.log.err("FREQUENCY CALCULATION REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
+
+        return error.InvalidInput;
+    }
+
+    switch (opt.space) {
+        .cas => |c| {
+            if (c.active_electrons == 0 or c.active_orbitals == 0) {
+                std.log.err("CASCI ACTIVE ELECTRONS AND ACTIVE ORBITALS MUST BE GREATER THAN 0", .{});
+
+                return error.InvalidInput;
+            }
+        },
+        .excitations => |ex| {
+            if (ex.len == 0) {
+                std.log.err("CI EXCITATIONS LIST MUST NOT BE EMPTY", .{});
+
+                return error.InvalidInput;
+            }
+
+            for (ex) |k| if (k == 0) {
+                std.log.err("CI EXCITATION LEVEL MUST BE GREATER THAN 0", .{});
+
+                return error.InvalidInput;
+            };
+        },
+    }
+
+    if (opt.nthreads == 0) {
+        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.nstate == 0) {
+        std.log.err("NUMBER OF CI STATES MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.gradient) |gradopt| {
+        const states = switch (gradopt) {
+            inline else => |g| g.states orelse &[_]u32{0},
+        };
+
+        if (states.len == 0) {
+            std.log.err("CI GRADIENT STATES LIST MUST NOT BE EMPTY", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (states) |s| if (s >= opt.nstate) {
+            std.log.err("GRADIENT STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        };
+    }
+
+    if (opt.hessian) |hessopt| {
+        const states = switch (hessopt) {
+            inline else => |h| h.states orelse &[_]u32{0},
+        };
+
+        if (states.len == 0) {
+            std.log.err("CI HESSIAN STATES LIST MUST NOT BE EMPTY", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (states) |s| if (s >= opt.nstate) {
+            std.log.err("HESSIAN STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        };
+    }
+
+    if (opt.nacv) |nacvopt| {
+        if (opt.nstate < 2) {
+            std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR NACV CALCULATION", .{});
+
+            return error.InvalidInput;
+        }
+
+        const pairs = switch (nacvopt) {
+            inline else => |n| n.pairs orelse &[_][2]u32{.{ 0, 1 }},
+        };
+
+        if (pairs.len == 0) {
+            std.log.err("CI NACV PAIRS LIST MUST NOT BE EMPTY", .{});
+
+            return error.InvalidInput;
+        }
+
+        for (pairs) |pair| {
+            if (pair[0] == pair[1]) {
+                std.log.err("NACV STATES MUST BE DISTINCT", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (pair[0] >= opt.nstate or pair[1] >= opt.nstate) {
+                std.log.err("NACV STATES MUST BE LESS THAN NUMBER OF STATES", .{});
+
+                return error.InvalidInput;
+            }
+        }
+    }
+
+    if (opt.optimize) |optopt| {
+        const gradopt = switch (optopt) {
+            .bfgs => |b| b.gradient,
+            .steepest_descent => |s| s.gradient,
+        };
+
+        const states = switch (gradopt) {
+            inline else => |g| g.states orelse &[_]u32{0},
+        };
+
+        if (states.len != 1) {
+            std.log.err("EXACTLY ONE STATE MUST BE SPECIFIED FOR GEOMETRY OPTIMIZATION", .{});
+
+            return error.InvalidInput;
+        }
+
+        if (states[0] >= opt.nstate) {
+            std.log.err("OPTIMIZATION STATE MUST BE LESS THAN NUMBER OF STATES", .{});
+
+            return error.InvalidInput;
+        }
+    }
+}
+
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
 pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
@@ -389,6 +534,7 @@ pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, det
 
     errdefer {
         E.deinit(gpa);
+
         C_ci.deinit(gpa);
     }
 
@@ -640,74 +786,39 @@ pub fn generatePairs(n: usize, gpa: Allocator) ![][2]u32 {
     return pairs;
 }
 
-/// Derives output paths for nonadiabatic coupling vectors by inserting state pair indices before the file extension.
-pub fn getNacvPath(path: []const u8, p0: u32, p1: u32, gpa: Allocator) ![]const u8 {
-    const ext = std.fs.path.extension(path);
+/// Computes the permutation sign (+1 or -1) associated with mapping two determinants via orbital excitations.
+pub fn signOfExcitations(S: []const usize, U: []const usize) i2 {
+    var exp: usize = 0;
 
-    return try std.fmt.allocPrint(gpa, "{s}_{d}_{d}{s}", .{ path[0 .. path.len - ext.len], p0, p1, ext });
-}
-
-/// Derives output paths for state nuclear derivatives by inserting the state index before the file extension.
-pub fn getStatePath(path: []const u8, state: u32, gpa: Allocator) ![]const u8 {
-    const ext = std.fs.path.extension(path);
-
-    return try std.fmt.allocPrint(gpa, "{s}_{d}{s}", .{ path[0 .. path.len - ext.len], state, ext });
-}
-
-/// Performs a CI calculation on a molecular system specified by file paths.
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
-
-    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
-
-    const basis_path = try exportIfBuiltin(io, opt.hartree_fock.basis, gpa);
-
-    defer if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
-        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
-    };
-
-    const charge, const multi = .{ opt.hartree_fock.charge, opt.hartree_fock.multiplicity };
-
-    var sys = try MolecularSystem(T).init(io, opt.hartree_fock.system, basis_path, charge, multi, gpa);
-    defer sys.deinit(gpa);
-
-    if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
-        try std.Io.Dir.cwd().deleteFile(io, basis_path);
+    for (0..U.len) |j| {
+        exp += std.mem.indexOfScalar(usize, S, U[j]).? - j;
     }
 
-    return try runFromSystem(T, io, opt, &sys, null, log, gpa);
+    return if (exp % 2 == 0) 1 else -1;
 }
 
-/// Runs a CI calculation starting from an initialized MolecularSystem structure.
-pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
+/// Computes the Hamiltonian matrix element between two Slater determinants using the Slater-Condon rules.
+pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
+    const diff = findDeterminantDifferences(A, B) orelse return Value(T).fromFloat(0).val;
 
-    var final_Pg: ?Matrix(T) = null;
-    defer if (final_Pg) |*p| p.deinit(gpa);
+    const s_A = signOfExcitations(A, diff.a[0..diff.len]);
+    const s_B = signOfExcitations(B, diff.b[0..diff.len]);
 
-    if (opt.optimize) |o| {
-        switch (o) {
-            .steepest_descent => final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa),
-            .bfgs => final_Pg = try bfgs(T, io, runFromSystem, opt, sys, Pg, log, gpa),
-        }
-    }
+    const phase = @as(primType(T), @floatFromInt(s_A * s_B));
 
-    const generalized, var hf_opt = .{ opt.hartree_fock.generalized, opt.hartree_fock };
+    return evaluateSlaterCondon(T, A, diff.a, diff.b, diff.len, phase, H_MS, g_MS);
+}
 
-    if (opt.gradient != null and opt.gradient.? == .analytic) {
-        hf_opt.gradient = .{ .analytic = .{} };
+/// Solves the Configuration Interaction Hamiltonian eigenvalue problem over the determinant space.
+pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), log: bool, gpa: Allocator) !Result(T) {
+    _ = sys;
 
-        if (hf_opt.response == null) {
-            hf_opt.response = .{};
-        }
-    }
-
-    var timer = std.Io.Timestamp.now(io, .real);
-
-    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, final_Pg orelse Pg, log, gpa);
+    var hfres = ref;
     errdefer hfres.deinit(gpa);
 
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
+
+    const generalized = opt.hartree_fock.generalized;
 
     if (opt.space == .cas) {
         const c = opt.space.cas;
@@ -722,7 +833,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
         const ncore = (nel - nact_el) / 2;
 
-        const nmo = if (generalized) hfres.C.ncol() / 2 else hfres.C.ncol();
+        const nmo = if (generalized) hfres.C_mo.ncol() / 2 else hfres.C_mo.ncol();
 
         if (ncore + nact > nmo) {
             std.log.err("ACTIVE PLUS CORE ORBITALS EXCEED MOLECULAR ORBITAL COUNT", .{});
@@ -731,17 +842,17 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         }
     }
 
+    var timer = std.Io.Timestamp.now(io, .real);
+
     if (log) {
         switch (opt.space) {
             .cas => |c| {
-                const fmt = "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCASCI SPACE: CAS({d}, {d})\n\nSLATER DETERMINANT TIME:";
+                const fmt = "\nCASCI SPACE: CAS({d}, {d})\n\nSLATER DETERMINANT TIME:";
 
-                try printf(io, fmt, .{ timer.untilNow(io, .real), c.active_electrons, c.active_orbitals });
+                try printf(io, fmt, .{ c.active_electrons, c.active_orbitals });
             },
             .excitations => |ex| {
-                const fmt = "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCI EXCITATIONS CONSIDERED: [";
-
-                try printf(io, fmt, .{timer.untilNow(io, .real)});
+                try printf(io, "\nCI EXCITATIONS CONSIDERED: [", .{});
 
                 for (0..ex.len) |i| {
                     try printf(io, "{d}{s}", .{ ex[i], if (i == ex.len - 1) "]" else ", " });
@@ -785,7 +896,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
 
     const nrep = try hfres.ints.sys.nrep();
 
-    var E, var C_ci = try computeCi(T, if (log) io else null, hfres.C, hfres.ints, dets.items, nrep, generalized, gpa);
+    var E, var C_ci = try computeCi(T, if (log) io else null, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, gpa);
 
     errdefer {
         E.deinit(gpa);
@@ -809,154 +920,29 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
         }
     }
 
-    const grad_states = if (opt.gradient) |gradopt| switch (gradopt) {
-        inline else => |g| g.states orelse &[_]u32{0},
-    } else &[_]u32{};
-
-    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = hfres.P };
-
-    var grad: []Matrix(T) = undefined;
-
-    if (opt.gradient == null) {
-        grad = try gpa.alloc(Matrix(T), 0);
-    }
-
-    if (opt.gradient) |gradopt| switch (gradopt) {
-        .analytic => grad = try gradient(T, hfres, C_ci, dets, grad_states, gpa),
-        .numeric => grad = try calculateNumericalGradient(T, ctx, runFromSystem, opt, grad_states),
-    };
+    var grad: []Matrix(T) = &.{};
 
     errdefer {
         for (0..grad.len) |k| grad[k].deinit(gpa);
 
-        gpa.free(grad);
+        if (grad.len > 0) gpa.free(grad);
     }
 
-    if (log and opt.gradient != null) {
-        const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTIC" else "NUMERIC";
-
-        for (grad_states, 0..) |state, i| {
-            try printf(io, "\nCI STATE {d} {s} NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{ state, grad_type_str });
-
-            for (0..grad[i].nrow()) |j| for (0..grad[i].ncol()) |k| {
-                try printf(io, "{d:20.14}{s}", .{ grad[i].at(j, k), if (k == 2) "\n" else " " });
-            };
-        }
-    }
-
-    const hess_states = if (opt.hessian) |hessopt| switch (hessopt) {
-        inline else => |h| h.states orelse &[_]u32{0},
-    } else &[_]u32{};
-
-    const hess = try handleHessianAndFrequencies(T, io, opt, sys, E.data, log, gpa);
-
-    errdefer {
-        for (0..hess.len) |k| hess[k].deinit(gpa);
-
-        gpa.free(hess);
-    }
-
-    const nacv_pairs = if (opt.nacv) |nacvopt| switch (nacvopt) {
-        inline else => |n| n.pairs orelse &[_][2]u32{.{ 0, 1 }},
-    } else &[_][2]u32{};
-
-    var nacv: []Matrix(T) = undefined;
-
-    if (opt.nacv == null) {
-        nacv = try gpa.alloc(Matrix(T), 0);
-    }
-
-    if (opt.nacv) |nacvopt| switch (nacvopt) {
-        .numeric => nacv = try calculateNumericalNacv(T, ctx, runFromSystem, opt, nacv_pairs),
+    if (opt.gradient) |g| switch (g) {
+        .analytic => |a| grad = try gradient(T, hfres, C_ci, dets, a.states orelse &[_]u32{0}, gpa),
+        .numeric => {},
     };
 
-    errdefer {
-        for (0..nacv.len) |k| nacv[k].deinit(gpa);
+    return Result(T){
+        .hartree_fock = hfres,
 
-        gpa.free(nacv);
-    }
+        .C_ci = C_ci,
+        .grad = grad,
+        .hess = &.{},
+        .nacv = &.{},
 
-    if (log and opt.nacv != null) {
-        for (nacv_pairs, 0..) |pair, idx| {
-            const fmt = "\nCI NONADIABATIC COUPLING VECTOR BETWEEN STATES {d} AND {d} (1/a0)\n";
-
-            try printf(io, fmt, .{ pair[0], pair[1] });
-
-            for (0..nacv[idx].nrow()) |j| for (0..nacv[idx].ncol()) |k| {
-                try printf(io, "{d:20.14}{s}", .{ nacv[idx].at(j, k), if (k == 2) "\n" else " " });
-            };
-        }
-    }
-
-    if (opt.write.gradient) |fname| {
-        if (grad.len == 1) {
-            try writeMatrix(T, io, fname, grad[0]);
-        }
-
-        if (grad.len > 1) for (grad, 0..) |g, idx| {
-            const out_name = try getStatePath(fname, grad_states[idx], gpa);
-            defer gpa.free(out_name);
-
-            try writeMatrix(T, io, out_name, g);
-        };
-    }
-
-    if (opt.write.hessian) |fname| {
-        if (hess.len == 1) {
-            try writeMatrix(T, io, fname, hess[0]);
-        }
-
-        if (hess.len > 1) for (hess, 0..) |h, idx| {
-            const out_name = try getStatePath(fname, hess_states[idx], gpa);
-            defer gpa.free(out_name);
-
-            try writeMatrix(T, io, out_name, h);
-        };
-    }
-
-    if (opt.write.nacv) |fname| {
-        if (nacv.len == 1) {
-            try writeMatrix(T, io, fname, nacv[0]);
-        }
-
-        if (nacv.len > 1) for (nacv, 0..) |n, idx| {
-            const p0, const p1 = .{ nacv_pairs[idx][0], nacv_pairs[idx][1] };
-
-            const out_name = try getNacvPath(fname, p0, p1, gpa);
-            defer gpa.free(out_name);
-
-            try writeMatrix(T, io, out_name, n);
-        };
-    }
-
-    if (opt.write.geometry) |fname| {
-        try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
-    }
-
-    return Result(T){ .hartree_fock = hfres, .energy = E.data, .C_ci = C_ci, .grad = grad, .hess = hess, .nacv = nacv };
-}
-
-/// Computes the permutation sign (+1 or -1) associated with mapping two determinants via orbital excitations.
-pub fn signOfExcitations(S: []const usize, U: []const usize) i2 {
-    var exp: usize = 0;
-
-    for (0..U.len) |j| {
-        exp += std.mem.indexOfScalar(usize, S, U[j]).? - j;
-    }
-
-    return if (exp % 2 == 0) 1 else -1;
-}
-
-/// Computes the Hamiltonian matrix element between two Slater determinants using the Slater-Condon rules.
-pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
-    const diff = findDeterminantDifferences(A, B) orelse return Value(T).fromFloat(0).val;
-
-    const s_A = signOfExcitations(A, diff.a[0..diff.len]);
-    const s_B = signOfExcitations(B, diff.b[0..diff.len]);
-
-    const phase = @as(primType(T), @floatFromInt(s_A * s_B));
-
-    return evaluateSlaterCondon(T, A, diff.a, diff.b, diff.len, phase, H_MS, g_MS);
+        .energy = E.data,
+    };
 }
 
 /// Diagonalizes the CI Hamiltonian matrix to yield state energies and coefficients.
@@ -1014,165 +1000,6 @@ pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 
     return .{ H_MS, g_MS };
 }
 
-/// Validates input options for physical consistency and method requirements.
-fn checkInvalidInput(opt: Options) !void {
-    if (opt.hartree_fock.integral_direct) {
-        std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR CONFIGURATION INTERACTION", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.gradient != null and opt.gradient == null) {
-        std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.hessian != null and opt.hessian == null) {
-        std.log.err("HESSIAN WRITE REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.nacv != null and opt.nacv == null) {
-        std.log.err("NACV WRITE REQUESTED BUT NACV IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.frequency != null and opt.hessian == null) {
-        std.log.err("FREQUENCY CALCULATION REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    switch (opt.space) {
-        .cas => |c| {
-            if (c.active_electrons == 0 or c.active_orbitals == 0) {
-                std.log.err("CASCI ACTIVE ELECTRONS AND ACTIVE ORBITALS MUST BE GREATER THAN 0", .{});
-
-                return error.InvalidInput;
-            }
-        },
-        .excitations => |ex| {
-            if (ex.len == 0) {
-                std.log.err("CI EXCITATIONS LIST MUST NOT BE EMPTY", .{});
-
-                return error.InvalidInput;
-            }
-
-            for (ex) |k| if (k == 0) {
-                std.log.err("CI EXCITATION LEVEL MUST BE GREATER THAN 0", .{});
-
-                return error.InvalidInput;
-            };
-        },
-    }
-
-    if (opt.nthreads == 0) {
-        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.nstate == 0) {
-        std.log.err("NUMBER OF CI STATES MUST BE GREATER THAN 0", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.gradient) |gradopt| {
-        const states = switch (gradopt) {
-            inline else => |g| g.states orelse &[_]u32{0},
-        };
-
-        if (states.len == 0) {
-            std.log.err("CI GRADIENT STATES LIST MUST NOT BE EMPTY", .{});
-
-            return error.InvalidInput;
-        }
-
-        for (states) |s| if (s >= opt.nstate) {
-            std.log.err("GRADIENT STATE MUST BE LESS THAN NUMBER OF STATES", .{});
-
-            return error.InvalidInput;
-        };
-    }
-
-    if (opt.hessian) |hessopt| {
-        const states = switch (hessopt) {
-            inline else => |h| h.states orelse &[_]u32{0},
-        };
-
-        if (states.len == 0) {
-            std.log.err("CI HESSIAN STATES LIST MUST NOT BE EMPTY", .{});
-
-            return error.InvalidInput;
-        }
-
-        for (states) |s| if (s >= opt.nstate) {
-            std.log.err("HESSIAN STATE MUST BE LESS THAN NUMBER OF STATES", .{});
-
-            return error.InvalidInput;
-        };
-    }
-
-    if (opt.nacv) |nacvopt| {
-        if (opt.nstate < 2) {
-            std.log.err("AT LEAST 2 STATES ARE REQUIRED FOR NACV CALCULATION", .{});
-
-            return error.InvalidInput;
-        }
-
-        const pairs = switch (nacvopt) {
-            inline else => |n| n.pairs orelse &[_][2]u32{.{ 0, 1 }},
-        };
-
-        if (pairs.len == 0) {
-            std.log.err("CI NACV PAIRS LIST MUST NOT BE EMPTY", .{});
-
-            return error.InvalidInput;
-        }
-
-        for (pairs) |pair| {
-            if (pair[0] == pair[1]) {
-                std.log.err("NACV STATES MUST BE DISTINCT", .{});
-
-                return error.InvalidInput;
-            }
-
-            if (pair[0] >= opt.nstate or pair[1] >= opt.nstate) {
-                std.log.err("NACV STATES MUST BE LESS THAN NUMBER OF STATES", .{});
-
-                return error.InvalidInput;
-            }
-        }
-    }
-
-    if (opt.optimize) |optopt| {
-        const gradopt = switch (optopt) {
-            .bfgs => |b| b.gradient,
-            .steepest_descent => |s| s.gradient,
-        };
-
-        const states = switch (gradopt) {
-            inline else => |g| g.states orelse &[_]u32{0},
-        };
-
-        if (states.len != 1) {
-            std.log.err("EXACTLY ONE STATE MUST BE SPECIFIED FOR GEOMETRY OPTIMIZATION", .{});
-
-            return error.InvalidInput;
-        }
-
-        if (states[0] >= opt.nstate) {
-            std.log.err("OPTIMIZATION STATE MUST BE LESS THAN NUMBER OF STATES", .{});
-
-            return error.InvalidInput;
-        }
-    }
-}
-
 /// Evaluates Hamiltonian matrix elements between Slater determinants using the Slater-Condon excitation rules.
 fn evaluateSlaterCondon(comptime T: type, A: []const usize, diff_a: [2]usize, diff_b: [2]usize, len: usize, phase: primType(T), H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
     switch (len) {
@@ -1223,7 +1050,7 @@ fn evaluateSlaterCondon(comptime T: type, A: []const usize, diff_a: [2]usize, di
 
 /// Computes analytic nuclear gradients of CI state energies using dual number differentiation.
 fn gradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matrix(T), dets: std.ArrayList([]const usize), states: []const u32, gpa: Allocator) ![]Matrix(T) {
-    const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
+    const generalized = hfres.ints.sys.nbf != hfres.C_mo.shape[0];
 
     var grads = try gpa.alloc(Matrix(T), states.len);
     errdefer gpa.free(grads);
@@ -1244,7 +1071,7 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matrix(T), dets
     var g_d = try Tensor(ScalarDual(T), 4).init(hfres.ints.g.?.shape, gpa);
     defer g_d.deinit(gpa);
 
-    var C_d = try Matrix(ScalarDual(T)).init(hfres.C.nrow(), hfres.C.ncol(), gpa);
+    var C_d = try Matrix(ScalarDual(T)).init(hfres.C_mo.nrow(), hfres.C_mo.ncol(), gpa);
     defer C_d.deinit(gpa);
 
     for (0..3 * hfres.ints.sys.atoms.len) |i| {
@@ -1263,7 +1090,7 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matrix(T), dets
         };
 
         for (0..C_d.nrow()) |mu| for (0..C_d.ncol()) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C.at(mu, p), hfres.dC.?.at(.{ i, mu, p }));
+            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ i, mu, p }));
         };
 
         var H_MS_d, var g_MS_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, generalized, gpa);
@@ -1285,43 +1112,4 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matrix(T), dets
     }
 
     return grads;
-}
-
-/// Computes nuclear Hessians of CI states numerically and performs frequency and thermochemical analyses.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), energies: []const T, log: bool, gpa: Allocator) ![]Matrix(T) {
-    if (opt.hessian == null) return try gpa.alloc(Matrix(T), 0);
-
-    const states = switch (opt.hessian.?) {
-        inline else => |h| h.states orelse &[_]u32{0},
-    };
-
-    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
-
-    var hess = try calculateNumericalHessian(T, ctx, runFromSystem, opt, states);
-
-    errdefer {
-        for (0..hess.len) |k| hess[k].deinit(gpa);
-
-        gpa.free(hess);
-    }
-
-    if (log and opt.frequency != null) {
-        for (states, 0..) |state, idx| {
-            var freqs = try calculateHarmonicFrequencies(T, hess[idx], sys.*, gpa);
-            defer freqs.deinit(gpa);
-
-            const method_str = try std.fmt.allocPrint(gpa, "CI STATE {d}", .{state});
-            defer gpa.free(method_str);
-
-            try printHarmonicFrequencies(T, io, freqs, method_str);
-
-            const mult = opt.hartree_fock.multiplicity;
-
-            const thermo = try calculateThermochemistry(T, opt.frequency.?, sys.*, freqs, mult, gpa);
-
-            try printThermochemistry(T, io, opt.frequency.?, thermo, energies[state], method_str);
-        }
-    }
-
-    return hess;
 }

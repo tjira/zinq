@@ -13,7 +13,7 @@ test "Restricted MP2 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -48,7 +48,7 @@ test "Generalized MP2 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -82,7 +82,7 @@ test "Restricted MP3 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -117,7 +117,7 @@ test "Generalized MP3 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -151,7 +151,7 @@ test "Restricted MP4 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -186,7 +186,7 @@ test "Generalized MP4 on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.moller_plesset.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off

@@ -19,23 +19,9 @@ const Vector = @import("tensor.zig").Vector;
 const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
 const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
-const bfgs = @import("molecular_optimization.zig").bfgs;
-const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
-const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
-const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
-const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
-const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
-const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const generateDets = @import("configuration_interaction.zig").generateDets;
-const hartree_fock_run = @import("hartree_fock.zig").run;
-const hartree_fock_runFromSystem = @import("hartree_fock.zig").runFromSystem;
-const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
-const printThermochemistry = @import("frequency_analysis.zig").printThermochemistry;
 const printf = @import("read_write.zig").printf;
-const writeMatrix = @import("read_write.zig").writeMatrix;
-const writeXyzFile = @import("read_write.zig").writeXyzFile;
 const slater = @import("configuration_interaction.zig").slater;
-const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 
 const AU2CM = @import("constant.zig").AU2CM;
 
@@ -111,8 +97,8 @@ pub fn Result(comptime T: type) type {
 
         energy: []T,
 
-        grad: []Matrix(T),
-        hess: []Matrix(T),
+        grad: []Matrix(T) = &.{},
+        hess: []Matrix(T) = &.{},
 
         /// Frees all allocated resources associated with the Møller-Plesset result.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
@@ -124,200 +110,19 @@ pub fn Result(comptime T: type) type {
                 self.grad[i].deinit(gpa);
             }
 
-            gpa.free(self.grad);
+            if (self.grad.len > 0) gpa.free(self.grad);
 
             for (0..self.hess.len) |i| {
                 self.hess[i].deinit(gpa);
             }
 
-            gpa.free(self.hess);
+            if (self.hess.len > 0) gpa.free(self.hess);
         }
     };
-}
-
-/// Executes a Møller-Plesset calculation on a molecular system specified by file paths.
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
-
-    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
-
-    const basis_path = try exportIfBuiltin(io, opt.hartree_fock.basis, gpa);
-
-    defer if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
-        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
-    };
-
-    const charge, const multi = .{ opt.hartree_fock.charge, opt.hartree_fock.multiplicity };
-
-    var sys = try MolecularSystem(T).init(io, opt.hartree_fock.system, basis_path, charge, multi, gpa);
-    defer sys.deinit(gpa);
-
-    if (std.mem.startsWith(u8, opt.hartree_fock.basis, "builtin:")) {
-        try std.Io.Dir.cwd().deleteFile(io, basis_path);
-    }
-
-    return try runFromSystem(T, io, opt, &sys, null, log, gpa);
-}
-
-/// Runs a Møller-Plesset calculation starting from an initialized MolecularSystem structure.
-pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
-
-    var final_Pg: ?Matrix(T) = null;
-    defer if (final_Pg) |*p| p.deinit(gpa);
-
-    if (opt.optimize) |o| {
-        switch (o) {
-            .steepest_descent => final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa),
-            .bfgs => final_Pg = try bfgs(T, io, runFromSystem, opt, sys, Pg, log, gpa),
-        }
-    }
-
-    try checkInvalidInput(opt);
-
-    const generalized, var hf_opt = .{ opt.hartree_fock.generalized, opt.hartree_fock };
-
-    if (opt.gradient != null and opt.gradient.? == .analytic) {
-        hf_opt.gradient = .{ .analytic = .{} };
-
-        if (hf_opt.response == null) {
-            hf_opt.response = .{};
-        }
-    }
-
-    var hfres = try hartree_fock_runFromSystem(T, io, hf_opt, sys, final_Pg orelse Pg, log, gpa);
-    errdefer hfres.deinit(gpa);
-
-    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
-
-    var energy = try gpa.alloc(T, 1);
-    errdefer gpa.free(energy);
-
-    const grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
-    errdefer gpa.free(grad);
-
-    energy[0] = hfres.energy[0];
-
-    if (opt.gradient) |gradopt| if (gradopt == .analytic) {
-        grad[0] = try hfres.grad[0].clone(gpa);
-    };
-
-    errdefer if (opt.gradient != null and opt.gradient.? == .analytic) {
-        grad[0].deinit(gpa);
-    };
-
-    const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
-
-    const energies = try mp(T, opt.order, hfres.ints.g.?, hfres.C, hfres.e, nocc, generalized, gpa);
-    defer gpa.free(energies);
-
-    var grads: ?[]Matrix(T) = null;
-
-    if (opt.gradient != null and opt.gradient.? == .analytic) {
-        grads = try gradient(T, opt.order, hfres, gpa);
-    }
-
-    defer if (grads != null) {
-        for (0..(opt.order + 1)) |i| {
-            grads.?[i].deinit(gpa);
-        }
-
-        gpa.free(grads.?);
-    };
-
-    for (2..opt.order + 1) |i| {
-        energy[0] += energies[i];
-
-        if (log) {
-            try printf(io, "\nMP{d:02} TOTAL ENERGY: {d:.14} Eh", .{ i, energy[0] });
-
-            if (grads != null) {
-                try printf(io, "\n", .{});
-            }
-        }
-
-        if (grads != null) {
-            for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-                grad[0].ptr(j, k).* += grads.?[i].at(j, k);
-            };
-
-            if (log) {
-                try printf(io, "\nMP{d:02} ANALYTICAL NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{i});
-
-                for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-                    try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
-                };
-            }
-        }
-
-        if (log and grads == null and i == opt.order) {
-            try printf(io, "\n", .{});
-        }
-    }
-
-    if (opt.gradient) |gradopt| if (gradopt == .numeric) {
-        const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
-
-        const num_grads = try calculateNumericalGradient(T, ctx, runFromSystem, opt, &.{0});
-        defer gpa.free(num_grads);
-
-        grad[0] = num_grads[0];
-
-        errdefer grad[0].deinit(gpa);
-
-        if (log) {
-            try printf(io, "\nMP{d} NUMERICAL NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{opt.order});
-
-            for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-                try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
-            };
-        }
-    };
-
-    errdefer if (opt.gradient != null and opt.gradient.? == .numeric) {
-        grad[0].deinit(gpa);
-    };
-
-    const hess = try handleHessianAndFrequencies(T, io, opt, sys, energy[0], log, gpa);
-
-    errdefer {
-        if (opt.hessian) |_| hess[0].deinit(gpa);
-
-        gpa.free(hess);
-    }
-
-    if (opt.write.gradient) |fname| if (grad.len > 0) {
-        try writeMatrix(T, io, fname, grad[0]);
-    };
-
-    if (opt.write.hessian) |fname| if (hess.len > 0) {
-        try writeMatrix(T, io, fname, hess[0]);
-    };
-
-    if (opt.write.geometry) |fname| {
-        try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
-    }
-
-    return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = hess };
-}
-
-/// Evaluates Hamiltonian matrix elements over all Slater determinant pairs using Slater-Condon rules.
-fn buildCiMatrix(comptime T: type, dets: []const []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
-    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
-    errdefer H_CI.deinit(gpa);
-
-    for (0..dets.len) |i| for (i..dets.len) |j| {
-        const val = slater(T, dets[i], dets[j], H_MS, g_MS);
-
-        H_CI.ptr(i, j).* = val;
-        H_CI.ptr(j, i).* = val;
-    };
-
-    return H_CI;
 }
 
 /// Validates Moller-Plesset inputs for method requirements and minimum perturbation order.
-fn checkInvalidInput(opt: Options) !void {
+pub fn checkInvalidInput(opt: Options) !void {
     if (opt.hartree_fock.integral_direct) {
         std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR MOLLER-PLESSET PERTURBATION THEORY", .{});
 
@@ -355,9 +160,107 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
+/// Computes the Møller-Plesset perturbation series for electronic correlation energy corrections.
+pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), log: bool, gpa: Allocator) !Result(T) {
+    _ = sys;
+
+    var hfres = ref;
+    errdefer hfres.deinit(gpa);
+
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
+
+    var energy = try gpa.alloc(T, 1);
+    errdefer gpa.free(energy);
+
+    var grad: []Matrix(T) = &.{};
+
+    errdefer {
+        for (0..grad.len) |k| grad[k].deinit(gpa);
+
+        if (grad.len > 0) gpa.free(grad);
+    }
+
+    var grads: ?[]Matrix(T) = null;
+
+    defer if (grads) |g| {
+        for (0..(opt.order + 1)) |i| g[i].deinit(gpa);
+
+        gpa.free(g);
+    };
+
+    if (opt.gradient) |g| switch (g) {
+        .analytic => {
+            var g0 = try hfres.grad[0].clone(gpa);
+            errdefer g0.deinit(gpa);
+
+            grad = try gpa.alloc(Matrix(T), 1);
+            grad[0] = g0;
+
+            grads = try gradient(T, opt.order, hfres, gpa);
+        },
+        .numeric => {},
+    };
+
+    energy[0] = hfres.energy[0];
+
+    const generalized = opt.hartree_fock.generalized;
+
+    const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
+
+    const energies = try mp(T, opt.order, hfres.ints.g.?, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
+    defer gpa.free(energies);
+
+    for (2..opt.order + 1) |i| {
+        energy[0] += energies[i];
+
+        if (log) {
+            try printf(io, "\nMP{d:02} TOTAL ENERGY: {d:.14} Eh", .{ i, energy[0] });
+
+            if (grads != null) {
+                try printf(io, "\n", .{});
+            }
+        }
+
+        if (grads) |g| {
+            for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
+                grad[0].ptr(j, k).* += g[i].at(j, k);
+            };
+
+            if (log) {
+                try printf(io, "\nMP{d:02} ANALYTICAL NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{i});
+
+                for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
+                    try printf(io, "{d:20.14}{s}", .{ grad[0].at(j, k), if (k == 2) "\n" else " " });
+                };
+            }
+        }
+
+        if (log and grads == null and i == opt.order) {
+            try printf(io, "\n", .{});
+        }
+    }
+
+    return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = &.{} };
+}
+
+/// Evaluates Hamiltonian matrix elements over all Slater determinant pairs using Slater-Condon rules.
+fn buildCiMatrix(comptime T: type, dets: []const []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
+    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
+    errdefer H_CI.deinit(gpa);
+
+    for (0..dets.len) |i| for (i..dets.len) |j| {
+        const val = slater(T, dets[i], dets[j], H_MS, g_MS);
+
+        H_CI.ptr(i, j).* = val;
+        H_CI.ptr(j, i).* = val;
+    };
+
+    return H_CI;
+}
+
 /// Computes the nuclear gradient of the Møller-Plesset energy corrections using dual number differentiation.
 fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Allocator) ![]Matrix(T) {
-    const nbf, const generalized = .{ hfres.C.shape[0], hfres.ints.sys.nbf != hfres.C.shape[0] };
+    const nbf, const generalized = .{ hfres.C_mo.shape[0], hfres.ints.sys.nbf != hfres.C_mo.shape[0] };
 
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
 
@@ -379,14 +282,14 @@ fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Al
         defer C_d.deinit(gpa);
 
         for (0..nbf) |mu| for (0..nbf) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C.at(mu, p), hfres.dC.?.at(.{ i, mu, p }));
+            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ i, mu, p }));
         };
 
         var e_d = try Vector(ScalarDual(T)).init(nbf, gpa);
         defer e_d.deinit(gpa);
 
         for (0..nbf) |j| {
-            e_d.ptr(j).* = ScalarDual(T).init(hfres.e.at(j), hfres.de.?.at(i, j));
+            e_d.ptr(j).* = ScalarDual(T).init(hfres.e_mo.at(j), hfres.de_mo.?.at(i, j));
         }
 
         var g_d = try Tensor(ScalarDual(T), 4).init(hfres.ints.g.?.shape, gpa);
@@ -407,39 +310,6 @@ fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Al
     }
 
     return grads;
-}
-
-/// Computes the nuclear Hessian of the MP energy numerically and performs frequency and thermochemical analyses.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), energy: T, log: bool, gpa: Allocator) anyerror![]Matrix(T) {
-    if (opt.hessian == null) return try gpa.alloc(Matrix(T), 0);
-
-    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
-
-    var hess = try calculateNumericalHessian(T, ctx, runFromSystem, opt, &.{0});
-
-    errdefer {
-        for (0..hess.len) |k| hess[k].deinit(gpa);
-
-        gpa.free(hess);
-    }
-
-    if (log and opt.frequency != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
-        defer freqs.deinit(gpa);
-
-        const method_str = try std.fmt.allocPrint(gpa, "MP{d}", .{opt.order});
-        defer gpa.free(method_str);
-
-        try printHarmonicFrequencies(T, io, freqs, method_str);
-
-        const mult = opt.hartree_fock.multiplicity;
-
-        const thermo = try calculateThermochemistry(T, opt.frequency.?, sys.*, freqs, mult, gpa);
-
-        try printThermochemistry(T, io, opt.frequency.?, thermo, energy, method_str);
-    }
-
-    return hess;
 }
 
 /// Computes Møller-Plesset energy corrections up to the specified perturbation order.

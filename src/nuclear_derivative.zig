@@ -351,7 +351,7 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
 
     const nsp = 2 * sys.nbf;
 
-    const C_ref = if (comptime @hasField(@TypeOf(res_ref), "C")) res_ref.C else res_ref.hartree_fock.C;
+    const C_ref = if (comptime @hasField(@TypeOf(res_ref), "C_mo")) res_ref.C_mo else res_ref.hartree_fock.C_mo;
 
     var C_ref_SO = if (generalized) C_ref else try Matrix(T).initZero(nsp, nsp, gpa);
     defer if (!generalized) C_ref_SO.deinit(gpa);
@@ -457,8 +457,8 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         var S_SO = try sys_m.overlapBetweenSpin(sys_p, nthreads, gpa);
         defer S_SO.deinit(gpa);
 
-        const C_m = if (comptime @hasField(@TypeOf(res_m), "C")) res_m.C else res_m.hartree_fock.C;
-        const C_p = if (comptime @hasField(@TypeOf(res_p), "C")) res_p.C else res_p.hartree_fock.C;
+        const C_m = if (comptime @hasField(@TypeOf(res_m), "C_mo")) res_m.C_mo else res_m.hartree_fock.C_mo;
+        const C_p = if (comptime @hasField(@TypeOf(res_p), "C_mo")) res_p.C_mo else res_p.hartree_fock.C_mo;
 
         var C_m_SO = if (generalized) C_m else C_m_buf;
 

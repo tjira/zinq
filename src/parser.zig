@@ -6,6 +6,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const StringHashMap = std.StringHashMap;
 
+const electronic_structure = @import("electronic_structure.zig");
 const fourier_transform = @import("fourier_transform.zig");
 const hartree_fock = @import("hartree_fock.zig");
 const main = @import("main.zig");
@@ -635,7 +636,7 @@ pub const Parser = struct {
             .write = .{ .geometry = opt_geom_path },
         };
 
-        var result = try hartree_fock.run(f64, io, opt, true, gpa);
+        var result = try electronic_structure.run(f64, io, opt, true, gpa);
         defer result.deinit(gpa);
     }
 
@@ -1158,7 +1159,7 @@ pub const Parser = struct {
             .write = .{ .geometry = opt_geom_path },
         };
 
-        var result = try moller_plesset.run(f64, io, opt, true, gpa);
+        var result = try electronic_structure.run(f64, io, opt, true, gpa);
         defer result.deinit(gpa);
     }
 

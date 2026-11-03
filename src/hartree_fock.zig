@@ -18,15 +18,8 @@ const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
 const axpy = @import("linear_algebra.zig").axpy;
-const bfgs = @import("molecular_optimization.zig").bfgs;
-const calculateHarmonicFrequencies = @import("frequency_analysis.zig").calculateHarmonicFrequencies;
-const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNumericalGradient;
-const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
-const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
 const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
-const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const dot = @import("linear_algebra.zig").dot;
-const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const gemm = @import("linear_algebra.zig").gemm;
 const getrf = @import("linear_algebra.zig").getrf;
 const getrs = @import("linear_algebra.zig").getrs;
@@ -38,20 +31,15 @@ const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").runFromSystem;
 const mulliken = @import("population_analysis.zig").mulliken;
 const orbitalResponse = @import("cphf.zig").orbitalResponse;
-const printGeometry = @import("read_write.zig").printGeometry;
-const printHarmonicFrequencies = @import("frequency_analysis.zig").printHarmonicFrequencies;
 const printLowdinCharges = @import("population_analysis.zig").printLowdinCharges;
 const printMayerBondOrders = @import("population_analysis.zig").printMayerBondOrders;
 const printMullikenCharges = @import("population_analysis.zig").printMullikenCharges;
-const printThermochemistry = @import("frequency_analysis.zig").printThermochemistry;
 const printTotalSpin = @import("spin_analysis.zig").printTotalSpin;
 const printWibergBondOrders = @import("population_analysis.zig").printWibergBondOrders;
 const printf = @import("read_write.zig").printf;
-const steepestDescent = @import("molecular_optimization.zig").steepestDescent;
 const sygvd = @import("linear_algebra.zig").sygvd;
 const wiberg = @import("population_analysis.zig").wiberg;
 const writeMatrix = @import("read_write.zig").writeMatrix;
-const writeXyzFile = @import("read_write.zig").writeXyzFile;
 
 const AN2SM = @import("constant.zig").AN2SM;
 const AU2CM = @import("constant.zig").AU2CM;
@@ -164,28 +152,30 @@ pub fn Result(comptime T: type) type {
     return struct {
         ints: Integrals(T),
 
-        C: Matrix(T),
+        C_mo: Matrix(T),
+        e_mo: Vector(T),
+
         P: Matrix(T),
         F: Matrix(T),
-        e: Vector(T),
 
         energy: []T,
 
         grad: []Matrix(T) = &.{},
         hess: []Matrix(T) = &.{},
 
-        dC: ?Tensor(T, 3) = null,
+        dC_mo: ?Tensor(T, 3) = null,
 
-        de: ?Matrix(T) = null,
+        de_mo: ?Matrix(T) = null,
 
         /// Frees allocated memory associated with the Hartree-Fock or DFT result structure.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
             self.ints.deinit(gpa);
 
-            self.C.deinit(gpa);
+            self.C_mo.deinit(gpa);
+            self.e_mo.deinit(gpa);
+
             self.P.deinit(gpa);
             self.F.deinit(gpa);
-            self.e.deinit(gpa);
 
             gpa.free(self.energy);
 
@@ -193,16 +183,16 @@ pub fn Result(comptime T: type) type {
                 self.grad[i].deinit(gpa);
             }
 
-            gpa.free(self.grad);
+            if (self.grad.len > 0) gpa.free(self.grad);
 
             for (0..self.hess.len) |i| {
                 self.hess[i].deinit(gpa);
             }
 
-            gpa.free(self.hess);
+            if (self.hess.len > 0) gpa.free(self.hess);
 
-            if (self.dC) |*dC| dC.deinit(gpa);
-            if (self.de) |*de| de.deinit(gpa);
+            if (self.dC_mo) |*dC_mo| dC_mo.deinit(gpa);
+            if (self.de_mo) |*de_mo| de_mo.deinit(gpa);
         }
     };
 }
@@ -271,486 +261,8 @@ pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWor
     return G;
 }
 
-/// Direct Inversion in the Iterative Subspace (DIIS) to accelerate Fock matrix convergence via error minimization.
-pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
-    if (fck_hist.len < 2) return;
-
-    var B = try Matrix(T).initZero(fck_hist.len + 1, fck_hist.len + 1, gpa);
-    defer B.deinit(gpa);
-
-    var b = try Matrix(T).initZero(fck_hist.len + 1, 1, gpa);
-    defer b.deinit(gpa);
-
-    for (0..fck_hist.len) |i| for (i..fck_hist.len) |j| {
-        const sum = dot(T, err_hist[i].asVector(), err_hist[j].asVector());
-
-        B.ptr(i, j).* = sum;
-        B.ptr(j, i).* = sum;
-    };
-
-    for (0..fck_hist.len) |i| {
-        B.ptr(i, fck_hist.len).* = -1.0;
-        B.ptr(fck_hist.len, i).* = -1.0;
-    }
-
-    for (0..fck_hist.len) |i| {
-        b.ptr(i, 0).* = 0.0;
-    }
-
-    b.ptr(fck_hist.len, 0).* = -1.0;
-
-    const ipiv = try gpa.alloc(i32, fck_hist.len + 1);
-    defer gpa.free(ipiv);
-
-    try getrf(T, &B, ipiv);
-
-    var c = try Matrix(T).init(fck_hist.len + 1, 1, gpa);
-    defer c.deinit(gpa);
-
-    try getrs(T, &c, B, ipiv, b);
-
-    F.zero();
-
-    for (0..fck_hist.len) |i| {
-        var f_vec = F.asVector();
-
-        axpy(T, &f_vec, fck_hist[i].asVector(), c.at(i, 0));
-    }
-
-    if (symmetric) F.symmetrize();
-}
-
-/// Computes the classical Coulomb repulsion gradient between nuclei.
-pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: Allocator) !Matrix(T) {
-    var dVN = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
-    errdefer dVN.deinit(gpa);
-
-    for (0..sys.atoms.len) |i| {
-        const Zi = @as(T, @floatFromInt(sys.atoms[i]));
-
-        const xi = sys.coors[3 * i + 0];
-        const yi = sys.coors[3 * i + 1];
-        const zi = sys.coors[3 * i + 2];
-
-        for (0..sys.atoms.len) |k| {
-            if (k == i) continue;
-
-            const Zk = @as(T, @floatFromInt(sys.atoms[k]));
-
-            const xk = sys.coors[3 * k + 0];
-            const yk = sys.coors[3 * k + 1];
-            const zk = sys.coors[3 * k + 2];
-
-            const dx = xi - xk;
-            const dy = yi - yk;
-            const dz = zi - zk;
-
-            const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
-
-            dVN.ptr(i, 0).* -= Zi * Zk * dx / (dist * dist * dist);
-            dVN.ptr(i, 1).* -= Zi * Zk * dy / (dist * dist * dist);
-            dVN.ptr(i, 2).* -= Zi * Zk * dz / (dist * dist * dist);
-        }
-    }
-
-    return dVN;
-}
-
-/// Executes a Hartree-Fock or DFT calculation on a molecular system specified by file paths.
-pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
-
-    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
-
-    const basis_path = try exportIfBuiltin(io, opt.basis, gpa);
-
-    defer if (std.mem.startsWith(u8, opt.basis, "builtin:")) {
-        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
-    };
-
-    var sys = try MolecularSystem(T).init(io, opt.system, basis_path, opt.charge, opt.multiplicity, gpa);
-    defer sys.deinit(gpa);
-
-    if (std.mem.startsWith(u8, opt.basis, "builtin:")) {
-        try std.Io.Dir.cwd().deleteFile(io, basis_path);
-    }
-
-    return try runFromSystem(T, io, opt, &sys, null, log, gpa);
-}
-
-/// Runs Hartree-Fock or DFT SCF starting from an initialized MolecularSystem structure.
-pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
-
-    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
-
-    if (log) {
-        try printGeometry(T, io, sys.atoms, sys.coors, "MOLECULAR GEOMETRY (Å)");
-    }
-
-    var final_Pg: ?Matrix(T) = null;
-    defer if (final_Pg) |*p| p.deinit(gpa);
-
-    if (opt.optimize) |o| {
-        switch (o) {
-            .steepest_descent => final_Pg = try steepestDescent(T, io, runFromSystem, opt, sys, Pg, log, gpa),
-            .bfgs => final_Pg = try bfgs(T, io, runFromSystem, opt, sys, Pg, log, gpa),
-        }
-
-        if (log) {
-            try printGeometry(T, io, sys.atoms, sys.coors, "OPTIMIZED MOLECULAR GEOMETRY (Å)");
-        }
-    }
-
-    const analytic_grad = opt.gradient != null and opt.gradient.? == .analytic;
-
-    const molopts = MolecularIntegralsOptions{
-        .system = opt.system,
-        .basis = opt.basis,
-        .generalized = opt.generalized,
-        .charge = opt.charge,
-        .multiplicity = opt.multiplicity,
-        .nthreads = opt.nthreads,
-        .calculate = .{
-            .coulomb = !opt.integral_direct,
-            .coulomb_d1 = !opt.integral_direct and analytic_grad,
-            .hamiltonian_d1 = analytic_grad,
-            .kinetic_d1 = analytic_grad,
-            .nuclear_d1 = analytic_grad,
-            .overlap_d1 = analytic_grad,
-        },
-        .write = opt.write.integrals,
-    };
-
-    var ints = try molecular_integrals_runFromSystem(T, io, molopts, sys.*, log, gpa);
-    errdefer ints.deinit(gpa);
-
-    var energy = try gpa.alloc(T, 1);
-    errdefer gpa.free(energy);
-
-    var grad = try gpa.alloc(Matrix(T), if (opt.gradient) |_| 1 else 0);
-    errdefer gpa.free(grad);
-
-    const VN = try sys.nrep();
-
-    const nocc = if (opt.generalized) sys.nel else blk: {
-        if (sys.nel % 2 != 0) {
-            return error.OnlyClosedShellSupported;
-        }
-
-        break :blk sys.nel / 2;
-    };
-
-    const nbf = if (opt.generalized) 2 * sys.nbf else sys.nbf;
-
-    if (log) {
-        try printf(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ nbf, nocc });
-    }
-
-    var B = try Matrix(T).init(nbf, nbf, gpa);
-    defer B.deinit(gpa);
-
-    var C = try Matrix(T).init(nbf, nbf, gpa);
-    errdefer C.deinit(gpa);
-
-    var P = try Matrix(T).initZero(nbf, nbf, gpa);
-    errdefer P.deinit(gpa);
-
-    var F = try Matrix(T).init(nbf, nbf, gpa);
-    errdefer F.deinit(gpa);
-
-    var e = try Vector(T).init(nbf, gpa);
-    errdefer e.deinit(gpa);
-
-    var dft: ?DftPotential(T) = null;
-
-    if (opt.dft) |dft_opt| {
-        const n_rad, const n_leb = .{ dft_opt.grid.radial, dft_opt.grid.angular };
-
-        const funcs = .{ dft_opt.exchange, dft_opt.correlation, dft_opt.exchange_correlation };
-
-        dft = try DftPotential(T).init(sys.*, funcs, n_rad, n_leb, opt.generalized, gpa);
-    }
-
-    defer if (dft) |*pot| {
-        pot.deinit(gpa);
-    };
-
-    const guess_p = final_Pg orelse Pg;
-
-    if (guess_p) |guess| {
-        @memcpy(P.data, guess.data);
-    }
-
-    if (guess_p == null) {
-        try solveRoothaanHall(T, &e, &C, ints.H.?, ints.S.?, &B);
-
-        buildDensityMatrix(T, &P, C, nocc, opt.generalized);
-    }
-
-    const ws: ScfWorkspace(T) = .{ .P = &P, .F = &F, .C = &C, .e = &e };
-
-    energy[0] = try scf(T, io, opt, ints, ws, if (dft) |*d| d else null, log, gpa);
-
-    if (log and opt.generalized) {
-        const s2 = try calculateTotalSpin(T, P, ints.S.?, gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printTotalSpin(T, io, s2, opt.multiplicity, method_str);
-    }
-
-    if (log and opt.lowdin) {
-        var charges = try lowdin(T, sys.*, P, ints.S.?, gpa);
-        defer charges.deinit(gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printLowdinCharges(T, io, sys.*, charges, method_str);
-    }
-
-    if (log and opt.mayer) {
-        var bo = try mayer(T, sys.*, P, ints.S.?, gpa);
-        defer bo.deinit(gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printMayerBondOrders(T, io, sys.*, bo, method_str);
-    }
-
-    if (log and opt.mulliken) {
-        var charges = try mulliken(T, sys.*, P, ints.S.?, gpa);
-        defer charges.deinit(gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printMullikenCharges(T, io, sys.*, charges, method_str);
-    }
-
-    if (log and opt.wiberg) {
-        var bo = try wiberg(T, sys.*, P, ints.S.?, gpa);
-        defer bo.deinit(gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printWibergBondOrders(T, io, sys.*, bo, method_str);
-    }
-
-    if (log) {
-        try printf(io, "\nNUCLEAR REPULSION ENERGY: {d:.14} Eh\n", .{VN});
-    }
-
-    if (log) if (dft) |*pot| {
-        const names = try pot.getFunctionalNames(gpa);
-        defer gpa.free(names);
-
-        try printf(io, "\nFINAL DFT ENERGY ({s}): {d:.14} Eh\n", .{ names, energy[0] });
-    };
-
-    if (log and dft == null) {
-        try printf(io, "\nFINAL HARTREE-FOCK ENERGY: {d:.14} Eh\n", .{energy[0]});
-    }
-
-    try exportMatrices(T, io, opt.write, C, P, F);
-
-    if (opt.write.geometry) |fname| {
-        try writeXyzFile(T, io, fname, sys.atoms, sys.coors);
-    }
-
-    if (opt.gradient) |gradopt| switch (gradopt) {
-        .analytic => grad[0] = try calculateNuclearGradient(T, ints, ws, opt.generalized, if (dft) |*d| d else null, opt.nthreads, gpa),
-        .numeric => {
-            const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = P };
-
-            const num_grads = try calculateNumericalGradient(T, ctx, runFromSystem, opt, &.{0});
-            defer gpa.free(num_grads);
-
-            grad[0] = num_grads[0];
-        },
-    };
-
-    errdefer if (opt.gradient) |_| grad[0].deinit(gpa);
-
-    if (opt.write.gradient) |fname| if (grad.len > 0) {
-        try writeMatrix(T, io, fname, grad[0]);
-    };
-
-    if (log) for (0..grad.len) |i| {
-        const grad_type_str = if (opt.gradient.? == .analytic) "ANALYTICAL" else "NUMERICAL";
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printf(io, "\n{s} {s} NUCLEAR ENERGY GRADIENT (Eh/a0)\n", .{ method_str, grad_type_str });
-
-        for (0..grad[i].shape[0]) |j| for (0..grad[i].shape[1]) |k| {
-            try printf(io, "{d:20.14}{s}", .{ grad[i].at(j, k), if (k == 2) "\n" else " " });
-        };
-    };
-
-    const hess = try handleHessianAndFrequencies(T, io, opt, sys, energy[0], log, gpa);
-
-    errdefer {
-        if (opt.hessian) |_| hess[0].deinit(gpa);
-
-        gpa.free(hess);
-    }
-
-    if (opt.write.hessian) |fname| if (hess.len > 0) {
-        try writeMatrix(T, io, fname, hess[0]);
-    };
-
-    var result: Result(T) = .{
-        .ints = ints,
-
-        .P = P,
-        .C = C,
-        .F = F,
-        .e = e,
-
-        .energy = energy,
-
-        .grad = grad,
-        .hess = hess,
-    };
-
-    if (opt.response) |response| {
-        result.dC, result.de = try orbitalResponse(T, io, result, response, log, gpa);
-    }
-
-    return result;
-}
-
-/// Constructs the one-particle reduced density matrix in the atomic basis from molecular orbital coefficients.
-fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) void {
-    std.debug.assert(C.shape[0] == P.shape[0]);
-    std.debug.assert(C.shape[1] == P.shape[1]);
-
-    const factor: T = if (generalized) 1 else 2;
-
-    for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
-        var sum: T = 0;
-
-        for (0..nocc) |k| {
-            sum += factor * C.at(i, k) * C.at(j, k);
-        }
-
-        P.ptr(i, j).* = sum;
-    };
-}
-
-/// Evaluates the Pulay energy-weighted density matrix from orbital energies and molecular orbital coefficients.
-fn buildEnergyWeightedDensity(comptime T: type, W: *Matrix(T), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool) void {
-    const factor: T = if (generalized) 1 else 2;
-
-    for (0..W.nrow()) |i| for (0..W.ncol()) |j| {
-        var sum: T = 0;
-
-        for (0..nocc) |k| {
-            sum += factor * e.at(k) * C.at(i, k) * C.at(j, k);
-        }
-
-        W.ptr(i, j).* = sum;
-    };
-}
-
-/// Constructs the effective one-electron Fock matrix from core Hamiltonian, Coulomb, exchange, and DFT potentials.
-fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), opt: Options, dft: ?*DftPotential(T), gpa: Allocator) !void {
-    const nbf = ints.H.?.shape[0];
-
-    std.debug.assert(F.shape[0] == nbf);
-    std.debug.assert(F.shape[1] == nbf);
-    std.debug.assert(P.shape[0] == nbf);
-    std.debug.assert(P.shape[1] == nbf);
-
-    for (0..nbf) |i| for (0..nbf) |j| {
-        F.ptr(i, j).* = ints.H.?.at(i, j);
-    };
-
-    if (opt.integral_direct) {
-        var exch_factor: T = if (opt.generalized) 1 else 0.5;
-
-        if (dft) |pot| {
-            exch_factor *= pot.exx_coef;
-        }
-
-        if (opt.generalized) {
-            ints.sys.fockGhf(F, P, exch_factor, opt.nthreads);
-        }
-
-        if (!opt.generalized) {
-            ints.sys.fockRhf(F, P, exch_factor, opt.nthreads);
-        }
-
-        if (dft) |pot| {
-            try pot.evaluate(ints.sys, P, gpa);
-
-            for (0..nbf) |j| for (0..nbf) |k| {
-                F.ptr(j, k).* += pot.Vxc.at(j, k);
-            };
-        }
-    }
-
-    if (!opt.integral_direct) {
-        std.debug.assert(ints.g.?.shape[0] == nbf);
-        std.debug.assert(ints.g.?.shape[1] == nbf);
-        std.debug.assert(ints.g.?.shape[2] == nbf);
-        std.debug.assert(ints.g.?.shape[3] == nbf);
-
-        if (dft) |pot| {
-            for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| for (0..nbf) |m| {
-                F.ptr(l, m).* += P.at(j, k) * ints.g.?.at(.{ j, l, k, m });
-            };
-
-            if (pot.exx_coef > 0) {
-                const factor: T = if (opt.generalized) 1 else 0.5;
-
-                for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-                    F.ptr(k, l).* -= factor * pot.exx_coef * P.at(i, j) * ints.g.?.at(.{ i, j, k, l });
-                };
-            }
-
-            try pot.evaluate(ints.sys, P, gpa);
-
-            for (0..nbf) |j| for (0..nbf) |k| {
-                F.ptr(j, k).* += pot.Vxc.at(j, k);
-            };
-        }
-
-        if (dft == null) {
-            const exch_factor: T = if (opt.generalized) 1 else 0.5;
-            const g = ints.g.?;
-
-            for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-                F.ptr(k, l).* += P.at(i, j) * (g.at(.{ i, k, j, l }) - exch_factor * g.at(.{ i, j, k, l }));
-            };
-        }
-    }
-
-    for (0..nbf) |i| for (i + 1..nbf) |j| {
-        const avg = (F.at(i, j) + F.at(j, i)) / 2;
-
-        F.ptr(i, j).* = avg;
-        F.ptr(j, i).* = avg;
-    };
-}
-
-/// Computes the electronic energy expectation value from density, core Hamiltonian, and Fock matrices.
-fn calculateElectronicEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), dft: ?*DftPotential(T)) T {
-    var energy: T = if (dft) |pot| pot.Exc else 0;
-
-    if (dft) |pot| for (0..P.shape[0]) |j| for (0..P.shape[1]) |k| {
-        energy += 0.5 * P.at(j, k) * (ints.H.?.at(j, k) + F.at(j, k) - pot.Vxc.at(j, k));
-    };
-
-    if (dft == null) for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
-        energy += 0.5 * P.at(i, j) * (ints.H.?.at(i, j) + F.at(i, j));
-    };
-
-    return energy;
-}
-
 /// Validates input options for physical consistency and method compatibility.
-fn checkInvalidInput(opt: Options) !void {
+pub fn checkInvalidInput(opt: Options) !void {
     if (opt.integral_direct) {
         if (opt.response != null) {
             std.log.err("CPHF RESPONSE PROPERTIES ARE NOT SUPPORTED FOR INTEGRAL DIRECT HARTREE-FOCK", .{});
@@ -858,11 +370,11 @@ fn checkInvalidInput(opt: Options) !void {
     }
 
     if (opt.dft) |d| {
-        if (opt.gradient != null and opt.gradient.? == .analytic) {
+        if (opt.gradient) |g| if (g == .analytic) {
             std.log.err("ANALYTIC GRADIENTS ARE NOT SUPPORTED FOR DFT CALCULATIONS", .{});
 
             return error.InvalidInput;
-        }
+        };
 
         if (opt.response != null) {
             std.log.err("CPKS RESPONSE PROPERTIES ARE NOT SUPPORTED FOR DFT CALCULATIONS", .{});
@@ -916,6 +428,369 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
+/// Direct Inversion in the Iterative Subspace (DIIS) to accelerate Fock matrix convergence via error minimization.
+pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
+    if (fck_hist.len < 2) return;
+
+    var B = try Matrix(T).initZero(fck_hist.len + 1, fck_hist.len + 1, gpa);
+    defer B.deinit(gpa);
+
+    var b = try Matrix(T).initZero(fck_hist.len + 1, 1, gpa);
+    defer b.deinit(gpa);
+
+    for (0..fck_hist.len) |i| for (i..fck_hist.len) |j| {
+        const sum = dot(T, err_hist[i].asVector(), err_hist[j].asVector());
+
+        B.ptr(i, j).* = sum;
+        B.ptr(j, i).* = sum;
+    };
+
+    for (0..fck_hist.len) |i| {
+        B.ptr(i, fck_hist.len).* = -1.0;
+        B.ptr(fck_hist.len, i).* = -1.0;
+    }
+
+    for (0..fck_hist.len) |i| {
+        b.ptr(i, 0).* = 0.0;
+    }
+
+    b.ptr(fck_hist.len, 0).* = -1.0;
+
+    const ipiv = try gpa.alloc(i32, fck_hist.len + 1);
+    defer gpa.free(ipiv);
+
+    try getrf(T, &B, ipiv);
+
+    var c = try Matrix(T).init(fck_hist.len + 1, 1, gpa);
+    defer c.deinit(gpa);
+
+    try getrs(T, &c, B, ipiv, b);
+
+    F.zero();
+
+    for (0..fck_hist.len) |i| {
+        var f_vec = F.asVector();
+
+        axpy(T, &f_vec, fck_hist[i].asVector(), c.at(i, 0));
+    }
+
+    if (symmetric) F.symmetrize();
+}
+
+/// Computes the classical Coulomb repulsion gradient between nuclei.
+pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: Allocator) !Matrix(T) {
+    var dVN = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
+    errdefer dVN.deinit(gpa);
+
+    for (0..sys.atoms.len) |i| {
+        const Zi = @as(T, @floatFromInt(sys.atoms[i]));
+
+        const xi = sys.coors[3 * i + 0];
+        const yi = sys.coors[3 * i + 1];
+        const zi = sys.coors[3 * i + 2];
+
+        for (0..sys.atoms.len) |k| {
+            if (k == i) continue;
+
+            const Zk = @as(T, @floatFromInt(sys.atoms[k]));
+
+            const xk = sys.coors[3 * k + 0];
+            const yk = sys.coors[3 * k + 1];
+            const zk = sys.coors[3 * k + 2];
+
+            const dx = xi - xk;
+            const dy = yi - yk;
+            const dz = zi - zk;
+
+            const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            dVN.ptr(i, 0).* -= Zi * Zk * dx / (dist * dist * dist);
+            dVN.ptr(i, 1).* -= Zi * Zk * dy / (dist * dist * dist);
+            dVN.ptr(i, 2).* -= Zi * Zk * dz / (dist * dist * dist);
+        }
+    }
+
+    return dVN;
+}
+
+/// Computes the self-consistent field molecular orbitals, density matrix, and ground-state electronic energy.
+pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), guess: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
+    const analytic_grad = if (opt.gradient) |g| g == .analytic else false;
+
+    const molopts = MolecularIntegralsOptions{
+        .system = opt.system,
+        .basis = opt.basis,
+        .generalized = opt.generalized,
+        .charge = opt.charge,
+        .multiplicity = opt.multiplicity,
+        .nthreads = opt.nthreads,
+        .calculate = .{
+            .coulomb = !opt.integral_direct,
+            .coulomb_d1 = !opt.integral_direct and analytic_grad,
+            .hamiltonian_d1 = analytic_grad,
+            .kinetic_d1 = analytic_grad,
+            .nuclear_d1 = analytic_grad,
+            .overlap_d1 = analytic_grad,
+        },
+        .write = opt.write.integrals,
+    };
+
+    var ints = try molecular_integrals_runFromSystem(T, io, molopts, sys.*, log, gpa);
+    errdefer ints.deinit(gpa);
+
+    var energy = try gpa.alloc(T, 1);
+    errdefer gpa.free(energy);
+
+    var grad: []Matrix(T) = &.{};
+
+    errdefer {
+        for (0..grad.len) |k| grad[k].deinit(gpa);
+
+        if (grad.len > 0) gpa.free(grad);
+    }
+
+    const VN = try sys.nrep();
+
+    const nocc = if (opt.generalized) sys.nel else blk: {
+        if (sys.nel % 2 != 0) {
+            return error.OnlyClosedShellSupported;
+        }
+
+        break :blk sys.nel / 2;
+    };
+
+    const nbf = if (opt.generalized) 2 * sys.nbf else sys.nbf;
+
+    if (log) {
+        try printf(io, "\nNUMBER OF BASIS FUNCTIONS: {d}, NUMBER OF OCCUPIED ORBITALS: {d}\n", .{ nbf, nocc });
+    }
+
+    var B = try Matrix(T).init(nbf, nbf, gpa);
+    defer B.deinit(gpa);
+
+    var C = try Matrix(T).init(nbf, nbf, gpa);
+    errdefer C.deinit(gpa);
+
+    var P = try Matrix(T).initZero(nbf, nbf, gpa);
+    errdefer P.deinit(gpa);
+
+    var F = try Matrix(T).init(nbf, nbf, gpa);
+    errdefer F.deinit(gpa);
+
+    var e = try Vector(T).init(nbf, gpa);
+    errdefer e.deinit(gpa);
+
+    var dft: ?DftPotential(T) = null;
+
+    if (opt.dft) |dft_opt| {
+        const n_rad, const n_leb = .{ dft_opt.grid.radial, dft_opt.grid.angular };
+
+        const funcs = .{ dft_opt.exchange, dft_opt.correlation, dft_opt.exchange_correlation };
+
+        dft = try DftPotential(T).init(sys.*, funcs, n_rad, n_leb, opt.generalized, gpa);
+    }
+
+    defer if (dft) |*pot| {
+        pot.deinit(gpa);
+    };
+
+    if (guess) |p| {
+        @memcpy(P.data, p.data);
+    }
+
+    if (guess == null) {
+        try solveRoothaanHall(T, &e, &C, ints.H.?, ints.S.?, &B);
+
+        buildDensityMatrix(T, &P, C, nocc, opt.generalized);
+    }
+
+    const ws: ScfWorkspace(T) = .{ .P = &P, .F = &F, .C = &C, .e = &e };
+
+    energy[0] = try scf(T, io, opt, ints, ws, if (dft) |*d| d else null, log, gpa);
+
+    if (log and opt.generalized) {
+        const s2 = try calculateTotalSpin(T, P, ints.S.?, gpa);
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printTotalSpin(T, io, s2, opt.multiplicity, method_str);
+    }
+
+    if (log and opt.lowdin) {
+        var charges = try lowdin(T, sys.*, P, ints.S.?, gpa);
+        defer charges.deinit(gpa);
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printLowdinCharges(T, io, sys.*, charges, method_str);
+    }
+
+    if (log and opt.mayer) {
+        var bo = try mayer(T, sys.*, P, ints.S.?, gpa);
+        defer bo.deinit(gpa);
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printMayerBondOrders(T, io, sys.*, bo, method_str);
+    }
+
+    if (log and opt.mulliken) {
+        var charges = try mulliken(T, sys.*, P, ints.S.?, gpa);
+        defer charges.deinit(gpa);
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printMullikenCharges(T, io, sys.*, charges, method_str);
+    }
+
+    if (log and opt.wiberg) {
+        var bo = try wiberg(T, sys.*, P, ints.S.?, gpa);
+        defer bo.deinit(gpa);
+
+        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+        try printWibergBondOrders(T, io, sys.*, bo, method_str);
+    }
+
+    if (log) {
+        try printf(io, "\nNUCLEAR REPULSION ENERGY: {d:.14} Eh\n", .{VN});
+    }
+
+    if (log) if (dft) |*pot| {
+        const names = try pot.getFunctionalNames(gpa);
+        defer gpa.free(names);
+
+        try printf(io, "\nFINAL DFT ENERGY ({s}): {d:.14} Eh\n", .{ names, energy[0] });
+    };
+
+    if (log and dft == null) {
+        try printf(io, "\nFINAL HARTREE-FOCK ENERGY: {d:.14} Eh\n", .{energy[0]});
+    }
+
+    try exportMatrices(T, io, opt.write, C, P, F);
+
+    if (analytic_grad) {
+        const g0 = try calculateNuclearGradient(T, ints, ws, opt.generalized, if (dft) |*d| d else null, opt.nthreads, gpa);
+
+        grad = try gpa.alloc(Matrix(T), 1);
+
+        grad[0] = g0;
+    }
+
+    var result: Result(T) = .{
+        .ints = ints,
+
+        .P = P,
+        .F = F,
+        .e_mo = e,
+
+        .energy = energy,
+
+        .grad = grad,
+        .hess = &.{},
+
+        .C_mo = C,
+    };
+
+    if (opt.response) |response| {
+        result.dC_mo, result.de_mo = try orbitalResponse(T, io, result, response, log, gpa);
+    }
+
+    return result;
+}
+
+/// Constructs the one-particle reduced density matrix in the atomic basis from molecular orbital coefficients.
+fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) void {
+    std.debug.assert(C.shape[0] == P.shape[0]);
+    std.debug.assert(C.shape[1] == P.shape[1]);
+
+    const factor: T = if (generalized) 1 else 2;
+
+    for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
+        var sum: T = 0;
+
+        for (0..nocc) |k| {
+            sum += factor * C.at(i, k) * C.at(j, k);
+        }
+
+        P.ptr(i, j).* = sum;
+    };
+}
+
+/// Evaluates the Pulay energy-weighted density matrix from orbital energies and molecular orbital coefficients.
+fn buildEnergyWeightedDensity(comptime T: type, W: *Matrix(T), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool) void {
+    const factor: T = if (generalized) 1 else 2;
+
+    for (0..W.nrow()) |i| for (0..W.ncol()) |j| {
+        var sum: T = 0;
+
+        for (0..nocc) |k| {
+            sum += factor * e.at(k) * C.at(i, k) * C.at(j, k);
+        }
+
+        W.ptr(i, j).* = sum;
+    };
+}
+
+/// Constructs the effective one-electron Fock matrix from core Hamiltonian, Coulomb, exchange, and DFT potentials.
+fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), opt: Options, dft: ?*DftPotential(T), gpa: Allocator) !void {
+    const nbf = ints.H.?.shape[0];
+
+    std.debug.assert(F.shape[0] == nbf);
+    std.debug.assert(F.shape[1] == nbf);
+    std.debug.assert(P.shape[0] == nbf);
+    std.debug.assert(P.shape[1] == nbf);
+
+    for (0..nbf) |i| for (0..nbf) |j| {
+        F.ptr(i, j).* = ints.H.?.at(i, j);
+    };
+
+    var exch_factor: T = if (opt.generalized) 1 else 0.5;
+
+    if (dft) |pot| {
+        exch_factor *= pot.exx_coef;
+    }
+
+    if (opt.integral_direct) {
+        if (opt.generalized) {
+            ints.sys.fockGhf(F, P, exch_factor, opt.nthreads);
+        }
+
+        if (!opt.generalized) {
+            ints.sys.fockRhf(F, P, exch_factor, opt.nthreads);
+        }
+    }
+
+    if (!opt.integral_direct) {
+        contractTwoElectronFock(T, F, ints.g.?, P, exch_factor);
+    }
+
+    if (dft) |pot| {
+        try pot.evaluate(ints.sys, P, gpa);
+
+        for (0..nbf) |j| for (0..nbf) |k| {
+            F.ptr(j, k).* += pot.Vxc.at(j, k);
+        };
+    }
+
+    F.symmetrize();
+}
+
+/// Computes the electronic energy expectation value from density, core Hamiltonian, and Fock matrices.
+fn calculateElectronicEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), dft: ?*DftPotential(T)) T {
+    var energy: T = if (dft) |pot| pot.Exc else 0;
+
+    if (dft) |pot| for (0..P.shape[0]) |j| for (0..P.shape[1]) |k| {
+        energy += 0.5 * P.at(j, k) * (ints.H.?.at(j, k) + F.at(j, k) - pot.Vxc.at(j, k));
+    };
+
+    if (dft == null) for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
+        energy += 0.5 * P.at(i, j) * (ints.H.?.at(i, j) + F.at(i, j));
+    };
+
+    return energy;
+}
+
 /// Computes the root-mean-square difference between current and previous density matrices.
 fn computeDensityRmsDifference(comptime T: type, P_new: Matrix(T), P_old: Matrix(T)) T {
     std.debug.assert(P_new.shape[0] == P_old.shape[0]);
@@ -960,6 +835,22 @@ fn computeOrbitalGradient(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Ma
     };
 }
 
+/// Contracts four-center two-electron repulsion integrals with the density matrix to form Coulomb and exchange terms.
+fn contractTwoElectronFock(comptime T: type, F: *Matrix(T), g: Tensor(T, 4), P: Matrix(T), exch_factor: T) void {
+    const nbf = F.nrow();
+
+    std.debug.assert(g.shape[0] == nbf);
+    std.debug.assert(g.shape[1] == nbf);
+    std.debug.assert(g.shape[2] == nbf);
+    std.debug.assert(g.shape[3] == nbf);
+    std.debug.assert(P.shape[0] == nbf);
+    std.debug.assert(P.shape[1] == nbf);
+
+    for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
+        F.ptr(k, l).* += P.at(i, j) * (g.at(.{ i, k, j, l }) - exch_factor * g.at(.{ i, j, k, l }));
+    };
+}
+
 /// Exports SCF result matrices to files if corresponding paths are provided.
 fn exportMatrices(comptime T: type, io: std.Io, write: Write, C: Matrix(T), P: Matrix(T), F: Matrix(T)) !void {
     if (write.coefficients) |fname| {
@@ -973,36 +864,6 @@ fn exportMatrices(comptime T: type, io: std.Io, write: Write, C: Matrix(T), P: M
     if (write.fock) |fname| {
         try writeMatrix(T, io, fname, F);
     }
-}
-
-/// Computes the nuclear Hessian and performs harmonic frequency and thermochemical analyses.
-fn handleHessianAndFrequencies(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), energy: T, log: bool, gpa: Allocator) anyerror![]Matrix(T) {
-    if (opt.hessian == null) return try gpa.alloc(Matrix(T), 0);
-
-    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
-
-    var hess = try calculateNumericalHessian(T, ctx, runFromSystem, opt, &.{0});
-
-    errdefer {
-        for (0..hess.len) |k| hess[k].deinit(gpa);
-
-        gpa.free(hess);
-    }
-
-    if (log and opt.frequency != null) {
-        var freqs = try calculateHarmonicFrequencies(T, hess[0], sys.*, gpa);
-        defer freqs.deinit(gpa);
-
-        const method_str = if (opt.dft != null) "DFT" else "HARTREE-FOCK";
-
-        try printHarmonicFrequencies(T, io, freqs, method_str);
-
-        const thermo = try calculateThermochemistry(T, opt.frequency.?, sys.*, freqs, opt.multiplicity, gpa);
-
-        try printThermochemistry(T, io, opt.frequency.?, thermo, energy, method_str);
-    }
-
-    return hess;
 }
 
 /// Solves the self-consistent field equations iteratively using a density-driven approach.
@@ -1057,59 +918,9 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
 
         e_new = calculateElectronicEnergy(T, ints, ws.F.*, ws.P.*, dft) + VN;
 
-        if (opt.diis != null and opt.diis.? > 0 and i > 0) {
-            var e_diis = try Matrix(T).init(nbf, nbf, gpa);
-            errdefer e_diis.deinit(gpa);
-
-            try computeOrbitalGradient(T, &e_diis, ws.F.*, ws.P.*, ints.S.?, gpa);
-
-            try fck_hist.ensureUnusedCapacity(gpa, 1);
-            try err_hist.ensureUnusedCapacity(gpa, 1);
-
-            var f_diis = try Matrix(T).init(nbf, nbf, gpa);
-            errdefer f_diis.deinit(gpa);
-
-            for (0..nbf) |j| for (0..nbf) |k| {
-                f_diis.ptr(j, k).* = ws.F.at(j, k);
-            };
-
-            if (fck_hist.items.len >= opt.diis.?) {
-                var old_f = fck_hist.orderedRemove(0);
-                var old_e = err_hist.orderedRemove(0);
-
-                old_f.deinit(gpa);
-                old_e.deinit(gpa);
-            }
-
-            fck_hist.appendAssumeCapacity(f_diis);
-            err_hist.appendAssumeCapacity(e_diis);
-
-            diis(T, fck_hist.items, err_hist.items, ws.F, true, gpa) catch {
-                for (0..fck_hist.items.len) |j| fck_hist.items[j].deinit(gpa);
-                for (0..err_hist.items.len) |j| err_hist.items[j].deinit(gpa);
-
-                fck_hist.clearRetainingCapacity();
-                err_hist.clearRetainingCapacity();
-
-                try fck_hist.ensureUnusedCapacity(gpa, 1);
-                try err_hist.ensureUnusedCapacity(gpa, 1);
-
-                var f_retry = try Matrix(T).init(nbf, nbf, gpa);
-                errdefer f_retry.deinit(gpa);
-
-                var e_retry = try Matrix(T).init(nbf, nbf, gpa);
-                errdefer e_retry.deinit(gpa);
-
-                for (0..nbf) |j| for (0..nbf) |k| {
-                    f_retry.ptr(j, k).* = ws.F.at(j, k);
-                };
-
-                try computeOrbitalGradient(T, &e_retry, ws.F.*, ws.P.*, ints.S.?, gpa);
-
-                fck_hist.appendAssumeCapacity(f_retry);
-                err_hist.appendAssumeCapacity(e_retry);
-            };
-        }
+        if (opt.diis) |d| if (d > 0 and i > 0) {
+            try updateDiis(T, ws, ints.S.?, &fck_hist, &err_hist, d, gpa);
+        };
 
         try solveRoothaanHall(T, ws.e, ws.C, ws.F.*, ints.S.?, &B);
 
@@ -1147,4 +958,57 @@ fn solveRoothaanHall(comptime T: type, e: *Vector(T), C: *Matrix(T), F: Matrix(T
     @memcpy(B.data, S.data);
 
     try sygvd(T, e, C, F, B);
+}
+
+/// Accelerates SCF convergence by updating Fock and error matrix histories and extrapolating via DIIS.
+fn updateDiis(comptime T: type, ws: ScfWorkspace(T), S: Matrix(T), fck_hist: *std.ArrayList(Matrix(T)), err_hist: *std.ArrayList(Matrix(T)), max_diis: usize, gpa: Allocator) !void {
+    const nbf = ws.F.nrow();
+
+    var e_diis = try Matrix(T).init(nbf, nbf, gpa);
+    errdefer e_diis.deinit(gpa);
+
+    try computeOrbitalGradient(T, &e_diis, ws.F.*, ws.P.*, S, gpa);
+
+    try fck_hist.ensureUnusedCapacity(gpa, 1);
+    try err_hist.ensureUnusedCapacity(gpa, 1);
+
+    var f_diis = try Matrix(T).init(nbf, nbf, gpa);
+    errdefer f_diis.deinit(gpa);
+
+    @memcpy(f_diis.data, ws.F.data);
+
+    if (fck_hist.items.len >= max_diis) {
+        var old_f = fck_hist.orderedRemove(0);
+        var old_e = err_hist.orderedRemove(0);
+
+        old_f.deinit(gpa);
+        old_e.deinit(gpa);
+    }
+
+    fck_hist.appendAssumeCapacity(f_diis);
+    err_hist.appendAssumeCapacity(e_diis);
+
+    diis(T, fck_hist.items, err_hist.items, ws.F, true, gpa) catch {
+        for (0..fck_hist.items.len) |j| fck_hist.items[j].deinit(gpa);
+        for (0..err_hist.items.len) |j| err_hist.items[j].deinit(gpa);
+
+        fck_hist.clearRetainingCapacity();
+        err_hist.clearRetainingCapacity();
+
+        try fck_hist.ensureUnusedCapacity(gpa, 1);
+        try err_hist.ensureUnusedCapacity(gpa, 1);
+
+        var f_retry = try Matrix(T).init(nbf, nbf, gpa);
+        errdefer f_retry.deinit(gpa);
+
+        var e_retry = try Matrix(T).init(nbf, nbf, gpa);
+        errdefer e_retry.deinit(gpa);
+
+        @memcpy(f_retry.data, ws.F.data);
+
+        try computeOrbitalGradient(T, &e_retry, ws.F.*, ws.P.*, S, gpa);
+
+        fck_hist.appendAssumeCapacity(f_retry);
+        err_hist.appendAssumeCapacity(e_retry);
+    };
 }

@@ -17,7 +17,7 @@ test "CASSCF(2, 2) on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.casscf.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off

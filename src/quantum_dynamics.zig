@@ -1663,7 +1663,7 @@ fn solve(comptime T: type, io: std.Io, ctx: SolveContext(T), gpa: Allocator) !Re
         try ctx.sim.wfn.toDia(ctx.sim.hams, ctx.sim.wfn_kpgrids, ctx.sim.epoten, 0, gpa);
     }
 
-    const track_cap_pop = opt.absorbing_potential != null and opt.absorbing_potential.?.track_population;
+    const track_cap_pop = if (opt.absorbing_potential) |ap| ap.track_population else false;
 
     var wfn0 = if (c_acf) try ctx.sim.wfn.clone(gpa) else null;
     defer if (wfn0) |*w| w.deinit(gpa);

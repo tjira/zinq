@@ -18,6 +18,7 @@ pub const cphf = @import("cphf.zig");
 pub const density_functional_theory = @import("density_functional_theory.zig");
 pub const dual = @import("dual.zig");
 pub const ehrenfest = @import("ehrenfest.zig");
+pub const electronic_structure = @import("electronic_structure.zig");
 pub const exprtk = @import("exprtk.zig");
 pub const flux_analysis = @import("flux_analysis.zig");
 pub const fourier_transform = @import("fourier_transform.zig");
@@ -67,16 +68,12 @@ const Options = struct {
     },
 };
 
-/// Simulation runner handlers for classical dynamics, Hartree-Fock, and quantum dynamics.
+/// Simulation runner handlers for non-electronic-structure targets.
 const Handlers = struct {
-    pub const casscf = @import("casscf.zig");
     pub const classical_dynamics = @import("classical_dynamics.zig");
-    pub const configuration_interaction = @import("configuration_interaction.zig");
     pub const fourier_transform = @import("fourier_transform.zig");
-    pub const hartree_fock = @import("hartree_fock.zig");
     pub const molecular_integrals = @import("molecular_integrals.zig");
     pub const molint = @import("molecular_integrals.zig");
-    pub const moller_plesset = @import("moller_plesset.zig");
     pub const potential_plot = @import("potential_plot.zig");
     pub const quantum_dynamics = @import("quantum_dynamics.zig");
     pub const tensor = @import("tensor.zig");
@@ -119,6 +116,11 @@ pub fn run(comptime T: type, io: std.Io, fname: []const u8, gpa: Allocator, aren
         try printf(io, "\n{f}\n", .{std.json.fmt(parsed.value.zinq[i], .{ .whitespace = .indent_4 })});
 
         switch (parsed.value.zinq[i]) {
+            inline .casscf, .configuration_interaction, .hartree_fock, .moller_plesset => |field| {
+                var result = try electronic_structure.run(T, io, field, true, gpa);
+                defer result.deinit(gpa);
+            },
+
             inline else => |field, tag| {
                 var result = try @field(Handlers, @tagName(tag)).run(T, io, field, true, gpa);
                 defer result.deinit(gpa);

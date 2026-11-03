@@ -16,7 +16,7 @@ const printf = @import("read_write.zig").printf;
 
 /// Computes the first-order derivative of molecular orbital coefficients and energies using CPHF.
 pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: HartreeFockResult(T), opt: anytype, log: bool, gpa: Allocator) !struct { Tensor(T, 3), Matrix(T) } {
-    const nbf = hfres.C.shape[0];
+    const nbf = hfres.C_mo.shape[0];
 
     var dC = try Tensor(T, 3).initZero(.{ 3 * hfres.ints.sys.atoms.len, nbf, nbf }, gpa);
     errdefer dC.deinit(gpa);
@@ -31,15 +31,13 @@ pub fn orbitalResponse(comptime T: type, io: std.Io, hfres: HartreeFockResult(T)
 
 /// Iteratively solves the CPHF linear equations to determine the first-order orbital response matrix.
 pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T), hfres: HartreeFockResult(T), opt: anytype, log: bool, gpa: Allocator) !void {
-    const generalized = hfres.ints.sys.nbf != hfres.C.shape[0];
+    const generalized = hfres.ints.sys.nbf != hfres.C_mo.shape[0];
 
     const dS = hfres.ints.dS orelse unreachable;
     const dH = hfres.ints.dH orelse unreachable;
     const dg = hfres.ints.dg orelse unreachable;
 
-    const C = hfres.C;
-    const P = hfres.P;
-    const e = hfres.e;
+    const C, const P, const e = .{ hfres.C_mo, hfres.P, hfres.e_mo };
 
     const nocc, const nbf = .{ if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2, C.shape[0] };
 
@@ -139,7 +137,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
         for (0..opt.iterations) |i| {
             var timer = std.Io.Timestamp.now(io, .real);
 
-            if (opt.diis != null and opt.diis.? > 0) for (0..nbf) |j| for (0..nbf) |k| {
+            if (opt.diis) |d| if (d > 0) for (0..nbf) |j| for (0..nbf) |k| {
                 U_p.ptr(j, k).* = U_x.at(j, k);
             };
 
@@ -191,7 +189,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
                 U_x.ptr(j, a).* = -S_x_MO.at(j, a) - U_x.at(a, j);
             };
 
-            if (opt.diis != null and opt.diis.? > 0) {
+            if (opt.diis) |d| if (d > 0) {
                 try uxm_hist.ensureUnusedCapacity(gpa, 1);
                 try err_hist.ensureUnusedCapacity(gpa, 1);
 
@@ -246,7 +244,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
                 for (0..nocc) |j| for (nocc..nbf) |a| {
                     U_x.ptr(j, a).* = -S_x_MO.at(j, a) - U_x.at(a, j);
                 };
-            }
+            };
 
             const elapsed = timer.untilNow(io, .real);
 

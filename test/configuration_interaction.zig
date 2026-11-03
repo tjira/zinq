@@ -13,7 +13,7 @@ test "Restricted CIS on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -52,7 +52,7 @@ test "Generalized CIS on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -91,7 +91,7 @@ test "Restricted CISD on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -131,7 +131,7 @@ test "Generalized CISD on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -175,7 +175,7 @@ test "Restricted CASCI(2, 2) on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
@@ -217,7 +217,7 @@ test "Generalized CASCI(2, 2) on Water with Analytical Gradient (STO-3G)" {
         .gradient = .{ .analytic = .{} },
     };
 
-    var res = try zinq.configuration_interaction.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
     defer res.deinit(std.testing.allocator);
 
     // zig fmt: off
