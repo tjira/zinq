@@ -217,6 +217,60 @@ fn ScfWorkspace(comptime T: type) type {
     };
 }
 
+/// Evaluates the nuclear gradient of the total molecular energy from Hellmann-Feynman, two-electron, and Pulay forces.
+pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWorkspace(T), generalized: bool, dft: ?*DftPotential(T), nthreads: usize, gpa: Allocator) !Matrix(T) {
+    const dS = ints.dS orelse unreachable;
+    const dH = ints.dH orelse unreachable;
+
+    const nocc = if (generalized) ints.sys.nel else ints.sys.nel / 2;
+
+    var G = try nuclearRepulsionGradient(T, ints.sys, gpa);
+    errdefer G.deinit(gpa);
+
+    var exch_factor: T = if (generalized) 1 else 0.5;
+
+    if (dft) |pot| {
+        exch_factor *= pot.exx_coef;
+    }
+
+    var W = try Matrix(T).init(ws.P.shape[0], ws.P.shape[0], gpa);
+    defer W.deinit(gpa);
+
+    buildEnergyWeightedDensity(T, &W, ws.C.*, ws.e.*, nocc, generalized);
+
+    for (0..ints.sys.atoms.len) |i| for (0..3) |j| {
+        const offset = (3 * i + j) * dS.shape[1] * dS.shape[2];
+
+        const h_G = dot(T, ws.P.asVector(), Vector(T).fromSlice(dH.data[offset .. offset + ws.P.data.len]));
+        const s_G = dot(T, W.asVector(), Vector(T).fromSlice(dS.data[offset .. offset + W.data.len]));
+
+        var g_G: T = 0;
+
+        if (ints.dg) |dg| {
+            for (0..dg.shape[1]) |p| for (0..dg.shape[2]) |q| for (0..dg.shape[3]) |r| for (0..dg.shape[4]) |s| {
+                const dg1 = dg.at(.{ 3 * i + j, p, r, q, s });
+                const dg2 = dg.at(.{ 3 * i + j, p, q, r, s });
+
+                g_G += 0.5 * ws.P.at(p, q) * ws.P.at(r, s) * (dg1 - exch_factor * dg2);
+            };
+        }
+
+        G.ptr(i, j).* += h_G + g_G - s_G;
+    };
+
+    if (ints.dg == null) {
+        if (generalized) {
+            ints.sys.coulombGradientGhf(&G, ws.P.*, exch_factor, nthreads);
+        }
+
+        if (!generalized) {
+            ints.sys.coulombGradientRhf(&G, ws.P.*, exch_factor, nthreads);
+        }
+    }
+
+    return G;
+}
+
 /// Direct Inversion in the Iterative Subspace (DIIS) to accelerate Fock matrix convergence via error minimization.
 pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
     if (fck_hist.len < 2) return;
@@ -264,70 +318,6 @@ pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Mat
     }
 
     if (symmetric) F.symmetrize();
-}
-
-/// Computes the nuclear gradient of the total energy with respect to atomic coordinates.
-pub fn gradient(comptime T: type, ints: Integrals(T), ws: ScfWorkspace(T), generalized: bool, dft: ?*DftPotential(T), nthreads: usize, gpa: Allocator) !Matrix(T) {
-    const dS = ints.dS orelse unreachable;
-    const dH = ints.dH orelse unreachable;
-
-    const nocc = if (generalized) ints.sys.nel else ints.sys.nel / 2;
-
-    var G = try nuclearRepulsionGradient(T, ints.sys, gpa);
-    errdefer G.deinit(gpa);
-
-    var exch_factor: T = if (generalized) 1 else 0.5;
-
-    if (dft) |pot| {
-        exch_factor *= pot.exx_coef;
-    }
-
-    var W = try Matrix(T).init(ws.P.shape[0], ws.P.shape[0], gpa);
-    defer W.deinit(gpa);
-
-    const factor: T = if (generalized) 1 else 2;
-
-    for (0..W.nrow()) |i| for (0..W.ncol()) |j| {
-        var sum: T = 0;
-
-        for (0..nocc) |k| {
-            sum += factor * ws.e.at(k) * ws.C.at(i, k) * ws.C.at(j, k);
-        }
-
-        W.ptr(i, j).* = sum;
-    };
-
-    for (0..ints.sys.atoms.len) |i| for (0..3) |j| {
-        const offset = (3 * i + j) * dS.shape[1] * dS.shape[2];
-
-        const h_G = dot(T, ws.P.asVector(), Vector(T).fromSlice(dH.data[offset .. offset + ws.P.data.len]));
-        const s_G = dot(T, W.asVector(), Vector(T).fromSlice(dS.data[offset .. offset + W.data.len]));
-
-        var g_G: T = 0;
-
-        if (ints.dg) |dg| {
-            for (0..dg.shape[1]) |p| for (0..dg.shape[2]) |q| for (0..dg.shape[3]) |r| for (0..dg.shape[4]) |s| {
-                const dg1 = dg.at(.{ 3 * i + j, p, r, q, s });
-                const dg2 = dg.at(.{ 3 * i + j, p, q, r, s });
-
-                g_G += 0.5 * ws.P.at(p, q) * ws.P.at(r, s) * (dg1 - exch_factor * dg2);
-            };
-        }
-
-        G.ptr(i, j).* += h_G + g_G - s_G;
-    };
-
-    if (ints.dg == null) {
-        if (generalized) {
-            ints.sys.coulombGradientGhf(&G, ws.P.*, exch_factor, nthreads);
-        }
-
-        if (!generalized) {
-            ints.sys.coulombGradientRhf(&G, ws.P.*, exch_factor, nthreads);
-        }
-    }
-
-    return G;
 }
 
 /// Computes the classical Coulomb repulsion gradient between nuclei.
@@ -493,11 +483,9 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (guess_p == null) {
-        @memcpy(B.data, ints.S.?.data);
+        try solveRoothaanHall(T, &e, &C, ints.H.?, ints.S.?, &B);
 
-        try sygvd(T, &e, &C, ints.H.?, &B);
-
-        _ = getDensity(T, &P, C, nocc, opt.generalized);
+        buildDensityMatrix(T, &P, C, nocc, opt.generalized);
     }
 
     const ws: ScfWorkspace(T) = .{ .P = &P, .F = &F, .C = &C, .e = &e };
@@ -570,7 +558,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     if (opt.gradient) |gradopt| switch (gradopt) {
-        .analytic => grad[0] = try gradient(T, ints, ws, opt.generalized, if (dft) |*d| d else null, opt.nthreads, gpa),
+        .analytic => grad[0] = try calculateNuclearGradient(T, ints, ws, opt.generalized, if (dft) |*d| d else null, opt.nthreads, gpa),
         .numeric => {
             const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = P };
 
@@ -630,6 +618,135 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: *Molecular
     }
 
     return result;
+}
+
+/// Constructs the one-particle reduced density matrix in the atomic basis from molecular orbital coefficients.
+fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) void {
+    std.debug.assert(C.shape[0] == P.shape[0]);
+    std.debug.assert(C.shape[1] == P.shape[1]);
+
+    const factor: T = if (generalized) 1 else 2;
+
+    for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
+        var sum: T = 0;
+
+        for (0..nocc) |k| {
+            sum += factor * C.at(i, k) * C.at(j, k);
+        }
+
+        P.ptr(i, j).* = sum;
+    };
+}
+
+/// Evaluates the Pulay energy-weighted density matrix from orbital energies and molecular orbital coefficients.
+fn buildEnergyWeightedDensity(comptime T: type, W: *Matrix(T), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool) void {
+    const factor: T = if (generalized) 1 else 2;
+
+    for (0..W.nrow()) |i| for (0..W.ncol()) |j| {
+        var sum: T = 0;
+
+        for (0..nocc) |k| {
+            sum += factor * e.at(k) * C.at(i, k) * C.at(j, k);
+        }
+
+        W.ptr(i, j).* = sum;
+    };
+}
+
+/// Constructs the effective one-electron Fock matrix from core Hamiltonian, Coulomb, exchange, and DFT potentials.
+fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), opt: Options, dft: ?*DftPotential(T), gpa: Allocator) !void {
+    const nbf = ints.H.?.shape[0];
+
+    std.debug.assert(F.shape[0] == nbf);
+    std.debug.assert(F.shape[1] == nbf);
+    std.debug.assert(P.shape[0] == nbf);
+    std.debug.assert(P.shape[1] == nbf);
+
+    for (0..nbf) |i| for (0..nbf) |j| {
+        F.ptr(i, j).* = ints.H.?.at(i, j);
+    };
+
+    if (opt.integral_direct) {
+        var exch_factor: T = if (opt.generalized) 1 else 0.5;
+
+        if (dft) |pot| {
+            exch_factor *= pot.exx_coef;
+        }
+
+        if (opt.generalized) {
+            ints.sys.fockGhf(F, P, exch_factor, opt.nthreads);
+        }
+
+        if (!opt.generalized) {
+            ints.sys.fockRhf(F, P, exch_factor, opt.nthreads);
+        }
+
+        if (dft) |pot| {
+            try pot.evaluate(ints.sys, P, gpa);
+
+            for (0..nbf) |j| for (0..nbf) |k| {
+                F.ptr(j, k).* += pot.Vxc.at(j, k);
+            };
+        }
+    }
+
+    if (!opt.integral_direct) {
+        std.debug.assert(ints.g.?.shape[0] == nbf);
+        std.debug.assert(ints.g.?.shape[1] == nbf);
+        std.debug.assert(ints.g.?.shape[2] == nbf);
+        std.debug.assert(ints.g.?.shape[3] == nbf);
+
+        if (dft) |pot| {
+            for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| for (0..nbf) |m| {
+                F.ptr(l, m).* += P.at(j, k) * ints.g.?.at(.{ j, l, k, m });
+            };
+
+            if (pot.exx_coef > 0) {
+                const factor: T = if (opt.generalized) 1 else 0.5;
+
+                for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
+                    F.ptr(k, l).* -= factor * pot.exx_coef * P.at(i, j) * ints.g.?.at(.{ i, j, k, l });
+                };
+            }
+
+            try pot.evaluate(ints.sys, P, gpa);
+
+            for (0..nbf) |j| for (0..nbf) |k| {
+                F.ptr(j, k).* += pot.Vxc.at(j, k);
+            };
+        }
+
+        if (dft == null) {
+            const exch_factor: T = if (opt.generalized) 1 else 0.5;
+            const g = ints.g.?;
+
+            for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
+                F.ptr(k, l).* += P.at(i, j) * (g.at(.{ i, k, j, l }) - exch_factor * g.at(.{ i, j, k, l }));
+            };
+        }
+    }
+
+    for (0..nbf) |i| for (i + 1..nbf) |j| {
+        const avg = (F.at(i, j) + F.at(j, i)) / 2;
+
+        F.ptr(i, j).* = avg;
+        F.ptr(j, i).* = avg;
+    };
+}
+
+/// Computes the electronic energy expectation value from density, core Hamiltonian, and Fock matrices.
+fn calculateElectronicEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), dft: ?*DftPotential(T)) T {
+    var energy: T = if (dft) |pot| pot.Exc else 0;
+
+    if (dft) |pot| for (0..P.shape[0]) |j| for (0..P.shape[1]) |k| {
+        energy += 0.5 * P.at(j, k) * (ints.H.?.at(j, k) + F.at(j, k) - pot.Vxc.at(j, k));
+    };
+
+    if (dft == null) for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
+        energy += 0.5 * P.at(i, j) * (ints.H.?.at(i, j) + F.at(i, j));
+    };
+
+    return energy;
 }
 
 /// Validates input options for physical consistency and method compatibility.
@@ -799,60 +916,24 @@ fn checkInvalidInput(opt: Options) !void {
     }
 }
 
-/// Exports SCF result matrices to files if corresponding paths are provided.
-fn exportMatrices(comptime T: type, io: std.Io, write: Write, C: Matrix(T), P: Matrix(T), F: Matrix(T)) !void {
-    if (write.coefficients) |fname| {
-        try writeMatrix(T, io, fname, C);
+/// Computes the root-mean-square difference between current and previous density matrices.
+fn computeDensityRmsDifference(comptime T: type, P_new: Matrix(T), P_old: Matrix(T)) T {
+    std.debug.assert(P_new.shape[0] == P_old.shape[0]);
+    std.debug.assert(P_new.shape[1] == P_old.shape[1]);
+
+    var sum_sq: T = 0;
+
+    for (0..P_new.data.len) |i| {
+        const diff = P_new.data[i] - P_old.data[i];
+
+        sum_sq += diff * diff;
     }
 
-    if (write.density) |fname| {
-        try writeMatrix(T, io, fname, P);
-    }
-
-    if (write.fock) |fname| {
-        try writeMatrix(T, io, fname, F);
-    }
+    return @sqrt(sum_sq / @as(T, @floatFromInt(P_new.data.len)));
 }
 
-/// Computes the electronic density matrix from molecular orbital coefficients.
-fn getDensity(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) T {
-    std.debug.assert(C.shape[0] == P.shape[0]);
-    std.debug.assert(C.shape[1] == P.shape[1]);
-
-    const factor: T, var sum_sq_dp: T = .{ if (generalized) 1 else 2, 0 };
-
-    for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
-        var sum: T = 0;
-
-        for (0..nocc) |k| {
-            sum += factor * C.at(i, k) * C.at(j, k);
-        }
-
-        sum_sq_dp += (sum - P.at(i, j)) * (sum - P.at(i, j));
-
-        P.ptr(i, j).* = sum;
-    };
-
-    return @sqrt(sum_sq_dp / @as(T, @floatFromInt(P.shape[0] * P.shape[1])));
-}
-
-/// Computes the total electronic energy from the Fock and density matrices.
-fn getEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), dft: ?*DftPotential(T)) T {
-    var energy: T = if (dft) |pot| pot.Exc else 0;
-
-    if (dft) |pot| for (0..P.shape[0]) |j| for (0..P.shape[1]) |k| {
-        energy += 0.5 * P.at(j, k) * (ints.H.?.at(j, k) + F.at(j, k) - pot.Vxc.at(j, k));
-    };
-
-    if (dft == null) for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
-        energy += 0.5 * P.at(i, j) * (ints.H.?.at(i, j) + F.at(i, j));
-    };
-
-    return energy;
-}
-
-/// Computes the DIIS error matrix representing the commutator [F, P] in the overlap representation.
-fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !void {
+/// Evaluates the DIIS orbital gradient error matrix representing the commutator [F, P] in the non-orthogonal AO basis.
+fn computeOrbitalGradient(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Matrix(T), gpa: Allocator) !void {
     const nbf = F.shape[0];
 
     std.debug.assert(F.shape[1] == nbf);
@@ -879,84 +960,19 @@ fn getError(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Matrix(T), S: Ma
     };
 }
 
-/// Constructs the Fock (or Kohn-Sham) matrix from core Hamiltonian and two-electron interactions.
-fn getFock(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), opt: Options, dft: ?*DftPotential(T), gpa: Allocator) !void {
-    const nbf = ints.H.?.shape[0];
-
-    std.debug.assert(F.shape[0] == nbf);
-    std.debug.assert(F.shape[1] == nbf);
-    std.debug.assert(P.shape[0] == nbf);
-    std.debug.assert(P.shape[1] == nbf);
-
-    for (0..nbf) |i| for (0..nbf) |j| {
-        F.ptr(i, j).* = ints.H.?.at(i, j);
-    };
-
-    if (opt.integral_direct) {
-        var exch_factor: T = if (opt.generalized) 1 else 0.5;
-
-        if (dft) |pot| {
-            exch_factor *= pot.exx_coef;
-        }
-
-        if (opt.generalized) {
-            ints.sys.fockGhf(F, P, exch_factor, opt.nthreads);
-        }
-
-        if (!opt.generalized) {
-            ints.sys.fockRhf(F, P, exch_factor, opt.nthreads);
-        }
-
-        if (dft) |pot| {
-            try pot.evaluate(ints.sys, P, gpa);
-
-            for (0..nbf) |j| for (0..nbf) |k| {
-                F.ptr(j, k).* += pot.Vxc.at(j, k);
-            };
-        }
+/// Exports SCF result matrices to files if corresponding paths are provided.
+fn exportMatrices(comptime T: type, io: std.Io, write: Write, C: Matrix(T), P: Matrix(T), F: Matrix(T)) !void {
+    if (write.coefficients) |fname| {
+        try writeMatrix(T, io, fname, C);
     }
 
-    if (!opt.integral_direct) {
-        std.debug.assert(ints.g.?.shape[0] == nbf);
-        std.debug.assert(ints.g.?.shape[1] == nbf);
-        std.debug.assert(ints.g.?.shape[2] == nbf);
-        std.debug.assert(ints.g.?.shape[3] == nbf);
-
-        if (dft) |pot| {
-            for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| for (0..nbf) |m| {
-                F.ptr(l, m).* += P.at(j, k) * ints.g.?.at(.{ j, l, k, m });
-            };
-
-            if (pot.exx_coef > 0) {
-                const factor: T = if (opt.generalized) 1 else 0.5;
-
-                for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-                    F.ptr(k, l).* -= factor * pot.exx_coef * P.at(i, j) * ints.g.?.at(.{ i, j, k, l });
-                };
-            }
-
-            try pot.evaluate(ints.sys, P, gpa);
-
-            for (0..nbf) |j| for (0..nbf) |k| {
-                F.ptr(j, k).* += pot.Vxc.at(j, k);
-            };
-        }
-
-        if (dft == null) {
-            const exch_factor: T = if (opt.generalized) 1 else 0.5;
-
-            for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-                F.ptr(k, l).* += P.at(i, j) * (ints.g.?.at(.{ i, k, j, l }) - exch_factor * ints.g.?.at(.{ i, j, k, l }));
-            };
-        }
+    if (write.density) |fname| {
+        try writeMatrix(T, io, fname, P);
     }
 
-    for (0..nbf) |i| for (i + 1..nbf) |j| {
-        const avg = (F.at(i, j) + F.at(j, i)) / 2;
-
-        F.ptr(i, j).* = avg;
-        F.ptr(j, i).* = avg;
-    };
+    if (write.fock) |fname| {
+        try writeMatrix(T, io, fname, F);
+    }
 }
 
 /// Computes the nuclear Hessian and performs harmonic frequency and thermochemical analyses.
@@ -1009,6 +1025,9 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
     var B = try Matrix(T).init(nbf, nbf, gpa);
     defer B.deinit(gpa);
 
+    var P_old = try Matrix(T).init(nbf, nbf, gpa);
+    defer P_old.deinit(gpa);
+
     if (opt.iterations > 0 and log) {
         const fmt = "\nSELF CONSISTENT FIELD\n{s:4} {s:20} {s:9} {s:9} {s:9}\n";
 
@@ -1034,15 +1053,15 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
     for (0..opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
-        try getFock(T, ws.F, ints, ws.P.*, opt, dft, gpa);
+        try buildFockMatrix(T, ws.F, ints, ws.P.*, opt, dft, gpa);
 
-        e_new = getEnergy(T, ints, ws.F.*, ws.P.*, dft) + VN;
+        e_new = calculateElectronicEnergy(T, ints, ws.F.*, ws.P.*, dft) + VN;
 
         if (opt.diis != null and opt.diis.? > 0 and i > 0) {
             var e_diis = try Matrix(T).init(nbf, nbf, gpa);
             errdefer e_diis.deinit(gpa);
 
-            try getError(T, &e_diis, ws.F.*, ws.P.*, ints.S.?, gpa);
+            try computeOrbitalGradient(T, &e_diis, ws.F.*, ws.P.*, ints.S.?, gpa);
 
             try fck_hist.ensureUnusedCapacity(gpa, 1);
             try err_hist.ensureUnusedCapacity(gpa, 1);
@@ -1085,18 +1104,20 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
                     f_retry.ptr(j, k).* = ws.F.at(j, k);
                 };
 
-                try getError(T, &e_retry, ws.F.*, ws.P.*, ints.S.?, gpa);
+                try computeOrbitalGradient(T, &e_retry, ws.F.*, ws.P.*, ints.S.?, gpa);
 
                 fck_hist.appendAssumeCapacity(f_retry);
                 err_hist.appendAssumeCapacity(e_retry);
             };
         }
 
-        @memcpy(B.data, ints.S.?.data);
+        try solveRoothaanHall(T, ws.e, ws.C, ws.F.*, ints.S.?, &B);
 
-        try sygvd(T, ws.e, ws.C, ws.F.*, &B);
+        @memcpy(P_old.data, ws.P.data);
 
-        const delta_energy, const p_rm = .{ @abs(e_new - e_old), getDensity(T, ws.P, ws.C.*, nocc, opt.generalized) };
+        buildDensityMatrix(T, ws.P, ws.C.*, nocc, opt.generalized);
+
+        const delta_energy, const p_rm = .{ @abs(e_new - e_old), computeDensityRmsDifference(T, ws.P.*, P_old) };
 
         const elapsed = timer.untilNow(io, .real);
 
@@ -1119,4 +1140,11 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
     } else return error.ScfDidNotConverge;
 
     return e_new;
+}
+
+/// Solves the generalized Roothaan-Hall eigenvalue problem FC = SCE for molecular orbital coefficients and energies.
+fn solveRoothaanHall(comptime T: type, e: *Vector(T), C: *Matrix(T), F: Matrix(T), S: Matrix(T), B: *Matrix(T)) !void {
+    @memcpy(B.data, S.data);
+
+    try sygvd(T, e, C, F, B);
 }
