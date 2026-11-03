@@ -121,45 +121,6 @@ pub fn Result(comptime T: type) type {
     };
 }
 
-/// Validates Moller-Plesset inputs for method requirements and minimum perturbation order.
-pub fn checkInvalidInput(opt: Options) !void {
-    if (opt.hartree_fock.integral_direct) {
-        std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR MOLLER-PLESSET PERTURBATION THEORY", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.gradient != null and opt.gradient == null) {
-        std.log.err("GRADIENT WRITE REQUESTED BUT GRADIENT IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.hessian != null and opt.hessian == null) {
-        std.log.err("HESSIAN WRITE REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.frequency != null and opt.hessian == null) {
-        std.log.err("FREQUENCY CALCULATION REQUESTED BUT HESSIAN IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.order < 2) {
-        std.log.err("MØLLER-PLESSET PERTURBATION ORDER MUST BE AT LEAST 2 (MP2)", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.nthreads == 0) {
-        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
-
-        return error.InvalidInput;
-    }
-}
-
 /// Computes the Møller-Plesset perturbation series for electronic correlation energy corrections.
 pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), log: bool, gpa: Allocator) !Result(T) {
     _ = sys;

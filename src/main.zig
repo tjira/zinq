@@ -45,6 +45,7 @@ pub const spin_analysis = @import("spin_analysis.zig");
 pub const surface_hopping = @import("surface_hopping.zig");
 pub const tensor = @import("tensor.zig");
 pub const thermostat = @import("thermostat.zig");
+pub const validation = @import("validation.zig");
 pub const value = @import("value.zig");
 pub const wavepacket = @import("wavepacket.zig");
 pub const xc_functional = @import("xc_functional.zig");

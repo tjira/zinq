@@ -8,6 +8,7 @@ const Allocator = std.mem.Allocator;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Tensor = @import("tensor.zig").Tensor;
+const validation = @import("validation.zig");
 
 const printMatrix = @import("read_write.zig").printMatrix;
 const printTensor = @import("read_write.zig").printTensor;
@@ -142,7 +143,7 @@ pub fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u
 
 /// Computes molecular integrals and nuclear derivatives from a geometry file and basis set path.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
+    try validation.checkInvalidInput(opt);
 
     const basis_path = try exportIfBuiltin(io, opt.basis, gpa);
 
@@ -166,7 +167,7 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 
 /// Evaluates molecular integrals and gradients directly on an initialized molecular system.
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
-    try checkInvalidInput(opt);
+    try validation.checkInvalidInput(opt);
 
     var ints: Result(T) = .{ .sys = try sys.clone(gpa) };
     errdefer ints.deinit(gpa);
@@ -290,147 +291,6 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     try writeIntegralsToFiles(T, io, opt, ints, log);
 
     return ints;
-}
-
-/// Validates that required options such as geometry and basis file paths are not empty.
-fn checkInvalidInput(opt: Options) !void {
-    if (opt.system.len == 0) {
-        std.log.err("MOLECULAR SYSTEM XYZ PATH IS EMPTY", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.basis.len == 0) {
-        std.log.err("BASIS SET G94 PATH IS EMPTY", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.nthreads == 0) {
-        std.log.err("THREAD COUNT MUST BE GREATER THAN 0", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.coulomb and !opt.calculate.coulomb) {
-        std.log.err("COULOMB INTEGRALS PRINT REQUESTED BUT COULOMB INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.coulomb_d1 and !opt.calculate.coulomb_d1) {
-        std.log.err("COULOMB DERIVATIVE PRINT REQUESTED BUT COULOMB DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.hamiltonian and !opt.calculate.hamiltonian) {
-        std.log.err("HAMILTONIAN INTEGRALS PRINT REQUESTED BUT HAMILTONIAN INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.hamiltonian_d1 and !opt.calculate.hamiltonian_d1) {
-        std.log.err("HAMILTONIAN DERIVATIVE PRINT REQUESTED BUT HAMILTONIAN DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.kinetic and !opt.calculate.kinetic) {
-        std.log.err("KINETIC INTEGRALS PRINT REQUESTED BUT KINETIC INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.kinetic_d1 and !opt.calculate.kinetic_d1) {
-        std.log.err("KINETIC DERIVATIVE PRINT REQUESTED BUT KINETIC DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.nuclear and !opt.calculate.nuclear) {
-        std.log.err("NUCLEAR INTEGRALS PRINT REQUESTED BUT NUCLEAR INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.nuclear_d1 and !opt.calculate.nuclear_d1) {
-        std.log.err("NUCLEAR DERIVATIVE PRINT REQUESTED BUT NUCLEAR DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.overlap and !opt.calculate.overlap) {
-        std.log.err("OVERLAP INTEGRALS PRINT REQUESTED BUT OVERLAP INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.log.overlap_d1 and !opt.calculate.overlap_d1) {
-        std.log.err("OVERLAP DERIVATIVE PRINT REQUESTED BUT OVERLAP DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.coulomb != null and !opt.calculate.coulomb) {
-        std.log.err("COULOMB INTEGRALS WRITE REQUESTED BUT COULOMB INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.coulomb_d1 != null and !opt.calculate.coulomb_d1) {
-        std.log.err("COULOMB DERIVATIVE WRITE REQUESTED BUT COULOMB DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.hamiltonian != null and !opt.calculate.hamiltonian) {
-        std.log.err("HAMILTONIAN INTEGRALS WRITE REQUESTED BUT HAMILTONIAN INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.hamiltonian_d1 != null and !opt.calculate.hamiltonian_d1) {
-        std.log.err("HAMILTONIAN DERIVATIVE WRITE REQUESTED BUT HAMILTONIAN DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.kinetic != null and !opt.calculate.kinetic) {
-        std.log.err("KINETIC INTEGRALS WRITE REQUESTED BUT KINETIC INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.kinetic_d1 != null and !opt.calculate.kinetic_d1) {
-        std.log.err("KINETIC DERIVATIVE WRITE REQUESTED BUT KINETIC DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.nuclear != null and !opt.calculate.nuclear) {
-        std.log.err("NUCLEAR INTEGRALS WRITE REQUESTED BUT NUCLEAR INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.nuclear_d1 != null and !opt.calculate.nuclear_d1) {
-        std.log.err("NUCLEAR DERIVATIVE WRITE REQUESTED BUT NUCLEAR DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.overlap != null and !opt.calculate.overlap) {
-        std.log.err("OVERLAP INTEGRALS WRITE REQUESTED BUT OVERLAP INTEGRALS ARE NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
-
-    if (opt.write.overlap_d1 != null and !opt.calculate.overlap_d1) {
-        std.log.err("OVERLAP DERIVATIVE WRITE REQUESTED BUT OVERLAP DERIVATIVE IS NOT CALCULATED", .{});
-
-        return error.InvalidInput;
-    }
 }
 
 /// Prints requested molecular integral matrices and derivative tensors to standard output.

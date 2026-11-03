@@ -10,6 +10,7 @@ const casscf = @import("casscf.zig");
 const configuration_interaction = @import("configuration_interaction.zig");
 const hartree_fock = @import("hartree_fock.zig");
 const moller_plesset = @import("moller_plesset.zig");
+const validation = @import("validation.zig");
 
 const DerivativeContext = @import("nuclear_derivative.zig").DerivativeContext;
 const Matrix = @import("tensor.zig").Matrix;
@@ -144,9 +145,7 @@ pub fn isPostScf(comptime Opt: type) bool {
 
 /// Runs an electronic structure method on a molecular system specified by file paths and basis set.
 pub fn run(comptime T: type, io: std.Io, opt: anytype, log: bool, gpa: Allocator) !getMethod(@TypeOf(opt)).Result(T) {
-    const Method = getMethod(@TypeOf(opt));
-
-    try Method.checkInvalidInput(opt);
+    try validation.checkInvalidInput(opt);
 
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
@@ -168,7 +167,7 @@ pub fn run(comptime T: type, io: std.Io, opt: anytype, log: bool, gpa: Allocator
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !getMethod(@TypeOf(opt)).Result(T) {
     const Method = getMethod(@TypeOf(opt));
 
-    try Method.checkInvalidInput(opt);
+    try validation.checkInvalidInput(opt);
 
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
