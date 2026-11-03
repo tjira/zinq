@@ -47,43 +47,22 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 
 ### Time-Independent Quantum Mechanics
 
-* **Integrals over Gaussian Basis Functions**  
-  Compute 1- and 2-electron integrals and geometric derivative integrals.
+* **Electronic Structure & Correlation**  
+  RHF/GHF (DIIS), Kohn–Sham DFT (LDA/GGA/mGGA/hybrids), arbitrary-order MPn, CI, and CASSCF.
 
-* **Hartree–Fock Methods**  
-  Perform restricted or generalized Hartree–Fock calculations with DIIS acceleration.
+* **Integrals, Derivatives & Vibrations**  
+  1e/2e Gaussian integrals, geometric derivatives, gradients, Hessians, and vibrational analysis.
 
-* **Density Functional Theory**  
-  Evaluate Kohn–Sham DFT using LDA, GGA, meta-GGA, and hybrid functionals on molecular grids.
-
-* **Post-Hartree–Fock Methods**  
-  Perform arbitrary-order Møller–Plesset perturbation theory and arbitrary-excitation CI.
-
-* **Multireference Methods**  
-  Perform CASSCF calculations with simultaneous orbital and CI optimization.
-
-* **Nuclear Derivatives & Vibrational Analysis**  
-  Compute analytic or numerical gradients, numerical Hessians, and harmonic vibrational frequencies.
-
-* **Molecular Geometry Optimization**  
-  Optimize molecular structures using BFGS quasi-Newton and steepest descent algorithms.
-
-* **Population Analysis & Bond Orders**  
-  Calculate Mulliken and Löwdin populations, and Mayer and Wiberg bond orders.
+* **Geometry & Chemical Bonding**  
+  BFGS/steepest descent optimization, Mulliken/Löwdin populations, and Mayer/Wiberg bond orders.
 
 ### Time-Dependent Quantum Mechanics
 
-* **Quantum Wavepacket Dynamics**  
-  Simulate multidimensional wavepacket dynamics using split-operator FFT propagation.
+* **Nonadiabatic Dynamics**  
+  Fewest switches (FSSH), Landau–Zener crossing, and Ehrenfest dynamics with continuous coupling.
 
-* **Trajectory Surface Hopping**  
-  Run nonadiabatic dynamics using fewest switches (FSSH) and Landau–Zener algorithms.
-
-* **Ehrenfest Dynamics**  
-  Perform mean-field nonadiabatic simulations with continuous electronic-nuclear coupling.
-
-* **Classical Molecular Dynamics**  
-  Propagate trajectories with thermostats and sample Maxwell–Boltzmann or Wigner ensembles.
+* **Wavepacket & Classical Dynamics**  
+  Split-operator FFT wavepackets and thermostat classical MD with Maxwell–Boltzmann/Wigner sampling.
 
 ## Citation
 
