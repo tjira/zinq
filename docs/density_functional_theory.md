@@ -1,109 +1,165 @@
 # Density Functional Theory
 
-This document provides a highly detailed, mathematically rigorous, yet simple and intuitive explanation of Density Functional Theory (DFT). If you want to understand how the electronic structure of molecules can be determined from the three-dimensional electron density rather than a many-electron wavefunction, this guide is written step-by-step for you.
+This document provides a clear, simple, and mathematically rigorous explanation of Density Functional Theory (DFT) within the Kohn–Sham framework. Building upon the foundational Hohenberg–Kohn existence and variational theorems, this guide explains how the interacting many-electron problem is mapped onto an auxiliary non-interacting reference system, how the Kohn–Sham potential and Roothaan–Kohn–Sham equations are derived, how exchange-correlation functionals are classified, and how spatial integration is evaluated on molecular grids.
 
 ---
 
-## I. Kohn–Sham Formulation
+## I. Hohenberg–Kohn Theorems and the Energy Functional
 
-In quantum mechanics, the exact wavefunction for $N$ electrons depends simultaneously on $3N$ spatial coordinates, making exact solutions computationally intractable for larger systems. Density Functional Theory resolves this challenge through the Hohenberg–Kohn theorems, which prove that the ground-state properties and total energy of an electronic system are uniquely determined by the three-dimensional electronic density $\rho(\mathbf{r})$.
+### 1. Hohenberg–Kohn Existence and Variational Theorems
 
-### 1. Kohn–Sham Equations
+In many-electron quantum mechanics, the electronic Hamiltonian operator $\hat{H}$ is composed of the electronic kinetic energy $\hat{T}$, the electron-electron Coulomb repulsion $\hat{V}_{\text{ee}}$, and the interaction of electrons with an external nuclear electrostatic potential $v(\mathbf{r})$, expressed in terms of the electron density operator $\hat{\rho}(\mathbf{r})$ as
 
-The Kohn–Sham formulation maps the interacting electron system onto an auxiliary system of non-interacting electrons experiencing an effective local potential, yielding the Roothaan–Kohn–Sham matrix equation
+$$
+\hat{H}=\hat{T}+\hat{V}_{\text{ee}}+\int v(\mathbf{r})\hat{\rho}(\mathbf{r})d\mathbf{r}
+$$
+
+where $v(\mathbf{r})=-\sum_A\frac{Z_A}{|\mathbf{r}-\mathbf{R}_A|}$ is the external nuclear attraction potential defining the one-electron core Hamiltonian operator $\hat{h}=-\frac{1}{2}\nabla^2+v(\mathbf{r})$. The first Hohenberg–Kohn theorem proves that the ground-state electronic density $\rho(\mathbf{r})=\langle\Psi|\hat{\rho}(\mathbf{r})|\Psi\rangle$ uniquely determines the external potential $v(\mathbf{r})$ up to a trivial additive constant. To demonstrate this by contradiction, assume that two distinct external potentials $v_1(\mathbf{r})$ and $v_2(\mathbf{r})$ differing by more than a constant yield non-degenerate ground-state wavefunctions $|\Psi_1\rangle$ and $|\Psi_2\rangle$ that share the exact same ground-state density $\rho(\mathbf{r})$. Applying the Rayleigh–Ritz variational inequality to the ground state of $\hat{H}_1$ gives
+
+$$
+E_1<\langle\Psi_2|\hat{H}_1|\Psi_2\rangle=\langle\Psi_2|\hat{H}_2|\Psi_2\rangle+\int\left(v_1(\mathbf{r})-v_2(\mathbf{r})\right)\rho(\mathbf{r})d\mathbf{r}=E_2+\int\left(v_1(\mathbf{r})-v_2(\mathbf{r})\right)\rho(\mathbf{r})d\mathbf{r}
+$$
+
+Interchanging the indices and evaluating the inequality for the ground state of $\hat{H}_2$ yields
+
+$$
+E_2<\langle\Psi_1|\hat{H}_2|\Psi_1\rangle=E_1+\int\left(v_2(\mathbf{r})-v_1(\mathbf{r})\right)\rho(\mathbf{r})d\mathbf{r}
+$$
+
+Adding these two strict inequalities produces the manifest contradiction $E_1+E_2<E_1+E_2$. Consequently, two distinct potentials cannot generate the same ground-state electron density, proving that the ground-state density $\rho(\mathbf{r})$ uniquely specifies the external potential $v(\mathbf{r})$, the Hamiltonian $\hat{H}$, and all ground- and excited-state electronic properties of the system.
+
+The second Hohenberg–Kohn theorem defines a universal functional $F_{\text{HK}}[\rho]=\langle\Psi[\rho]|(\hat{T}+\hat{V}_{\text{ee}})|\Psi[\rho]\rangle$ that depends only on the density and is completely independent of the external potential. The total ground-state energy functional is expressed as
+
+$$
+E_v[\rho]=F_{\text{HK}}[\rho]+\int v(\mathbf{r})\rho(\mathbf{r})d\mathbf{r}
+$$
+
+For any trial density $\tilde{\rho}(\mathbf{r})$ associated with an external potential and integrating to the correct number of electrons $N$, the energy functional satisfies the variational condition $E_0\le E_v[\tilde{\rho}]$, where the minimum is attained if and only if the trial density matches the exact ground-state density.
+
+### 2. The Kohn–Sham Auxiliary System
+
+Although the Hohenberg–Kohn theorems establish density as the fundamental physical variable, the kinetic energy functional $T[\rho]$ of an interacting many-electron system cannot be expressed accurately as an explicit local functional of the density. Kohn and Sham solved this limitation by mapping the physical interacting system onto an auxiliary reference system of $N$ non-interacting electrons moving in an effective local single-particle potential $v_{\text{eff}}(\mathbf{r})$.
+
+The ground state of this non-interacting system is represented by a single Slater determinant of $N$ orthonormal single-particle orbitals $\{\phi_i(\mathbf{r})\}$, whose exact non-interacting kinetic energy is computed analytically as
+
+$$
+T_{\text{s}}[\rho]=-\frac{1}{2}\sum_i^{\text{occ}}\int\phi_i^*(\mathbf{r})\nabla^2\phi_i(\mathbf{r})d\mathbf{r}
+$$
+
+The single-particle orbitals are chosen such that their sum of squared moduli reproduces the exact ground-state electronic density of the interacting system as
+
+$$
+\rho(\mathbf{r})=\sum_i^{\text{occ}}|\phi_i(\mathbf{r})|^2
+$$
+
+The universal functional $F_{\text{HK}}[\rho]$ is then partitioned by separating the non-interacting kinetic energy $T_{\text{s}}[\rho]$ and the classical Hartree electrostatic repulsion $J[\rho]=\frac{1}{2}\int\int\frac{\rho(\mathbf{r})\rho(\mathbf{r}')}{|\mathbf{r}-\mathbf{r}'|}d\mathbf{r}d\mathbf{r}'$, leaving the exchange-correlation energy functional $E_{\text{xc}}[\rho]$ defined as
+
+$$
+E_{\text{xc}}[\rho]=\left(T[\rho]-T_{\text{s}}[\rho]\right)+\left(V_{\text{ee}}[\rho]-J[\rho]\right)
+$$
+
+which encapsulates the non-classical quantum exchange, dynamical electron correlation, and the difference between the true interacting kinetic energy and the non-interacting single-particle kinetic energy.
+
+---
+
+## II. Kohn–Sham Equations and Basis Set Expansion
+
+### 3. Variational Derivation of the Kohn–Sham Potential
+
+The total electronic energy functional in the Kohn–Sham formulation is written in terms of the occupied single-particle orbitals as
+
+$$
+E_{\text{KS}}[\{\phi_i\}]=-\frac{1}{2}\sum_i^{\text{occ}}\int\phi_i^*(\mathbf{r})\nabla^2\phi_i(\mathbf{r})d\mathbf{r}+\int v(\mathbf{r})\rho(\mathbf{r})d\mathbf{r}+\frac{1}{2}\int\int\frac{\rho(\mathbf{r})\rho(\mathbf{r}')}{|\mathbf{r}-\mathbf{r}'|}d\mathbf{r}d\mathbf{r}'+E_{\text{xc}}[\rho]
+$$
+
+We minimize this energy functional with respect to orbital variations $\phi_i^*(\mathbf{r})$ subject to the orbital orthonormality constraint $\int\phi_i^*(\mathbf{r})\phi_j(\mathbf{r})d\mathbf{r}=\delta_{ij}$ using Lagrange multipliers $\epsilon_{ij}$. Setting the functional derivative to zero and diagonalizing the Hermitian multiplier matrix yields the canonical Kohn–Sham eigenvalue equations
+
+$$
+\hat{h}_{\text{KS}}\phi_i(\mathbf{r})=\left(-\frac{1}{2}\nabla^2+v_{\text{eff}}(\mathbf{r})\right)\phi_i(\mathbf{r})=\epsilon_i\phi_i(\mathbf{r})
+$$
+
+where $\epsilon_i$ are the Kohn–Sham orbital energies, and the effective local potential $v_{\text{eff}}(\mathbf{r})$ is defined as
+
+$$
+v_{\text{eff}}(\mathbf{r})=v(\mathbf{r})+v_{\text{H}}(\mathbf{r})+v_{\text{xc}}(\mathbf{r})
+$$
+
+In this effective potential, $v(\mathbf{r})=-\sum_A\frac{Z_A}{|\mathbf{r}-\mathbf{R}_A|}$ is the nuclear attraction potential, $v_{\text{H}}(\mathbf{r})=\int\frac{\rho(\mathbf{r}')}{|\mathbf{r}-\mathbf{r}'|}d\mathbf{r}'$ is the classical Hartree electrostatic potential, and $v_{\text{xc}}(\mathbf{r})$ is the local exchange-correlation potential defined by the functional derivative
+
+$$
+v_{\text{xc}}(\mathbf{r})=\frac{\delta E_{\text{xc}}[\rho]}{\delta\rho(\mathbf{r})}
+$$
+
+### 4. Roothaan–Kohn–Sham Matrix Equations
+
+To solve the Kohn–Sham equations computationally for molecular systems, each single-particle orbital is expanded in a known atomic orbital basis set as $|\phi_i\rangle=\sum_\mu C_{\mu i}|\chi_\mu\rangle$. Projecting the differential eigenvalue equations onto the atomic basis functions $\langle\chi_\mu|$ transforms the problem into the algebraic Roothaan–Kohn–Sham generalized eigenvalue equations
 
 $$
 \mathbf{F}\mathbf{C}=\mathbf{S}\mathbf{C}\mathbf{E}
 $$
 
-where $\mathbf{F}$ is the Kohn–Sham Fock matrix, $\mathbf{C}$ is the molecular orbital coefficient matrix, $\mathbf{S}$ is the overlap matrix of the atomic orbital basis functions, and $\mathbf{E}$ is the diagonal matrix containing the orbital energy eigenvalues. In the atomic orbital basis, the Kohn–Sham matrix elements are constructed as
+where $\mathbf{S}$ is the atomic orbital overlap matrix with elements $S_{\mu\nu}=\langle\chi_\mu|\chi_\nu\rangle$, $\mathbf{C}$ is the molecular orbital expansion coefficient matrix, and $\mathbf{E}=\text{diag}(\epsilon_1,\epsilon_2,\dots,\epsilon_{N_{\text{AO}}})$ is the diagonal matrix of orbital energies. The Kohn–Sham Fock matrix elements in the atomic basis are evaluated as
 
 $$
-F_{\mu\nu}=H_{\mu\nu}^{\text{core}}+\sum_{\lambda,\sigma}P_{\lambda\sigma}\left(\langle\mu\lambda|\nu\sigma\rangle-c_{\text{x}}a_{\text{x}}\langle\mu\lambda|\sigma\nu\rangle\right)+V_{\mu\nu}^{\text{xc}}
+F_{\mu\nu}=H_{\mu\nu}+J_{\mu\nu}-c_{\text{x}}a_{\text{x}}K_{\mu\nu}+V_{\mu\nu}^{\text{xc}}
 $$
 
-where $H_{\mu\nu}^{\text{core}}$ is the one-electron core Hamiltonian matrix describing kinetic energy and nuclear attraction, the two-electron integral sum accounts for classical Coulomb repulsion and an exact exchange contribution scaled by the hybrid mixing fraction $a_{\text{x}}$ and spin-variant exchange factor $c_{\text{x}}$, and $V_{\mu\nu}^{\text{xc}}$ is the exchange-correlation potential matrix. The density matrix $\mathbf{P}$ is formed from the occupied molecular orbital coefficients, while the exchange-correlation potential encapsulates all non-classical electron-electron interactions.
+where $H_{\mu\nu}=\langle\chi_\mu|\hat{h}|\chi_\nu\rangle$ is the core Hamiltonian matrix and $J_{\mu\nu}=\sum_{\lambda,\sigma}P_{\lambda\sigma}\langle\mu\lambda|\nu\sigma\rangle$ is the Coulomb matrix, matching the standard Hartree–Fock operators. For hybrid density functionals, a fraction $a_{\text{x}}$ of Hartree–Fock exact exchange $K_{\mu\nu}=\sum_{\lambda,\sigma}P_{\lambda\sigma}\langle\mu\lambda|\sigma\nu\rangle$ is incorporated with spin-scaling factor $c_{\text{x}}$, while $V_{\mu\nu}^{\text{xc}}=\langle\chi_\mu|v_{\text{xc}}|\chi_\nu\rangle$ represents the matrix elements of the exchange-correlation potential.
 
-### 2. Restricted and Generalized Variants
-
-Depending on how electron spin is treated, Kohn–Sham density functional theory is formulated in either a restricted or generalized framework. The density matrix is generally constructed from the occupied molecular orbital coefficients with an orbital occupancy factor $f_{\text{occ}}$ as
+The one-particle density matrix is constructed from the occupied orbital coefficients with orbital occupancy factor $f_{\text{occ}}$ as
 
 $$
 P_{\mu\nu}=f_{\text{occ}}\sum_i^{\text{occ}}C_{\mu i}C_{\nu i}^*
 $$
 
-where the occupancy factor reflects the nature of the basis. In Restricted Kohn–Sham (RKS), electrons of opposite spins are constrained to share identical spatial molecular orbitals, yielding a spin-unpolarized density $\rho_\alpha(\mathbf{r})=\rho_\beta(\mathbf{r})=\frac{1}{2}\rho(\mathbf{r})$. The density matrix $\mathbf{P}$ is defined in the $N_{\text{ao}}$-dimensional spatial basis where each spatial orbital holds two electrons ($f_{\text{occ}}=2$) with exchange factor $c_{\text{x}}=1/2$. In Generalized Kohn–Sham (GKS), the molecular orbitals are expanded into a $2N_{\text{ao}}$-dimensional spin-orbital basis where each state is a general two-component spinor with single occupancy ($f_{\text{occ}}=1$) and exchange factor $c_{\text{x}}=1$. The generalized density matrix is partitioned into spin blocks as
+where $f_{\text{occ}}=2$ and $c_{\text{x}}=1/2$ for Restricted Kohn–Sham (RKS) describing closed-shell systems with doubly occupied spatial orbitals, while $f_{\text{occ}}=1$ and $c_{\text{x}}=1$ for Generalized Kohn–Sham (GKS) where each state is an individually occupied two-component spinor. The total electronic energy of the molecular system is evaluated from the density matrix and potential contributions as
 
 $$
-\mathbf{P}=\begin{pmatrix}\mathbf{P}^{\alpha\alpha}&\mathbf{P}^{\alpha\beta}\\\mathbf{P}^{\beta\alpha}&\mathbf{P}^{\beta\beta}\end{pmatrix}
+E_{\text{elec}}=\sum_{\mu,\nu}P_{\nu\mu}H_{\mu\nu}+\frac{1}{2}\sum_{\mu,\nu}P_{\nu\mu}\left(J_{\mu\nu}-c_{\text{x}}a_{\text{x}}K_{\mu\nu}\right)+E_{\text{xc}}[\rho]
 $$
 
-where the diagonal blocks $\mathbf{P}^{\alpha\alpha}$ and $\mathbf{P}^{\beta\beta}$ determine the individual spin densities $\rho_\alpha(\mathbf{r})$ and $\rho_\beta(\mathbf{r})$ on the numerical grid, while the off-diagonal blocks $\mathbf{P}^{\alpha\beta}$ and $\mathbf{P}^{\beta\alpha}$ describe non-collinear spin alignments that couple through the exact exchange operator in hybrid functionals. The resulting exchange-correlation potential matrix $\mathbf{V}^{\text{xc}}$ is block-diagonal in the spin channels with diagonal blocks $\mathbf{V}^{\text{xc},\alpha}$ and $\mathbf{V}^{\text{xc},\beta}$ evaluated from the spin-polarized functional derivatives.
-
-### 3. Exchange-Correlation and Total Energy
-
-The exchange-correlation energy accounts for the quantum mechanical exchange and dynamical correlation effects, evaluated as the spatial integral of the exchange-correlation energy density $\epsilon_{\text{xc}}$ multiplied by the electronic density as
-
-$$
-E_{\text{xc}}=\int\rho(\mathbf{r})\epsilon_{\text{xc}}(\mathbf{r})d\mathbf{r}
-$$
-
-where the functional form of $\epsilon_{\text{xc}}$ depends on the chosen density functional approximation. The total electronic energy is then calculated from the density matrix, core Hamiltonian, Kohn–Sham matrix, and exchange-correlation potential as
-
-$$
-E_{\text{elec}}=\frac{1}{2}\sum_{\mu,\nu}P_{\mu\nu}\left(H_{\mu\nu}^{\text{core}}+F_{\mu\nu}-V_{\mu\nu}^{\text{xc}}\right)+E_{\text{xc}}
-$$
-
-and the total energy of the molecular system is obtained by adding the classical nuclear repulsion energy $V_{\text{nuc}}$ as
-
-$$
-E_{\text{tot}}=E_{\text{elec}}+V_{\text{nuc}}
-$$
-
-where $V_{\text{nuc}}$ is evaluated from the nuclear charges and Cartesian nuclear coordinates.
+and the total molecular ground-state energy is obtained by adding the classical nuclear repulsion energy $V_{\text{nuc}}=\sum_{A<B}\frac{Z_A Z_B}{|\mathbf{R}_A-\mathbf{R}_B|}$ as $E_{\text{tot}}=E_{\text{elec}}+V_{\text{nuc}}$.
 
 ---
 
-## II. Numerical Grid Integration
+## III. Exchange-Correlation Approximations and Numerical Quadrature
 
-### 4. Molecular Integration Grid
+### 5. Jacob's Ladder of Density Functional Approximations
 
-Because the exchange-correlation energy density $\epsilon_{\text{xc}}$ is a highly non-linear function of the density and its spatial derivatives, the spatial integrals cannot be evaluated analytically. Instead, the integration is performed numerically over a three-dimensional grid of points distributed across the molecule. The molecular volume is partitioned into atomic regions using Becke fuzzy cell weighting, where a multicenter grid is formed for each atom by combining a radial grid with an angular Lebedev quadrature sphere. The exchange-correlation energy is evaluated as a weighted quadrature sum over all grid points as
+Because the exact mathematical form of $E_{\text{xc}}[\rho]$ is unknown, practical DFT relies on systematic approximations organized along Perdew's conceptual Jacob's ladder according to the local physical ingredients included across successive rungs.
 
-$$
-E_{\text{xc}}\approx\sum_gw_g\rho(\mathbf{r}_g)\epsilon_{\text{xc}}(\mathbf{r}_g)
-$$
-
-where $\mathbf{r}_g$ represents the spatial coordinates of grid point $g$, and $w_g$ is the quadrature weight incorporating the radial, angular, and multicenter Becke partitioning factors.
-
-### 5. Density Evaluation and Functional Families
-
-At each quadrature grid point, the electronic density $\rho(\mathbf{r})$ is evaluated from the atomic orbital basis functions $\chi_\mu(\mathbf{r})$ and density matrix $\mathbf{P}$ as
+The Local Density Approximation (LDA) forms the first rung, modeling the exchange-correlation energy density at each point from the analytical and Quantum Monte Carlo parameterization of the homogeneous electron gas as
 
 $$
-\rho(\mathbf{r})=\sum_{\mu,\nu}P_{\mu\nu}\chi_\mu(\mathbf{r})\chi_\nu(\mathbf{r})
+E_{\text{xc}}^{\text{LDA}}[\rho]=\int\rho(\mathbf{r})\epsilon_{\text{xc}}^{\text{unif}}(\rho(\mathbf{r}))d\mathbf{r}
 $$
 
-along with the density gradient $\nabla\rho(\mathbf{r})$ and the non-interacting kinetic energy density $\tau(\mathbf{r})$ evaluated as
+The Generalized Gradient Approximation (GGA) forms the second rung, incorporating the density gradient norm squared $\gamma=|\nabla\rho|^2$ through the dimensionless reduced density gradient $s=\frac{|\nabla\rho|}{2(3\pi^2)^{1/3}\rho^{4/3}}$ to describe the spatial inhomogeneity of molecular electron distributions, as exemplified by PBE and BLYP.
+
+The meta-GGA level forms the third rung, adding the non-interacting positive kinetic energy density $\tau(\mathbf{r})=\frac{1}{2}\sum_i^{\text{occ}}|\nabla\phi_i(\mathbf{r})|^2$ or the density Laplacian $\nabla^2\rho$ to distinguish between single-bond, metallic, and non-covalent overlapping regions, as implemented in SCAN and TPSS.
+
+Hybrid functionals occupy the fourth rung, mixing a fraction $a_{\text{x}}$ of non-local Hartree–Fock exact exchange into the functional as $E_{\text{xc}}^{\text{hybrid}}=E_{\text{xc}}^{\text{DFA}}+a_{\text{x}}\left(E_{\text{x}}^{\text{HF}}-E_{\text{x}}^{\text{DFA}}\right)$, which partially cancels the self-interaction error and substantially improves reaction barrier heights, band gaps, and thermochemical atomization energies, as in B3LYP and PBE0.
+
+### 6. Molecular Numerical Grid Quadrature
+
+Because exchange-correlation energy densities $\epsilon_{\text{xc}}(\rho,\gamma,\tau)$ are non-linear functions of the density and its gradients, spatial integrals involving $E_{\text{xc}}$ and $V_{\mu\nu}^{\text{xc}}$ cannot be evaluated analytically over Gaussian basis sets. Instead, the continuous integrals are evaluated using numerical quadrature over a three-dimensional molecular grid.
+
+The molecular integration space is partitioned into atom-centered contributions using Becke fuzzy cell weighting functions $w_A(\mathbf{r})$, mapping the continuous exchange-correlation integral into a discrete quadrature sum over grid points as
 
 $$
-\nabla\rho(\mathbf{r})=2\sum_{\mu,\nu}P_{\mu\nu}\nabla\chi_\mu(\mathbf{r})\chi_\nu(\mathbf{r})
+E_{\text{xc}}\approx\sum_g w_g\rho(\mathbf{r}_g)\epsilon_{\text{xc}}(\mathbf{r}_g)
 $$
 
-and
+where $\mathbf{r}_g$ are the Cartesian coordinates of grid point $g$, and $w_g$ is the quadrature weight combining radial integration steps and angular Lebedev weights on atomic spheres. At each grid point $\mathbf{r}_g$, the density and its gradient are evaluated directly from the atomic basis functions and the density matrix as
 
 $$
-\tau(\mathbf{r})=\frac{1}{2}\sum_{\mu,\nu}P_{\mu\nu}\nabla\chi_\mu(\mathbf{r})\cdot\nabla\chi_\nu(\mathbf{r})
+\rho(\mathbf{r}_g)=\sum_{\mu,\nu}P_{\mu\nu}\chi_\mu(\mathbf{r}_g)\chi_\nu(\mathbf{r}_g),\quad\nabla\rho(\mathbf{r}_g)=2\sum_{\mu,\nu}P_{\mu\nu}\nabla\chi_\mu(\mathbf{r}_g)\chi_\nu(\mathbf{r}_g)
 $$
 
-which classify functionals into standard approximations, where the Local Density Approximation (LDA) depends solely on the local density $\rho$, the Generalized Gradient Approximation (GGA) incorporates the gradient norm squared $\gamma=|\nabla\rho|^2$, meta-GGA functionals additionally include the kinetic energy density $\tau$ or density Laplacian $\nabla^2\rho$, and hybrid functionals mix a fraction $a_{\text{x}}$ of non-local Hartree–Fock exact exchange into the Kohn–Sham operator. In spin-polarized generalized calculations, these expressions are evaluated separately for the alpha and beta spin channels using the diagonal blocks $\mathbf{P}^{\alpha\alpha}$ and $\mathbf{P}^{\beta\beta}$.
-
-### 6. Exchange-Correlation Potential Construction
-
-The matrix elements of the exchange-correlation potential $V_{\mu\nu}^{\text{xc}}$ are defined as the functional derivative of the exchange-correlation energy with respect to the density matrix elements. Applying the chain rule to the numerical quadrature expansion over grid points yields the matrix representation as
+Applying the chain rule to the quadrature expression with respect to variations in the density matrix elements yields the exchange-correlation potential matrix elements as
 
 $$
-V_{\mu\nu}^{\text{xc}}\approx\sum_gw_g\left(\frac{\partial(\rho\epsilon_{\text{xc}})}{\partial\rho}\chi_\mu(\mathbf{r}_g)\chi_\nu(\mathbf{r}_g)+2\frac{\partial(\rho\epsilon_{\text{xc}})}{\partial\gamma}\nabla\rho(\mathbf{r}_g)\cdot\left(\nabla\chi_\mu(\mathbf{r}_g)\chi_\nu(\mathbf{r}_g)+\chi_\mu(\mathbf{r}_g)\nabla\chi_\nu(\mathbf{r}_g)\right)+\frac{1}{2}\frac{\partial(\rho\epsilon_{\text{xc}})}{\partial\tau}\nabla\chi_\mu(\mathbf{r}_g)\cdot\nabla\chi_\nu(\mathbf{r}_g)\right)
+V_{\mu\nu}^{\text{xc}}\approx\sum_g w_g\left[\frac{\partial(\rho\epsilon_{\text{xc}})}{\partial\rho}\chi_\mu\chi_\nu+2\frac{\partial(\rho\epsilon_{\text{xc}})}{\partial\gamma}\nabla\rho\cdot\left(\nabla\chi_\mu\chi_\nu+\chi_\mu\nabla\chi_\nu\right)+\frac{1}{2}\frac{\partial(\rho\epsilon_{\text{xc}})}{\partial\tau}\nabla\chi_\mu\cdot\nabla\chi_\nu\right]
 $$
 
-where the partial derivatives of the exchange-correlation energy density are contracted with the basis function values and their spatial gradients at each grid point to assemble the potential matrix for self-consistent field iterations.
+which is assembled on the numerical grid and added to the core and Coulomb matrices during each self-consistent field iteration until orbital coefficients and electron density achieve numerical convergence.

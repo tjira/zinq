@@ -1,119 +1,121 @@
-# Configuration–Interaction
+# Configuration Interaction
 
-This document provides a highly detailed, mathematically rigorous, yet simple and intuitive explanation of the Configuration–Interaction (CI) method. If you want to understand how we can describe electron correlation by mixing different electronic configurations together using a variational approach, this guide is written step-by-step for you.
-
----
-
-## I. Wavefunction Representation
-
-To understand the Configuration–Interaction method, we must first look at how the Hartree–Fock method represents a molecule. Hartree–Fock assumes that all electrons occupy a single configuration of molecular orbitals, described by a single Slater determinant. While this is a good starting point, it is an approximation that ignores the detailed ways in which electrons avoid one another (electron correlation). The Configuration–Interaction method improves on this by expressing the many-electron wavefunction as a linear combination of many different Slater determinants. These determinants represent different electronic configurations, including the reference ground-state determinant, determinants where one electron has been excited to a virtual orbital, determinants where two electrons have been excited, and so on.
-
-### 1. Variational Wavefunction Expansion
-
-We write the Configuration–Interaction wavefunction expansion for an electronic state $k$ as
-
-$$
-|\Psi_k\rangle=\sum_a c_{ak}|\Phi_a\rangle
-$$
-
-where $|\Phi_0\rangle$ is the reference Hartree–Fock Slater determinant representing the mean-field ground state of the system, $|\Phi_a\rangle$ represents the excited Slater determinants where one or more electrons have been promoted from occupied molecular orbitals to virtual molecular orbitals, and $c_{ak}$ are the variational coefficients that define state $k$. In a determinant-based Configuration–Interaction approach, each Slater determinant is specified by its occupied spin-orbital indices, from which the excitation level relative to the reference determinant is determined.
+This document provides a clear, simple, and mathematically rigorous explanation of the Configuration Interaction (CI) method in second quantization. Building directly upon the Hartree–Fock reference state and canonical spin-orbitals, this guide explains how many-electron wavefunctions are expanded over excited configurations, how Hamiltonian matrix elements are evaluated using Wick's theorem, and how the variational principle determines correlated ground and excited electronic states.
 
 ---
 
-## II. Hamiltonian Evaluation and Diagonalization
+## I. Determinant Space and Second-Quantized Excitations
 
-### 2. Slater–Condon Rules
+### 1. Configuration Expansion and Excitation Hierarchy
 
-To find the coefficients that minimize the energy of the system, we construct the matrix representing the electronic Hamiltonian operator $\hat{H}$ in the basis of Slater determinants. The total electronic Hamiltonian is partitioned into one-electron and two-electron operators as
-
-$$
-\hat{H}=\sum_i\hat{h}^{\text{core}}(i)+\sum_{i<j}\hat{g}(i,j)
-$$
-
-where $\hat{h}^{\text{core}}$ describes the one-electron kinetic energy and nuclear attraction, and $\hat{g}(i,j)=\frac{1}{r_{ij}}$ represents the electron-electron Coulomb repulsion. The matrix elements in the determinant basis are denoted as $H_{\text{CI},ab}=\langle\Phi_a|\hat{H}|\Phi_b\rangle$. Because the molecular orbitals are orthonormal and the Hamiltonian contains at most two-body interactions, the Slater–Condon rules simplify these matrix elements to one- and two-electron molecular spin-orbital integrals based on the number of spin-orbitals differing between determinants $a$ and $b$.
-
-If the two determinants are identical ($a=b$), the matrix element is the expectation value of the Hamiltonian evaluated as
+While the Hartree–Fock method finds the single Slater determinant that minimizes the mean-field electronic energy, it ignores dynamical and static electron correlation. The Configuration Interaction method provides an exact variational framework to capture this correlation by expanding the many-electron electronic wavefunction $|\Psi_k\rangle$ for state $k$ as a linear combination of Slater determinants formed by promoting electrons from occupied orbitals to virtual orbitals as
 
 $$
-\langle\Phi_a|\hat{H}|\Phi_a\rangle=\sum_i\langle\phi_i|\hat{h}^{\text{core}}|\phi_i\rangle+\sum_{i<j}\langle\phi_i\phi_j||\phi_i\phi_j\rangle
+|\Psi_k\rangle=\sum_n c_{nk}|\Phi_n\rangle=c_{0k}|\Phi_0\rangle+\sum_{i,a}c_i^{a,k}|\Phi_i^a\rangle+\sum_{i<j,a<b}c_{ij}^{ab,k}|\Phi_{ij}^{ab}\rangle+\cdots
 $$
 
-where the sums run over all occupied spin-orbitals $\phi_i$ and $\phi_j$, and $\langle\phi_i\phi_j||\phi_i\phi_j\rangle=\langle\phi_i\phi_j|\phi_i\phi_j\rangle-\langle\phi_i\phi_j|\phi_j\phi_i\rangle$ is the antisymmetrized two-electron integral combining classical Coulomb repulsion and quantum exchange.
-
-If the two determinants differ by exactly one spin-orbital (where determinant $a$ contains spin-orbital $\phi_p$ and determinant $b$ contains spin-orbital $\phi_r$), the matrix element is evaluated as
+where $|\Phi_0\rangle$ is the Hartree–Fock reference state, and $c_{nk}$ are the linear variational coefficients defining state $k$. In second quantization, each excited determinant is generated by applying particle creation operators $a_a^\dagger,a_b^\dagger,\dots$ and hole annihilation operators $a_i,a_j,\dots$ directly to the reference state, defining single and double excitations as
 
 $$
-\langle\Phi_a|\hat{H}|\Phi_b\rangle=(-1)^{\sigma_{ab}}\left(\langle\phi_p|\hat{h}^{\text{core}}|\phi_r\rangle+\sum_i\langle\phi_p\phi_i||\phi_r\phi_i\rangle\right)
+|\Phi_i^a\rangle=a_a^\dagger a_i|\Phi_0\rangle,\quad|\Phi_{ij}^{ab}\rangle=a_a^\dagger a_b^\dagger a_j a_i|\Phi_0\rangle
 $$
 
-where the sum runs over the spin-orbitals shared by both determinants, and $(-1)^{\sigma_{ab}}$ is a permutation phase factor determined by the number of orbital transpositions required to align the common spin-orbital occupations between the two determinants.
+where canonical index restrictions $i<j$ and $a<b$ ensure linear independence among configurations. Truncating this expansion at specific excitation levels defines standard Configuration Interaction models, such as Configuration Interaction Singles (CIS) for electronic excitation spectra, Configuration Interaction Doubles (CID) for electron pair correlation, and Configuration Interaction Singles and Doubles (CISD) for combined ground- and excited-state correlation.
 
-If the two determinants differ by exactly two spin-orbitals (where determinant $a$ contains spin-orbitals $\phi_p$ and $\phi_q$, and determinant $b$ contains spin-orbitals $\phi_r$ and $\phi_s$), the one-electron contribution vanishes, and the two-electron matrix element is evaluated as
+### 2. Full Configuration Interaction and Combinatorial Scaling
+
+When the expansion includes all possible electron promotions up to the total number of electrons $N$, the method becomes Full Configuration Interaction (FCI). Because the set of all $N$-electron Slater determinants forms a complete basis for the $N$-electron Hilbert space spanned by the chosen one-electron orbital basis, FCI yields the exact non-relativistic electronic energy within that basis set.
+
+For a system of $N$ electrons distributed among $2M$ spin-orbitals (corresponding to $M$ spatial molecular orbitals), the total number of determinants in the full expansion is given by the binomial coefficient
 
 $$
-\langle\Phi_a|\hat{H}|\Phi_b\rangle=(-1)^{\sigma_{ab}}\langle\phi_p\phi_q||\phi_r\phi_s\rangle
+N_{\text{det}}=\binom{2M}{N}=\frac{(2M)!}{N!(2M-N)!}
 $$
 
-which directly couples the two excited configurations. If the determinants differ by three or more spin-orbitals, the Hamiltonian matrix element is identically zero because $\hat{H}$ contains only one- and two-body operators.
+When separated into $N_\alpha$ alpha-spin and $N_\beta$ beta-spin electrons, the total number of spin-adapted determinants expands as the product of independent binomial factors
 
-### 3. Hamiltonian Diagonalization
+$$
+N_{\text{det}}=\binom{M}{N_\alpha}\binom{M}{N_\beta}
+$$
 
-Applying the variational principle to optimize the expansion coefficients leads to the matrix eigenvalue equation
+Because this binomial dimension grows factorially with molecular size, solving the exact FCI eigenvalue problem becomes computationally intractable for all but the smallest molecules. Truncated CI approximations like CISD reduce the determinant dimension to a polynomial scaling of $O(N_{\text{occ}}^2 N_{\text{virt}}^2)$, making correlated electronic calculations feasible for larger chemical systems.
+
+---
+
+## II. Hamiltonian Matrix Elements and the Slater–Condon Rules
+
+### 3. Second-Quantized Derivation of Matrix Elements
+
+To determine the variational coefficients and electronic energies, we evaluate the matrix representation of the exact electronic Hamiltonian $\hat{H}=\sum_{pq}h_{pq}a_p^\dagger a_q+\frac{1}{2}\sum_{pqrs}g_{pqrs}a_p^\dagger a_q^\dagger a_s a_r$ in the orthonormal determinant basis. Applying Wick's theorem to the expectation values $\langle\Phi_m|\hat{H}|\Phi_n\rangle$ eliminates all uncontracted operator strings, deriving the Slater–Condon rules directly based on the orbital differences between determinants $m$ and $n$.
+
+When the two determinants are identical ($m=n$), all operators contract within the occupied spin-orbitals of that determinant, giving the diagonal matrix element as
+
+$$
+\langle\Phi_m|\hat{H}|\Phi_m\rangle=\sum_{i \in \text{det}_m}h_{ii}+\frac{1}{2}\sum_{i,j \in \text{det}_m}\left(g_{ijij}-g_{ijji}\right)
+$$
+
+When the two determinants differ by exactly one spin-orbital, where determinant $m$ contains spin-orbital $p$ and determinant $n$ contains spin-orbital $q$, contracting the one-body and two-body operators over the set of common occupied spin-orbitals $I_{\text{common}}$ yields
+
+$$
+\langle\Phi_m|\hat{H}|\Phi_n\rangle=(-1)^\sigma\left(h_{pq}+\sum_{k \in I_{\text{common}}}\langle pk||qk\rangle\right)
+$$
+
+where $(-1)^\sigma$ is the phase factor associated with the permutation of fermionic operators required to bring the shared spin-orbitals into matching alignment, and $\langle pk||qk\rangle=\langle pk|qk\rangle-\langle pk|kq\rangle=g_{pkqk}-g_{pkkq}$ is the antisymmetrized two-electron integral in physicist notation.
+
+When the two determinants differ by exactly two spin-orbitals, where determinant $m$ contains spin-orbitals $p,q$ and determinant $n$ contains spin-orbitals $r,s$, the one-body core Hamiltonian term vanishes due to the mutual orthogonality of the remaining spin-orbitals, leaving purely the two-body repulsion matrix element as
+
+$$
+\langle\Phi_m|\hat{H}|\Phi_n\rangle=(-1)^\sigma\langle pq||rs\rangle=(-1)^\sigma\left(\langle pq|rs\rangle-\langle pq|sr\rangle\right)=(-1)^\sigma\left(g_{pqrs}-g_{pqsr}\right)
+$$
+
+When the two determinants differ by three or more spin-orbitals, the matrix element vanishes identically because the Hamiltonian contains at most two-body operators, meaning that at least one pair of differing spin-orbitals remains uncontracted and yields zero by orbital orthonormality as
+
+$$
+\langle\Phi_m|\hat{H}|\Phi_n\rangle=0\quad(\Delta N\ge3)
+$$
+
+### 4. Block Structure of the CISD Hamiltonian Matrix
+
+In the Configuration Interaction Singles and Doubles (CISD) approximation, the determinant basis is partitioned into the reference ground state $|\Phi_0\rangle$, singly excited determinants $|\Phi_{\text{S}}\rangle$, and doubly excited determinants $|\Phi_{\text{D}}\rangle$. Arranging these configurations into subspace blocks reveals the matrix structure
+
+$$
+\mathbf{H}_{\text{CISD}}=\begin{pmatrix}H_{00}&\mathbf{H}_{0\text{S}}&\mathbf{H}_{0\text{D}}\\\mathbf{H}_{\text{S}0}&\mathbf{H}_{\text{SS}}&\mathbf{H}_{\text{SD}}\\\mathbf{H}_{\text{D}0}&\mathbf{H}_{\text{DS}}&\mathbf{H}_{\text{DD}}\end{pmatrix}
+$$
+
+The reference diagonal element reproduces the Hartree–Fock energy, $H_{00}=E_{\text{HF}}$. By Brillouin's theorem, established for the canonical Hartree–Fock reference, the exact Hamiltonian does not couple the reference ground state directly to any singly excited determinant, causing the reference-singles coupling block to vanish identically as
+
+$$
+\mathbf{H}_{0\text{S}}=\mathbf{0}
+$$
+
+The reference state couples directly only to the doubly excited configurations, with coupling matrix elements given by $\langle\Phi_0|\hat{H}|\Phi_{ij}^{ab}\rangle=\langle ij||ab\rangle=g_{ijab}-g_{ijba}=\langle ij|ab\rangle-\langle ij|ba\rangle$. Although single excitations do not couple directly to the reference state, they couple to the double excitations through the off-diagonal block $\mathbf{H}_{\text{SD}}$, allowing singly excited configurations to mix indirectly into the correlated ground-state wavefunction and to describe one-electron polarization effects.
+
+---
+
+## III. Variational Optimization and Matrix Eigenvalues
+
+### 5. Rayleigh–Ritz Variational Formulation
+
+The linear expansion coefficients $c_{nk}$ and state energies $E_k$ are determined by applying the Rayleigh–Ritz variational principle. We minimize the energy expectation value $E=\frac{\langle\Psi|\hat{H}|\Psi\rangle}{\langle\Psi|\Psi\rangle}$ subject to the normalization constraint $\langle\Psi|\Psi\rangle=1$ by constructing the Lagrangian functional
+
+$$
+\mathcal{L}=\sum_{m,n}c_m^* H_{mn}c_n-E\left(\sum_n c_n^* c_n-1\right)
+$$
+
+where $H_{mn}=\langle\Phi_m|\hat{H}|\Phi_n\rangle$ are the Hamiltonian matrix elements evaluated via the Slater–Condon rules. Setting the variation with respect to the complex conjugate coefficients $c_m^*$ to zero yields the stationary condition
+
+$$
+\sum_n H_{mn}c_{nk}=E_k c_{mk}
+$$
+
+which establishes that the optimal configuration interaction coefficients satisfy a system of linear equations coupled by the Hamiltonian matrix.
+
+### 6. Secular Equations and Variational Bounds
+
+Collecting the linear equations for all basis determinants into matrix form produces the Hermitian matrix eigenvalue problem
 
 $$
 \mathbf{H}_{\text{CI}}\mathbf{c}_k=E_k\mathbf{c}_k
 $$
 
-where $\mathbf{H}_{\text{CI}}$ is the Hamiltonian matrix representation in the Slater determinant basis, $\mathbf{c}_k$ is the eigenvector containing the configuration coefficients for state $k$, and $E_k$ is the corresponding electronic energy eigenvalue. The total energy of state $k$ is the sum of the electronic energy $E_k$ and the nuclear repulsion energy $V_{\text{nuc}}$.
-
----
-
-## III. Nuclear Derivatives
-
-### 4. Analytical Nuclear Gradient
-
-To determine the forces acting on the nuclei, we calculate the derivative of the total energy of state $k$ with respect to the Cartesian nuclear coordinates $x$. Differentiating the variational energy expression yields the analytical nuclear gradient as
-
-$$
-\frac{dE_{k,\text{tot}}}{dx}=\frac{dV_{\text{nuc}}}{dx}+\sum_{a,b}c_{ak}c_{bk}\frac{dH_{\text{CI},ab}}{dx}
-$$
-
-where $V_{\text{nuc}}$ is the nuclear repulsion energy, and $c_{ak}$ and $c_{bk}$ are the components of the CI eigenvector $\mathbf{c}_k$. Because the CI coefficients are variationally optimized by diagonalizing the Hamiltonian matrix, their derivatives with respect to nuclear displacements vanish by the Hellmann–Feynman theorem. However, the molecular orbitals are optimized for the Hartree–Fock reference rather than the CI wavefunction, so the energy is not stationary with respect to changes in the molecular orbital coefficients, meaning their nuclear derivatives contribute explicitly to $\frac{dH_{\text{CI},ab}}{dx}$.
-
-### 5. Differentiation via CPHF and Dual Numbers
-
-Evaluating the derivative of each Hamiltonian matrix element $\frac{dH_{\text{CI},ab}}{dx}$ requires propagating nuclear derivatives through the atomic orbital integrals, the four-index molecular orbital transformation, and the Slater–Condon rules. To accomplish this, mean-field response theory is combined with forward-mode automatic differentiation using dual numbers.
-
-First, the Coupled-Perturbed Hartree–Fock (CPHF) equations are solved to obtain the first-order response of the molecular orbitals to nuclear displacements. This yields the molecular orbital coefficient derivatives $\frac{d\mathbf{C}}{dx}$, which describe the geometric relaxation of the molecular orbital basis as the nuclei move.
-
-Second, rather than manually differentiating the four-index molecular orbital transformation and the determinant evaluation rules, the derivative of the CI Hamiltonian matrix is evaluated using forward-mode automatic differentiation. Seeding the atomic orbital core Hamiltonian $\mathbf{H}^{\text{core}}$, the two-electron repulsion integrals $\mathbf{g}$, and the molecular orbital coefficients $\mathbf{C}$ with their exact first-order derivatives ($\frac{d\mathbf{H}^{\text{core}}}{dx}$, $\frac{d\mathbf{g}}{dx}$, and $\frac{d\mathbf{C}}{dx}$) automatically propagates the derivatives through the integral transformation and Slater–Condon evaluation using dual numbers. The resulting dual component of the Hamiltonian matrix directly provides $\frac{dH_{\text{CI},ab}}{dx}$, which is contracted with the CI eigenvectors to complete the analytical nuclear gradient.
-
-### 6. Numerical Nonadiabatic Coupling Vectors
-
-Beyond diagonal forces on single electronic surfaces, transitions between distinct electronic states are mediated by nonadiabatic coupling vectors. For two adiabatic electronic states $j$ and $k$ with $j\ne k$, the nonadiabatic coupling vector with respect to the nuclear coordinate vector $\mathbf{R}$ is defined as
-
-$$
-\mathbf{d}_{jk}=\langle\Psi_j|\boldsymbol{\nabla}_\mathbf{R}\Psi_k\rangle
-$$
-
-which describes the first-order derivative coupling induced by nuclear kinetic motion and carries dimensions of inverse length ($a_0^{-1}$ in atomic units).
-
-In Configuration Interaction, each electronic state is expanded over the Slater determinant basis as $|\Psi_k(\mathbf{R})\rangle=\sum_a c_{ak}(\mathbf{R})|\Phi_a(\mathbf{R})\rangle$. Evaluating the coupling numerically using finite differences with displacement step $h$ along Cartesian coordinate $R_{A\alpha}$ via the cross-geometry wavefunction overlap yields
-
-$$
-d_{jk,A\alpha}\approx\frac{\langle\Psi_j(\mathbf{R}-h\mathbf{e}_{A\alpha})|\Psi_k(\mathbf{R}+h\mathbf{e}_{A\alpha})\rangle-\langle\Psi_j(\mathbf{R}+h\mathbf{e}_{A\alpha})|\Psi_k(\mathbf{R}-h\mathbf{e}_{A\alpha})\rangle}{4h}
-$$
-
-which achieves second-order accuracy and ensures strict antisymmetry such that $d_{jk,A\alpha}=-d_{kj,A\alpha}$.
-
-Each cross-geometry state overlap is evaluated over the displaced Slater determinants as
-
-$$
-\langle\Psi_j(\mathbf{R}^-)|\Psi_k(\mathbf{R}^+)\rangle=\sum_{a,b}c_{aj}(\mathbf{R}^-)c_{bk}(\mathbf{R}^+)\langle\Phi_a(\mathbf{R}^-)|\Phi_b(\mathbf{R}^+)\rangle
-$$
-
-where $\mathbf{R}^\pm=\mathbf{R}\pm h\mathbf{e}_{A\alpha}$, and the determinant overlap $\langle\Phi_a(\mathbf{R}^-)|\Phi_b(\mathbf{R}^+)\rangle=\det(\mathbf{M}_{ab})$ is evaluated using Löwdin's rule from the $N_{\text{elec}}\times N_{\text{elec}}$ submatrix of the molecular spin-orbital overlap matrix $\mathbf{S}^{\text{MO}}=\mathbf{C}(\mathbf{R}^-)^T\mathbf{S}^{\text{SO-AO}}(\mathbf{R}^-,\mathbf{R}^+)\mathbf{C}(\mathbf{R}^+)$. Because the atomic orbital overlap $\mathbf{S}^{\text{AO}}(\mathbf{R}^-,\mathbf{R}^+)$ is evaluated directly between the displaced nuclear configurations using two-center integral engines, this formulation rigorously accounts for atomic orbital displacement (Pulay) terms, molecular orbital relaxation, and CI configuration derivative couplings without truncation.
-
-By virtue of the symmetry of real electronic wavefunctions, the reverse overlap is equivalently evaluated as $\langle\Psi_j(\mathbf{R}^+)|\Psi_k(\mathbf{R}^-)\rangle=\langle\Psi_k(\mathbf{R}^-)|\Psi_j(\mathbf{R}^+)\rangle=\sum_{a,b}c_{ak}(\mathbf{R}^-)c_{bj}(\mathbf{R}^+)\langle\Phi_a(\mathbf{R}^-)|\Phi_b(\mathbf{R}^+)\rangle$, which enables the simultaneous accumulation of both directional overlaps from a single set of cross-geometry determinant overlaps $\det(\mathbf{M}_{ab})$.
-
-Because numerical diagonalization determines eigenvectors up to an arbitrary global sign $\pm 1$, phase continuity must be enforced across displaced geometries. The sign of each displaced eigenvector is aligned with the reference geometry eigenvector by requiring $\mathbf{c}_k(\mathbf{R}\pm h\mathbf{e}_{A\alpha})^T\mathbf{c}_k(\mathbf{R})>0$ before computing the state overlaps.
+where $\mathbf{H}_{\text{CI}}$ is the Hamiltonian matrix representation in the chosen determinant basis, $\mathbf{c}_k$ is the normalized eigenvector of configuration coefficients, and $E_k$ is the corresponding electronic energy eigenvalue. By the Hylleraas–Undheim–MacDonald theorem, each calculated eigenvalue $E_k$ provides a rigorous variational upper bound to the exact $k$-th electronic state energy of the physical Hamiltonian, $E_k\ge E_k^{\text{exact}}$. Diagonalizing $\mathbf{H}_{\text{CI}}$ yields the correlated ground state and all electronically excited states simultaneously as mutually orthogonal eigenvectors.

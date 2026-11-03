@@ -1,6 +1,6 @@
 # Hartree–Fock Method
 
-This document provides a clear, simple, and mathematically rigorous explanation of the Hartree–Fock method in second quantization. If you want to understand how the electronic Hamiltonian, Slater determinants, Wick's theorem, basis sets, and the variational principle lead to the fundamental mean-field equations of quantum chemistry, this guide explains every step directly.
+This document provides a clear, simple, and mathematically rigorous explanation of the Hartree–Fock method in second quantization. If you want to understand how the electronic Hamiltonian, Slater determinants, Wick's theorem, basis sets, the variational principle, and Brillouin's theorem lead to the fundamental mean-field equations of quantum chemistry, this guide explains every step directly.
 
 ---
 
@@ -277,3 +277,21 @@ $$
 $$
 
 which dictate the electronic ground state of the system. Here $\mathbf{F}$ is the Fock matrix, $\mathbf{C}$ is the molecular orbital coefficient matrix, $\mathbf{S}$ is the atomic overlap matrix, and $\mathbf{E}$ is the diagonal matrix of orbital energies. Because the atomic basis functions are not mutually orthogonal, the overlap matrix $\mathbf{S}$ appears on the right-hand side, making this a generalized eigenvalue problem. Furthermore, because the Fock matrix $\mathbf{F}(\mathbf{P})$ depends nonlinearly on the coefficients $\mathbf{C}$ through the density matrix $\mathbf{P}$, the equations cannot be solved in a single step and must instead be solved iteratively using the self-consistent field method until the orbital coefficients and electron density reach numerical convergence. This derivation presents Generalized Hartree–Fock (GHF) in a spin-orbital basis where each state has unit occupancy. For closed-shell systems with spatial orbitals in Restricted Hartree–Fock (RHF), pairs of electrons with opposite spins occupy the same spatial orbital, giving an occupancy factor of two in the density matrix ($P_{\mu\nu}=2\sum_i^{\text{occ}}C_{\mu i}C_{\nu i}^*$) and scaling the exchange term in the Fock matrix by one half because electrons only undergo exchange with electrons of identical spin ($\mathbf{P}_\alpha=\frac{1}{2}\mathbf{P}$), while all electrons contribute to Coulomb repulsion. In the absence of external magnetic fields, the Hamiltonian is time-reversal invariant, so the molecular orbitals can be chosen strictly real, where $\mathbf{U}$ reduces to an orthogonal matrix and $\mathbf{C}^\dagger$ reduces to $\mathbf{C}^T$.
+
+### 7. Canonical Orbitals and Brillouin's Theorem
+
+Once the self-consistent field equations reach convergence, the resulting canonical molecular spin-orbitals diagonalize the Fock operator across the entire orbital space, $\langle\phi_p|\hat{F}|\phi_q\rangle=\epsilon_p\delta_{pq}$. In second quantization, this effective one-electron Fock operator is expressed as
+
+$$
+\hat{F}=\sum_p\epsilon_p a_p^\dagger a_p
+$$
+
+where $\epsilon_p$ are the canonical orbital energies. Because the Fock operator is strictly diagonal in this canonical basis, any matrix element connecting an occupied spin-orbital $|\phi_i\rangle$ to an unoccupied virtual spin-orbital $|\phi_a\rangle$ vanishes identically, $F_{ia}=\langle\phi_i|\hat{F}|\phi_a\rangle=\epsilon_i\delta_{ia}=0$.
+
+This property leads directly to Brillouin's theorem. In second quantization, any singly excited determinant $|\Phi_i^a\rangle$ is formed by replacing an occupied spin-orbital $i$ with a virtual spin-orbital $a$ as $|\Phi_i^a\rangle=a_a^\dagger a_i|\Phi_0\rangle$. Evaluating the matrix element of the exact Hamiltonian between the Hartree–Fock reference state and this singly excited state using Wick's theorem yields
+
+$$
+\langle\Phi_0|\hat{H}|\Phi_i^a\rangle=\langle\Phi_0|\hat{H}a_a^\dagger a_i|\Phi_0\rangle=h_{ia}+\sum_j^{\text{occ}}\left(g_{ijaj}-g_{ijja}\right)=\langle\phi_i|\hat{F}|\phi_a\rangle=F_{ia}=0
+$$
+
+which proves that the Hartree–Fock ground state does not interact directly with any singly excited configuration. Brillouin's theorem reflects the variational stationarity of the Hartree–Fock wavefunction, ensuring that small orbital rotations cannot lower the ground-state electronic energy and providing the foundation for post-Hartree–Fock correlation methods.

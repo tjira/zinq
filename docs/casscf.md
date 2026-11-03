@@ -1,205 +1,129 @@
 # Complete Active Space Self-Consistent Field
 
-This document provides a detailed and mathematically rigorous explanation of the Complete Active Space Self-Consistent Field (CASSCF) method and its computational implementation in Zinq. The guide presents the multiconfigurational wavefunction formulation, state averaging, two-step orbital and configuration interaction optimization, generalized Fock matrix construction, Cayley unitary orbital rotation, coupled-perturbed Z-vector response, and analytic nuclear derivatives.
+This document provides a clear, simple, and mathematically rigorous explanation of the Complete Active Space Self-Consistent Field (CASSCF) method in second quantization. Designed to treat strong static electron correlation, near-degeneracies, and open-shell systems, this guide explains how the orbital space is partitioned, how the multiconfigurational wavefunction and reduced density matrices are formulated, how the generalized Fock matrix and orbital gradient are derived, and how two-step orbital and configuration optimization is achieved.
 
 ---
 
-## I. Orbital Space Partitioning and Wavefunction Formulation
+## I. Orbital Space Partitioning and Multiconfigurational Wavefunction
 
 ### 1. Partitioning of the Molecular Orbital Space
 
-In molecular systems exhibiting near-degeneracy and strong static electron correlation, such as bond dissociation processes, diradicals, and open-shell transition metal complexes, a single Slater determinant cannot qualitatively describe the electronic structure. The Complete Active Space Self-Consistent Field method addresses this multiconfigurational problem by partitioning the molecular orbital space into three distinct subspaces according to physical occupation. The inactive or core space contains $n_{\text{core}}$ spatial orbitals that remain doubly occupied across all electronic configurations; the active space contains $n_{\text{act}}$ spatial orbitals accommodating $n_{\text{act,el}}$ active electrons whose occupations vary freely between zero, one, and two; and the virtual or secondary space contains $n_{\text{virt}}$ unoccupied spatial orbitals that remain empty in every determinant.
+Single-determinant methods like Hartree–Fock break down fundamentally for molecules with near-degenerate electronic states, broken bonds, or open-shell diradical character because no single Slater determinant can qualitatively describe the true wavefunction. The Complete Active Space Self-Consistent Field (CASSCF) method resolves this static correlation problem by partitioning the $M$ spatial molecular orbitals into three disjoint physical subspaces according to their occupation characteristics.
+
+The inactive or core subspace contains $n_{\text{core}}$ spatial orbitals that remain doubly occupied across all electronic configurations; the active subspace contains $n_{\text{act}}$ spatial orbitals accommodating $n_{\text{act,el}}$ active electrons whose occupations vary freely between zero, one, and two; and the secondary or virtual subspace contains $n_{\text{virt}}$ unoccupied spatial orbitals that remain empty in all configurations. The total number of electrons in the molecule is partitioned as $N_{\text{elec}}=2n_{\text{core}}+n_{\text{act,el}}$, while the total number of molecular orbitals satisfies $M=n_{\text{core}}+n_{\text{act}}+n_{\text{virt}}$.
 
 ### 2. Complete Active Space Configuration Expansion
 
-Within the active orbital subspace, the electronic wavefunction $|\Psi_k\rangle$ for state $k$ is constructed as an exact Full Configuration Interaction (FCI) expansion over all symmetry- and spin-adapted Slater determinants $|\Phi_a\rangle$ formed by distributing the $n_{\text{act,el}}$ active electrons among the $n_{\text{act}}$ active orbitals as
+Within the active orbital subspace, the electronic wavefunction $|\Psi_k\rangle$ for electronic state $k$ is constructed as a Full Configuration Interaction (FCI) expansion over all symmetry- and spin-adapted active Slater determinants as
 
 $$
-|\Psi_k\rangle=\sum_a C_{ak}|\Phi_a\rangle
+|\Psi_k\rangle=\sum_a c_{ak}|\Phi_a\rangle
 $$
 
-where $C_{ak}$ are the state configuration interaction expansion coefficients satisfying the normalization condition $\sum_a C_{ak}^2=1$. The total number of electrons in the molecular system is partitioned as $N_{\text{elec}}=2n_{\text{core}}+n_{\text{act,el}}$, and each determinant $|\Phi_a\rangle$ is formed by appending the fully occupied core spin-orbitals to the active spin-orbital excitation string, ensuring that core electrons are preserved while all active configurations match the spin multiplicity $2S+1$.
+where $c_{ak}$ are the state Configuration Interaction coefficients satisfying the normalization condition $\sum_a c_{ak}^2=1$. In second quantization, each determinant $|\Phi_a\rangle$ is formed by appending the fully occupied core spin-orbitals to an active spin-orbital creation string acting on the vacuum state as
+
+$$
+|\Phi_a\rangle=\left(\prod_{i \in \text{core}} a_{i\alpha}^\dagger a_{i\beta}^\dagger\right)\left(\prod_{u \in \text{act}_a} a_{u\sigma}^\dagger\right)|0\rangle
+$$
+
+By allowing the active electrons to distribute across all active orbitals in every possible spin-conserving combination, CASSCF captures the complete static electron correlation within the selected valence active space.
 
 ---
 
-## II. Electronic Hamiltonian and Reduced Density Matrices
+## II. Reduced Density Matrices and Electronic Energy
 
-### 3. Active Space Integrals and CI Diagonalization
+### 3. Spin-Summed Excitation Operators and Reduced Density Matrices
 
-To determine the state CI expansion coefficients $\mathbf{C}_{\text{ci}}$ and electronic energies for the current molecular orbital basis $\mathbf{C}$, the one-electron core Hamiltonian $\mathbf{h}$ and two-electron Coulomb repulsion integrals $(\mu\nu|\lambda\sigma)$ are transformed into the molecular orbital basis. The effective one-electron core Fock Hamiltonian incorporating the mean-field Coulomb and exchange interactions of the doubly occupied inactive core electrons is evaluated as
-
-$$
-F_{pq}^{\text{core}}=h_{pq}+\sum_{i \in \text{core}}\left[2(pq|ii)-(pi|iq)\right]
-$$
-
-where $h_{pq}=\sum_{\mu\nu}C_{\mu p}C_{\nu q}h_{\mu\nu}$, and $(pq|rs)=\sum_{\mu\nu\lambda\sigma}C_{\mu p}C_{\nu q}C_{\lambda r}C_{\sigma s}(\mu\nu|\lambda\sigma)$ in chemist notation. In the basis of active determinants, the matrix elements of the electronic Hamiltonian operator $\hat{H}$ are evaluated using the Slater–Condon rules with the core Fock operator and active molecular integrals. Diagonalizing the active configuration interaction Hamiltonian matrix via symmetric eigensolvers yields the state energies $E_k$ and the corresponding eigenvector columns $\mathbf{C}_{\text{ci}}$.
-
-### 4. Active Reduced Density Matrices and State Averaging
-
-Orbital optimization requires the spin-summed one-particle reduced density matrix $\mathbf{D}$ and two-particle reduced density matrix $\mathbf{d}$ defined in the active orbital space. Using the spin-summed excitation operators $\hat{E}_{uv}=\sum_\sigma a_{u\sigma}^\dagger a_{v\sigma}$ and $\hat{e}_{uvwx}=\sum_{\sigma\tau}a_{u\sigma}^\dagger a_{w\tau}^\dagger a_{x\tau}a_{v\sigma}=\hat{E}_{uv}\hat{E}_{wx}-\delta_{vw}\hat{E}_{ux}$, the elements of the active one-particle reduced density matrix for electronic state $k$ are defined as
+To express the electronic energy and orbital gradients independently of specific spin projections, we employ the spin-summed one-body and two-body excitation operators defined as
 
 $$
-D_{uv}^{(k)}=\langle\Psi_k|\hat{E}_{uv}|\Psi_k\rangle=\sum_{a,b}C_{ak}C_{bk}\langle\Phi_a|\hat{E}_{uv}|\Phi_b\rangle
+\hat{E}_{pq}=\sum_\sigma a_{p\sigma}^\dagger a_{q\sigma},\quad\hat{e}_{pqrs}=\sum_{\sigma,\tau}a_{p\sigma}^\dagger a_{r\tau}^\dagger a_{s\tau} a_{q\sigma}=\hat{E}_{pq}\hat{E}_{rs}-\delta_{qr}\hat{E}_{ps}
 $$
 
-where the transition elements are non-zero only when determinants $a$ and $b$ differ by at most one active spin-orbital excitation. The elements of the active two-particle reduced density matrix are evaluated as
+The spatial distributions of electrons in the active space are characterized by the active one-particle reduced density matrix (1-RDM) $\mathbf{D}$ and two-particle reduced density matrix (2-RDM) $\mathbf{d}$. For state $k$, their elements are defined by the active space expectation values
 
 $$
-d_{uvwx}^{(k)}=\langle\Psi_k|\hat{e}_{uvwx}|\Psi_k\rangle=\sum_{a,b}C_{ak}C_{bk}\langle\Phi_a|\hat{e}_{uvwx}|\Phi_b\rangle
+D_{uv}^{(k)}=\langle\Psi_k|\hat{E}_{uv}|\Psi_k\rangle=\sum_{a,b}c_{ak}c_{bk}\langle\Phi_a|\hat{E}_{uv}|\Phi_b\rangle
 $$
 
-which quantify correlated two-electron pair distributions among active orbitals. In State-Averaged CASSCF (SA-CASSCF), the molecular orbitals are optimized for an ensemble of $M$ electronic states using normalized non-negative state weights $w_I$ satisfying $\sum_{I=1}^M w_I=1$. The state-averaged active reduced density matrices are constructed by forming the statistical average
+and
 
 $$
-\mathbf{D}^{\text{SA}}=\sum_{I=1}^M w_I\mathbf{D}^{(I)},\quad\mathbf{d}^{\text{SA}}=\sum_{I=1}^M w_I\mathbf{d}^{(I)}
+d_{uvwx}^{(k)}=\langle\Psi_k|\hat{e}_{uvwx}|\Psi_k\rangle=\sum_{a,b}c_{ak}c_{bk}\langle\Phi_a|\hat{e}_{uvwx}|\Phi_b\rangle
 $$
 
-and the total state-averaged electronic energy minimized during orbital optimization is expressed as
+In State-Averaged CASSCF (SA-CASSCF), the molecular orbitals are optimized for an ensemble of $M_{\text{states}}$ target electronic states using normalized non-negative state weights $w_I$ satisfying $\sum_I w_I=1$. The state-averaged active reduced density matrices are constructed as the weighted statistical averages
 
 $$
-E_{\text{SA}}=\sum_{I=1}^M w_I E_I=E_{\text{core}}+\sum_{uv \in \text{act}}D_{uv}^{\text{SA}}F_{uv}^{\text{core}}+\frac{1}{2}\sum_{uvwx \in \text{act}}d_{uvwx}^{\text{SA}}(uv|wx)
+\mathbf{D}=\sum_{I=1}^{M_{\text{states}}}w_I\mathbf{D}^{(I)},\quad\mathbf{d}=\sum_{I=1}^{M_{\text{states}}}w_I\mathbf{d}^{(I)}
 $$
 
-where $E_{\text{core}}=\sum_{i \in \text{core}}\left(h_{ii}+F_{ii}^{\text{core}}\right)$ represents the energy contribution of the doubly occupied inactive core electrons. State averaging prevents root-flipping instabilities and guarantees an orthogonal, balanced molecular orbital set across multiple electronic states.
+which prevents root-flipping instabilities during numerical optimization and yields a single balanced, orthogonal orbital set capable of describing ground and excited states on an equal footing. For single-state CASSCF, $M_{\text{states}}=1$ and $w_1=1$, recovering the state-specific density matrices $\mathbf{D}=\mathbf{D}^{(1)}$ and $\mathbf{d}=\mathbf{d}^{(1)}$ directly.
+
+### 4. Electronic Energy Functional in the Molecular Basis
+
+Transforming the electronic Hamiltonian into the spatial molecular orbital basis using the spin-summed excitation operators gives $\hat{H}=\sum_{pq}h_{pq}\hat{E}_{pq}+\frac{1}{2}\sum_{pqrs}\langle pq|rs\rangle\sum_{\sigma,\tau}a_{p\sigma}^\dagger a_{q\tau}^\dagger a_{s\tau}a_{r\sigma}$, where $\langle pq|rs\rangle=\int\int\phi_p^*(\mathbf{r}_1)\phi_q^*(\mathbf{r}_2)\frac{1}{r_{12}}\phi_r(\mathbf{r}_1)\phi_s(\mathbf{r}_2)d\mathbf{r}_1d\mathbf{r}_2$ denotes the spatial two-electron repulsion integral in physicist notation. Evaluating the expectation value of this Hamiltonian over the multiconfigurational wavefunction isolates the inactive core contributions, expressing the total electronic energy as
+
+$$
+E=E_{\text{core}}+\sum_{u,v \in \text{act}}D_{uv}F_{uv}^{\text{core}}+\frac{1}{2}\sum_{u,v,w,x \in \text{act}}d_{uvwx}\langle uw|vx\rangle
+$$
+
+In this energy expression, $F_{pq}^{\text{core}}$ is the effective one-electron core Fock Hamiltonian incorporating the mean-field Coulomb and exchange interactions from the doubly occupied inactive electrons, defined in physicist notation as
+
+$$
+F_{pq}^{\text{core}}=h_{pq}+\sum_{i \in \text{core}}\left(2\langle pi|qi\rangle-\langle pi|iq\rangle\right)
+$$
+
+where $h_{pq}=\langle\phi_p|\hat{h}|\phi_q\rangle$ is the core Hamiltonian from Hartree–Fock, and $E_{\text{core}}=\sum_{i \in \text{core}}\left(h_{ii}+F_{ii}^{\text{core}}\right)$ represents the energy contribution of the closed inactive shell.
 
 ---
 
-## III. Generalized Fock Matrix and Orbital Gradient
+## III. Generalized Brillouin Theorem and Orbital Optimization
 
-### 5. Generalized Fock Matrix Construction
+### 5. Generalized Fock Matrix and Orbital Gradient
 
-In standard Hartree–Fock theory, the Brillouin theorem states that singly excited determinants do not interact with the Hartree–Fock reference determinant, which is equivalent to requiring the Fock operator to be diagonal. In multiconfigurational self-consistent field theory, this condition is generalized through the generalized Fock matrix $\mathbf{F}^{\text{gen}}$. In State-Averaged CASSCF theory, the elements of the generalized Fock matrix $F_{pq}^{\text{gen}}$ are evaluated with the state-averaged reduced density matrices and classified according to the subspace of the column orbital index $q$ as
+Unlike Hartree–Fock theory where only molecular orbitals are optimized, or Configuration Interaction where only CI expansion coefficients are optimized, CASSCF requires simultaneous variational optimization of both the configuration coefficients $\mathbf{c}_k$ and the molecular orbital coefficients $\mathbf{C}$. Variations in the molecular orbitals are generated by unitary transformations $\mathbf{C}(\boldsymbol{\kappa})=\mathbf{C}e^{\boldsymbol{\kappa}}$, parameterized by an anti-symmetric matrix of orbital rotation parameters $\kappa_{pq}=-\kappa_{qp}$.
 
-$$
-F_{pj}^{\text{gen}}=2F_{pj}^{\text{tot}}=2\left(F_{pj}^{\text{core}}+\sum_{uv \in \text{act}}D_{uv}^{\text{SA}}\left[(pj|uv)-\frac{1}{2}(pv|uj)\right]\right)
-$$
-
-for inactive core columns $j \in \text{core}$, where $F_{pj}^{\text{tot}}$ combines the inactive core potential with the Coulomb and exchange fields generated by the active electron density. For active columns $u \in \text{act}$, the generalized Fock matrix elements are computed from the active one-particle reduced density matrix contracted with the core Fock operator and the active two-particle reduced density matrix contracted with the two-electron integrals as
+Differentiating the electronic energy with respect to an orbital rotation parameter $\kappa_{pq}$ defines the orbital gradient matrix $\mathbf{g}$ as
 
 $$
-F_{pu}^{\text{gen}}=\sum_{v \in \text{act}}F_{pv}^{\text{core}}D_{vu}^{\text{SA}}+\sum_{vwx \in \text{act}}d_{uvwx}^{\text{SA}}(pv|wx)
+g_{pq}=2(F_{pq}-F_{qp})
 $$
 
-which represents the effective mean field experienced by an active electron interacting with the correlated multiconfigurational active space. For secondary virtual columns $a \in \text{virt}$, the generalized Fock matrix elements vanish identically as
+where $\mathbf{F}$ is the generalized Fock matrix. The elements of the generalized Fock matrix are evaluated block-wise according to the subspace of the column orbital index in physicist notation as
 
 $$
-F_{pa}^{\text{gen}}=0
+F_{pj}=2F_{pj}^{\text{core}}+2\sum_{u,v \in \text{act}}D_{uv}\left(\langle pu|jv\rangle-\frac{1}{2}\langle pu|vj\rangle\right)
 $$
 
-because secondary virtual orbitals are unpopulated in every Slater determinant of the wavefunction.
-
-### 6. Orbital Gradient and the Generalized Brillouin Theorem
-
-The variation of the state-averaged electronic energy with respect to an infinitesimal anti-symmetric orbital rotation parameter $\kappa_{pq}=-\kappa_{qp}$ defines the orbital gradient matrix $\mathbf{g}^{\text{SA}}$ as
+for inactive core columns $j \in \text{core}$, and as
 
 $$
-g_{pq}^{\text{SA}}=2\left(F_{pq}^{\text{gen}}-F_{qp}^{\text{gen}}\right)
+F_{pu}=\sum_{v \in \text{act}}F_{pv}^{\text{core}}D_{vu}+\sum_{v,w,x \in \text{act}}d_{uvwx}\langle pw|vx\rangle
 $$
 
-which provides the driving force for molecular orbital optimization. At stationary points of the state-averaged energy hypersurface, the generalized Brillouin theorem requires that the generalized Fock matrix is symmetric ($F_{pq}^{\text{gen}}=F_{qp}^{\text{gen}}$), causing the state-averaged orbital gradient $g_{pq}^{\text{SA}}$ to vanish for all non-redundant orbital pairs. Non-redundant orbital rotations occur exclusively between different orbital subspaces, specifically core–active, core–virtual, and active–virtual orbital pairs, whereas rotations within the same subspace (core–core, active–active, and virtual–virtual) leave the physical CASSCF energy invariant and have zero orbital gradients.
-
----
-
-## IV. Orbital Optimization and Macro-Iteration Algorithm
-
-### 7. Approximate Quasi-Newton Step and Unitary Cayley Transform
-
-To update the molecular orbitals toward self-consistency without constructing the exact four-index orbital Hessian matrix, an approximate diagonal quasi-Newton step is evaluated. The non-redundant orbital rotation parameters $\kappa_{pq}$ are computed using the diagonal Hessian approximation as
+for active columns $u \in \text{act}$, while vanishing identically for virtual columns $a \in \text{virt}$ as
 
 $$
-\kappa_{bj}=-\frac{g_{bj}^{\text{SA}}}{4(F_{bb}^{\text{diag}}-F_{jj}^{\text{diag}})}
+F_{pa}=0
 $$
 
-for core–virtual rotations between core orbital $j$ and virtual orbital $b$, and as
+At stationary points of the energy hypersurface, the generalized Brillouin theorem requires that the generalized Fock matrix is symmetric ($F_{pq}=F_{qp}$), which causes the orbital gradient $g_{pq}$ to vanish for all non-redundant orbital pairs. Rotations between orbitals within the same subspace (core–core, active–active, and virtual–virtual) leave the physical CASSCF energy strictly invariant and have zero gradient, meaning that non-redundant rotations occur exclusively between different orbital subspaces (core–active, core–virtual, and active–virtual).
+
+### 6. Macro-Iteration Algorithm and Unitary Cayley Transform
+
+The CASSCF optimization proceeds via a two-step macro-iteration cycle that alternates between configuration interaction and orbital optimization until self-consistency is reached. In the CI step, the molecular orbitals are held fixed, and the active-space configuration interaction Hamiltonian is diagonalized to determine state energies $E_k$, expansion eigenvectors $\mathbf{c}_k$, and active reduced density matrices $\mathbf{D}$ and $\mathbf{d}$.
+
+In the orbital step, the density matrices are held fixed, and the generalized Fock matrix $\mathbf{F}$ and orbital gradient $\mathbf{g}$ are assembled. An approximate quasi-Newton step computes the non-redundant orbital rotation parameters $\boldsymbol{\kappa}$ using a diagonal Hessian approximation with diagonal orbital energies $F_{pp}$ as
 
 $$
-\kappa_{bu}=-\frac{g_{bu}^{\text{SA}}}{2D_{uu}^{\text{SA}}(F_{bb}^{\text{diag}}-F_{uu}^{\text{diag}})}
+\kappa_{bj}=-\frac{g_{bj}}{4(F_{bb}-F_{jj})},\quad\kappa_{bu}=-\frac{g_{bu}}{2D_{uu}(F_{bb}-F_{uu})},\quad\kappa_{uj}=-\frac{g_{uj}}{2(2-D_{uu})(F_{uu}-F_{jj})}
 $$
 
-for active–virtual rotations between active orbital $u$ and virtual orbital $b$, and as
-
-$$
-\kappa_{uj}=-\frac{g_{uj}^{\text{SA}}}{2(2-D_{uu}^{\text{SA}})(F_{uu}^{\text{diag}}-F_{jj}^{\text{diag}})}
-$$
-
-for core–active rotations between core orbital $j$ and active orbital $u$, where $D_{uu}^{\text{SA}}$ is the diagonal state-averaged occupation of active orbital $u$. To preserve the strict orthonormality condition $\mathbf{C}^T\mathbf{S}\mathbf{C}=\mathbf{I}$ throughout optimization, the anti-symmetric generator matrix $\boldsymbol{\kappa}$ is mapped to an orthogonal rotation matrix $\mathbf{U}$ via the Cayley transform defined as
+To preserve the strict orthonormality constraint $\mathbf{C}^\dagger\mathbf{S}\mathbf{C}=\mathbf{I}$ without requiring expensive matrix exponentials, the anti-symmetric generator matrix $\boldsymbol{\kappa}$ is mapped to an orthogonal orbital rotation matrix $\mathbf{U}$ via the Cayley transform as
 
 $$
 \mathbf{U}=\left(\mathbf{I}-\frac{1}{2}\boldsymbol{\kappa}\right)^{-1}\left(\mathbf{I}+\frac{1}{2}\boldsymbol{\kappa}\right)
 $$
 
-which is solved numerically by LU factorization of the linear system $\left(\mathbf{I}-\frac{1}{2}\boldsymbol{\kappa}\right)\mathbf{U}=\mathbf{I}+\frac{1}{2}\boldsymbol{\kappa}$. The molecular orbital coefficient matrix is updated as
-
-$$
-\mathbf{C}^{(m+1)}=\mathbf{C}^{(m)}\mathbf{U}
-$$
-
-and the macro-iteration cycle of integral transformation, CAS-CI diagonalization, reduced density matrix evaluation, generalized Fock construction, and Cayley orbital rotation is repeated until the maximum orbital gradient element $\max|g_{pq}^{\text{SA}}|$ and the energy change drop below the convergence threshold.
-
-### 8. Orbital Canonicalization
-
-Because the CASSCF energy is invariant under arbitrary unitary rotations within the core, active, and virtual subspaces, the converged molecular orbitals within each subspace are not uniquely determined. To obtain canonical, symmetry-adapted molecular orbitals, the core–core and virtual–virtual diagonal blocks of the core Fock operator are diagonalized independently after macro-iteration convergence. This transformation orders the molecular orbitals within each subspace according to increasing orbital energy eigenvalues while leaving the total multiconfigurational wavefunction and energy completely invariant.
-
----
-
-## V. Analytic Nuclear Gradients and Nonadiabatic Couplings
-
-### 9. Automatic Differentiation and Dual-Number Hellmann–Feynman Gradients
-
-Analytic nuclear gradients of the electronic state energy with respect to Cartesian nuclear coordinates $\mathbf{R}_A$ are evaluated using forward-mode automatic differentiation with dual numbers. In the molecular orbital basis, the Hellmann–Feynman contribution holding the molecular orbital expansion coefficients stationary with respect to orbital relaxation is given as
-
-$$
-\left(\frac{\partial E_K}{\partial R_{A\alpha}}\right)_{\mathbf{C}}=\sum_{pq}D_{pq}^{(K)}\frac{\partial h_{pq}}{\partial R_{A\alpha}}+\frac{1}{2}\sum_{pqrs}d_{pqrs}^{(K)}\frac{\partial(pq|rs)}{\partial R_{A\alpha}}-\sum_{pq}F_{pq}^{\text{gen}}(\mathbf{D}^{(K)},\mathbf{d}^{(K)})\left(\mathbf{C}^T\frac{\partial\mathbf{S}}{\partial R_{A\alpha}}\mathbf{C}\right)_{pq}+\frac{\partial V_{\text{NN}}}{\partial R_{A\alpha}}
-$$
-
-where $V_{\text{NN}}$ is the classical nuclear repulsion energy. In Zinq, this contribution is evaluated to machine precision by lifting atomic orbital integrals to the dual number algebra with the orbital connection derivative $d\mathbf{C}=-\frac{1}{2}\mathbf{C}(\mathbf{C}^T d\mathbf{S}\,\mathbf{C})$ maintaining basis set orthonormality.
-
-### 10. Z-Vector Method for State-Specific Analytic Nuclear Gradients
-
-In State-Averaged CASSCF calculations with multiple states, the molecular orbitals are optimized to make the state-averaged energy stationary ($\mathbf{g}^{\text{SA}}=\mathbf{0}$), but are not individually stationary with respect to a specific target electronic state $K$. Consequently, the state-specific orbital gradient
-
-$$
-g_{pq}^{(K)}=2\left(F_{pq}^{\text{gen}}(\mathbf{D}^{(K)},\mathbf{d}^{(K)})-F_{qp}^{\text{gen}}(\mathbf{D}^{(K)},\mathbf{d}^{(K)})\right)
-$$
-
-does not vanish for non-redundant orbital pairs $p>q$. The total state-specific nuclear gradient therefore contains an orbital response contribution
-
-$$
-\frac{d E_K}{d R_{A\alpha}}=\left(\frac{\partial E_K}{\partial R_{A\alpha}}\right)_{\mathbf{C}}+\sum_{p>q}g_{pq}^{(K)}\frac{d\kappa_{pq}}{d R_{A\alpha}}
-$$
-
-where $\boldsymbol{\kappa}$ represents the non-redundant orbital rotation parameters. Differentiating the state-averaged stationary condition $\mathbf{g}^{\text{SA}}=\mathbf{0}$ with respect to nuclear coordinates yields the Coupled-Perturbed MCSCF (CP-MCSCF) equations
-
-$$
-\sum_{rs}\mathbf{A}_{pq,rs}^{\text{SA}}\frac{d\kappa_{rs}}{d R_{A\alpha}}+B_{pq}^{A\alpha}=0
-$$
-
-where $\mathbf{A}^{\text{SA}}$ is the non-redundant state-averaged orbital Hessian and $B_{pq}^{A\alpha}=2(F_{pq}^{\text{gen}}-F_{qp}^{\text{gen}})_{\frac{\partial}{\partial R_{A\alpha}}}$ is the derivative orbital force evaluated with state-averaged density matrices and derivative molecular integrals. Rather than solving the CP-MCSCF equations for each of the $3N_{\text{atom}}$ nuclear displacements, the Handy–Schaefer Z-vector method introduces a coordinate-independent Lagrange multiplier vector $\mathbf{z}^{(K)}$ satisfying the linear system
-
-$$
-\mathbf{A}^{\text{SA}}\mathbf{z}^{(K)}=-\mathbf{g}^{(K)}
-$$
-
-which is solved via LU decomposition. The exact state-specific analytic nuclear gradient is then evaluated as
-
-$$
-\frac{d E_K}{d R_{A\alpha}}=\left(\frac{\partial E_K}{\partial R_{A\alpha}}\right)_{\mathbf{C}}-\sum_{p>q}z_{pq}^{(K)}B_{pq}^{A\alpha}
-$$
-
-which eliminates the need to compute nuclear derivatives of the orbital coefficients explicitly. For single-state ground-state optimizations ($w_0=1$), the state gradient vanishes identically ($g_{pq}^{(0)}=0$), resulting in $\mathbf{z}^{(0)}=\mathbf{0}$ such that the orbital response term vanishes and the generalized Hellmann–Feynman theorem is recovered.
-
-### 11. Nonadiabatic Coupling Vectors
-
-For nonadiabatic molecular dynamics and electronic transitions involving multiple states, the first-derivative nonadiabatic coupling vector between states $J$ and $K$ describes the electronic momentum coupling defined as
-
-$$
-\mathbf{d}_{JK}(\mathbf{R})=\langle\Psi_J|\boldsymbol{\nabla}_{\mathbf{R}}\Psi_K\rangle=\frac{\langle\Psi_J|(\boldsymbol{\nabla}_{\mathbf{R}}\hat{H})|\Psi_K\rangle}{E_K-E_J}
-$$
-
-which governs radiationless transitions between potential energy surfaces. In the CASSCF framework, nonadiabatic coupling vectors are evaluated numerically via central finite difference coordinate displacements as
-
-$$
-\mathbf{d}_{JK}(\mathbf{R})=\lim_{h \to 0}\frac{\langle\Psi_J(\mathbf{R}-h\hat{\mathbf{e}})|\Psi_K(\mathbf{R}+h\hat{\mathbf{e}})\rangle-\langle\Psi_J(\mathbf{R}+h\hat{\mathbf{e}})|\Psi_K(\mathbf{R}-h\hat{\mathbf{e}})\rangle}{4h}
-$$
-
-combined with active determinant overlap evaluation and molecular orbital phase tracking to preserve wavefunction continuity for Fewest Switches Surface Hopping and Ehrenfest dynamics.
+which is solved efficiently by LU factorization. In the absence of external magnetic fields, the molecular orbitals can be chosen strictly real, where $\mathbf{C}^\dagger\mathbf{S}\mathbf{C}=\mathbf{I}$ reduces to $\mathbf{C}^T\mathbf{S}\mathbf{C}=\mathbf{I}$ and $\mathbf{U}$ is an orthogonal matrix. The molecular orbital coefficients are updated as $\mathbf{C}\leftarrow\mathbf{C}\mathbf{U}$, and the macro-iteration cycle is repeated until the maximum orbital gradient element $\max|g_{pq}|$ and the energy change drop below the convergence threshold, completing the self-consistent multiconfigurational solution.
