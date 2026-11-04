@@ -190,38 +190,38 @@ pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T
 pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
     const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
 
-    var C_so = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) C_so.deinit(gpa);
+    var C_ms = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_ms.deinit(gpa);
 
     if (!generalized) {
-        ao2so_coef(T, &C_so, C);
+        ao2so_coef(T, &C_ms, C);
     }
 
-    var H_so = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) H_so.deinit(gpa);
+    var H_as = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) H_as.deinit(gpa);
 
     if (!generalized) {
-        ao2so_pp(T, &H_so, H);
+        ao2so_pp(T, &H_as, H);
     }
 
-    var g_so_ao = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
-    defer if (!generalized) g_so_ao.deinit(gpa);
+    var g_as = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer if (!generalized) g_as.deinit(gpa);
 
     if (!generalized) {
-        ao2so_pppp(T, &g_so_ao, g);
+        ao2so_pppp(T, &g_as, g);
     }
 
-    var h_so = try Matrix(T).init(nsp, nsp, gpa);
-    errdefer h_so.deinit(gpa);
+    var h_ms = try Matrix(T).init(nsp, nsp, gpa);
+    errdefer h_ms.deinit(gpa);
 
-    ao2mo_pp(T, &h_so, H_so, C_so);
+    ao2mo_pp(T, &h_ms, H_as, C_ms);
 
-    var g_so = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
-    errdefer g_so.deinit(gpa);
+    var g_ms = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
+    errdefer g_ms.deinit(gpa);
 
-    try ao2mo_pppp(T, &g_so, g_so_ao, C_so, gpa);
+    try ao2mo_pppp(T, &g_ms, g_as, C_ms, gpa);
 
-    return .{ h_so, g_so };
+    return .{ h_ms, g_ms };
 }
 
 /// Transforms atomic orbital integrals to a restricted molecular orbital subset of occupied and virtual orbitals.

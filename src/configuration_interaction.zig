@@ -212,29 +212,29 @@ pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev
 }
 
 /// Evaluates electronic Hamiltonian matrix elements across Slater determinants using Slater-Condon rules.
-pub fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_so: Matrix(T), g_so: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
-    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
-    errdefer H_CI.deinit(gpa);
+pub fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_ms: Matrix(T), g_ms: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
+    var H_ci = try Matrix(T).init(dets.len, dets.len, gpa);
+    errdefer H_ci.deinit(gpa);
 
-    for (0..dets.len) |m| for (m..dets.len) |n_det| {
-        const val = slater(T, dets[m], dets[n_det], h_so, g_so);
+    for (0..dets.len) |m| for (m..dets.len) |n| {
+        const val = slater(T, dets[m], dets[n], h_ms, g_ms);
 
-        H_CI.ptr(m, n_det).* = val;
-        H_CI.ptr(n_det, m).* = val;
+        H_ci.ptr(m, n).* = val;
+        H_ci.ptr(n, m).* = val;
     };
 
-    return H_CI;
+    return H_ci;
 }
 
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
 pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
 
-    var h_so, var g_so = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
+    var h_ms, var g_ms = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
 
     defer {
-        h_so.deinit(gpa);
-        g_so.deinit(gpa);
+        h_ms.deinit(gpa);
+        g_ms.deinit(gpa);
     }
 
     if (io) |out| {
@@ -243,15 +243,15 @@ pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, det
         timer = std.Io.Timestamp.now(out, .real);
     }
 
-    var H_CI = try buildHamiltonianMatrix(T, dets, h_so, g_so, gpa);
-    defer H_CI.deinit(gpa);
+    var H_ci = try buildHamiltonianMatrix(T, dets, h_ms, g_ms, gpa);
+    defer H_ci.deinit(gpa);
 
     if (io) |out| {
         try printf(out, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(out, .real)});
         timer = std.Io.Timestamp.now(out, .real);
     }
 
-    var E, var C_ci = try solveEigenvalueProblem(T, H_CI, VN, gpa);
+    var E, var C_ci = try solveEigenvalueProblem(T, H_ci, VN, gpa);
 
     errdefer {
         E.deinit(gpa);
@@ -357,8 +357,8 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         if (n_states > 1) {
             try printf(io, "\n", .{});
 
-            for (0..n_states) |s| {
-                try printf(io, "STATE {d:2} FINAL CI ENERGY: {d:.14} Eh\n", .{ s, E.at(s) });
+            for (0..n_states) |k| {
+                try printf(io, "STATE {d:2} FINAL CI ENERGY: {d:.14} Eh\n", .{ k, E.at(k) });
             }
         }
     }
@@ -389,14 +389,14 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 }
 
 /// Diagonalizes the CI Hamiltonian matrix to yield state energies and coefficients.
-pub fn solveEigenvalueProblem(comptime T: type, H_CI: Matrix(T), VN: T, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
-    var E = try Vector(T).init(H_CI.shape[0], gpa);
+pub fn solveEigenvalueProblem(comptime T: type, H_ci: Matrix(T), VN: T, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+    var E = try Vector(T).init(H_ci.shape[0], gpa);
     errdefer E.deinit(gpa);
 
-    var C_ci = try Matrix(T).initZero(H_CI.shape[0], H_CI.shape[0], gpa);
+    var C_ci = try Matrix(T).initZero(H_ci.shape[0], H_ci.shape[0], gpa);
     errdefer C_ci.deinit(gpa);
 
-    try syevd(T, &E, &C_ci, H_CI);
+    try syevd(T, &E, &C_ci, H_ci);
 
     for (0..E.length()) |i| {
         E.ptr(i).* += VN;
@@ -436,9 +436,9 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci:
             H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
         };
 
-        const n = g_d.shape[0];
+        const nao = g_d.shape[0];
 
-        for (0..n) |mu| for (0..n) |lambda| for (0..n) |nu| for (0..n) |sigma| {
+        for (0..nao) |mu| for (0..nao) |lambda| for (0..nao) |nu| for (0..nao) |sigma| {
             const indices = .{ mu, lambda, nu, sigma };
 
             const val = hfres.ints.g.?.at(indices);
@@ -450,20 +450,20 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci:
             C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ coord, mu, p }));
         };
 
-        var h_so_d, var g_so_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, generalized, gpa);
+        var h_ms_d, var g_ms_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, generalized, gpa);
 
         defer {
-            h_so_d.deinit(gpa);
-            g_so_d.deinit(gpa);
+            h_ms_d.deinit(gpa);
+            g_ms_d.deinit(gpa);
         }
 
-        for (0..dets.items.len) |m| for (m..dets.items.len) |n_det| {
-            const factor: T = if (m == n_det) 1 else 2;
+        for (0..dets.items.len) |m| for (m..dets.items.len) |n| {
+            const factor: T = if (m == n) 1 else 2;
 
-            const val = slater(ScalarDual(T), dets.items[m], dets.items[n_det], h_so_d, g_so_d);
+            const val = slater(ScalarDual(T), dets.items[m], dets.items[n], h_ms_d, g_ms_d);
 
-            for (states, 0..) |s, s_idx| {
-                grads[s_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, s) * C_ci.at(n_det, s) * val.der;
+            for (states, 0..) |k, k_idx| {
+                grads[k_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, k) * C_ci.at(n, k) * val.der;
             }
         };
     }

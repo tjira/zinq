@@ -26,14 +26,15 @@ pub fn DftPotential(comptime T: type) type {
         corr: ?libxc.xc_func_type,
         exco: ?libxc.xc_func_type,
 
+        a_x: T = 0,
+
         pts: Matrix(T),
         wgh: Vector(T),
 
-        Vxc: Matrix(T),
-        Exc: T = 0.000,
+        V_xc: Matrix(T),
+        E_xc: T = 0.000,
 
         polarized: bool,
-        exx_coef: T = 0,
 
         /// Initializes the DFT potential, setting up the molecular grid and initializing libxc functionals.
         pub fn init(sys: MolecularSystem(T), funcs: anytype, n_rad: usize, n_leb: usize, polarized: bool, gpa: Allocator) !@This() {
@@ -92,8 +93,8 @@ pub fn DftPotential(comptime T: type) type {
                 exx = @floatCast(libxc.xc_hyb_exx_coef(func));
             }
 
-            var Vxc = try Matrix(T).init(nbf, nbf, gpa);
-            errdefer Vxc.deinit(gpa);
+            var V_xc = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer V_xc.deinit(gpa);
 
             var dft: @This() = undefined;
 
@@ -104,9 +105,9 @@ pub fn DftPotential(comptime T: type) type {
             dft.pts = grid[0];
             dft.wgh = grid[1];
 
-            dft.Vxc, dft.polarized, dft.exx_coef = .{ Vxc, polarized, exx };
+            dft.V_xc, dft.polarized, dft.a_x = .{ V_xc, polarized, exx };
 
-            dft.Exc = 0;
+            dft.E_xc = 0;
 
             return dft;
         }
@@ -119,12 +120,12 @@ pub fn DftPotential(comptime T: type) type {
 
             self.pts.deinit(gpa);
             self.wgh.deinit(gpa);
-            self.Vxc.deinit(gpa);
+            self.V_xc.deinit(gpa);
         }
 
         /// Evaluates the exchange-correlation potential matrix and energy contribution by grid integration.
         pub fn evaluate(self: *@This(), sys: MolecularSystem(T), P: Matrix(T), gpa: Allocator) !void {
-            self.Vxc.zero();
+            self.V_xc.zero();
 
             const size_factor: usize, const flags = .{ if (self.polarized) 2 else 1, self.getFamilyFlags() };
 
@@ -490,11 +491,11 @@ pub fn DftPotential(comptime T: type) type {
         /// Performs numerical integration of the exchange-correlation potential over grid points.
         fn integratePotential(self: *@This(), ctx: DftEvaluationContext(T), gpa: Allocator) !void {
             if (self.polarized) {
-                self.Exc = try self.integratePotentialPolarized(ctx, gpa);
+                self.E_xc = try self.integratePotentialPolarized(ctx, gpa);
             }
 
             if (!self.polarized) {
-                self.Exc = try self.integratePotentialUnpolarized(ctx, gpa);
+                self.E_xc = try self.integratePotentialUnpolarized(ctx, gpa);
             }
         }
 
@@ -559,8 +560,8 @@ pub fn DftPotential(comptime T: type) type {
                             val_b += v_lap_b * lapl_term;
                         }
 
-                        self.Vxc.ptr(mu + 0, nu + 0).* += val_a * w;
-                        self.Vxc.ptr(mu + b, nu + b).* += val_b * w;
+                        self.V_xc.ptr(mu + 0, nu + 0).* += val_a * w;
+                        self.V_xc.ptr(mu + b, nu + b).* += val_b * w;
                     };
                 }
 
@@ -571,8 +572,8 @@ pub fn DftPotential(comptime T: type) type {
 
                         const b = ctx.sys.nbf;
 
-                        self.Vxc.ptr(mu + 0, nu + 0).* += v_a * phi_mu * phi_nu * w;
-                        self.Vxc.ptr(mu + b, nu + b).* += v_b * phi_mu * phi_nu * w;
+                        self.V_xc.ptr(mu + 0, nu + 0).* += v_a * phi_mu * phi_nu * w;
+                        self.V_xc.ptr(mu + b, nu + b).* += v_b * phi_mu * phi_nu * w;
                     };
                 }
             }
@@ -628,7 +629,7 @@ pub fn DftPotential(comptime T: type) type {
                             val += v_lap * lapl_term;
                         }
 
-                        self.Vxc.ptr(mu, nu).* += val * w;
+                        self.V_xc.ptr(mu, nu).* += val * w;
                     };
                 }
 
@@ -636,7 +637,7 @@ pub fn DftPotential(comptime T: type) type {
                     const phi_mu = ctx.basisgrid.phi.at(g, mu);
                     const phi_nu = ctx.basisgrid.phi.at(g, nu);
 
-                    self.Vxc.ptr(mu, nu).* += ctx.potgd.rho_pot.at(g, 0) * phi_mu * phi_nu * w;
+                    self.V_xc.ptr(mu, nu).* += ctx.potgd.rho_pot.at(g, 0) * phi_mu * phi_nu * w;
                 };
             }
 

@@ -216,7 +216,7 @@ pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWor
     var exch_factor: T = if (generalized) 1 else 0.5;
 
     if (dft) |pot| {
-        exch_factor *= pot.exx_coef;
+        exch_factor *= pot.a_x;
     }
 
     var W = try Matrix(T).init(ws.P.shape[0], ws.P.shape[0], gpa);
@@ -413,7 +413,7 @@ fn addDftPotential(comptime T: type, F: *Matrix(T), dft: *DftPotential(T), P: Ma
     const nbf = F.nrow();
 
     for (0..nbf) |mu| for (0..nbf) |nu| {
-        F.ptr(mu, nu).* += dft.Vxc.at(mu, nu);
+        F.ptr(mu, nu).* += dft.V_xc.at(mu, nu);
     };
 }
 
@@ -498,7 +498,7 @@ fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matri
     var exch_factor: T = if (opt.generalized) 1 else 0.5;
 
     if (dft) |pot| {
-        exch_factor *= pot.exx_coef;
+        exch_factor *= pot.a_x;
     }
 
     if (opt.integral_direct) {
@@ -536,10 +536,10 @@ fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matri
 
 /// Computes the electronic energy expectation value from density, core Hamiltonian, and Fock matrices.
 fn calculateElectronicEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), dft: ?*DftPotential(T)) T {
-    var energy: T = if (dft) |pot| pot.Exc else 0;
+    var energy: T = if (dft) |pot| pot.E_xc else 0;
 
     if (dft) |pot| for (0..P.shape[0]) |mu| for (0..P.shape[1]) |nu| {
-        energy += 0.5 * P.at(mu, nu) * (ints.H.?.at(mu, nu) + F.at(mu, nu) - pot.Vxc.at(mu, nu));
+        energy += 0.5 * P.at(mu, nu) * (ints.H.?.at(mu, nu) + F.at(mu, nu) - pot.V_xc.at(mu, nu));
     };
 
     if (dft == null) for (0..P.shape[0]) |mu| for (0..P.shape[1]) |nu| {

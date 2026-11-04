@@ -269,12 +269,12 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 }
 
 /// Evaluates electronic Hamiltonian matrix elements across Slater determinants using Slater-Condon rules.
-fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_so: Matrix(T), g_so: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
+fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_ms: Matrix(T), g_ms: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
     var H_dets = try Matrix(T).init(dets.len, dets.len, gpa);
     errdefer H_dets.deinit(gpa);
 
     for (0..dets.len) |i| for (i..dets.len) |j| {
-        const val = slater(T, dets[i], dets[j], h_so, g_so);
+        const val = slater(T, dets[i], dets[j], h_ms, g_ms);
 
         H_dets.ptr(i, j).* = val;
         H_dets.ptr(j, i).* = val;
@@ -287,23 +287,23 @@ fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_so: M
 fn calculateCorrelationEnergies(comptime T: type, order: usize, H: Matrix(T), g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
     const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
 
-    var h_so, var g_so = try transformInts(T, C, H, g, generalized, gpa);
+    var h_ms, var g_ms = try transformInts(T, C, H, g, generalized, gpa);
 
     defer {
-        h_so.deinit(gpa);
-        g_so.deinit(gpa);
+        h_ms.deinit(gpa);
+        g_ms.deinit(gpa);
     }
 
-    var eps_so = try Vector(T).init(nsp, gpa);
-    defer eps_so.deinit(gpa);
+    var e_ms = try Vector(T).init(nsp, gpa);
+    defer e_ms.deinit(gpa);
 
     if (generalized) for (0..nsp) |p| {
-        eps_so.ptr(p).* = e.at(p);
+        e_ms.ptr(p).* = e.at(p);
     };
 
     if (!generalized) for (0..C.shape[0]) |p| {
-        eps_so.ptr(2 * p + 0).* = e.at(p);
-        eps_so.ptr(2 * p + 1).* = e.at(p);
+        e_ms.ptr(2 * p + 0).* = e.at(p);
+        e_ms.ptr(2 * p + 1).* = e.at(p);
     };
 
     var excitations = try gpa.alloc(u32, @min(order, @min(nel, nsp - nel)));
@@ -321,24 +321,24 @@ fn calculateCorrelationEnergies(comptime T: type, order: usize, H: Matrix(T), g:
         dets.deinit(gpa);
     }
 
-    var H_dets = try buildHamiltonianMatrix(T, dets.items, h_so, g_so, gpa);
+    var H_dets = try buildHamiltonianMatrix(T, dets.items, h_ms, g_ms, gpa);
     defer H_dets.deinit(gpa);
 
     const E0 = try gpa.alloc(Value(T), dets.items.len);
     defer gpa.free(E0);
 
-    calculateZerothOrderEnergies(T, E0, dets.items, eps_so);
+    calculateZerothOrderEnergies(T, E0, dets.items, e_ms);
 
     return try solveRayleighSchrodinger(T, H_dets, E0, order, gpa);
 }
 
 /// Evaluates unperturbed zeroth-order energies of Slater determinants under the unperturbed Fock Hamiltonian.
-fn calculateZerothOrderEnergies(comptime T: type, E0: []Value(T), dets: []const []const usize, eps_so: Vector(T)) void {
+fn calculateZerothOrderEnergies(comptime T: type, E0: []Value(T), dets: []const []const usize, e_ms: Vector(T)) void {
     for (0..dets.len) |i| {
         var sum = Value(T).fromFloat(0);
 
         for (dets[i]) |p| {
-            sum = sum.add(Value(T).init(eps_so.at(p)));
+            sum = sum.add(Value(T).init(e_ms.at(p)));
         }
 
         E0[i] = sum;
