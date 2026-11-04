@@ -19,7 +19,7 @@ const Value = @import("value.zig").Value;
 
 const alignPhases = @import("configuration_interaction.zig").alignPhases;
 const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
-const generatePairs = @import("configuration_interaction.zig").generatePairs;
+const generatePairs = @import("determinant.zig").generatePairs;
 const isDual = @import("value.zig").isDual;
 const readMatrix = @import("read_write.zig").readMatrix;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;

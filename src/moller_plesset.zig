@@ -16,12 +16,10 @@ const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
-const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
-const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
-const ao2so_pppp = @import("integral_transform.zig").ao2so_pppp;
-const generateDets = @import("configuration_interaction.zig").generateDets;
+const generateDets = @import("determinant.zig").generateDets;
 const printf = @import("read_write.zig").printf;
-const slater = @import("configuration_interaction.zig").slater;
+const slater = @import("slater_condon.zig").slater;
+const transformInts = @import("integral_transform.zig").transformInts;
 
 const AU2CM = @import("constant.zig").AU2CM;
 
@@ -141,6 +139,13 @@ pub fn calculateNuclearGradient(comptime T: type, order: usize, hfres: HartreeFo
     }
 
     for (0..3 * hfres.ints.sys.atoms.len) |coord| {
+        var H_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
+        defer H_d.deinit(gpa);
+
+        for (0..nbf) |mu| for (0..nbf) |nu| {
+            H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
+        };
+
         var C_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
         defer C_d.deinit(gpa);
 
@@ -166,7 +171,7 @@ pub fn calculateNuclearGradient(comptime T: type, order: usize, hfres: HartreeFo
             g_d.ptr(idx).* = ScalarDual(T).init(hfres.ints.g.?.at(idx), dg_x);
         };
 
-        const corr = try calculateCorrelationEnergies(ScalarDual(T), order, g_d, C_d, e_d, nocc, generalized, gpa);
+        const corr = try calculateCorrelationEnergies(ScalarDual(T), order, H_d, g_d, C_d, e_d, nocc, generalized, gpa);
         defer gpa.free(corr);
 
         for (2..order + 1) |k| {
@@ -225,9 +230,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
 
-    const g_ao, const C_mo, const e_mo = .{ hfres.ints.g.?, hfres.C_mo, hfres.e_mo };
+    const H_ao, const g_ao, const C_mo, const e_mo = .{ hfres.ints.H.?, hfres.ints.g.?, hfres.C_mo, hfres.e_mo };
 
-    const energies = try calculateCorrelationEnergies(T, opt.order, g_ao, C_mo, e_mo, nocc, generalized, gpa);
+    const energies = try calculateCorrelationEnergies(T, opt.order, H_ao, g_ao, C_mo, e_mo, nocc, generalized, gpa);
     defer gpa.free(energies);
 
     for (2..opt.order + 1) |i| {
@@ -263,24 +268,6 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = &.{} };
 }
 
-/// Evaluates the one-electron core Hamiltonian in the molecular spin-orbital basis.
-fn buildCoreHamiltonian(comptime T: type, h_so: *Matrix(T), g_so: Tensor(T, 4), eps_so: Vector(T), nel: usize) void {
-    const nsp = eps_so.shape[0];
-
-    for (0..nsp) |p| for (0..nsp) |q| {
-        var sum = Value(T).fromFloat(0);
-
-        for (0..nel) |i| {
-            const term1 = Value(T).init(g_so.at(.{ p, i, q, i }));
-            const term2 = Value(T).init(g_so.at(.{ p, i, i, q }));
-
-            sum = sum.add(term1.sub(term2));
-        }
-
-        h_so.ptr(p, q).* = (if (p == q) Value(T).init(eps_so.at(p)) else Value(T).fromFloat(0)).sub(sum).val;
-    };
-}
-
 /// Evaluates electronic Hamiltonian matrix elements across Slater determinants using Slater-Condon rules.
 fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_so: Matrix(T), g_so: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
     var H_dets = try Matrix(T).init(dets.len, dets.len, gpa);
@@ -297,21 +284,27 @@ fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_so: M
 }
 
 /// Computes Møller-Plesset correlation energy corrections up to the requested perturbation order.
-fn calculateCorrelationEnergies(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
+fn calculateCorrelationEnergies(comptime T: type, order: usize, H: Matrix(T), g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
     const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
 
-    var g_so = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
-    defer g_so.deinit(gpa);
+    var h_so, var g_so = try transformInts(T, C, H, g, generalized, gpa);
+
+    defer {
+        h_so.deinit(gpa);
+        g_so.deinit(gpa);
+    }
 
     var eps_so = try Vector(T).init(nsp, gpa);
     defer eps_so.deinit(gpa);
 
-    try transformToSpinOrbitalBasis(T, &g_so, &eps_so, g, C, e, generalized, gpa);
+    if (generalized) for (0..nsp) |p| {
+        eps_so.ptr(p).* = e.at(p);
+    };
 
-    var h_so = try Matrix(T).initZero(nsp, nsp, gpa);
-    defer h_so.deinit(gpa);
-
-    buildCoreHamiltonian(T, &h_so, g_so, eps_so, nel);
+    if (!generalized) for (0..C.shape[0]) |p| {
+        eps_so.ptr(2 * p + 0).* = e.at(p);
+        eps_so.ptr(2 * p + 1).* = e.at(p);
+    };
 
     var excitations = try gpa.alloc(u32, @min(order, @min(nel, nsp - nel)));
     defer gpa.free(excitations);
@@ -401,36 +394,6 @@ fn solveRayleighSchrodinger(comptime T: type, H_dets: Matrix(T), E0: []const Val
     }
 
     return energies;
-}
-
-/// Transforms two-electron repulsion integrals and orbital energies into the molecular spin-orbital basis.
-fn transformToSpinOrbitalBasis(comptime T: type, g_so: *Tensor(T, 4), eps_so: *Vector(T), g: Tensor(T, 4), C: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !void {
-    const nsp = eps_so.shape[0];
-
-    var C_SO = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) C_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_coef(T, &C_SO, C);
-    }
-
-    var g_SO = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
-    defer if (!generalized) g_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_pppp(T, &g_SO, g);
-    }
-
-    try ao2mo_pppp(T, g_so, g_SO, C_SO, gpa);
-
-    if (generalized) for (0..nsp) |p| {
-        eps_so.ptr(p).* = e.at(p);
-    };
-
-    if (!generalized) for (0..C.shape[0]) |p| {
-        eps_so.ptr(2 * p + 0).* = e.at(p);
-        eps_so.ptr(2 * p + 1).* = e.at(p);
-    };
 }
 
 /// Evaluates m-th order configuration mixing amplitudes using Rayleigh-Schrödinger perturbation theory.

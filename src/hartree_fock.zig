@@ -2,11 +2,10 @@
 
 const std = @import("std");
 
-const cblas = @import("cimport.zig").cblas;
-
 const Allocator = std.mem.Allocator;
 
 const DftPotential = @import("density_functional_theory.zig").DftPotential;
+const Diis = @import("diis.zig").Diis;
 const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const Integrals = @import("molecular_integrals.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
@@ -17,12 +16,9 @@ const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
-const axpy = @import("linear_algebra.zig").axpy;
 const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
 const dot = @import("linear_algebra.zig").dot;
 const gemm = @import("linear_algebra.zig").gemm;
-const getrf = @import("linear_algebra.zig").getrf;
-const getrs = @import("linear_algebra.zig").getrs;
 const getSymbol = @import("constant.zig").getSymbol;
 const lowdin = @import("population_analysis.zig").lowdin;
 const mayer = @import("population_analysis.zig").mayer;
@@ -214,7 +210,7 @@ pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWor
 
     const nocc = if (generalized) ints.sys.nel else ints.sys.nel / 2;
 
-    var G = try nuclearRepulsionGradient(T, ints.sys, gpa);
+    var G = try ints.sys.nuclearRepulsionGradient(gpa);
     errdefer G.deinit(gpa);
 
     var exch_factor: T = if (generalized) 1 else 0.5;
@@ -262,91 +258,6 @@ pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWor
     }
 
     return G;
-}
-
-/// Direct Inversion in the Iterative Subspace (DIIS) to accelerate Fock matrix convergence via error minimization.
-pub fn diis(comptime T: type, fck_hist: []const Matrix(T), err_hist: []const Matrix(T), F: *Matrix(T), symmetric: bool, gpa: Allocator) !void {
-    if (fck_hist.len < 2) return;
-
-    var B = try Matrix(T).initZero(fck_hist.len + 1, fck_hist.len + 1, gpa);
-    defer B.deinit(gpa);
-
-    var b = try Matrix(T).initZero(fck_hist.len + 1, 1, gpa);
-    defer b.deinit(gpa);
-
-    for (0..fck_hist.len) |i| for (i..fck_hist.len) |j| {
-        const sum = dot(T, err_hist[i].asVector(), err_hist[j].asVector());
-
-        B.ptr(i, j).* = sum;
-        B.ptr(j, i).* = sum;
-    };
-
-    for (0..fck_hist.len) |i| {
-        B.ptr(i, fck_hist.len).* = -1.0;
-        B.ptr(fck_hist.len, i).* = -1.0;
-    }
-
-    for (0..fck_hist.len) |i| {
-        b.ptr(i, 0).* = 0.0;
-    }
-
-    b.ptr(fck_hist.len, 0).* = -1.0;
-
-    const ipiv = try gpa.alloc(i32, fck_hist.len + 1);
-    defer gpa.free(ipiv);
-
-    try getrf(T, &B, ipiv);
-
-    var c = try Matrix(T).init(fck_hist.len + 1, 1, gpa);
-    defer c.deinit(gpa);
-
-    try getrs(T, &c, B, ipiv, b);
-
-    F.zero();
-
-    for (0..fck_hist.len) |i| {
-        var f_vec = F.asVector();
-
-        axpy(T, &f_vec, fck_hist[i].asVector(), c.at(i, 0));
-    }
-
-    if (symmetric) F.symmetrize();
-}
-
-/// Computes the classical Coulomb repulsion gradient between nuclei.
-pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: Allocator) !Matrix(T) {
-    var dVN = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
-    errdefer dVN.deinit(gpa);
-
-    for (0..sys.atoms.len) |A| {
-        const ZA = @as(T, @floatFromInt(sys.atoms[A]));
-
-        const xA = sys.coors[3 * A + 0];
-        const yA = sys.coors[3 * A + 1];
-        const zA = sys.coors[3 * A + 2];
-
-        for (0..sys.atoms.len) |B| {
-            if (B == A) continue;
-
-            const ZB = @as(T, @floatFromInt(sys.atoms[B]));
-
-            const xB = sys.coors[3 * B + 0];
-            const yB = sys.coors[3 * B + 1];
-            const zB = sys.coors[3 * B + 2];
-
-            const dx = xA - xB;
-            const dy = yA - yB;
-            const dz = zA - zB;
-
-            const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
-
-            dVN.ptr(A, 0).* -= ZA * ZB * dx / (dist * dist * dist);
-            dVN.ptr(A, 1).* -= ZA * ZB * dy / (dist * dist * dist);
-            dVN.ptr(A, 2).* -= ZA * ZB * dz / (dist * dist * dist);
-        }
-    }
-
-    return dVN;
 }
 
 /// Computes the self-consistent field molecular orbitals, density matrix, and ground-state electronic energy.
@@ -765,21 +676,8 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
         try printf(io, fmt, .{ "ITER", "TOTAL ENERGY (Eh)", "|DE| (Eh)", "RMS(DP)", "TIME" });
     }
 
-    var fck_hist = std.ArrayList(Matrix(T)).empty;
-
-    defer {
-        for (0..fck_hist.items.len) |i| fck_hist.items[i].deinit(gpa);
-
-        fck_hist.deinit(gpa);
-    }
-
-    var err_hist = std.ArrayList(Matrix(T)).empty;
-
-    defer {
-        for (0..err_hist.items.len) |i| err_hist.items[i].deinit(gpa);
-
-        err_hist.deinit(gpa);
-    }
+    var diis_acc: ?Diis(T) = if (opt.diis) |d| if (d > 0) Diis(T).init(d) else null else null;
+    defer if (diis_acc) |*d| d.deinit(gpa);
 
     for (0..opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
@@ -788,8 +686,13 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
 
         e_new = calculateElectronicEnergy(T, ints, ws.F.*, ws.P.*, dft) + VN;
 
-        if (opt.diis) |d| if (d > 0 and i > 0) {
-            try updateDiis(T, ws, ints.S.?, &fck_hist, &err_hist, d, gpa);
+        if (diis_acc) |*d| if (i > 0) {
+            var e_diis = try Matrix(T).init(nbf, nbf, gpa);
+            errdefer e_diis.deinit(gpa);
+
+            try computeOrbitalGradient(T, &e_diis, ws.F.*, ws.P.*, ints.S.?, gpa);
+
+            try d.update(ws.F, e_diis, true, gpa);
         };
 
         try solveRoothaanHall(T, ws.e, ws.C, ws.F.*, ints.S.?, &B);
@@ -810,7 +713,9 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
 
             const de = if (i == 0) 0 else delta_energy;
 
-            try printf(io, fmt, .{ i + 1, e_new, de, p_rm, time_str, if (err_hist.items.len >= 2) "DIIS" else "" });
+            const diis_tag = if (diis_acc) |d| (if (d.err_hist.items.len >= 2) "DIIS" else "") else "";
+
+            try printf(io, fmt, .{ i + 1, e_new, de, p_rm, time_str, diis_tag });
         }
 
         e_old = e_new;
@@ -828,57 +733,4 @@ fn solveRoothaanHall(comptime T: type, e: *Vector(T), C: *Matrix(T), F: Matrix(T
     @memcpy(B.data, S.data);
 
     try sygvd(T, e, C, F, B);
-}
-
-/// Accelerates SCF convergence by updating Fock and error matrix histories and extrapolating via DIIS.
-fn updateDiis(comptime T: type, ws: ScfWorkspace(T), S: Matrix(T), fck_hist: *std.ArrayList(Matrix(T)), err_hist: *std.ArrayList(Matrix(T)), max_diis: usize, gpa: Allocator) !void {
-    const nbf = ws.F.nrow();
-
-    var e_diis = try Matrix(T).init(nbf, nbf, gpa);
-    errdefer e_diis.deinit(gpa);
-
-    try computeOrbitalGradient(T, &e_diis, ws.F.*, ws.P.*, S, gpa);
-
-    try fck_hist.ensureUnusedCapacity(gpa, 1);
-    try err_hist.ensureUnusedCapacity(gpa, 1);
-
-    var f_diis = try Matrix(T).init(nbf, nbf, gpa);
-    errdefer f_diis.deinit(gpa);
-
-    @memcpy(f_diis.data, ws.F.data);
-
-    if (fck_hist.items.len >= max_diis) {
-        var old_f = fck_hist.orderedRemove(0);
-        var old_e = err_hist.orderedRemove(0);
-
-        old_f.deinit(gpa);
-        old_e.deinit(gpa);
-    }
-
-    fck_hist.appendAssumeCapacity(f_diis);
-    err_hist.appendAssumeCapacity(e_diis);
-
-    diis(T, fck_hist.items, err_hist.items, ws.F, true, gpa) catch {
-        for (0..fck_hist.items.len) |j| fck_hist.items[j].deinit(gpa);
-        for (0..err_hist.items.len) |j| err_hist.items[j].deinit(gpa);
-
-        fck_hist.clearRetainingCapacity();
-        err_hist.clearRetainingCapacity();
-
-        try fck_hist.ensureUnusedCapacity(gpa, 1);
-        try err_hist.ensureUnusedCapacity(gpa, 1);
-
-        var f_retry = try Matrix(T).init(nbf, nbf, gpa);
-        errdefer f_retry.deinit(gpa);
-
-        var e_retry = try Matrix(T).init(nbf, nbf, gpa);
-        errdefer e_retry.deinit(gpa);
-
-        @memcpy(f_retry.data, ws.F.data);
-
-        try computeOrbitalGradient(T, &e_retry, ws.F.*, ws.P.*, S, gpa);
-
-        fck_hist.appendAssumeCapacity(f_retry);
-        err_hist.appendAssumeCapacity(e_retry);
-    };
 }

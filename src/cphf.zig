@@ -4,13 +4,13 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
+const Diis = @import("diis.zig").Diis;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
-const diis = @import("hartree_fock.zig").diis;
 const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
 const printf = @import("read_write.zig").printf;
 
@@ -56,14 +56,14 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
     var V_x = try Matrix(T).init(nbf, nbf, gpa);
     defer V_x.deinit(gpa);
 
-    var F_x_MO = try Matrix(T).init(nbf, nbf, gpa);
-    defer F_x_MO.deinit(gpa);
+    var F_x_mo = try Matrix(T).init(nbf, nbf, gpa);
+    defer F_x_mo.deinit(gpa);
 
-    var S_x_MO = try Matrix(T).init(nbf, nbf, gpa);
-    defer S_x_MO.deinit(gpa);
+    var S_x_mo = try Matrix(T).init(nbf, nbf, gpa);
+    defer S_x_mo.deinit(gpa);
 
-    var V_x_MO = try Matrix(T).init(nbf, nbf, gpa);
-    defer V_x_MO.deinit(gpa);
+    var V_x_mo = try Matrix(T).init(nbf, nbf, gpa);
+    defer V_x_mo.deinit(gpa);
 
     var dC_x = try Matrix(T).init(nbf, nbf, gpa);
     defer dC_x.deinit(gpa);
@@ -80,21 +80,8 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             try printf(io, "{s:4} {s:9} {s:9} {s:9}\n", .{ "ITER", "RMS(DU)", "RMS(DP)", "TIME" });
         }
 
-        var uxm_hist = std.ArrayList(Matrix(T)).empty;
-
-        defer {
-            for (0..uxm_hist.items.len) |i| uxm_hist.items[i].deinit(gpa);
-
-            uxm_hist.deinit(gpa);
-        }
-
-        var err_hist = std.ArrayList(Matrix(T)).empty;
-
-        defer {
-            for (0..err_hist.items.len) |i| err_hist.items[i].deinit(gpa);
-
-            err_hist.deinit(gpa);
-        }
+        var diis_acc: ?Diis(T) = if (opt.diis) |d| if (d > 0) Diis(T).init(d) else null else null;
+        defer if (diis_acc) |*d| d.deinit(gpa);
 
         F_x.zero();
 
@@ -118,20 +105,20 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
         const S_x = Matrix(T){ .data = dS.data[c * nbf * nbf .. (c + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
 
-        ao2mo_pp(T, &F_x_MO, F_x, C);
-        ao2mo_pp(T, &S_x_MO, S_x, C);
+        ao2mo_pp(T, &F_x_mo, F_x, C);
+        ao2mo_pp(T, &S_x_mo, S_x, C);
 
         for (0..nbf) |p| for (0..nbf) |q| {
-            U_x.ptr(p, q).* = -0.5 * S_x_MO.at(p, q);
+            U_x.ptr(p, q).* = -0.5 * S_x_mo.at(p, q);
         };
 
         for (nocc..nbf) |a| for (0..nocc) |i| {
             const diff = e.at(a) - e.at(i);
 
             if (@abs(diff) > 1e-12) {
-                const u_ai = (e.at(i) * S_x_MO.at(a, i) - F_x_MO.at(a, i)) / diff;
+                const u_ai = (e.at(i) * S_x_mo.at(a, i) - F_x_mo.at(a, i)) / diff;
 
-                U_x.ptr(a, i).*, U_x.ptr(i, a).* = .{ u_ai, -S_x_MO.at(i, a) - u_ai };
+                U_x.ptr(a, i).*, U_x.ptr(i, a).* = .{ u_ai, -S_x_mo.at(i, a) - u_ai };
             }
         };
 
@@ -172,14 +159,14 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
                 V_x.ptr(lambda, sigma).* += P_x.at(mu, nu) * (g_mlns - exch_factor * g_mnls);
             };
 
-            ao2mo_pp(T, &V_x_MO, V_x, C);
+            ao2mo_pp(T, &V_x_mo, V_x, C);
 
             for (nocc..nbf) |a| for (0..nocc) |k| {
                 const prev, const delta_e = .{ U_x.at(a, k), e.at(a) - e.at(k) };
 
-                const f = F_x_MO.at(a, k);
-                const v = V_x_MO.at(a, k);
-                const s = S_x_MO.at(a, k);
+                const f = F_x_mo.at(a, k);
+                const v = V_x_mo.at(a, k);
+                const s = S_x_mo.at(a, k);
 
                 U_x.ptr(a, k).* = if (@abs(delta_e) > 1e-12) (e.at(k) * s - f - v) / delta_e else -0.5 * s;
 
@@ -189,66 +176,23 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             const rms_du = @sqrt(sum_sq_du / @as(T, @floatFromInt((nbf - nocc) * nocc)));
 
             for (0..nocc) |k| for (nocc..nbf) |a| {
-                U_x.ptr(k, a).* = -S_x_MO.at(k, a) - U_x.at(a, k);
+                U_x.ptr(k, a).* = -S_x_mo.at(k, a) - U_x.at(a, k);
             };
 
-            if (opt.diis) |d| if (d > 0) {
-                try uxm_hist.ensureUnusedCapacity(gpa, 1);
-                try err_hist.ensureUnusedCapacity(gpa, 1);
-
-                var u_diis_opt: ?Matrix(T) = try Matrix(T).init(nbf, nbf, gpa);
-                errdefer if (u_diis_opt) |*m| m.deinit(gpa);
-
-                var e_diis_opt: ?Matrix(T) = try Matrix(T).init(nbf, nbf, gpa);
-                errdefer if (e_diis_opt) |*m| m.deinit(gpa);
+            if (diis_acc) |*d| {
+                var e_diis = try Matrix(T).init(nbf, nbf, gpa);
+                errdefer e_diis.deinit(gpa);
 
                 for (0..nbf) |p| for (0..nbf) |q| {
-                    u_diis_opt.?.ptr(p, q).* = U_x.at(p, q);
-
-                    e_diis_opt.?.ptr(p, q).* = U_x.at(p, q) - U_p.at(p, q);
+                    e_diis.ptr(p, q).* = U_x.at(p, q) - U_p.at(p, q);
                 };
 
-                if (uxm_hist.items.len >= opt.diis.?) {
-                    var old_u = uxm_hist.orderedRemove(0);
-                    var old_e = err_hist.orderedRemove(0);
-
-                    old_u.deinit(gpa);
-                    old_e.deinit(gpa);
-                }
-
-                uxm_hist.appendAssumeCapacity(u_diis_opt.?);
-                err_hist.appendAssumeCapacity(e_diis_opt.?);
-
-                diis(T, uxm_hist.items, err_hist.items, &U_x, false, gpa) catch {
-                    var u_retry = try Matrix(T).init(nbf, nbf, gpa);
-                    errdefer u_retry.deinit(gpa);
-
-                    var e_retry = try Matrix(T).init(nbf, nbf, gpa);
-                    errdefer e_retry.deinit(gpa);
-
-                    @memcpy(u_retry.data, U_x.data);
-
-                    for (0..nbf) |p| for (0..nbf) |q| {
-                        e_retry.ptr(p, q).* = err_hist.items[err_hist.items.len - 1].at(p, q);
-                    };
-
-                    for (0..uxm_hist.items.len) |idx| uxm_hist.items[idx].deinit(gpa);
-                    for (0..err_hist.items.len) |idx| err_hist.items[idx].deinit(gpa);
-
-                    uxm_hist.clearRetainingCapacity();
-                    err_hist.clearRetainingCapacity();
-
-                    try uxm_hist.ensureUnusedCapacity(gpa, 1);
-                    try err_hist.ensureUnusedCapacity(gpa, 1);
-
-                    uxm_hist.appendAssumeCapacity(u_retry);
-                    err_hist.appendAssumeCapacity(e_retry);
-                };
+                try d.update(&U_x, e_diis, false, gpa);
 
                 for (0..nocc) |k| for (nocc..nbf) |a| {
-                    U_x.ptr(k, a).* = -S_x_MO.at(k, a) - U_x.at(a, k);
+                    U_x.ptr(k, a).* = -S_x_mo.at(k, a) - U_x.at(a, k);
                 };
-            };
+            }
 
             const elapsed = timer.untilNow(io, .real);
 
@@ -258,7 +202,9 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
                 const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
                 defer gpa.free(time_str);
 
-                try printf(io, fmt, .{ i + 1, rms_du, rms_dp, time_str, if (err_hist.items.len >= 2) "DIIS" else "" });
+                const diis_tag = if (diis_acc) |d| (if (d.err_hist.items.len >= 2) "DIIS" else "") else "";
+
+                try printf(io, fmt, .{ i + 1, rms_du, rms_dp, time_str, diis_tag });
             }
 
             if (rms_du < opt.threshold and rms_dp < opt.threshold) {
@@ -269,9 +215,9 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
         for (0..nbf) |p| for (0..nbf) |q| {
             const delta_e = e.at(q) - e.at(p);
 
-            const f = F_x_MO.at(p, q);
-            const v = V_x_MO.at(p, q);
-            const s = S_x_MO.at(p, q);
+            const f = F_x_mo.at(p, q);
+            const v = V_x_mo.at(p, q);
+            const s = S_x_mo.at(p, q);
 
             U_x.ptr(p, q).* = if (@abs(delta_e) > 1e-12) (f + v - e.at(q) * s) / delta_e else -0.5 * s;
         };
@@ -283,7 +229,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
         };
 
         for (0..nbf) |p| {
-            de.ptr(c, p).* = F_x_MO.at(p, p) + V_x_MO.at(p, p) - S_x_MO.at(p, p) * e.at(p);
+            de.ptr(c, p).* = F_x_mo.at(p, p) + V_x_mo.at(p, p) - S_x_mo.at(p, p) * e.at(p);
         }
     }
 }

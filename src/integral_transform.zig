@@ -186,6 +186,44 @@ pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T
     };
 }
 
+/// Transforms core Hamiltonian and two-electron integrals to the molecular spin-orbital basis.
+pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+    const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
+
+    var C_so = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_so.deinit(gpa);
+
+    if (!generalized) {
+        ao2so_coef(T, &C_so, C);
+    }
+
+    var H_so = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) H_so.deinit(gpa);
+
+    if (!generalized) {
+        ao2so_pp(T, &H_so, H);
+    }
+
+    var g_so_ao = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer if (!generalized) g_so_ao.deinit(gpa);
+
+    if (!generalized) {
+        ao2so_pppp(T, &g_so_ao, g);
+    }
+
+    var h_so = try Matrix(T).init(nsp, nsp, gpa);
+    errdefer h_so.deinit(gpa);
+
+    ao2mo_pp(T, &h_so, H_so, C_so);
+
+    var g_so = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
+    errdefer g_so.deinit(gpa);
+
+    try ao2mo_pppp(T, &g_so, g_so_ao, C_so, gpa);
+
+    return .{ h_so, g_so };
+}
+
 /// Transforms atomic orbital integrals to a restricted molecular orbital subset of occupied and virtual orbitals.
 fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), nocc: usize, gpa: Allocator) !void {
     const N = g_xxxx.shape[0];

@@ -271,13 +271,13 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
 
     const C_ref = electronic_structure.getOrbitals(T, res_ref);
 
-    var C_ref_SO = if (generalized) C_ref else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) C_ref_SO.deinit(gpa);
+    var C_ref_so = if (generalized) C_ref else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_ref_so.deinit(gpa);
 
-    if (!generalized) ao2so_coef(T, &C_ref_SO, C_ref);
+    if (!generalized) ao2so_coef(T, &C_ref_so, C_ref);
 
-    var S_MS = try Matrix(T).init(nsp, nsp, gpa);
-    defer S_MS.deinit(gpa);
+    var S_ms = try Matrix(T).init(nsp, nsp, gpa);
+    defer S_ms.deinit(gpa);
 
     var tmp = try Matrix(T).init(nsp, nsp, gpa);
     defer tmp.deinit(gpa);
@@ -320,27 +320,27 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         var res_p = try runFn(T, io, modified_opt, &sys_p, Pg, false, gpa);
         defer res_p.deinit(gpa);
 
-        var S_SO = try sys_m.overlapBetweenSpin(sys_p, nthreads, gpa);
-        defer S_SO.deinit(gpa);
+        var S_so = try sys_m.overlapBetweenSpin(sys_p, nthreads, gpa);
+        defer S_so.deinit(gpa);
 
         const C_m = electronic_structure.getOrbitals(T, res_m);
         const C_p = electronic_structure.getOrbitals(T, res_p);
 
-        var C_m_SO = if (generalized) C_m else C_m_buf;
+        var C_m_so = if (generalized) C_m else C_m_buf;
 
-        if (!generalized) ao2so_coef(T, &C_m_SO, C_m);
+        if (!generalized) ao2so_coef(T, &C_m_so, C_m);
 
-        var C_p_SO = if (generalized) C_p else C_p_buf;
+        var C_p_so = if (generalized) C_p else C_p_buf;
 
-        if (!generalized) ao2so_coef(T, &C_p_SO, C_p);
+        if (!generalized) ao2so_coef(T, &C_p_so, C_p);
 
-        alignDisplacedPhases(T, .{ &C_m_SO, &C_p_SO }, C_ref_SO, .{ &res_m.C_ci, &res_p.C_ci }, C_ci_ref, dets.items);
+        alignDisplacedPhases(T, .{ &C_m_so, &C_p_so }, C_ref_so, .{ &res_m.C_ci, &res_p.C_ci }, C_ci_ref, dets.items);
 
-        gemm(T, &tmp, S_SO, C_p_SO, 1, 0, false, false);
+        gemm(T, &tmp, S_so, C_p_so, 1, 0, false, false);
 
-        gemm(T, &S_MS, C_m_SO, tmp, 1, 0, true, false);
+        gemm(T, &S_ms, C_m_so, tmp, 1, 0, true, false);
 
-        try accumulateNacv(T, couplings, S_MS, .{ res_m.C_ci, res_p.C_ci }, dets.items, pairs, gpa);
+        try accumulateNacv(T, couplings, S_ms, .{ res_m.C_ci, res_p.C_ci }, dets.items, pairs, gpa);
 
         for (0..pairs.len) |p_idx| {
             nacvs[p_idx].ptr(i, j).* = couplings[p_idx] / (4 * h);
@@ -443,7 +443,7 @@ fn accumulateNacv(comptime T: type, couplings: []T, S_MS: Matrix(T), C_ci: [2]Ma
 }
 
 /// Aligns spin-orbital and CI state phase signs across displaced geometries.
-fn alignDisplacedPhases(comptime T: type, C_SO: [2]*Matrix(T), C_ref: Matrix(T), C_ci: [2]*Matrix(T), C_ci_ref: Matrix(T), dets: []const []const usize) void {
+fn alignDisplacedPhases(comptime T: type, C_so: [2]*Matrix(T), C_ref: Matrix(T), C_ci: [2]*Matrix(T), C_ci_ref: Matrix(T), dets: []const []const usize) void {
     const nsp = C_ref.nrow();
 
     for (0..2) |idx| {
@@ -451,12 +451,12 @@ fn alignDisplacedPhases(comptime T: type, C_SO: [2]*Matrix(T), C_ref: Matrix(T),
             var d: T = 0;
 
             for (0..nsp) |mu| {
-                d += C_SO[idx].at(mu, p) * C_ref.at(mu, p);
+                d += C_so[idx].at(mu, p) * C_ref.at(mu, p);
             }
 
             if (d < 0) {
                 for (0..nsp) |mu| {
-                    C_SO[idx].ptr(mu, p).* = -C_SO[idx].at(mu, p);
+                    C_so[idx].ptr(mu, p).* = -C_so[idx].at(mu, p);
                 }
 
                 for (0..dets.len) |a| {

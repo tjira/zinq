@@ -13,22 +13,21 @@ const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
-const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
 const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
-const buildActiveRdm = @import("configuration_interaction.zig").buildActiveRdm;
+const buildAsRdm = @import("rdm.zig").buildAsRdm;
+const buildStateAveragedAsRdm = @import("rdm.zig").buildStateAveragedAsRdm;
 const computeCi = @import("configuration_interaction.zig").computeCi;
 const gemm = @import("linear_algebra.zig").gemm;
-const generateCasDets = @import("configuration_interaction.zig").generateCasDets;
+const generateCasDets = @import("determinant.zig").generateCasDets;
 const getrf = @import("linear_algebra.zig").getrf;
 const getrs = @import("linear_algebra.zig").getrs;
-const nuclearRepulsionGradient = @import("hartree_fock.zig").nuclearRepulsionGradient;
 const printf = @import("read_write.zig").printf;
-const slater = @import("configuration_interaction.zig").slater;
+const slater = @import("slater_condon.zig").slater;
 const syevd = @import("linear_algebra.zig").syevd;
-const transformInts = @import("configuration_interaction.zig").transformInts;
+const transformInts = @import("integral_transform.zig").transformInts;
 
 /// Configurations for CASSCF active space dimensions, iterations, and derivative calculations.
 pub const Options = struct {
@@ -179,17 +178,17 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     var timer = std.Io.Timestamp.now(io, .real);
 
-    const nel, const nact_el, const nact = .{ hfres.ints.sys.nel, opt.active_electrons, opt.active_orbitals };
+    const nel, const nas_el, const nas = .{ hfres.ints.sys.nel, opt.active_electrons, opt.active_orbitals };
 
-    if (nact_el > nel or (nel - nact_el) % 2 != 0) {
+    if (nas_el > nel or (nel - nas_el) % 2 != 0) {
         std.log.err("ACTIVE ELECTRONS MUST BE LESS THAN OR EQUAL TO TOTAL ELECTRONS WITH CLOSED SHELL CORE", .{});
 
         return error.InvalidInput;
     }
 
-    const ncore, const nmo = .{ (nel - nact_el) / 2, hfres.C_mo.ncol() };
+    const ncore, const nmo = .{ (nel - nas_el) / 2, hfres.C_mo.ncol() };
 
-    if (ncore + nact > nmo) {
+    if (ncore + nas > nmo) {
         std.log.err("ACTIVE PLUS CORE ORBITALS EXCEED MOLECULAR ORBITAL COUNT", .{});
 
         return error.InvalidInput;
@@ -198,10 +197,10 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     if (log) {
         const fmt = "\nHARTREE-FOCK CYCLE TIME: {f}\n\nCASSCF SPACE: CAS({d}, {d})\n\n";
 
-        try printf(io, fmt, .{ timer.untilNow(io, .real), nact_el, nact });
+        try printf(io, fmt, .{ timer.untilNow(io, .real), nas_el, nas });
     }
 
-    var dets = try generateCasDets(ncore, nact, nact_el, opt.hartree_fock.multiplicity, gpa);
+    var dets = try generateCasDets(ncore, nas, nas_el, opt.hartree_fock.multiplicity, gpa);
 
     defer {
         for (0..dets.items.len) |i| gpa.free(dets.items[i]);
@@ -249,7 +248,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     try casscf(T, io, &C, hfres.ints, dets.items, weights, opt, log, gpa);
 
-    try canonicalizeOrbitals(T, &C, hfres.ints, ncore, nact, gpa);
+    try canonicalizeOrbitals(T, &C, hfres.ints, ncore, nas, gpa);
 
     const nrep = try hfres.ints.sys.nrep();
 
@@ -295,7 +294,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         .analytic => |a| {
             const states = a.states orelse &[_]u32{0};
 
-            grad = try calculateNuclearGradient(T, hfres, C, final_C_ci, dets.items, weights, ncore, nact, states, gpa);
+            grad = try calculateNuclearGradient(T, hfres, C, final_C_ci, dets.items, weights, ncore, nas, states, gpa);
         },
         .numeric => {},
     };
@@ -345,21 +344,21 @@ fn applyCayleyTransform(comptime T: type, C: *Matrix(T), kappa: Matrix(T), gpa: 
 }
 
 /// Constructs active subspace columns of the generalized Fock matrix from active 1- and 2-RDM contractions.
-fn buildActiveColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), ncore: usize) void {
-    const nmo, const nact = .{ F_core.nrow(), D_act.nrow() };
+fn buildAsColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_as: Matrix(T), d_as: Tensor(T, 4), ncore: usize) void {
+    const nmo, const nas = .{ F_core.nrow(), D_as.nrow() };
 
-    for (0..nmo) |p| for (0..nact) |u| {
+    for (0..nmo) |p| for (0..nas) |u| {
         const U = ncore + u;
         var sum: T = 0;
 
-        for (0..nact) |v| {
-            sum += F_core.at(p, ncore + v) * D_act.at(v, u);
+        for (0..nas) |v| {
+            sum += F_core.at(p, ncore + v) * D_as.at(v, u);
         }
 
-        for (0..nact) |v| for (0..nact) |w| for (0..nact) |x| {
+        for (0..nas) |v| for (0..nas) |w| for (0..nas) |x| {
             const V, const W, const X = .{ ncore + v, ncore + w, ncore + x };
 
-            sum += g_mo.at(.{ p, W, V, X }) * d_act.at(.{ u, v, w, x });
+            sum += g_mo.at(.{ p, W, V, X }) * d_as.at(.{ u, v, w, x });
         };
 
         F_gen.ptr(p, U).* = sum;
@@ -367,16 +366,16 @@ fn buildActiveColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_
 }
 
 /// Constructs core subspace columns of the generalized Fock matrix from active 1-RDM contractions.
-fn buildCoreColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), ncore: usize) void {
-    const nmo, const nact = .{ F_core.nrow(), D_act.nrow() };
+fn buildCoreColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_as: Matrix(T), ncore: usize) void {
+    const nmo, const nas = .{ F_core.nrow(), D_as.nrow() };
 
     for (0..nmo) |p| for (0..ncore) |j| {
         var sum = F_core.at(p, j);
 
-        for (0..nact) |u| for (0..nact) |v| {
+        for (0..nas) |u| for (0..nas) |v| {
             const U, const V = .{ ncore + u, ncore + v };
 
-            sum += D_act.at(u, v) * (g_mo.at(.{ p, U, j, V }) - 0.5 * g_mo.at(.{ p, U, V, j }));
+            sum += D_as.at(u, v) * (g_mo.at(.{ p, U, j, V }) - 0.5 * g_mo.at(.{ p, U, V, j }));
         };
 
         F_gen.ptr(p, j).* = 2 * sum;
@@ -399,8 +398,8 @@ fn buildCoreFock(comptime T: type, F_core: *Matrix(T), H_mo: Matrix(T), g_mo: Te
 }
 
 /// Constructs diagonal Fock matrix elements for orbital rotation preconditioner.
-fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), ncore: usize, gpa: Allocator) !void {
-    const nmo, const nact = .{ H_mo.nrow(), D_act.nrow() };
+fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_as: Matrix(T), ncore: usize, gpa: Allocator) !void {
+    const nmo, const nas = .{ H_mo.nrow(), D_as.nrow() };
 
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
@@ -410,10 +409,10 @@ fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), H_mo: Matrix(T), g_mo
     for (0..nmo) |p| {
         var sum_diag = F_core.at(p, p);
 
-        for (0..nact) |u| for (0..nact) |v| {
+        for (0..nas) |u| for (0..nas) |v| {
             const U, const V = .{ ncore + u, ncore + v };
 
-            sum_diag += D_act.at(u, v) * (g_mo.at(.{ p, U, p, V }) - 0.5 * g_mo.at(.{ p, U, V, p }));
+            sum_diag += D_as.at(u, v) * (g_mo.at(.{ p, U, p, V }) - 0.5 * g_mo.at(.{ p, U, V, p }));
         };
 
         F_diag.ptr(p).* = sum_diag;
@@ -421,7 +420,7 @@ fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), H_mo: Matrix(T), g_mo
 }
 
 /// Constructs the generalized Fock matrix using active reduced density matrices.
-fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), ncore: usize, gpa: Allocator) !void {
+fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_as: Matrix(T), d_as: Tensor(T, 4), ncore: usize, gpa: Allocator) !void {
     const nmo = H_mo.nrow();
 
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
@@ -431,30 +430,30 @@ fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), H_mo: Matrix(T), g_
 
     @memset(F_gen.data, 0);
 
-    buildCoreColumns(T, F_gen, F_core, g_mo, D_act, ncore);
+    buildCoreColumns(T, F_gen, F_core, g_mo, D_as, ncore);
 
-    buildActiveColumns(T, F_gen, F_core, g_mo, D_act, d_act, ncore);
+    buildAsColumns(T, F_gen, F_core, g_mo, D_as, d_as, ncore);
 }
 
 /// Enumerates non-redundant orbital pairs across core-virtual, active-virtual, and core-active subspaces.
-fn buildNonRedundantPairs(ncore: usize, nact: usize, nmo: usize, gpa: Allocator) ![]OrbitalPair {
-    const total = ncore * (nmo - ncore - nact) + nact * (nmo - ncore - nact) + ncore * nact;
+fn buildNonRedundantPairs(ncore: usize, nas: usize, nmo: usize, gpa: Allocator) ![]OrbitalPair {
+    const total = ncore * (nmo - ncore - nas) + nas * (nmo - ncore - nas) + ncore * nas;
 
     var pairs, var idx: usize = .{ try gpa.alloc(OrbitalPair, total), 0 };
 
-    for (0..ncore) |j| for (ncore + nact..nmo) |b| {
+    for (0..ncore) |j| for (ncore + nas..nmo) |b| {
         pairs[idx] = .{ .p = b, .q = j };
 
         idx += 1;
     };
 
-    for (ncore..ncore + nact) |u| for (ncore + nact..nmo) |b| {
+    for (ncore..ncore + nas) |u| for (ncore + nas..nmo) |b| {
         pairs[idx] = .{ .p = b, .q = u };
 
         idx += 1;
     };
 
-    for (0..ncore) |j| for (ncore..ncore + nact) |u| {
+    for (0..ncore) |j| for (ncore..ncore + nas) |u| {
         pairs[idx] = .{ .p = u, .q = j };
 
         idx += 1;
@@ -464,7 +463,7 @@ fn buildNonRedundantPairs(ncore: usize, nact: usize, nmo: usize, gpa: Allocator)
 }
 
 /// Evaluates the exact analytic orbital Hessian of the state-averaged energy with respect to orbital rotations.
-fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, ncore: usize, gpa: Allocator) !void {
+fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_as: Matrix(T), d_as: Tensor(T, 4), pairs: []const OrbitalPair, ncore: usize, gpa: Allocator) !void {
     const nmo, const nrot = .{ H_mo.ncol(), pairs.len };
 
     var dH = try Matrix(T).initZero(nmo, nmo, gpa);
@@ -506,7 +505,7 @@ fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), H_mo: Matrix(T), g_mo: T
 
         @memset(dF_gen.data, 0);
 
-        try buildGeneralizedFock(T, &dF_gen, dH, dg, D_act, d_act, ncore, gpa);
+        try buildGeneralizedFock(T, &dF_gen, dH, dg, D_as, d_as, ncore, gpa);
 
         for (pairs, 0..) |pair_i, i| {
             A.ptr(i, j).* = 2 * (dF_gen.at(pair_i.p, pair_i.q) - dF_gen.at(pair_i.q, pair_i.p));
@@ -522,10 +521,10 @@ fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), H_mo: Matrix(T), g_mo: T
 }
 
 /// Evaluates the anti-symmetric orbital rotation generator matrix kappa using a diagonal Hessian approximation.
-fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb: Matrix(T), F_diag: Vector(T), D_act: Matrix(T), ncore: usize) void {
-    const nmo, const nact = .{ kappa.ncol(), D_act.nrow() };
+fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb: Matrix(T), F_diag: Vector(T), D_as: Matrix(T), ncore: usize) void {
+    const nmo, const nas = .{ kappa.ncol(), D_as.nrow() };
 
-    for (0..ncore) |j| for (ncore + nact..nmo) |b| {
+    for (0..ncore) |j| for (ncore + nas..nmo) |b| {
         var denom = 4 * (F_diag.at(b) - F_diag.at(j));
 
         if (@abs(denom) < 0.1) denom = if (denom < 0) -0.1 else 0.1;
@@ -538,12 +537,12 @@ fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb: Mat
         kappa.ptr(j, b).* = 0 - step;
     };
 
-    for (0..nact) |u_idx| {
+    for (0..nas) |u_idx| {
         const u = ncore + u_idx;
 
-        const Duu = D_act.at(u_idx, u_idx);
+        const Duu = D_as.at(u_idx, u_idx);
 
-        for (ncore + nact..nmo) |b| {
+        for (ncore + nas..nmo) |b| {
             var denom = 2 * Duu * (F_diag.at(b) - F_diag.at(u));
 
             if (@abs(denom) < 0.1) denom = if (denom < 0) -0.1 else 0.1;
@@ -571,40 +570,8 @@ fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb: Mat
     }
 }
 
-/// Assembles state-averaged 1- and 2-particle reduced density matrices across active configurations.
-fn buildStateAveragedRdm(comptime T: type, dets: []const []const usize, C_ci: Matrix(T), weights: []const T, ncore: usize, nact: usize, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
-    var D_act = try Matrix(T).initZero(nact, nact, gpa);
-    errdefer D_act.deinit(gpa);
-
-    var d_act = try Tensor(T, 4).initZero(.{ nact, nact, nact, nact }, gpa);
-    errdefer d_act.deinit(gpa);
-
-    for (0..weights.len) |I| {
-        const w_I = weights[I];
-
-        if (w_I == 0) continue;
-
-        var D_I, var d_I = try buildActiveRdm(T, dets, C_ci, I, ncore, nact, gpa);
-
-        defer {
-            D_I.deinit(gpa);
-            d_I.deinit(gpa);
-        }
-
-        for (0..D_act.data.len) |idx| {
-            D_act.data[idx] += w_I * D_I.data[idx];
-        }
-
-        for (0..d_act.data.len) |idx| {
-            d_act.data[idx] += w_I * d_I.data[idx];
-        }
-    }
-
-    return .{ D_act, d_act };
-}
-
 /// Computes analytic nuclear gradients of CASSCF state energies using dual number differentiation.
-fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: Matrix(T), dets: []const []const usize, weights: []const T, ncore: usize, nact: usize, states: []const u32, gpa: Allocator) ![]Matrix(T) {
+fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: Matrix(T), dets: []const []const usize, weights: []const T, ncore: usize, nas: usize, states: []const u32, gpa: Allocator) ![]Matrix(T) {
     var grads = try gpa.alloc(Matrix(T), states.len);
     errdefer gpa.free(grads);
 
@@ -612,7 +579,7 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
     errdefer for (0..grads_done) |k| grads[k].deinit(gpa);
 
     for (0..states.len) |idx| {
-        grads[idx] = try nuclearRepulsionGradient(T, hfres.ints.sys, gpa);
+        grads[idx] = try hfres.ints.sys.nuclearRepulsionGradient(gpa);
 
         grads_done += 1;
     }
@@ -622,16 +589,16 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
 
     const natoms = hfres.ints.sys.atoms.len;
 
-    const pairs = try buildNonRedundantPairs(ncore, nact, nmo, gpa);
+    const pairs = try buildNonRedundantPairs(ncore, nas, nmo, gpa);
     defer gpa.free(pairs);
 
     const nrot = pairs.len;
 
-    var D_act_SA, var d_act_SA = try buildStateAveragedRdm(T, dets, C_ci, weights, ncore, nact, gpa);
+    var D_as_sa, var d_as_sa = try buildStateAveragedAsRdm(T, dets, C_ci, weights, ncore, nas, gpa);
 
     defer {
-        D_act_SA.deinit(gpa);
-        d_act_SA.deinit(gpa);
+        D_as_sa.deinit(gpa);
+        d_as_sa.deinit(gpa);
     }
 
     var Z_mat = try gpa.alloc(Matrix(T), states.len);
@@ -656,7 +623,7 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
         var A_SA = try Matrix(T).initZero(nrot, nrot, gpa);
         defer A_SA.deinit(gpa);
 
-        try buildOrbitalHessian(T, &A_SA, H_mo_conv, g_mo_conv, D_act_SA, d_act_SA, pairs, ncore, gpa);
+        try buildOrbitalHessian(T, &A_SA, H_mo_conv, g_mo_conv, D_as_sa, d_as_sa, pairs, ncore, gpa);
 
         var F_gen_s = try Matrix(T).initZero(nmo, nmo, gpa);
         defer F_gen_s.deinit(gpa);
@@ -674,7 +641,7 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
         for (states, 0..) |s, s_idx| {
             Z_mat[s_idx] = try Matrix(T).initZero(nrot, 1, gpa);
 
-            var D_s, var d_s = try buildActiveRdm(T, dets, C_ci, s, ncore, nact, gpa);
+            var D_s, var d_s = try buildAsRdm(T, dets, C_ci, s, ncore, nas, gpa);
 
             defer {
                 D_s.deinit(gpa);
@@ -709,8 +676,8 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
     var C_d = try Matrix(ScalarDual(T)).init(nbf, nmo, gpa);
     defer C_d.deinit(gpa);
 
-    var dS_AO = try Matrix(T).init(nbf, nbf, gpa);
-    defer dS_AO.deinit(gpa);
+    var dS_ao = try Matrix(T).init(nbf, nbf, gpa);
+    defer dS_ao.deinit(gpa);
 
     var tmp = try Matrix(T).init(nbf, nmo, gpa);
     defer tmp.deinit(gpa);
@@ -723,10 +690,10 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
 
     for (0..3 * natoms) |coord| {
         for (0..nbf) |mu| for (0..nbf) |nu| {
-            dS_AO.ptr(mu, nu).* = hfres.ints.dS.?.at(.{ coord, mu, nu });
+            dS_ao.ptr(mu, nu).* = hfres.ints.dS.?.at(.{ coord, mu, nu });
         };
 
-        gemm(T, &tmp, dS_AO, C, 1, 0, false, false);
+        gemm(T, &tmp, dS_ao, C, 1, 0, false, false);
 
         gemm(T, &S_mo, C, tmp, 1, 0, true, false);
 
@@ -752,17 +719,17 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
             g_d.ptr(indices).* = ScalarDual(T).init(val, der);
         };
 
-        var H_MS_d, var g_MS_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, false, gpa);
+        var h_so_d, var g_so_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, false, gpa);
 
         defer {
-            H_MS_d.deinit(gpa);
-            g_MS_d.deinit(gpa);
+            h_so_d.deinit(gpa);
+            g_so_d.deinit(gpa);
         }
 
         for (0..dets.len) |d1| for (d1..dets.len) |d2| {
             const factor: T = if (d1 == d2) 1 else 2;
 
-            const val = slater(ScalarDual(T), dets[d1], dets[d2], H_MS_d, g_MS_d);
+            const val = slater(ScalarDual(T), dets[d1], dets[d2], h_so_d, g_so_d);
 
             for (states, 0..) |s, s_idx| {
                 grads[s_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(d1, s) * C_ci.at(d2, s) * val.der;
@@ -777,17 +744,17 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
             defer dg_mo.deinit(gpa);
 
             for (0..nmo) |p| for (0..nmo) |q| {
-                dH_mo.ptr(p, q).* = H_MS_d.at(2 * p, 2 * q).der;
+                dH_mo.ptr(p, q).* = h_so_d.at(2 * p, 2 * q).der;
             };
 
             for (0..nmo) |p| for (0..nmo) |q| for (0..nmo) |r| for (0..nmo) |s| {
-                dg_mo.ptr(.{ p, q, r, s }).* = g_MS_d.at(.{ 2 * p, 2 * q, 2 * r, 2 * s }).der;
+                dg_mo.ptr(.{ p, q, r, s }).* = g_so_d.at(.{ 2 * p, 2 * q, 2 * r, 2 * s }).der;
             };
 
             var dF_gen = try Matrix(T).initZero(nmo, nmo, gpa);
             defer dF_gen.deinit(gpa);
 
-            try buildGeneralizedFock(T, &dF_gen, dH_mo, dg_mo, D_act_SA, d_act_SA, ncore, gpa);
+            try buildGeneralizedFock(T, &dF_gen, dH_mo, dg_mo, D_as_sa, d_as_sa, ncore, gpa);
 
             for (states, 0..) |_, s_idx| {
                 var resp: T = 0;
@@ -845,7 +812,7 @@ fn canonicalizeCoreSubspace(comptime T: type, C: *Matrix(T), F_core: Matrix(T), 
 }
 
 /// Canonicalizes core and virtual orbital blocks by diagonalizing their respective Fock matrices.
-fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, ncore: usize, nact: usize, gpa: Allocator) !void {
+fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, ncore: usize, nas: usize, gpa: Allocator) !void {
     const nmo = C.ncol();
 
     var H_mo = try Matrix(T).init(nmo, nmo, gpa);
@@ -865,19 +832,19 @@ fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, ncore: u
 
     try canonicalizeCoreSubspace(T, C, F_core, ncore, gpa);
 
-    try canonicalizeVirtualSubspace(T, C, F_core, ncore, nact, gpa);
+    try canonicalizeVirtualSubspace(T, C, F_core, ncore, nas, gpa);
 }
 
 /// Canonicalizes the unoccupied virtual orbital subspace by diagonalizing its core Fock sub-block.
-fn canonicalizeVirtualSubspace(comptime T: type, C: *Matrix(T), F_core: Matrix(T), ncore: usize, nact: usize, gpa: Allocator) !void {
+fn canonicalizeVirtualSubspace(comptime T: type, C: *Matrix(T), F_core: Matrix(T), ncore: usize, nas: usize, gpa: Allocator) !void {
     const nmo = C.ncol();
 
-    const nvirt = nmo - ncore - nact;
+    const nvirt = nmo - ncore - nas;
 
     if (nvirt <= 1) return;
 
     const nbf = C.nrow();
-    const v_start = ncore + nact;
+    const v_start = ncore + nas;
 
     var F_vv = try Matrix(T).init(nvirt, nvirt, gpa);
     defer F_vv.deinit(gpa);
@@ -913,7 +880,7 @@ fn canonicalizeVirtualSubspace(comptime T: type, C: *Matrix(T), F_core: Matrix(T
 
 /// Executes the two-step CASSCF macro-iteration cycle alternating configuration and orbital optimizations.
 fn casscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []const []const usize, weights: []const T, opt: Options, log: bool, gpa: Allocator) !void {
-    const ncore, const nact = .{ (ints.sys.nel - opt.active_electrons) / 2, opt.active_orbitals };
+    const ncore, const nas = .{ (ints.sys.nel - opt.active_electrons) / 2, opt.active_orbitals };
 
     const nmo, var prev_energy: T = .{ C.ncol(), 0 };
 
@@ -938,11 +905,11 @@ fn casscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []co
 
         prev_energy = sa_E;
 
-        var D_act, var d_act = try buildStateAveragedRdm(T, dets, C_ci, weights, ncore, nact, gpa);
+        var D_as, var d_as = try buildStateAveragedAsRdm(T, dets, C_ci, weights, ncore, nas, gpa);
 
         defer {
-            D_act.deinit(gpa);
-            d_act.deinit(gpa);
+            D_as.deinit(gpa);
+            d_as.deinit(gpa);
         }
 
         var H_mo = try Matrix(T).init(nmo, nmo, gpa);
@@ -958,12 +925,12 @@ fn casscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []co
         var F_gen = try Matrix(T).initZero(nmo, nmo, gpa);
         defer F_gen.deinit(gpa);
 
-        try buildGeneralizedFock(T, &F_gen, H_mo, g_mo, D_act, d_act, ncore, gpa);
+        try buildGeneralizedFock(T, &F_gen, H_mo, g_mo, D_as, d_as, ncore, gpa);
 
         var g_orb = try Matrix(T).initZero(nmo, nmo, gpa);
         defer g_orb.deinit(gpa);
 
-        const grad_norm = computeOrbitalGradient(T, &g_orb, F_gen, ncore, nact);
+        const grad_norm = computeOrbitalGradient(T, &g_orb, F_gen, ncore, nas);
 
         if (log) {
             const fmt = "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9}\n";
@@ -984,12 +951,12 @@ fn casscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []co
             var F_diag = try Vector(T).init(nmo, gpa);
             defer F_diag.deinit(gpa);
 
-            try buildDiagonalFock(T, &F_diag, H_mo, g_mo, D_act, ncore, gpa);
+            try buildDiagonalFock(T, &F_diag, H_mo, g_mo, D_as, ncore, gpa);
 
             var kappa = try Matrix(T).initZero(nmo, nmo, gpa);
             defer kappa.deinit(gpa);
 
-            buildOrbitalRotationGenerator(T, &kappa, g_orb, F_diag, D_act, ncore);
+            buildOrbitalRotationGenerator(T, &kappa, g_orb, F_diag, D_as, ncore);
 
             try applyCayleyTransform(T, C, kappa, gpa);
         }
@@ -997,22 +964,22 @@ fn casscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []co
 }
 
 /// Evaluates the orbital gradient matrix and returns the maximum gradient norm among non-redundant pairs.
-fn computeOrbitalGradient(comptime T: type, g_orb: *Matrix(T), F_gen: Matrix(T), ncore: usize, nact: usize) T {
+fn computeOrbitalGradient(comptime T: type, g_orb: *Matrix(T), F_gen: Matrix(T), ncore: usize, nas: usize) T {
     const nmo, var max_norm: T = .{ F_gen.nrow(), 0 };
 
     for (0..nmo) |p| for (0..nmo) |q| {
         g_orb.ptr(p, q).* = 2 * (F_gen.at(p, q) - F_gen.at(q, p));
     };
 
-    for (0..ncore) |j| for (ncore + nact..nmo) |b| {
+    for (0..ncore) |j| for (ncore + nas..nmo) |b| {
         max_norm = @max(max_norm, @abs(g_orb.at(b, j)));
     };
 
-    for (ncore..ncore + nact) |u| for (ncore + nact..nmo) |b| {
+    for (ncore..ncore + nas) |u| for (ncore + nas..nmo) |b| {
         max_norm = @max(max_norm, @abs(g_orb.at(b, u)));
     };
 
-    for (0..ncore) |j| for (ncore..ncore + nact) |u| {
+    for (0..ncore) |j| for (ncore..ncore + nas) |u| {
         max_norm = @max(max_norm, @abs(g_orb.at(u, j)));
     };
 

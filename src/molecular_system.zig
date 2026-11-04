@@ -343,6 +343,42 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Computes the classical Coulomb repulsion gradient between nuclei.
+        pub fn nuclearRepulsionGradient(self: @This(), gpa: Allocator) !Matrix(T) {
+            var dVN = try Matrix(T).initZero(self.atoms.len, 3, gpa);
+            errdefer dVN.deinit(gpa);
+
+            for (0..self.atoms.len) |A| {
+                const ZA = @as(T, @floatFromInt(self.atoms[A]));
+
+                const xA = self.coors[3 * A + 0];
+                const yA = self.coors[3 * A + 1];
+                const zA = self.coors[3 * A + 2];
+
+                for (0..self.atoms.len) |B| {
+                    if (B == A) continue;
+
+                    const ZB = @as(T, @floatFromInt(self.atoms[B]));
+
+                    const xB = self.coors[3 * B + 0];
+                    const yB = self.coors[3 * B + 1];
+                    const zB = self.coors[3 * B + 2];
+
+                    const dx = xA - xB;
+                    const dy = yA - yB;
+                    const dz = zA - zB;
+
+                    const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                    dVN.ptr(A, 0).* -= ZA * ZB * dx / (dist * dist * dist);
+                    dVN.ptr(A, 1).* -= ZA * ZB * dy / (dist * dist * dist);
+                    dVN.ptr(A, 2).* -= ZA * ZB * dz / (dist * dist * dist);
+                }
+            }
+
+            return dVN;
+        }
+
         /// Constructs the spin-blocked nuclear-electron attraction potential matrix.
         pub fn nuclearSpin(self: @This(), nthreads: usize, gpa: Allocator) !Matrix(T) {
             var V = try self.nuclear(nthreads, gpa);
