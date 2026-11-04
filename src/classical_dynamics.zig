@@ -1730,7 +1730,7 @@ fn sampleWignerAbInitio(comptime T: type, io: std.Io, ensemble: *Ensemble(T), op
             var res = try electronic_structure.run(T, io, m_opt, true, gpa);
             defer res.deinit(gpa);
 
-            const sys = if (@hasField(@TypeOf(res), "hartree_fock")) res.hartree_fock.ints.sys else res.ints.sys;
+            const sys = electronic_structure.getSystem(T, res);
 
             try sampleWignerFromHessian(T, ensemble, res.hess[0], sys, opt, gpa);
         },

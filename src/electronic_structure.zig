@@ -74,18 +74,14 @@ pub fn generateDeterminants(nel: usize, nbf: usize, opt: anytype, gpa: Allocator
 }
 
 /// Extracts the one-particle reduced density matrix from an electronic structure result.
-pub fn getDensity(comptime T: type, result: anytype) ?Matrix(T) {
-    const ResType = if (@typeInfo(@TypeOf(result)) == .pointer) @TypeOf(result.*) else @TypeOf(result);
+pub fn getDensity(comptime T: type, result: anytype) Matrix(T) {
+    const ResType = switch (@typeInfo(@TypeOf(result))) { .pointer => |p| p.child, else => @TypeOf(result) };
 
-    if (@hasField(ResType, "P")) {
+    if (comptime @hasField(ResType, "P")) {
         return result.P;
     }
 
-    if (@hasField(ResType, "hartree_fock")) {
-        return result.hartree_fock.P;
-    }
-
-    return null;
+    return result.hartree_fock.P;
 }
 
 /// Identifies the active electronic structure method type from configuration options.
@@ -106,11 +102,33 @@ pub fn getNacvPath(path: []const u8, p0: u32, p1: u32, gpa: Allocator) ![]const 
     return try std.fmt.allocPrint(gpa, "{s}_{d}_{d}{s}", .{ path[0 .. path.len - ext.len], p0, p1, ext });
 }
 
+/// Extracts molecular orbital coefficient matrices from converged electronic structure results.
+pub fn getOrbitals(comptime T: type, result: anytype) Matrix(T) {
+    const ResType = switch (@typeInfo(@TypeOf(result))) { .pointer => |p| p.child, else => @TypeOf(result) };
+
+    if (comptime @hasField(ResType, "C_mo")) {
+        return result.C_mo;
+    }
+
+    return result.hartree_fock.C_mo;
+}
+
 /// Derives output paths for state nuclear derivatives by appending the state index before extension.
 pub fn getStatePath(path: []const u8, state: u32, gpa: Allocator) ![]const u8 {
     const ext = std.fs.path.extension(path);
 
     return try std.fmt.allocPrint(gpa, "{s}_{d}{s}", .{ path[0 .. path.len - ext.len], state, ext });
+}
+
+/// Extracts the molecular system geometry and basis specification from calculation results.
+pub fn getSystem(comptime T: type, result: anytype) MolecularSystem(T) {
+    const ResType = switch (@typeInfo(@TypeOf(result))) { .pointer => |p| p.child, else => @TypeOf(result) };
+
+    if (comptime @hasField(ResType, "hartree_fock")) {
+        return result.hartree_fock.ints.sys;
+    }
+
+    return result.ints.sys;
 }
 
 /// Extracts the nuclear geometry, basis set, and electronic spin parameters from method options.
@@ -132,6 +150,19 @@ pub fn getSystemParams(opt: anytype) SystemParams {
             .system = opt.system,
         };
     }
+}
+
+/// Determines whether spin-unrestricted or generalized orbital treatment is enabled.
+pub fn isGeneralized(opt: anytype) bool {
+    return if (comptime isPostScf(@TypeOf(opt))) opt.hartree_fock.generalized else opt.generalized;
+}
+
+/// Identifies whether the electronic structure method resolves multiple electronic states.
+pub fn isMultiState(comptime Opt: type) bool {
+    return switch (getMethodKind(Opt)) {
+        .casscf, .configuration_interaction => true,
+        .hartree_fock, .moller_plesset => false,
+    };
 }
 
 /// Indicates whether the specified electronic structure method builds upon an SCF reference.

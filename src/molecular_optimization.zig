@@ -11,13 +11,12 @@ const Vector = @import("tensor.zig").Vector;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
 const gemv = @import("linear_algebra.zig").gemv;
+const getDensity = @import("electronic_structure.zig").getDensity;
 const printf = @import("read_write.zig").printf;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 
 /// Performs molecular geometry optimization using the Broyden-Fletcher-Goldfarb-Shanno (BFGS) quasi-Newton method.
 pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
-    const is_hf = @hasField(@TypeOf(opt), "hartree_fock");
-
     const bfgs_opt = opt.optimize.?.bfgs;
 
     var run_opt = stripSecondaryOptions(opt, .{});
@@ -72,7 +71,7 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
             try printf(io, fmt, .{ i + 1, energy, rms_grad, max_grad, time_str });
         }
 
-        const P = try (if (comptime is_hf) res.hartree_fock.P else res.P).clone(gpa);
+        const P = try getDensity(T, res).clone(gpa);
 
         if (guess_density) |*p| p.deinit(gpa);
 
@@ -156,8 +155,6 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
 
 /// Optimizes molecular geometry by walking in the direction of the steepest descent negative energy gradient.
 pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
-    const is_hf = @hasField(@TypeOf(opt), "hartree_fock");
-
     const sd_opt = opt.optimize.?.steepest_descent;
 
     var run_opt = stripSecondaryOptions(opt, .{});
@@ -199,7 +196,7 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
             try printf(io, fmt, .{ i + 1, energy, rms_grad, max_grad, time_str });
         }
 
-        const P = try (if (comptime is_hf) res.hartree_fock.P else res.P).clone(gpa);
+        const P = try getDensity(T, res).clone(gpa);
 
         if (guess_density) |*p| p.deinit(gpa);
 

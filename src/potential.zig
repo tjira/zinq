@@ -438,15 +438,15 @@ fn AbInitio(comptime T: type) type {
                 dets.deinit(self.gpa);
             }
 
-            const C_mo_ptr = if (@hasField(@TypeOf(res), "C_mo")) &res.C_mo else &res.hartree_fock.C_mo;
+            var C_mo = electronic_structure.getOrbitals(T, res);
 
-            alignPhases(T, C_mo_ptr, &res.C_ci, self.C_mo.items[traj], self.C_ci.items[traj], dets.items, gen, flipped);
+            alignPhases(T, &C_mo, &res.C_ci, self.C_mo.items[traj], self.C_ci.items[traj], dets.items, gen, flipped);
 
             if (self.C_mo.items[traj] == null) {
-                self.C_mo.items[traj] = try Matrix(T).init(C_mo_ptr.nrow(), C_mo_ptr.ncol(), self.gpa);
+                self.C_mo.items[traj] = try Matrix(T).init(C_mo.nrow(), C_mo.ncol(), self.gpa);
             }
 
-            @memcpy(self.C_mo.items[traj].?.data, C_mo_ptr.data);
+            @memcpy(self.C_mo.items[traj].?.data, C_mo.data);
 
             if (self.C_ci.items[traj] == null) {
                 self.C_ci.items[traj] = try Matrix(T).init(res.C_ci.nrow(), res.C_ci.ncol(), self.gpa);
@@ -501,7 +501,7 @@ fn AbInitio(comptime T: type) type {
             var res = try electronic_structure.runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg.items[traj], false, self.gpa);
             defer res.deinit(self.gpa);
 
-            const P = electronic_structure.getDensity(T, res).?;
+            const P = electronic_structure.getDensity(T, res);
 
             if (self.Pg.items[traj] == null) {
                 self.Pg.items[traj] = try Matrix(T).init(P.nrow(), P.ncol(), self.gpa);
