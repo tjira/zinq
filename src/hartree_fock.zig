@@ -228,24 +228,27 @@ pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWor
 
     buildEnergyWeightedDensity(T, &W, ws.C.*, ws.e.*, nocc, generalized);
 
-    for (0..ints.sys.atoms.len) |i| for (0..3) |j| {
-        const offset = (3 * i + j) * dS.shape[1] * dS.shape[2];
+    for (0..ints.sys.atoms.len) |A| for (0..3) |alpha| {
+        const offset = (3 * A + alpha) * dS.shape[1] * dS.shape[2];
 
         const h_G = dot(T, ws.P.asVector(), Vector(T).fromSlice(dH.data[offset .. offset + ws.P.data.len]));
+
         const s_G = dot(T, W.asVector(), Vector(T).fromSlice(dS.data[offset .. offset + W.data.len]));
 
         var g_G: T = 0;
 
         if (ints.dg) |dg| {
-            for (0..dg.shape[1]) |p| for (0..dg.shape[2]) |q| for (0..dg.shape[3]) |r| for (0..dg.shape[4]) |s| {
-                const dg1 = dg.at(.{ 3 * i + j, p, r, q, s });
-                const dg2 = dg.at(.{ 3 * i + j, p, q, r, s });
+            for (0..dg.shape[1]) |mu| for (0..dg.shape[2]) |nu| {
+                for (0..dg.shape[3]) |lambda| for (0..dg.shape[4]) |sigma| {
+                    const dg1 = dg.at(.{ 3 * A + alpha, mu, lambda, nu, sigma });
+                    const dg2 = dg.at(.{ 3 * A + alpha, mu, lambda, sigma, nu });
 
-                g_G += 0.5 * ws.P.at(p, q) * ws.P.at(r, s) * (dg1 - exch_factor * dg2);
+                    g_G += 0.5 * ws.P.at(mu, nu) * ws.P.at(lambda, sigma) * (dg1 - exch_factor * dg2);
+                };
             };
         }
 
-        G.ptr(i, j).* += h_G + g_G - s_G;
+        G.ptr(A, alpha).* += h_G + g_G - s_G;
     };
 
     if (ints.dg == null) {
@@ -315,31 +318,31 @@ pub fn nuclearRepulsionGradient(comptime T: type, sys: MolecularSystem(T), gpa: 
     var dVN = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
     errdefer dVN.deinit(gpa);
 
-    for (0..sys.atoms.len) |i| {
-        const Zi = @as(T, @floatFromInt(sys.atoms[i]));
+    for (0..sys.atoms.len) |A| {
+        const ZA = @as(T, @floatFromInt(sys.atoms[A]));
 
-        const xi = sys.coors[3 * i + 0];
-        const yi = sys.coors[3 * i + 1];
-        const zi = sys.coors[3 * i + 2];
+        const xA = sys.coors[3 * A + 0];
+        const yA = sys.coors[3 * A + 1];
+        const zA = sys.coors[3 * A + 2];
 
-        for (0..sys.atoms.len) |k| {
-            if (k == i) continue;
+        for (0..sys.atoms.len) |B| {
+            if (B == A) continue;
 
-            const Zk = @as(T, @floatFromInt(sys.atoms[k]));
+            const ZB = @as(T, @floatFromInt(sys.atoms[B]));
 
-            const xk = sys.coors[3 * k + 0];
-            const yk = sys.coors[3 * k + 1];
-            const zk = sys.coors[3 * k + 2];
+            const xB = sys.coors[3 * B + 0];
+            const yB = sys.coors[3 * B + 1];
+            const zB = sys.coors[3 * B + 2];
 
-            const dx = xi - xk;
-            const dy = yi - yk;
-            const dz = zi - zk;
+            const dx = xA - xB;
+            const dy = yA - yB;
+            const dz = zA - zB;
 
             const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
 
-            dVN.ptr(i, 0).* -= Zi * Zk * dx / (dist * dist * dist);
-            dVN.ptr(i, 1).* -= Zi * Zk * dy / (dist * dist * dist);
-            dVN.ptr(i, 2).* -= Zi * Zk * dz / (dist * dist * dist);
+            dVN.ptr(A, 0).* -= ZA * ZB * dx / (dist * dist * dist);
+            dVN.ptr(A, 1).* -= ZA * ZB * dy / (dist * dist * dist);
+            dVN.ptr(A, 2).* -= ZA * ZB * dz / (dist * dist * dist);
         }
     }
 
@@ -441,51 +444,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     energy[0] = try scf(T, io, opt, ints, ws, if (dft) |*d| d else null, log, gpa);
 
-    if (log and opt.generalized) {
-        const s2 = try calculateTotalSpin(T, P, ints.S.?, gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printTotalSpin(T, io, s2, opt.multiplicity, method_str);
-    }
-
-    if (log and opt.lowdin) {
-        var charges = try lowdin(T, sys.*, P, ints.S.?, gpa);
-        defer charges.deinit(gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printLowdinCharges(T, io, sys.*, charges, method_str);
-    }
-
-    if (log and opt.mayer) {
-        var bo = try mayer(T, sys.*, P, ints.S.?, gpa);
-        defer bo.deinit(gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printMayerBondOrders(T, io, sys.*, bo, method_str);
-    }
-
-    if (log and opt.mulliken) {
-        var charges = try mulliken(T, sys.*, P, ints.S.?, gpa);
-        defer charges.deinit(gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printMullikenCharges(T, io, sys.*, charges, method_str);
-    }
-
-    if (log and opt.wiberg) {
-        var bo = try wiberg(T, sys.*, P, ints.S.?, gpa);
-        defer bo.deinit(gpa);
-
-        const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
-
-        try printWibergBondOrders(T, io, sys.*, bo, method_str);
-    }
-
     if (log) {
+        try computeElectronicProperties(T, io, opt, sys.*, P, ints.S.?, if (dft) |*d| d else null, gpa);
+
         try printf(io, "\nNUCLEAR REPULSION ENERGY: {d:.14} Eh\n", .{VN});
     }
 
@@ -503,7 +464,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     try exportMatrices(T, io, opt.write, C, P, F);
 
     if (analytic_grad) {
-        const g0 = try calculateNuclearGradient(T, ints, ws, opt.generalized, if (dft) |*d| d else null, opt.nthreads, gpa);
+        const pot = if (dft) |*d| d else null;
+
+        const g0 = try calculateNuclearGradient(T, ints, ws, opt.generalized, pot, opt.nthreads, gpa);
 
         grad = try gpa.alloc(Matrix(T), 1);
 
@@ -532,6 +495,33 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     return result;
 }
 
+/// Evaluates the exchange-correlation potential and adds its contribution to the Fock matrix.
+fn addDftPotential(comptime T: type, F: *Matrix(T), dft: *DftPotential(T), P: Matrix(T), sys: MolecularSystem(T), gpa: Allocator) !void {
+    try dft.evaluate(sys, P, gpa);
+
+    const nbf = F.nrow();
+
+    for (0..nbf) |mu| for (0..nbf) |nu| {
+        F.ptr(mu, nu).* += dft.Vxc.at(mu, nu);
+    };
+}
+
+/// Constructs the Coulomb matrix J by contracting two-electron repulsion integrals with the density matrix.
+fn buildCoulombMatrix(comptime T: type, J: *Matrix(T), g: Tensor(T, 4), P: Matrix(T)) void {
+    const nbf = J.nrow();
+
+    std.debug.assert(g.shape[0] == nbf);
+    std.debug.assert(g.shape[1] == nbf);
+    std.debug.assert(g.shape[2] == nbf);
+    std.debug.assert(g.shape[3] == nbf);
+    std.debug.assert(P.shape[0] == nbf);
+    std.debug.assert(P.shape[1] == nbf);
+
+    for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
+        J.ptr(mu, nu).* += P.at(lambda, sigma) * g.at(.{ mu, lambda, nu, sigma });
+    };
+}
+
 /// Constructs the one-particle reduced density matrix in the atomic basis from molecular orbital coefficients.
 fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) void {
     std.debug.assert(C.shape[0] == P.shape[0]);
@@ -539,14 +529,14 @@ fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize
 
     const factor: T = if (generalized) 1 else 2;
 
-    for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
+    for (0..P.shape[0]) |mu| for (0..P.shape[1]) |nu| {
         var sum: T = 0;
 
-        for (0..nocc) |k| {
-            sum += factor * C.at(i, k) * C.at(j, k);
+        for (0..nocc) |i| {
+            sum += factor * C.at(mu, i) * C.at(nu, i);
         }
 
-        P.ptr(i, j).* = sum;
+        P.ptr(mu, nu).* = sum;
     };
 }
 
@@ -554,14 +544,30 @@ fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize
 fn buildEnergyWeightedDensity(comptime T: type, W: *Matrix(T), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool) void {
     const factor: T = if (generalized) 1 else 2;
 
-    for (0..W.nrow()) |i| for (0..W.ncol()) |j| {
+    for (0..W.nrow()) |mu| for (0..W.ncol()) |nu| {
         var sum: T = 0;
 
-        for (0..nocc) |k| {
-            sum += factor * e.at(k) * C.at(i, k) * C.at(j, k);
+        for (0..nocc) |i| {
+            sum += factor * e.at(i) * C.at(mu, i) * C.at(nu, i);
         }
 
-        W.ptr(i, j).* = sum;
+        W.ptr(mu, nu).* = sum;
+    };
+}
+
+/// Constructs the exchange matrix K by contracting two-electron repulsion integrals with the density matrix.
+fn buildExchangeMatrix(comptime T: type, K: *Matrix(T), g: Tensor(T, 4), P: Matrix(T)) void {
+    const nbf = K.nrow();
+
+    std.debug.assert(g.shape[0] == nbf);
+    std.debug.assert(g.shape[1] == nbf);
+    std.debug.assert(g.shape[2] == nbf);
+    std.debug.assert(g.shape[3] == nbf);
+    std.debug.assert(P.shape[0] == nbf);
+    std.debug.assert(P.shape[1] == nbf);
+
+    for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
+        K.ptr(mu, nu).* += P.at(lambda, sigma) * g.at(.{ mu, lambda, sigma, nu });
     };
 }
 
@@ -574,8 +580,8 @@ fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matri
     std.debug.assert(P.shape[0] == nbf);
     std.debug.assert(P.shape[1] == nbf);
 
-    for (0..nbf) |i| for (0..nbf) |j| {
-        F.ptr(i, j).* = ints.H.?.at(i, j);
+    for (0..nbf) |mu| for (0..nbf) |nu| {
+        F.ptr(mu, nu).* = ints.H.?.at(mu, nu);
     };
 
     var exch_factor: T = if (opt.generalized) 1 else 0.5;
@@ -595,15 +601,23 @@ fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matri
     }
 
     if (!opt.integral_direct) {
-        contractTwoElectronFock(T, F, ints.g.?, P, exch_factor);
+        var J = try Matrix(T).initZero(nbf, nbf, gpa);
+        defer J.deinit(gpa);
+
+        var K = try Matrix(T).initZero(nbf, nbf, gpa);
+        defer K.deinit(gpa);
+
+        buildCoulombMatrix(T, &J, ints.g.?, P);
+
+        buildExchangeMatrix(T, &K, ints.g.?, P);
+
+        for (0..nbf) |mu| for (0..nbf) |nu| {
+            F.ptr(mu, nu).* += J.at(mu, nu) - exch_factor * K.at(mu, nu);
+        };
     }
 
     if (dft) |pot| {
-        try pot.evaluate(ints.sys, P, gpa);
-
-        for (0..nbf) |j| for (0..nbf) |k| {
-            F.ptr(j, k).* += pot.Vxc.at(j, k);
-        };
+        try addDftPotential(T, F, pot, P, ints.sys, gpa);
     }
 
     F.symmetrize();
@@ -613,12 +627,12 @@ fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matri
 fn calculateElectronicEnergy(comptime T: type, ints: Integrals(T), F: Matrix(T), P: Matrix(T), dft: ?*DftPotential(T)) T {
     var energy: T = if (dft) |pot| pot.Exc else 0;
 
-    if (dft) |pot| for (0..P.shape[0]) |j| for (0..P.shape[1]) |k| {
-        energy += 0.5 * P.at(j, k) * (ints.H.?.at(j, k) + F.at(j, k) - pot.Vxc.at(j, k));
+    if (dft) |pot| for (0..P.shape[0]) |mu| for (0..P.shape[1]) |nu| {
+        energy += 0.5 * P.at(mu, nu) * (ints.H.?.at(mu, nu) + F.at(mu, nu) - pot.Vxc.at(mu, nu));
     };
 
-    if (dft == null) for (0..P.shape[0]) |i| for (0..P.shape[1]) |j| {
-        energy += 0.5 * P.at(i, j) * (ints.H.?.at(i, j) + F.at(i, j));
+    if (dft == null) for (0..P.shape[0]) |mu| for (0..P.shape[1]) |nu| {
+        energy += 0.5 * P.at(mu, nu) * (ints.H.?.at(mu, nu) + F.at(mu, nu));
     };
 
     return energy;
@@ -638,6 +652,45 @@ fn computeDensityRmsDifference(comptime T: type, P_new: Matrix(T), P_old: Matrix
     }
 
     return @sqrt(sum_sq / @as(T, @floatFromInt(P_new.data.len)));
+}
+
+/// Computes and prints requested population and spin properties from the converged density matrix.
+fn computeElectronicProperties(comptime T: type, io: std.Io, opt: Options, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(T), dft: ?*DftPotential(T), gpa: Allocator) !void {
+    const method_str = if (dft) |_| "DFT" else "HARTREE-FOCK";
+
+    if (opt.generalized) {
+        const s2 = try calculateTotalSpin(T, P, S, gpa);
+
+        try printTotalSpin(T, io, s2, opt.multiplicity, method_str);
+    }
+
+    if (opt.lowdin) {
+        var charges = try lowdin(T, sys, P, S, gpa);
+        defer charges.deinit(gpa);
+
+        try printLowdinCharges(T, io, sys, charges, method_str);
+    }
+
+    if (opt.mayer) {
+        var bo = try mayer(T, sys, P, S, gpa);
+        defer bo.deinit(gpa);
+
+        try printMayerBondOrders(T, io, sys, bo, method_str);
+    }
+
+    if (opt.mulliken) {
+        var charges = try mulliken(T, sys, P, S, gpa);
+        defer charges.deinit(gpa);
+
+        try printMullikenCharges(T, io, sys, charges, method_str);
+    }
+
+    if (opt.wiberg) {
+        var bo = try wiberg(T, sys, P, S, gpa);
+        defer bo.deinit(gpa);
+
+        try printWibergBondOrders(T, io, sys, bo, method_str);
+    }
 }
 
 /// Evaluates the DIIS orbital gradient error matrix representing the commutator [F, P] in the non-orthogonal AO basis.
@@ -663,24 +716,8 @@ fn computeOrbitalGradient(comptime T: type, err: *Matrix(T), F: Matrix(T), P: Ma
 
     gemm(T, &FPS, FP, S, 1, 0, false, false);
 
-    for (0..nbf) |i| for (0..nbf) |j| {
-        err.ptr(i, j).* = FPS.at(i, j) - FPS.at(j, i);
-    };
-}
-
-/// Contracts four-center two-electron repulsion integrals with the density matrix to form Coulomb and exchange terms.
-fn contractTwoElectronFock(comptime T: type, F: *Matrix(T), g: Tensor(T, 4), P: Matrix(T), exch_factor: T) void {
-    const nbf = F.nrow();
-
-    std.debug.assert(g.shape[0] == nbf);
-    std.debug.assert(g.shape[1] == nbf);
-    std.debug.assert(g.shape[2] == nbf);
-    std.debug.assert(g.shape[3] == nbf);
-    std.debug.assert(P.shape[0] == nbf);
-    std.debug.assert(P.shape[1] == nbf);
-
-    for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-        F.ptr(k, l).* += P.at(i, j) * (g.at(.{ i, k, j, l }) - exch_factor * g.at(.{ i, j, k, l }));
+    for (0..nbf) |mu| for (0..nbf) |nu| {
+        err.ptr(mu, nu).* = FPS.at(mu, nu) - FPS.at(nu, mu);
     };
 }
 

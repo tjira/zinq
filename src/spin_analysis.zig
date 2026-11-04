@@ -32,12 +32,12 @@ pub fn SpinBlocks(comptime T: type) type {
             var ba = try Matrix(T).init(nbf, nbf, gpa);
             errdefer ba.deinit(gpa);
 
-            for (0..nbf) |i| for (0..nbf) |j| {
-                a.ptr(i, j).* = P.at(i + 0 * nbf, j + 0 * nbf);
-                b.ptr(i, j).* = P.at(i + 1 * nbf, j + 1 * nbf);
+            for (0..nbf) |mu| for (0..nbf) |nu| {
+                a.ptr(mu, nu).* = P.at(mu + 0 * nbf, nu + 0 * nbf);
+                b.ptr(mu, nu).* = P.at(mu + 1 * nbf, nu + 1 * nbf);
 
-                ab.ptr(i, j).* = P.at(i + 0 * nbf, j + 1 * nbf);
-                ba.ptr(i, j).* = P.at(i + 1 * nbf, j + 0 * nbf);
+                ab.ptr(mu, nu).* = P.at(mu + 0 * nbf, nu + 1 * nbf);
+                ba.ptr(mu, nu).* = P.at(mu + 1 * nbf, nu + 0 * nbf);
             };
 
             return .{ .a = a, .b = b, .ab = ab, .ba = ba };
@@ -67,8 +67,8 @@ pub fn calculateTotalSpin(comptime T: type, P: Matrix(T), S: Matrix(T), gpa: All
     var S_spatial = try Matrix(T).init(nbf, nbf, gpa);
     defer S_spatial.deinit(gpa);
 
-    for (0..nbf) |i| for (0..nbf) |j| {
-        S_spatial.ptr(i, j).* = S.at(i, j);
+    for (0..nbf) |mu| for (0..nbf) |nu| {
+        S_spatial.ptr(mu, nu).* = S.at(mu, nu);
     };
 
     var AS = try Matrix(T).init(nbf, nbf, gpa);
@@ -99,17 +99,17 @@ pub fn calculateTotalSpin(comptime T: type, P: Matrix(T), S: Matrix(T), gpa: All
 
     var tr_absbas: T = 0;
 
-    for (0..nbf) |i| {
-        n_a += AS.at(i, i);
-        n_b += BS.at(i, i);
+    for (0..nbf) |mu| {
+        n_a += AS.at(mu, mu);
+        n_b += BS.at(mu, mu);
 
-        tr_abs += ABS.at(i, i);
-        tr_bas += BAS.at(i, i);
+        tr_abs += ABS.at(mu, mu);
+        tr_bas += BAS.at(mu, mu);
 
-        for (0..nbf) |j| {
-            tr_asbs += AS.at(i, j) * BS.at(j, i);
+        for (0..nbf) |nu| {
+            tr_asbs += AS.at(mu, nu) * BS.at(nu, mu);
 
-            tr_absbas += ABS.at(i, j) * BAS.at(j, i);
+            tr_absbas += ABS.at(mu, nu) * BAS.at(nu, mu);
         }
     }
 

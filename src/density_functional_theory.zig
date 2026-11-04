@@ -1,4 +1,4 @@
-//! Implements density functional theory (DFT) numerical integration grids and exchange-correlation potential evaluation.
+//! Implements DFT numerical integration grids and exchange-correlation potential evaluation.
 
 const std = @import("std");
 
@@ -19,7 +19,7 @@ const XCOutput = @import("xc_functional.zig").XCOutput;
 
 const evaluateXCFunctional = @import("xc_functional.zig").evaluateXCFunctional;
 
-/// Factory function returning a struct representing the DFT exchange-correlation potential and numerical integration grid.
+/// Constructs a struct representing the DFT exchange-correlation potential and numerical integration grid.
 pub fn DftPotential(comptime T: type) type {
     return struct {
         exch: ?libxc.xc_func_type,
@@ -212,226 +212,222 @@ pub fn DftPotential(comptime T: type) type {
 
         /// Calculates the spin-polarized electronic density, its gradient, and kinetic energy density on the grid.
         fn computeDensityPolarized(self: @This(), P: Matrix(T), ctx: *DftEvaluationContext(T)) void {
-            for (0..self.pts.shape[0]) |i| {
-                var rho_a: T = 0;
-                var rho_b: T = 0;
+            const b = ctx.sys.nbf;
 
-                var del_rho_a_x: T = 0;
-                var del_rho_a_y: T = 0;
-                var del_rho_a_z: T = 0;
-                var del_rho_b_x: T = 0;
-                var del_rho_b_y: T = 0;
-                var del_rho_b_z: T = 0;
+            for (0..self.pts.shape[0]) |g| {
+                const rho_a = contractDensity(P, ctx.basisgrid, 0, g, b);
+                const rho_b = contractDensity(P, ctx.basisgrid, b, g, b);
 
-                var tau_a: T = 0;
-                var tau_b: T = 0;
-
-                var lapl_sum_a: T = 0;
-                var lapl_sum_b: T = 0;
-
-                for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
-                    const b = ctx.sys.nbf;
-
-                    const p_val_a = P.at(mu + 0, nu + 0);
-                    const p_val_b = P.at(mu + b, nu + b);
-
-                    const phi_mu = ctx.basisgrid.phi.at(i, mu);
-                    const phi_nu = ctx.basisgrid.phi.at(i, nu);
-
-                    rho_a += p_val_a * phi_mu * phi_nu;
-                    rho_b += p_val_b * phi_mu * phi_nu;
-
-                    if (ctx.needs_deriv) {
-                        const dphi_dx_mu = ctx.basisgrid.dphi_dx.?.at(i, mu);
-                        const dphi_dy_mu = ctx.basisgrid.dphi_dy.?.at(i, mu);
-                        const dphi_dz_mu = ctx.basisgrid.dphi_dz.?.at(i, mu);
-
-                        const term_a = p_val_a * phi_nu;
-                        const term_b = p_val_b * phi_nu;
-
-                        del_rho_a_x += term_a * dphi_dx_mu;
-                        del_rho_a_y += term_a * dphi_dy_mu;
-                        del_rho_a_z += term_a * dphi_dz_mu;
-
-                        del_rho_b_x += term_b * dphi_dx_mu;
-                        del_rho_b_y += term_b * dphi_dy_mu;
-                        del_rho_b_z += term_b * dphi_dz_mu;
-
-                        if (ctx.has_mgga) {
-                            const dphi_dx_nu = ctx.basisgrid.dphi_dx.?.at(i, nu);
-                            const dphi_dy_nu = ctx.basisgrid.dphi_dy.?.at(i, nu);
-                            const dphi_dz_nu = ctx.basisgrid.dphi_dz.?.at(i, nu);
-
-                            const dphi_dx_mu_nu = dphi_dx_mu * dphi_dx_nu;
-                            const dphi_dy_mu_nu = dphi_dy_mu * dphi_dy_nu;
-                            const dphi_dz_mu_nu = dphi_dz_mu * dphi_dz_nu;
-
-                            const dphi_dot = dphi_dx_mu_nu + dphi_dy_mu_nu + dphi_dz_mu_nu;
-
-                            tau_a += p_val_a * dphi_dot;
-                            tau_b += p_val_b * dphi_dot;
-
-                            const lapl_mu = ctx.basisgrid.lapl.?.at(i, mu);
-
-                            lapl_sum_a += p_val_a * lapl_mu * phi_nu;
-                            lapl_sum_b += p_val_b * lapl_mu * phi_nu;
-                        }
-                    }
-                };
-
-                ctx.density.rho_val.ptr(i, 0).* = rho_a;
-                ctx.density.rho_val.ptr(i, 1).* = rho_b;
+                ctx.density.rho_val.ptr(g, 0).* = rho_a;
+                ctx.density.rho_val.ptr(g, 1).* = rho_b;
 
                 if (ctx.needs_deriv) {
-                    del_rho_a_x *= 2;
-                    del_rho_a_y *= 2;
-                    del_rho_a_z *= 2;
-                    del_rho_b_x *= 2;
-                    del_rho_b_y *= 2;
-                    del_rho_b_z *= 2;
+                    const del_rho_a = contractDensityGradient(P, ctx.basisgrid, 0, g, b);
+                    const del_rho_b = contractDensityGradient(P, ctx.basisgrid, b, g, b);
 
-                    ctx.density.del_rho.?.ptr(i, 0).* = del_rho_a_x;
-                    ctx.density.del_rho.?.ptr(i, 1).* = del_rho_a_y;
-                    ctx.density.del_rho.?.ptr(i, 2).* = del_rho_a_z;
-                    ctx.density.del_rho.?.ptr(i, 3).* = del_rho_b_x;
-                    ctx.density.del_rho.?.ptr(i, 4).* = del_rho_b_y;
-                    ctx.density.del_rho.?.ptr(i, 5).* = del_rho_b_z;
+                    ctx.density.del_rho.?.ptr(g, 0).* = del_rho_a[0];
+                    ctx.density.del_rho.?.ptr(g, 1).* = del_rho_a[1];
+                    ctx.density.del_rho.?.ptr(g, 2).* = del_rho_a[2];
+                    ctx.density.del_rho.?.ptr(g, 3).* = del_rho_b[0];
+                    ctx.density.del_rho.?.ptr(g, 4).* = del_rho_b[1];
+                    ctx.density.del_rho.?.ptr(g, 5).* = del_rho_b[2];
 
-                    const del_rho_a_x_2 = del_rho_a_x * del_rho_a_x;
-                    const del_rho_a_y_2 = del_rho_a_y * del_rho_a_y;
-                    const del_rho_a_z_2 = del_rho_a_z * del_rho_a_z;
+                    const ga, const gb = .{ del_rho_a, del_rho_b };
 
-                    ctx.density.sig_val.?.ptr(i, 0).* = del_rho_a_x_2 + del_rho_a_y_2 + del_rho_a_z_2;
+                    const sig_aa = ga[0] * ga[0] + ga[1] * ga[1] + ga[2] * ga[2];
+                    const sig_ab = ga[0] * gb[0] + ga[1] * gb[1] + ga[2] * gb[2];
+                    const sig_bb = gb[0] * gb[0] + gb[1] * gb[1] + gb[2] * gb[2];
 
-                    const del_rho_a_b_x_2 = del_rho_a_x * del_rho_b_x;
-                    const del_rho_a_b_y_2 = del_rho_a_y * del_rho_b_y;
-                    const del_rho_a_b_z_2 = del_rho_a_z * del_rho_b_z;
-
-                    ctx.density.sig_val.?.ptr(i, 1).* = del_rho_a_b_x_2 + del_rho_a_b_y_2 + del_rho_a_b_z_2;
-
-                    const del_rho_b_x_2 = del_rho_b_x * del_rho_b_x;
-                    const del_rho_b_y_2 = del_rho_b_y * del_rho_b_y;
-                    const del_rho_b_z_2 = del_rho_b_z * del_rho_b_z;
-
-                    ctx.density.sig_val.?.ptr(i, 2).* = del_rho_b_x_2 + del_rho_b_y_2 + del_rho_b_z_2;
+                    ctx.density.sig_val.?.ptr(g, 0).* = sig_aa;
+                    ctx.density.sig_val.?.ptr(g, 1).* = sig_ab;
+                    ctx.density.sig_val.?.ptr(g, 2).* = sig_bb;
                 }
 
                 if (ctx.has_mgga) {
-                    ctx.density.tau_val.?.ptr(i, 0).* = 0.5 * tau_a;
-                    ctx.density.tau_val.?.ptr(i, 1).* = 0.5 * tau_b;
+                    const mgga_a = contractKineticEnergyDensity(P, ctx.basisgrid, 0, g, b);
+                    const mgga_b = contractKineticEnergyDensity(P, ctx.basisgrid, b, g, b);
 
-                    ctx.density.lap_val.?.ptr(i, 0).* = 2 * (lapl_sum_a + tau_a);
-                    ctx.density.lap_val.?.ptr(i, 1).* = 2 * (lapl_sum_b + tau_b);
+                    ctx.density.tau_val.?.ptr(g, 0).* = mgga_a.tau;
+                    ctx.density.tau_val.?.ptr(g, 1).* = mgga_b.tau;
+
+                    ctx.density.lap_val.?.ptr(g, 0).* = mgga_a.lapl;
+                    ctx.density.lap_val.?.ptr(g, 1).* = mgga_b.lapl;
                 }
             }
         }
 
         /// Calculates the spin-unpolarized electronic density, its gradient, and kinetic energy density on the grid.
         fn computeDensityUnpolarized(self: @This(), P: Matrix(T), ctx: *DftEvaluationContext(T)) void {
-            for (0..self.pts.shape[0]) |i| {
-                var rho_tot: T = 0;
-                var tau_tot: T = 0;
+            for (0..self.pts.shape[0]) |g| {
+                const rho_tot = contractDensity(P, ctx.basisgrid, 0, g, ctx.sys.nbf);
 
-                var lapl_sum_tot: T = 0;
-
-                var del_rho_x: T = 0;
-                var del_rho_y: T = 0;
-                var del_rho_z: T = 0;
-
-                for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
-                    const phi_mu = ctx.basisgrid.phi.at(i, mu);
-                    const phi_nu = ctx.basisgrid.phi.at(i, nu);
-
-                    rho_tot += P.at(mu, nu) * phi_mu * phi_nu;
-
-                    if (ctx.needs_deriv) {
-                        const dphi_dx_mu = ctx.basisgrid.dphi_dx.?.at(i, mu);
-                        const dphi_dy_mu = ctx.basisgrid.dphi_dy.?.at(i, mu);
-                        const dphi_dz_mu = ctx.basisgrid.dphi_dz.?.at(i, mu);
-
-                        const term = P.at(mu, nu) * phi_nu;
-
-                        del_rho_x += term * dphi_dx_mu;
-                        del_rho_y += term * dphi_dy_mu;
-                        del_rho_z += term * dphi_dz_mu;
-
-                        if (ctx.has_mgga) {
-                            const dphi_dx_nu = ctx.basisgrid.dphi_dx.?.at(i, nu);
-                            const dphi_dy_nu = ctx.basisgrid.dphi_dy.?.at(i, nu);
-                            const dphi_dz_nu = ctx.basisgrid.dphi_dz.?.at(i, nu);
-
-                            const dphi_dx_mu_nu = dphi_dx_mu * dphi_dx_nu;
-                            const dphi_dy_mu_nu = dphi_dy_mu * dphi_dy_nu;
-                            const dphi_dz_mu_nu = dphi_dz_mu * dphi_dz_nu;
-
-                            const dphi_dot = dphi_dx_mu_nu + dphi_dy_mu_nu + dphi_dz_mu_nu;
-
-                            tau_tot += P.at(mu, nu) * dphi_dot;
-
-                            lapl_sum_tot += P.at(mu, nu) * ctx.basisgrid.lapl.?.at(i, mu) * phi_nu;
-                        }
-                    }
-                };
-
-                ctx.density.rho_val.ptr(i, 0).* = rho_tot;
+                ctx.density.rho_val.ptr(g, 0).* = rho_tot;
 
                 if (ctx.needs_deriv) {
-                    del_rho_x *= 2;
-                    del_rho_y *= 2;
-                    del_rho_z *= 2;
+                    const del_rho = contractDensityGradient(P, ctx.basisgrid, 0, g, ctx.sys.nbf);
 
-                    ctx.density.del_rho.?.ptr(i, 0).* = del_rho_x;
-                    ctx.density.del_rho.?.ptr(i, 1).* = del_rho_y;
-                    ctx.density.del_rho.?.ptr(i, 2).* = del_rho_z;
+                    ctx.density.del_rho.?.ptr(g, 0).* = del_rho[0];
+                    ctx.density.del_rho.?.ptr(g, 1).* = del_rho[1];
+                    ctx.density.del_rho.?.ptr(g, 2).* = del_rho[2];
 
-                    const del_rho_x_2 = del_rho_x * del_rho_x;
-                    const del_rho_y_2 = del_rho_y * del_rho_y;
-                    const del_rho_z_2 = del_rho_z * del_rho_z;
+                    const sig_tot = del_rho[0] * del_rho[0] + del_rho[1] * del_rho[1] + del_rho[2] * del_rho[2];
 
-                    ctx.density.sig_val.?.ptr(i, 0).* = del_rho_x_2 + del_rho_y_2 + del_rho_z_2;
+                    ctx.density.sig_val.?.ptr(g, 0).* = sig_tot;
                 }
 
                 if (ctx.has_mgga) {
-                    ctx.density.tau_val.?.ptr(i, 0).* = 0.5 * tau_tot;
+                    const mgga = contractKineticEnergyDensity(P, ctx.basisgrid, 0, g, ctx.sys.nbf);
 
-                    ctx.density.lap_val.?.ptr(i, 0).* = 2 * (lapl_sum_tot + tau_tot);
+                    ctx.density.tau_val.?.ptr(g, 0).* = mgga.tau;
+
+                    ctx.density.lap_val.?.ptr(g, 0).* = mgga.lapl;
                 }
             }
+        }
+
+        /// Computes the intermediate gradient vector X_mu = 2 * v_sigma * grad(rho) . grad(chi_mu) on the grid.
+        fn computeIntermediateGradientVector(X: *Vector(T), del_rho: Matrix(T), basis: BasisGrid(T), v_sigma: T, g: usize, nbf: usize) void {
+            const w_x = 2 * v_sigma * del_rho.at(g, 0);
+            const w_y = 2 * v_sigma * del_rho.at(g, 1);
+            const w_z = 2 * v_sigma * del_rho.at(g, 2);
+
+            for (0..nbf) |mu| {
+                const dx_mu = basis.dphi_dx.?.at(g, mu);
+                const dy_mu = basis.dphi_dy.?.at(g, mu);
+                const dz_mu = basis.dphi_dz.?.at(g, mu);
+
+                X.data[mu] = w_x * dx_mu + w_y * dy_mu + w_z * dz_mu;
+            }
+        }
+
+        /// Computes spin-resolved intermediate gradient vectors X_a and X_b on the numerical integration grid.
+        fn computeIntermediateGradientVectorPolarized(X_a: *Vector(T), X_b: *Vector(T), del_rho: Matrix(T), basis: BasisGrid(T), sig_pot: Matrix(T), g: usize, nbf: usize) void {
+            const g_a_x = del_rho.at(g, 0);
+            const g_a_y = del_rho.at(g, 1);
+            const g_a_z = del_rho.at(g, 2);
+
+            const g_b_x = del_rho.at(g, 3);
+            const g_b_y = del_rho.at(g, 4);
+            const g_b_z = del_rho.at(g, 5);
+
+            const v_sig_aa = sig_pot.at(g, 0);
+            const v_sig_ab = sig_pot.at(g, 1);
+            const v_sig_bb = sig_pot.at(g, 2);
+
+            const w_a_x = 2 * v_sig_aa * g_a_x + v_sig_ab * g_b_x;
+            const w_a_y = 2 * v_sig_aa * g_a_y + v_sig_ab * g_b_y;
+            const w_a_z = 2 * v_sig_aa * g_a_z + v_sig_ab * g_b_z;
+
+            const w_b_x = 2 * v_sig_bb * g_b_x + v_sig_ab * g_a_x;
+            const w_b_y = 2 * v_sig_bb * g_b_y + v_sig_ab * g_a_y;
+            const w_b_z = 2 * v_sig_bb * g_b_z + v_sig_ab * g_a_z;
+
+            for (0..nbf) |mu| {
+                const d_dx = basis.dphi_dx.?.at(g, mu);
+                const d_dy = basis.dphi_dy.?.at(g, mu);
+                const d_dz = basis.dphi_dz.?.at(g, mu);
+
+                X_a.data[mu] = w_a_x * d_dx + w_a_y * d_dy + w_a_z * d_dz;
+                X_b.data[mu] = w_b_x * d_dx + w_b_y * d_dy + w_b_z * d_dz;
+            }
+        }
+
+        /// Evaluates the electron density rho at a grid point by contracting the density matrix with basis functions.
+        fn contractDensity(P: Matrix(T), basis: BasisGrid(T), offset: usize, g: usize, nbf: usize) T {
+            var rho: T = 0;
+
+            for (0..nbf) |mu| for (0..nbf) |nu| {
+                rho += P.at(mu + offset, nu + offset) * basis.phi.at(g, mu) * basis.phi.at(g, nu);
+            };
+
+            return rho;
+        }
+
+        /// Contracts atomic orbital gradients with the density matrix at a grid point to evaluate grad(rho).
+        fn contractDensityGradient(P: Matrix(T), basis: BasisGrid(T), offset: usize, g: usize, nbf: usize) [3]T {
+            var del_rho = [3]T{ 0, 0, 0 };
+
+            for (0..nbf) |mu| {
+                const dphi_dx_mu = basis.dphi_dx.?.at(g, mu);
+                const dphi_dy_mu = basis.dphi_dy.?.at(g, mu);
+                const dphi_dz_mu = basis.dphi_dz.?.at(g, mu);
+
+                for (0..nbf) |nu| {
+                    const term = P.at(mu + offset, nu + offset) * basis.phi.at(g, nu);
+
+                    del_rho[0] += term * dphi_dx_mu;
+                    del_rho[1] += term * dphi_dy_mu;
+                    del_rho[2] += term * dphi_dz_mu;
+                }
+            }
+
+            return .{ 2 * del_rho[0], 2 * del_rho[1], 2 * del_rho[2] };
+        }
+
+        /// Contracts atomic orbital gradients and Laplacians with the density matrix to evaluate tau and lapl(rho).
+        fn contractKineticEnergyDensity(P: Matrix(T), basis: BasisGrid(T), offset: usize, g: usize, nbf: usize) struct { tau: T, lapl: T } {
+            var tau: T, var lapl_sum: T = .{ 0, 0 };
+
+            for (0..nbf) |mu| {
+                const dphi_dx_mu = basis.dphi_dx.?.at(g, mu);
+                const dphi_dy_mu = basis.dphi_dy.?.at(g, mu);
+                const dphi_dz_mu = basis.dphi_dz.?.at(g, mu);
+
+                const lapl_mu = basis.lapl.?.at(g, mu);
+
+                for (0..nbf) |nu| {
+                    const p_val = P.at(mu + offset, nu + offset);
+
+                    const phi_nu = basis.phi.at(g, nu);
+
+                    const dphi_dx_nu = basis.dphi_dx.?.at(g, nu);
+                    const dphi_dy_nu = basis.dphi_dy.?.at(g, nu);
+                    const dphi_dz_nu = basis.dphi_dz.?.at(g, nu);
+
+                    const dphi_dot = dphi_dx_mu * dphi_dx_nu + dphi_dy_mu * dphi_dy_nu + dphi_dz_mu * dphi_dz_nu;
+
+                    tau += p_val * dphi_dot;
+
+                    lapl_sum += p_val * lapl_mu * phi_nu;
+                }
+            }
+
+            return .{ .tau = 0.5 * tau, .lapl = 2 * (lapl_sum + tau) };
         }
 
         /// Evaluates atomic orbital basis functions and their spatial derivatives at all grid points.
         fn evaluateBasis(self: @This(), sys: MolecularSystem(T), basis: BasisGrid(T)) void {
             const needs_d1, const needs_d2 = .{ basis.dphi_dx != null, basis.lapl != null };
 
-            for (0..self.pts.shape[0]) |i| {
-                const x = self.pts.at(i, 0);
-                const y = self.pts.at(i, 1);
-                const z = self.pts.at(i, 2);
+            for (0..self.pts.shape[0]) |g| {
+                const x = self.pts.at(g, 0);
+                const y = self.pts.at(g, 1);
+                const z = self.pts.at(g, 2);
 
                 if (needs_d2) {
-                    const phi_row = basis.phi.rowSlice(i).ptr;
+                    const phi_row = basis.phi.rowSlice(g).ptr;
 
-                    const dx_row = basis.dphi_dx.?.rowSlice(i).ptr;
-                    const dy_row = basis.dphi_dy.?.rowSlice(i).ptr;
-                    const dz_row = basis.dphi_dz.?.rowSlice(i).ptr;
+                    const dx_row = basis.dphi_dx.?.rowSlice(g).ptr;
+                    const dy_row = basis.dphi_dy.?.rowSlice(g).ptr;
+                    const dz_row = basis.dphi_dz.?.rowSlice(g).ptr;
 
-                    const lapl_row = basis.lapl.?.rowSlice(i).ptr;
+                    const lapl_row = basis.lapl.?.rowSlice(g).ptr;
 
                     libint.libint_evaluate_basis_vgl(phi_row, dx_row, dy_row, dz_row, lapl_row, x, y, z, sys.ptr);
                 }
 
                 if (needs_d1 and !needs_d2) {
-                    const phi_row = basis.phi.rowSlice(i).ptr;
+                    const phi_row = basis.phi.rowSlice(g).ptr;
 
-                    const dx_row = basis.dphi_dx.?.rowSlice(i).ptr;
-                    const dy_row = basis.dphi_dy.?.rowSlice(i).ptr;
-                    const dz_row = basis.dphi_dz.?.rowSlice(i).ptr;
+                    const dx_row = basis.dphi_dx.?.rowSlice(g).ptr;
+                    const dy_row = basis.dphi_dy.?.rowSlice(g).ptr;
+                    const dz_row = basis.dphi_dz.?.rowSlice(g).ptr;
 
                     libint.libint_evaluate_basis_vg(phi_row, dx_row, dy_row, dz_row, x, y, z, sys.ptr);
                 }
 
                 if (!needs_d1 and !needs_d2) {
-                    libint.libint_evaluate_basis_v(basis.phi.rowSlice(i).ptr, x, y, z, sys.ptr);
+                    libint.libint_evaluate_basis_v(basis.phi.rowSlice(g).ptr, x, y, z, sys.ptr);
                 }
             }
         }
@@ -519,52 +515,25 @@ pub fn DftPotential(comptime T: type) type {
                 if (X_b) |*x| x.deinit(gpa);
             }
 
-            for (0..self.pts.shape[0]) |i| {
-                const w = self.wgh.at(i);
+            for (0..self.pts.shape[0]) |g| {
+                const w = self.wgh.at(g);
 
-                energy_exc += (ctx.density.rho_val.at(i, 0) + ctx.density.rho_val.at(i, 1)) * ctx.potgd.exc.at(i) * w;
+                energy_exc += (ctx.density.rho_val.at(g, 0) + ctx.density.rho_val.at(g, 1)) * ctx.potgd.exc.at(g) * w;
 
-                const v_a = ctx.potgd.rho_pot.at(i, 0);
-                const v_b = ctx.potgd.rho_pot.at(i, 1);
+                const v_a = ctx.potgd.rho_pot.at(g, 0);
+                const v_b = ctx.potgd.rho_pot.at(g, 1);
 
                 if (ctx.needs_deriv) {
-                    const g_a_x = ctx.density.del_rho.?.at(i, 0);
-                    const g_a_y = ctx.density.del_rho.?.at(i, 1);
-                    const g_a_z = ctx.density.del_rho.?.at(i, 2);
+                    computeIntermediateGradientVectorPolarized(&X_a.?, &X_b.?, ctx.density.del_rho.?, ctx.basisgrid, ctx.potgd.sig_pot.?, g, ctx.sys.nbf);
 
-                    const g_b_x = ctx.density.del_rho.?.at(i, 3);
-                    const g_b_y = ctx.density.del_rho.?.at(i, 4);
-                    const g_b_z = ctx.density.del_rho.?.at(i, 5);
-
-                    const v_sig_aa = ctx.potgd.sig_pot.?.at(i, 0);
-                    const v_sig_ab = ctx.potgd.sig_pot.?.at(i, 1);
-                    const v_sig_bb = ctx.potgd.sig_pot.?.at(i, 2);
-
-                    const w_a_x = 2 * v_sig_aa * g_a_x + v_sig_ab * g_b_x;
-                    const w_a_y = 2 * v_sig_aa * g_a_y + v_sig_ab * g_b_y;
-                    const w_a_z = 2 * v_sig_aa * g_a_z + v_sig_ab * g_b_z;
-
-                    const w_b_x = 2 * v_sig_bb * g_b_x + v_sig_ab * g_a_x;
-                    const w_b_y = 2 * v_sig_bb * g_b_y + v_sig_ab * g_a_y;
-                    const w_b_z = 2 * v_sig_bb * g_b_z + v_sig_ab * g_a_z;
-
-                    for (0..ctx.sys.nbf) |mu| {
-                        const d_dx = ctx.basisgrid.dphi_dx.?.at(i, mu);
-                        const d_dy = ctx.basisgrid.dphi_dy.?.at(i, mu);
-                        const d_dz = ctx.basisgrid.dphi_dz.?.at(i, mu);
-
-                        X_a.?.data[mu] = w_a_x * d_dx + w_a_y * d_dy + w_a_z * d_dz;
-                        X_b.?.data[mu] = w_b_x * d_dx + w_b_y * d_dy + w_b_z * d_dz;
-                    }
-
-                    const v_tau_a = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(i, 0) else 0.0;
-                    const v_tau_b = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(i, 1) else 0.0;
-                    const v_lap_a = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(i, 0) else 0.0;
-                    const v_lap_b = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(i, 1) else 0.0;
+                    const v_tau_a = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(g, 0) else 0.0;
+                    const v_tau_b = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(g, 1) else 0.0;
+                    const v_lap_a = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(g, 0) else 0.0;
+                    const v_lap_b = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(g, 1) else 0.0;
 
                     for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
-                        const phi_mu = ctx.basisgrid.phi.at(i, mu);
-                        const phi_nu = ctx.basisgrid.phi.at(i, nu);
+                        const phi_mu = ctx.basisgrid.phi.at(g, mu);
+                        const phi_nu = ctx.basisgrid.phi.at(g, nu);
 
                         const b = ctx.sys.nbf;
 
@@ -572,17 +541,17 @@ pub fn DftPotential(comptime T: type) type {
                         var val_b = v_b * phi_mu * phi_nu + X_b.?.data[mu] * phi_nu + phi_mu * X_b.?.data[nu];
 
                         if (ctx.has_mgga) {
-                            const dx_mu_nu = ctx.basisgrid.dphi_dx.?.at(i, mu) * ctx.basisgrid.dphi_dx.?.at(i, nu);
-                            const dy_mu_nu = ctx.basisgrid.dphi_dy.?.at(i, mu) * ctx.basisgrid.dphi_dy.?.at(i, nu);
-                            const dz_mu_nu = ctx.basisgrid.dphi_dz.?.at(i, mu) * ctx.basisgrid.dphi_dz.?.at(i, nu);
+                            const dx_mu_nu = ctx.basisgrid.dphi_dx.?.at(g, mu) * ctx.basisgrid.dphi_dx.?.at(g, nu);
+                            const dy_mu_nu = ctx.basisgrid.dphi_dy.?.at(g, mu) * ctx.basisgrid.dphi_dy.?.at(g, nu);
+                            const dz_mu_nu = ctx.basisgrid.dphi_dz.?.at(g, mu) * ctx.basisgrid.dphi_dz.?.at(g, nu);
 
                             const dphi_dot = dx_mu_nu + dy_mu_nu + dz_mu_nu;
 
                             val_a += 0.5 * v_tau_a * dphi_dot;
                             val_b += 0.5 * v_tau_b * dphi_dot;
 
-                            const lapl_mu = ctx.basisgrid.lapl.?.at(i, mu);
-                            const lapl_nu = ctx.basisgrid.lapl.?.at(i, nu);
+                            const lapl_mu = ctx.basisgrid.lapl.?.at(g, mu);
+                            const lapl_nu = ctx.basisgrid.lapl.?.at(g, nu);
 
                             const lapl_term = lapl_mu * phi_nu + 2 * dphi_dot + phi_mu * lapl_nu;
 
@@ -597,8 +566,8 @@ pub fn DftPotential(comptime T: type) type {
 
                 if (!ctx.needs_deriv) {
                     for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
-                        const phi_mu = ctx.basisgrid.phi.at(i, mu);
-                        const phi_nu = ctx.basisgrid.phi.at(i, nu);
+                        const phi_mu = ctx.basisgrid.phi.at(g, mu);
+                        const phi_nu = ctx.basisgrid.phi.at(g, nu);
 
                         const b = ctx.sys.nbf;
 
@@ -622,47 +591,37 @@ pub fn DftPotential(comptime T: type) type {
                 if (X_a) |*x| x.deinit(gpa);
             }
 
-            for (0..self.pts.shape[0]) |i| {
-                const w = self.wgh.at(i);
+            for (0..self.pts.shape[0]) |g| {
+                const w = self.wgh.at(g);
 
-                energy_exc += ctx.density.rho_val.at(i, 0) * ctx.potgd.exc.at(i) * w;
+                energy_exc += ctx.density.rho_val.at(g, 0) * ctx.potgd.exc.at(g) * w;
 
                 if (ctx.needs_deriv) {
-                    const v_sigma = ctx.potgd.sig_pot.?.at(i, 0);
+                    const v_sigma = ctx.potgd.sig_pot.?.at(g, 0);
 
-                    const w_x = 2 * v_sigma * ctx.density.del_rho.?.at(i, 0);
-                    const w_y = 2 * v_sigma * ctx.density.del_rho.?.at(i, 1);
-                    const w_z = 2 * v_sigma * ctx.density.del_rho.?.at(i, 2);
+                    computeIntermediateGradientVector(&X_a.?, ctx.density.del_rho.?, ctx.basisgrid, v_sigma, g, ctx.sys.nbf);
 
-                    for (0..ctx.sys.nbf) |mu| {
-                        const dx_mu = ctx.basisgrid.dphi_dx.?.at(i, mu);
-                        const dy_mu = ctx.basisgrid.dphi_dy.?.at(i, mu);
-                        const dz_mu = ctx.basisgrid.dphi_dz.?.at(i, mu);
-
-                        X_a.?.data[mu] = w_x * dx_mu + w_y * dy_mu + w_z * dz_mu;
-                    }
-
-                    const v_tau = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(i, 0) else 0.0;
-                    const v_lap = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(i, 0) else 0.0;
+                    const v_tau = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(g, 0) else 0.0;
+                    const v_lap = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(g, 0) else 0.0;
 
                     for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
-                        const rho_val = ctx.potgd.rho_pot.at(i, 0);
-                        const phi_mu = ctx.basisgrid.phi.at(i, mu);
-                        const phi_nu = ctx.basisgrid.phi.at(i, nu);
+                        const rho_val = ctx.potgd.rho_pot.at(g, 0);
+                        const phi_mu = ctx.basisgrid.phi.at(g, mu);
+                        const phi_nu = ctx.basisgrid.phi.at(g, nu);
 
                         var val = rho_val * phi_mu * phi_nu + X_a.?.data[mu] * phi_nu + phi_mu * X_a.?.data[nu];
 
                         if (ctx.has_mgga) {
-                            const dx_mu_nu = ctx.basisgrid.dphi_dx.?.at(i, mu) * ctx.basisgrid.dphi_dx.?.at(i, nu);
-                            const dy_mu_nu = ctx.basisgrid.dphi_dy.?.at(i, mu) * ctx.basisgrid.dphi_dy.?.at(i, nu);
-                            const dz_mu_nu = ctx.basisgrid.dphi_dz.?.at(i, mu) * ctx.basisgrid.dphi_dz.?.at(i, nu);
+                            const dx_mu_nu = ctx.basisgrid.dphi_dx.?.at(g, mu) * ctx.basisgrid.dphi_dx.?.at(g, nu);
+                            const dy_mu_nu = ctx.basisgrid.dphi_dy.?.at(g, mu) * ctx.basisgrid.dphi_dy.?.at(g, nu);
+                            const dz_mu_nu = ctx.basisgrid.dphi_dz.?.at(g, mu) * ctx.basisgrid.dphi_dz.?.at(g, nu);
 
                             const dphi_dot = dx_mu_nu + dy_mu_nu + dz_mu_nu;
 
                             val += 0.5 * v_tau * dphi_dot;
 
-                            const lapl_mu = ctx.basisgrid.lapl.?.at(i, mu);
-                            const lapl_nu = ctx.basisgrid.lapl.?.at(i, nu);
+                            const lapl_mu = ctx.basisgrid.lapl.?.at(g, mu);
+                            const lapl_nu = ctx.basisgrid.lapl.?.at(g, nu);
 
                             const lapl_term = lapl_mu * phi_nu + 2 * dphi_dot + phi_mu * lapl_nu;
 
@@ -674,12 +633,13 @@ pub fn DftPotential(comptime T: type) type {
                 }
 
                 if (!ctx.needs_deriv) for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
-                    const phi_mu = ctx.basisgrid.phi.at(i, mu);
-                    const phi_nu = ctx.basisgrid.phi.at(i, nu);
+                    const phi_mu = ctx.basisgrid.phi.at(g, mu);
+                    const phi_nu = ctx.basisgrid.phi.at(g, nu);
 
-                    self.Vxc.ptr(mu, nu).* += ctx.potgd.rho_pot.at(i, 0) * phi_mu * phi_nu * w;
+                    self.Vxc.ptr(mu, nu).* += ctx.potgd.rho_pot.at(g, 0) * phi_mu * phi_nu * w;
                 };
             }
+
             return energy_exc;
         }
     };

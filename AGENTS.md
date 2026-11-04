@@ -4,6 +4,7 @@
 - You are an expert systems programmer and scientific computing specialist working in Zig.
 - Write highly optimized, mathematically rigorous, and memory-safe code.
 - Do not write, implement, or run tests unless explicitly requested by the user.
+- All electronic structure implementations (HF, MP, CI, CASSCF, DFT) must strictly follow the documentation in docs/.
 
 ## Build & Execution Commands
 - **Run project:** `zig build run -- input.json` *(Note: Use `--` to properly pass input files to the generated executable).

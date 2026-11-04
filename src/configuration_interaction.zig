@@ -235,119 +235,41 @@ pub fn buildActiveRdm(comptime T: type, dets: []const []const usize, C_ci: Matri
 
         const phase: T = if (diff.len > 0) @as(T, @floatFromInt(sA * sB)) else 1;
 
-        if (diff.len == 0) {
-            for (0..nact) |u| {
-                const pa = 2 * (ncore + u) + 0;
-                const pb = 2 * (ncore + u) + 1;
-
-                const occ_a = std.mem.indexOfScalar(usize, dets[i], pa) != null;
-                const occ_b = std.mem.indexOfScalar(usize, dets[i], pb) != null;
-
-                if (occ_a) D_act.ptr(u, u).* += c_prod;
-                if (occ_b) D_act.ptr(u, u).* += c_prod;
-
-                if (occ_a and occ_b) d_act.ptr(.{ u, u, u, u }).* += 2 * c_prod;
-
-                for (0..nact) |w| if (u != w) {
-                    const qa = 2 * (ncore + w) + 0;
-                    const qb = 2 * (ncore + w) + 1;
-
-                    const w_a = std.mem.indexOfScalar(usize, dets[i], qa) != null;
-                    const w_b = std.mem.indexOfScalar(usize, dets[i], qb) != null;
-
-                    const nu: T = (if (occ_a) @as(T, 1) else @as(T, 0)) + (if (occ_b) @as(T, 1) else @as(T, 0));
-
-                    const nw: T = (if (w_a) @as(T, 1) else @as(T, 0)) + (if (w_b) @as(T, 1) else @as(T, 0));
-
-                    d_act.ptr(.{ u, u, w, w }).* += nu * nw * c_prod;
-
-                    var exch: T = 0;
-
-                    if (occ_a and w_a) exch += 1;
-                    if (occ_b and w_b) exch += 1;
-
-                    d_act.ptr(.{ u, w, w, u }).* -= exch * c_prod;
-                };
-            }
-        }
-
-        if (diff.len == 1) {
-            const p = diff.a[0];
-            const q = diff.b[0];
-
-            if (p >= 2 * ncore and q >= 2 * ncore) {
-                const u = (p / 2) - ncore;
-                const v = (q / 2) - ncore;
-
-                if (u < nact and v < nact and (p % 2 == q % 2)) {
-                    D_act.ptr(u, v).* += c_prod * phase;
-
-                    for (0..nact) |w| {
-                        const ka = 2 * (ncore + w) + 0;
-                        const kb = 2 * (ncore + w) + 1;
-
-                        const w_a = std.mem.indexOfScalar(usize, dets[i], ka) != null;
-                        const w_b = std.mem.indexOfScalar(usize, dets[i], kb) != null;
-
-                        const occ_ka = w_a and ka != p and ka != q;
-                        const occ_kb = w_b and kb != p and kb != q;
-
-                        const nw: T = (if (occ_ka) @as(T, 1) else @as(T, 0)) + (if (occ_kb) @as(T, 1) else @as(T, 0));
-
-                        d_act.ptr(.{ u, v, w, w }).* += nw * c_prod * phase;
-                        d_act.ptr(.{ w, w, u, v }).* += nw * c_prod * phase;
-
-                        var exch: T = 0;
-
-                        if ((p % 2 == 0) and occ_ka) exch += 1;
-                        if ((p % 2 == 1) and occ_kb) exch += 1;
-
-                        d_act.ptr(.{ u, w, w, v }).* -= exch * c_prod * phase;
-                        d_act.ptr(.{ w, v, u, w }).* -= exch * c_prod * phase;
-                    }
-                }
-            }
-        }
-
-        if (diff.len == 2) {
-            const p = diff.a[0];
-            const q = diff.a[1];
-            const r = diff.b[0];
-            const s = diff.b[1];
-
-            if (p >= 2 * ncore and q >= 2 * ncore and r >= 2 * ncore and s >= 2 * ncore) {
-                const up = (p / 2) - ncore;
-                const uq = (q / 2) - ncore;
-                const ur = (r / 2) - ncore;
-                const us = (s / 2) - ncore;
-
-                if (up < nact and uq < nact and ur < nact and us < nact) {
-                    if ((p % 2 == r % 2) and (q % 2 == s % 2)) {
-                        d_act.ptr(.{ up, ur, uq, us }).* += c_prod * phase;
-                        d_act.ptr(.{ uq, us, up, ur }).* += c_prod * phase;
-                    }
-
-                    if ((p % 2 == s % 2) and (q % 2 == r % 2)) {
-                        d_act.ptr(.{ up, us, uq, ur }).* -= c_prod * phase;
-                        d_act.ptr(.{ uq, ur, up, us }).* -= c_prod * phase;
-                    }
-                }
-            }
+        switch (diff.len) {
+            0 => accumulateRdmDiagonal(T, &D_act, &d_act, dets[i], c_prod, ncore, nact),
+            1 => accumulateRdmSingle(T, &D_act, &d_act, dets[i], diff.a[0], diff.b[0], phase, c_prod, ncore, nact),
+            2 => accumulateRdmDouble(T, &d_act, diff.a, diff.b, phase, c_prod, ncore, nact),
+            else => {},
         }
     };
 
     return .{ D_act, d_act };
 }
 
+/// Evaluates electronic Hamiltonian matrix elements across Slater determinants using Slater-Condon rules.
+pub fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_so: Matrix(T), g_so: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
+    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
+    errdefer H_CI.deinit(gpa);
+
+    for (0..dets.len) |m| for (m..dets.len) |n_det| {
+        const val = slater(T, dets[m], dets[n_det], h_so, g_so);
+
+        H_CI.ptr(m, n_det).* = val;
+        H_CI.ptr(n_det, m).* = val;
+    };
+
+    return H_CI;
+}
+
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
 pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
 
-    var H_MS, var g_MS = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
+    var h_so, var g_so = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
 
     defer {
-        H_MS.deinit(gpa);
-        g_MS.deinit(gpa);
+        h_so.deinit(gpa);
+        g_so.deinit(gpa);
     }
 
     if (io) |out| {
@@ -356,15 +278,8 @@ pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, det
         timer = std.Io.Timestamp.now(out, .real);
     }
 
-    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
+    var H_CI = try buildHamiltonianMatrix(T, dets, h_so, g_so, gpa);
     defer H_CI.deinit(gpa);
-
-    for (0..dets.len) |i| for (i..dets.len) |j| {
-        const val = slater(T, dets[i], dets[j], H_MS, g_MS);
-
-        H_CI.ptr(i, j).* = val;
-        H_CI.ptr(j, i).* = val;
-    };
 
     if (io) |out| {
         try printf(out, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(out, .real)});
@@ -639,7 +554,7 @@ pub fn signOfExcitations(S: []const usize, U: []const usize) i2 {
 }
 
 /// Computes the Hamiltonian matrix element between two Slater determinants using the Slater-Condon rules.
-pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
+pub fn slater(comptime T: type, A: []const usize, B: []const usize, h_so: Matrix(T), g_so: Tensor(T, 4)) T {
     const diff = findDeterminantDifferences(A, B) orelse return Value(T).fromFloat(0).val;
 
     const s_A = signOfExcitations(A, diff.a[0..diff.len]);
@@ -647,7 +562,7 @@ pub fn slater(comptime T: type, A: []const usize, B: []const usize, H_MS: Matrix
 
     const phase = @as(primType(T), @floatFromInt(s_A * s_B));
 
-    return evaluateSlaterCondon(T, A, diff.a, diff.b, diff.len, phase, H_MS, g_MS);
+    return evaluateSlaterCondon(T, A, diff.a, diff.b, diff.len, phase, h_so, g_so);
 }
 
 /// Solves the Configuration Interaction Hamiltonian eigenvalue problem over the determinant space.
@@ -661,27 +576,11 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     const generalized = opt.hartree_fock.generalized;
 
-    if (opt.space == .cas) {
-        const c = opt.space.cas;
+    const nel = hfres.ints.sys.nel;
 
-        const nel, const nact_el, const nact = .{ hfres.ints.sys.nel, c.active_electrons, c.active_orbitals };
+    const nmo = if (generalized) hfres.C_mo.ncol() / 2 else hfres.C_mo.ncol();
 
-        if (nact_el > nel or (nel - nact_el) % 2 != 0) {
-            std.log.err("ACTIVE ELECTRONS MUST BE LESS THAN OR EQUAL TO TOTAL ELECTRONS WITH CLOSED SHELL CORE", .{});
-
-            return error.InvalidInput;
-        }
-
-        const ncore = (nel - nact_el) / 2;
-
-        const nmo = if (generalized) hfres.C_mo.ncol() / 2 else hfres.C_mo.ncol();
-
-        if (ncore + nact > nmo) {
-            std.log.err("ACTIVE PLUS CORE ORBITALS EXCEED MOLECULAR ORBITAL COUNT", .{});
-
-            return error.InvalidInput;
-        }
-    }
+    try validateSpaceOptions(opt, nel, nmo);
 
     var timer = std.Io.Timestamp.now(io, .real);
 
@@ -737,7 +636,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     const nrep = try hfres.ints.sys.nrep();
 
-    var E, var C_ci = try computeCi(T, if (log) io else null, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, gpa);
+    const io_ci = if (log) io else null;
+
+    var E, var C_ci = try computeCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, gpa);
 
     errdefer {
         E.deinit(gpa);
@@ -770,7 +671,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     }
 
     if (opt.gradient) |g| switch (g) {
-        .analytic => |a| grad = try gradient(T, hfres, C_ci, dets, a.states orelse &[_]u32{0}, gpa),
+        .analytic => |a| grad = try calculateNuclearGradient(T, hfres, C_ci, dets, a.states orelse &[_]u32{0}, gpa),
         .numeric => {},
     };
 
@@ -828,69 +729,118 @@ pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 
         ao2so_pppp(T, &g_SO, g);
     }
 
-    var H_MS = try Matrix(T).init(nsp, nsp, gpa);
-    errdefer H_MS.deinit(gpa);
+    var h_so = try Matrix(T).init(nsp, nsp, gpa);
+    errdefer h_so.deinit(gpa);
 
-    ao2mo_pp(T, &H_MS, H_SO, C_SO);
+    ao2mo_pp(T, &h_so, H_SO, C_SO);
 
-    var g_MS = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
-    errdefer g_MS.deinit(gpa);
+    var g_so = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
+    errdefer g_so.deinit(gpa);
 
-    try ao2mo_pppp(T, &g_MS, g_SO, C_SO, gpa);
+    try ao2mo_pppp(T, &g_so, g_SO, C_SO, gpa);
 
-    return .{ H_MS, g_MS };
+    return .{ h_so, g_so };
 }
 
-/// Evaluates Hamiltonian matrix elements between Slater determinants using the Slater-Condon excitation rules.
-fn evaluateSlaterCondon(comptime T: type, A: []const usize, diff_a: [2]usize, diff_b: [2]usize, len: usize, phase: primType(T), H_MS: Matrix(T), g_MS: Tensor(T, 4)) T {
-    switch (len) {
-        0 => {
-            var sum = Value(T).fromFloat(0);
+/// Accumulates diagonal 1-RDM and 2-RDM contributions between identical configurations.
+fn accumulateRdmDiagonal(comptime T: type, D_act: *Matrix(T), d_act: *Tensor(T, 4), det: []const usize, c_prod: T, ncore: usize, nact: usize) void {
+    for (0..nact) |u| {
+        const pa = 2 * (ncore + u) + 0;
+        const pb = 2 * (ncore + u) + 1;
 
-            for (0..A.len) |i| {
-                sum = sum.add(Value(T).init(H_MS.at(A[i], A[i])));
+        const occ_a = std.mem.indexOfScalar(usize, det, pa) != null;
+        const occ_b = std.mem.indexOfScalar(usize, det, pb) != null;
+
+        if (occ_a) D_act.ptr(u, u).* += c_prod;
+        if (occ_b) D_act.ptr(u, u).* += c_prod;
+
+        if (occ_a and occ_b) d_act.ptr(.{ u, u, u, u }).* += 2 * c_prod;
+
+        for (0..nact) |w| if (u != w) {
+            const qa = 2 * (ncore + w) + 0;
+            const qb = 2 * (ncore + w) + 1;
+
+            const w_a = std.mem.indexOfScalar(usize, det, qa) != null;
+            const w_b = std.mem.indexOfScalar(usize, det, qb) != null;
+
+            const nu: T = (if (occ_a) @as(T, 1) else @as(T, 0)) + (if (occ_b) @as(T, 1) else @as(T, 0));
+            const nw: T = (if (w_a) @as(T, 1) else @as(T, 0)) + (if (w_b) @as(T, 1) else @as(T, 0));
+
+            d_act.ptr(.{ u, u, w, w }).* += nu * nw * c_prod;
+
+            var exch: T = 0;
+
+            if (occ_a and w_a) exch += 1;
+            if (occ_b and w_b) exch += 1;
+
+            d_act.ptr(.{ u, w, w, u }).* -= exch * c_prod;
+        };
+    }
+}
+
+/// Accumulates 2-RDM contributions between configurations differing by two spin-orbitals.
+fn accumulateRdmDouble(comptime T: type, d_act: *Tensor(T, 4), diff_a: [2]usize, diff_b: [2]usize, phase: T, c_prod: T, ncore: usize, nact: usize) void {
+    const p, const q = .{ diff_a[0], diff_a[1] };
+    const r, const s = .{ diff_b[0], diff_b[1] };
+
+    if (p >= 2 * ncore and q >= 2 * ncore and r >= 2 * ncore and s >= 2 * ncore) {
+        const u = (p / 2) - ncore;
+        const v = (q / 2) - ncore;
+        const w = (r / 2) - ncore;
+        const x = (s / 2) - ncore;
+
+        if (u < nact and v < nact and w < nact and x < nact) {
+            if ((p % 2 == r % 2) and (q % 2 == s % 2)) {
+                d_act.ptr(.{ u, w, v, x }).* += c_prod * phase;
+                d_act.ptr(.{ v, x, u, w }).* += c_prod * phase;
             }
 
-            for (0..A.len) |i| for (i + 1..A.len) |j| {
-                const idx_i, const idx_j = .{ A[i], A[j] };
+            if ((p % 2 == s % 2) and (q % 2 == r % 2)) {
+                d_act.ptr(.{ u, x, v, w }).* -= c_prod * phase;
+                d_act.ptr(.{ v, w, u, x }).* -= c_prod * phase;
+            }
+        }
+    }
+}
 
-                const term1 = Value(T).init(g_MS.at(.{ idx_i, idx_j, idx_i, idx_j }));
-                const term2 = Value(T).init(g_MS.at(.{ idx_i, idx_j, idx_j, idx_i }));
+/// Accumulates 1-RDM and 2-RDM contributions between configurations differing by one spin-orbital.
+fn accumulateRdmSingle(comptime T: type, D_act: *Matrix(T), d_act: *Tensor(T, 4), det: []const usize, p: usize, q: usize, phase: T, c_prod: T, ncore: usize, nact: usize) void {
+    if (p >= 2 * ncore and q >= 2 * ncore) {
+        const u = (p / 2) - ncore;
+        const v = (q / 2) - ncore;
 
-                sum = sum.add(term1.sub(term2));
-            };
+        if (u < nact and v < nact and (p % 2 == q % 2)) {
+            D_act.ptr(u, v).* += c_prod * phase;
 
-            return sum.val;
-        },
-        1 => {
-            const m, const p = .{ diff_a[0], diff_b[0] };
+            for (0..nact) |w| {
+                const ka = 2 * (ncore + w) + 0;
+                const kb = 2 * (ncore + w) + 1;
 
-            var term = Value(T).init(H_MS.at(m, p));
+                const w_a = std.mem.indexOfScalar(usize, det, ka) != null;
+                const w_b = std.mem.indexOfScalar(usize, det, kb) != null;
 
-            for (0..A.len) |i| if (A[i] != m) {
-                const term1 = Value(T).init(g_MS.at(.{ m, A[i], p, A[i] }));
-                const term2 = Value(T).init(g_MS.at(.{ m, A[i], A[i], p }));
+                const occ_ka = w_a and ka != p and ka != q;
+                const occ_kb = w_b and kb != p and kb != q;
 
-                term = term.add(term1.sub(term2));
-            };
+                const nw: T = (if (occ_ka) @as(T, 1) else @as(T, 0)) + (if (occ_kb) @as(T, 1) else @as(T, 0));
 
-            return term.muls(phase).val;
-        },
-        2 => {
-            const m, const n = .{ diff_a[0], diff_a[1] };
-            const p, const q = .{ diff_b[0], diff_b[1] };
+                d_act.ptr(.{ u, v, w, w }).* += nw * c_prod * phase;
+                d_act.ptr(.{ w, w, u, v }).* += nw * c_prod * phase;
 
-            const term1 = Value(T).init(g_MS.at(.{ m, n, p, q }));
-            const term2 = Value(T).init(g_MS.at(.{ m, n, q, p }));
+                var exch: T = 0;
 
-            return term1.sub(term2).muls(phase).val;
-        },
-        else => return Value(T).fromFloat(0).val,
+                if ((p % 2 == 0) and occ_ka) exch += 1;
+                if ((p % 2 == 1) and occ_kb) exch += 1;
+
+                d_act.ptr(.{ u, w, w, v }).* -= exch * c_prod * phase;
+                d_act.ptr(.{ w, v, u, w }).* -= exch * c_prod * phase;
+            }
+        }
     }
 }
 
 /// Computes analytic nuclear gradients of CI state energies using dual number differentiation.
-fn gradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matrix(T), dets: std.ArrayList([]const usize), states: []const u32, gpa: Allocator) ![]Matrix(T) {
+fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matrix(T), dets: std.ArrayList([]const usize), states: []const u32, gpa: Allocator) ![]Matrix(T) {
     const generalized = hfres.ints.sys.nbf != hfres.C_mo.shape[0];
 
     var grads = try gpa.alloc(Matrix(T), states.len);
@@ -934,23 +884,101 @@ fn gradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matrix(T), dets
             C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ i, mu, p }));
         };
 
-        var H_MS_d, var g_MS_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, generalized, gpa);
+        var h_so_d, var g_so_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, generalized, gpa);
 
         defer {
-            H_MS_d.deinit(gpa);
-            g_MS_d.deinit(gpa);
+            h_so_d.deinit(gpa);
+            g_so_d.deinit(gpa);
         }
 
-        for (0..dets.items.len) |a| for (a..dets.items.len) |b| {
-            const factor: T = if (a == b) 1 else 2;
+        for (0..dets.items.len) |m| for (m..dets.items.len) |n_det| {
+            const factor: T = if (m == n_det) 1 else 2;
 
-            const val = slater(ScalarDual(T), dets.items[a], dets.items[b], H_MS_d, g_MS_d);
+            const val = slater(ScalarDual(T), dets.items[m], dets.items[n_det], h_so_d, g_so_d);
 
             for (states, 0..) |s, s_idx| {
-                grads[s_idx].ptr(i / 3, i % 3).* += factor * C_ci.at(a, s) * C_ci.at(b, s) * val.der;
+                grads[s_idx].ptr(i / 3, i % 3).* += factor * C_ci.at(m, s) * C_ci.at(n_det, s) * val.der;
             }
         };
     }
 
     return grads;
+}
+
+/// Evaluates Hamiltonian matrix elements between Slater determinants using the Slater-Condon excitation rules.
+fn evaluateSlaterCondon(comptime T: type, A: []const usize, diff_a: [2]usize, diff_b: [2]usize, len: usize, phase: primType(T), h_so: Matrix(T), g_so: Tensor(T, 4)) T {
+    return switch (len) {
+        0 => slaterDiagonal(T, h_so, g_so, A),
+        1 => slaterSingle(T, h_so, g_so, A, diff_a[0], diff_b[0], phase),
+        2 => slaterDouble(T, g_so, diff_a[0], diff_a[1], diff_b[0], diff_b[1], phase),
+        else => Value(T).fromFloat(0).val,
+    };
+}
+
+/// Evaluates diagonal Hamiltonian matrix elements between identical Slater determinants via Slater-Condon rules.
+fn slaterDiagonal(comptime T: type, h_so: Matrix(T), g_so: Tensor(T, 4), det: []const usize) T {
+    var sum = Value(T).fromFloat(0);
+
+    for (0..det.len) |i| {
+        sum = sum.add(Value(T).init(h_so.at(det[i], det[i])));
+    }
+
+    for (0..det.len) |i| for (i + 1..det.len) |j| {
+        const p, const q = .{ det[i], det[j] };
+
+        const coulomb = Value(T).init(g_so.at(.{ p, q, p, q }));
+
+        const exchange = Value(T).init(g_so.at(.{ p, q, q, p }));
+
+        sum = sum.add(coulomb.sub(exchange));
+    };
+
+    return sum.val;
+}
+
+/// Evaluates Hamiltonian matrix elements between Slater determinants differing by two spin-orbitals.
+fn slaterDouble(comptime T: type, g_so: Tensor(T, 4), p: usize, q: usize, r: usize, s: usize, phase: primType(T)) T {
+    const direct = Value(T).init(g_so.at(.{ p, q, r, s }));
+    const exchange = Value(T).init(g_so.at(.{ p, q, s, r }));
+
+    return direct.sub(exchange).muls(phase).val;
+}
+
+/// Evaluates Hamiltonian matrix elements between Slater determinants differing by a single spin-orbital.
+fn slaterSingle(comptime T: type, h_so: Matrix(T), g_so: Tensor(T, 4), det: []const usize, p: usize, q: usize, phase: primType(T)) T {
+    var elem = Value(T).init(h_so.at(p, q));
+
+    for (0..det.len) |idx| if (det[idx] != p) {
+        const k = det[idx];
+
+        const coulomb = Value(T).init(g_so.at(.{ p, k, q, k }));
+        const exchange = Value(T).init(g_so.at(.{ p, k, k, q }));
+
+        elem = elem.add(coulomb.sub(exchange));
+    };
+
+    return elem.muls(phase).val;
+}
+
+/// Validates orbital space partitioning consistency for Complete Active Space calculations.
+fn validateSpaceOptions(opt: Options, nel: usize, nmo: usize) !void {
+    if (opt.space == .cas) {
+        const c = opt.space.cas;
+
+        const nact_el, const nact = .{ c.active_electrons, c.active_orbitals };
+
+        if (nact_el > nel or (nel - nact_el) % 2 != 0) {
+            std.log.err("ACTIVE ELECTRONS MUST BE LESS THAN OR EQUAL TO TOTAL ELECTRONS WITH CLOSED SHELL CORE", .{});
+
+            return error.InvalidInput;
+        }
+
+        const ncore = (nel - nact_el) / 2;
+
+        if (ncore + nact > nmo) {
+            std.log.err("ACTIVE PLUS CORE ORBITALS EXCEED MOLECULAR ORBITAL COUNT", .{});
+
+            return error.InvalidInput;
+        }
+    }
 }

@@ -32,15 +32,15 @@ pub fn lowdin(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
 
     @memset(net_populations, 0);
 
-    for (0..n) |u| {
-        net_populations[@intCast(sys.bf2at[u % sys.nbf])] += dot(T, SP.row(u), Shalf.row(u));
+    for (0..n) |mu| {
+        net_populations[@intCast(sys.bf2at[mu % sys.nbf])] += dot(T, SP.row(mu), Shalf.row(mu));
     }
 
     var charges = try Vector(T).init(sys.atoms.len, gpa);
     errdefer charges.deinit(gpa);
 
-    for (0..sys.atoms.len) |i| {
-        charges.data[i] = @as(T, @floatFromInt(sys.atoms[i])) - net_populations[i];
+    for (0..sys.atoms.len) |A| {
+        charges.data[A] = @as(T, @floatFromInt(sys.atoms[A])) - net_populations[A];
     }
 
     return charges;
@@ -58,8 +58,8 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
     var S_spatial = try Matrix(T).init(nbf, nbf, gpa);
     defer S_spatial.deinit(gpa);
 
-    for (0..nbf) |i| for (0..nbf) |j| {
-        S_spatial.ptr(i, j).* = S.at(i, j);
+    for (0..nbf) |mu| for (0..nbf) |nu| {
+        S_spatial.ptr(mu, nu).* = S.at(mu, nu);
     };
 
     if (!is_gen) {
@@ -68,14 +68,14 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
 
         gemm(T, &PS, P, S_spatial, 1, 0, false, false);
 
-        for (0..nbf) |u| {
-            const at_u: usize = @intCast(sys.bf2at[u]);
+        for (0..nbf) |mu| {
+            const A: usize = @intCast(sys.bf2at[mu]);
 
-            for (0..nbf) |v| {
-                const at_v: usize = @intCast(sys.bf2at[v]);
+            for (0..nbf) |nu| {
+                const B: usize = @intCast(sys.bf2at[nu]);
 
-                if (at_u != at_v) {
-                    bo.ptr(at_u, at_v).* += PS.at(u, v) * PS.at(v, u);
+                if (A != B) {
+                    bo.ptr(A, B).* += PS.at(mu, nu) * PS.at(nu, mu);
                 }
             }
         }
@@ -99,19 +99,19 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
 
         gemm(T, &PS_ab, blocks.ab, S_spatial, 1, 0, false, false);
 
-        for (0..nbf) |u| {
-            const at_u: usize = @intCast(sys.bf2at[u]);
+        for (0..nbf) |mu| {
+            const A: usize = @intCast(sys.bf2at[mu]);
 
-            for (0..nbf) |v| {
-                const at_v: usize = @intCast(sys.bf2at[v]);
+            for (0..nbf) |nu| {
+                const B: usize = @intCast(sys.bf2at[nu]);
 
-                if (at_u != at_v) {
-                    const term_a = PS_a.at(u, v) * PS_a.at(v, u);
-                    const term_b = PS_b.at(u, v) * PS_b.at(v, u);
+                if (A != B) {
+                    const term_a = PS_a.at(mu, nu) * PS_a.at(nu, mu);
+                    const term_b = PS_b.at(mu, nu) * PS_b.at(nu, mu);
 
-                    const term_ab = PS_ab.at(u, v) * PS_ab.at(v, u);
+                    const term_ab = PS_ab.at(mu, nu) * PS_ab.at(nu, mu);
 
-                    bo.ptr(at_u, at_v).* += 2 * (term_a + term_b + 2 * term_ab);
+                    bo.ptr(A, B).* += 2 * (term_a + term_b + 2 * term_ab);
                 }
             }
         }
@@ -127,15 +127,15 @@ pub fn mulliken(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matr
 
     @memset(net_populations, 0);
 
-    for (0..P.shape[0]) |u| {
-        net_populations[@intCast(sys.bf2at[u % sys.nbf])] += dot(T, P.row(u), S.row(u));
+    for (0..P.shape[0]) |mu| {
+        net_populations[@intCast(sys.bf2at[mu % sys.nbf])] += dot(T, P.row(mu), S.row(mu));
     }
 
     var charges = try Vector(T).init(sys.atoms.len, gpa);
     errdefer charges.deinit(gpa);
 
-    for (0..sys.atoms.len) |i| {
-        charges.data[i] = @as(T, @floatFromInt(sys.atoms[i])) - net_populations[i];
+    for (0..sys.atoms.len) |A| {
+        charges.data[A] = @as(T, @floatFromInt(sys.atoms[A])) - net_populations[A];
     }
 
     return charges;
@@ -145,10 +145,10 @@ pub fn mulliken(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matr
 pub fn printLowdinCharges(comptime T: type, io: std.Io, sys: MolecularSystem(T), charges: Vector(T), method_str: []const u8) !void {
     try printf(io, "\n{s} LÖWDIN POPULATION ANALYSIS\n", .{method_str});
 
-    for (0..sys.atoms.len) |i| {
-        const sym = try getSymbol(sys.atoms[i]);
+    for (0..sys.atoms.len) |A| {
+        const sym = try getSymbol(sys.atoms[A]);
 
-        try printf(io, "{s:4} {d:20.14}\n", .{ sym, charges.data[i] });
+        try printf(io, "{s:4} {d:20.14}\n", .{ sym, charges.data[A] });
     }
 }
 
@@ -156,11 +156,11 @@ pub fn printLowdinCharges(comptime T: type, io: std.Io, sys: MolecularSystem(T),
 pub fn printMayerBondOrders(comptime T: type, io: std.Io, sys: MolecularSystem(T), bo: Matrix(T), method_str: []const u8) !void {
     try printf(io, "\n{s} MAYER BOND ORDERS\n", .{method_str});
 
-    for (0..sys.atoms.len) |i| for (i + 1..sys.atoms.len) |j| {
-        const sym_i = try getSymbol(sys.atoms[i]);
-        const sym_j = try getSymbol(sys.atoms[j]);
+    for (0..sys.atoms.len) |A| for (A + 1..sys.atoms.len) |B| {
+        const sym_A = try getSymbol(sys.atoms[A]);
+        const sym_B = try getSymbol(sys.atoms[B]);
 
-        try printf(io, "{s:2}{d:<2} - {s:2}{d:<2} {d:20.14}\n", .{ sym_i, i + 1, sym_j, j + 1, bo.at(i, j) });
+        try printf(io, "{s:2}{d:<2} - {s:2}{d:<2} {d:20.14}\n", .{ sym_A, A + 1, sym_B, B + 1, bo.at(A, B) });
     };
 }
 
@@ -168,10 +168,10 @@ pub fn printMayerBondOrders(comptime T: type, io: std.Io, sys: MolecularSystem(T
 pub fn printMullikenCharges(comptime T: type, io: std.Io, sys: MolecularSystem(T), charges: Vector(T), method_str: []const u8) !void {
     try printf(io, "\n{s} MULLIKEN POPULATION ANALYSIS\n", .{method_str});
 
-    for (0..sys.atoms.len) |i| {
-        const sym = try getSymbol(sys.atoms[i]);
+    for (0..sys.atoms.len) |A| {
+        const sym = try getSymbol(sys.atoms[A]);
 
-        try printf(io, "{s:4} {d:20.14}\n", .{ sym, charges.data[i] });
+        try printf(io, "{s:4} {d:20.14}\n", .{ sym, charges.data[A] });
     }
 }
 
@@ -179,11 +179,11 @@ pub fn printMullikenCharges(comptime T: type, io: std.Io, sys: MolecularSystem(T
 pub fn printWibergBondOrders(comptime T: type, io: std.Io, sys: MolecularSystem(T), bo: Matrix(T), method_str: []const u8) !void {
     try printf(io, "\n{s} WIBERG BOND ORDERS\n", .{method_str});
 
-    for (0..sys.atoms.len) |i| for (i + 1..sys.atoms.len) |j| {
-        const sym_i = try getSymbol(sys.atoms[i]);
-        const sym_j = try getSymbol(sys.atoms[j]);
+    for (0..sys.atoms.len) |A| for (A + 1..sys.atoms.len) |B| {
+        const sym_A = try getSymbol(sys.atoms[A]);
+        const sym_B = try getSymbol(sys.atoms[B]);
 
-        try printf(io, "{s:2}{d:<2} - {s:2}{d:<2} {d:20.14}\n", .{ sym_i, i + 1, sym_j, j + 1, bo.at(i, j) });
+        try printf(io, "{s:2}{d:<2} - {s:2}{d:<2} {d:20.14}\n", .{ sym_A, A + 1, sym_B, B + 1, bo.at(A, B) });
     };
 }
 
@@ -196,8 +196,8 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
     var S_spatial = try Matrix(T).init(nbf, nbf, gpa);
     defer S_spatial.deinit(gpa);
 
-    for (0..nbf) |i| for (0..nbf) |j| {
-        S_spatial.ptr(i, j).* = S.at(i, j);
+    for (0..nbf) |mu| for (0..nbf) |nu| {
+        S_spatial.ptr(mu, nu).* = S.at(mu, nu);
     };
 
     var Shalf = try matrixSquareRoot(T, S_spatial, gpa);
@@ -217,16 +217,16 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
 
         gemm(T, &P_ortho, SP, Shalf, 1, 0, false, false);
 
-        for (0..nbf) |u| {
-            const at_u: usize = @intCast(sys.bf2at[u]);
+        for (0..nbf) |mu| {
+            const A: usize = @intCast(sys.bf2at[mu]);
 
-            for (0..nbf) |v| {
-                const at_v: usize = @intCast(sys.bf2at[v]);
+            for (0..nbf) |nu| {
+                const B: usize = @intCast(sys.bf2at[nu]);
 
-                if (at_u != at_v) {
-                    const p_uv = P_ortho.at(u, v);
+                if (A != B) {
+                    const p_munu = P_ortho.at(mu, nu);
 
-                    bo.ptr(at_u, at_v).* += p_uv * p_uv;
+                    bo.ptr(A, B).* += p_munu * p_munu;
                 }
             }
         }
@@ -264,18 +264,18 @@ pub fn wiberg(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix
 
         gemm(T, &P_ortho_ab, SP_ab, Shalf, 1, 0, false, false);
 
-        for (0..nbf) |u| {
-            const at_u: usize = @intCast(sys.bf2at[u]);
+        for (0..nbf) |mu| {
+            const A: usize = @intCast(sys.bf2at[mu]);
 
-            for (0..nbf) |v| {
-                const at_v: usize = @intCast(sys.bf2at[v]);
+            for (0..nbf) |nu| {
+                const B: usize = @intCast(sys.bf2at[nu]);
 
-                if (at_u != at_v) {
-                    const pa_uv = P_ortho_a.at(u, v);
-                    const pb_uv = P_ortho_b.at(u, v);
-                    const pab_uv = P_ortho_ab.at(u, v);
+                if (A != B) {
+                    const pa_munu = P_ortho_a.at(mu, nu);
+                    const pb_munu = P_ortho_b.at(mu, nu);
+                    const pab_munu = P_ortho_ab.at(mu, nu);
 
-                    bo.ptr(at_u, at_v).* += 2.0 * (pa_uv * pa_uv + pb_uv * pb_uv + 2.0 * pab_uv * pab_uv);
+                    bo.ptr(A, B).* += 2.0 * (pa_munu * pa_munu + pb_munu * pb_munu + 2.0 * pab_munu * pab_munu);
                 }
             }
         }

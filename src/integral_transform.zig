@@ -82,20 +82,20 @@ pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4),
         }
     }.addTo;
 
-    for (0..N) |i| for (0..N) |lambda| for (0..N) |nu| for (0..N) |mu| for (0..N) |sigma| {
-        addTo(g_pxxx.ptr(.{ i, lambda, nu, sigma }), C.at(mu, i), g_xxxx.at(.{ mu, lambda, nu, sigma }));
+    for (0..N) |p| for (0..N) |lambda| for (0..N) |nu| for (0..N) |mu| for (0..N) |sigma| {
+        addTo(g_pxxx.ptr(.{ p, lambda, nu, sigma }), C.at(mu, p), g_xxxx.at(.{ mu, lambda, nu, sigma }));
     };
 
-    for (0..N) |i| for (0..N) |j| for (0..N) |nu| for (0..N) |lambda| for (0..N) |sigma| {
-        addTo(g_ppxx.ptr(.{ i, j, nu, sigma }), C.at(lambda, j), g_pxxx.at(.{ i, lambda, nu, sigma }));
+    for (0..N) |p| for (0..N) |q| for (0..N) |nu| for (0..N) |lambda| for (0..N) |sigma| {
+        addTo(g_ppxx.ptr(.{ p, q, nu, sigma }), C.at(lambda, q), g_pxxx.at(.{ p, lambda, nu, sigma }));
     };
 
-    for (0..N) |i| for (0..N) |j| for (0..N) |a| for (0..N) |nu| for (0..N) |sigma| {
-        addTo(g_pppx.ptr(.{ i, j, a, sigma }), C.at(nu, a), g_ppxx.at(.{ i, j, nu, sigma }));
+    for (0..N) |p| for (0..N) |q| for (0..N) |r| for (0..N) |nu| for (0..N) |sigma| {
+        addTo(g_pppx.ptr(.{ p, q, r, sigma }), C.at(nu, r), g_ppxx.at(.{ p, q, nu, sigma }));
     };
 
-    for (0..N) |i| for (0..N) |j| for (0..N) |a| for (0..N) |sigma| for (0..N) |b| {
-        addTo(g_pppp.ptr(.{ i, j, a, b }), C.at(sigma, b), g_pppx.at(.{ i, j, a, sigma }));
+    for (0..N) |p| for (0..N) |q| for (0..N) |r| for (0..N) |sigma| for (0..N) |s| {
+        addTo(g_pppp.ptr(.{ p, q, r, s }), C.at(sigma, s), g_pppx.at(.{ p, q, r, sigma }));
     };
 }
 
@@ -108,15 +108,15 @@ pub fn ao2so_coef(comptime T: type, C_so: *Matrix(T), C_ao: Matrix(T)) void {
 
     C_so.zero();
 
-    for (0..nbf) |i| {
-        const col_a = 2 * i + 0;
-        const col_b = 2 * i + 1;
+    for (0..nbf) |p| {
+        const col_a = 2 * p + 0;
+        const col_b = 2 * p + 1;
 
         for (0..nbf) |mu| {
             const indmu0, const indmu1 = .{ mu, mu + nbf };
 
-            C_so.ptr(indmu0, col_a).* = C_ao.at(mu, i);
-            C_so.ptr(indmu1, col_b).* = C_ao.at(mu, i);
+            C_so.ptr(indmu0, col_a).* = C_ao.at(mu, p);
+            C_so.ptr(indmu1, col_b).* = C_ao.at(mu, p);
         }
     }
 }
@@ -130,10 +130,10 @@ pub fn ao2so_pp(comptime T: type, A_so: *Matrix(T), A_ao: Matrix(T)) void {
 
     A_so.zero();
 
-    for (0..nbf) |i| for (0..nbf) |j| {
-        A_so.ptr(i, j).* = A_ao.at(i, j);
+    for (0..nbf) |mu| for (0..nbf) |nu| {
+        A_so.ptr(mu, nu).* = A_ao.at(mu, nu);
 
-        A_so.ptr(i + nbf, j + nbf).* = A_ao.at(i, j);
+        A_so.ptr(mu + nbf, nu + nbf).* = A_ao.at(mu, nu);
     };
 }
 
@@ -152,13 +152,13 @@ pub fn ao2so_pppp(comptime T: type, g_so: *Tensor(T, 4), g_ao: Tensor(T, 4)) voi
 
     g_so.zero();
 
-    for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-        g_so.ptr(.{ i, j, k, l }).* = g_ao.at(.{ i, j, k, l });
+    for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
+        g_so.ptr(.{ mu, nu, lambda, sigma }).* = g_ao.at(.{ mu, nu, lambda, sigma });
 
-        g_so.ptr(.{ i + nbf, j, k + nbf, l }).* = g_ao.at(.{ i, j, k, l });
-        g_so.ptr(.{ i, j + nbf, k, l + nbf }).* = g_ao.at(.{ i, j, k, l });
+        g_so.ptr(.{ mu + nbf, nu, lambda + nbf, sigma }).* = g_ao.at(.{ mu, nu, lambda, sigma });
+        g_so.ptr(.{ mu, nu + nbf, lambda, sigma + nbf }).* = g_ao.at(.{ mu, nu, lambda, sigma });
 
-        g_so.ptr(.{ i + nbf, j + nbf, k + nbf, l + nbf }).* = g_ao.at(.{ i, j, k, l });
+        g_so.ptr(.{ mu + nbf, nu + nbf, lambda + nbf, sigma + nbf }).* = g_ao.at(.{ mu, nu, lambda, sigma });
     };
 }
 

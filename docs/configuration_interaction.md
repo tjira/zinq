@@ -46,7 +46,13 @@ Because this binomial dimension grows factorially with molecular size, solving t
 
 ### 3. Second-Quantized Derivation of Matrix Elements
 
-To determine the variational coefficients and electronic energies, we evaluate the matrix representation of the exact electronic Hamiltonian $\hat{H}=\sum_{pq}h_{pq}a_p^\dagger a_q+\frac{1}{2}\sum_{pqrs}g_{pqrs}a_p^\dagger a_q^\dagger a_s a_r$ in the orthonormal determinant basis. Applying Wick's theorem to the expectation values $\langle\Phi_m|\hat{H}|\Phi_n\rangle$ eliminates all uncontracted operator strings, deriving the Slater–Condon rules directly based on the orbital differences between determinants $m$ and $n$.
+To determine the variational coefficients and electronic energies, we evaluate the matrix representation of the exact electronic Hamiltonian $\hat{H}=\sum_{pq}h_{pq}a_p^\dagger a_q+\frac{1}{2}\sum_{pqrs}g_{pqrs}a_p^\dagger a_q^\dagger a_s a_r$ in the orthonormal determinant basis. In a canonical Hartree–Fock reference, the Fock operator is diagonal with orbital eigenvalues $\epsilon_p$. Because the Fock operator decomposes into the one-electron core Hamiltonian and the mean-field Coulomb and exchange potentials as $\hat{F}=\hat{h}+\sum_i^{\text{occ}}(\hat{J}_i-\hat{K}_i)$, the one-electron core Hamiltonian matrix elements in the canonical spin-orbital basis evaluate directly as
+
+$$
+h_{pq}=\epsilon_p\delta_{pq}-\sum_i^{\text{occ}}\left(g_{piqi}-g_{piiq}\right)
+$$
+
+Applying Wick's theorem to the expectation values $\langle\Phi_m|\hat{H}|\Phi_n\rangle$ eliminates all uncontracted operator strings, deriving the Slater–Condon rules directly based on the orbital differences between determinants $m$ and $n$.
 
 When the two determinants are identical ($m=n$), all operators contract within the occupied spin-orbitals of that determinant, giving the diagonal matrix element as
 
@@ -88,7 +94,7 @@ $$
 \mathbf{H}_{0\text{S}}=\mathbf{0}
 $$
 
-The reference state couples directly only to the doubly excited configurations, with coupling matrix elements given by $\langle\Phi_0|\hat{H}|\Phi_{ij}^{ab}\rangle=\langle ij||ab\rangle=g_{ijab}-g_{ijba}=\langle ij|ab\rangle-\langle ij|ba\rangle$. Although single excitations do not couple directly to the reference state, they couple to the double excitations through the off-diagonal block $\mathbf{H}_{\text{SD}}$, allowing singly excited configurations to mix indirectly into the correlated ground-state wavefunction and to describe one-electron polarization effects.
+The reference state couples directly only to the doubly excited configurations, with coupling matrix elements given by $\langle\Phi_0|\hat{H}|\Phi_{ij}^{ab}\rangle=\langle ij||ab\rangle=g_{ijab}-g_{ijba}=\langle ij|ab\rangle-\langle ij|ba\rangle$. Although single excitations do not couple directly to the reference state, they couple to the double excitations through the off-diagonal block $\mathbf{H}_{\text{SD}}$, allowing singly excited configurations to mix indirectly into the correlated ground-state wavefunction and to describe one-electron polarization effects. The determinant basis and the Hamiltonian block structure $\mathbf{H}$ established here also serve as the foundation for Møller–Plesset perturbation theory, which evaluates electron correlation by solving the Schrödinger equation perturbatively order by order rather than diagonalizing $\mathbf{H}$ variationally.
 
 ---
 

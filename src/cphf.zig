@@ -98,19 +98,22 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
         F_x.zero();
 
-        for (0..nbf) |i| for (0..nbf) |j| {
-            F_x.ptr(i, j).* = dH.at(.{ c, i, j });
+        for (0..nbf) |mu| for (0..nbf) |nu| {
+            F_x.ptr(mu, nu).* = dH.at(.{ c, mu, nu });
         };
 
-        for (0..nbf) |i| for (0..nbf) |j| for (0..nbf) |k| for (0..nbf) |l| {
-            F_x.ptr(k, l).* += P.at(i, j) * (dg.at(.{ c, i, k, j, l }) - exch_factor * dg.at(.{ c, i, j, k, l }));
+        for (0..nbf) |lambda| for (0..nbf) |sigma| for (0..nbf) |mu| for (0..nbf) |nu| {
+            const coul = dg.at(.{ c, lambda, mu, sigma, nu });
+            const exch = dg.at(.{ c, lambda, sigma, mu, nu });
+
+            F_x.ptr(mu, nu).* += P.at(lambda, sigma) * (coul - exch_factor * exch);
         };
 
-        for (0..nbf) |i| for (i + 1..nbf) |j| {
-            const avg = (F_x.at(i, j) + F_x.at(j, i)) / 2;
+        for (0..nbf) |mu| for (mu + 1..nbf) |nu| {
+            const avg = (F_x.at(mu, nu) + F_x.at(nu, mu)) / 2;
 
-            F_x.ptr(i, j).* = avg;
-            F_x.ptr(j, i).* = avg;
+            F_x.ptr(mu, nu).* = avg;
+            F_x.ptr(nu, mu).* = avg;
         };
 
         const S_x = Matrix(T){ .data = dS.data[c * nbf * nbf .. (c + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
@@ -118,8 +121,8 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
         ao2mo_pp(T, &F_x_MO, F_x, C);
         ao2mo_pp(T, &S_x_MO, S_x, C);
 
-        for (0..nbf) |i| for (0..nbf) |j| {
-            U_x.ptr(i, j).* = -0.5 * S_x_MO.at(i, j);
+        for (0..nbf) |p| for (0..nbf) |q| {
+            U_x.ptr(p, q).* = -0.5 * S_x_MO.at(p, q);
         };
 
         for (nocc..nbf) |a| for (0..nocc) |i| {
@@ -137,8 +140,8 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
         for (0..opt.iterations) |i| {
             var timer = std.Io.Timestamp.now(io, .real);
 
-            if (opt.diis) |d| if (d > 0) for (0..nbf) |j| for (0..nbf) |k| {
-                U_p.ptr(j, k).* = U_x.at(j, k);
+            if (opt.diis) |d| if (d > 0) for (0..nbf) |p| for (0..nbf) |q| {
+                U_p.ptr(p, q).* = U_x.at(p, q);
             };
 
             try mo2ao_xx(T, &dC_x, U_x, C);
@@ -151,8 +154,8 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             for (0..nbf) |mu| for (0..nbf) |nu| {
                 var sum: T = 0;
 
-                for (0..nocc) |j| {
-                    sum += dens_factor * (dC_x.at(mu, j) * C.at(nu, j) + C.at(mu, j) * dC_x.at(nu, j));
+                for (0..nocc) |k| {
+                    sum += dens_factor * (dC_x.at(mu, k) * C.at(nu, k) + C.at(mu, k) * dC_x.at(nu, k));
                 }
 
                 sum_sq_dp += (sum - P_x.at(mu, nu)) * (sum - P_x.at(mu, nu));
@@ -171,22 +174,22 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
             ao2mo_pp(T, &V_x_MO, V_x, C);
 
-            for (nocc..nbf) |a| for (0..nocc) |j| {
-                const prev, const delta_e = .{ U_x.at(a, j), e.at(a) - e.at(j) };
+            for (nocc..nbf) |a| for (0..nocc) |k| {
+                const prev, const delta_e = .{ U_x.at(a, k), e.at(a) - e.at(k) };
 
-                const f = F_x_MO.at(a, j);
-                const v = V_x_MO.at(a, j);
-                const s = S_x_MO.at(a, j);
+                const f = F_x_MO.at(a, k);
+                const v = V_x_MO.at(a, k);
+                const s = S_x_MO.at(a, k);
 
-                U_x.ptr(a, j).* = if (@abs(delta_e) > 1e-12) (e.at(j) * s - f - v) / delta_e else -0.5 * s;
+                U_x.ptr(a, k).* = if (@abs(delta_e) > 1e-12) (e.at(k) * s - f - v) / delta_e else -0.5 * s;
 
-                sum_sq_du += (U_x.at(a, j) - prev) * (U_x.at(a, j) - prev);
+                sum_sq_du += (U_x.at(a, k) - prev) * (U_x.at(a, k) - prev);
             };
 
             const rms_du = @sqrt(sum_sq_du / @as(T, @floatFromInt((nbf - nocc) * nocc)));
 
-            for (0..nocc) |j| for (nocc..nbf) |a| {
-                U_x.ptr(j, a).* = -S_x_MO.at(j, a) - U_x.at(a, j);
+            for (0..nocc) |k| for (nocc..nbf) |a| {
+                U_x.ptr(k, a).* = -S_x_MO.at(k, a) - U_x.at(a, k);
             };
 
             if (opt.diis) |d| if (d > 0) {
@@ -199,9 +202,10 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
                 var e_diis_opt: ?Matrix(T) = try Matrix(T).init(nbf, nbf, gpa);
                 errdefer if (e_diis_opt) |*m| m.deinit(gpa);
 
-                for (0..nbf) |j| for (0..nbf) |k| {
-                    u_diis_opt.?.ptr(j, k).* = U_x.at(j, k);
-                    e_diis_opt.?.ptr(j, k).* = U_x.at(j, k) - U_p.at(j, k);
+                for (0..nbf) |p| for (0..nbf) |q| {
+                    u_diis_opt.?.ptr(p, q).* = U_x.at(p, q);
+
+                    e_diis_opt.?.ptr(p, q).* = U_x.at(p, q) - U_p.at(p, q);
                 };
 
                 if (uxm_hist.items.len >= opt.diis.?) {
@@ -224,12 +228,12 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
                     @memcpy(u_retry.data, U_x.data);
 
-                    for (0..nbf) |j| for (0..nbf) |k| {
-                        e_retry.ptr(j, k).* = err_hist.items[err_hist.items.len - 1].at(j, k);
+                    for (0..nbf) |p| for (0..nbf) |q| {
+                        e_retry.ptr(p, q).* = err_hist.items[err_hist.items.len - 1].at(p, q);
                     };
 
-                    for (0..uxm_hist.items.len) |j| uxm_hist.items[j].deinit(gpa);
-                    for (0..err_hist.items.len) |j| err_hist.items[j].deinit(gpa);
+                    for (0..uxm_hist.items.len) |idx| uxm_hist.items[idx].deinit(gpa);
+                    for (0..err_hist.items.len) |idx| err_hist.items[idx].deinit(gpa);
 
                     uxm_hist.clearRetainingCapacity();
                     err_hist.clearRetainingCapacity();
@@ -241,8 +245,8 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
                     err_hist.appendAssumeCapacity(e_retry);
                 };
 
-                for (0..nocc) |j| for (nocc..nbf) |a| {
-                    U_x.ptr(j, a).* = -S_x_MO.at(j, a) - U_x.at(a, j);
+                for (0..nocc) |k| for (nocc..nbf) |a| {
+                    U_x.ptr(k, a).* = -S_x_MO.at(k, a) - U_x.at(a, k);
                 };
             };
 
@@ -262,24 +266,24 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             }
         } else return error.CphfDidNotConverge;
 
-        for (0..nbf) |i| for (0..nbf) |j| {
-            const delta_e = e.at(j) - e.at(i);
+        for (0..nbf) |p| for (0..nbf) |q| {
+            const delta_e = e.at(q) - e.at(p);
 
-            const f = F_x_MO.at(i, j);
-            const v = V_x_MO.at(i, j);
-            const s = S_x_MO.at(i, j);
+            const f = F_x_MO.at(p, q);
+            const v = V_x_MO.at(p, q);
+            const s = S_x_MO.at(p, q);
 
-            U_x.ptr(i, j).* = if (@abs(delta_e) > 1e-12) (f + v - e.at(j) * s) / delta_e else -0.5 * s;
+            U_x.ptr(p, q).* = if (@abs(delta_e) > 1e-12) (f + v - e.at(q) * s) / delta_e else -0.5 * s;
         };
 
         try mo2ao_xx(T, &dC_x, U_x, C);
 
-        for (0..nbf) |i| for (0..nbf) |q| {
-            dC.ptr(.{ c, i, q }).* = dC_x.at(i, q);
+        for (0..nbf) |mu| for (0..nbf) |p| {
+            dC.ptr(.{ c, mu, p }).* = dC_x.at(mu, p);
         };
 
-        for (0..nbf) |q| {
-            de.ptr(c, q).* = F_x_MO.at(q, q) + V_x_MO.at(q, q) - S_x_MO.at(q, q) * e.at(q);
+        for (0..nbf) |p| {
+            de.ptr(c, p).* = F_x_MO.at(p, p) + V_x_MO.at(p, p) - S_x_MO.at(p, p) * e.at(p);
         }
     }
 }

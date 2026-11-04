@@ -121,6 +121,62 @@ pub fn Result(comptime T: type) type {
     };
 }
 
+/// Computes the nuclear gradient of Møller-Plesset correlation energies using dual number differentiation.
+pub fn calculateNuclearGradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Allocator) ![]Matrix(T) {
+    const nbf, const generalized = .{ hfres.C_mo.shape[0], hfres.ints.sys.nbf != hfres.C_mo.shape[0] };
+
+    const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
+
+    const grads = try gpa.alloc(Matrix(T), order + 1);
+    errdefer gpa.free(grads);
+
+    for (0..order + 1) |k| {
+        grads[k] = Matrix(T).initZero(hfres.ints.sys.atoms.len, 3, gpa) catch |err| {
+            for (0..k) |i| {
+                grads[i].deinit(gpa);
+            }
+
+            return err;
+        };
+    }
+
+    for (0..3 * hfres.ints.sys.atoms.len) |coord| {
+        var C_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
+        defer C_d.deinit(gpa);
+
+        for (0..nbf) |mu| for (0..nbf) |p| {
+            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ coord, mu, p }));
+        };
+
+        var e_d = try Vector(ScalarDual(T)).init(nbf, gpa);
+        defer e_d.deinit(gpa);
+
+        for (0..nbf) |p| {
+            e_d.ptr(p).* = ScalarDual(T).init(hfres.e_mo.at(p), hfres.de_mo.?.at(coord, p));
+        }
+
+        var g_d = try Tensor(ScalarDual(T), 4).init(hfres.ints.g.?.shape, gpa);
+        defer g_d.deinit(gpa);
+
+        for (0..nbf) |mu| for (0..nbf) |lambda| for (0..nbf) |nu| for (0..nbf) |sigma| {
+            const idx = .{ mu, lambda, nu, sigma };
+
+            const dg_x = hfres.ints.dg.?.at(.{ coord, mu, lambda, nu, sigma });
+
+            g_d.ptr(idx).* = ScalarDual(T).init(hfres.ints.g.?.at(idx), dg_x);
+        };
+
+        const corr = try calculateCorrelationEnergies(ScalarDual(T), order, g_d, C_d, e_d, nocc, generalized, gpa);
+        defer gpa.free(corr);
+
+        for (2..order + 1) |k| {
+            grads[k].ptr(coord / 3, coord % 3).* = corr[k].der;
+        }
+    }
+
+    return grads;
+}
+
 /// Computes the Møller-Plesset perturbation series for electronic correlation energy corrections.
 pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), log: bool, gpa: Allocator) !Result(T) {
     _ = sys;
@@ -155,9 +211,10 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
             errdefer g0.deinit(gpa);
 
             grad = try gpa.alloc(Matrix(T), 1);
+
             grad[0] = g0;
 
-            grads = try gradient(T, opt.order, hfres, gpa);
+            grads = try calculateNuclearGradient(T, opt.order, hfres, gpa);
         },
         .numeric => {},
     };
@@ -168,7 +225,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
 
-    const energies = try mp(T, opt.order, hfres.ints.g.?, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
+    const g_ao, const C_mo, const e_mo = .{ hfres.ints.g.?, hfres.C_mo, hfres.e_mo };
+
+    const energies = try calculateCorrelationEnergies(T, opt.order, g_ao, C_mo, e_mo, nocc, generalized, gpa);
     defer gpa.free(energies);
 
     for (2..opt.order + 1) |i| {
@@ -204,125 +263,55 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = &.{} };
 }
 
-/// Evaluates Hamiltonian matrix elements over all Slater determinant pairs using Slater-Condon rules.
-fn buildCiMatrix(comptime T: type, dets: []const []const usize, H_MS: Matrix(T), g_MS: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
-    var H_CI = try Matrix(T).init(dets.len, dets.len, gpa);
-    errdefer H_CI.deinit(gpa);
-
-    for (0..dets.len) |i| for (i..dets.len) |j| {
-        const val = slater(T, dets[i], dets[j], H_MS, g_MS);
-
-        H_CI.ptr(i, j).* = val;
-        H_CI.ptr(j, i).* = val;
-    };
-
-    return H_CI;
-}
-
-/// Computes the nuclear gradient of the Møller-Plesset energy corrections using dual number differentiation.
-fn gradient(comptime T: type, order: usize, hfres: HartreeFockResult(T), gpa: Allocator) ![]Matrix(T) {
-    const nbf, const generalized = .{ hfres.C_mo.shape[0], hfres.ints.sys.nbf != hfres.C_mo.shape[0] };
-
-    const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
-
-    const grads = try gpa.alloc(Matrix(T), order + 1);
-    errdefer gpa.free(grads);
-
-    for (0..order + 1) |k| {
-        grads[k] = Matrix(T).initZero(hfres.ints.sys.atoms.len, 3, gpa) catch |err| {
-            for (0..k) |i| {
-                grads[i].deinit(gpa);
-            }
-
-            return err;
-        };
-    }
-
-    for (0..3 * hfres.ints.sys.atoms.len) |i| {
-        var C_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
-        defer C_d.deinit(gpa);
-
-        for (0..nbf) |mu| for (0..nbf) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ i, mu, p }));
-        };
-
-        var e_d = try Vector(ScalarDual(T)).init(nbf, gpa);
-        defer e_d.deinit(gpa);
-
-        for (0..nbf) |j| {
-            e_d.ptr(j).* = ScalarDual(T).init(hfres.e_mo.at(j), hfres.de_mo.?.at(i, j));
-        }
-
-        var g_d = try Tensor(ScalarDual(T), 4).init(hfres.ints.g.?.shape, gpa);
-        defer g_d.deinit(gpa);
-
-        for (0..nbf) |mu| for (0..nbf) |lambda| for (0..nbf) |nu| for (0..nbf) |sigma| {
-            const dg_x = hfres.ints.dg.?.at(.{ i, mu, lambda, nu, sigma });
-
-            g_d.ptr(.{ mu, lambda, nu, sigma }).* = ScalarDual(T).init(hfres.ints.g.?.at(.{ mu, lambda, nu, sigma }), dg_x);
-        };
-
-        const corr_energies_d = try mp(ScalarDual(T), order, g_d, C_d, e_d, nocc, generalized, gpa);
-        defer gpa.free(corr_energies_d);
-
-        for (2..order + 1) |k| {
-            grads[k].ptr(i / 3, i % 3).* = corr_energies_d[k].der;
-        }
-    }
-
-    return grads;
-}
-
-/// Computes Møller-Plesset energy corrections up to the specified perturbation order.
-fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
-    const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
-
-    var C_SO = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) C_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_coef(T, &C_SO, C);
-    }
-
-    var g_SO = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
-    defer if (!generalized) g_SO.deinit(gpa);
-
-    if (!generalized) {
-        ao2so_pppp(T, &g_SO, g);
-    }
-
-    var g_MS = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
-    defer g_MS.deinit(gpa);
-
-    try ao2mo_pppp(T, &g_MS, g_SO, C_SO, gpa);
-
-    var H_MS = try Matrix(T).initZero(nsp, nsp, gpa);
-    defer H_MS.deinit(gpa);
-
-    var e_SO = try Vector(T).init(nsp, gpa);
-    defer e_SO.deinit(gpa);
-
-    if (generalized) for (0..nsp) |p| {
-        e_SO.ptr(p).* = e.at(p);
-    };
-
-    if (!generalized) for (0..C.shape[0]) |i| {
-        e_SO.ptr(2 * i + 0).* = e.at(i);
-        e_SO.ptr(2 * i + 1).* = e.at(i);
-    };
+/// Evaluates the one-electron core Hamiltonian in the molecular spin-orbital basis.
+fn buildCoreHamiltonian(comptime T: type, h_so: *Matrix(T), g_so: Tensor(T, 4), eps_so: Vector(T), nel: usize) void {
+    const nsp = eps_so.shape[0];
 
     for (0..nsp) |p| for (0..nsp) |q| {
         var sum = Value(T).fromFloat(0);
 
         for (0..nel) |i| {
-            const term1 = Value(T).init(g_MS.at(.{ p, i, q, i }));
-            const term2 = Value(T).init(g_MS.at(.{ p, i, i, q }));
+            const term1 = Value(T).init(g_so.at(.{ p, i, q, i }));
+            const term2 = Value(T).init(g_so.at(.{ p, i, i, q }));
 
             sum = sum.add(term1.sub(term2));
         }
 
-        H_MS.ptr(p, q).* = (if (p == q) Value(T).init(e_SO.at(p)) else Value(T).fromFloat(0)).sub(sum).val;
+        h_so.ptr(p, q).* = (if (p == q) Value(T).init(eps_so.at(p)) else Value(T).fromFloat(0)).sub(sum).val;
     };
+}
+
+/// Evaluates electronic Hamiltonian matrix elements across Slater determinants using Slater-Condon rules.
+fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_so: Matrix(T), g_so: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
+    var H_dets = try Matrix(T).init(dets.len, dets.len, gpa);
+    errdefer H_dets.deinit(gpa);
+
+    for (0..dets.len) |i| for (i..dets.len) |j| {
+        const val = slater(T, dets[i], dets[j], h_so, g_so);
+
+        H_dets.ptr(i, j).* = val;
+        H_dets.ptr(j, i).* = val;
+    };
+
+    return H_dets;
+}
+
+/// Computes Møller-Plesset correlation energy corrections up to the requested perturbation order.
+fn calculateCorrelationEnergies(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
+    const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
+
+    var g_so = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer g_so.deinit(gpa);
+
+    var eps_so = try Vector(T).init(nsp, gpa);
+    defer eps_so.deinit(gpa);
+
+    try transformToSpinOrbitalBasis(T, &g_so, &eps_so, g, C, e, generalized, gpa);
+
+    var h_so = try Matrix(T).initZero(nsp, nsp, gpa);
+    defer h_so.deinit(gpa);
+
+    buildCoreHamiltonian(T, &h_so, g_so, eps_so, nel);
 
     var excitations = try gpa.alloc(u32, @min(order, @min(nel, nsp - nel)));
     defer gpa.free(excitations);
@@ -339,80 +328,129 @@ fn mp(comptime T: type, order: usize, g: Tensor(T, 4), C: Matrix(T), e: Vector(T
         dets.deinit(gpa);
     }
 
-    var H_CI = try buildCiMatrix(T, dets.items, H_MS, g_MS, gpa);
-    defer H_CI.deinit(gpa);
+    var H_dets = try buildHamiltonianMatrix(T, dets.items, h_so, g_so, gpa);
+    defer H_dets.deinit(gpa);
 
-    var E0 = try gpa.alloc(Value(T), dets.items.len);
+    const E0 = try gpa.alloc(Value(T), dets.items.len);
     defer gpa.free(E0);
 
-    for (0..dets.items.len) |i| {
+    calculateZerothOrderEnergies(T, E0, dets.items, eps_so);
+
+    return try solveRayleighSchrodinger(T, H_dets, E0, order, gpa);
+}
+
+/// Evaluates unperturbed zeroth-order energies of Slater determinants under the unperturbed Fock Hamiltonian.
+fn calculateZerothOrderEnergies(comptime T: type, E0: []Value(T), dets: []const []const usize, eps_so: Vector(T)) void {
+    for (0..dets.len) |i| {
         var sum = Value(T).fromFloat(0);
 
-        for (dets.items[i]) |p| {
-            sum = sum.add(Value(T).init(e_SO.at(p)));
+        for (dets[i]) |p| {
+            sum = sum.add(Value(T).init(eps_so.at(p)));
         }
 
         E0[i] = sum;
     }
-
-    return try solveRayleighSchrodinger(T, H_CI, E0, order, gpa);
 }
 
-/// Solves Rayleigh-Schrödinger perturbation equations iteratively up to the requested perturbation order.
-fn solveRayleighSchrodinger(comptime T: type, H_CI: Matrix(T), E0: []const Value(T), order: usize, gpa: Allocator) ![]T {
+/// Computes the m-th order Rayleigh-Schrödinger correlation energy correction from Hamiltonian couplings.
+fn evaluateEnergyCorrection(comptime T: type, m: usize, H_dets: Matrix(T), c_dets: []const Value(T)) Value(T) {
+    const ndets = H_dets.nrow();
+
+    var sum = Value(T).fromFloat(0);
+
+    for (1..ndets) |j| {
+        sum = sum.add(Value(T).init(H_dets.at(0, j)).mul(c_dets[(m - 1) * ndets + j]));
+    }
+
+    return sum;
+}
+
+/// Solves Rayleigh-Schrödinger perturbation equations iteratively in the Slater determinant basis.
+fn solveRayleighSchrodinger(comptime T: type, H_dets: Matrix(T), E0: []const Value(T), order: usize, gpa: Allocator) ![]T {
     const ndets = E0.len;
 
-    var C_coeff = try gpa.alloc(Value(T), (order + 1) * ndets);
-    defer gpa.free(C_coeff);
+    var c_dets = try gpa.alloc(Value(T), (order + 1) * ndets);
+    defer gpa.free(c_dets);
 
-    @memset(C_coeff, Value(T).fromFloat(0));
+    @memset(c_dets, Value(T).fromFloat(0));
 
     var E = try gpa.alloc(Value(T), order + 1);
     defer gpa.free(E);
 
-    E[0], C_coeff[0] = .{ E0[0], Value(T).fromFloat(1) };
+    E[0], c_dets[0] = .{ E0[0], Value(T).fromFloat(1) };
 
-    for (1..order + 1) |k| {
-        if (k == 1) {
-            E[1] = Value(T).init(H_CI.at(0, 0)).sub(E0[0]);
+    for (1..order + 1) |m| {
+        if (m == 1) {
+            E[1] = Value(T).init(H_dets.at(0, 0)).sub(E0[0]);
         }
 
-        if (k > 1) {
-            var sum = Value(T).fromFloat(0);
-
-            for (1..ndets) |j| {
-                sum = sum.add(Value(T).init(H_CI.at(0, j)).mul(C_coeff[(k - 1) * ndets + j]));
-            }
-
-            E[k] = sum;
+        if (m > 1) {
+            E[m] = evaluateEnergyCorrection(T, m, H_dets, c_dets);
         }
 
-        if (k == order) break;
+        if (m == order) break;
 
-        for (1..ndets) |i| {
-            var term1 = Value(T).fromFloat(0);
-            var term3 = Value(T).fromFloat(0);
-
-            for (0..ndets) |j| {
-                term1 = term1.add(Value(T).init(H_CI.at(i, j)).mul(C_coeff[(k - 1) * ndets + j]));
-            }
-
-            const term2 = E0[i].mul(C_coeff[(k - 1) * ndets + i]);
-
-            for (1..k + 1) |j| {
-                term3 = term3.add(E[j].mul(C_coeff[(k - j) * ndets + i]));
-            }
-
-            C_coeff[k * ndets + i] = term1.sub(term2).sub(term3).div(E0[0].sub(E0[i]));
-        }
+        updateAmplitudes(T, m, H_dets, E0, E, c_dets);
     }
 
     const energies = try gpa.alloc(T, order + 1);
     errdefer gpa.free(energies);
 
-    for (0..order + 1) |k| {
-        energies[k] = E[k].val;
+    for (0..order + 1) |m| {
+        energies[m] = E[m].val;
     }
 
     return energies;
+}
+
+/// Transforms two-electron repulsion integrals and orbital energies into the molecular spin-orbital basis.
+fn transformToSpinOrbitalBasis(comptime T: type, g_so: *Tensor(T, 4), eps_so: *Vector(T), g: Tensor(T, 4), C: Matrix(T), e: Vector(T), generalized: bool, gpa: Allocator) !void {
+    const nsp = eps_so.shape[0];
+
+    var C_SO = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_SO.deinit(gpa);
+
+    if (!generalized) {
+        ao2so_coef(T, &C_SO, C);
+    }
+
+    var g_SO = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer if (!generalized) g_SO.deinit(gpa);
+
+    if (!generalized) {
+        ao2so_pppp(T, &g_SO, g);
+    }
+
+    try ao2mo_pppp(T, g_so, g_SO, C_SO, gpa);
+
+    if (generalized) for (0..nsp) |p| {
+        eps_so.ptr(p).* = e.at(p);
+    };
+
+    if (!generalized) for (0..C.shape[0]) |p| {
+        eps_so.ptr(2 * p + 0).* = e.at(p);
+        eps_so.ptr(2 * p + 1).* = e.at(p);
+    };
+}
+
+/// Evaluates m-th order configuration mixing amplitudes using Rayleigh-Schrödinger perturbation theory.
+fn updateAmplitudes(comptime T: type, m: usize, H_dets: Matrix(T), E0: []const Value(T), E: []const Value(T), c_dets: []Value(T)) void {
+    const ndets = E0.len;
+
+    for (1..ndets) |i| {
+        var h_psi = Value(T).fromFloat(0);
+        var e_psi = Value(T).fromFloat(0);
+
+        for (0..ndets) |j| {
+            h_psi = h_psi.add(Value(T).init(H_dets.at(i, j)).mul(c_dets[(m - 1) * ndets + j]));
+        }
+
+        const h0_psi = E0[i].mul(c_dets[(m - 1) * ndets + i]);
+
+        for (1..m + 1) |j| {
+            e_psi = e_psi.add(E[j].mul(c_dets[(m - j) * ndets + i]));
+        }
+
+        c_dets[m * ndets + i] = h_psi.sub(h0_psi).sub(e_psi).div(E0[0].sub(E0[i]));
+    }
 }
