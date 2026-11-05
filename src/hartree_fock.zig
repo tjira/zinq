@@ -15,14 +15,12 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
-const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
 const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
 const dot = @import("linear_algebra.zig").dot;
 const gemm = @import("linear_algebra.zig").gemm;
 const getSymbol = @import("constant.zig").getSymbol;
 const lowdin = @import("population_analysis.zig").lowdin;
 const mayer = @import("population_analysis.zig").mayer;
-const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
 const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").runFromSystem;
 const mulliken = @import("population_analysis.zig").mulliken;
@@ -151,8 +149,8 @@ pub fn Result(comptime T: type) type {
         C_mo: Matrix(T),
         e_mo: Vector(T),
 
-        P: Matrix(T),
-        F: Matrix(T),
+        P_ao: Matrix(T),
+        F_ao: Matrix(T),
 
         energy: []T,
 
@@ -170,8 +168,8 @@ pub fn Result(comptime T: type) type {
             self.C_mo.deinit(gpa);
             self.e_mo.deinit(gpa);
 
-            self.P.deinit(gpa);
-            self.F.deinit(gpa);
+            self.P_ao.deinit(gpa);
+            self.F_ao.deinit(gpa);
 
             gpa.free(self.energy);
 
@@ -387,8 +385,8 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     var result: Result(T) = .{
         .ints = ints,
 
-        .P = P,
-        .F = F,
+        .P_ao = P,
+        .F_ao = F,
         .e_mo = e,
 
         .energy = energy,

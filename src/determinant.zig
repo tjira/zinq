@@ -60,7 +60,7 @@ pub fn findDeterminantDifferences(A: []const usize, B: []const usize) ?struct { 
 }
 
 /// Generates complete active space determinants preserving closed-shell core occupations.
-pub fn generateCasDets(ncore: usize, nas: usize, nas_el: usize, mult: u32, gpa: Allocator) !std.ArrayList([]const usize) {
+pub fn generateCasDets(ncore: usize, nact: usize, nact_el: usize, mult: u32, gpa: Allocator) !std.ArrayList([]const usize) {
     var dets = std.ArrayList([]const usize).empty;
 
     errdefer {
@@ -69,15 +69,15 @@ pub fn generateCasDets(ncore: usize, nas: usize, nas_el: usize, mult: u32, gpa: 
         dets.deinit(gpa);
     }
 
-    if ((nas_el + mult - 1) % 2 != 0) return error.InvalidInput;
+    if ((nact_el + mult - 1) % 2 != 0) return error.InvalidInput;
 
-    const n_alpha = (nas_el + mult - 1) / 2;
+    const n_alpha = (nact_el + mult - 1) / 2;
 
-    const n_beta = nas_el - n_alpha;
+    const n_beta = nact_el - n_alpha;
 
-    if (n_alpha > nas or n_beta > nas) return error.InvalidInput;
+    if (n_alpha > nact or n_beta > nact) return error.InvalidInput;
 
-    var alpha_combs = try generateCombinations(nas, n_alpha, 0, gpa);
+    var alpha_combs = try generateCombinations(nact, n_alpha, 0, gpa);
 
     defer {
         for (0..alpha_combs.items.len) |i| gpa.free(alpha_combs.items[i]);
@@ -85,7 +85,7 @@ pub fn generateCasDets(ncore: usize, nas: usize, nas_el: usize, mult: u32, gpa: 
         alpha_combs.deinit(gpa);
     }
 
-    var beta_combs = try generateCombinations(nas, n_beta, 0, gpa);
+    var beta_combs = try generateCombinations(nact, n_beta, 0, gpa);
 
     defer {
         for (0..beta_combs.items.len) |i| gpa.free(beta_combs.items[i]);
@@ -93,7 +93,7 @@ pub fn generateCasDets(ncore: usize, nas: usize, nas_el: usize, mult: u32, gpa: 
         beta_combs.deinit(gpa);
     }
 
-    const nel = 2 * ncore + nas_el;
+    const nel = 2 * ncore + nact_el;
 
     for (alpha_combs.items) |ac| for (beta_combs.items) |bc| {
         const det = try gpa.alloc(usize, nel);

@@ -412,7 +412,7 @@ fn AbInitio(comptime T: type) type {
             var res = try electronic_structure.runFromSystem(T, self.inpout, run_opt, msys, prev_Pg, false, self.gpa);
             defer res.deinit(self.gpa);
 
-            const P = res.hartree_fock.P;
+            const P = res.hartree_fock.P_ao;
 
             if (self.Pg.items[traj] == null) {
                 self.Pg.items[traj] = try Matrix(T).init(P.nrow(), P.ncol(), self.gpa);

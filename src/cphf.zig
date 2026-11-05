@@ -10,8 +10,8 @@ const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
-const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
-const mo2ao_xx = @import("integral_transform.zig").mo2ao_xx;
+const ao2mo_1e = @import("integral_transform.zig").ao2mo_1e;
+const mo2ao_1e = @import("integral_transform.zig").mo2ao_1e;
 const printf = @import("read_write.zig").printf;
 
 /// Computes the first-order derivative of molecular orbital coefficients and energies using CPHF.
@@ -37,7 +37,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
     const dH = hfres.ints.dH orelse unreachable;
     const dg = hfres.ints.dg orelse unreachable;
 
-    const C, const P, const e = .{ hfres.C_mo, hfres.P, hfres.e_mo };
+    const C, const P, const e = .{ hfres.C_mo, hfres.P_ao, hfres.e_mo };
 
     const nocc, const nbf = .{ if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2, C.shape[0] };
 
@@ -105,8 +105,8 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
         const S_x = Matrix(T){ .data = dS.data[c * nbf * nbf .. (c + 1) * nbf * nbf], .shape = .{ nbf, nbf } };
 
-        ao2mo_pp(T, &F_x_mo, F_x, C);
-        ao2mo_pp(T, &S_x_mo, S_x, C);
+        ao2mo_1e(T, &F_x_mo, F_x, C);
+        ao2mo_1e(T, &S_x_mo, S_x, C);
 
         for (0..nbf) |p| for (0..nbf) |q| {
             U_x.ptr(p, q).* = -0.5 * S_x_mo.at(p, q);
@@ -131,7 +131,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
                 U_p.ptr(p, q).* = U_x.at(p, q);
             };
 
-            try mo2ao_xx(T, &dC_x, U_x, C);
+            try mo2ao_1e(T, &dC_x, U_x, C);
 
             V_x.zero();
 
@@ -159,7 +159,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
                 V_x.ptr(lambda, sigma).* += P_x.at(mu, nu) * (g_mlns - exch_factor * g_mnls);
             };
 
-            ao2mo_pp(T, &V_x_mo, V_x, C);
+            ao2mo_1e(T, &V_x_mo, V_x, C);
 
             for (nocc..nbf) |a| for (0..nocc) |k| {
                 const prev, const delta_e = .{ U_x.at(a, k), e.at(a) - e.at(k) };
@@ -222,7 +222,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             U_x.ptr(p, q).* = if (@abs(delta_e) > 1e-12) (f + v - e.at(q) * s) / delta_e else -0.5 * s;
         };
 
-        try mo2ao_xx(T, &dC_x, U_x, C);
+        try mo2ao_1e(T, &dC_x, U_x, C);
 
         for (0..nbf) |mu| for (0..nbf) |p| {
             dC.ptr(.{ c, mu, p }).* = dC_x.at(mu, p);

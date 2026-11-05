@@ -77,11 +77,11 @@ pub fn generateDeterminants(nel: usize, nbf: usize, opt: anytype, gpa: Allocator
 pub fn getDensity(comptime T: type, result: anytype) Matrix(T) {
     const ResType = switch (@typeInfo(@TypeOf(result))) { .pointer => |p| p.child, else => @TypeOf(result) };
 
-    if (comptime @hasField(ResType, "P")) {
-        return result.P;
+    if (comptime @hasField(ResType, "P_ao")) {
+        return result.P_ao;
     }
 
-    return result.hartree_fock.P;
+    return result.hartree_fock.P_ao;
 }
 
 /// Identifies the active electronic structure method type from configuration options.

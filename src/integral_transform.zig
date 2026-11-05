@@ -10,14 +10,55 @@ const Value = @import("value.zig").Value;
 
 const contract = @import("contract.zig").contract;
 
-/// Transforms a symmetric one-electron operator matrix from the atomic orbital basis to the molecular orbital basis.
-pub fn ao2mo_pp(comptime T: type, A_pp: *Matrix(T), A_xx: Matrix(T), C: Matrix(T)) void {
+/// Transforms a one-electron operator from the spatial atomic orbital basis to the atomic spin-orbital basis.
+pub fn ao2as_1e(comptime T: type, A_as: *Matrix(T), A_ao: Matrix(T)) void {
+    const nbf = A_ao.shape[0];
+
+    std.debug.assert(A_as.shape[0] == 2 * nbf);
+    std.debug.assert(A_as.shape[1] == 2 * nbf);
+
+    A_as.zero();
+
+    for (0..nbf) |mu| for (0..nbf) |nu| {
+        A_as.ptr(mu, nu).* = A_ao.at(mu, nu);
+
+        A_as.ptr(mu + nbf, nu + nbf).* = A_ao.at(mu, nu);
+    };
+}
+
+/// Transforms two-electron repulsion integrals from the spatial atomic orbital basis to the atomic spin-orbital basis.
+pub fn ao2as_2e(comptime T: type, g_as: *Tensor(T, 4), g_ao: Tensor(T, 4)) void {
+    const nbf = g_ao.shape[0];
+
+    std.debug.assert(g_ao.shape[1] == nbf);
+    std.debug.assert(g_ao.shape[2] == nbf);
+    std.debug.assert(g_ao.shape[3] == nbf);
+
+    std.debug.assert(g_as.shape[0] == 2 * nbf);
+    std.debug.assert(g_as.shape[1] == 2 * nbf);
+    std.debug.assert(g_as.shape[2] == 2 * nbf);
+    std.debug.assert(g_as.shape[3] == 2 * nbf);
+
+    g_as.zero();
+
+    for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
+        g_as.ptr(.{ mu, nu, lambda, sigma }).* = g_ao.at(.{ mu, nu, lambda, sigma });
+
+        g_as.ptr(.{ mu + nbf, nu, lambda + nbf, sigma }).* = g_ao.at(.{ mu, nu, lambda, sigma });
+        g_as.ptr(.{ mu, nu + nbf, lambda, sigma + nbf }).* = g_ao.at(.{ mu, nu, lambda, sigma });
+
+        g_as.ptr(.{ mu + nbf, nu + nbf, lambda + nbf, sigma + nbf }).* = g_ao.at(.{ mu, nu, lambda, sigma });
+    };
+}
+
+/// Transforms a one-electron operator matrix from the atomic orbital basis to the molecular orbital basis.
+pub fn ao2mo_1e(comptime T: type, A_mo: *Matrix(T), A_ao: Matrix(T), C: Matrix(T)) void {
     const N = C.shape[0];
 
-    std.debug.assert(A_pp.nrow() == N);
-    std.debug.assert(A_pp.ncol() == N);
-    std.debug.assert(A_xx.nrow() == N);
-    std.debug.assert(A_xx.ncol() == N);
+    std.debug.assert(A_mo.nrow() == N);
+    std.debug.assert(A_mo.ncol() == N);
+    std.debug.assert(A_ao.nrow() == N);
+    std.debug.assert(A_ao.ncol() == N);
 
     for (0..N) |p| for (0..N) |q| {
         var sum = Value(T).fromFloat(0);
@@ -26,55 +67,56 @@ pub fn ao2mo_pp(comptime T: type, A_pp: *Matrix(T), A_xx: Matrix(T), C: Matrix(T
             const c_mu_p = Value(T).init(C.at(mu, p));
             const c_nu_q = Value(T).init(C.at(nu, q));
 
-            const a_val = Value(T).init(A_xx.at(mu, nu));
+            const a_val = Value(T).init(A_ao.at(mu, nu));
 
             sum = sum.add(c_mu_p.mul(c_nu_q).mul(a_val));
         };
 
-        A_pp.ptr(p, q).* = sum.val;
+        A_mo.ptr(p, q).* = sum.val;
     };
 }
 
 /// Transforms two-electron repulsion integrals from the atomic orbital basis to the molecular orbital basis.
-pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), gpa: Allocator) !void {
-    const N = g_xxxx.shape[0];
+pub fn ao2mo_2e(comptime T: type, g_mo: *Tensor(T, 4), g_ao: Tensor(T, 4), C: Matrix(T), gpa: Allocator) !void {
+    const N = g_ao.shape[0];
 
-    std.debug.assert(g_xxxx.shape[1] == N);
-    std.debug.assert(g_xxxx.shape[2] == N);
-    std.debug.assert(g_xxxx.shape[3] == N);
+    std.debug.assert(g_ao.shape[1] == N);
+    std.debug.assert(g_ao.shape[2] == N);
+    std.debug.assert(g_ao.shape[3] == N);
 
     std.debug.assert(C.shape[0] == N);
     std.debug.assert(C.shape[1] == N);
 
     if (T == f64) {
-        var g_pxxx = try Tensor(T, 4).init(.{ N, N, N, N }, gpa);
-        defer g_pxxx.deinit(gpa);
+        var g_1mo = try Tensor(T, 4).init(.{ N, N, N, N }, gpa);
+        defer g_1mo.deinit(gpa);
 
-        var g_ppxx = try Tensor(T, 4).init(.{ N, N, N, N }, gpa);
-        defer g_ppxx.deinit(gpa);
+        var g_2mo = try Tensor(T, 4).init(.{ N, N, N, N }, gpa);
+        defer g_2mo.deinit(gpa);
 
-        var g_pppx = try Tensor(T, 4).init(.{ N, N, N, N }, gpa);
-        defer g_pppx.deinit(gpa);
+        var g_3mo = try Tensor(T, 4).init(.{ N, N, N, N }, gpa);
+        defer g_3mo.deinit(gpa);
 
-        try contract(f64, "mi,mlns->ilns", &g_pxxx, C, g_xxxx, 1, 0, gpa);
-        try contract(f64, "ilns,lj->ijns", &g_ppxx, g_pxxx, C, 1, 0, gpa);
-        try contract(f64, "ijns,na->ijas", &g_pppx, g_ppxx, C, 1, 0, gpa);
+        try contract(f64, "mi,mlns->ilns", &g_1mo, C, g_ao, 1, 0, gpa);
 
-        try contract(f64, "ijas,sb->ijab", g_pppp, g_pppx, C, 1, 0, gpa);
+        try contract(f64, "ilns,lj->ijns", &g_2mo, g_1mo, C, 1, 0, gpa);
+        try contract(f64, "ijns,na->ijas", &g_3mo, g_2mo, C, 1, 0, gpa);
+
+        try contract(f64, "ijas,sb->ijab", g_mo, g_3mo, C, 1, 0, gpa);
 
         return;
     }
 
-    var g_pxxx = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
-    defer g_pxxx.deinit(gpa);
+    var g_1mo = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
+    defer g_1mo.deinit(gpa);
 
-    var g_ppxx = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
-    defer g_ppxx.deinit(gpa);
+    var g_2mo = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
+    defer g_2mo.deinit(gpa);
 
-    var g_pppx = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
-    defer g_pppx.deinit(gpa);
+    var g_3mo = try Tensor(T, 4).initZero(.{ N, N, N, N }, gpa);
+    defer g_3mo.deinit(gpa);
 
-    g_pppp.zero();
+    g_mo.zero();
 
     const addTo = struct {
         pub fn addTo(ptr: *T, c: T, val: T) void {
@@ -83,30 +125,54 @@ pub fn ao2mo_pppp(comptime T: type, g_pppp: *Tensor(T, 4), g_xxxx: Tensor(T, 4),
     }.addTo;
 
     for (0..N) |p| for (0..N) |lambda| for (0..N) |nu| for (0..N) |mu| for (0..N) |sigma| {
-        addTo(g_pxxx.ptr(.{ p, lambda, nu, sigma }), C.at(mu, p), g_xxxx.at(.{ mu, lambda, nu, sigma }));
+        addTo(g_1mo.ptr(.{ p, lambda, nu, sigma }), C.at(mu, p), g_ao.at(.{ mu, lambda, nu, sigma }));
     };
 
     for (0..N) |p| for (0..N) |q| for (0..N) |nu| for (0..N) |lambda| for (0..N) |sigma| {
-        addTo(g_ppxx.ptr(.{ p, q, nu, sigma }), C.at(lambda, q), g_pxxx.at(.{ p, lambda, nu, sigma }));
+        addTo(g_2mo.ptr(.{ p, q, nu, sigma }), C.at(lambda, q), g_1mo.at(.{ p, lambda, nu, sigma }));
     };
 
     for (0..N) |p| for (0..N) |q| for (0..N) |r| for (0..N) |nu| for (0..N) |sigma| {
-        addTo(g_pppx.ptr(.{ p, q, r, sigma }), C.at(nu, r), g_ppxx.at(.{ p, q, nu, sigma }));
+        addTo(g_3mo.ptr(.{ p, q, r, sigma }), C.at(nu, r), g_2mo.at(.{ p, q, nu, sigma }));
     };
 
     for (0..N) |p| for (0..N) |q| for (0..N) |r| for (0..N) |sigma| for (0..N) |s| {
-        addTo(g_pppp.ptr(.{ p, q, r, s }), C.at(sigma, s), g_pppx.at(.{ p, q, r, sigma }));
+        addTo(g_mo.ptr(.{ p, q, r, s }), C.at(sigma, s), g_3mo.at(.{ p, q, r, sigma }));
     };
 }
 
-/// Expands atomic orbital coefficients into a spin-orbital representation block matrix.
-pub fn ao2so_coef(comptime T: type, C_so: *Matrix(T), C_ao: Matrix(T)) void {
-    const nbf = C_ao.shape[0];
+/// Transforms a one-electron operator matrix from the molecular orbital basis back to the atomic orbital basis.
+pub fn mo2ao_1e(comptime T: type, A_ao: *Matrix(T), A_mo: Matrix(T), C: Matrix(T)) !void {
+    const N = C.shape[0];
 
-    std.debug.assert(C_so.shape[0] == 2 * nbf);
-    std.debug.assert(C_so.shape[1] == 2 * nbf);
+    std.debug.assert(A_mo.nrow() == N);
+    std.debug.assert(A_mo.ncol() == N);
+    std.debug.assert(A_ao.nrow() == N);
+    std.debug.assert(A_ao.ncol() == N);
 
-    C_so.zero();
+    if (T == f64) {
+        return try contract(f64, "mq,qp->mp", A_ao, C, A_mo, 1, 0, null);
+    }
+
+    for (0..N) |mu| for (0..N) |p| {
+        var sum = Value(T).fromFloat(0);
+
+        for (0..N) |q| {
+            sum = sum.add(Value(T).init(C.at(mu, q)).mul(Value(T).init(A_mo.at(q, p))));
+        }
+
+        A_ao.ptr(mu, p).* = sum.val;
+    };
+}
+
+/// Expands spatial molecular orbital expansion coefficients into a molecular spin-orbital block matrix.
+pub fn mo2ms_coef(comptime T: type, C_ms: *Matrix(T), C_mo: Matrix(T)) void {
+    const nbf = C_mo.shape[0];
+
+    std.debug.assert(C_ms.shape[0] == 2 * nbf);
+    std.debug.assert(C_ms.shape[1] == 2 * nbf);
+
+    C_ms.zero();
 
     for (0..nbf) |p| {
         const col_a = 2 * p + 0;
@@ -115,78 +181,13 @@ pub fn ao2so_coef(comptime T: type, C_so: *Matrix(T), C_ao: Matrix(T)) void {
         for (0..nbf) |mu| {
             const indmu0, const indmu1 = .{ mu, mu + nbf };
 
-            C_so.ptr(indmu0, col_a).* = C_ao.at(mu, p);
-            C_so.ptr(indmu1, col_b).* = C_ao.at(mu, p);
+            C_ms.ptr(indmu0, col_a).* = C_mo.at(mu, p);
+            C_ms.ptr(indmu1, col_b).* = C_mo.at(mu, p);
         }
     }
 }
 
-/// Transforms a one-electron operator from the atomic orbital representation to a spin-orbital representation.
-pub fn ao2so_pp(comptime T: type, A_so: *Matrix(T), A_ao: Matrix(T)) void {
-    const nbf = A_ao.shape[0];
-
-    std.debug.assert(A_so.shape[0] == 2 * nbf);
-    std.debug.assert(A_so.shape[1] == 2 * nbf);
-
-    A_so.zero();
-
-    for (0..nbf) |mu| for (0..nbf) |nu| {
-        A_so.ptr(mu, nu).* = A_ao.at(mu, nu);
-
-        A_so.ptr(mu + nbf, nu + nbf).* = A_ao.at(mu, nu);
-    };
-}
-
-/// Transforms two-electron integrals from spatial atomic orbitals to spin-orbitals.
-pub fn ao2so_pppp(comptime T: type, g_so: *Tensor(T, 4), g_ao: Tensor(T, 4)) void {
-    const nbf = g_ao.shape[0];
-
-    std.debug.assert(g_ao.shape[1] == nbf);
-    std.debug.assert(g_ao.shape[2] == nbf);
-    std.debug.assert(g_ao.shape[3] == nbf);
-
-    std.debug.assert(g_so.shape[0] == 2 * nbf);
-    std.debug.assert(g_so.shape[1] == 2 * nbf);
-    std.debug.assert(g_so.shape[2] == 2 * nbf);
-    std.debug.assert(g_so.shape[3] == 2 * nbf);
-
-    g_so.zero();
-
-    for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
-        g_so.ptr(.{ mu, nu, lambda, sigma }).* = g_ao.at(.{ mu, nu, lambda, sigma });
-
-        g_so.ptr(.{ mu + nbf, nu, lambda + nbf, sigma }).* = g_ao.at(.{ mu, nu, lambda, sigma });
-        g_so.ptr(.{ mu, nu + nbf, lambda, sigma + nbf }).* = g_ao.at(.{ mu, nu, lambda, sigma });
-
-        g_so.ptr(.{ mu + nbf, nu + nbf, lambda + nbf, sigma + nbf }).* = g_ao.at(.{ mu, nu, lambda, sigma });
-    };
-}
-
-/// Transforms a one-electron operator matrix from the molecular orbital basis back to the atomic orbital basis.
-pub fn mo2ao_xx(comptime T: type, A_xx: *Matrix(T), A_pp: Matrix(T), C: Matrix(T)) !void {
-    const N = C.shape[0];
-
-    std.debug.assert(A_pp.nrow() == N);
-    std.debug.assert(A_pp.ncol() == N);
-    std.debug.assert(A_xx.nrow() == N);
-    std.debug.assert(A_xx.ncol() == N);
-
-    if (T == f64) {
-        return try contract(f64, "mq,qp->mp", A_xx, C, A_pp, 1, 0, null);
-    }
-
-    for (0..N) |mu| for (0..N) |p| {
-        var sum = Value(T).fromFloat(0);
-
-        for (0..N) |q| {
-            sum = sum.add(Value(T).init(C.at(mu, q)).mul(Value(T).init(A_pp.at(q, p))));
-        }
-
-        A_xx.ptr(mu, p).* = sum.val;
-    };
-}
-
-/// Transforms core Hamiltonian and two-electron integrals to the molecular spin-orbital basis.
+/// Transforms core Hamiltonian and two-electron repulsion integrals to the molecular spin-orbital basis.
 pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
     const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
 
@@ -194,43 +195,43 @@ pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 
     defer if (!generalized) C_ms.deinit(gpa);
 
     if (!generalized) {
-        ao2so_coef(T, &C_ms, C);
+        mo2ms_coef(T, &C_ms, C);
     }
 
     var H_as = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
     defer if (!generalized) H_as.deinit(gpa);
 
     if (!generalized) {
-        ao2so_pp(T, &H_as, H);
+        ao2as_1e(T, &H_as, H);
     }
 
     var g_as = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
     defer if (!generalized) g_as.deinit(gpa);
 
     if (!generalized) {
-        ao2so_pppp(T, &g_as, g);
+        ao2as_2e(T, &g_as, g);
     }
 
     var h_ms = try Matrix(T).init(nsp, nsp, gpa);
     errdefer h_ms.deinit(gpa);
 
-    ao2mo_pp(T, &h_ms, H_as, C_ms);
+    ao2mo_1e(T, &h_ms, H_as, C_ms);
 
     var g_ms = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
     errdefer g_ms.deinit(gpa);
 
-    try ao2mo_pppp(T, &g_ms, g_as, C_ms, gpa);
+    try ao2mo_2e(T, &g_ms, g_as, C_ms, gpa);
 
     return .{ h_ms, g_ms };
 }
 
 /// Transforms atomic orbital integrals to a restricted molecular orbital subset of occupied and virtual orbitals.
-fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: Matrix(T), nocc: usize, gpa: Allocator) !void {
-    const N = g_xxxx.shape[0];
+fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_ao: Tensor(T, 4), C: Matrix(T), nocc: usize, gpa: Allocator) !void {
+    const N = g_ao.shape[0];
 
-    std.debug.assert(g_xxxx.shape[1] == N);
-    std.debug.assert(g_xxxx.shape[2] == N);
-    std.debug.assert(g_xxxx.shape[3] == N);
+    std.debug.assert(g_ao.shape[1] == N);
+    std.debug.assert(g_ao.shape[2] == N);
+    std.debug.assert(g_ao.shape[3] == N);
 
     std.debug.assert(C.shape[0] == N);
     std.debug.assert(C.shape[1] == N);
@@ -259,32 +260,33 @@ fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: 
             C_vir.ptr(mu, a).* = C.at(mu, nocc + a);
         };
 
-        var g_oxxx = try Tensor(T, 4).init(.{ nocc, N, N, N }, gpa);
-        defer g_oxxx.deinit(gpa);
+        var g_1mo = try Tensor(T, 4).init(.{ nocc, N, N, N }, gpa);
+        defer g_1mo.deinit(gpa);
 
-        var g_ooxx = try Tensor(T, 4).init(.{ nocc, nocc, N, N }, gpa);
-        defer g_ooxx.deinit(gpa);
+        var g_2mo = try Tensor(T, 4).init(.{ nocc, nocc, N, N }, gpa);
+        defer g_2mo.deinit(gpa);
 
-        var g_oovx = try Tensor(T, 4).init(.{ nocc, nocc, nvir, N }, gpa);
-        defer g_oovx.deinit(gpa);
+        var g_3mo = try Tensor(T, 4).init(.{ nocc, nocc, nvir, N }, gpa);
+        defer g_3mo.deinit(gpa);
 
-        try contract(f64, "mi,mlns->ilns", &g_oxxx, C_occ, g_xxxx, 1, 0, gpa);
-        try contract(f64, "ilns,lj->ijns", &g_ooxx, g_oxxx, C_occ, 1, 0, gpa);
-        try contract(f64, "ijns,na->ijas", &g_oovx, g_ooxx, C_vir, 1, 0, gpa);
+        try contract(f64, "mi,mlns->ilns", &g_1mo, C_occ, g_ao, 1, 0, gpa);
 
-        try contract(f64, "ijas,sb->ijab", g_oovv, g_oovx, C_vir, 1, 0, gpa);
+        try contract(f64, "ilns,lj->ijns", &g_2mo, g_1mo, C_occ, 1, 0, gpa);
+        try contract(f64, "ijns,na->ijas", &g_3mo, g_2mo, C_vir, 1, 0, gpa);
+
+        try contract(f64, "ijas,sb->ijab", g_oovv, g_3mo, C_vir, 1, 0, gpa);
 
         return;
     }
 
-    var g_oxxx = try Tensor(T, 4).initZero(.{ nocc, N, N, N }, gpa);
-    defer g_oxxx.deinit(gpa);
+    var g_1mo = try Tensor(T, 4).initZero(.{ nocc, N, N, N }, gpa);
+    defer g_1mo.deinit(gpa);
 
-    var g_ooxx = try Tensor(T, 4).initZero(.{ nocc, nocc, N, N }, gpa);
-    defer g_ooxx.deinit(gpa);
+    var g_2mo = try Tensor(T, 4).initZero(.{ nocc, nocc, N, N }, gpa);
+    defer g_2mo.deinit(gpa);
 
-    var g_oovx = try Tensor(T, 4).initZero(.{ nocc, nocc, nvir, N }, gpa);
-    defer g_oovx.deinit(gpa);
+    var g_3mo = try Tensor(T, 4).initZero(.{ nocc, nocc, nvir, N }, gpa);
+    defer g_3mo.deinit(gpa);
 
     g_oovv.zero();
 
@@ -298,18 +300,18 @@ fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_xxxx: Tensor(T, 4), C: 
     }.addTo;
 
     for (0..nocc) |i| for (0..N) |lambda| for (0..N) |nu| for (0..N) |mu| for (0..N) |sigma| {
-        addTo(g_oxxx.ptr(.{ i, lambda, nu, sigma }), C.at(mu, i), g_xxxx.at(.{ mu, lambda, nu, sigma }));
+        addTo(g_1mo.ptr(.{ i, lambda, nu, sigma }), C.at(mu, i), g_ao.at(.{ mu, lambda, nu, sigma }));
     };
 
     for (0..nocc) |i| for (0..nocc) |j| for (0..N) |nu| for (0..N) |lambda| for (0..N) |sigma| {
-        addTo(g_ooxx.ptr(.{ i, j, nu, sigma }), C.at(lambda, j), g_oxxx.at(.{ i, lambda, nu, sigma }));
+        addTo(g_2mo.ptr(.{ i, j, nu, sigma }), C.at(lambda, j), g_1mo.at(.{ i, lambda, nu, sigma }));
     };
 
     for (0..nocc) |i| for (0..nocc) |j| for (nocc..N) |a| for (0..N) |nu| for (0..N) |sigma| {
-        addTo(g_oovx.ptr(.{ i, j, a - nocc, sigma }), C.at(nu, a), g_ooxx.at(.{ i, j, nu, sigma }));
+        addTo(g_3mo.ptr(.{ i, j, a - nocc, sigma }), C.at(nu, a), g_2mo.at(.{ i, j, nu, sigma }));
     };
 
     for (0..nocc) |i| for (0..nocc) |j| for (0..nvir) |a| for (0..N) |sigma| for (nocc..N) |b| {
-        addTo(g_oovv.ptr(.{ i, j, a, b - nocc }), C.at(sigma, b), g_oovx.at(.{ i, j, a, sigma }));
+        addTo(g_oovv.ptr(.{ i, j, a, b - nocc }), C.at(sigma, b), g_3mo.at(.{ i, j, a, sigma }));
     };
 }

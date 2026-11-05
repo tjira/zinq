@@ -15,8 +15,8 @@ const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
-const ao2mo_pp = @import("integral_transform.zig").ao2mo_pp;
-const ao2mo_pppp = @import("integral_transform.zig").ao2mo_pppp;
+const ao2mo_1e = @import("integral_transform.zig").ao2mo_1e;
+const ao2mo_2e = @import("integral_transform.zig").ao2mo_2e;
 const buildActRdm = @import("rdm.zig").buildActRdm;
 const buildStateAveragedActRdm = @import("rdm.zig").buildStateAveragedActRdm;
 const computeCi = @import("configuration_interaction.zig").computeCi;
@@ -383,11 +383,11 @@ fn buildCoreColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo
 }
 
 /// Constructs the core Fock matrix by contracting one-electron integrals with closed-shell core orbitals.
-fn buildCoreFock(comptime T: type, F_core: *Matrix(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), ncore: usize) void {
-    const nmo = H_mo.nrow();
+fn buildCoreFock(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), ncore: usize) void {
+    const nmo = h_mo.nrow();
 
     for (0..nmo) |p| for (0..nmo) |q| {
-        var sum = H_mo.at(p, q);
+        var sum = h_mo.at(p, q);
 
         for (0..ncore) |i| {
             sum += 2 * g_mo.at(.{ p, i, q, i }) - g_mo.at(.{ p, i, i, q });
@@ -398,13 +398,13 @@ fn buildCoreFock(comptime T: type, F_core: *Matrix(T), H_mo: Matrix(T), g_mo: Te
 }
 
 /// Constructs diagonal Fock matrix elements for orbital rotation preconditioner.
-fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), ncore: usize, gpa: Allocator) !void {
-    const nmo, const nact = .{ H_mo.nrow(), D_act.nrow() };
+fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), ncore: usize, gpa: Allocator) !void {
+    const nmo, const nact = .{ h_mo.nrow(), D_act.nrow() };
 
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
 
-    buildCoreFock(T, &F_core, H_mo, g_mo, ncore);
+    buildCoreFock(T, &F_core, h_mo, g_mo, ncore);
 
     for (0..nmo) |p| {
         var sum_diag = F_core.at(p, p);
@@ -420,13 +420,13 @@ fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), H_mo: Matrix(T), g_mo
 }
 
 /// Constructs the generalized Fock matrix using active reduced density matrices.
-fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), ncore: usize, gpa: Allocator) !void {
-    const nmo = H_mo.nrow();
+fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), ncore: usize, gpa: Allocator) !void {
+    const nmo = h_mo.nrow();
 
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
 
-    buildCoreFock(T, &F_core, H_mo, g_mo, ncore);
+    buildCoreFock(T, &F_core, h_mo, g_mo, ncore);
 
     @memset(F_gen.data, 0);
 
@@ -463,11 +463,11 @@ fn buildNonRedundantPairs(ncore: usize, nact: usize, nmo: usize, gpa: Allocator)
 }
 
 /// Evaluates the exact analytic orbital Hessian of the state-averaged energy with respect to orbital rotations.
-fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), H_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, ncore: usize, gpa: Allocator) !void {
-    const nmo, const nrot = .{ H_mo.ncol(), pairs.len };
+fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, ncore: usize, gpa: Allocator) !void {
+    const nmo, const nrot = .{ h_mo.ncol(), pairs.len };
 
-    var dH = try Matrix(T).initZero(nmo, nmo, gpa);
-    defer dH.deinit(gpa);
+    var dh = try Matrix(T).initZero(nmo, nmo, gpa);
+    defer dh.deinit(gpa);
 
     var dg = try Tensor(T, 4).initZero(.{ nmo, nmo, nmo, nmo }, gpa);
     defer dg.deinit(gpa);
@@ -478,13 +478,13 @@ fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), H_mo: Matrix(T), g_mo: T
     for (pairs, 0..) |pair_j, j| {
         const p, const q = .{ pair_j.p, pair_j.q };
 
-        @memset(dH.data, 0);
+        @memset(dh.data, 0);
 
         for (0..nmo) |idx| {
-            dH.ptr(p, idx).* += H_mo.at(q, idx);
-            dH.ptr(q, idx).* -= H_mo.at(p, idx);
-            dH.ptr(idx, p).* += H_mo.at(idx, q);
-            dH.ptr(idx, q).* -= H_mo.at(idx, p);
+            dh.ptr(p, idx).* += h_mo.at(q, idx);
+            dh.ptr(q, idx).* -= h_mo.at(p, idx);
+            dh.ptr(idx, p).* += h_mo.at(idx, q);
+            dh.ptr(idx, q).* -= h_mo.at(idx, p);
         }
 
         @memset(dg.data, 0);
@@ -505,7 +505,7 @@ fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), H_mo: Matrix(T), g_mo: T
 
         @memset(dF_gen.data, 0);
 
-        try buildGeneralizedFock(T, &dF_gen, dH, dg, D_act, d_act, ncore, gpa);
+        try buildGeneralizedFock(T, &dF_gen, dh, dg, D_act, d_act, ncore, gpa);
 
         for (pairs, 0..) |pair_i, i| {
             A.ptr(i, j).* = 2 * (dF_gen.at(pair_i.p, pair_i.q) - dF_gen.at(pair_i.q, pair_i.p));
@@ -610,20 +610,20 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
     }
 
     if (weights.len > 1 and nrot > 0) {
-        var H_mo_conv = try Matrix(T).init(nmo, nmo, gpa);
-        defer H_mo_conv.deinit(gpa);
+        var h_mo_conv = try Matrix(T).init(nmo, nmo, gpa);
+        defer h_mo_conv.deinit(gpa);
 
-        ao2mo_pp(T, &H_mo_conv, hfres.ints.H.?, C);
+        ao2mo_1e(T, &h_mo_conv, hfres.ints.H.?, C);
 
         var g_mo_conv = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
         defer g_mo_conv.deinit(gpa);
 
-        try ao2mo_pppp(T, &g_mo_conv, hfres.ints.g.?, C, gpa);
+        try ao2mo_2e(T, &g_mo_conv, hfres.ints.g.?, C, gpa);
 
         var A_sa = try Matrix(T).initZero(nrot, nrot, gpa);
         defer A_sa.deinit(gpa);
 
-        try buildOrbitalHessian(T, &A_sa, H_mo_conv, g_mo_conv, D_act_sa, d_act_sa, pairs, ncore, gpa);
+        try buildOrbitalHessian(T, &A_sa, h_mo_conv, g_mo_conv, D_act_sa, d_act_sa, pairs, ncore, gpa);
 
         var F_gen_s = try Matrix(T).initZero(nmo, nmo, gpa);
         defer F_gen_s.deinit(gpa);
@@ -648,7 +648,7 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
                 d_s.deinit(gpa);
             }
 
-            try buildGeneralizedFock(T, &F_gen_s, H_mo_conv, g_mo_conv, D_s, d_s, ncore, gpa);
+            try buildGeneralizedFock(T, &F_gen_s, h_mo_conv, g_mo_conv, D_s, d_s, ncore, gpa);
 
             var neg_g = try Matrix(T).init(nrot, 1, gpa);
             defer neg_g.deinit(gpa);
@@ -707,9 +707,7 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
             H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
         };
 
-        const n = g_d.shape[0];
-
-        for (0..n) |mu| for (0..n) |lambda| for (0..n) |nu| for (0..n) |sigma| {
+        for (0..nbf) |mu| for (0..nbf) |lambda| for (0..nbf) |nu| for (0..nbf) |sigma| {
             const indices = .{ mu, lambda, nu, sigma };
 
             const val = hfres.ints.g.?.at(indices);
@@ -726,25 +724,25 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
             g_ms_d.deinit(gpa);
         }
 
-        for (0..dets.len) |d1| for (d1..dets.len) |d2| {
-            const factor: T = if (d1 == d2) 1 else 2;
+        for (0..dets.len) |m| for (m..dets.len) |n| {
+            const factor: T = if (m == n) 1 else 2;
 
-            const val = slater(ScalarDual(T), dets[d1], dets[d2], h_ms_d, g_ms_d);
+            const val = slater(ScalarDual(T), dets[m], dets[n], h_ms_d, g_ms_d);
 
             for (states, 0..) |s, s_idx| {
-                grads[s_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(d1, s) * C_ci.at(d2, s) * val.der;
+                grads[s_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, s) * C_ci.at(n, s) * val.der;
             }
         };
 
         if (weights.len > 1 and nrot > 0) {
-            var dH_mo = try Matrix(T).init(nmo, nmo, gpa);
-            defer dH_mo.deinit(gpa);
+            var dh_mo = try Matrix(T).init(nmo, nmo, gpa);
+            defer dh_mo.deinit(gpa);
 
             var dg_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
             defer dg_mo.deinit(gpa);
 
             for (0..nmo) |p| for (0..nmo) |q| {
-                dH_mo.ptr(p, q).* = h_ms_d.at(2 * p, 2 * q).der;
+                dh_mo.ptr(p, q).* = h_ms_d.at(2 * p, 2 * q).der;
             };
 
             for (0..nmo) |p| for (0..nmo) |q| for (0..nmo) |r| for (0..nmo) |s| {
@@ -754,7 +752,7 @@ fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C: Ma
             var dF_gen = try Matrix(T).initZero(nmo, nmo, gpa);
             defer dF_gen.deinit(gpa);
 
-            try buildGeneralizedFock(T, &dF_gen, dH_mo, dg_mo, D_act_sa, d_act_sa, ncore, gpa);
+            try buildGeneralizedFock(T, &dF_gen, dh_mo, dg_mo, D_act_sa, d_act_sa, ncore, gpa);
 
             for (states, 0..) |_, s_idx| {
                 var resp: T = 0;
@@ -815,20 +813,20 @@ fn canonicalizeCoreSubspace(comptime T: type, C: *Matrix(T), F_core: Matrix(T), 
 fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, ncore: usize, nact: usize, gpa: Allocator) !void {
     const nmo = C.ncol();
 
-    var H_mo = try Matrix(T).init(nmo, nmo, gpa);
-    defer H_mo.deinit(gpa);
+    var h_mo = try Matrix(T).init(nmo, nmo, gpa);
+    defer h_mo.deinit(gpa);
 
-    ao2mo_pp(T, &H_mo, ints.H.?, C.*);
+    ao2mo_1e(T, &h_mo, ints.H.?, C.*);
 
     var g_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
     defer g_mo.deinit(gpa);
 
-    try ao2mo_pppp(T, &g_mo, ints.g.?, C.*, gpa);
+    try ao2mo_2e(T, &g_mo, ints.g.?, C.*, gpa);
 
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
 
-    buildCoreFock(T, &F_core, H_mo, g_mo, ncore);
+    buildCoreFock(T, &F_core, h_mo, g_mo, ncore);
 
     try canonicalizeCoreSubspace(T, C, F_core, ncore, gpa);
 
@@ -912,20 +910,20 @@ fn casscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []co
             d_act.deinit(gpa);
         }
 
-        var H_mo = try Matrix(T).init(nmo, nmo, gpa);
-        defer H_mo.deinit(gpa);
+        var h_mo = try Matrix(T).init(nmo, nmo, gpa);
+        defer h_mo.deinit(gpa);
 
-        ao2mo_pp(T, &H_mo, ints.H.?, C.*);
+        ao2mo_1e(T, &h_mo, ints.H.?, C.*);
 
         var g_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
         defer g_mo.deinit(gpa);
 
-        try ao2mo_pppp(T, &g_mo, ints.g.?, C.*, gpa);
+        try ao2mo_2e(T, &g_mo, ints.g.?, C.*, gpa);
 
         var F_gen = try Matrix(T).initZero(nmo, nmo, gpa);
         defer F_gen.deinit(gpa);
 
-        try buildGeneralizedFock(T, &F_gen, H_mo, g_mo, D_act, d_act, ncore, gpa);
+        try buildGeneralizedFock(T, &F_gen, h_mo, g_mo, D_act, d_act, ncore, gpa);
 
         var g_orb = try Matrix(T).initZero(nmo, nmo, gpa);
         defer g_orb.deinit(gpa);
@@ -951,7 +949,7 @@ fn casscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []co
             var F_diag = try Vector(T).init(nmo, gpa);
             defer F_diag.deinit(gpa);
 
-            try buildDiagonalFock(T, &F_diag, H_mo, g_mo, D_act, ncore, gpa);
+            try buildDiagonalFock(T, &F_diag, h_mo, g_mo, D_act, ncore, gpa);
 
             var kappa = try Matrix(T).initZero(nmo, nmo, gpa);
             defer kappa.deinit(gpa);

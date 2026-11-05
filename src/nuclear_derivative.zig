@@ -11,10 +11,10 @@ const electronic_structure = @import("electronic_structure.zig");
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
-const ao2so_coef = @import("integral_transform.zig").ao2so_coef;
 const det = @import("linear_algebra.zig").det;
 const gemm = @import("linear_algebra.zig").gemm;
 const getSymbol = @import("constant.zig").getSymbol;
+const mo2ms_coef = @import("integral_transform.zig").mo2ms_coef;
 const printf = @import("read_write.zig").printf;
 
 /// Execution context encapsulating molecular system geometry, IO streams, memory allocator, and logging settings.
@@ -271,10 +271,10 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
 
     const C_ref = electronic_structure.getOrbitals(T, res_ref);
 
-    var C_ref_so = if (generalized) C_ref else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) C_ref_so.deinit(gpa);
+    var C_ref_ms = if (generalized) C_ref else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_ref_ms.deinit(gpa);
 
-    if (!generalized) ao2so_coef(T, &C_ref_so, C_ref);
+    if (!generalized) mo2ms_coef(T, &C_ref_ms, C_ref);
 
     var S_ms = try Matrix(T).init(nsp, nsp, gpa);
     defer S_ms.deinit(gpa);
@@ -320,25 +320,25 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         var res_p = try runFn(T, io, modified_opt, &sys_p, Pg, false, gpa);
         defer res_p.deinit(gpa);
 
-        var S_so = try sys_m.overlapBetweenSpin(sys_p, nthreads, gpa);
-        defer S_so.deinit(gpa);
+        var S_as = try sys_m.overlapBetweenSpin(sys_p, nthreads, gpa);
+        defer S_as.deinit(gpa);
 
         const C_m = electronic_structure.getOrbitals(T, res_m);
         const C_p = electronic_structure.getOrbitals(T, res_p);
 
-        var C_m_so = if (generalized) C_m else C_m_buf;
+        var C_m_ms = if (generalized) C_m else C_m_buf;
 
-        if (!generalized) ao2so_coef(T, &C_m_so, C_m);
+        if (!generalized) mo2ms_coef(T, &C_m_ms, C_m);
 
-        var C_p_so = if (generalized) C_p else C_p_buf;
+        var C_p_ms = if (generalized) C_p else C_p_buf;
 
-        if (!generalized) ao2so_coef(T, &C_p_so, C_p);
+        if (!generalized) mo2ms_coef(T, &C_p_ms, C_p);
 
-        alignDisplacedPhases(T, .{ &C_m_so, &C_p_so }, C_ref_so, .{ &res_m.C_ci, &res_p.C_ci }, C_ci_ref, dets.items);
+        alignDisplacedPhases(T, .{ &C_m_ms, &C_p_ms }, C_ref_ms, .{ &res_m.C_ci, &res_p.C_ci }, C_ci_ref, dets.items);
 
-        gemm(T, &tmp, S_so, C_p_so, 1, 0, false, false);
+        gemm(T, &tmp, S_as, C_p_ms, 1, 0, false, false);
 
-        gemm(T, &S_ms, C_m_so, tmp, 1, 0, true, false);
+        gemm(T, &S_ms, C_m_ms, tmp, 1, 0, true, false);
 
         try accumulateNacv(T, couplings, S_ms, .{ res_m.C_ci, res_p.C_ci }, dets.items, pairs, gpa);
 
@@ -443,7 +443,7 @@ fn accumulateNacv(comptime T: type, couplings: []T, S_MS: Matrix(T), C_ci: [2]Ma
 }
 
 /// Aligns spin-orbital and CI state phase signs across displaced geometries.
-fn alignDisplacedPhases(comptime T: type, C_so: [2]*Matrix(T), C_ref: Matrix(T), C_ci: [2]*Matrix(T), C_ci_ref: Matrix(T), dets: []const []const usize) void {
+fn alignDisplacedPhases(comptime T: type, C_ms: [2]*Matrix(T), C_ref: Matrix(T), C_ci: [2]*Matrix(T), C_ci_ref: Matrix(T), dets: []const []const usize) void {
     const nsp = C_ref.nrow();
 
     for (0..2) |idx| {
@@ -451,12 +451,12 @@ fn alignDisplacedPhases(comptime T: type, C_so: [2]*Matrix(T), C_ref: Matrix(T),
             var d: T = 0;
 
             for (0..nsp) |mu| {
-                d += C_so[idx].at(mu, p) * C_ref.at(mu, p);
+                d += C_ms[idx].at(mu, p) * C_ref.at(mu, p);
             }
 
             if (d < 0) {
                 for (0..nsp) |mu| {
-                    C_so[idx].ptr(mu, p).* = -C_so[idx].at(mu, p);
+                    C_ms[idx].ptr(mu, p).* = -C_ms[idx].at(mu, p);
                 }
 
                 for (0..dets.len) |a| {

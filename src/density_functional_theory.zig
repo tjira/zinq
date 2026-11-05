@@ -606,11 +606,12 @@ pub fn DftPotential(comptime T: type) type {
                     const v_lap = if (ctx.has_mgga) ctx.potgd.lap_pot.?.at(g, 0) else 0.0;
 
                     for (0..ctx.sys.nbf) |mu| for (0..ctx.sys.nbf) |nu| {
-                        const rho_val = ctx.potgd.rho_pot.at(g, 0);
+                        const v_rho = ctx.potgd.rho_pot.at(g, 0);
+
                         const phi_mu = ctx.basisgrid.phi.at(g, mu);
                         const phi_nu = ctx.basisgrid.phi.at(g, nu);
 
-                        var val = rho_val * phi_mu * phi_nu + X_a.?.data[mu] * phi_nu + phi_mu * X_a.?.data[nu];
+                        var val = v_rho * phi_mu * phi_nu + X_a.?.data[mu] * phi_nu + phi_mu * X_a.?.data[nu];
 
                         if (ctx.has_mgga) {
                             const dx_mu_nu = ctx.basisgrid.dphi_dx.?.at(g, mu) * ctx.basisgrid.dphi_dx.?.at(g, nu);
