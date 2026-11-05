@@ -15,6 +15,7 @@ const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
+const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
 const generateCasDets = @import("determinant.zig").generateCasDets;
 const generateDets = @import("determinant.zig").generateDets;
 const printf = @import("read_write.zig").printf;
@@ -209,21 +210,6 @@ pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev
             }
         }
     }
-}
-
-/// Evaluates electronic Hamiltonian matrix elements across Slater determinants using Slater-Condon rules.
-pub fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_ms: Matrix(T), g_ms: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
-    var H_ci = try Matrix(T).init(dets.len, dets.len, gpa);
-    errdefer H_ci.deinit(gpa);
-
-    for (0..dets.len) |m| for (m..dets.len) |n| {
-        const val = slater(T, dets[m], dets[n], h_ms, g_ms);
-
-        H_ci.ptr(m, n).* = val;
-        H_ci.ptr(n, m).* = val;
-    };
-
-    return H_ci;
 }
 
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.

@@ -16,12 +16,12 @@ const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
+const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
 const generateDets = @import("determinant.zig").generateDets;
 const printf = @import("read_write.zig").printf;
-const slater = @import("slater_condon.zig").slater;
 const transformInts = @import("integral_transform.zig").transformInts;
 
-const AU2CM = @import("constant.zig").AU2CM;
+const AU2CM = @import("constants.zig").AU2CM;
 
 /// Parameters governing the Møller-Plesset perturbation theory calculation and its derivatives.
 pub const Options = struct {
@@ -266,21 +266,6 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     }
 
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = &.{} };
-}
-
-/// Evaluates electronic Hamiltonian matrix elements across Slater determinants using Slater-Condon rules.
-fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_ms: Matrix(T), g_ms: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
-    var H_dets = try Matrix(T).init(dets.len, dets.len, gpa);
-    errdefer H_dets.deinit(gpa);
-
-    for (0..dets.len) |i| for (i..dets.len) |j| {
-        const val = slater(T, dets[i], dets[j], h_ms, g_ms);
-
-        H_dets.ptr(i, j).* = val;
-        H_dets.ptr(j, i).* = val;
-    };
-
-    return H_dets;
 }
 
 /// Computes Møller-Plesset correlation energy corrections up to the requested perturbation order.

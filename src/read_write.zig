@@ -7,13 +7,13 @@ const Complex = std.math.Complex;
 const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 
-const getSymbol = @import("constant.zig").getSymbol;
+const getSymbol = @import("constants.zig").getSymbol;
 const isComplex = @import("value.zig").isComplex;
 const primType = @import("value.zig").primType;
 
-const A2BOHR = @import("constant.zig").A2BOHR;
-const AMU2AU = @import("constant.zig").AMU2AU;
-const AU2FS = @import("constant.zig").AU2FS;
+const A2BOHR = @import("constants.zig").A2BOHR;
+const AMU2AU = @import("constants.zig").AMU2AU;
+const AU2FS = @import("constants.zig").AU2FS;
 
 /// Resolves the trajectory output path with automatic numerical suffixing when ntraj > 1.
 pub fn getTrajectoryPath(path: []const u8, i: usize, ntraj: usize, gpa: std.mem.Allocator) ![]const u8 {

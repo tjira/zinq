@@ -13,7 +13,7 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
 const det = @import("linear_algebra.zig").det;
 const gemm = @import("linear_algebra.zig").gemm;
-const getSymbol = @import("constant.zig").getSymbol;
+const getSymbol = @import("constants.zig").getSymbol;
 const mo2ms_coef = @import("integral_transform.zig").mo2ms_coef;
 const printf = @import("read_write.zig").printf;
 

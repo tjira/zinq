@@ -16,15 +16,17 @@ const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
+const contractTwoElectronFock = @import("two_electron_contraction.zig").contractTwoElectronFock;
+const contractTwoElectronGradient = @import("two_electron_contraction.zig").contractTwoElectronGradient;
 const dot = @import("linear_algebra.zig").dot;
 const gemm = @import("linear_algebra.zig").gemm;
-const getSymbol = @import("constant.zig").getSymbol;
+const getSymbol = @import("constants.zig").getSymbol;
 const lowdin = @import("population_analysis.zig").lowdin;
 const mayer = @import("population_analysis.zig").mayer;
 const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").runFromSystem;
 const mulliken = @import("population_analysis.zig").mulliken;
-const orbitalResponse = @import("cphf.zig").orbitalResponse;
+const orbitalResponse = @import("orbital_response.zig").orbitalResponse;
 const printLowdinCharges = @import("population_analysis.zig").printLowdinCharges;
 const printMayerBondOrders = @import("population_analysis.zig").printMayerBondOrders;
 const printMullikenCharges = @import("population_analysis.zig").printMullikenCharges;
@@ -35,8 +37,8 @@ const sygvd = @import("linear_algebra.zig").sygvd;
 const wiberg = @import("population_analysis.zig").wiberg;
 const writeMatrix = @import("read_write.zig").writeMatrix;
 
-const AN2SM = @import("constant.zig").AN2SM;
-const AU2CM = @import("constant.zig").AU2CM;
+const AN2SM = @import("constants.zig").AN2SM;
+const AU2CM = @import("constants.zig").AU2CM;
 
 /// Parameters governing the self-consistent field (SCF) calculation convergence and method options.
 pub const Options = struct {
@@ -232,14 +234,7 @@ pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWor
         var g_G: T = 0;
 
         if (ints.dg) |dg| {
-            for (0..dg.shape[1]) |mu| for (0..dg.shape[2]) |nu| {
-                for (0..dg.shape[3]) |lambda| for (0..dg.shape[4]) |sigma| {
-                    const dg1 = dg.at(.{ 3 * A + alpha, mu, lambda, nu, sigma });
-                    const dg2 = dg.at(.{ 3 * A + alpha, mu, lambda, sigma, nu });
-
-                    g_G += 0.5 * ws.P.at(mu, nu) * ws.P.at(lambda, sigma) * (dg1 - exch_factor * dg2);
-                };
-            };
+            g_G += contractTwoElectronGradient(T, dg, 3 * A + alpha, ws.P.*, exch_factor);
         }
 
         G.ptr(A, alpha).* += h_G + g_G - s_G;
@@ -415,22 +410,6 @@ fn addDftPotential(comptime T: type, F: *Matrix(T), dft: *DftPotential(T), P: Ma
     };
 }
 
-/// Constructs the Coulomb matrix J by contracting two-electron repulsion integrals with the density matrix.
-fn buildCoulombMatrix(comptime T: type, J: *Matrix(T), g: Tensor(T, 4), P: Matrix(T)) void {
-    const nbf = J.nrow();
-
-    std.debug.assert(g.shape[0] == nbf);
-    std.debug.assert(g.shape[1] == nbf);
-    std.debug.assert(g.shape[2] == nbf);
-    std.debug.assert(g.shape[3] == nbf);
-    std.debug.assert(P.shape[0] == nbf);
-    std.debug.assert(P.shape[1] == nbf);
-
-    for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
-        J.ptr(mu, nu).* += P.at(lambda, sigma) * g.at(.{ mu, lambda, nu, sigma });
-    };
-}
-
 /// Constructs the one-particle reduced density matrix in the atomic basis from molecular orbital coefficients.
 fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) void {
     std.debug.assert(C.shape[0] == P.shape[0]);
@@ -464,22 +443,6 @@ fn buildEnergyWeightedDensity(comptime T: type, W: *Matrix(T), C: Matrix(T), e: 
     };
 }
 
-/// Constructs the exchange matrix K by contracting two-electron repulsion integrals with the density matrix.
-fn buildExchangeMatrix(comptime T: type, K: *Matrix(T), g: Tensor(T, 4), P: Matrix(T)) void {
-    const nbf = K.nrow();
-
-    std.debug.assert(g.shape[0] == nbf);
-    std.debug.assert(g.shape[1] == nbf);
-    std.debug.assert(g.shape[2] == nbf);
-    std.debug.assert(g.shape[3] == nbf);
-    std.debug.assert(P.shape[0] == nbf);
-    std.debug.assert(P.shape[1] == nbf);
-
-    for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
-        K.ptr(mu, nu).* += P.at(lambda, sigma) * g.at(.{ mu, lambda, sigma, nu });
-    };
-}
-
 /// Constructs the effective one-electron Fock matrix from core Hamiltonian, Coulomb, exchange, and DFT potentials.
 fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), opt: Options, dft: ?*DftPotential(T), gpa: Allocator) !void {
     const nbf = ints.H.?.shape[0];
@@ -510,19 +473,7 @@ fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matri
     }
 
     if (!opt.integral_direct) {
-        var J = try Matrix(T).initZero(nbf, nbf, gpa);
-        defer J.deinit(gpa);
-
-        var K = try Matrix(T).initZero(nbf, nbf, gpa);
-        defer K.deinit(gpa);
-
-        buildCoulombMatrix(T, &J, ints.g.?, P);
-
-        buildExchangeMatrix(T, &K, ints.g.?, P);
-
-        for (0..nbf) |mu| for (0..nbf) |nu| {
-            F.ptr(mu, nu).* += J.at(mu, nu) - exch_factor * K.at(mu, nu);
-        };
+        contractTwoElectronFock(T, F, ints.g.?, P, exch_factor);
     }
 
     if (dft) |pot| {

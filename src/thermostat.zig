@@ -4,7 +4,7 @@ const std = @import("std");
 
 const Matrix = @import("tensor.zig").Matrix;
 
-const AU2K = @import("constant.zig").AU2K;
+const AU2K = @import("constants.zig").AU2K;
 
 /// Tagged union for thermostat configuration options.
 pub const Options = union(enum) {

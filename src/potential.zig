@@ -24,8 +24,8 @@ const isDual = @import("value.zig").isDual;
 const readMatrix = @import("read_write.zig").readMatrix;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 
-const CM2EV = @import("constant.zig").CM2EV;
-const EV2AU = @import("constant.zig").EV2AU;
+const CM2EV = @import("constants.zig").CM2EV;
+const EV2AU = @import("constants.zig").EV2AU;
 
 /// Parameter union for potential energy surfaces supporting ab initio, harmonic, coupling, and Tully models.
 pub const Options = union(enum) {

@@ -7,8 +7,8 @@ const Complex = std.math.Complex;
 
 const electronic_structure = @import("electronic_structure.zig");
 
-const Ehrenfest = @import("ehrenfest.zig").Ehrenfest;
-const EhrenfestOptions = @import("ehrenfest.zig").Options;
+const Ehrenfest = @import("ehrenfest_dynamics.zig").Ehrenfest;
+const EhrenfestOptions = @import("ehrenfest_dynamics.zig").Options;
 const Matrix = @import("tensor.zig").Matrix;
 const MethodOptions = @import("potential.zig").MethodOptions;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
@@ -23,7 +23,7 @@ const Vector = @import("tensor.zig").Vector;
 const validation = @import("validation.zig");
 
 const calculateNormalModes = @import("frequency_analysis.zig").calculateNormalModes;
-const getMass = @import("constant.zig").getMass;
+const getMass = @import("constants.zig").getMass;
 const getTrajectoryPath = @import("read_write.zig").getTrajectoryPath;
 const printf = @import("read_write.zig").printf;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
@@ -35,8 +35,8 @@ const writeXyzMomentumFrame = @import("read_write.zig").writeXyzMomentumFrame;
 const writeXyzMomentumTrajectory = @import("read_write.zig").writeXyzMomentumTrajectory;
 const writeXyzTrajectory = @import("read_write.zig").writeXyzTrajectory;
 
-const AMU2AU = @import("constant.zig").AMU2AU;
-const AU2K = @import("constant.zig").AU2K;
+const AMU2AU = @import("constants.zig").AMU2AU;
+const AU2K = @import("constants.zig").AU2K;
 
 /// Configuration options for the classical molecular dynamics simulation.
 pub const Options = struct {

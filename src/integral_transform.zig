@@ -8,7 +8,7 @@ const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 
-const contract = @import("contract.zig").contract;
+const contract = @import("tensor_contraction.zig").contract;
 
 /// Transforms a one-electron operator from the spatial atomic orbital basis to the atomic spin-orbital basis.
 pub fn ao2as_1e(comptime T: type, A_as: *Matrix(T), A_ao: Matrix(T)) void {
@@ -141,92 +141,8 @@ pub fn ao2mo_2e(comptime T: type, g_mo: *Tensor(T, 4), g_ao: Tensor(T, 4), C: Ma
     };
 }
 
-/// Transforms a one-electron operator matrix from the molecular orbital basis back to the atomic orbital basis.
-pub fn mo2ao_1e(comptime T: type, A_ao: *Matrix(T), A_mo: Matrix(T), C: Matrix(T)) !void {
-    const N = C.shape[0];
-
-    std.debug.assert(A_mo.nrow() == N);
-    std.debug.assert(A_mo.ncol() == N);
-    std.debug.assert(A_ao.nrow() == N);
-    std.debug.assert(A_ao.ncol() == N);
-
-    if (T == f64) {
-        return try contract(f64, "mq,qp->mp", A_ao, C, A_mo, 1, 0, null);
-    }
-
-    for (0..N) |mu| for (0..N) |p| {
-        var sum = Value(T).fromFloat(0);
-
-        for (0..N) |q| {
-            sum = sum.add(Value(T).init(C.at(mu, q)).mul(Value(T).init(A_mo.at(q, p))));
-        }
-
-        A_ao.ptr(mu, p).* = sum.val;
-    };
-}
-
-/// Expands spatial molecular orbital expansion coefficients into a molecular spin-orbital block matrix.
-pub fn mo2ms_coef(comptime T: type, C_ms: *Matrix(T), C_mo: Matrix(T)) void {
-    const nbf = C_mo.shape[0];
-
-    std.debug.assert(C_ms.shape[0] == 2 * nbf);
-    std.debug.assert(C_ms.shape[1] == 2 * nbf);
-
-    C_ms.zero();
-
-    for (0..nbf) |p| {
-        const col_a = 2 * p + 0;
-        const col_b = 2 * p + 1;
-
-        for (0..nbf) |mu| {
-            const indmu0, const indmu1 = .{ mu, mu + nbf };
-
-            C_ms.ptr(indmu0, col_a).* = C_mo.at(mu, p);
-            C_ms.ptr(indmu1, col_b).* = C_mo.at(mu, p);
-        }
-    }
-}
-
-/// Transforms core Hamiltonian and two-electron repulsion integrals to the molecular spin-orbital basis.
-pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
-    const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
-
-    var C_ms = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) C_ms.deinit(gpa);
-
-    if (!generalized) {
-        mo2ms_coef(T, &C_ms, C);
-    }
-
-    var H_as = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) H_as.deinit(gpa);
-
-    if (!generalized) {
-        ao2as_1e(T, &H_as, H);
-    }
-
-    var g_as = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
-    defer if (!generalized) g_as.deinit(gpa);
-
-    if (!generalized) {
-        ao2as_2e(T, &g_as, g);
-    }
-
-    var h_ms = try Matrix(T).init(nsp, nsp, gpa);
-    errdefer h_ms.deinit(gpa);
-
-    ao2mo_1e(T, &h_ms, H_as, C_ms);
-
-    var g_ms = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
-    errdefer g_ms.deinit(gpa);
-
-    try ao2mo_2e(T, &g_ms, g_as, C_ms, gpa);
-
-    return .{ h_ms, g_ms };
-}
-
 /// Transforms atomic orbital integrals to a restricted molecular orbital subset of occupied and virtual orbitals.
-fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_ao: Tensor(T, 4), C: Matrix(T), nocc: usize, gpa: Allocator) !void {
+pub fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_ao: Tensor(T, 4), C: Matrix(T), nocc: usize, gpa: Allocator) !void {
     const N = g_ao.shape[0];
 
     std.debug.assert(g_ao.shape[1] == N);
@@ -314,4 +230,88 @@ fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_ao: Tensor(T, 4), C: Ma
     for (0..nocc) |i| for (0..nocc) |j| for (0..nvir) |a| for (0..N) |sigma| for (nocc..N) |b| {
         addTo(g_oovv.ptr(.{ i, j, a, b - nocc }), C.at(sigma, b), g_3mo.at(.{ i, j, a, sigma }));
     };
+}
+
+/// Transforms a one-electron operator matrix from the molecular orbital basis back to the atomic orbital basis.
+pub fn mo2ao_1e(comptime T: type, A_ao: *Matrix(T), A_mo: Matrix(T), C: Matrix(T)) !void {
+    const N = C.shape[0];
+
+    std.debug.assert(A_mo.nrow() == N);
+    std.debug.assert(A_mo.ncol() == N);
+    std.debug.assert(A_ao.nrow() == N);
+    std.debug.assert(A_ao.ncol() == N);
+
+    if (T == f64) {
+        return try contract(f64, "mq,qp->mp", A_ao, C, A_mo, 1, 0, null);
+    }
+
+    for (0..N) |mu| for (0..N) |p| {
+        var sum = Value(T).fromFloat(0);
+
+        for (0..N) |q| {
+            sum = sum.add(Value(T).init(C.at(mu, q)).mul(Value(T).init(A_mo.at(q, p))));
+        }
+
+        A_ao.ptr(mu, p).* = sum.val;
+    };
+}
+
+/// Expands spatial molecular orbital expansion coefficients into a molecular spin-orbital block matrix.
+pub fn mo2ms_coef(comptime T: type, C_ms: *Matrix(T), C_mo: Matrix(T)) void {
+    const nbf = C_mo.shape[0];
+
+    std.debug.assert(C_ms.shape[0] == 2 * nbf);
+    std.debug.assert(C_ms.shape[1] == 2 * nbf);
+
+    C_ms.zero();
+
+    for (0..nbf) |p| {
+        const col_a = 2 * p + 0;
+        const col_b = 2 * p + 1;
+
+        for (0..nbf) |mu| {
+            const indmu0, const indmu1 = .{ mu, mu + nbf };
+
+            C_ms.ptr(indmu0, col_a).* = C_mo.at(mu, p);
+            C_ms.ptr(indmu1, col_b).* = C_mo.at(mu, p);
+        }
+    }
+}
+
+/// Transforms core Hamiltonian and two-electron repulsion integrals to the molecular spin-orbital basis.
+pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 4), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+    const nsp = if (generalized) C.shape[0] else 2 * C.shape[0];
+
+    var C_ms = if (generalized) C else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) C_ms.deinit(gpa);
+
+    if (!generalized) {
+        mo2ms_coef(T, &C_ms, C);
+    }
+
+    var H_as = if (generalized) H else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!generalized) H_as.deinit(gpa);
+
+    if (!generalized) {
+        ao2as_1e(T, &H_as, H);
+    }
+
+    var g_as = if (generalized) g else try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer if (!generalized) g_as.deinit(gpa);
+
+    if (!generalized) {
+        ao2as_2e(T, &g_as, g);
+    }
+
+    var h_ms = try Matrix(T).init(nsp, nsp, gpa);
+    errdefer h_ms.deinit(gpa);
+
+    ao2mo_1e(T, &h_ms, H_as, C_ms);
+
+    var g_ms = try Tensor(T, 4).init(.{ nsp, nsp, nsp, nsp }, gpa);
+    errdefer g_ms.deinit(gpa);
+
+    try ao2mo_2e(T, &g_ms, g_as, C_ms, gpa);
+
+    return .{ h_ms, g_ms };
 }

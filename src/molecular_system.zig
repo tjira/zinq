@@ -9,7 +9,7 @@ const Allocator = std.mem.Allocator;
 const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 
-const A2BOHR = @import("constant.zig").A2BOHR;
+const A2BOHR = @import("constants.zig").A2BOHR;
 
 /// Generates a MolecularSystem struct type for the given floating-point coordinate precision type T.
 pub fn MolecularSystem(comptime T: type) type {

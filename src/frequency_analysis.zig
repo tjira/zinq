@@ -9,20 +9,20 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Vector = @import("tensor.zig").Vector;
 
 const gemm = @import("linear_algebra.zig").gemm;
-const getMass = @import("constant.zig").getMass;
+const getMass = @import("constants.zig").getMass;
 const printf = @import("read_write.zig").printf;
 const syevd = @import("linear_algebra.zig").syevd;
 
-const a0 = @import("constant.zig").a0;
-const h = @import("constant.zig").h;
-const kB = @import("constant.zig").kB;
-const mu = @import("constant.zig").mu;
-const R = @import("constant.zig").R;
+const a0 = @import("constants.zig").a0;
+const h = @import("constants.zig").h;
+const kB = @import("constants.zig").kB;
+const mu = @import("constants.zig").mu;
+const R = @import("constants.zig").R;
 
-const CAL2J = @import("constant.zig").CAL2J;
-const AU2CM = @import("constant.zig").AU2CM;
-const AU2K = @import("constant.zig").AU2K;
-const CM2AU = @import("constant.zig").CM2AU;
+const CAL2J = @import("constants.zig").CAL2J;
+const AU2CM = @import("constants.zig").AU2CM;
+const AU2K = @import("constants.zig").AU2K;
+const CM2AU = @import("constants.zig").CM2AU;
 
 /// Options for thermochemical analysis specifying the thermodynamic temperature and pressure.
 pub const Options = struct {

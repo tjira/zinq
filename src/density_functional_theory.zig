@@ -2,7 +2,6 @@
 
 const std = @import("std");
 
-const libint = @import("cimport.zig").libint;
 const libxc = @import("cimport.zig").libxc;
 
 const Allocator = std.mem.Allocator;
@@ -140,9 +139,11 @@ pub fn DftPotential(comptime T: type) type {
             var potential = try PotentialGrid(T).init(self.pts.shape[0], size_factor, nd, mgga, self.polarized, gpa);
             defer potential.deinit(gpa);
 
-            self.evaluateBasis(sys, basis);
+            basis.evaluate(sys, self.pts);
 
-            var ctx = DftEvaluationContext(T){
+            density.compute(P, basis, sys);
+
+            const ctx = DftEvaluationContext(T){
                 .sys = sys,
 
                 .basisgrid = basis,
@@ -154,8 +155,6 @@ pub fn DftPotential(comptime T: type) type {
 
                 .needs_deriv = flags.needs_deriv,
             };
-
-            self.computeDensity(P, &ctx);
 
             const inp = XCInput(T){
                 .rho_val = ctx.density.rho_val.data,
@@ -202,90 +201,6 @@ pub fn DftPotential(comptime T: type) type {
             return try std.mem.join(gpa, " + ", parts.items);
         }
 
-        /// Calculates the electronic density and its derivatives on the grid from the density matrix.
-        fn computeDensity(self: @This(), P: Matrix(T), ctx: *DftEvaluationContext(T)) void {
-            if (self.polarized) {
-                self.computeDensityPolarized(P, ctx);
-            } else {
-                self.computeDensityUnpolarized(P, ctx);
-            }
-        }
-
-        /// Calculates the spin-polarized electronic density, its gradient, and kinetic energy density on the grid.
-        fn computeDensityPolarized(self: @This(), P: Matrix(T), ctx: *DftEvaluationContext(T)) void {
-            const b = ctx.sys.nbf;
-
-            for (0..self.pts.shape[0]) |g| {
-                const rho_a = contractDensity(P, ctx.basisgrid, 0, g, b);
-                const rho_b = contractDensity(P, ctx.basisgrid, b, g, b);
-
-                ctx.density.rho_val.ptr(g, 0).* = rho_a;
-                ctx.density.rho_val.ptr(g, 1).* = rho_b;
-
-                if (ctx.needs_deriv) {
-                    const del_rho_a = contractDensityGradient(P, ctx.basisgrid, 0, g, b);
-                    const del_rho_b = contractDensityGradient(P, ctx.basisgrid, b, g, b);
-
-                    ctx.density.del_rho.?.ptr(g, 0).* = del_rho_a[0];
-                    ctx.density.del_rho.?.ptr(g, 1).* = del_rho_a[1];
-                    ctx.density.del_rho.?.ptr(g, 2).* = del_rho_a[2];
-                    ctx.density.del_rho.?.ptr(g, 3).* = del_rho_b[0];
-                    ctx.density.del_rho.?.ptr(g, 4).* = del_rho_b[1];
-                    ctx.density.del_rho.?.ptr(g, 5).* = del_rho_b[2];
-
-                    const ga, const gb = .{ del_rho_a, del_rho_b };
-
-                    const sig_aa = ga[0] * ga[0] + ga[1] * ga[1] + ga[2] * ga[2];
-                    const sig_ab = ga[0] * gb[0] + ga[1] * gb[1] + ga[2] * gb[2];
-                    const sig_bb = gb[0] * gb[0] + gb[1] * gb[1] + gb[2] * gb[2];
-
-                    ctx.density.sig_val.?.ptr(g, 0).* = sig_aa;
-                    ctx.density.sig_val.?.ptr(g, 1).* = sig_ab;
-                    ctx.density.sig_val.?.ptr(g, 2).* = sig_bb;
-                }
-
-                if (ctx.has_mgga) {
-                    const mgga_a = contractKineticEnergyDensity(P, ctx.basisgrid, 0, g, b);
-                    const mgga_b = contractKineticEnergyDensity(P, ctx.basisgrid, b, g, b);
-
-                    ctx.density.tau_val.?.ptr(g, 0).* = mgga_a.tau;
-                    ctx.density.tau_val.?.ptr(g, 1).* = mgga_b.tau;
-
-                    ctx.density.lap_val.?.ptr(g, 0).* = mgga_a.lapl;
-                    ctx.density.lap_val.?.ptr(g, 1).* = mgga_b.lapl;
-                }
-            }
-        }
-
-        /// Calculates the spin-unpolarized electronic density, its gradient, and kinetic energy density on the grid.
-        fn computeDensityUnpolarized(self: @This(), P: Matrix(T), ctx: *DftEvaluationContext(T)) void {
-            for (0..self.pts.shape[0]) |g| {
-                const rho_tot = contractDensity(P, ctx.basisgrid, 0, g, ctx.sys.nbf);
-
-                ctx.density.rho_val.ptr(g, 0).* = rho_tot;
-
-                if (ctx.needs_deriv) {
-                    const del_rho = contractDensityGradient(P, ctx.basisgrid, 0, g, ctx.sys.nbf);
-
-                    ctx.density.del_rho.?.ptr(g, 0).* = del_rho[0];
-                    ctx.density.del_rho.?.ptr(g, 1).* = del_rho[1];
-                    ctx.density.del_rho.?.ptr(g, 2).* = del_rho[2];
-
-                    const sig_tot = del_rho[0] * del_rho[0] + del_rho[1] * del_rho[1] + del_rho[2] * del_rho[2];
-
-                    ctx.density.sig_val.?.ptr(g, 0).* = sig_tot;
-                }
-
-                if (ctx.has_mgga) {
-                    const mgga = contractKineticEnergyDensity(P, ctx.basisgrid, 0, g, ctx.sys.nbf);
-
-                    ctx.density.tau_val.?.ptr(g, 0).* = mgga.tau;
-
-                    ctx.density.lap_val.?.ptr(g, 0).* = mgga.lapl;
-                }
-            }
-        }
-
         /// Computes the intermediate gradient vector X_mu = 2 * v_sigma * grad(rho) . grad(chi_mu) on the grid.
         fn computeIntermediateGradientVector(X: *Vector(T), del_rho: Matrix(T), basis: BasisGrid(T), v_sigma: T, g: usize, nbf: usize) void {
             const w_x = 2 * v_sigma * del_rho.at(g, 0);
@@ -330,106 +245,6 @@ pub fn DftPotential(comptime T: type) type {
 
                 X_a.data[mu] = w_a_x * d_dx + w_a_y * d_dy + w_a_z * d_dz;
                 X_b.data[mu] = w_b_x * d_dx + w_b_y * d_dy + w_b_z * d_dz;
-            }
-        }
-
-        /// Evaluates the electron density rho at a grid point by contracting the density matrix with basis functions.
-        fn contractDensity(P: Matrix(T), basis: BasisGrid(T), offset: usize, g: usize, nbf: usize) T {
-            var rho: T = 0;
-
-            for (0..nbf) |mu| for (0..nbf) |nu| {
-                rho += P.at(mu + offset, nu + offset) * basis.phi.at(g, mu) * basis.phi.at(g, nu);
-            };
-
-            return rho;
-        }
-
-        /// Contracts atomic orbital gradients with the density matrix at a grid point to evaluate grad(rho).
-        fn contractDensityGradient(P: Matrix(T), basis: BasisGrid(T), offset: usize, g: usize, nbf: usize) [3]T {
-            var del_rho = [3]T{ 0, 0, 0 };
-
-            for (0..nbf) |mu| {
-                const dphi_dx_mu = basis.dphi_dx.?.at(g, mu);
-                const dphi_dy_mu = basis.dphi_dy.?.at(g, mu);
-                const dphi_dz_mu = basis.dphi_dz.?.at(g, mu);
-
-                for (0..nbf) |nu| {
-                    const term = P.at(mu + offset, nu + offset) * basis.phi.at(g, nu);
-
-                    del_rho[0] += term * dphi_dx_mu;
-                    del_rho[1] += term * dphi_dy_mu;
-                    del_rho[2] += term * dphi_dz_mu;
-                }
-            }
-
-            return .{ 2 * del_rho[0], 2 * del_rho[1], 2 * del_rho[2] };
-        }
-
-        /// Contracts atomic orbital gradients and Laplacians with the density matrix to evaluate tau and lapl(rho).
-        fn contractKineticEnergyDensity(P: Matrix(T), basis: BasisGrid(T), offset: usize, g: usize, nbf: usize) struct { tau: T, lapl: T } {
-            var tau: T, var lapl_sum: T = .{ 0, 0 };
-
-            for (0..nbf) |mu| {
-                const dphi_dx_mu = basis.dphi_dx.?.at(g, mu);
-                const dphi_dy_mu = basis.dphi_dy.?.at(g, mu);
-                const dphi_dz_mu = basis.dphi_dz.?.at(g, mu);
-
-                const lapl_mu = basis.lapl.?.at(g, mu);
-
-                for (0..nbf) |nu| {
-                    const p_val = P.at(mu + offset, nu + offset);
-
-                    const phi_nu = basis.phi.at(g, nu);
-
-                    const dphi_dx_nu = basis.dphi_dx.?.at(g, nu);
-                    const dphi_dy_nu = basis.dphi_dy.?.at(g, nu);
-                    const dphi_dz_nu = basis.dphi_dz.?.at(g, nu);
-
-                    const dphi_dot = dphi_dx_mu * dphi_dx_nu + dphi_dy_mu * dphi_dy_nu + dphi_dz_mu * dphi_dz_nu;
-
-                    tau += p_val * dphi_dot;
-
-                    lapl_sum += p_val * lapl_mu * phi_nu;
-                }
-            }
-
-            return .{ .tau = 0.5 * tau, .lapl = 2 * (lapl_sum + tau) };
-        }
-
-        /// Evaluates atomic orbital basis functions and their spatial derivatives at all grid points.
-        fn evaluateBasis(self: @This(), sys: MolecularSystem(T), basis: BasisGrid(T)) void {
-            const needs_d1, const needs_d2 = .{ basis.dphi_dx != null, basis.lapl != null };
-
-            for (0..self.pts.shape[0]) |g| {
-                const x = self.pts.at(g, 0);
-                const y = self.pts.at(g, 1);
-                const z = self.pts.at(g, 2);
-
-                if (needs_d2) {
-                    const phi_row = basis.phi.rowSlice(g).ptr;
-
-                    const dx_row = basis.dphi_dx.?.rowSlice(g).ptr;
-                    const dy_row = basis.dphi_dy.?.rowSlice(g).ptr;
-                    const dz_row = basis.dphi_dz.?.rowSlice(g).ptr;
-
-                    const lapl_row = basis.lapl.?.rowSlice(g).ptr;
-
-                    libint.libint_evaluate_basis_vgl(phi_row, dx_row, dy_row, dz_row, lapl_row, x, y, z, sys.ptr);
-                }
-
-                if (needs_d1 and !needs_d2) {
-                    const phi_row = basis.phi.rowSlice(g).ptr;
-
-                    const dx_row = basis.dphi_dx.?.rowSlice(g).ptr;
-                    const dy_row = basis.dphi_dy.?.rowSlice(g).ptr;
-                    const dz_row = basis.dphi_dz.?.rowSlice(g).ptr;
-
-                    libint.libint_evaluate_basis_vg(phi_row, dx_row, dy_row, dz_row, x, y, z, sys.ptr);
-                }
-
-                if (!needs_d1 and !needs_d2) {
-                    libint.libint_evaluate_basis_v(basis.phi.rowSlice(g).ptr, x, y, z, sys.ptr);
-                }
             }
         }
 

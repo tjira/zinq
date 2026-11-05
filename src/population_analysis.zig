@@ -11,7 +11,7 @@ const Vector = @import("tensor.zig").Vector;
 
 const dot = @import("linear_algebra.zig").dot;
 const gemm = @import("linear_algebra.zig").gemm;
-const getSymbol = @import("constant.zig").getSymbol;
+const getSymbol = @import("constants.zig").getSymbol;
 const printf = @import("read_write.zig").printf;
 const syevd = @import("linear_algebra.zig").syevd;
 

@@ -1,5 +1,9 @@
 //! Evaluates Hamiltonian matrix elements between Slater determinants using the Slater-Condon rules.
 
+const std = @import("std");
+
+const Allocator = std.mem.Allocator;
+
 const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
@@ -7,6 +11,21 @@ const Value = @import("value.zig").Value;
 const findDeterminantDifferences = @import("determinant.zig").findDeterminantDifferences;
 const primType = @import("value.zig").primType;
 const signOfExcitations = @import("determinant.zig").signOfExcitations;
+
+/// Assembles the electronic Hamiltonian matrix across Slater determinants via the Slater-Condon rules.
+pub fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_ms: Matrix(T), g_ms: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
+    var H = try Matrix(T).init(dets.len, dets.len, gpa);
+    errdefer H.deinit(gpa);
+
+    for (0..dets.len) |i| for (i..dets.len) |j| {
+        const val = slater(T, dets[i], dets[j], h_ms, g_ms);
+
+        H.ptr(i, j).* = val;
+        H.ptr(j, i).* = val;
+    };
+
+    return H;
+}
 
 /// Computes the Hamiltonian matrix element between two Slater determinants using the Slater-Condon rules.
 pub fn slater(comptime T: type, A: []const usize, B: []const usize, h_ms: Matrix(T), g_ms: Tensor(T, 4)) T {

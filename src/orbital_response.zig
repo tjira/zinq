@@ -11,6 +11,7 @@ const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_1e = @import("integral_transform.zig").ao2mo_1e;
+const contractTwoElectronResponse = @import("two_electron_contraction.zig").contractTwoElectronResponse;
 const mo2ao_1e = @import("integral_transform.zig").mo2ao_1e;
 const printf = @import("read_write.zig").printf;
 
@@ -89,12 +90,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             F_x.ptr(mu, nu).* = dH.at(.{ c, mu, nu });
         };
 
-        for (0..nbf) |lambda| for (0..nbf) |sigma| for (0..nbf) |mu| for (0..nbf) |nu| {
-            const coul = dg.at(.{ c, lambda, mu, sigma, nu });
-            const exch = dg.at(.{ c, lambda, sigma, mu, nu });
-
-            F_x.ptr(mu, nu).* += P.at(lambda, sigma) * (coul - exch_factor * exch);
-        };
+        contractTwoElectronResponse(T, &F_x, dg, c, P, exch_factor);
 
         for (0..nbf) |mu| for (mu + 1..nbf) |nu| {
             const avg = (F_x.at(mu, nu) + F_x.at(nu, mu)) / 2;
