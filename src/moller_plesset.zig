@@ -11,6 +11,7 @@ const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
@@ -46,20 +47,6 @@ pub const HessianOptions = union(enum) {
     numeric: HessianNumericOptions,
 };
 
-/// Tagged union specifying geometry optimization algorithms.
-pub const OptimizeOptions = union(enum) {
-    bfgs: BfgsOptions,
-    steepest_descent: SteepestDescentOptions,
-};
-
-/// Configuration options for BFGS quasi-Newton molecular geometry optimization.
-const BfgsOptions = struct {
-    gradient: GradientOptions = .analytic,
-    iterations: u32 = 100,
-    step: f64 = 1,
-    threshold: f64 = 1e-4,
-};
-
 /// Analytical nuclear gradient evaluation settings.
 const GradientAnalyticOptions = struct {};
 
@@ -71,14 +58,6 @@ const GradientNumericOptions = struct {
 /// Finite difference displacement step for numerical Hessian evaluation.
 const HessianNumericOptions = struct {
     step: f64 = 1e-5,
-};
-
-/// Configuration options for steepest descent molecular geometry optimization.
-const SteepestDescentOptions = struct {
-    gradient: GradientOptions = .analytic,
-    iterations: u32 = 100,
-    step: f64 = 1e-1,
-    threshold: f64 = 1e-4,
 };
 
 /// Destination paths for outputting Moller-Plesset geometries, gradients, and Hessians.

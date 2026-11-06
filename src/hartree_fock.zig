@@ -12,6 +12,7 @@ const Matrix = @import("tensor.zig").Matrix;
 const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
 const MolecularIntegralsWrite = @import("molecular_integrals.zig").Write;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
@@ -76,20 +77,6 @@ pub const HessianOptions = union(enum) {
     numeric: HessianNumericOptions,
 };
 
-/// Tagged union specifying geometry optimization algorithms.
-pub const OptimizeOptions = union(enum) {
-    bfgs: BfgsOptions,
-    steepest_descent: SteepestDescentOptions,
-};
-
-/// Configuration options for BFGS quasi-Newton molecular geometry optimization.
-const BfgsOptions = struct {
-    gradient: GradientOptions = .analytic,
-    iterations: u32 = 100,
-    step: f64 = 1,
-    threshold: f64 = 1e-4,
-};
-
 /// Angular and radial grid point specifications for numerical DFT integration.
 const DftGridOptions = struct {
     angular: usize = 302,
@@ -122,14 +109,6 @@ const ResponseOptions = struct {
     diis: ?u32 = 8,
     iterations: u32 = 100,
     threshold: f64 = 1e-8,
-};
-
-/// Configuration options for steepest descent molecular geometry optimization.
-const SteepestDescentOptions = struct {
-    gradient: GradientOptions = .analytic,
-    iterations: u32 = 100,
-    step: f64 = 1e-1,
-    threshold: f64 = 1e-4,
 };
 
 /// File paths for exporting computed SCF matrices, molecular integrals, and geometries.

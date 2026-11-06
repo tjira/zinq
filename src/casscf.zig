@@ -11,6 +11,7 @@ const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
+const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
 const OrbitalPair = @import("casscf_orbital.zig").OrbitalPair;
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
@@ -72,20 +73,6 @@ pub const NacvOptions = union(enum) {
     numeric: NacvNumericOptions,
 };
 
-/// Tagged union specifying molecular geometry optimization algorithms for CASSCF.
-pub const OptimizeOptions = union(enum) {
-    bfgs: BfgsOptions,
-    steepest_descent: SteepestDescentOptions,
-};
-
-/// Configuration options for BFGS quasi-Newton molecular geometry optimization.
-const BfgsOptions = struct {
-    gradient: GradientOptions = .{ .analytic = .{} },
-    iterations: u32 = 100,
-    step: f64 = 1,
-    threshold: f64 = 1e-4,
-};
-
 /// Analytical nuclear gradient evaluation settings for specific electronic states.
 const GradientAnalyticOptions = struct {
     states: ?[]const u32 = null,
@@ -107,14 +94,6 @@ const HessianNumericOptions = struct {
 const NacvNumericOptions = struct {
     pairs: ?[]const [2]u32 = null,
     step: f64 = 1e-5,
-};
-
-/// Configuration options for steepest descent molecular geometry optimization.
-const SteepestDescentOptions = struct {
-    gradient: GradientOptions = .{ .analytic = .{} },
-    iterations: u32 = 100,
-    step: f64 = 1e-1,
-    threshold: f64 = 1e-4,
 };
 
 /// Output file destinations for CASSCF geometry, gradients, Hessians, NACV, and orbitals.

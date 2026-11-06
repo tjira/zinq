@@ -15,6 +15,34 @@ const getDensity = @import("electronic_structure.zig").getDensity;
 const printf = @import("read_write.zig").printf;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 
+/// Configuration options for BFGS quasi-Newton molecular geometry optimization.
+pub fn BfgsOptions(comptime GradOpt: type) type {
+    return struct {
+        gradient: GradOpt = .{ .analytic = .{} },
+        iterations: u32 = 100,
+        step: f64 = 1,
+        threshold: f64 = 1e-4,
+    };
+}
+
+/// Tagged union specifying molecular geometry optimization algorithms.
+pub fn OptimizeOptions(comptime GradOpt: type) type {
+    return union(enum) {
+        bfgs: BfgsOptions(GradOpt),
+        steepest_descent: SteepestDescentOptions(GradOpt),
+    };
+}
+
+/// Configuration options for steepest descent molecular geometry optimization.
+pub fn SteepestDescentOptions(comptime GradOpt: type) type {
+    return struct {
+        gradient: GradOpt = .{ .analytic = .{} },
+        iterations: u32 = 100,
+        step: f64 = 1e-1,
+        threshold: f64 = 1e-4,
+    };
+}
+
 /// Performs molecular geometry optimization using the Broyden-Fletcher-Goldfarb-Shanno (BFGS) quasi-Newton method.
 pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) anyerror!Matrix(T) {
     const bfgs_opt = opt.optimize.?.bfgs;
