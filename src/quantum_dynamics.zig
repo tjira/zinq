@@ -5,6 +5,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
+const partial_wave = @import("partial_wave.zig");
+const quantum_observables = @import("quantum_observables.zig");
+const split_operator = @import("split_operator.zig");
+
 const FluxAnalysis = @import("flux_analysis.zig").FluxAnalysis;
 const Grid = @import("wavepacket.zig").Grid;
 const Hamiltonian = @import("wavepacket.zig").Hamiltonian;
@@ -22,6 +26,15 @@ const printf = @import("read_write.zig").printf;
 const writeMatrixHjoin = @import("read_write.zig").writeMatrixHjoin;
 const writeMatrixLinspace = @import("read_write.zig").writeMatrixLinspace;
 const writeMatrixLogspace = @import("read_write.zig").writeMatrixLogspace;
+
+pub const estimateMaxJ = partial_wave.estimateMaxJ;
+pub const injectAngularFname = partial_wave.injectAngularFname;
+pub const Observables = quantum_observables.Observables;
+pub const PartialWaveContext = partial_wave.PartialWaveContext;
+pub const PartialWaveOptions = partial_wave.PartialWaveOptions;
+pub const PartialWaveWrite = partial_wave.PartialWaveWrite;
+pub const Propagator = split_operator.SplitOperator;
+pub const SplitOperator = split_operator.SplitOperator;
 
 /// Configuration options for split-operator quantum dynamics wavepacket propagation on a grid.
 pub const Options = struct {
@@ -41,15 +54,6 @@ pub const Options = struct {
     spectrum: ?SpectrumOptions = null,
     time_step: f64,
     write: Write = .{},
-};
-
-/// Configuration options for sweeping and summing over partial waves J.
-pub const PartialWaveOptions = struct {
-    log_interval: u32 = 1,
-    max: ?u32 = null,
-    step: u32 = 1,
-    threads: ?u32 = null,
-    write: PartialWaveWrite = .{},
 };
 
 /// Negative imaginary potential parameters for absorbing outgoing boundary wavepackets.
@@ -93,11 +97,6 @@ const Memory = struct {
     grid: bool = true,
     potential: bool = true,
     propagator: bool = true,
-};
-
-/// Output file paths for recording total scattering cross sections.
-const PartialWaveWrite = struct {
-    cross_section: ?[]const u8 = null,
 };
 
 /// Spectral analysis parameters for Fourier transforming wavefunction autocorrelation functions.
@@ -415,600 +414,12 @@ fn History(comptime T: type) type {
     };
 }
 
-/// Computes and stores expectation values and autocorrelation overlap at a specific time.
-fn Observables(comptime T: type) type {
+/// Worker routine wrapper for concurrent partial wavepacket propagation tasks.
+fn PartialWaveWorker(comptime T: type) type {
     return struct {
-        pos: ?Vector(T) = null,
-        mom: ?Vector(T) = null,
-        pop: ?Vector(T) = null,
-
-        acf: ?Complex(T) = null,
-
-        epot: ?T = null,
-        ekin: ?T = null,
-        norm: ?T = null,
-
-        /// Computes quantum expectation values and state populations from the current wavepacket.
-        pub fn init(sim: *SimulationState(T), wfn0: ?Wavefunction(T), write: Write, adia: bool, log: bool, t: T, gpa: Allocator) !@This() {
-            var obs = @This(){};
-            errdefer obs.deinit(gpa);
-
-            const calc_ekin, const calc_epot = .{ write.kinetic_energy != null, write.potential_energy != null };
-
-            const calc_norm = write.norm != null;
-
-            var calc = .{
-                .pos = log or write.position != null,
-                .mom = log or write.momentum != null,
-
-                .pop = log or write.population != null,
-
-                .norm = log or calc_norm,
-                .ekin = log or calc_ekin,
-                .epot = log or calc_epot,
-            };
-
-            if (wfn0 != null) {
-                obs.acf = wfn0.?.overlap(sim.wfn, sim.wfn_kpgrids);
-            }
-
-            calc.ekin = calc.ekin or write.total_energy != null;
-            calc.epot = calc.epot or write.total_energy != null;
-
-            if (calc.pos) {
-                obs.pos = try sim.wfn.pos(sim.wfn_kpgrids, gpa);
-            }
-
-            if (calc.norm) {
-                obs.norm = sim.wfn.norm(sim.wfn_kpgrids);
-            }
-
-            var langer: T = 0;
-
-            if (sim.hams.cylindric and (calc.epot or calc.ekin)) {
-                const radial_idx = sim.wfn_kpgrids.ncol() - 1;
-
-                const m = sim.hams.mass[radial_idx];
-
-                for (0..sim.wfn.W.nrow()) |s| for (0..sim.wfn.W.rowSlice(s).len) |j| {
-                    const r = sim.wfn_kpgrids.getR(j, radial_idx);
-
-                    if (r != 0) {
-                        langer += sim.wfn.W.at(s, j).squaredMagnitude() / (8 * m * r * r);
-                    }
-                };
-
-                langer *= sim.wfn_kpgrids.dr;
-            }
-
-            if (calc.epot) {
-                obs.epot = try sim.wfn.epot(sim.hams, sim.wfn_kpgrids, sim.epoten, t, langer);
-            }
-
-            if (calc.pop) {
-                if (adia == true) {
-                    obs.pop = try sim.wfn.popAdia(sim.hams, sim.wfn_kpgrids, sim.epoten, t, gpa);
-                }
-
-                if (adia != true) {
-                    obs.pop = try sim.wfn.pop(sim.wfn_kpgrids, gpa);
-                }
-
-                if (obs.pop) |*pop| for (0..pop.length()) |j| {
-                    pop.ptr(j).* += sim.pop_apabs.at(j);
-                };
-            }
-
-            const needs_fft = calc.mom or calc.ekin;
-
-            if (needs_fft) {
-                sim.wfn.fft(-1);
-
-                defer {
-                    sim.wfn.fft(1);
-                }
-
-                if (calc.mom) {
-                    obs.mom = try sim.wfn.mom(sim.wfn_kpgrids, gpa);
-                }
-
-                if (calc.ekin) {
-                    obs.ekin = sim.wfn.ekin(sim.hams, sim.wfn_kpgrids, langer);
-                }
-            }
-
-            return obs;
-        }
-
-        /// Deallocates arrays stored in the quantum observables struct.
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            if (self.pos) |*pos| pos.deinit(gpa);
-            if (self.mom) |*mom| mom.deinit(gpa);
-            if (self.pop) |*pop| pop.deinit(gpa);
-        }
-    };
-}
-
-/// Thread-safe counters and lock for parallel partial wave distribution.
-fn PartialWaveContext(comptime T: type) type {
-    return struct {
-        next_j: std.atomic.Value(u32),
-        in_mutx: std.Io.Mutex = .init,
-
-        completed: std.atomic.Value(u32) = .init(0),
-        mutx: std.atomic.Value(bool) = .init(false),
-
-        j_max: u32,
-
-        /// Propagates partial wavepackets concurrently and accumulates state-resolved reaction cross sections.
-        pub fn worker(self: *@This(), io: std.Io, opt: Options, log: bool, gpa: Allocator, thread_sigma: ?*Matrix(T)) void {
-            const pw = opt.partial_waves.?;
-
-            var arena = std.heap.ArenaAllocator.init(gpa);
-            defer arena.deinit();
-
-            const tasks = self.j_max / pw.step + 1;
-
-            while (true) {
-                const j = self.next_j.fetchAdd(pw.step, .monotonic);
-
-                if (j > self.j_max) break;
-
-                const timer = std.Io.Timestamp.now(io, .real);
-
-                _ = arena.reset(.retain_capacity);
-
-                var opt_j = opt;
-
-                opt_j.j_quantum_number = j;
-                opt_j.partial_waves = null;
-
-                const alloc = arena.allocator();
-
-                inline for (@typeInfo(@TypeOf(opt_j.write)).@"struct".field_names) |name| {
-                    if (@field(opt_j.write, name)) |p| {
-                        @field(opt_j.write, name) = injectAngularFname(p, j, alloc) catch null;
-                    }
-                }
-
-                if (opt_j.flux_analysis) |*fa| if (fa.write.cross_section) |p| {
-                    fa.write.cross_section = injectAngularFname(p, j, alloc) catch null;
-                };
-
-                self.in_mutx.lockUncancelable(io);
-
-                var sim = init(T, io, opt_j, alloc) catch |err| {
-                    self.in_mutx.unlock(io);
-
-                    std.log.err("FAILED TO INITIALIZE SIMULATION FOR J={d} ({s})", .{ j, @errorName(err) });
-
-                    continue;
-                };
-
-                self.in_mutx.unlock(io);
-
-                defer sim.deinit(alloc);
-
-                var res = solve(T, io, .{ .opt = opt_j, .sim = &sim, .eigs = 0, .log = false }, alloc) catch |err| {
-                    std.log.err("SIMULATION FAILED FOR J={d} ({s})", .{ j, @errorName(err) });
-
-                    continue;
-                };
-
-                defer res.deinit(alloc);
-
-                var p_peak: T, var p_integ: T = .{ 0, 0 };
-
-                if (res.cross_section) |*s_j| {
-                    const fa = opt.flux_analysis.?;
-
-                    var p_prev: T, var e_prev: T = .{ 0, FluxAnalysis(T).getCollisionEnergy(fa, 0) };
-
-                    for (0..s_j.nrow()) |ei| {
-                        const e_curr = FluxAnalysis(T).getCollisionEnergy(fa, ei);
-
-                        var p_row: T = 0;
-
-                        for (0..s_j.ncol()) |col| {
-                            if (s_j.ncol() > 1 and col == opt.initial_conditions.state) continue;
-
-                            p_row += s_j.at(ei, col);
-                        }
-
-                        if (p_row > p_peak) p_peak = p_row;
-
-                        if (ei > 0) {
-                            p_integ += 0.5 * (p_prev + p_row) * (e_curr - e_prev);
-                        }
-
-                        p_prev, e_prev = .{ p_row, e_curr };
-                    }
-
-                    if (thread_sigma) |sigma| {
-                        if (sigma.data.len == 0) {
-                            sigma.* = Matrix(T).initZero(s_j.nrow(), s_j.ncol(), gpa) catch continue;
-                        }
-
-                        const dj = @as(T, @floatFromInt(pw.step));
-
-                        const factor = dj * std.math.pi * (2 * @as(T, @floatFromInt(j)) + 1) / (2 * opt.mass[0]);
-
-                        const asymp: T = @floatCast(fa.asymptotic_offset);
-
-                        for (0..s_j.nrow()) |ei| {
-                            const E = FluxAnalysis(T).getCollisionEnergy(fa, ei) - asymp;
-
-                            if (E <= 0) continue;
-
-                            for (0..s_j.ncol()) |col| {
-                                sigma.ptr(ei, col).* += (factor / E) * s_j.at(ei, col);
-                            }
-                        }
-                    }
-                }
-
-                const r_0, const m_0 = .{ opt.initial_conditions.position[0], opt.mass[0] };
-
-                const j_flt = @as(T, @floatFromInt(j));
-
-                const v_cent = if (r_0 != 0) j_flt * (j_flt + 1) / (2 * m_0 * r_0 * r_0) else 0;
-
-                const done = self.completed.fetchAdd(1, .monotonic) + 1;
-
-                if (log and (done == 1 or (done - 1) % pw.log_interval == 0 or done == tasks)) {
-                    while (self.mutx.swap(true, .acquire)) {
-                        std.Thread.yield() catch {};
-                    }
-
-                    const elapsed = timer.untilNow(io, .real);
-
-                    const fmt = "{d:06} {d:7} {d:12.6} {e:12.3} {e:12.3} {f}\n";
-
-                    printf(io, fmt, .{ done - 1, j, v_cent, p_peak, p_integ, elapsed }) catch {};
-
-                    self.mutx.store(false, .release);
-                }
-            }
-        }
-    };
-}
-
-/// Wavepacket propagator using the split-operator Fourier method with absorbing boundary potentials.
-fn Propagator(comptime T: type) type {
-    return struct {
-        R: ?Matrix(Complex(T)),
-        K: ?Vector(Complex(T)),
-        cap_weight: ?Vector(T),
-
-        r_buf: ?[]Complex(T),
-
-        dt: Complex(T),
-
-        /// Initializes the kinetic and potential propagation operators and absorbing boundary weights.
-        pub fn init(grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), capopt: anytype, dt: Complex(T), optimize_memory: bool, gpa: Allocator) !@This() {
-            if (optimize_memory) {
-                const r_buf = try gpa.alloc(Complex(T), pot.nstate() * pot.nstate());
-                errdefer gpa.free(r_buf);
-
-                return @This(){ .R = null, .K = null, .cap_weight = null, .r_buf = r_buf, .dt = dt };
-            }
-
-            const nstate = pot.nstate();
-
-            var R = try Matrix(Complex(T)).init(grid.nrow(), nstate * nstate, gpa);
-            errdefer R.deinit(gpa);
-
-            var K = try Vector(Complex(T)).initZero(grid.nrow(), gpa);
-            errdefer K.deinit(gpa);
-
-            var cap_weight = try Vector(T).initZero(grid.nrow(), gpa);
-            errdefer cap_weight.deinit(gpa);
-
-            for (0..grid.nrow()) |i| {
-                K.data[i] = std.math.complex.exp(Complex(T).init(0, -ham.getK(grid, i)).mul(dt));
-            }
-
-            var prop = @This(){ .R = R, .K = K, .cap_weight = cap_weight, .r_buf = null, .dt = dt };
-
-            try prop.update(grid, ham, pot, 0, capopt);
-
-            return prop;
-        }
-
-        /// Deallocates split-operator propagation matrices.
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            if (self.r_buf) |buf| gpa.free(buf);
-
-            if (self.R) |*R| R.deinit(gpa);
-            if (self.K) |*K| K.deinit(gpa);
-
-            if (self.cap_weight) |*cw| cw.deinit(gpa);
-        }
-
-        /// Retrieves the absorbing boundary decay coefficient value at a grid coordinate to damp outgoing flux.
-        pub fn getCap(self: @This(), grid: Grid(T), capopt: anytype, i: usize) T {
-            if (self.cap_weight) |cw| return cw.data[i];
-
-            var cap_sum: T = 0;
-
-            if (capopt) |cap| for (0..grid.ncol()) |j| {
-                const r_val = grid.getR(i, j);
-
-                const min_bound = cap.bounds[j][0];
-                const max_bound = cap.bounds[j][1];
-
-                const dist = @max(0, @max(min_bound - r_val, r_val - max_bound));
-
-                if (dist > 0) {
-                    cap_sum += std.math.exp(cap.exponent * dist) - 1;
-                }
-            };
-
-            const cap_decay = std.math.exp(-0.5 * cap_sum * self.dt.magnitude());
-
-            return 1 - cap_decay * cap_decay;
-        }
-
-        /// Retrieves the kinetic propagator phase factor representing momentum-dependent grid transitions.
-        pub fn getK(self: @This(), grid: Grid(T), ham: Hamiltonian(T), i: usize) Complex(T) {
-            if (self.K) |K| return K.at(i);
-
-            return std.math.complex.exp(Complex(T).init(0, -ham.getK(grid, i)).mul(self.dt));
-        }
-
-        /// Retrieves the diabatic propagator row representing potential-induced transitions at a grid point.
-        pub fn getR(self: @This(), grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), t: T, capopt: anytype, i: usize) ![]Complex(T) {
-            if (self.R) |R| return R.rowSlice(i);
-
-            const nstate, var cap_decay: T = .{ pot.nstate(), 1 };
-
-            if (capopt != null) {
-                cap_decay = std.math.sqrt(@max(0, 1 - self.getCap(grid, capopt, i)));
-            }
-
-            const w, const u, _ = try ham.getTriple(grid, pot, t, i);
-
-            const buffer = self.r_buf.?;
-
-            for (0..nstate) |k| for (0..nstate) |j| {
-                var sum = Complex(T).init(0, 0);
-
-                for (0..nstate) |m| {
-                    const U_km = u[k * nstate + m];
-                    const U_jm = u[j * nstate + m];
-
-                    const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * w[m]).mul(self.dt));
-
-                    sum = sum.add(Complex(T).init(phase.re * U_km * U_jm, phase.im * U_km * U_jm));
-                }
-
-                buffer[k * nstate + j] = sum.mul(Complex(T).init(cap_decay, 0));
-            };
-
-            return buffer;
-        }
-
-        /// Propagates the wavepacket by one time step using potential and kinetic operator splits.
-        pub fn step(self: @This(), sim: *SimulationState(T), capopt: anytype, adia: bool, track_pop: bool, t: T, gpa: Allocator) !void {
-            if (track_pop) try self.accumAbsorbed(sim, capopt, adia, t, gpa);
-
-            try self.applyR(sim, capopt, t, gpa);
-
-            try self.applyK(sim);
-
-            if (track_pop) try self.accumAbsorbed(sim, capopt, adia, t, gpa);
-
-            try self.applyR(sim, capopt, t, gpa);
-        }
-
-        /// Updates the potential propagator matrix and absorbing boundary exponential decay.
-        pub fn update(self: *@This(), grid: Grid(T), ham: Hamiltonian(T), pot: Potential(T), t: T, capopt: anytype) !void {
-            if (self.R == null) return;
-
-            const nstate = pot.nstate();
-
-            for (0..self.R.?.nrow()) |i| {
-                var cap_sum: T = 0;
-
-                if (capopt) |cap| for (0..grid.ncol()) |j| {
-                    const r_val = grid.getR(i, j);
-
-                    const min_bound = cap.bounds[j][0];
-                    const max_bound = cap.bounds[j][1];
-
-                    const dist = @max(0, @max(min_bound - r_val, r_val - max_bound));
-
-                    if (dist > 0) {
-                        cap_sum += std.math.exp(cap.exponent * dist) - 1;
-                    }
-                };
-
-                const cap_decay = std.math.exp(-0.5 * cap_sum * self.dt.magnitude());
-
-                self.cap_weight.?.ptr(i).* = 1 - cap_decay * cap_decay;
-
-                const R_i = try self.getR(grid, ham, pot, t, capopt, i);
-
-                const w, const u, _ = try ham.getTriple(grid, pot, t, i);
-
-                for (0..nstate) |k| for (0..nstate) |j| {
-                    var sum = Complex(T).init(0, 0);
-
-                    for (0..nstate) |m| {
-                        const U_km = u[k * nstate + m];
-                        const U_jm = u[j * nstate + m];
-
-                        const phase = std.math.complex.exp(Complex(T).init(0, -0.5 * w[m]).mul(self.dt));
-
-                        sum = sum.add(Complex(T).init(phase.re * U_km * U_jm, phase.im * U_km * U_jm));
-                    }
-
-                    R_i[k * nstate + j] = sum.mul(Complex(T).init(cap_decay, 0));
-                };
-            }
-        }
-
-        /// Computes and accumulates the population absorbed by the boundary potential.
-        fn accumAbsorbed(self: @This(), sim: *SimulationState(T), capopt: anytype, adia: bool, t: T, gpa: Allocator) !void {
-            const nstate = sim.wfn.W.nrow();
-
-            var sums = try gpa.alloc(T, nstate);
-            defer gpa.free(sums);
-
-            @memset(sums, 0);
-
-            for (0..sim.wfn.W.ncol()) |j| {
-                const w = self.getCap(sim.wfn_kpgrids, capopt, j);
-
-                if (w == 0) continue;
-
-                const triple = if (adia) try sim.hams.getTriple(sim.wfn_kpgrids, sim.epoten, t, j) else null;
-
-                for (0..nstate) |i| {
-                    if (adia) {
-                        var adia_re: T = 0;
-                        var adia_im: T = 0;
-
-                        for (0..nstate) |k| {
-                            const u = triple.?[1][k * nstate + i];
-
-                            adia_re += sim.wfn.W.at(k, j).re * u;
-                            adia_im += sim.wfn.W.at(k, j).im * u;
-                        }
-
-                        sums[i] += w * (adia_re * adia_re + adia_im * adia_im);
-                    }
-
-                    if (!adia) {
-                        sums[i] += w * sim.wfn.W.at(i, j).squaredMagnitude();
-                    }
-                }
-            }
-
-            for (0..nstate) |i| {
-                sim.pop_apabs.ptr(i).* += sums[i] * sim.wfn_kpgrids.dr;
-            }
-        }
-
-        /// Applies the kinetic energy propagator in momentum space using FFT.
-        fn applyK(self: @This(), sim: *SimulationState(T)) !void {
-            sim.wfn.fft(-1);
-
-            defer {
-                sim.wfn.fft(1);
-            }
-
-            for (0..sim.wfn.W.nrow()) |i| for (0..sim.wfn.W.ncol()) |j| {
-                sim.wfn.W.ptr(i, j).* = self.getK(sim.wfn_kpgrids, sim.hams, j).mul(sim.wfn.W.at(i, j));
-            };
-        }
-
-        /// Applies the potential energy propagator in position space.
-        fn applyR(self: @This(), sim: *SimulationState(T), capopt: anytype, t: T, gpa: Allocator) !void {
-            const nstate = sim.wfn.W.nrow();
-
-            if (nstate < 16) {
-                inline for (1..16) |N| {
-                    if (nstate == N) return try self.applyRFast(N, sim, capopt, t);
-                }
-            }
-
-            try self.applyRSlow(sim, capopt, t, gpa);
-        }
-
-        /// Fast potential propagation in coordinate space for small state spaces using stack-allocated structures.
-        fn applyRFast(self: @This(), comptime N: usize, sim: *SimulationState(T), capopt: anytype, t: T) !void {
-            return if (self.R) |_| self.applyRFastStatic(N, sim) else self.applyRFastDynamic(N, sim, capopt, t);
-        }
-
-        /// Fast potential propagation in coordinate space with on-the-fly propagator computation.
-        fn applyRFastDynamic(self: @This(), comptime N: usize, sim: *SimulationState(T), capopt: anytype, t: T) !void {
-            var rows: [N][]Complex(T), var w_col: [N]Complex(T) = .{ undefined, undefined };
-
-            inline for (0..N) |k| {
-                rows[k] = sim.wfn.W.rowSlice(k);
-            }
-
-            const ncol = sim.wfn.W.ncol();
-
-            for (0..ncol) |j| {
-                const R_j = try self.getR(sim.wfn_kpgrids, sim.hams, sim.epoten, t, capopt, j);
-
-                inline for (0..N) |k| {
-                    w_col[k] = rows[k][j];
-                }
-
-                inline for (0..N) |i| {
-                    var sum_re: T = 0;
-                    var sum_im: T = 0;
-
-                    inline for (0..N) |k| {
-                        const r, const w = .{ R_j[i * N + k], w_col[k] };
-
-                        sum_re += r.re * w.re - r.im * w.im;
-                        sum_im += r.re * w.im + r.im * w.re;
-                    }
-
-                    rows[i][j] = Complex(T).init(sum_re, sum_im);
-                }
-            }
-        }
-
-        /// Fast potential propagation in coordinate space using precomputed propagator matrices.
-        fn applyRFastStatic(self: @This(), comptime N: usize, sim: *SimulationState(T)) void {
-            var rows: [N][]Complex(T), var w_col: [N]Complex(T) = .{ undefined, undefined };
-
-            inline for (0..N) |k| {
-                rows[k] = sim.wfn.W.rowSlice(k);
-            }
-
-            const r_data, const ncol, var r_idx: usize = .{ self.R.?.data, sim.wfn.W.ncol(), 0 };
-
-            for (0..ncol) |j| {
-                inline for (0..N) |k| {
-                    w_col[k] = rows[k][j];
-                }
-
-                inline for (0..N) |i| {
-                    var sum_re: T = 0;
-                    var sum_im: T = 0;
-
-                    inline for (0..N) |k| {
-                        const r, const w = .{ r_data[r_idx + i * N + k], w_col[k] };
-
-                        sum_re += r.re * w.re - r.im * w.im;
-                        sum_im += r.re * w.im + r.im * w.re;
-                    }
-
-                    rows[i][j] = Complex(T).init(sum_re, sum_im);
-                }
-
-                r_idx += N * N;
-            }
-        }
-
-        /// Potential propagation in coordinate space for large state spaces using dynamically allocated buffers.
-        fn applyRSlow(self: @This(), sim: *SimulationState(T), capopt: anytype, t: T, gpa: Allocator) !void {
-            var temp = try gpa.alloc(Complex(T), sim.wfn.W.nrow());
-            defer gpa.free(temp);
-
-            for (0..sim.wfn.W.ncol()) |j| {
-                const R_j = try self.getR(sim.wfn_kpgrids, sim.hams, sim.epoten, t, capopt, j);
-
-                for (0..sim.wfn.W.nrow()) |i| {
-                    var sum = Complex(T).init(0, 0);
-
-                    for (0..sim.wfn.W.nrow()) |k| {
-                        sum = sum.add(R_j[i * sim.wfn.W.nrow() + k].mul(sim.wfn.W.at(k, j)));
-                    }
-
-                    temp[i] = sum;
-                }
-
-                for (0..sim.wfn.W.nrow()) |i| {
-                    sim.wfn.W.ptr(i, j).* = temp[i];
-                }
-            }
+        /// Executes partial wave propagation worker thread.
+        pub fn run(ctx: *PartialWaveContext(T), io: std.Io, opt: Options, log: bool, gpa: Allocator, thread_sigma: ?*Matrix(T)) void {
+            ctx.worker(io, opt, log, gpa, thread_sigma, init, solve);
         }
     };
 }
@@ -1039,21 +450,6 @@ fn SimulationState(comptime T: type) type {
 /// Bundles simulation options, state, target eigenvalue index, and logging flags.
 fn SolveContext(comptime T: type) type {
     return struct { opt: Options, sim: *SimulationState(T), eigs: usize, log: bool };
-}
-
-/// Injects the J partial wave index into output filenames.
-pub fn injectAngularFname(path: []const u8, j: u32, allocator: Allocator) ![]const u8 {
-    if (std.mem.indexOf(u8, path, "{J}")) |idx| {
-        return try std.fmt.allocPrint(allocator, "{s}{d}{s}", .{ path[0..idx], j, path[idx + 3 ..] });
-    }
-
-    const last_dot = std.mem.lastIndexOfScalar(u8, path, '.');
-
-    if (last_dot) |dot_idx| {
-        return try std.fmt.allocPrint(allocator, "{s}_J{d}{s}", .{ path[0..dot_idx], j, path[dot_idx..] });
-    }
-
-    return try std.fmt.allocPrint(allocator, "{s}_J{d}", .{ path, j });
 }
 
 /// Executes the grid-based split-operator wavepacket propagation simulation.
@@ -1108,45 +504,6 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     if (log) try printFinalEnergies(T, io, result.observables);
 
     return result;
-}
-
-/// Evaluates the maximum partial wave from the peak of the bare interaction potential barrier.
-fn estimateMaxJ(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !u32 {
-    const fa, const npoint = .{ opt.flux_analysis.?, opt.grid.npoint };
-
-    const dr = (opt.grid.bounds[0][1] - opt.grid.bounds[0][0]) / @as(f64, @floatFromInt(npoint - 1));
-
-    const r_0, const r_flux = .{ opt.initial_conditions.position[0], fa.flux_bounds[0][1] };
-
-    var pot = try Potential(T).init(io, opt.potential, gpa);
-    defer pot.deinit(gpa);
-
-    const v_buf = try gpa.alloc(T, pot.nstate() * pot.nstate());
-    defer gpa.free(v_buf);
-
-    const r_min, const r_max = .{ @min(r_0, r_flux), @max(r_0, r_flux) };
-
-    const s_idx = opt.initial_conditions.state * (pot.nstate() + 1);
-
-    var v_peak: f64, var r_peak: f64 = .{ -std.math.inf(f64), @abs(r_flux) };
-
-    for (0..npoint) |i| {
-        const r = opt.grid.bounds[0][0] + @as(f64, @floatFromInt(i)) * dr;
-
-        if (r < r_min or r > r_max) continue;
-
-        const r_t: T = @floatCast(r);
-
-        try pot.eval(T, v_buf, &.{r_t}, 0);
-
-        const v: f64 = @floatCast(v_buf[s_idx]);
-
-        if (v > v_peak) v_peak, r_peak = .{ v, @max(@abs(r), dr) };
-    }
-
-    const k_eff = std.math.sqrt(2 * opt.mass[0] * @max(1.1 * fa.e_max - v_peak, 0));
-
-    return @max(@as(u32, @intFromFloat(@ceil(k_eff * r_peak))) + 4, 1);
 }
 
 /// Initializes the grid, wavefunction, Hamiltonian, and Fourier plans.
@@ -1342,7 +699,7 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
     var ctx = PartialWaveContext(T){ .j_max = j_max, .next_j = .init(0) };
 
     if (nthreads == 1) {
-        ctx.worker(io, opt, log, gpa, if (thread_sigmas) |sigmas| &sigmas[0] else null);
+        ctx.worker(io, opt, log, gpa, if (thread_sigmas) |sigmas| &sigmas[0] else null, init, solve);
     }
 
     if (nthreads > 1) {
@@ -1352,7 +709,7 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
         for (0..nthreads) |t| {
             const sigma = if (thread_sigmas) |sigmas| &sigmas[t] else null;
 
-            threads[t] = try std.Thread.spawn(.{}, PartialWaveContext(T).worker, .{ &ctx, io, opt, log, gpa, sigma });
+            threads[t] = try std.Thread.spawn(.{}, PartialWaveWorker(T).run, .{ &ctx, io, opt, log, gpa, sigma });
         }
 
         for (threads) |t| t.join();

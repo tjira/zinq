@@ -6,27 +6,26 @@ const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 const DefaultPrng = std.Random.DefaultPrng;
 
-const Ensemble = @import("classical_dynamics.zig").Ensemble;
+const electronic_propagation = @import("electronic_propagation.zig");
+
+const Ensemble = @import("ensemble.zig").Ensemble;
 const Integrator = @import("integrator.zig").Integrator;
 const Matrix = @import("tensor.zig").Matrix;
+
+pub const CouplingOptions = electronic_propagation.CouplingOptions;
+pub const HstOptions = electronic_propagation.HstOptions;
+pub const NacvOptions = electronic_propagation.NacvOptions;
+pub const checkNorm = electronic_propagation.checkNorm;
+pub const coefDerAdia = electronic_propagation.coefDerAdia;
+pub const coefDerDia = electronic_propagation.coefDerDia;
+pub const hammesSchifferTully = electronic_propagation.hammesSchifferTully;
+pub const nacvCoupling = electronic_propagation.nacvCoupling;
 
 /// Options for selecting Fewest Switches Tully hopping or Landau-Zener hopping models.
 pub const Options = union(enum) {
     fewest_switches: FewestSwitchesOptions,
     landau_zener: LandauZenerOptions,
 };
-
-/// Tagged union selecting the time-derivative nonadiabatic coupling scheme.
-pub const CouplingOptions = union(enum) {
-    hst: HstOptions,
-    nacv: NacvOptions,
-};
-
-/// Options for Hammes-Schiffer-Tully antisymmetric wavefunction overlap coupling.
-pub const HstOptions = struct {};
-
-/// Options for nonadiabatic coupling vectors time-derivative coupling.
-pub const NacvOptions = struct {};
 
 /// Options configuration for Tully's fewest switches surface hopping.
 const FewestSwitchesOptions = struct {
@@ -124,12 +123,12 @@ pub fn SurfaceHopping(comptime T: type) type {
             }
         }
 
-        /// Returns electronic wavefunction coefficients for nonadiabatic state transitions.
+        /// Returns electronic wavefunction coefficients for nonadiabatic dynamics if active.
         pub fn coefs(self: @This()) ?Matrix(Complex(T)) {
-            return switch (self.method) {
-                .fewest_switches => |fs| fs.coefics,
-                inline else => null,
-            };
+            switch (self.method) {
+                .fewest_switches => |fs| return fs.coefics,
+                inline else => return null,
+            }
         }
 
         /// Executes a surface hopping step, calculating transition probabilities and updating states.
@@ -157,14 +156,14 @@ pub fn SurfaceHopping(comptime T: type) type {
             return any_hop;
         }
 
-        /// Updates Hamiltonian and unitary transformation histories for hopping evaluation.
+        /// Updates Hamiltonian history and eigenvector history for transition probability evaluation.
         pub fn update(self: *@This(), H: Matrix(T), U: Matrix(T)) void {
             switch (self.method) {
                 inline else => |*field| field.update(H, U),
             }
         }
 
-        /// Damps electronic coefficients using the Granucci-Persico decoherence correction.
+        /// Applies energy-based decoherence damping to non-active electronic state amplitudes.
         fn applyDecoherence(self: *@This(), ensemble: *Ensemble(T), dt: T) void {
             switch (self.method) {
                 .fewest_switches => |*fs| fs.applyDecoherence(ensemble, dt),
@@ -241,35 +240,13 @@ pub fn SurfaceHopping(comptime T: type) type {
             for (0..ensemble.s.length()) |i| {
                 if (self.targets[i] != ensemble.s.at(i)) continue;
 
-                var sum: T = 0;
-
-                for (0..self.probs.ncol()) |j| {
-                    sum += self.probs.at(i, j);
-                }
-
-                var accum: T = 0;
-
-                if (sum > 1) for (0..self.probs.ncol()) |j| {
-                    self.probs.ptr(i, j).* /= sum;
-                };
-
-                const rv = self.rng.random().float(T);
-
-                for (0..self.probs.ncol()) |j| {
-                    accum += self.probs.at(i, j);
-
-                    if (rv < accum) {
-                        self.targets[i] = j;
-
-                        break;
-                    }
-                }
+                self.targets[i] = sampleTargetState(T, self.probs.rowSlice(i), ensemble.s.at(i), self.rng.random().float(T));
             }
         }
     };
 }
 
-/// Implements Tully's fewest switches surface hopping algorithm.
+/// Implements Tully's fewest switches surface hopping algorithm for nonadiabatic dynamics.
 fn FewestSwitches(comptime T: type) type {
     return struct {
         coefics: Matrix(Complex(T)),
@@ -335,14 +312,14 @@ fn FewestSwitches(comptime T: type) type {
             }
 
             const itg_tag = switch (opt.integrator) {
-                inline else => |tag| @field(Integrator(Complex(T)).Method, @tagName(tag)),
+                inline else => |tag| @field(std.meta.Tag(Integrator(Complex(T)).Method), @tagName(tag)),
             };
 
             const itg = try Integrator(Complex(T)).init(itg_tag, nstate, gpa);
             errdefer itg.deinit(gpa);
 
             return .{
-                .alpha = opt.alpha,
+                .alpha = if (opt.alpha) |a| @floatCast(a) else null,
                 .coefics = coef,
                 .coupling = coupling,
                 .hamilton = ham,
@@ -359,7 +336,6 @@ fn FewestSwitches(comptime T: type) type {
 
             self.hamilton.deinit(gpa);
             self.sigmatdc.deinit(gpa);
-
             self.uhist[0].deinit(gpa);
             self.uhist[1].deinit(gpa);
 
@@ -379,39 +355,7 @@ fn FewestSwitches(comptime T: type) type {
 
                 if (ekin <= 1e-4) continue;
 
-                const c = ensemble.s.at(traj);
-
-                const rho_cc = self.coefics.at(traj, c).squaredMagnitude();
-
-                if (rho_cc < 1e-14) continue;
-
-                const e_curr = self.hamilton.at(traj, c);
-
-                var delta_rho: T = 0;
-
-                for (0..self.coefics.ncol()) |j| {
-                    if (j == c) continue;
-
-                    const delta_e = @abs(self.hamilton.at(traj, j) - e_curr);
-
-                    if (delta_e < 1e-14) continue;
-
-                    const tau = (1 + alpha / ekin) / delta_e;
-
-                    const d = std.math.exp(-0.5 * dt / tau);
-
-                    const rho_j = self.coefics.at(traj, j).squaredMagnitude();
-
-                    delta_rho += rho_j * (1 - d * d);
-
-                    self.coefics.ptr(traj, j).re *= d;
-                    self.coefics.ptr(traj, j).im *= d;
-                }
-
-                const renorm = std.math.sqrt((rho_cc + delta_rho) / rho_cc);
-
-                self.coefics.ptr(traj, c).re *= renorm;
-                self.coefics.ptr(traj, c).im *= renorm;
+                dampStateAmplitudes(T, self.coefics.rowSlice(traj), self.hamilton.rowSlice(traj), ensemble.s.at(traj), ekin, alpha, dt);
             }
         }
 
@@ -620,103 +564,46 @@ fn LandauZener(comptime T: type) type {
     };
 }
 
-/// Validates electronic state coefficient normalization against a tolerance threshold.
-pub fn checkNorm(comptime T: type, coefs: []const Complex(T), tol: ?T) !void {
-    const t = tol orelse return;
-
-    var norm_val: T = 0;
-
-    for (coefs) |c| {
-        norm_val += c.squaredMagnitude();
-    }
-
-    if (std.math.isNan(norm_val) or @abs(norm_val - 1) > t) {
-        return error.NormDivergence;
-    }
+/// Evaluates Granucci-Persico decoherence time from active-target energy gap and kinetic energy.
+fn computeDecoherenceTime(comptime T: type, delta_e: T, ekin: T, alpha: T) T {
+    return (1 + alpha / ekin) / delta_e;
 }
 
-/// Computes time derivative of electronic coefficients in the adiabatic basis.
-pub fn coefDerAdia(ctx: anytype, y: anytype, dy: anytype) void {
-    const e_ref = if (ctx.is_td) 0 else ctx.ham[0];
+/// Damps non-active electronic state amplitudes and renormalizes active state population.
+fn dampStateAmplitudes(comptime T: type, coefs: []Complex(T), ham: []const T, c: usize, ekin: T, alpha: T, dt: T) void {
+    if (ekin <= 1e-4) return;
 
-    const T = @TypeOf(y[0].re);
+    const rho_cc = coefs[c].squaredMagnitude();
 
-    for (0..ctx.ham.len) |i| {
-        var sum_sigma = Complex(T).init(0, 0);
+    if (rho_cc < 1e-14) return;
 
-        for (0..ctx.ham.len) |j| {
-            const sig = Complex(T).init(ctx.sigma[i * ctx.ham.len + j], 0);
+    const e_curr = ham[c];
 
-            sum_sigma = sum_sigma.add(sig.mul(y[j]));
-        }
+    var delta_rho: T = 0;
 
-        dy[i] = Complex(T).init(0, -(ctx.ham[i] - e_ref)).mul(y[i]).sub(sum_sigma);
+    for (0..coefs.len) |j| {
+        if (j == c) continue;
+
+        const delta_e = @abs(ham[j] - e_curr);
+
+        if (delta_e < 1e-14) continue;
+
+        const tau = computeDecoherenceTime(T, delta_e, ekin, alpha);
+
+        const d = std.math.exp(-0.5 * dt / tau);
+
+        const rho_j = coefs[j].squaredMagnitude();
+
+        delta_rho += rho_j * (1 - d * d);
+
+        coefs[j].re *= d;
+        coefs[j].im *= d;
     }
-}
 
-/// Computes time derivative of electronic coefficients in the diabatic basis.
-pub fn coefDerDia(ctx: anytype, y: anytype, dy: anytype) void {
-    const nstate = std.math.sqrt(ctx.ham.len);
+    const renorm = std.math.sqrt((rho_cc + delta_rho) / rho_cc);
 
-    const T = @TypeOf(y[0].re);
-
-    for (0..nstate) |i| {
-        var sum = Complex(T).init(0, 0);
-
-        for (0..nstate) |j| {
-            const term = y[j].mul(Complex(T).init(0, -ctx.ham[i * nstate + j]));
-
-            sum = sum.add(term);
-        }
-
-        dy[i] = sum;
-    }
-}
-
-/// Calculates nonadiabatic coupling terms using Hammes-Schiffer-Tully approximation.
-pub fn hammesSchifferTully(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T) void {
-    const nstate = std.math.sqrt(sigma.len);
-
-    for (0..nstate) |i| for (0..nstate) |j| {
-        var S_ij: T = 0;
-        var S_ji: T = 0;
-
-        for (0..nstate) |k| {
-            const U_t_ki = U_new[k * nstate + i];
-            const U_t_kj = U_new[k * nstate + j];
-
-            const U_old_ki = U_old[k * nstate + i];
-            const U_old_kj = U_old[k * nstate + j];
-
-            S_ij += U_t_ki * U_old_kj;
-            S_ji += U_t_kj * U_old_ki;
-        }
-
-        sigma[i * nstate + j] = (S_ji - S_ij) / (2 * dt);
-    };
-}
-
-/// Evaluates nonadiabatic time-derivative coupling matrix elements from nonadiabatic coupling vectors.
-pub fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, p: []const T, m: []const T) void {
-    const nstate = std.math.sqrt(sigma.len);
-
-    for (0..nstate) |i| for (0..nstate) |j| {
-        if (i == j) {
-            sigma[i * nstate + j] = 0;
-
-            continue;
-        }
-
-        var v_dot_grad: T = 0;
-
-        for (0..p.len) |alpha| {
-            const v_alpha = p[alpha] / m[alpha];
-
-            v_dot_grad += v_alpha * grad_V[alpha * nstate * nstate + i * nstate + j];
-        }
-
-        sigma[i * nstate + j] = v_dot_grad;
-    };
+    coefs[c].re *= renorm;
+    coefs[c].im *= renorm;
 }
 
 /// Rescales nuclear momentum along nonadiabatic coupling vectors or isotropically to conserve total energy.
@@ -736,6 +623,11 @@ fn rescaleMomentum(comptime T: type, ensemble: *Ensemble(T), traj: usize, c: usi
         return rescaleMomentumIsotropic(T, ensemble, traj, dE);
     }
 
+    return rescaleMomentumDirectional(T, ensemble, traj, c, k, a, b, dE, grad_V, nstate, reflect);
+}
+
+/// Applies directional momentum rescaling along nonadiabatic coupling vector or reflects on frustrated hops.
+fn rescaleMomentumDirectional(comptime T: type, ensemble: *Ensemble(T), traj: usize, c: usize, k: usize, a: T, b: T, dE: T, grad_V: Matrix(T), nstate: usize, reflect: bool) bool {
     const discriminant = b * b - 4 * a * dE;
 
     if (discriminant >= 0) {
@@ -794,4 +686,25 @@ fn rescaleMomentumIsotropic(comptime T: type, ensemble: *Ensemble(T), i: usize, 
     }
 
     return true;
+}
+
+/// Stochastically samples the target electronic state from accumulated transition probabilities.
+fn sampleTargetState(comptime T: type, probs_row: []T, current: usize, rv: T) usize {
+    var sum: T = 0;
+
+    for (probs_row) |p| sum += p;
+
+    if (sum > 1.0) {
+        for (probs_row) |*p| p.* /= sum;
+    }
+
+    var accum: T = 0;
+
+    for (probs_row, 0..) |p, j| {
+        accum += p;
+
+        if (rv < accum) return j;
+    }
+
+    return current;
 }

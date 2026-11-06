@@ -5,7 +5,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 
-const electronic_structure = @import("electronic_structure.zig");
+const classical_forces = @import("classical_forces.zig");
+const ensemble_mod = @import("ensemble.zig");
+const initial_conditions_mod = @import("initial_conditions.zig");
 
 const Ehrenfest = @import("ehrenfest_dynamics.zig").Ehrenfest;
 const EhrenfestOptions = @import("ehrenfest_dynamics.zig").Options;
@@ -14,7 +16,6 @@ const MethodOptions = @import("potential.zig").MethodOptions;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Potential = @import("potential.zig").Potential;
 const PotentialOptions = @import("potential.zig").Options;
-const ScalarDual = @import("dual.zig").ScalarDual;
 const SurfaceHopping = @import("surface_hopping.zig").SurfaceHopping;
 const SurfaceHoppingOptions = @import("surface_hopping.zig").Options;
 const Thermostat = @import("thermostat.zig").Thermostat;
@@ -22,13 +23,9 @@ const ThermostatOptions = @import("thermostat.zig").Options;
 const Vector = @import("tensor.zig").Vector;
 const validation = @import("validation.zig");
 
-const calculateNormalModes = @import("frequency_analysis.zig").calculateNormalModes;
 const getMass = @import("constants.zig").getMass;
 const getTrajectoryPath = @import("read_write.zig").getTrajectoryPath;
 const printf = @import("read_write.zig").printf;
-const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
-const syevd = @import("linear_algebra.zig").syevd;
-const syevdBatch = @import("linear_algebra.zig").syevdBatch;
 const writeMatrixLinspace = @import("read_write.zig").writeMatrixLinspace;
 const writeXyzFrame = @import("read_write.zig").writeXyzFrame;
 const writeXyzMomentumFrame = @import("read_write.zig").writeXyzMomentumFrame;
@@ -37,6 +34,15 @@ const writeXyzTrajectory = @import("read_write.zig").writeXyzTrajectory;
 
 const AMU2AU = @import("constants.zig").AMU2AU;
 const AU2K = @import("constants.zig").AU2K;
+
+pub const DistributionOptions = initial_conditions_mod.DistributionOptions;
+pub const Ensemble = ensemble_mod.Ensemble;
+pub const GradientBuffer = classical_forces.GradientBuffer;
+pub const InitialConditions = initial_conditions_mod.InitialConditions;
+pub const MaxwellBoltzmannOptions = initial_conditions_mod.MaxwellBoltzmannOptions;
+pub const WignerOptions = initial_conditions_mod.WignerOptions;
+
+const sampleWignerAbInitio = initial_conditions_mod.sampleWignerAbInitio;
 
 /// Configuration options for the classical molecular dynamics simulation.
 pub const Options = struct {
@@ -54,37 +60,10 @@ pub const Options = struct {
     write: Write = .{},
 };
 
-/// Tagged union defining mutually exclusive initial phase space probability distributions.
-pub const DistributionOptions = union(enum) {
-    maxwell_boltzmann: MaxwellBoltzmannOptions,
-    wigner: WignerOptions,
-};
-
-/// Parameters for classical thermal momentum sampling according to the Maxwell-Boltzmann distribution.
-pub const MaxwellBoltzmannOptions = struct {
-    temperature: f64 = 298.15,
-};
-
 /// Tagged union for multi-state non-adiabatic trajectory propagation methods.
 pub const NonadiabaticOptions = union(enum) {
     ehrenfest: EhrenfestOptions,
     surface_hopping: SurfaceHoppingOptions,
-};
-
-/// Parameters for quantum harmonic oscillator Wigner phase space distribution sampling.
-pub const WignerOptions = struct {
-    gamma: ?[]const f64 = null,
-    method: ?MethodOptions = null,
-    temperature: ?f64 = null,
-};
-
-/// Initial phase space parameters and distribution configuration for trajectory sampling.
-const InitialConditions = struct {
-    distribution: ?DistributionOptions = null,
-    momentum: ?[]const f64 = null,
-    position: ?[]const f64 = null,
-    seed: u32 = 1,
-    state: u32 = 0,
 };
 
 /// Output file destinations for streaming trajectory observables to disk during dynamics.
@@ -112,338 +91,6 @@ const Write = struct {
     temperature: ?[]const u8 = null,
     total_energy: ?[]const u8 = null,
 };
-
-/// Generates a representation of a classical trajectory ensemble with positions, momenta, and active states.
-pub fn Ensemble(comptime T: type) type {
-    return struct {
-        r: Matrix(T),
-        p: Matrix(T),
-        a: Matrix(T),
-        m: []const T,
-
-        s: Vector(usize),
-
-        ndof: usize,
-
-        /// Initializes the ensemble trajectories with allocated memory for positions, momenta, and forces.
-        pub fn init(ndim: usize, ntraj: usize, mass: []const T, gpa: Allocator) !@This() {
-            var r = try Matrix(T).init(ntraj, ndim, gpa);
-            errdefer r.deinit(gpa);
-
-            var p = try Matrix(T).init(ntraj, ndim, gpa);
-            errdefer p.deinit(gpa);
-
-            var a = try Matrix(T).init(ntraj, ndim, gpa);
-            errdefer a.deinit(gpa);
-
-            var s = try Vector(usize).init(ntraj, gpa);
-            errdefer s.deinit(gpa);
-
-            const m = try gpa.alloc(T, mass.len);
-            errdefer gpa.free(m);
-
-            @memcpy(m, mass);
-
-            return .{ .r = r, .p = p, .a = a, .s = s, .m = m, .ndof = ndim };
-        }
-
-        /// Deallocates the positions, momenta, and force vectors of the trajectory ensemble.
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.r.deinit(gpa);
-            self.p.deinit(gpa);
-            self.a.deinit(gpa);
-            self.s.deinit(gpa);
-
-            gpa.free(self.m);
-        }
-
-        /// Calculates the average classical kinetic energy of the ensemble trajectories.
-        pub fn ekin(self: @This()) T {
-            var sum: T = 0;
-
-            for (0..self.p.nrow()) |i| for (0..self.p.ncol()) |j| {
-                sum += self.p.at(i, j) * self.p.at(i, j) / (2 * self.m[j]);
-            };
-
-            return sum / @as(T, @floatFromInt(self.p.nrow()));
-        }
-
-        /// Computes the mean momentum vector averaged over all trajectories in the ensemble.
-        pub fn mom(self: @This(), gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(self.p.ncol(), gpa);
-
-            for (0..self.p.nrow()) |i| for (0..self.p.ncol()) |j| {
-                value.ptr(j).* += self.p.at(i, j);
-            };
-
-            value.divs(@floatFromInt(self.p.nrow()));
-
-            return value;
-        }
-
-        /// Computes the population fraction of trajectories occupying each electronic state.
-        pub fn pop(self: @This(), nstate: usize, coefs: ?Matrix(Complex(T)), gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(nstate, gpa);
-
-            if (coefs) |coef| {
-                for (0..coef.nrow()) |i| for (0..nstate) |k| {
-                    value.ptr(k).* += coef.at(i, k).squaredMagnitude();
-                };
-
-                value.divs(@floatFromInt(self.r.nrow()));
-            }
-
-            if (coefs == null) {
-                for (0..self.s.length()) |i| {
-                    value.ptr(self.s.at(i)).* += 1;
-                }
-
-                value.divs(@floatFromInt(self.s.length()));
-            }
-
-            return value;
-        }
-
-        /// Computes the mean position vector averaged over all trajectories in the ensemble.
-        pub fn pos(self: @This(), gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(self.r.ncol(), gpa);
-
-            for (0..self.r.nrow()) |i| for (0..self.r.ncol()) |j| {
-                value.ptr(j).* += self.r.at(i, j);
-            };
-
-            value.divs(@floatFromInt(self.r.nrow()));
-
-            return value;
-        }
-
-        /// Projects out overall angular momentum and rotational velocities from the ensemble.
-        pub fn removeRotation(self: *@This()) usize {
-            const natom = self.m.len / 3;
-
-            if (natom < 2) return 0;
-
-            var m_tot: T = 0;
-
-            for (0..natom) |k| {
-                m_tot += self.m[k * 3];
-            }
-
-            if (m_tot <= 0) return 0;
-
-            var axes_removed: usize = 0;
-
-            for (0..self.r.nrow()) |i| {
-                var r_cm = [3]T{ 0, 0, 0 };
-
-                for (0..natom) |k| for (0..3) |c| {
-                    r_cm[c] += self.m[k * 3 + c] * self.r.at(i, k * 3 + c);
-                };
-
-                for (0..3) |c| r_cm[c] /= m_tot;
-
-                var L: [3]T, var I_tensor: [9]T = .{ .{ 0, 0, 0 }, .{ 0, 0, 0, 0, 0, 0, 0, 0, 0 } };
-
-                for (0..natom) |k| {
-                    const mk = self.m[k * 3];
-
-                    const rx = self.r.at(i, k * 3 + 0) - r_cm[0];
-                    const ry = self.r.at(i, k * 3 + 1) - r_cm[1];
-                    const rz = self.r.at(i, k * 3 + 2) - r_cm[2];
-
-                    const px = self.p.at(i, k * 3 + 0);
-                    const py = self.p.at(i, k * 3 + 1);
-                    const pz = self.p.at(i, k * 3 + 2);
-
-                    L[0] += ry * pz - rz * py;
-                    L[1] += rz * px - rx * pz;
-                    L[2] += rx * py - ry * px;
-
-                    I_tensor[0] += mk * (ry * ry + rz * rz);
-                    I_tensor[4] += mk * (rx * rx + rz * rz);
-                    I_tensor[8] += mk * (rx * rx + ry * ry);
-
-                    I_tensor[1] -= mk * rx * ry;
-                    I_tensor[2] -= mk * rx * rz;
-                    I_tensor[5] -= mk * ry * rz;
-                }
-
-                I_tensor[3] = I_tensor[1];
-                I_tensor[6] = I_tensor[2];
-                I_tensor[7] = I_tensor[5];
-
-                var ev: [3]T, var evec: [9]T = .{ undefined, undefined };
-
-                var ev_vec = Vector(T).fromSlice(&ev);
-
-                var evec_mat = Matrix(T).fromSlice(3, 3, &evec);
-
-                syevd(T, &ev_vec, &evec_mat, Matrix(T).fromSlice(3, 3, &I_tensor)) catch continue;
-
-                var omega: [3]T, var cur_axes: usize = .{ .{ 0, 0, 0 }, 0 };
-
-                for (0..3) |axis| if (ev[axis] > 1e-8) {
-                    cur_axes += 1;
-
-                    const l0, const l1, const l2 = .{ L[0], L[1], L[2] };
-
-                    const l_proj = evec[axis] * l0 + evec[3 + axis] * l1 + evec[6 + axis] * l2;
-
-                    for (0..3) |c| {
-                        omega[c] += (l_proj / ev[axis]) * evec[c * 3 + axis];
-                    }
-                };
-
-                if (i == 0) axes_removed = cur_axes;
-
-                for (0..natom) |k| {
-                    const mk = self.m[k * 3];
-
-                    const rx = self.r.at(i, k * 3 + 0) - r_cm[0];
-                    const ry = self.r.at(i, k * 3 + 1) - r_cm[1];
-                    const rz = self.r.at(i, k * 3 + 2) - r_cm[2];
-
-                    self.p.ptr(i, k * 3 + 0).* -= mk * (omega[1] * rz - omega[2] * ry);
-                    self.p.ptr(i, k * 3 + 1).* -= mk * (omega[2] * rx - omega[0] * rz);
-                    self.p.ptr(i, k * 3 + 2).* -= mk * (omega[0] * ry - omega[1] * rx);
-                }
-            }
-
-            self.ndof -|= axes_removed;
-
-            return axes_removed;
-        }
-
-        /// Removes center-of-mass momentum drift from all trajectories in the ensemble.
-        pub fn removeTranslation(self: *@This()) void {
-            const natom, var m_tot: T = .{ self.m.len / 3, 0 };
-
-            for (0..natom) |k| m_tot += self.m[k * 3];
-
-            if (m_tot <= 0) return;
-
-            for (0..self.r.nrow()) |i| {
-                var p_cm = [3]T{ 0, 0, 0 };
-
-                for (0..natom) |k| for (0..3) |c| {
-                    p_cm[c] += self.p.at(i, k * 3 + c);
-                };
-
-                for (0..3) |c| {
-                    p_cm[c] /= m_tot;
-                }
-
-                for (0..natom) |k| for (0..3) |c| {
-                    self.p.ptr(i, k * 3 + c).* -= self.m[k * 3 + c] * p_cm[c];
-                };
-            }
-
-            self.ndof -|= 3;
-        }
-
-        /// Rescales ensemble momenta to match the target kinetic temperature across active degrees of freedom.
-        pub fn rescaleTemperature(self: *@This(), temp_k: T) void {
-            if (self.ndof == 0) return;
-
-            const target_ekin = 0.5 * @as(T, @floatFromInt(self.ndof)) * (temp_k / AU2K);
-
-            for (0..self.p.nrow()) |i| {
-                var cur_ekin: T = 0;
-
-                for (0..self.p.ncol()) |j| {
-                    cur_ekin += (self.p.at(i, j) * self.p.at(i, j)) / (2 * self.m[j]);
-                }
-
-                if (cur_ekin > 1e-12) {
-                    const factor = @sqrt(target_ekin / cur_ekin);
-
-                    for (0..self.p.ncol()) |j| {
-                        self.p.ptr(i, j).* *= factor;
-                    }
-                }
-            }
-        }
-
-        /// Samples initial positions and momenta from a Wigner-like Gaussian distribution or reference geometry.
-        pub fn setGaussian(self: *@This(), ic: InitialConditions, default_pos: ?[]const T) void {
-            var split_mix = std.Random.SplitMix64.init(ic.seed);
-
-            var rng = std.Random.DefaultPrng.init(split_mix.next());
-
-            for (0..self.s.length()) |i| {
-                self.s.ptr(i).* = ic.state;
-            }
-
-            const random = rng.random();
-
-            const gamma = if (ic.distribution) |dist| switch (dist) {
-                .wigner => |wig| wig.gamma,
-                inline else => null,
-            } else null;
-
-            const temperature = if (ic.distribution) |dist| switch (dist) {
-                .maxwell_boltzmann => |mb| mb.temperature,
-                inline else => null,
-            } else null;
-
-            for (0..self.r.nrow()) |i| for (0..self.r.ncol()) |j| {
-                const r0 = if (ic.position) |r_pos| r_pos[j] else default_pos.?[j];
-
-                if (gamma) |gam| {
-                    const stdev = 1 / std.math.sqrt(2 * gam[j]);
-
-                    self.r.ptr(i, j).* = r0 + stdev * random.floatNorm(T);
-                }
-
-                if (gamma == null) {
-                    self.r.ptr(i, j).* = r0;
-                }
-            };
-
-            for (0..self.p.nrow()) |i| for (0..self.p.ncol()) |j| {
-                const p0 = if (ic.momentum) |p_mom| p_mom[j] else 0;
-
-                if (temperature) |t_val| {
-                    const stdev = std.math.sqrt(self.m[j] * @as(T, @floatCast(t_val)) / AU2K);
-
-                    self.p.ptr(i, j).* = p0 + stdev * random.floatNorm(T);
-
-                    continue;
-                }
-
-                if (gamma) |gam| {
-                    const stdev = std.math.sqrt(gam[j] / 2);
-
-                    self.p.ptr(i, j).* = p0 + stdev * random.floatNorm(T);
-
-                    continue;
-                }
-
-                self.p.ptr(i, j).* = p0;
-            };
-        }
-
-        /// Computes the ensemble-averaged electronic state coefficient magnitudes for nonadiabatic dynamics.
-        pub fn stateCoef(self: @This(), nstate: usize, coefs: Matrix(Complex(T)), gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(nstate, gpa);
-
-            for (0..coefs.nrow()) |i| for (0..nstate) |k| {
-                value.ptr(k).* += coefs.at(i, k).squaredMagnitude();
-            };
-
-            value.divs(@floatFromInt(self.r.nrow()));
-
-            return value;
-        }
-
-        /// Calculates the instantaneous kinetic temperature of the ensemble in Kelvin.
-        pub fn temp(self: @This()) T {
-            if (self.ndof == 0) return 0;
-
-            return (2 * self.ekin() / @as(T, @floatFromInt(self.ndof))) * AU2K;
-        }
-    };
-}
 
 /// Container structure holding the results and observables computed during classical propagation.
 pub fn Result(comptime T: type) type {
@@ -801,266 +448,6 @@ const StreamWriter = struct {
         return files;
     }
 };
-
-/// Helper struct managing memory for potential energy gradients and wavefunctions.
-fn GradientBuffer(comptime T: type) type {
-    return struct {
-        adia: bool,
-
-        r_dual: Matrix(ScalarDual(T)),
-        V_dual: Matrix(ScalarDual(T)),
-
-        V: Matrix(T),
-        W: Matrix(T),
-        U: Matrix(T),
-
-        U_prev: Matrix(T),
-        grad_V: Matrix(T),
-
-        /// Allocates memory for dual numbers and gradients needed in force evaluations.
-        pub fn init(ndim: usize, nstate: usize, ntraj: usize, adia: bool, gpa: Allocator) !@This() {
-            var r_dual = try Matrix(ScalarDual(T)).init(ntraj, ndim, gpa);
-            errdefer r_dual.deinit(gpa);
-
-            var V_dual = try Matrix(ScalarDual(T)).init(ntraj, nstate * nstate, gpa);
-            errdefer V_dual.deinit(gpa);
-
-            var V = try Matrix(T).init(ntraj, nstate * nstate, gpa);
-            errdefer V.deinit(gpa);
-
-            var W = try Matrix(T).init(ntraj, nstate, gpa);
-            errdefer W.deinit(gpa);
-
-            var U = try Matrix(T).init(ntraj, nstate * nstate, gpa);
-            errdefer U.deinit(gpa);
-
-            var U_prev = try Matrix(T).init(ntraj, nstate * nstate, gpa);
-            errdefer U_prev.deinit(gpa);
-
-            U_prev.fill(std.math.nan(T));
-
-            const grad_V = try Matrix(T).init(ntraj, ndim * nstate * nstate, gpa);
-            errdefer grad_V.deinit(gpa);
-
-            return .{
-                .r_dual = r_dual,
-                .V_dual = V_dual,
-                .U_prev = U_prev,
-                .grad_V = grad_V,
-
-                .V = V,
-                .W = W,
-                .U = U,
-
-                .adia = adia,
-            };
-        }
-
-        /// Deallocates gradient matrices, eigenvalues, and eigenvectors.
-        pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.r_dual.deinit(gpa);
-            self.V_dual.deinit(gpa);
-
-            self.V.deinit(gpa);
-            self.W.deinit(gpa);
-            self.U.deinit(gpa);
-            self.U_prev.deinit(gpa);
-
-            self.grad_V.deinit(gpa);
-        }
-
-        /// Computes and applies nuclear forces to trajectories based on potential gradients.
-        pub fn apply(self: *@This(), ensemble: *Ensemble(T), pot: Potential(T), coefs: ?*const Matrix(Complex(T))) void {
-            const nstate = pot.nstate();
-
-            for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
-                if (coefs) |coef| {
-                    var der: T = 0;
-
-                    if (self.adia) {
-                        for (0..nstate) |m| for (0..nstate) |n| {
-                            const rho_mn = coef.at(i, m).conjugate().mul(coef.at(i, n)).re;
-
-                            if (m == n) {
-                                der += rho_mn * self.grad_V.at(i, j * nstate * nstate + m * nstate + n);
-                            }
-
-                            if (m != n) {
-                                const dE = self.W.at(i, n) - self.W.at(i, m);
-
-                                der += rho_mn * dE * self.grad_V.at(i, j * nstate * nstate + m * nstate + n);
-                            }
-                        };
-                    }
-
-                    if (!self.adia) {
-                        for (0..nstate) |k| for (0..nstate) |l| {
-                            const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
-
-                            der += rho_kl * self.grad_V.at(i, j * nstate * nstate + k * nstate + l);
-                        };
-                    }
-
-                    ensemble.a.ptr(i, j).* = -der / ensemble.m[j];
-                }
-
-                if (coefs == null and self.adia) {
-                    const s = ensemble.s.at(i);
-
-                    const der = self.grad_V.at(i, j * nstate * nstate + s * nstate + s);
-
-                    ensemble.a.ptr(i, j).* = -der / ensemble.m[j];
-                }
-
-                if (coefs == null and !self.adia) {
-                    const k = ensemble.s.at(i) * nstate + ensemble.s.at(i);
-
-                    ensemble.a.ptr(i, j).* = -self.grad_V.at(i, j * nstate * nstate + k) / ensemble.m[j];
-                }
-            };
-        }
-
-        /// Calculates average potential energy from cached gradient buffer matrices.
-        pub fn epot(self: @This(), ensemble: Ensemble(T), nstate: usize, coefs: ?Matrix(Complex(T))) T {
-            var sum: T = 0;
-
-            if (coefs) |coef| for (0..ensemble.r.nrow()) |i| {
-                var traj_epot: T = 0;
-
-                if (self.adia) {
-                    for (0..nstate) |k| {
-                        const rho_kk = coef.at(i, k).squaredMagnitude();
-
-                        traj_epot += rho_kk * self.W.at(i, k);
-                    }
-                }
-
-                if (!self.adia) {
-                    for (0..nstate) |k| for (0..nstate) |l| {
-                        const rho_kl = coef.at(i, k).conjugate().mul(coef.at(i, l)).re;
-
-                        traj_epot += rho_kl * self.V.at(i, k * nstate + l);
-                    };
-                }
-
-                sum += traj_epot;
-            };
-
-            if (coefs == null and self.adia) for (0..ensemble.r.nrow()) |i| {
-                sum += self.W.at(i, ensemble.s.at(i));
-            };
-
-            if (coefs == null and !self.adia) for (0..ensemble.r.nrow()) |i| {
-                sum += self.V.at(i, ensemble.s.at(i) * nstate + ensemble.s.at(i));
-            };
-
-            return sum / @as(T, @floatFromInt(ensemble.r.nrow()));
-        }
-
-        /// Computes the ensemble-averaged potential energy for each electronic state.
-        pub fn epotState(self: @This(), nstate: usize, gpa: Allocator) !Vector(T) {
-            var value = try Vector(T).initZero(nstate, gpa);
-
-            for (0..self.V.nrow()) |i| for (0..nstate) |k| {
-                const v_k = if (self.adia) self.W.at(i, k) else self.V.at(i, k * nstate + k);
-
-                value.ptr(k).* += v_k;
-            };
-
-            value.divs(@floatFromInt(self.V.nrow()));
-
-            return value;
-        }
-
-        /// Evaluates the potential and its gradients using automatic differentiation or direct ab initio evaluation.
-        pub fn update(self: *@This(), r: Matrix(T), pot: Potential(T), time: T, states: ?[]const usize) !void {
-            switch (pot) {
-                .ab_initio => |ab| {
-                    try ab.updateGradients(&self.V, &self.grad_V, r, states);
-
-                    if (self.adia) for (0..self.V.nrow()) |i| for (0..pot.nstate()) |k| {
-                        self.W.ptr(i, k).* = self.V.at(i, k * pot.nstate() + k);
-
-                        for (0..pot.nstate()) |l| {
-                            self.U.ptr(i, k * pot.nstate() + l).* = if (k == l) 1 else 0;
-                        }
-                    };
-                },
-
-                inline else => {
-                    try pot.evalBatch(T, &self.V, r, time);
-
-                    if (self.adia) {
-                        try syevdBatch(T, &self.W, &self.U, self.V);
-
-                        if (!std.math.isNan(self.U_prev.at(0, 0))) {
-                            for (0..self.U.nrow()) |i| for (0..pot.nstate()) |k| {
-                                var overlap: T = 0;
-
-                                for (0..pot.nstate()) |a| {
-                                    const u_k = self.U.at(i, a * pot.nstate() + k);
-
-                                    overlap += u_k * self.U_prev.at(i, a * pot.nstate() + k);
-                                }
-
-                                if (overlap < 0) for (0..pot.nstate()) |a| {
-                                    self.U.ptr(i, a * pot.nstate() + k).* = -self.U.at(i, a * pot.nstate() + k);
-                                };
-                            };
-                        }
-
-                        @memcpy(self.U_prev.data, self.U.data);
-                    }
-
-                    const nstate = pot.nstate();
-
-                    for (0..r.nrow()) |i| for (0..r.ncol()) |j| {
-                        for (0..r.ncol()) |k| {
-                            self.r_dual.ptr(i, k).* = ScalarDual(T).init(r.at(i, k), if (k == j) 1 else 0);
-                        }
-
-                        const v_row, const r_row = .{ self.V_dual.rowSlice(i), self.r_dual.rowSlice(i) };
-
-                        try pot.eval(ScalarDual(T), v_row, r_row, ScalarDual(T).init(time, 0));
-
-                        if (self.adia) {
-                            for (0..nstate) |k| for (0..nstate) |l| {
-                                var sum: T = 0;
-
-                                for (0..nstate) |a| for (0..nstate) |b| {
-                                    const u_ak = self.U.at(i, a * nstate + k);
-                                    const u_bl = self.U.at(i, b * nstate + l);
-
-                                    const d_ab = self.V_dual.at(i, a * nstate + b).der;
-
-                                    sum += u_ak * u_bl * d_ab;
-                                };
-
-                                if (k == l) {
-                                    self.grad_V.ptr(i, j * nstate * nstate + k * nstate + l).* = sum;
-                                }
-
-                                if (k != l) {
-                                    const dE = self.W.at(i, l) - self.W.at(i, k);
-
-                                    const val = if (@abs(dE) < 1e-14) 0 else sum / dE;
-
-                                    self.grad_V.ptr(i, j * nstate * nstate + k * nstate + l).* = val;
-                                }
-                            };
-                        }
-
-                        if (!self.adia) {
-                            for (0..nstate * nstate) |k| {
-                                self.grad_V.ptr(i, j * nstate * nstate + k).* = self.V_dual.at(i, k).der;
-                            }
-                        }
-                    };
-                },
-            }
-        }
-    };
-}
 
 /// Accumulates time-dependent expectation values and dynamics trajectories.
 fn History(comptime T: type) type {
@@ -1466,21 +853,6 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
     return .{ .observables = obs };
 }
 
-/// Derives electronic structure options for Wigner sampling from explicit settings or potential configuration.
-fn getWignerMethod(opt: Options) MethodOptions {
-    if (opt.initial_conditions.distribution.?.wigner.method) |m| {
-        return stripSecondaryOptions(m, .{ .hessian = true });
-    }
-
-    var method = stripSecondaryOptions(opt.potential.ab_initio, .{});
-
-    switch (method) {
-        inline else => |*m| m.hessian = .{ .numeric = .{} },
-    }
-
-    return method;
-}
-
 /// Initializes the simulation state, potential, and initial ensemble.
 fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationState(T) {
     var pot = try Potential(T).init(io, opt.potential, gpa);
@@ -1721,98 +1093,6 @@ fn printIteration(comptime T: type, io: std.Io, obs: Observables(T), i: usize, h
     try printf(io, "{f}\n", .{timer.untilNow(io, .real)});
 
     timer.* = std.Io.Timestamp.now(io, .real);
-}
-
-/// Samples initial Cartesian phase space coordinates from ab initio quantum harmonic oscillator Wigner distributions.
-fn sampleWignerAbInitio(comptime T: type, io: std.Io, ensemble: *Ensemble(T), opt: Options, gpa: Allocator) !void {
-    switch (getWignerMethod(opt)) {
-        inline else => |m_opt| {
-            var res = try electronic_structure.run(T, io, m_opt, true, gpa);
-            defer res.deinit(gpa);
-
-            const sys = electronic_structure.getSystem(T, res);
-
-            try sampleWignerFromHessian(T, ensemble, res.hess[0], sys, opt, gpa);
-        },
-    }
-}
-
-/// Samples ensemble positions and momenta from normal modes computed from a molecular Hessian.
-fn sampleWignerFromHessian(comptime T: type, ensemble: *Ensemble(T), hess: Matrix(T), sys: MolecularSystem(T), opt: Options, gpa: Allocator) !void {
-    var nm = try calculateNormalModes(T, hess, sys, gpa);
-    defer nm.deinit(gpa);
-
-    const ndim, const ntraj = .{ sys.atoms.len * 3, ensemble.r.nrow() };
-
-    const temp = opt.initial_conditions.distribution.?.wigner.temperature orelse 0;
-
-    var split_mix = std.Random.SplitMix64.init(opt.initial_conditions.seed);
-    var rng = std.Random.DefaultPrng.init(split_mix.next());
-
-    var sigma_Q = try gpa.alloc(T, ndim);
-    defer gpa.free(sigma_Q);
-
-    var sigma_P = try gpa.alloc(T, ndim);
-    defer gpa.free(sigma_P);
-
-    const random = rng.random();
-
-    for (0..ndim) |k| {
-        const omega_au = nm.freqs.at(k) / @sqrt(AMU2AU);
-
-        if (omega_au <= 1e-5) {
-            sigma_Q[k] = 0;
-            sigma_P[k] = 0;
-
-            continue;
-        }
-
-        if (temp > 1e-6) {
-            const coth = 1.0 / std.math.tanh(0.5 * (AU2K / temp) * omega_au);
-
-            sigma_Q[k] = std.math.sqrt(0.5 / omega_au * coth);
-            sigma_P[k] = std.math.sqrt(0.5 * omega_au * coth);
-        }
-
-        if (temp <= 1e-6) {
-            sigma_Q[k] = std.math.sqrt(0.5 / omega_au);
-            sigma_P[k] = std.math.sqrt(0.5 * omega_au);
-        }
-    }
-
-    var Q = try gpa.alloc(T, ndim);
-    defer gpa.free(Q);
-
-    var P_Q = try gpa.alloc(T, ndim);
-    defer gpa.free(P_Q);
-
-    for (0..ntraj) |i| {
-        ensemble.s.ptr(i).* = opt.initial_conditions.state;
-
-        for (0..ndim) |k| {
-            Q[k] = if (sigma_Q[k] > 0) sigma_Q[k] * random.floatNorm(T) else 0;
-
-            P_Q[k] = if (sigma_P[k] > 0) sigma_P[k] * random.floatNorm(T) else 0;
-        }
-
-        for (0..ndim) |a| {
-            var delta_r: T, var p_a: T = .{ 0, 0 };
-
-            for (0..ndim) |k| {
-                const u_ak = nm.modes.at(a, k);
-
-                delta_r += u_ak * Q[k];
-
-                p_a += u_ak * P_Q[k];
-            }
-
-            const sqrt_m = std.math.sqrt(ensemble.m[a]);
-
-            ensemble.r.ptr(i, a).* = sys.coors[a] + delta_r / sqrt_m;
-
-            ensemble.p.ptr(i, a).* = p_a * sqrt_m;
-        }
-    }
 }
 
 /// Propagates the classical equations of motion over the specified number of time steps.

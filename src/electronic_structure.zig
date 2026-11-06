@@ -75,7 +75,10 @@ pub fn generateDeterminants(nel: usize, nbf: usize, opt: anytype, gpa: Allocator
 
 /// Extracts the one-particle reduced density matrix from an electronic structure result.
 pub fn getDensity(comptime T: type, result: anytype) Matrix(T) {
-    const ResType = switch (@typeInfo(@TypeOf(result))) { .pointer => |p| p.child, else => @TypeOf(result) };
+    const ResType = switch (@typeInfo(@TypeOf(result))) {
+        .pointer => |p| p.child,
+        else => @TypeOf(result),
+    };
 
     if (comptime @hasField(ResType, "P_ao")) {
         return result.P_ao;
@@ -104,7 +107,10 @@ pub fn getNacvPath(path: []const u8, p0: u32, p1: u32, gpa: Allocator) ![]const 
 
 /// Extracts molecular orbital coefficient matrices from converged electronic structure results.
 pub fn getOrbitals(comptime T: type, result: anytype) Matrix(T) {
-    const ResType = switch (@typeInfo(@TypeOf(result))) { .pointer => |p| p.child, else => @TypeOf(result) };
+    const ResType = switch (@typeInfo(@TypeOf(result))) {
+        .pointer => |p| p.child,
+        else => @TypeOf(result),
+    };
 
     if (comptime @hasField(ResType, "C_mo")) {
         return result.C_mo;
@@ -122,7 +128,10 @@ pub fn getStatePath(path: []const u8, state: u32, gpa: Allocator) ![]const u8 {
 
 /// Extracts the molecular system geometry and basis specification from calculation results.
 pub fn getSystem(comptime T: type, result: anytype) MolecularSystem(T) {
-    const ResType = switch (@typeInfo(@TypeOf(result))) { .pointer => |p| p.child, else => @TypeOf(result) };
+    const ResType = switch (@typeInfo(@TypeOf(result))) {
+        .pointer => |p| p.child,
+        else => @TypeOf(result),
+    };
 
     if (comptime @hasField(ResType, "hartree_fock")) {
         return result.hartree_fock.ints.sys;
