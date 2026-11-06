@@ -34,6 +34,7 @@ const gemm = @import("linear_algebra.zig").gemm;
 const generateCasDets = @import("determinant.zig").generateCasDets;
 const getrf = @import("linear_algebra.zig").getrf;
 const getrs = @import("linear_algebra.zig").getrs;
+const printDeterminants = @import("determinant.zig").printDeterminants;
 const printf = @import("read_write.zig").printf;
 const slater = @import("slater_condon.zig").slater;
 const transformInts = @import("integral_transform.zig").transformInts;
@@ -261,6 +262,8 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
             try printf(io, "\nSTATE-AVERAGED FINAL CASSCF ENERGY: {d:.14} Eh\n", .{final_sa_energy});
         }
+
+        try printDeterminants(T, io, final_C_ci, dets.items, n_states, ncore, nact, false, gpa);
     }
 
     var grad: []Matrix(T) = &.{};

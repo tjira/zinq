@@ -4,6 +4,13 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
+const Matrix = @import("tensor.zig").Matrix;
+
+const printf = @import("read_write.zig").printf;
+
+/// Holds determinant index, expansion coefficient, and contribution weight for printing.
+const DetContrib = struct { d_idx: usize, coeff: f64, weight: f64 };
+
 /// Compares two Slater determinants and extracts orbital differences when excitation degree is at most two.
 pub fn findDeterminantDifferences(A: []const usize, B: []const usize) ?struct { a: [2]usize, b: [2]usize, len: usize } {
     var diff_A: [2]usize = undefined;
@@ -245,6 +252,64 @@ pub fn generatePairs(n: usize, gpa: Allocator) ![][2]u32 {
     return pairs;
 }
 
+/// Prints leading electronic determinants, configuration interaction coefficients, and weights for each state.
+pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), dets: []const []const usize, nstates: usize, ncore: usize, norbs: usize, gen: bool, gpa: Allocator) !void {
+    const threshold: f64 = 0.01;
+
+    for (0..nstates) |s| {
+        var list = std.ArrayList(DetContrib).empty;
+        defer list.deinit(gpa);
+
+        var max_w: f64 = 0;
+        var max_c: f64 = 0;
+
+        var max_i: usize = 0;
+
+        for (0..C_ci.nrow()) |d| {
+            const c_val: f64 = @floatCast(C_ci.at(d, s));
+
+            const weight: f64 = c_val * c_val;
+
+            if (weight > max_w) {
+                max_w, max_c, max_i = .{ weight, c_val, d };
+            }
+
+            if (weight >= threshold) {
+                try list.append(gpa, .{ .d_idx = d, .coeff = c_val, .weight = weight });
+            }
+        }
+
+        if (list.items.len == 0 and C_ci.nrow() > 0) {
+            try list.append(gpa, .{ .d_idx = max_i, .coeff = max_c, .weight = max_w });
+        }
+
+        std.mem.sort(DetContrib, list.items, {}, struct {
+            fn desc(_: void, a: DetContrib, b: DetContrib) bool {
+                return a.weight > b.weight;
+            }
+        }.desc);
+
+        if (nstates == 1) {
+            try printf(io, "\nLEADING DETERMINANT CONTRIBUTIONS (|C|^2 >= 0.0100)\n", .{});
+        }
+
+        if (nstates > 1) {
+            try printf(io, "\nSTATE {d:2} LEADING DETERMINANT CONTRIBUTIONS (|C|^2 >= 0.0100)\n", .{s});
+        }
+
+        try printf(io, "{s:6} {s:18} {s:14} {s:14}\n", .{ "DET", "OCCUPATION", "COEF (C)", "WEIGHT (|C|^2)" });
+
+        for (list.items) |item| {
+            const desc = try formatDeterminant(dets[item.d_idx], ncore, norbs, gen, gpa);
+            defer gpa.free(desc);
+
+            const wght = item.weight * 100.0;
+
+            try printf(io, "{d:6} {s:18} {d:14.6} {d:12.2} %\n", .{ item.d_idx + 1, desc, item.coeff, wght });
+        }
+    }
+}
+
 /// Computes the permutation sign (+1 or -1) associated with mapping two determinants via orbital excitations.
 pub fn signOfExcitations(S: []const usize, U: []const usize) i2 {
     var exp: usize = 0;
@@ -254,4 +319,49 @@ pub fn signOfExcitations(S: []const usize, U: []const usize) i2 {
     }
 
     return if (exp % 2 == 0) 1 else -1;
+}
+
+/// Formats a Slater determinant into an allocated occupation string representation over specified molecular orbitals.
+fn formatDeterminant(det: []const usize, ncore: usize, norbs: usize, gen: bool, gpa: Allocator) ![]u8 {
+    const len = 2 * norbs + 3;
+
+    var buf = try gpa.alloc(u8, len);
+    errdefer gpa.free(buf);
+
+    var pos: usize = 0;
+
+    buf[pos] = '|';
+
+    pos += 1;
+
+    for (0..norbs) |u| {
+        const p = ncore + u;
+
+        buf[pos] = ' ';
+
+        pos += 1;
+
+        if (gen) {
+            const has_p = std.mem.indexOfScalar(usize, det, p) != null;
+
+            buf[pos] = if (has_p) '1' else '0';
+        }
+
+        if (!gen) {
+            const has_a = std.mem.indexOfScalar(usize, det, 2 * p + 0) != null;
+            const has_b = std.mem.indexOfScalar(usize, det, 2 * p + 1) != null;
+
+            buf[pos] = if (has_a and has_b) '2' else if (has_a) 'a' else if (has_b) 'b' else '0';
+        }
+
+        pos += 1;
+    }
+
+    buf[pos] = ' ';
+
+    pos += 1;
+
+    buf[pos] = '>';
+
+    return buf;
 }

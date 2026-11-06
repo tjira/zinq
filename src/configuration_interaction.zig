@@ -19,6 +19,7 @@ const Vector = @import("tensor.zig").Vector;
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
 const generateCasDets = @import("determinant.zig").generateCasDets;
 const generateDets = @import("determinant.zig").generateDets;
+const printDeterminants = @import("determinant.zig").printDeterminants;
 const printf = @import("read_write.zig").printf;
 const slater = @import("slater_condon.zig").slater;
 const syevd = @import("linear_algebra.zig").syevd;
@@ -326,6 +327,18 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
                 try printf(io, "STATE {d:2} FINAL CI ENERGY: {d:.14} Eh\n", .{ k, E.at(k) });
             }
         }
+
+        const ncore = switch (opt.space) {
+            .cas => |c| (hfres.ints.sys.nel - c.active_electrons) / 2,
+            .excitations => 0,
+        };
+
+        const norbs = switch (opt.space) {
+            .cas => |c| c.active_orbitals,
+            .excitations => hfres.C_mo.ncol(),
+        };
+
+        try printDeterminants(T, io, C_ci, dets.items, n_states, ncore, norbs, generalized, gpa);
     }
 
     var grad: []Matrix(T) = &.{};
