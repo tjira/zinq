@@ -14,8 +14,10 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
+const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
+const applySpinPenalty = @import("slater_condon.zig").applySpinPenalty;
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
 const generateCasDets = @import("determinant.zig").generateCasDets;
 const generateDets = @import("determinant.zig").generateDets;
@@ -43,6 +45,8 @@ pub const Options = struct {
 pub const CasSpaceOptions = struct {
     active_electrons: u32,
     active_orbitals: u32,
+    multiplicity: u32 = 1,
+    spin_penalty: ?f64 = null,
 };
 
 /// Options for computing CI energy gradients analytically or numerically for a specific electronic state.
@@ -193,7 +197,7 @@ pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev
 }
 
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
-pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
 
     var h_ms, var g_ms = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
@@ -212,6 +216,15 @@ pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, det
     var H_ci = try buildHamiltonianMatrix(T, dets, h_ms, g_ms, gpa);
     defer H_ci.deinit(gpa);
 
+    var H_orig = if (penalty != null) try Matrix(T).init(dets.len, dets.len, gpa) else undefined;
+    defer if (penalty != null) H_orig.deinit(gpa);
+
+    if (penalty) |pen| {
+        @memcpy(H_orig.data, H_ci.data);
+
+        applySpinPenalty(T, &H_ci, dets, pen, s2_target);
+    }
+
     if (io) |out| {
         try printf(out, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(out, .real)});
         timer = std.Io.Timestamp.now(out, .real);
@@ -224,6 +237,18 @@ pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, det
 
         C_ci.deinit(gpa);
     }
+
+    if (penalty != null) for (0..E.length()) |k| {
+        var phys_e: T = 0;
+
+        for (0..dets.len) |i| for (0..dets.len) |j| {
+            const c_prod = Value(T).init(C_ci.at(i, k)).mul(Value(T).init(C_ci.at(j, k)));
+
+            phys_e = Value(T).init(phys_e).add(c_prod.mul(Value(T).init(H_orig.at(i, j)))).val;
+        };
+
+        E.ptr(k).* = Value(T).init(phys_e).add(Value(T).init(VN)).val;
+    };
 
     if (io) |out| {
         try printf(out, " {f}\n", .{timer.untilNow(out, .real)});
@@ -276,9 +301,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         .cas => |c| blk: {
             const ncore = (hfres.ints.sys.nel - c.active_electrons) / 2;
 
-            const mult = opt.hartree_fock.multiplicity;
-
-            break :blk try generateCasDets(ncore, c.active_orbitals, c.active_electrons, mult, gpa);
+            break :blk try generateCasDets(ncore, c.active_orbitals, c.active_electrons, c.multiplicity, gpa);
         },
         .excitations => |ex| try generateDets(hfres.ints.sys.nel, 2 * hfres.ints.sys.nbf, ex, gpa),
     };
@@ -301,11 +324,20 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nORBITAL TRANSFORMS TIME:", params);
     }
 
+    const penalty, const s2_target = switch (opt.space) {
+        .cas => |c| blk: {
+            const s_target = 0.5 * @as(f64, @floatFromInt(c.multiplicity - 1));
+
+            break :blk .{ c.spin_penalty, s_target * (s_target + 1.0) };
+        },
+        .excitations => .{ null, 0.0 },
+    };
+
     const nrep = try hfres.ints.sys.nrep();
 
     const io_ci = if (log) io else null;
 
-    var E, var C_ci = try computeCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, gpa);
+    var E, var C_ci = try computeCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
 
     errdefer {
         E.deinit(gpa);

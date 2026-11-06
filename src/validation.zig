@@ -63,6 +63,18 @@ fn checkCasscf(opt: casscf.Options) !void {
         return error.InvalidInput;
     }
 
+    if (opt.multiplicity == 0) {
+        std.log.err("CASSCF MULTIPLICITY MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.spin_penalty) |pen| if (pen < 0 or std.math.isNan(pen)) {
+        std.log.err("CASSCF SPIN PENALTY MUST BE NON-NEGATIVE", .{});
+
+        return error.InvalidInput;
+    };
+
     const nt, const ni, const ns = .{ opt.nthreads == 0, opt.iterations == 0, opt.nstate == 0 };
 
     if (nt or ni or opt.threshold <= 0 or opt.orbital_threshold <= 0 or ns) {
@@ -607,6 +619,18 @@ fn checkConfigurationInteraction(opt: configuration_interaction.Options) !void {
 
                 return error.InvalidInput;
             }
+
+            if (c.multiplicity == 0) {
+                std.log.err("CASCI MULTIPLICITY MUST BE GREATER THAN 0", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (c.spin_penalty) |pen| if (pen < 0 or std.math.isNan(pen)) {
+                std.log.err("CASCI SPIN PENALTY MUST BE NON-NEGATIVE", .{});
+
+                return error.InvalidInput;
+            };
         },
         .excitations => |ex| {
             if (ex.len == 0) {

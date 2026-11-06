@@ -13,6 +13,34 @@ const printf = @import("read_write.zig").printf;
 /// Holds determinant index, expansion coefficient, and contribution weight for printing.
 const DetContrib = struct { d_idx: usize, coeff: f64, weight: f64 };
 
+/// Evaluates the total spin squared expectation value <S^2> of a Slater determinant with orthonormal spatial orbitals.
+pub fn calculateDeterminantSpin(det: []const usize) f64 {
+    var n_a: usize = 0;
+    var n_b: usize = 0;
+
+    var n_pair: usize = 0;
+
+    for (det) |k| {
+        if (k % 2 == 0) {
+            n_a += 1;
+
+            if (std.mem.indexOfScalar(usize, det, k + 1) != null) {
+                n_pair += 1;
+            }
+        } else {
+            n_b += 1;
+        }
+    }
+
+    const n_a_f = @as(f64, @floatFromInt(n_a));
+    const n_b_f = @as(f64, @floatFromInt(n_b));
+    const n_p_f = @as(f64, @floatFromInt(n_pair));
+
+    const ms = 0.5 * (n_a_f - n_b_f);
+
+    return ms * (ms + 1.0) + (n_b_f - n_p_f);
+}
+
 /// Evaluates the total spin squared expectation value <S^2> of a single Slater determinant from its density matrix.
 pub fn calculateDeterminantTotalSpin(comptime T: type, det: []const usize, C_ms: Matrix(T), S_ao: Matrix(T), gpa: Allocator) !T {
     const nsp = C_ms.shape[0];

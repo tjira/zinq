@@ -48,11 +48,13 @@ pub const Options = struct {
     hartree_fock: HartreeFockOptions,
     hessian: ?HessianOptions = null,
     iterations: u32 = 100,
+    multiplicity: u32 = 1,
     nacv: ?NacvOptions = null,
     nstate: u32 = 1,
     nthreads: u32 = 1,
     optimize: ?OptimizeOptions = null,
     orbital_threshold: f64 = 1e-6,
+    spin_penalty: ?f64 = null,
     threshold: f64 = 1e-8,
     weights: ?[]const f64 = null,
     write: Write = .{},
@@ -182,7 +184,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         try printf(io, fmt, .{ timer.untilNow(io, .real), nact_el, nact });
     }
 
-    var dets = try generateCasDets(ncore, nact, nact_el, opt.hartree_fock.multiplicity, gpa);
+    var dets = try generateCasDets(ncore, nact, nact_el, opt.multiplicity, gpa);
 
     defer {
         for (0..dets.items.len) |i| gpa.free(dets.items[i]);
@@ -234,7 +236,11 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     const nrep = try hfres.ints.sys.nrep();
 
-    var final_energies, var final_C_ci = try computeCi(T, null, C, hfres.ints, dets.items, nrep, false, gpa);
+    const s_target = 0.5 * @as(f64, @floatFromInt(opt.multiplicity - 1));
+
+    const s2_target = s_target * (s_target + 1.0);
+
+    var final_energies, var final_C_ci = try computeCi(T, null, C, hfres.ints, dets.items, nrep, false, opt.spin_penalty, s2_target, gpa);
 
     errdefer {
         final_energies.deinit(gpa);
@@ -501,10 +507,14 @@ fn casscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []co
 
     const nmo, var prev_energy: T = .{ C.ncol(), 0 };
 
+    const s_target = 0.5 * @as(f64, @floatFromInt(opt.multiplicity - 1));
+
+    const s2_target = s_target * (s_target + 1.0);
+
     for (0..opt.iterations) |iter| {
         var iter_timer = std.Io.Timestamp.now(io, .real);
 
-        var all_E, var C_ci = try computeCi(T, null, C.*, ints, dets, try ints.sys.nrep(), false, gpa);
+        var all_E, var C_ci = try computeCi(T, null, C.*, ints, dets, try ints.sys.nrep(), false, opt.spin_penalty, s2_target, gpa);
 
         defer {
             all_E.deinit(gpa);

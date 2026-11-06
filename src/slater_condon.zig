@@ -8,9 +8,44 @@ const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 
+const calculateDeterminantSpin = @import("determinant.zig").calculateDeterminantSpin;
 const findDeterminantDifferences = @import("determinant.zig").findDeterminantDifferences;
 const primType = @import("value.zig").primType;
 const signOfExcitations = @import("determinant.zig").signOfExcitations;
+
+/// Adds an S^2 penalty operator to the CI Hamiltonian to shift non-target spin states to higher energies.
+pub fn applySpinPenalty(comptime T: type, H: *Matrix(T), dets: []const []const usize, lambda: f64, s2_target: f64) void {
+    const val_lambda = Value(T).fromFloat(lambda);
+
+    for (0..dets.len) |i| {
+        const s2_diag = calculateDeterminantSpin(dets[i]);
+
+        const shift_diag = val_lambda.mul(Value(T).fromFloat(s2_diag - s2_target));
+
+        H.ptr(i, i).* = Value(T).init(H.at(i, i)).add(shift_diag).val;
+
+        for (i + 1..dets.len) |j| {
+            const diff = findDeterminantDifferences(dets[i], dets[j]) orelse continue;
+
+            if (diff.len != 2) continue;
+
+            const p0, const p1 = .{ diff.a[0] / 2, diff.a[1] / 2 };
+            const q0, const q1 = .{ diff.b[0] / 2, diff.b[1] / 2 };
+
+            if (p0 == q0 and p1 == q1 and (diff.a[0] % 2 != diff.a[1] % 2) and (diff.b[0] % 2 != diff.a[0] % 2)) {
+                const s_A = signOfExcitations(dets[i], diff.a[0..2]);
+                const s_B = signOfExcitations(dets[j], diff.b[0..2]);
+
+                const phase = @as(f64, @floatFromInt(s_A * s_B));
+
+                const shift_off = val_lambda.mul(Value(T).fromFloat(phase));
+
+                H.ptr(i, j).* = Value(T).init(H.at(i, j)).add(shift_off).val;
+                H.ptr(j, i).* = Value(T).init(H.at(j, i)).add(shift_off).val;
+            }
+        }
+    }
+}
 
 /// Assembles the electronic Hamiltonian matrix across Slater determinants via the Slater-Condon rules.
 pub fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_ms: Matrix(T), g_ms: Tensor(T, 4), gpa: Allocator) !Matrix(T) {

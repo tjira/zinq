@@ -58,5 +58,4 @@
 - [x] Allow ab initio Wigner sampling to inherit the method and molecular system from the potential configuration.
 - [x] Validate that Granucci-Persico decoherence parameter alpha is positive and non-NaN.
 - [ ] Implement electronic state tracking (root following via CI wavefunction overlaps) in CASSCF and excited-state dynamics to prevent root flipping at crossings.
-- [ ] Implement spin-adapted Configuration State Functions (CSFs) or an $\hat{S}^2$ penalty operator in CI and CASSCF to explicitly isolate pure singlet or triplet states and prevent unwanted spin states from mixing into electronic calculations and dynamics.
-- [ ] Support spin-conserving excitation filtering in determinant generation for truncated CI to restrict excitations to target spin manifolds.
+- [x] Implement an $\hat{S}^2$ penalty operator in CASSCF to explicitly isolate pure singlet or triplet states.
