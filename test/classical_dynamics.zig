@@ -724,3 +724,49 @@ test "Diabatic Ehrenfest on Time-Linear Potential" {
     try std.testing.expectApproxEqAbs(output.observables.ekin.?,       0.8077216762263024, TEST_TOLERANCE);
     // zig fmt: on
 }
+
+test "Hartree-Fock Molecular Dynamics on Water (STO-3G)" {
+    const opt = zinq.classical_dynamics.Options{
+        .initial_conditions = .{},
+        .iterations = 2,
+        .time_step = 10,
+        .trajectories = 1,
+        .potential = .{
+            .ab_initio = .{
+                .hartree_fock = .{
+                    .system = "example/molecule/water.xyz",
+                    .basis = "builtin:sto-3g",
+                    .gradient = .{ .analytic = .{} },
+                },
+            },
+        },
+    };
+
+    var output = try zinq.classical_dynamics.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer output.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(0), -0.0804730625246396, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(1), -0.0278996985210011, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(2), -0.0320843218204610, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(3),  1.2348088833895834, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(4), -0.9758552998220694, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(5),  0.8991694294204026, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(6),  0.7282093474983120, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(7),  1.6558993335623913, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.pos.?.at(8), -0.1138402199568459, TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(0), -0.0000041763433001, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(1),  0.0000289045552693, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(2), -0.0000104321053240, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(3),  0.0000139056986614, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(4), -0.0000122022758753, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(5),  0.0000104749390950, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(6), -0.0000097293552181, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(7), -0.0000167022793685, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.mom.?.at(8), -0.0000000428337595, TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(output.observables.epot.?, -74.9659012172974400, TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(output.observables.ekin.?,   0.0000000000002412, TEST_TOLERANCE);
+    // zig fmt: on
+}
