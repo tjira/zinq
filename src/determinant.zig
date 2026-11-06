@@ -6,10 +6,32 @@ const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
 
+const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
+const mo2ms_coef = @import("integral_transform.zig").mo2ms_coef;
 const printf = @import("read_write.zig").printf;
 
 /// Holds determinant index, expansion coefficient, and contribution weight for printing.
 const DetContrib = struct { d_idx: usize, coeff: f64, weight: f64 };
+
+/// Evaluates the total spin squared expectation value <S^2> of a single Slater determinant from its density matrix.
+pub fn calculateDeterminantTotalSpin(comptime T: type, det: []const usize, C_ms: Matrix(T), S_ao: Matrix(T), gpa: Allocator) !T {
+    const nsp = C_ms.shape[0];
+
+    var P = try Matrix(T).initZero(nsp, nsp, gpa);
+    defer P.deinit(gpa);
+
+    for (det) |k| for (0..nsp) |mu| {
+        const c_mu = C_ms.at(mu, k);
+
+        if (c_mu == 0) continue;
+
+        for (0..nsp) |nu| {
+            P.ptr(mu, nu).* += c_mu * C_ms.at(nu, k);
+        }
+    };
+
+    return try calculateTotalSpin(T, P, S_ao, gpa);
+}
 
 /// Compares two Slater determinants and extracts orbital differences when excitation degree is at most two.
 pub fn findDeterminantDifferences(A: []const usize, B: []const usize) ?struct { a: [2]usize, b: [2]usize, len: usize } {
@@ -253,8 +275,17 @@ pub fn generatePairs(n: usize, gpa: Allocator) ![][2]u32 {
 }
 
 /// Prints leading electronic determinants, configuration interaction coefficients, and weights for each state.
-pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), dets: []const []const usize, nstates: usize, ncore: usize, norbs: usize, gen: bool, gpa: Allocator) !void {
+pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), C_mo: Matrix(T), S_ao: Matrix(T), dets: []const []const usize, nstates: usize, ncore: usize, norbs: usize, gen: bool, gpa: Allocator) !void {
     const threshold: f64 = 0.01;
+
+    const nsp = if (gen) C_mo.shape[0] else 2 * C_mo.shape[0];
+
+    var C_ms = if (gen) C_mo else try Matrix(T).initZero(nsp, nsp, gpa);
+    defer if (!gen) C_ms.deinit(gpa);
+
+    if (!gen) {
+        mo2ms_coef(T, &C_ms, C_mo);
+    }
 
     for (0..nstates) |s| {
         var list = std.ArrayList(DetContrib).empty;
@@ -297,7 +328,7 @@ pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), dets: []
             try printf(io, "\nSTATE {d:2} LEADING DETERMINANT CONTRIBUTIONS (|C|^2 >= 0.0100)\n", .{s});
         }
 
-        try printf(io, "{s:6} {s:18} {s:14} {s:14}\n", .{ "DET", "OCCUPATION", "COEF (C)", "WEIGHT (|C|^2)" });
+        try printf(io, "{s:6} {s:18} {s:14} {s:14} {s:8}\n", .{ "DET", "OCCUPATION", "COEF (C)", "WEIGHT (|C|^2)", "<S^2>" });
 
         for (list.items) |item| {
             const desc = try formatDeterminant(dets[item.d_idx], ncore, norbs, gen, gpa);
@@ -305,7 +336,9 @@ pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), dets: []
 
             const wght = item.weight * 100.0;
 
-            try printf(io, "{d:6} {s:18} {d:14.6} {d:12.2} %\n", .{ item.d_idx + 1, desc, item.coeff, wght });
+            const s_val = try calculateDeterminantTotalSpin(T, dets[item.d_idx], C_ms, S_ao, gpa);
+
+            try printf(io, "{d:6} {s:18} {d:14.6} {d:12.2} % {d:8.2}\n", .{ item.d_idx + 1, desc, item.coeff, wght, s_val });
         }
     }
 }

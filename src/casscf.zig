@@ -263,7 +263,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
             try printf(io, "\nSTATE-AVERAGED FINAL CASSCF ENERGY: {d:.14} Eh\n", .{final_sa_energy});
         }
 
-        try printDeterminants(T, io, final_C_ci, dets.items, n_states, ncore, nact, false, gpa);
+        try printDeterminants(T, io, final_C_ci, C, hfres.ints.S.?, dets.items, n_states, ncore, nact, false, gpa);
     }
 
     var grad: []Matrix(T) = &.{};

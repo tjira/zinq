@@ -338,7 +338,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
             .excitations => hfres.C_mo.ncol(),
         };
 
-        try printDeterminants(T, io, C_ci, dets.items, n_states, ncore, norbs, generalized, gpa);
+        try printDeterminants(T, io, C_ci, hfres.C_mo, hfres.ints.S.?, dets.items, n_states, ncore, norbs, generalized, gpa);
     }
 
     var grad: []Matrix(T) = &.{};
