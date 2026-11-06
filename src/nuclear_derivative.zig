@@ -19,7 +19,7 @@ const printf = @import("read_write.zig").printf;
 
 /// Execution context encapsulating molecular system geometry, IO streams, memory allocator, and logging settings.
 pub fn DerivativeContext(comptime T: type) type {
-    return struct { gpa: Allocator, io: std.Io, log: bool = false, sys: *MolecularSystem(T), Pg: ?Matrix(T) = null };
+    return struct { gpa: Allocator, io: std.Io, log: bool = false, sys: *MolecularSystem(T), Pg: ?Matrix(T) = null, C_mo: ?Matrix(T) = null };
 }
 
 /// Computes nuclear gradients of electronic states using central finite differences.
@@ -63,7 +63,7 @@ pub fn calculateNumericalGradient(comptime T: type, ctx: DerivativeContext(T), r
 
     const ep, const em = .{ energies[0..n], energies[n .. 2 * n] };
 
-    var res_ref = try runFn(T, io, stripSecondaryOptions(opt, .{}), sys, ctx.Pg, false, gpa);
+    var res_ref = try runFn(T, io, stripSecondaryOptions(opt, .{}), sys, ctx.Pg, ctx.C_mo, false, gpa);
     defer res_ref.deinit(gpa);
 
     if (res_ref.energy.len <= max_state) {
@@ -138,7 +138,7 @@ pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), ru
     const epp, const epm = .{ energies[3 * n .. 4 * n], energies[4 * n .. 5 * n] };
     const emp, const emm = .{ energies[5 * n .. 6 * n], energies[6 * n .. 7 * n] };
 
-    var res_ref = try runFn(T, io, stripSecondaryOptions(opt, .{}), sys, ctx.Pg, false, gpa);
+    var res_ref = try runFn(T, io, stripSecondaryOptions(opt, .{}), sys, ctx.Pg, ctx.C_mo, false, gpa);
     defer res_ref.deinit(gpa);
 
     if (res_ref.energy.len <= max_state) {
@@ -238,7 +238,7 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         }
     }
 
-    var res_ref = try runFn(T, io, modified_opt, sys, ctx.Pg, false, gpa);
+    var res_ref = try runFn(T, io, modified_opt, sys, ctx.Pg, ctx.C_mo, false, gpa);
     defer res_ref.deinit(gpa);
 
     @memcpy(Pg.data, electronic_structure.getDensity(T, res_ref).data);
@@ -314,10 +314,10 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
             libint.libint_update_coords(sys_p.ptr, sys_p.coors.ptr);
         }
 
-        var res_m = try runFn(T, io, modified_opt, &sys_m, Pg, false, gpa);
+        var res_m = try runFn(T, io, modified_opt, &sys_m, Pg, C_ref, false, gpa);
         defer res_m.deinit(gpa);
 
-        var res_p = try runFn(T, io, modified_opt, &sys_p, Pg, false, gpa);
+        var res_p = try runFn(T, io, modified_opt, &sys_p, Pg, C_ref, false, gpa);
         defer res_p.deinit(gpa);
 
         var S_as = try sys_m.overlapBetweenSpin(sys_p, nthreads, gpa);
@@ -508,7 +508,7 @@ fn getEnergies(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt:
         libint.libint_update_coords(sys.ptr, sys.coors.ptr);
     }
 
-    var res = try runFn(T, ctx.io, modified_opt, sys, Pg, false, ctx.gpa);
+    var res = try runFn(T, ctx.io, modified_opt, sys, Pg, ctx.C_mo, false, ctx.gpa);
     defer res.deinit(ctx.gpa);
 
     if (res.energy.len <= out.len - 1) {

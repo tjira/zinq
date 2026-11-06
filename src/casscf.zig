@@ -37,6 +37,7 @@ const getrs = @import("linear_algebra.zig").getrs;
 const printDeterminants = @import("determinant.zig").printDeterminants;
 const printf = @import("read_write.zig").printf;
 const slater = @import("slater_condon.zig").slater;
+const syevd = @import("linear_algebra.zig").syevd;
 const transformInts = @import("integral_transform.zig").transformInts;
 
 /// Configurations for CASSCF active space dimensions, iterations, and derivative calculations.
@@ -152,7 +153,7 @@ pub fn Result(comptime T: type) type {
 }
 
 /// Solves the Complete Active Space Self-Consistent Field equations to optimize orbitals and CI states.
-pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), log: bool, gpa: Allocator) !Result(T) {
+pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), guess: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
     _ = sys;
 
     var hfres = ref;
@@ -209,7 +210,13 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     var C = try Matrix(T).init(hfres.C_mo.nrow(), hfres.C_mo.ncol(), gpa);
     errdefer C.deinit(gpa);
 
-    @memcpy(C.data, hfres.C_mo.data);
+    if (guess) |g| {
+        try projectOrbitals(T, &C, g, hfres.ints.S.?, gpa);
+    }
+
+    if (guess == null) {
+        @memcpy(C.data, hfres.C_mo.data);
+    }
 
     const weights = try gpa.alloc(T, opt.nstate);
     defer gpa.free(weights);
@@ -588,4 +595,43 @@ fn casscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []co
             try applyCayleyTransform(T, C, kappa, gpa);
         }
     } else return error.CasscfDidNotConverge;
+}
+
+/// Projects and Lowdin-orthogonalizes an orbital guess against the metric overlap matrix S.
+fn projectOrbitals(comptime T: type, C: *Matrix(T), guess: Matrix(T), S: Matrix(T), gpa: Allocator) !void {
+    const nbf, const nmo = .{ C.nrow(), C.ncol() };
+
+    var tmp = try Matrix(T).init(nbf, nmo, gpa);
+    defer tmp.deinit(gpa);
+
+    gemm(T, &tmp, S, guess, 1, 0, false, false);
+
+    var S_mo = try Matrix(T).init(nmo, nmo, gpa);
+    defer S_mo.deinit(gpa);
+
+    gemm(T, &S_mo, guess, tmp, 1, 0, true, false);
+
+    var eigvals = try Vector(T).init(nmo, gpa);
+    defer eigvals.deinit(gpa);
+
+    var U = try Matrix(T).init(nmo, nmo, gpa);
+    defer U.deinit(gpa);
+
+    try syevd(T, &eigvals, &U, S_mo);
+
+    var U_scaled = try Matrix(T).init(nmo, nmo, gpa);
+    defer U_scaled.deinit(gpa);
+
+    for (0..nmo) |i| for (0..nmo) |j| {
+        const ev = @max(1e-12, eigvals.at(j));
+
+        U_scaled.ptr(i, j).* = U.at(i, j) / @sqrt(ev);
+    };
+
+    var S_inv_half = try Matrix(T).init(nmo, nmo, gpa);
+    defer S_inv_half.deinit(gpa);
+
+    gemm(T, &S_inv_half, U_scaled, U, 1, 0, false, true);
+
+    gemm(T, C, guess, S_inv_half, 1, 0, false, false);
 }

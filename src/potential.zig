@@ -406,10 +406,11 @@ fn AbInitio(comptime T: type) type {
             };
 
             while (self.Pg.items.len <= traj) try self.Pg.append(self.gpa, null);
+            while (self.C_mo.items.len <= traj) try self.C_mo.append(self.gpa, null);
 
-            const msys, const prev_Pg = .{ @constCast(&self.msys), self.Pg.items[traj] };
+            const msys, const prev_Pg, const prev_C_mo = .{ @constCast(&self.msys), self.Pg.items[traj], self.C_mo.items[traj] };
 
-            var res = try electronic_structure.runFromSystem(T, self.inpout, run_opt, msys, prev_Pg, false, self.gpa);
+            var res = try electronic_structure.runFromSystem(T, self.inpout, run_opt, msys, prev_Pg, prev_C_mo, false, self.gpa);
             defer res.deinit(self.gpa);
 
             const P = res.hartree_fock.P_ao;
@@ -497,8 +498,11 @@ fn AbInitio(comptime T: type) type {
         /// Evaluates electronic energy and nuclear gradients for single-reference electronic structure methods.
         fn evalGradSingle(self: @This(), V: []T, grad_V: []T, opt: anytype, traj: usize) !void {
             while (self.Pg.items.len <= traj) try self.Pg.append(self.gpa, null);
+            while (self.C_mo.items.len <= traj) try self.C_mo.append(self.gpa, null);
 
-            var res = try electronic_structure.runFromSystem(T, self.inpout, opt, @constCast(&self.msys), self.Pg.items[traj], false, self.gpa);
+            const msys, const prev_Pg, const prev_C_mo = .{ @constCast(&self.msys), self.Pg.items[traj], self.C_mo.items[traj] };
+
+            var res = try electronic_structure.runFromSystem(T, self.inpout, opt, msys, prev_Pg, prev_C_mo, false, self.gpa);
             defer res.deinit(self.gpa);
 
             const P = electronic_structure.getDensity(T, res);

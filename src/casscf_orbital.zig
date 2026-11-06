@@ -197,13 +197,9 @@ pub fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb:
     const nmo, const nact = .{ kappa.ncol(), D_act.nrow() };
 
     for (0..ncore) |j| for (ncore + nact..nmo) |b| {
-        var denom = 4 * (F_diag.at(b) - F_diag.at(j));
+        const denom = @max(0.1, @abs(4 * (F_diag.at(b) - F_diag.at(j))));
 
-        if (@abs(denom) < 0.1) denom = if (denom < 0) -0.1 else 0.1;
-
-        var step = -g_orb.at(b, j) / denom;
-
-        step = std.math.clamp(step, -0.2, 0.2);
+        const step = std.math.clamp(-g_orb.at(b, j) / denom, -0.2, 0.2);
 
         kappa.ptr(b, j).* = 0 + step;
         kappa.ptr(j, b).* = 0 - step;
@@ -215,26 +211,18 @@ pub fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb:
         const Duu = D_act.at(u_idx, u_idx);
 
         for (ncore + nact..nmo) |b| {
-            var denom = 2 * Duu * (F_diag.at(b) - F_diag.at(u));
+            const denom = @max(0.1, @abs(2 * Duu * (F_diag.at(b) - F_diag.at(u))));
 
-            if (@abs(denom) < 0.1) denom = if (denom < 0) -0.1 else 0.1;
-
-            var step = -g_orb.at(b, u) / denom;
-
-            step = std.math.clamp(step, -0.2, 0.2);
+            const step = std.math.clamp(-g_orb.at(b, u) / denom, -0.2, 0.2);
 
             kappa.ptr(b, u).* = 0 + step;
             kappa.ptr(u, b).* = 0 - step;
         }
 
         for (0..ncore) |j| {
-            var denom = 2 * (2 - Duu) * (F_diag.at(u) - F_diag.at(j));
+            const denom = @max(0.1, @abs(2 * (2 - Duu) * (F_diag.at(u) - F_diag.at(j))));
 
-            if (@abs(denom) < 0.1) denom = if (denom < 0) -0.1 else 0.1;
-
-            var step = -g_orb.at(u, j) / denom;
-
-            step = std.math.clamp(step, -0.2, 0.2);
+            const step = std.math.clamp(-g_orb.at(u, j) / denom, -0.2, 0.2);
 
             kappa.ptr(u, j).* = 0 + step;
             kappa.ptr(j, u).* = 0 - step;

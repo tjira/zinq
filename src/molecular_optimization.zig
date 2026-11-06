@@ -12,6 +12,7 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
 const gemv = @import("linear_algebra.zig").gemv;
 const getDensity = @import("electronic_structure.zig").getDensity;
+const getOrbitals = @import("electronic_structure.zig").getOrbitals;
 const printf = @import("read_write.zig").printf;
 const stripSecondaryOptions = @import("nuclear_derivative.zig").stripSecondaryOptions;
 
@@ -60,6 +61,9 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
     var guess_density: ?Matrix(T) = if (Pg) |guess| try guess.clone(gpa) else null;
     errdefer if (guess_density) |*p| p.deinit(gpa);
 
+    var guess_orbitals: ?Matrix(T) = null;
+    defer if (guess_orbitals) |*m| m.deinit(gpa);
+
     var H = try Matrix(T).initZero(3 * sys.atoms.len, 3 * sys.atoms.len, gpa);
     defer H.deinit(gpa);
 
@@ -76,7 +80,7 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
     for (0..bfgs_opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
-        var res = try runFn(T, io, run_opt, sys, guess_density, false, gpa);
+        var res = try runFn(T, io, run_opt, sys, guess_density, guess_orbitals, false, gpa);
         defer res.deinit(gpa);
 
         if (res.grad.len == 0) return error.GradientNotAvailable;
@@ -104,6 +108,12 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
         if (guess_density) |*p| p.deinit(gpa);
 
         guess_density = P;
+
+        const C_mo = try getOrbitals(T, res).clone(gpa);
+
+        if (guess_orbitals) |*m| m.deinit(gpa);
+
+        guess_orbitals = C_mo;
 
         if (rms_grad < bfgs_opt.threshold) {
             break;
@@ -198,10 +208,13 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
     var guess_density: ?Matrix(T) = if (Pg) |guess| try guess.clone(gpa) else null;
     errdefer if (guess_density) |*p| p.deinit(gpa);
 
+    var guess_orbitals: ?Matrix(T) = null;
+    defer if (guess_orbitals) |*m| m.deinit(gpa);
+
     for (0..sd_opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
-        var res = try runFn(T, io, run_opt, sys, guess_density, false, gpa);
+        var res = try runFn(T, io, run_opt, sys, guess_density, guess_orbitals, false, gpa);
         defer res.deinit(gpa);
 
         if (res.grad.len == 0) return error.GradientNotAvailable;
@@ -229,6 +242,12 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
         if (guess_density) |*p| p.deinit(gpa);
 
         guess_density = P;
+
+        const C_mo = try getOrbitals(T, res).clone(gpa);
+
+        if (guess_orbitals) |*m| m.deinit(gpa);
+
+        guess_orbitals = C_mo;
 
         if (rms_grad < sd_opt.threshold) {
             break;

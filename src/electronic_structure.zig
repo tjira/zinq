@@ -198,11 +198,11 @@ pub fn run(comptime T: type, io: std.Io, opt: anytype, log: bool, gpa: Allocator
     var sys = try MolecularSystem(T).init(io, params.system, basis_path, params.charge, params.multiplicity, gpa);
     defer sys.deinit(gpa);
 
-    return try runFromSystem(T, io, opt, &sys, null, log, gpa);
+    return try runFromSystem(T, io, opt, &sys, null, null, log, gpa);
 }
 
 /// Executes an electronic structure calculation and nuclear derivatives on an initialized system.
-pub fn runFromSystem(comptime T: type, io: std.Io, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), log: bool, gpa: Allocator) !getMethod(@TypeOf(opt)).Result(T) {
+pub fn runFromSystem(comptime T: type, io: std.Io, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), C_mo: ?Matrix(T), log: bool, gpa: Allocator) !getMethod(@TypeOf(opt)).Result(T) {
     const Method = getMethod(@TypeOf(opt));
 
     try validation.checkInvalidInput(opt);
@@ -229,6 +229,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: anytype, sys: *Molecular
 
     var result = if (comptime isPostScf(@TypeOf(opt))) blk: {
         const ref = try computeHfReference(T, io, opt, sys, final_Pg orelse Pg, log, gpa);
+
+        if (comptime getMethodKind(@TypeOf(opt)) == .casscf) {
+            break :blk try Method.solve(T, io, opt, sys, ref, C_mo, log, gpa);
+        }
 
         break :blk try Method.solve(T, io, opt, sys, ref, log, gpa);
     } else try hartree_fock.solve(T, io, opt, sys, final_Pg orelse Pg, log, gpa);
@@ -262,7 +266,7 @@ fn computeHfReference(comptime T: type, io: std.Io, opt: anytype, sys: *Molecula
         }
     };
 
-    const hfres = try runFromSystem(T, io, hf_opt, sys, Pg, log, gpa);
+    const hfres = try runFromSystem(T, io, hf_opt, sys, Pg, null, log, gpa);
 
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
@@ -282,9 +286,9 @@ fn evaluateGradients(comptime T: type, io: std.Io, opt: anytype, sys: *Molecular
             }
         },
         .numeric => {
-            const Pg = getDensity(T, result);
+            const Pg, const C_mo = .{ getDensity(T, result), getOrbitals(T, result) };
 
-            const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = Pg };
+            const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = Pg, .C_mo = C_mo };
 
             const num_grads = try calculateNumericalGradient(T, ctx, runFromSystem, opt, grad_states);
 
@@ -313,7 +317,9 @@ fn evaluateHessians(comptime T: type, io: std.Io, opt: anytype, sys: *MolecularS
 
     const hess_states = getHessianStates(opt);
 
-    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys };
+    const Pg, const C_mo = .{ getDensity(T, result), getOrbitals(T, result) };
+
+    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = Pg, .C_mo = C_mo };
 
     const hess = try calculateNumericalHessian(T, ctx, runFromSystem, opt, hess_states);
 
@@ -356,9 +362,9 @@ fn evaluateNacvs(comptime T: type, io: std.Io, opt: anytype, sys: *MolecularSyst
 
     const nacv_pairs = getNacvPairs(opt);
 
-    const Pg = getDensity(T, result);
+    const Pg, const C_mo = .{ getDensity(T, result), getOrbitals(T, result) };
 
-    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = Pg };
+    const ctx: DerivativeContext(T) = .{ .gpa = gpa, .io = io, .log = log, .sys = sys, .Pg = Pg, .C_mo = C_mo };
 
     const nacv = try calculateNumericalNacv(T, ctx, runFromSystem, opt, nacv_pairs);
 

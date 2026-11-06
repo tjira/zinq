@@ -13,7 +13,7 @@
                         "casscf" : {
                             "hartree_fock" : {
                                 "basis" : "builtin:sto-3g",
-                                "system" : "example/molecule/H2.xyz"
+                                "system" : "example/molecule/water.xyz"
                             },
                             "active_electrons" : 2,
                             "active_orbitals" : 2,
