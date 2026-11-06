@@ -313,6 +313,28 @@ fn checkClassicalDynamics(opt: classical_dynamics.Options) !void {
     }
 
     if (opt.potential == .ab_initio) {
+        switch (opt.potential.ab_initio) {
+            inline else => |m| {
+                if (m.optimize != null) {
+                    std.log.err("GEOMETRY OPTIMIZATION IS NOT SUPPORTED FOR AB INITIO POTENTIAL", .{});
+
+                    return error.InvalidInput;
+                }
+
+                if (m.frequency != null) {
+                    std.log.err("FREQUENCY CALCULATION IS NOT SUPPORTED FOR AB INITIO POTENTIAL", .{});
+
+                    return error.InvalidInput;
+                }
+
+                if (m.hessian != null) {
+                    std.log.err("HESSIAN CALCULATION IS NOT SUPPORTED FOR AB INITIO POTENTIAL", .{});
+
+                    return error.InvalidInput;
+                }
+            },
+        }
+
         const has_grad = switch (opt.potential.ab_initio) {
             inline else => |m| m.gradient != null,
         };
@@ -331,6 +353,39 @@ fn checkClassicalDynamics(opt: classical_dynamics.Options) !void {
     }
 
     if (opt.potential == .ab_initio and opt.nonadiabatic != null) {
+        if (opt.potential.ab_initio == .configuration_interaction) {
+            if (opt.potential.ab_initio.configuration_interaction.space != .cas) {
+                std.log.err("TRUNCATED CI IS NOT SUPPORTED FOR NONADIABATIC DYNAMICS", .{});
+
+                return error.InvalidInput;
+            }
+        }
+
+        const is_cas = switch (opt.potential.ab_initio) {
+            .casscf, .configuration_interaction => true,
+            else => false,
+        };
+
+        if (is_cas) {
+            const mult, const penalty = switch (opt.potential.ab_initio) {
+                .casscf => |c| .{ c.multiplicity, c.spin_penalty },
+                .configuration_interaction => |ci| .{ ci.space.cas.multiplicity, ci.space.cas.spin_penalty },
+                else => unreachable,
+            };
+
+            if (mult > 1) {
+                std.log.err("ONLY SINGLET MULTIPLICITY IS SUPPORTED FOR AB INITIO NAMD", .{});
+
+                return error.InvalidInput;
+            }
+
+            if (penalty == null) {
+                std.log.err("SPIN PENALTY IS MANDATORY FOR AB INITIO NAMD TO PREVENT TRIPLET CONTAMINATION", .{});
+
+                return error.InvalidInput;
+            }
+        }
+
         switch (opt.nonadiabatic.?) {
             .ehrenfest => |eh| {
                 const is_valid = switch (opt.potential.ab_initio) {
@@ -565,6 +620,12 @@ fn checkClassicalDynamics(opt: classical_dynamics.Options) !void {
             return error.InvalidInput;
         },
     };
+
+    if (opt.thermostat != null and opt.nonadiabatic != null) {
+        std.log.err("THERMOSTATS ARE NOT SUPPORTED FOR NONADIABATIC DYNAMICS", .{});
+
+        return error.InvalidInput;
+    }
 
     if (opt.thermostat) |topt| switch (topt) {
         .berendsen => |bopt| {

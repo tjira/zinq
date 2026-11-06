@@ -18,6 +18,7 @@
                             },
                             "active_electrons" : 2,
                             "active_orbitals" : 2,
+                            "spin_penalty" : 2,
                             "nstate" : 2,
                             "gradient" : {
                                 "analytic" : {}

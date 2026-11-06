@@ -51,12 +51,10 @@ pub const SystemParams = struct {
 
 /// Generates electronic Slater determinants for complete active space or truncated CI excitation spaces.
 pub fn generateDeterminants(nel: usize, nbf: usize, opt: anytype, gpa: Allocator) !std.ArrayList([]const usize) {
-    const mult = opt.hartree_fock.multiplicity;
-
     if (comptime @TypeOf(opt) == casscf.Options) {
         const ncore = (nel - opt.active_electrons) / 2;
 
-        return generateCasDets(ncore, opt.active_orbitals, opt.active_electrons, mult, gpa);
+        return generateCasDets(ncore, opt.active_orbitals, opt.active_electrons, opt.multiplicity, gpa);
     }
 
     if (comptime @TypeOf(opt) == configuration_interaction.Options) {
@@ -64,7 +62,7 @@ pub fn generateDeterminants(nel: usize, nbf: usize, opt: anytype, gpa: Allocator
             .cas => |c| blk: {
                 const ncore = (nel - c.active_electrons) / 2;
 
-                break :blk generateCasDets(ncore, c.active_orbitals, c.active_electrons, mult, gpa);
+                break :blk generateCasDets(ncore, c.active_orbitals, c.active_electrons, c.multiplicity, gpa);
             },
             .excitations => |ex| generateDets(nel, 2 * nbf, ex, gpa),
         };
