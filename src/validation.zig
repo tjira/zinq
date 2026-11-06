@@ -45,6 +45,12 @@ pub fn checkInvalidInput(opt: anytype) !void {
 
 /// Validates complete active space orbital ranges, electron counts, and multi-state coupling constraints.
 fn checkCasscf(opt: casscf.Options) !void {
+    if (opt.hartree_fock.generalized) {
+        std.log.err("GENERALIZED HARTREE-FOCK IS NOT SUPPORTED FOR CASSCF", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.hartree_fock.integral_direct) {
         std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR CASSCF", .{});
 
@@ -590,6 +596,12 @@ fn checkConfigurationInteraction(opt: configuration_interaction.Options) !void {
 
     switch (opt.space) {
         .cas => |c| {
+            if (opt.hartree_fock.generalized) {
+                std.log.err("GENERALIZED HARTREE-FOCK IS NOT SUPPORTED FOR CASCI", .{});
+
+                return error.InvalidInput;
+            }
+
             if (c.active_electrons == 0 or c.active_orbitals == 0) {
                 std.log.err("CASCI ACTIVE ELECTRONS AND ACTIVE ORBITALS MUST BE GREATER THAN 0", .{});
 
