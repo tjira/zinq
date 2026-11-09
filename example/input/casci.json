@@ -1,0 +1,32 @@
+{
+    "zinq" : [
+        {
+            "configuration_interaction" : {
+                "hartree_fock" : {
+                    "system" : "example/molecule/water.xyz",
+                    "basis" : "builtin:sto-3g"
+                },
+                "space" : {
+                    "cas" : {
+                        "active_electrons" : 2,
+                        "active_orbitals" : 2
+                    }
+                },
+                "nstate" : 2,
+                "optimize" : {
+                    "bfgs" : {}
+                },
+                "gradient" : {
+                    "analytic" : {}
+                },
+                "hessian" : {
+                    "numeric" : {}
+                },
+                "nacv" : {
+                    "numeric" : {}
+                },
+                "frequency" : {}
+            }
+        }
+    ]
+}

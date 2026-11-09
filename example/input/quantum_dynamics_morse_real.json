@@ -1,0 +1,34 @@
+{
+    "zinq" : [
+        {
+            "quantum_dynamics" : {
+                "grid" : {
+                    "bounds" : [[-2, 8]],
+                    "npoint" : 256
+                },
+                "initial_conditions" : {
+                    "position" : [0.5],
+                    "momentum" : [0],
+                    "gamma" : [20],
+                    "state" : 0
+                },
+                "potential" : {
+                    "morse" : {}
+                },
+                "spectrum" : {
+                    "padding" : 100000,
+                    "write" : {
+                        "spectrum" : "SPECTRUM.mat"
+                    }
+                },
+                "write" : {
+                    "acf" : "ACF.mat"
+                },
+                "mass" : [2000],
+                "iterations" : 10000,
+                "time_step" : 10,
+                "log_interval" : 2000
+            }
+        }
+    ]
+}

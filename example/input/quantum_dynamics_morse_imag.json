@@ -1,0 +1,28 @@
+{
+    "zinq" : [
+        {
+            "quantum_dynamics" : {
+                "grid" : {
+                    "bounds" : [[-2, 8]],
+                    "npoint" : 256
+                },
+                "initial_conditions" : {
+                    "position" : [0.5],
+                    "momentum" : [0],
+                    "gamma" : [20],
+                    "state" : 0
+                },
+                "potential" : {
+                    "morse" : {}
+                },
+                "imaginary" : {
+                    "nstate" : 2
+                },
+                "mass" : [2000],
+                "iterations" : 1000,
+                "time_step" : 1,
+                "log_interval" : 200
+            }
+        }
+    ]
+}
