@@ -117,6 +117,22 @@ pub fn getOrbitals(comptime T: type, result: anytype) Matrix(T) {
     return result.hartree_fock.C_mo;
 }
 
+/// Extracts the spin multiplicity of the electronic target state from calculation options.
+pub fn getStateMultiplicity(opt: anytype) u32 {
+    if (comptime @TypeOf(opt) == casscf.Options) {
+        return opt.multiplicity;
+    }
+
+    if (comptime @TypeOf(opt) == configuration_interaction.Options) {
+        return switch (opt.space) {
+            .cas => |c| c.multiplicity,
+            .excitations => opt.hartree_fock.multiplicity,
+        };
+    }
+
+    return getSystemParams(opt).multiplicity;
+}
+
 /// Derives output paths for state nuclear derivatives by appending the state index before extension.
 pub fn getStatePath(path: []const u8, state: u32, gpa: Allocator) ![]const u8 {
     const ext = std.fs.path.extension(path);
@@ -330,7 +346,7 @@ fn evaluateHessians(comptime T: type, io: std.Io, opt: anytype, sys: *MolecularS
     }
 
     if (log and opt.frequency != null) {
-        const mult = getSystemParams(opt).multiplicity;
+        const mult = getStateMultiplicity(opt);
 
         for (hess_states, 0..) |state, idx| {
             var freqs = try calculateHarmonicFrequencies(T, hess[idx], sys.*, gpa);

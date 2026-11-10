@@ -61,6 +61,43 @@ pub fn calculateDeterminantTotalSpin(comptime T: type, det: []const usize, C_ms:
     return try calculateTotalSpin(T, P, S_ao, gpa);
 }
 
+/// Evaluates the total spin squared expectation value <S^2> of a CI electronic state from determinant coefficients.
+pub fn calculateStateSpin(comptime T: type, C_ci: Matrix(T), state: usize, dets: []const []const usize) f64 {
+    var s2: f64 = 0;
+
+    for (0..dets.len) |i| {
+        const c_i = @as(f64, @floatCast(C_ci.at(i, state)));
+
+        if (@abs(c_i) < 1e-15) continue;
+
+        s2 += c_i * c_i * calculateDeterminantSpin(dets[i]);
+
+        for (i + 1..dets.len) |j| {
+            const c_j = @as(f64, @floatCast(C_ci.at(j, state)));
+
+            if (@abs(c_j) < 1e-15) continue;
+
+            const diff = findDeterminantDifferences(dets[i], dets[j]) orelse continue;
+
+            if (diff.len != 2) continue;
+
+            const p0, const p1 = .{ diff.a[0] / 2, diff.a[1] / 2 };
+            const q0, const q1 = .{ diff.b[0] / 2, diff.b[1] / 2 };
+
+            if (p0 == q0 and p1 == q1 and (diff.a[0] % 2 != diff.a[1] % 2) and (diff.b[0] % 2 != diff.a[0] % 2)) {
+                const s_A = signOfExcitations(dets[i], diff.a[0..2]);
+                const s_B = signOfExcitations(dets[j], diff.b[0..2]);
+
+                const phase = @as(f64, @floatFromInt(s_A * s_B));
+
+                s2 += 2.0 * c_i * c_j * phase;
+            }
+        }
+    }
+
+    return s2;
+}
+
 /// Compares two Slater determinants and extracts orbital differences when excitation degree is at most two.
 pub fn findDeterminantDifferences(A: []const usize, B: []const usize) ?struct { a: [2]usize, b: [2]usize, len: usize } {
     var diff_A: [2]usize = undefined;

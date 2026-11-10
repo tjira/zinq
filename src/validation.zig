@@ -45,6 +45,12 @@ pub fn checkInvalidInput(opt: anytype) !void {
 
 /// Validates complete active space orbital ranges, electron counts, and multi-state coupling constraints.
 fn checkCasscf(opt: casscf.Options) !void {
+    if (opt.hartree_fock.multiplicity != 1) {
+        std.log.err("CASSCF HARTREE-FOCK REFERENCE MUST BE CLOSED-SHELL SINGLET (MULTIPLICITY 1)", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.hartree_fock.generalized) {
         std.log.err("GENERALIZED HARTREE-FOCK IS NOT SUPPORTED FOR CASSCF", .{});
 
@@ -65,6 +71,12 @@ fn checkCasscf(opt: casscf.Options) !void {
 
     if (opt.multiplicity == 0) {
         std.log.err("CASSCF MULTIPLICITY MUST BE GREATER THAN 0", .{});
+
+        return error.InvalidInput;
+    }
+
+    if ((opt.active_electrons + opt.multiplicity - 1) % 2 != 0) {
+        std.log.err("CASSCF ACTIVE ELECTRONS AND MULTIPLICITY ARE INCOMPATIBLE", .{});
 
         return error.InvalidInput;
     }
@@ -373,14 +385,14 @@ fn checkClassicalDynamics(opt: classical_dynamics.Options) !void {
                 else => unreachable,
             };
 
-            if (mult > 1) {
-                std.log.err("ONLY SINGLET MULTIPLICITY IS SUPPORTED FOR AB INITIO NAMD", .{});
+            if (mult != 1 and mult != 3) {
+                std.log.err("ONLY SINGLET AND TRIPLET MULTIPLICITIES ARE SUPPORTED FOR AB INITIO NAMD", .{});
 
                 return error.InvalidInput;
             }
 
             if (penalty == null) {
-                std.log.err("SPIN PENALTY IS MANDATORY FOR AB INITIO NAMD TO PREVENT TRIPLET CONTAMINATION", .{});
+                std.log.err("SPIN PENALTY IS MANDATORY FOR AB INITIO NAMD TO PREVENT SPIN CONTAMINATION", .{});
 
                 return error.InvalidInput;
             }
@@ -669,6 +681,12 @@ fn checkConfigurationInteraction(opt: configuration_interaction.Options) !void {
 
     switch (opt.space) {
         .cas => |c| {
+            if (opt.hartree_fock.multiplicity != 1) {
+                std.log.err("CASCI HARTREE-FOCK REFERENCE MUST BE CLOSED-SHELL SINGLET (MULTIPLICITY 1)", .{});
+
+                return error.InvalidInput;
+            }
+
             if (opt.hartree_fock.generalized) {
                 std.log.err("GENERALIZED HARTREE-FOCK IS NOT SUPPORTED FOR CASCI", .{});
 
@@ -683,6 +701,12 @@ fn checkConfigurationInteraction(opt: configuration_interaction.Options) !void {
 
             if (c.multiplicity == 0) {
                 std.log.err("CASCI MULTIPLICITY MUST BE GREATER THAN 0", .{});
+
+                return error.InvalidInput;
+            }
+
+            if ((c.active_electrons + c.multiplicity - 1) % 2 != 0) {
+                std.log.err("CASCI ACTIVE ELECTRONS AND MULTIPLICITY ARE INCOMPATIBLE", .{});
 
                 return error.InvalidInput;
             }

@@ -59,4 +59,4 @@
 - [x] Validate that Granucci-Persico decoherence parameter alpha is positive and non-NaN.
 - [ ] Implement electronic state tracking (root following via CI wavefunction overlaps) in CASSCF and excited-state dynamics to prevent root flipping at crossings.
 - [x] Implement an $\hat{S}^2$ penalty operator in CASSCF to explicitly isolate pure singlet or triplet states.
-- [ ] Check the situation with NACVS, because it can now be calculated between arbitrary pairs of states regardless of multiplicity, so it is probably not entirely correct.
+- [x] Check the situation with NACVS, because it can now be calculated between arbitrary pairs of states regardless of multiplicity, so it is probably not entirely correct.

@@ -11,6 +11,7 @@ const electronic_structure = @import("electronic_structure.zig");
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 
+const calculateStateSpin = @import("determinant.zig").calculateStateSpin;
 const det = @import("linear_algebra.zig").det;
 const gemm = @import("linear_algebra.zig").gemm;
 const getSymbol = @import("constants.zig").getSymbol;
@@ -257,6 +258,17 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         for (0..dets.items.len) |i| gpa.free(dets.items[i]);
 
         dets.deinit(gpa);
+    }
+
+    for (pairs) |pair| {
+        const s2_0 = calculateStateSpin(T, C_ci_ref, pair[0], dets.items);
+        const s2_1 = calculateStateSpin(T, C_ci_ref, pair[1], dets.items);
+
+        if (@abs(s2_0 - s2_1) > 0.5) {
+            std.log.err("NONADIABATIC COUPLING REQUIRES STATES WITH THE SAME SPIN MULTIPLICITY (<S^2> = {d:.2} vs {d:.2})", .{ s2_0, s2_1 });
+
+            return error.InvalidInput;
+        }
     }
 
     var sys_m = try sys.clone(gpa);
