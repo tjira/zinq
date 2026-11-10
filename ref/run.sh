@@ -7,32 +7,10 @@ ZINQ="../zig-out/bin/zinq"; ORCA="orca"
 
 METHODS=("rhf" "mp2" "mp3" "cisd" "casscf" "dft_b3lyp" "dft_pbe")
 
-MOLECULES=($(grep -v '^[[:space:]]*#' molecules.txt)); BASES=($(grep -v '^[[:space:]]*#' bases.txt))
-
-for mol in "${MOLECULES[@]}"; do
-    xyz=$(find ../example/molecule -maxdepth 1 -iname "${mol}.xyz" | head -n 1)
-
-    m="${mol,,}"
-
-    for bas in "${BASES[@]}"; do
-        b="${bas,,}"
-
-        for t in template/orca_*.inp template/zinq_*.json; do
-            out="${t#template/}"; out="${out%.*}_${m}_${b}.${out##*.}"
-
-            sed -e "s|{{XYZ}}|$xyz|g" -e "s|{{BASIS}}|$bas|g" "$t" > "$out"
-        done
-    done
-done
-
 TARGETS=()
 
-for mol in "${MOLECULES[@]}"; do
-    for bas in "${BASES[@]}"; do
-        for m in "${METHODS[@]}"; do
-            TARGETS+=("${m}_${mol,,}_${bas,,}")
-        done
-    done
+for m in "${METHODS[@]}"; do
+    TARGETS+=("${m}_water_sto-3g")
 done
 
 if [ $# -gt 0 ]; then
@@ -43,6 +21,11 @@ TABLE=()
 
 for t in "${TARGETS[@]}"; do
     basis="${t##*_}"; rest="${t%_*}"; method="${rest%_*}"; system="${rest##*_}"
+
+    xyz=$(find ../example/molecule -maxdepth 1 -iname "${system}.xyz" | head -n 1)
+
+    sed -e "s|{{XYZ}}|$xyz|g" -e "s|{{BASIS}}|$basis|g" "template/zinq_${method}.json" > "zinq_${t}.json"
+    sed -e "s|{{XYZ}}|$xyz|g" -e "s|{{BASIS}}|$basis|g" "template/orca_${method}.inp"  > "orca_${t}.inp"
 
     echo "Method: $method, System: $system, Basis: $basis"
 
