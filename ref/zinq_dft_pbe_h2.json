@@ -1,0 +1,14 @@
+{
+    "zinq": [
+        {
+            "hartree_fock": {
+                "system": "../example/molecule/H2.xyz",
+                "basis": "builtin:sto-3g",
+                "dft": {
+                    "exchange": "gga_x_pbe",
+                    "correlation": "gga_c_pbe"
+                }
+            }
+        }
+    ]
+}

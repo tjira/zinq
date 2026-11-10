@@ -33,7 +33,7 @@ pub fn getTrajectoryPath(path: []const u8, i: usize, ntraj: usize, gpa: std.mem.
 /// Formats and prints a string to standard output, flushing the writer buffer.
 pub fn printf(io: std.Io, comptime format: []const u8, args: anytype) !void {
     var buffer: [4096]u8 = undefined;
-    var writer = std.Io.File.stdout().writer(io, &buffer);
+    var writer = std.Io.File.stdout().writerStreaming(io, &buffer);
 
     try writer.interface.print(format, args);
 
@@ -48,7 +48,7 @@ pub fn printComplexMatrix(comptime T: type, io: std.Io, A: Matrix(Complex(primTy
 /// Prints multi-dimensional complex tensor dimensions and space-separated elements to standard output.
 pub fn printComplexTensor(comptime T: type, comptime N: usize, io: std.Io, A: Tensor(Complex(primType(T)), N)) !void {
     var buffer: [65536]u8 = undefined;
-    var writer = std.Io.File.stdout().writer(io, &buffer);
+    var writer = std.Io.File.stdout().writerStreaming(io, &buffer);
 
     try writeComplexTensorWriter(T, N, &writer, A);
 }
@@ -89,7 +89,7 @@ pub fn printRealMatrix(comptime T: type, io: std.Io, A: Matrix(T)) !void {
 /// Prints multi-dimensional real tensor dimensions and space-separated elements to standard output.
 pub fn printRealTensor(comptime T: type, comptime N: usize, io: std.Io, A: Tensor(T, N)) !void {
     var buffer: [65536]u8 = undefined;
-    var writer = std.Io.File.stdout().writer(io, &buffer);
+    var writer = std.Io.File.stdout().writerStreaming(io, &buffer);
 
     try writeRealTensorWriter(T, N, &writer, A);
 }

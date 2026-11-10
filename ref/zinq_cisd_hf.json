@@ -1,0 +1,16 @@
+{
+    "zinq": [
+        {
+            "configuration_interaction": {
+                "hartree_fock": {
+                    "system": "../example/molecule/HF.xyz",
+                    "basis": "builtin:sto-3g"
+                },
+                "space": {
+                    "excitations": [1, 2]
+                },
+                "nstate": 1
+            }
+        }
+    ]
+}

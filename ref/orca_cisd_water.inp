@@ -1,0 +1,2 @@
+! NoRI CISD STO-3G TightSCF NoFrozenCore NoAutoStart
+* xyzfile 0 1 ../example/molecule/water.xyz

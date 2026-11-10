@@ -1,0 +1,6 @@
+! NoRI CASSCF STO-3G TightSCF NoAutoStart
+%casscf
+  nel 2
+  norb 2
+end
+* xyzfile 0 1 ../example/molecule/water.xyz

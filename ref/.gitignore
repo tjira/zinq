@@ -1,0 +1,5 @@
+orca_*
+zinq_*
+
+!orca_*.inp
+!zinq_*.json

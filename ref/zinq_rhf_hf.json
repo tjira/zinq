@@ -1,0 +1,10 @@
+{
+    "zinq": [
+        {
+            "hartree_fock": {
+                "system": "../example/molecule/HF.xyz",
+                "basis": "builtin:sto-3g"
+            }
+        }
+    ]
+}
