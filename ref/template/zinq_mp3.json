@@ -3,8 +3,8 @@
         {
             "moller_plesset": {
                 "hartree_fock": {
-                    "system": "../example/molecule/H2.xyz",
-                    "basis": "builtin:sto-3g"
+                    "system": "{{XYZ}}",
+                    "basis": "builtin:{{BASIS}}"
                 },
                 "order": 3
             }

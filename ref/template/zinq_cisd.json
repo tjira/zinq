@@ -3,8 +3,8 @@
         {
             "configuration_interaction": {
                 "hartree_fock": {
-                    "system": "../example/molecule/HF.xyz",
-                    "basis": "builtin:sto-3g"
+                    "system": "{{XYZ}}",
+                    "basis": "builtin:{{BASIS}}"
                 },
                 "space": {
                     "excitations": [1, 2]

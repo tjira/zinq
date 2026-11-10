@@ -1,5 +1,2 @@
-orca_*
-zinq_*
-
-!orca_*.inp
-!zinq_*.json
+/orca_*
+/zinq_*

@@ -1,0 +1,10 @@
+{
+    "zinq": [
+        {
+            "hartree_fock": {
+                "system": "{{XYZ}}",
+                "basis": "builtin:{{BASIS}}"
+            }
+        }
+    ]
+}

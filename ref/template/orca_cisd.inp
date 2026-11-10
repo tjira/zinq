@@ -1,0 +1,2 @@
+! NoRI CISD {{BASIS}} TightSCF NoFrozenCore NoAutoStart
+* xyzfile 0 1 {{XYZ}}
