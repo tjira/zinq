@@ -116,17 +116,14 @@ pub fn calculateNuclearGradient(comptime T: type, order: usize, hfres: HartreeFo
     const grads = try gpa.alloc(Matrix(T), order + 1);
     errdefer gpa.free(grads);
 
+    var initialized: usize = 0;
+    errdefer for (0..initialized) |k| grads[k].deinit(gpa);
+
     for (0..order + 1) |k| {
-        grads[k] = Matrix(T).initZero(hfres.ints.sys.atoms.len, 3, gpa) catch |err| {
-            for (0..k) |i| {
-                grads[i].deinit(gpa);
-            }
+        grads[k] = try Matrix(T).initZero(hfres.ints.sys.atoms.len, 3, gpa);
 
-            return err;
-        };
+        initialized += 1;
     }
-
-    errdefer for (0..order + 1) |k| grads[k].deinit(gpa);
 
     if (hfres.ints.B == null) {
         try calculateCanonicalMpGradient(T, grads, order, hfres, nocc, generalized, gpa);

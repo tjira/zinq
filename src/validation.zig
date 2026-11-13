@@ -63,6 +63,12 @@ fn checkCasscf(opt: casscf.Options) !void {
         return error.InvalidInput;
     }
 
+    if (opt.hartree_fock.aux_basis != null) {
+        std.log.err("DENSITY FITTING (RI) IS NOT SUPPORTED FOR CASSCF", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.active_electrons == 0 or opt.active_orbitals == 0) {
         std.log.err("CASSCF ACTIVE ELECTRONS AND ACTIVE ORBITALS MUST BE GREATER THAN 0", .{});
 
@@ -673,6 +679,12 @@ fn checkClassicalDynamics(opt: classical_dynamics.Options) !void {
 fn checkConfigurationInteraction(opt: configuration_interaction.Options) !void {
     if (opt.hartree_fock.integral_direct) {
         std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR CONFIGURATION INTERACTION", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.hartree_fock.aux_basis != null) {
+        std.log.err("DENSITY FITTING (RI) IS NOT SUPPORTED FOR CONFIGURATION INTERACTION", .{});
 
         return error.InvalidInput;
     }
