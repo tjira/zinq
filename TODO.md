@@ -64,4 +64,4 @@
 - [x] Write to AGENTS.md to write modularized code in imperative style.
 - [x] Implement analytical nuclear gradients for RI-MP2 using density fitting and CPHF response.
 - [ ] Find a reason for the double free when running MP3 with c-pVDZ basis set.
-- [ ] Check if the CPHF solver can be modularized as there is some code duplication.
+- [x] Check if the CPHF solver can be modularized as there is some code duplication.
