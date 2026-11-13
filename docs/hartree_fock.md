@@ -295,3 +295,75 @@ $$
 $$
 
 which proves that the Hartree–Fock ground state does not interact directly with any singly excited configuration. Brillouin's theorem reflects the variational stationarity of the Hartree–Fock wavefunction, ensuring that small orbital rotations cannot lower the ground-state electronic energy and providing the foundation for post-Hartree–Fock correlation methods.
+
+### 8. Density Fitting for Coulomb and Exchange Potentials (RI-JK)
+
+Evaluating the four-center two-electron Coulomb repulsion matrix elements $J_{\mu\nu}=\sum_{\lambda,\sigma}P_{\lambda\sigma}\langle\mu\lambda|\nu\sigma\rangle$ and exchange elements $K_{\mu\nu}=\sum_{\lambda,\sigma}P_{\lambda\sigma}\langle\mu\lambda|\sigma\nu\rangle$ scales formally as $\mathcal{O}(N_{\text{AO}}^4)$, creating a computational bottleneck for large molecular systems. The resolution-of-the-identity or density fitting approximation expands the product of two primary atomic orbital basis functions in an auxiliary basis set $\{P\}$ as
+
+$$
+|\mu\nu\rangle\approx\sum_P C_{\mu\nu}^P|P\rangle
+$$
+
+Minimizing the Coulomb metric self-interaction error of the residual density determines the optimal expansion coefficients by solving $\sum_Q J_{PQ}C_{\mu\nu}^Q=\langle\mu P|\nu\rangle$, yielding the fitted product representation
+
+$$
+|\mu\nu\rangle\approx\sum_{P,Q}\langle\mu P|\nu\rangle\left[\mathbf{J}^{-1}\right]_{PQ}|Q\rangle
+$$
+
+where $J_{PQ}=\iint\frac{P(\mathbf{r}_1)Q(\mathbf{r}_2)}{|\mathbf{r}_1-\mathbf{r}_2|}d\mathbf{r}_1 d\mathbf{r}_2$ is the two-center auxiliary Coulomb metric matrix and $\langle\mu P|\nu\rangle=\iint\frac{\phi_\mu(\mathbf{r}_1)P(\mathbf{r}_2)\phi_\nu(\mathbf{r}_1)}{|\mathbf{r}_1-\mathbf{r}_2|}d\mathbf{r}_1 d\mathbf{r}_2$ denotes the three-center electron repulsion integrals in physicists' Dirac notation. Factorizing the symmetric auxiliary metric as $\mathbf{J}^{-1}=\mathbf{J}^{-1/2}\mathbf{J}^{-1/2}$ allows us to define the transformed three-center intermediate tensor
+
+$$
+B_{\mu\nu,Q}=\sum_P\langle\mu P|\nu\rangle\left[\mathbf{J}^{-1/2}\right]_{PQ}
+$$
+
+which approximates the four-center two-electron repulsion integrals as $\langle\mu\lambda|\nu\sigma\rangle\approx\sum_Q B_{\mu\nu,Q}B_{\lambda\sigma,Q}$ and reduces the evaluation of the Coulomb matrix to two consecutive matrix-vector products as
+
+$$
+q_Q=\sum_{\mu,\nu}B_{\mu\nu,Q}P_{\mu\nu},\quad J_{\mu\nu}=\sum_Q B_{\mu\nu,Q}q_Q
+$$
+
+scaling as $\mathcal{O}(N_{\text{AO}}^2 N_{\text{aux}})$ rather than $\mathcal{O}(N_{\text{AO}}^4)$. In Generalized Hartree–Fock, the spatial Coulomb operator is spin-diagonal and contracts with the total density $P_{\mu\nu}^{\text{tot}}=P_{\mu\nu}+P_{\mu+N_{\text{AO}},\nu+N_{\text{AO}}}$, adding the resulting Coulomb potential matrix $\mathbf{J}$ symmetrically to both the $\alpha\alpha$ and $\beta\beta$ spin diagonal blocks of the Fock matrix.
+
+For exact exchange evaluation, the fitting tensor contracts with occupied molecular orbital coefficients to construct the intermediate half-transformed tensor as
+
+$$
+W_{\mu i,Q}=\sum_{\nu=1}^{N_{\text{AO}}}C_{\nu i}B_{\mu\nu,Q}
+$$
+
+which yields the closed-shell exchange potential matrix through a single symmetric matrix multiplication as
+
+$$
+V_{\mu\nu}^{\text{x}}=\frac{1}{2}K_{\mu\nu}=\sum_{i=1}^{N_{\text{occ}}}\sum_Q W_{\mu i,Q}W_{\nu i,Q}=\left[\mathbf{W}\mathbf{W}^T\right]_{\mu\nu}
+$$
+
+scaling as $\mathcal{O}(N_{\text{occ}} N_{\text{AO}}^2 N_{\text{aux}})$ and subtracting the exchange potential from the Fock matrix without four-center integral evaluations. In Generalized Hartree–Fock, molecular spin-orbital coefficients partition into spatial spin blocks $\mathbf{C}_{\text{occ}}^\alpha$ and $\mathbf{C}_{\text{occ}}^\beta$, generating intermediate blocks $\mathbf{W}^\alpha$ and $\mathbf{W}^\beta$ whose stacked outer product $\mathbf{K}=\mathbf{W}\mathbf{W}^T$ evaluates all spin blocks of the generalized exchange matrix.
+
+### 9. Density-Fitted Coupled-Perturbed Hartree–Fock Response (RI-CPHF)
+
+Determining first-order orbital responses $\partial\mathbf{C}/\partial X$ and orbital energy derivatives $\partial\boldsymbol{\epsilon}/\partial X$ with respect to a nuclear coordinate $X$ requires solving the Coupled-Perturbed Hartree–Fock (CPHF) linear equations. The orbital rotation matrix $\mathbf{U}^X$ parameterizes the orbital derivative as $\frac{\partial\mathbf{C}}{\partial X}=\mathbf{C}\mathbf{U}^X$, where the occupied–occupied and virtual–virtual blocks are determined directly from the atomic orbital overlap derivative matrix $\mathbf{S}^X=\mathbf{C}^T\frac{\partial\mathbf{S}}{\partial X}\mathbf{C}$ as
+
+$$
+U_{ij}^X=-\frac{1}{2}S_{ij}^X,\quad U_{ab}^X=-\frac{1}{2}S_{ab}^X
+$$
+
+The occupied–virtual response block $U_{ai}^X$ satisfies the coupled linear system
+
+$$
+(\epsilon_a-\epsilon_i)U_{ai}^X+\sum_{b=1}^{N_{\text{vir}}}\sum_{j=1}^{N_{\text{occ}}}A_{ai,bj}U_{bj}^X=-F_{ai}^X+\epsilon_i S_{ai}^X
+$$
+
+where $F_{ai}^X=\left[\mathbf{C}^T\frac{\partial\mathbf{F}}{\partial X}\mathbf{C}\right]_{ai}$ is the molecular orbital projection of the unperturbed skeleton Fock derivative matrix and $\mathbf{A}$ represents the electronic Hessian orbital rotation coupling tensor.
+
+In density fitting, all four-center two-electron integral evaluations in both the skeleton Fock derivative and the iterative Hessian-vector contractions are replaced by three-center contractions. The two-electron contribution to the skeleton Fock derivative matrix $\mathbf{F}^{X,\text{2e}}$ is evaluated directly from the derivative fitting tensor $\frac{\partial\mathbf{B}}{\partial X}$ as
+
+$$
+F_{\mu\nu}^{X,\text{2e}}=\sum_Q\left(\frac{\partial B_{\mu\nu,Q}}{\partial X}q_Q+B_{\mu\nu,Q}q_Q^X\right)-\sum_{i=1}^{N_{\text{occ}}}\sum_Q\left(\frac{\partial W_{\mu i,Q}}{\partial X}W_{\nu i,Q}+W_{\mu i,Q}\frac{\partial W_{\nu i,Q}}{\partial X}\right)
+$$
+
+where $q_Q=\sum_{\mu,\nu}B_{\mu\nu,Q}P_{\mu\nu}$, $q_Q^X=\sum_{\mu,\nu}\frac{\partial B_{\mu\nu,Q}}{\partial X}P_{\mu\nu}$, and $\frac{\partial W_{\mu i,Q}}{\partial X}=\sum_\nu C_{\nu i}\frac{\partial B_{\mu\nu,Q}}{\partial X}$. During each CPHF iteration, the trial perturbation to the occupied orbital coefficients $\mathbf{dC}_x=\mathbf{C}_{\text{vir}}\mathbf{U}_{\text{vo}}^X$ induces the response density $\mathbf{P}^V=2\mathbf{C}_{\text{occ}}\mathbf{dC}_x^T+2\mathbf{dC}_x\mathbf{C}_{\text{occ}}^T$. The response Coulomb potential matrix is evaluated from $\mathbf{P}^V$ via density-fitted Coulomb contraction, while the response exchange potential matrix is evaluated using the perturbed half-transformed tensor $W_{\mu i,Q}^V=\sum_\nu(dC_x)_{\nu i}B_{\mu\nu,Q}$ as
+
+$$
+V_{\mu\nu}^{\text{x},V}=\sum_{i=1}^{N_{\text{occ}}}\sum_Q\left(W_{\mu i,Q}^V W_{\nu i,Q}+W_{\mu i,Q}W_{\nu i,Q}^V\right)
+$$
+
+scaling as $\mathcal{O}(N_{\text{occ}} N_{\text{AO}}^2 N_{\text{aux}})$ per iteration and eliminating all four-center integrals from orbital response theory.

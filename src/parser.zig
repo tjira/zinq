@@ -100,6 +100,7 @@ pub const Parser = struct {
         \\USAGE: zinq hf [ARGUMENTS] [OPTIONS]
         \\
         \\OPTIONS:
+        \\  -a, --aux-basis       SPECIFY AUXILIARY BASIS SET FOR DENSITY FITTING
         \\  -b, --basis           SPECIFY BASIS SET (DEFAULT: STO-3G)
         \\  -s, --multiplicity    SPECIFY MULTIPLICITY (DEFAULT: 1)
         \\  -c, --charge          SPECIFY CHARGE (DEFAULT: 0)
@@ -156,12 +157,19 @@ pub const Parser = struct {
         \\USAGE: zinq molint [ARGUMENTS] [OPTIONS]
         \\
         \\OPTIONS:
+        \\  -a, --aux-basis       SPECIFY AUXILIARY BASIS SET FOR DENSITY FITTING
         \\  -b, --basis           SPECIFY BASIS SET (DEFAULT: STO-3G)
         \\  -c, --charge          SPECIFY CHARGE (DEFAULT: 0)
         \\  -n, --nthreads        NUMBER OF THREADS (DEFAULT: 1)
         \\  -s, --multiplicity    SPECIFY MULTIPLICITY (DEFAULT: 1)
         \\  --coulomb             CALCULATE COULOMB REPULSION INTEGRALS
+        \\  --coulomb-2c          CALCULATE 2-CENTER COULOMB METRIC INTEGRALS
+        \\  --coulomb-2c-d1       CALCULATE 2-CENTER COULOMB METRIC DERIVATIVES
+        \\  --coulomb-3c          CALCULATE 3-CENTER COULOMB REPULSION INTEGRALS
+        \\  --coulomb-3c-d1       CALCULATE 3-CENTER COULOMB DERIVATIVES
         \\  --coulomb-d1          CALCULATE COULOMB REPULSION DERIVATIVES
+        \\  --coulomb-ri          CALCULATE RESOLUTION-OF-IDENTITY FITTING TENSOR
+        \\  --coulomb-ri-d1       CALCULATE RI 2C AND 3C INTEGRAL DERIVATIVES
         \\  --generalized         ENABLE SPIN-ORBITAL BASIS CALCULATION
         \\  --hamiltonian         CALCULATE CORE HAMILTONIAN INTEGRALS
         \\  --hamiltonian-d1      CALCULATE CORE HAMILTONIAN DERIVATIVES
@@ -186,10 +194,12 @@ pub const Parser = struct {
         \\USAGE: zinq mp [ARGUMENTS] [OPTIONS]
         \\
         \\OPTIONS:
+        \\  -a, --aux-basis       SPECIFY AUXILIARY BASIS SET FOR DENSITY FITTING
         \\  -b, --basis           SPECIFY BASIS SET (DEFAULT: STO-3G)
         \\  -o, --order           SPECIFY PERTURBATION ORDER (DEFAULT: 2)
         \\  -s, --multiplicity    SPECIFY MULTIPLICITY (DEFAULT: 1)
         \\  -c, --charge          SPECIFY CHARGE (DEFAULT: 0)
+        \\  --direct              ENABLE INTEGRAL DIRECT HARTREE-FOCK
         \\  --generalized         ENABLE GENERALIZED PERTURBATION THEORY
         \\  --optimize            OPTIMIZE MOLECULAR GEOMETRY USING BFGS
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
@@ -539,6 +549,8 @@ pub const Parser = struct {
     /// Projects CLI subcommand parameters into Hartree-Fock electronic states.
     pub fn runHartreeFock(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         const allowed_options = &.{
+            "-a",
+            "--aux-basis",
             "-b",
             "--basis",
             "-c",
@@ -621,6 +633,16 @@ pub const Parser = struct {
 
         const basis_resolved = try std.fmt.allocPrint(arena, "builtin:{s}", .{basis_opt orelse "sto-3g"});
 
+        const aux_basis_opt = parsed.options.get("-a") orelse parsed.options.get("--aux-basis");
+
+        if (aux_basis_opt) |a| if (a.len == 0) {
+            try printf(io, "MISSING VALUE FOR AUX BASIS OPTION\n", .{});
+
+            return error.MissingAuxBasisValue;
+        };
+
+        const aux_basis_resolved = if (aux_basis_opt) |b| try std.fmt.allocPrint(arena, "builtin:{s}", .{b}) else null;
+
         const optimize = parsed.options.contains("--optimize");
 
         const opt_geom_path = if (optimize) try std.fmt.allocPrint(arena, "{s}.opt", .{parsed.positional[0]}) else null;
@@ -628,6 +650,7 @@ pub const Parser = struct {
         const opt = hartree_fock.Options{
             .system = parsed.positional[0],
             .basis = basis_resolved,
+            .aux_basis = aux_basis_resolved,
             .multiplicity = multiplicity,
             .charge = charge,
             .generalized = parsed.options.contains("--generalized"),
@@ -865,6 +888,8 @@ pub const Parser = struct {
     /// Evaluates molecular orbital integrals and nuclear derivatives from parsed CLI options.
     pub fn runMolint(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         const allowed_options = &.{
+            "-a",
+            "--aux-basis",
             "-b",
             "--basis",
             "-c",
@@ -877,7 +902,13 @@ pub const Parser = struct {
 
         const allowed_flags = &.{
             "--coulomb",
+            "--coulomb-2c",
+            "--coulomb-2c-d1",
+            "--coulomb-3c",
+            "--coulomb-3c-d1",
             "--coulomb-d1",
+            "--coulomb-ri",
+            "--coulomb-ri-d1",
             "--generalized",
             "--hamiltonian",
             "--hamiltonian-d1",
@@ -920,6 +951,20 @@ pub const Parser = struct {
         };
 
         const basis_resolved = try std.fmt.allocPrint(arena, "builtin:{s}", .{basis_opt orelse "sto-3g"});
+
+        const aux_basis_opt = parsed.options.get("-a") orelse parsed.options.get("--aux-basis");
+
+        if (aux_basis_opt) |a| if (a.len == 0) {
+            try printf(io, "MISSING VALUE FOR AUX BASIS OPTION\n", .{});
+
+            return error.MissingAuxBasisValue;
+        };
+
+        var aux_basis_resolved: ?[]u8 = null;
+
+        if (aux_basis_opt) |a| {
+            aux_basis_resolved = try std.mem.concat(arena, u8, &.{ "builtin:", a });
+        }
 
         const multiplicity_opt = parsed.options.get("-s") orelse parsed.options.get("--multiplicity");
 
@@ -985,7 +1030,13 @@ pub const Parser = struct {
 
         const calc = molecular_integrals.Calculate{
             .coulomb = parsed.options.contains("--coulomb"),
+            .coulomb_2c = parsed.options.contains("--coulomb-2c"),
+            .coulomb_2c_d1 = parsed.options.contains("--coulomb-2c-d1"),
+            .coulomb_3c = parsed.options.contains("--coulomb-3c"),
+            .coulomb_3c_d1 = parsed.options.contains("--coulomb-3c-d1"),
             .coulomb_d1 = parsed.options.contains("--coulomb-d1"),
+            .coulomb_ri = parsed.options.contains("--coulomb-ri"),
+            .coulomb_ri_d1 = parsed.options.contains("--coulomb-ri-d1"),
             .hamiltonian = parsed.options.contains("--hamiltonian"),
             .hamiltonian_d1 = parsed.options.contains("--hamiltonian-d1"),
             .kinetic = parsed.options.contains("--kinetic"),
@@ -999,8 +1050,14 @@ pub const Parser = struct {
         const output = parsed.options.contains("--output");
 
         const write = molecular_integrals.Write{
-            .coulomb = if (output and calc.coulomb) "J.mat" else null,
-            .coulomb_d1 = if (output and calc.coulomb_d1) "dJ.mat" else null,
+            .coulomb = if (output and calc.coulomb) "g.mat" else null,
+            .coulomb_2c = if (output and calc.coulomb_2c) "J.mat" else null,
+            .coulomb_2c_d1 = if (output and calc.coulomb_2c_d1) "dJ.mat" else null,
+            .coulomb_3c = if (output and calc.coulomb_3c) "I.mat" else null,
+            .coulomb_3c_d1 = if (output and calc.coulomb_3c_d1) "dI.mat" else null,
+            .coulomb_d1 = if (output and calc.coulomb_d1) "dg.mat" else null,
+            .coulomb_ri = if (output and calc.coulomb_ri) "B.mat" else null,
+            .coulomb_ri_d1 = if (output and calc.coulomb_ri_d1) "dI_ri.mat" else null,
             .hamiltonian = if (output and calc.hamiltonian) "H.mat" else null,
             .hamiltonian_d1 = if (output and calc.hamiltonian_d1) "dH.mat" else null,
             .kinetic = if (output and calc.kinetic) "T.mat" else null,
@@ -1015,7 +1072,13 @@ pub const Parser = struct {
 
         const log = molecular_integrals.Log{
             .coulomb = print and calc.coulomb,
+            .coulomb_2c = print and calc.coulomb_2c,
+            .coulomb_2c_d1 = print and calc.coulomb_2c_d1,
+            .coulomb_3c = print and calc.coulomb_3c,
+            .coulomb_3c_d1 = print and calc.coulomb_3c_d1,
             .coulomb_d1 = print and calc.coulomb_d1,
+            .coulomb_ri = print and calc.coulomb_ri,
+            .coulomb_ri_d1 = print and calc.coulomb_ri_d1,
             .hamiltonian = print and calc.hamiltonian,
             .hamiltonian_d1 = print and calc.hamiltonian_d1,
             .kinetic = print and calc.kinetic,
@@ -1027,6 +1090,7 @@ pub const Parser = struct {
         };
 
         const opt = molecular_integrals.Options{
+            .aux_basis = aux_basis_resolved,
             .basis = basis_resolved,
             .calculate = calc,
             .charge = charge,
@@ -1045,6 +1109,8 @@ pub const Parser = struct {
     /// Projects Hartree-Fock reference states into perturbed Møller-Plesset correlation spaces.
     pub fn runMollerPlesset(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         const allowed_options = &.{
+            "-a",
+            "--aux-basis",
             "-b",
             "--basis",
             "-c",
@@ -1056,6 +1122,7 @@ pub const Parser = struct {
         };
 
         const allowed_flags = &.{
+            "--direct",
             "--generalized",
             "--optimize",
         };
@@ -1142,17 +1209,32 @@ pub const Parser = struct {
 
         const basis_resolved = try std.fmt.allocPrint(arena, "builtin:{s}", .{basis_opt orelse "sto-3g"});
 
+        const aux_basis_opt = parsed.options.get("-a") orelse parsed.options.get("--aux-basis");
+
+        if (aux_basis_opt) |a| if (a.len == 0) {
+            try printf(io, "MISSING VALUE FOR AUX BASIS OPTION\n", .{});
+
+            return error.MissingAuxBasisValue;
+        };
+
+        const aux_basis_resolved = if (aux_basis_opt) |b| try std.fmt.allocPrint(arena, "builtin:{s}", .{b}) else null;
+
+        const is_direct = parsed.options.contains("--direct");
+
         const optimize = parsed.options.contains("--optimize");
 
         const opt_geom_path = if (optimize) try std.fmt.allocPrint(arena, "{s}.opt", .{parsed.positional[0]}) else null;
 
         const opt = moller_plesset.Options{
+            .aux_basis = aux_basis_resolved,
             .hartree_fock = .{
                 .system = parsed.positional[0],
                 .basis = basis_resolved,
+                .aux_basis = aux_basis_resolved,
                 .multiplicity = multiplicity,
                 .charge = charge,
                 .generalized = parsed.options.contains("--generalized"),
+                .integral_direct = is_direct,
             },
             .order = order,
             .optimize = if (optimize) .{ .bfgs = .{} } else null,

@@ -51,6 +51,23 @@ my @bases = (
     "aug-cc-pvtz",
     "aug-cc-pvqz",
     "aug-cc-pv5z",
+    "def2-svp-rifit",
+    "def2-svpd-rifit",
+    "def2-tzvp-rifit",
+    "def2-tzvpd-rifit",
+    "def2-tzvpp-rifit",
+    "def2-tzvppd-rifit",
+    "def2-qzvp-rifit",
+    "def2-qzvpp-rifit",
+    "def2-qzvppd-rifit",
+    "cc-pvdz-rifit",
+    "cc-pvtz-rifit",
+    "cc-pvqz-rifit",
+    "cc-pv5z-rifit",
+    "aug-cc-pvdz-rifit",
+    "aug-cc-pvtz-rifit",
+    "aug-cc-pvqz-rifit",
+    "aug-cc-pv5z-rifit",
 );
 
 # CREATE OUTPUT DIRECTORY

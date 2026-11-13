@@ -25,9 +25,6 @@
     <a href="https://github.com/tjira/zinq">
         <img src="https://img.shields.io/github/languages/code-size/tjira/zinq?style=for-the-badge"/>
     </a>
-    <a href="https://github.com/tjira/zinq">
-        <img src="https://img.shields.io/endpoint?url=https://ghloc.vercel.app/api/tjira/zinq/badge?filter=.zig&style=for-the-badge&format=human"/>
-    </a>
     <a href="https://github.com/tjira/zinq/stargazers">
         <img src="https://img.shields.io/github/stars/tjira/zinq?style=for-the-badge"/>
     </a>

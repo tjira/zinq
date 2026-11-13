@@ -1,6 +1,6 @@
 # Møller–Plesset Perturbation Theory
 
-This document provides a clear, simple, and mathematically rigorous explanation of Møller–Plesset perturbation theory in second quantization and determinant space. Building directly upon the Hartree–Fock ground state and canonical Fock operator, this guide explains how the electronic Hamiltonian is partitioned, how Rayleigh–Schrödinger perturbation theory evaluates electron correlation, and how the perturbation series is solved recursively in the Slater determinant basis.
+This document provides a clear, simple, and mathematically rigorous explanation of Møller–Plesset perturbation theory in second quantization and determinant space. Building directly upon the Hartree–Fock ground state and canonical Fock operator, this guide explains how the electronic Hamiltonian is partitioned, how Rayleigh–Schrödinger perturbation theory evaluates electron correlation, how the perturbation series is solved recursively in the Slater determinant basis, and how resolution-of-the-identity density fitting accelerates second-order correlation calculations.
 
 ---
 
@@ -113,3 +113,97 @@ $$
 Applying the Hamiltonian subspace block structure and Brillouin's theorem established in Configuration Interaction theory, the reference state decouples from all single excitations ($H_{0,\Phi_i^a}=0$) and couples directly only to double excitations ($H_{0,\Phi_{ij}^{ab}}=\langle ij||ab\rangle=g_{ijab}-g_{ijba}$), while matrix elements with triply and higher excited determinants vanish identically because the Hamiltonian contains at most two-body operators.
 
 At second order ($m=2$), the correlation energy evaluates to $E^{(2)}=\sum_{j\neq0}H_{0j}c_j^{(1)}$ with first-order amplitudes $c_j^{(1)}=H_{j0}/(E_0^{(0)}-E_j^{(0)})$, recovering the physical pair correlation energy. For higher orders such as MP3 ($m=3$) and MP4 ($m=4$), Hamiltonian couplings between singles, doubles, triples, and quadruples determinants recursively generate the complete correlation energy series without truncation errors.
+
+---
+
+## III. Resolution of the Identity and Density Fitting (RI-MP2)
+
+### 5. Auxiliary Basis Expansion and the Coulomb Metric
+
+The canonical evaluation of the second-order Møller–Plesset correlation energy requires the transformation of four-center two-electron repulsion integrals $\langle\mu\lambda|\nu\sigma\rangle$ from the atomic orbital basis to the molecular orbital basis $\langle ij|ab\rangle$, scaling computationally as $\mathcal{O}(N^5)$ and demanding $\mathcal{O}(N^4)$ memory storage. The resolution of the identity (RI), or density fitting (DF), technique accelerates this calculation by expanding the orbital pair charge distributions $\rho_{ia}(\mathbf{r})=\psi_i(\mathbf{r})\psi_a(\mathbf{r})$ in an auxiliary Gaussian basis set $\{P(\mathbf{r})\}_{P=1}^{N_{\text{aux}}}$ as
+
+$$
+\rho_{ia}(\mathbf{r})\approx\tilde{\rho}_{ia}(\mathbf{r})=\sum_{P=1}^{N_{\text{aux}}}d_{ia}^P P(\mathbf{r})
+$$
+
+To find the optimal expansion coefficients $\mathbf{d}_{ia}$, the Coulomb self-repulsion of the residual fitting error $\Delta\rho_{ia}(\mathbf{r})=\rho_{ia}(\mathbf{r})-\tilde{\rho}_{ia}(\mathbf{r})$ is minimized variationally under the Coulomb metric, defined by
+
+$$
+\Delta_{ia}=\iint\frac{\left[\rho_{ia}(\mathbf{r}_1)-\tilde{\rho}_{ia}(\mathbf{r}_1)\right]\left[\rho_{ia}(\mathbf{r}_2)-\tilde{\rho}_{ia}(\mathbf{r}_2)\right]}{|\mathbf{r}_1-\mathbf{r}_2|}d\mathbf{r}_1 d\mathbf{r}_2
+$$
+
+Setting the derivative $\frac{\partial\Delta_{ia}}{\partial d_{ia}^P}=0$ with respect to each auxiliary coefficient yields the linear system of equations
+
+$$
+\sum_{Q=1}^{N_{\text{aux}}}J_{PQ}d_{ia}^Q=\langle iP|a\rangle
+$$
+
+where $J_{PQ}=\iint\frac{P(\mathbf{r}_1)Q(\mathbf{r}_2)}{|\mathbf{r}_1-\mathbf{r}_2|}d\mathbf{r}_1 d\mathbf{r}_2$ is the positive-definite two-center Coulomb metric matrix over the auxiliary basis functions and $I_{ia,P}=\langle iP|a\rangle$ denotes the three-center two-electron Coulomb repulsion integral
+
+$$
+I_{ia,P}=\langle iP|a\rangle=\iint\frac{\psi_i(\mathbf{r}_1)P(\mathbf{r}_2)\psi_a(\mathbf{r}_1)}{|\mathbf{r}_1-\mathbf{r}_2|}d\mathbf{r}_1 d\mathbf{r}_2
+$$
+
+The auxiliary Coulomb metric $\mathbf{J}$ is symmetric and positive-definite, and its symmetric inverse square root $\mathbf{J}^{-1/2}$ is computed via spectral decomposition $\mathbf{J}=\mathbf{U}\mathbf{\Lambda}\mathbf{U}^T$ as
+
+$$
+\mathbf{J}^{-1/2}=\mathbf{U}\mathbf{\Lambda}^{-1/2}\mathbf{U}^T
+$$
+
+where $\mathbf{U}$ is the orthogonal matrix of eigenvectors and $\mathbf{\Lambda}$ is the diagonal matrix of positive eigenvalues, with thresholding applied to eliminate numerical singularities from auxiliary basis linear dependencies.
+
+### 6. Three-Center Integral Transformation and RI-MP2 Energy
+
+Using the symmetric inverse square root $\mathbf{J}^{-1/2}$, the three-center Coulomb integrals over the atomic orbital basis $I_{\mu\nu,P}=\langle\mu P|\nu\rangle$ are contracted to form the intermediate atomic orbital fitting tensor $\mathbf{B}$ as
+
+$$
+B_{\mu\nu,Q}=\sum_{P=1}^{N_{\text{aux}}}\langle\mu P|\nu\rangle\left[\mathbf{J}^{-1/2}\right]_{PQ}
+$$
+
+For a restricted Hartree–Fock reference, the spatial atomic orbital indices $\mu$ and $\nu$ are transformed into the occupied and virtual molecular orbital spaces using the orbital coefficients $\mathbf{C}$ as
+
+$$
+B_{ia,Q}=\sum_{\mu=1}^{N_{\text{bf}}}\sum_{\nu=1}^{N_{\text{bf}}}C_{\mu i}C_{\nu a}B_{\mu\nu,Q}
+$$
+
+For a generalized Hartree–Fock spin-orbital reference, each molecular spin-orbital contains $\alpha$ and $\beta$ spin components, giving the spin-summed molecular orbital three-center intermediate as
+
+$$
+B_{ia,Q}=\sum_{\mu=1}^{N_{\text{bf}}}\sum_{\nu=1}^{N_{\text{bf}}}\left(C_{\mu i}C_{\nu,n_{\text{occ}}+a}+C_{\mu+N_{\text{bf}},i}C_{\nu+N_{\text{bf}},n_{\text{occ}}+a}\right)B_{\mu\nu,Q}
+$$
+
+The four-center molecular orbital two-electron repulsion integrals $\langle ij|ab\rangle$ are then approximated through a single contraction over the auxiliary basis index as
+
+$$
+\langle ij|ab\rangle\approx\sum_{Q=1}^{N_{\text{aux}}}B_{ia,Q}B_{jb,Q}
+$$
+
+For a closed-shell restricted Hartree–Fock reference, the second-order Møller–Plesset correlation energy is evaluated directly from the reconstructed integrals as
+
+$$
+E_{\text{corr}}^{\text{RI-MP2}}=\sum_{i,j}^{\text{occ}}\sum_{a,b}^{\text{vir}}\frac{\langle ij|ab\rangle\left[2\langle ij|ab\rangle-\langle ij|ba\rangle\right]}{\epsilon_i+\epsilon_j-\epsilon_a-\epsilon_b}
+$$
+
+while for a generalized Hartree–Fock spin-orbital reference, the corresponding correlation energy takes the antisymmetrized form
+
+$$
+E_{\text{corr}}^{\text{RI-MP2}}=\frac{1}{4}\sum_{i,j}^{\text{occ}}\sum_{a,b}^{\text{vir}}\frac{\left[\langle ij|ab\rangle-\langle ij|ba\rangle\right]^2}{\epsilon_i+\epsilon_j-\epsilon_a-\epsilon_b}
+$$
+
+This density fitting formulation completely eliminates the $\mathcal{O}(N^4)$ memory storage requirement for four-center repulsion integrals, reduces the scaling of the integral transformation to $\mathcal{O}(N^4)$, and evaluates the correlation energy via highly optimized matrix multiplications.
+
+### 7. Analytical Nuclear Gradients for RI-MP2
+
+The analytical nuclear gradient of the RI-MP2 correlation energy with respect to a nuclear coordinate $X$ requires differentiating the fitting tensor $\mathbf{B}$, molecular orbital coefficients $\mathbf{C}$, and orbital energies $\boldsymbol{\epsilon}$. Differentiating the inverse square root of the auxiliary metric $\mathbf{J}^{-1/2}$ via the Daleckii–Krein formula in the eigenbasis of $\mathbf{J}=\mathbf{U}\mathbf{\Lambda}\mathbf{U}^T$ yields
+
+$$
+\left(\mathbf{U}^T\frac{\partial\mathbf{J}^{-1/2}}{\partial X}\mathbf{U}\right)_{PQ}=\frac{-1}{\sqrt{\lambda_P\lambda_Q}\left(\sqrt{\lambda_P}+\sqrt{\lambda_Q}\right)}\left(\mathbf{U}^T\frac{\partial\mathbf{J}}{\partial X}\mathbf{U}\right)_{PQ}
+$$
+
+Differentiating the atomic orbital fitting tensor intermediate $B_{\mu\nu,Q}=\sum_P\langle\mu P|\nu\rangle\left[\mathbf{J}^{-1/2}\right]_{PQ}$ gives
+
+$$
+\frac{\partial B_{\mu\nu,Q}}{\partial X}=\sum_P\frac{\partial\langle\mu P|\nu\rangle}{\partial X}\left[\mathbf{J}^{-1/2}\right]_{PQ}+\sum_P\langle\mu P|\nu\rangle\left[\frac{\partial\mathbf{J}^{-1/2}}{\partial X}\right]_{PQ}
+$$
+
+Combining the derivative fitting tensor with first-order orbital responses $\partial\mathbf{C}/\partial X$ and $\partial\boldsymbol{\epsilon}/\partial X$ obtained from Coupled-Perturbed Hartree–Fock equations allows the exact evaluation of the RI-MP2 analytical nuclear gradient via the dual-number boundary wrapper approach. For each Cartesian coordinate $X$, the unperturbed tensors and their first derivatives are packaged into first-order dual numbers as $\mathbf{B}_d=\mathbf{B}+\frac{\partial\mathbf{B}}{\partial X}\epsilon$, $\mathbf{C}_d=\mathbf{C}+\frac{\partial\mathbf{C}}{\partial X}\epsilon$, and $\boldsymbol{\epsilon}_d=\boldsymbol{\epsilon}+\frac{\partial\boldsymbol{\epsilon}}{\partial X}\epsilon$. Evaluating the RI-MP2 correlation energy function directly with these dual tensors automatically yields $E_d=E_{\text{corr}}^{\text{RI-MP2}}+\frac{\partial E_{\text{corr}}^{\text{RI-MP2}}}{\partial X}\epsilon$, extracting the exact analytical correlation energy gradient from the dual component without constructing four-center integral derivatives or unrelaxed correlation density matrices.

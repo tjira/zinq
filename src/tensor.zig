@@ -253,6 +253,13 @@ pub fn Matrix(comptime T: type) type {
             return self.shape.len;
         }
 
+        /// Reshapes the 2D matrix into a new 2D matrix view of dimensions rows by cols.
+        pub fn reshape(self: @This(), rows: usize, cols: usize) @This() {
+            std.debug.assert(rows * cols == self.data.len);
+
+            return fromSlice(rows, cols, self.data);
+        }
+
         /// Computes the root-mean-square value of the matrix elements.
         pub fn rms(self: @This()) T {
             var sum_sq: T = 0;
@@ -273,11 +280,27 @@ pub fn Matrix(comptime T: type) type {
             return .{ .data = self.data[i * self.shape[1] .. (i + 1) * self.shape[1]], .shape = .{self.shape[1]} };
         }
 
+        /// Reshapes the specified row vector into a 2D matrix view of dimensions rows by cols.
+        pub fn rowMatrix(self: @This(), i: usize, rows: usize, cols: usize) Matrix(T) {
+            std.debug.assert(rows * cols == self.shape[1]);
+
+            return fromSlice(rows, cols, self.rowSlice(i));
+        }
+
         /// Returns a slice view of the specified row.
         pub fn rowSlice(self: @This(), i: usize) []T {
             std.debug.assert(i < self.shape[0]);
 
             return self.data[i * self.shape[1] .. (i + 1) * self.shape[1]];
+        }
+
+        /// Returns a submatrix view spanning a contiguous range of rows from start to start + count.
+        pub fn sliceRows(self: @This(), start: usize, count: usize) @This() {
+            std.debug.assert(start + count <= self.shape[0]);
+
+            const offset, const len = .{ start * self.shape[1], count * self.shape[1] };
+
+            return .{ .data = self.data[offset .. offset + len], .shape = .{ count, self.shape[1] } };
         }
 
         /// Symmetrizes a square matrix in-place by averaging off-diagonal elements.
@@ -294,9 +317,7 @@ pub fn Matrix(comptime T: type) type {
 
         /// Returns a submatrix view consisting of the first n rows.
         pub fn takeRows(self: @This(), n: usize) @This() {
-            std.debug.assert(n <= self.shape[0]);
-
-            return .{ .data = self.data[0 .. n * self.shape[1]], .shape = .{ n, self.shape[1] } };
+            return self.sliceRows(0, n);
         }
 
         /// Sets all elements of the matrix to zero.
@@ -363,6 +384,11 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             return self;
         }
 
+        /// Flattens the N-dimensional tensor into a 1D vector representation.
+        pub fn asVector(self: @This()) Vector(T) {
+            return .{ .data = self.data, .shape = .{self.data.len} };
+        }
+
         /// Returns the tensor element at the specified multi-index coordinate.
         pub fn at(self: @This(), indx: [N]usize) T {
             var idx: usize = 0;
@@ -380,6 +406,19 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             return self.data[idx];
         }
 
+        /// Wraps an existing memory buffer into an N-dimensional tensor view of the given shape.
+        pub fn fromSlice(shape: [N]usize, data: []T) @This() {
+            var size: usize = 1;
+
+            inline for (0..N) |i| {
+                size *= shape[i];
+            }
+
+            std.debug.assert(data.len == size);
+
+            return .{ .data = data, .shape = shape };
+        }
+
         /// Allocates a tensor and initializes all elements to zero.
         pub fn initZero(shape: [N]usize, gpa: std.mem.Allocator) !@This() {
             var U = try @This().init(shape, gpa);
@@ -387,6 +426,13 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             U.zero();
 
             return U;
+        }
+
+        /// Reshapes the N-dimensional tensor into a 2D matrix view of dimensions rows by cols.
+        pub fn matrixView(self: @This(), rows: usize, cols: usize) Matrix(T) {
+            std.debug.assert(rows * cols == self.data.len);
+
+            return Matrix(T).fromSlice(rows, cols, self.data);
         }
 
         /// Returns a pointer to the tensor element at the specified multi-index coordinate.
@@ -409,6 +455,24 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
         /// Returns the rank (number of dimensions) of the tensor.
         pub fn rank(self: @This()) usize {
             return self.shape.len;
+        }
+
+        /// Returns a sub-tensor view along the leading dimension at the specified index.
+        pub fn slice(self: @This(), i: usize) if (N > 1) Tensor(T, N - 1) else void {
+            if (comptime N <= 1) @compileError("Tensor rank must be greater than 1 to slice");
+            std.debug.assert(i < self.shape[0]);
+
+            var sub_shape: [N - 1]usize, var sub_size: usize = .{ undefined, 1 };
+
+            inline for (1..N) |d| {
+                sub_shape[d - 1] = self.shape[d];
+
+                sub_size *= self.shape[d];
+            }
+
+            const start = i * sub_size;
+
+            return .{ .data = self.data[start .. start + sub_size], .shape = sub_shape };
         }
 
         /// Sets all elements of the tensor to zero.
@@ -498,11 +562,23 @@ pub fn Vector(comptime T: type) type {
             return self.shape.len;
         }
 
+        /// Reshapes the 1D vector into a 2D matrix view of dimensions rows by cols.
+        pub fn reshape(self: @This(), rows: usize, cols: usize) Matrix(T) {
+            std.debug.assert(rows * cols == self.shape[0]);
+
+            return Matrix(T).fromSlice(rows, cols, self.data);
+        }
+
+        /// Returns a subvector view spanning a contiguous range of elements from start to start + len.
+        pub fn slice(self: @This(), start: usize, len: usize) @This() {
+            std.debug.assert(start + len <= self.shape[0]);
+
+            return .{ .data = self.data[start .. start + len], .shape = .{len} };
+        }
+
         /// Returns a subvector view consisting of the first n elements.
         pub fn takeRows(self: @This(), n: usize) @This() {
-            std.debug.assert(n <= self.shape[0]);
-
-            return .{ .data = self.data[0..n], .shape = .{n} };
+            return self.slice(0, n);
         }
 
         /// Sets all elements of the vector to zero.

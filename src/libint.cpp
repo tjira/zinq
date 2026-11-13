@@ -39,6 +39,16 @@ extern "C" {
         if (!sys) return 0; return sys->obs.nbf();
     }
 
+    size_t libint_aux_nbf(SystemData *sys, const char *aux_basis) {
+        if (!sys) return 0; libint2::initialize();
+
+        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+
+        size_t nbf = aux.nbf(); libint2::finalize();
+
+        return nbf;
+    }
+
     void libint_atoms(int *atoms, SystemData *sys) {
         if (!sys) return;
 
@@ -224,6 +234,100 @@ extern "C" {
                                         I[bf4 * nbf * nbf * nbf + bf2 * nbf * nbf + bf3 * nbf + bf1] = val;
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void twoelec_2c(double *J, libint2::Engine &engine, const BasisSet &aux, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<Engine> engines(nthreads, engine); size_t naux = aux.nbf(); auto sh2bf = aux.shell2bf();
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < aux.size(); s1++) {
+            auto bf1_first = sh2bf.at(s1);
+
+            for (size_t s2 = s1; s2 < aux.size(); s2++) {
+                int id = omp_get_thread_num(); auto bf2_first = sh2bf.at(s2);
+
+                engines.at(id).compute(aux.at(s1), aux.at(s2));
+
+                const auto& res = engines.at(id).results();
+
+                if (res.at(0) == nullptr) continue;
+
+                int idx = 0;
+
+                for (size_t f1 = 0; f1 < aux.at(s1).size(); f1++) {
+                    size_t bf1 = f1 + bf1_first;
+
+                    for (size_t f2 = 0; f2 < aux.at(s2).size(); f2++, idx++) {
+                        size_t bf2 = f2 + bf2_first;
+
+                        double val = res[0][idx];
+
+                        J[bf1 * naux + bf2] = val;
+                        J[bf2 * naux + bf1] = val;
+                    }
+                }
+            }
+        }
+    }
+
+    void twoelec_3c(double *I, libint2::Engine &engine, const BasisSet &obs, const BasisSet &aux, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<Engine> engines(nthreads, engine); size_t nbf = obs.nbf(); size_t naux = aux.nbf();
+
+        auto obs_sh2bf = obs.shell2bf(); auto aux_sh2bf = aux.shell2bf();
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < obs.size(); s1++) {
+            auto bf1_first = obs_sh2bf.at(s1);
+
+            for (size_t s2 = s1; s2 < obs.size(); s2++) {
+                auto bf2_first = obs_sh2bf.at(s2);
+
+                for (size_t s3 = 0; s3 < aux.size(); s3++) {
+                    int id = omp_get_thread_num(); auto bf3_first = aux_sh2bf.at(s3);
+
+                    engines.at(id).compute(obs.at(s1), obs.at(s2), aux.at(s3));
+
+                    const auto& res = engines.at(id).results();
+
+                    if (res.at(0) == nullptr) continue;
+
+                    int idx = 0;
+
+                    for (size_t f1 = 0; f1 < obs.at(s1).size(); f1++) {
+                        size_t bf1 = f1 + bf1_first;
+
+                        for (size_t f2 = 0; f2 < obs.at(s2).size(); f2++) {
+                            size_t bf2 = f2 + bf2_first;
+
+                            for (size_t f3 = 0; f3 < aux.at(s3).size(); f3++, idx++) {
+                                size_t bf3 = f3 + bf3_first;
+
+                                double val = res[0][idx];
+
+                                I[bf1 * nbf * naux + bf2 * naux + bf3] = val;
+                                I[bf2 * nbf * naux + bf1 * naux + bf3] = val;
                             }
                         }
                     }
@@ -476,6 +580,32 @@ extern "C" {
         twoelec(I, engine, sys->obs, nthreads); libint2::finalize();
     }
 
+    void libint_coulomb_2c(double *J, SystemData *sys, const char *aux_basis, size_t nthreads) {
+        if (!sys) return; libint2::initialize();
+
+        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+
+        size_t max_prim = aux.max_nprim();
+        size_t max_l    = aux.max_l(    );
+
+        Engine engine(Operator::coulomb, max_prim, max_l, 0, 1e-14, default_params(Operator::coulomb), BraKet::xs_xs);
+
+        twoelec_2c(J, engine, aux, nthreads); libint2::finalize();
+    }
+
+    void libint_coulomb_3c(double *I, SystemData *sys, const char *aux_basis, size_t nthreads) {
+        if (!sys) return; libint2::initialize();
+
+        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+
+        size_t max_prim = std::max(sys->obs.max_nprim(), aux.max_nprim());
+        size_t max_l    = std::max(sys->obs.max_l(    ), aux.max_l(    ));
+
+        Engine engine(Operator::coulomb, max_prim, max_l, 0, 1e-14, default_params(Operator::coulomb), BraKet::xx_xs);
+
+        twoelec_3c(I, engine, sys->obs, aux, nthreads); libint2::finalize();
+    }
+
     void libint_fock_ghf(double *F, const double *P, double exch_factor, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -679,6 +809,118 @@ extern "C" {
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void twoelec_2c_deriv(double *I, libint2::Engine &engine, const BasisSet &aux, const std::vector<Atom> &atoms, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<Engine> engines(nthreads, engine);
+
+        size_t naux = aux.nbf(); auto sh2bf = aux.shell2bf();
+        size_t nat = atoms.size(); auto sh2at = aux.shell2atom(atoms);
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < aux.size(); s1++) {
+            auto bf1_first = sh2bf.at(s1); size_t atom1 = sh2at[s1];
+
+            for (size_t s2 = s1; s2 < aux.size(); s2++) {
+                int id = omp_get_thread_num(); auto bf2_first = sh2bf.at(s2); size_t atom2 = sh2at[s2];
+
+                engines.at(id).compute(aux.at(s1), aux.at(s2));
+
+                const auto& res = engines.at(id).results();
+
+                if (res.at(0) == nullptr) continue;
+
+                int idx = 0;
+
+                for (size_t f1 = 0; f1 < aux.at(s1).size(); f1++) {
+                    size_t bf1 = f1 + bf1_first;
+
+                    for (size_t f2 = 0; f2 < aux.at(s2).size(); f2++, idx++) {
+                        size_t bf2 = f2 + bf2_first;
+
+                        for (size_t c = 0; c < nat; c++) for (size_t d = 0; d < 3; d++) {
+                            double val = 0;
+
+                            if (atom1 == c) val += res.at(d + 0)[idx];
+                            if (atom2 == c) val += res.at(d + 3)[idx];
+
+                            I[(3 * c + d) * naux * naux + bf1 * naux + bf2] = val;
+                            I[(3 * c + d) * naux * naux + bf2 * naux + bf1] = val;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    void twoelec_3c_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const BasisSet &aux, const std::vector<Atom> &atoms, size_t nthreads) {
+        nthreads = std::max<size_t>(1, nthreads);
+
+        #ifndef _OPENMP
+        nthreads = 1;
+        #endif
+
+        std::vector<Engine> engines(nthreads, engine);
+
+        size_t nbf = obs.nbf(); size_t naux = aux.nbf();
+        size_t nat = atoms.size();
+
+        auto obs_sh2bf = obs.shell2bf(); auto aux_sh2bf = aux.shell2bf();
+        auto obs_sh2at = obs.shell2atom(atoms); auto aux_sh2at = aux.shell2atom(atoms);
+
+        #ifdef _OPENMP
+        #pragma omp parallel for schedule(dynamic) num_threads(nthreads)
+        #endif
+        for (size_t s1 = 0; s1 < aux.size(); s1++) {
+            auto bf1_first = aux_sh2bf.at(s1); size_t atom1 = aux_sh2at[s1];
+
+            for (size_t s2 = 0; s2 < obs.size(); s2++) {
+                auto bf2_first = obs_sh2bf.at(s2); size_t atom2 = obs_sh2at[s2];
+
+                for (size_t s3 = s2; s3 < obs.size(); s3++) {
+                    int id = omp_get_thread_num(); auto bf3_first = obs_sh2bf.at(s3); size_t atom3 = obs_sh2at[s3];
+
+                    engines.at(id).compute(aux.at(s1), obs.at(s2), obs.at(s3));
+
+                    const auto& res = engines.at(id).results();
+
+                    if (res.at(0) == nullptr) continue;
+
+                    int idx = 0;
+
+                    for (size_t f1 = 0; f1 < aux.at(s1).size(); f1++) {
+                        size_t bf1 = f1 + bf1_first;
+
+                        for (size_t f2 = 0; f2 < obs.at(s2).size(); f2++) {
+                            size_t bf2 = f2 + bf2_first;
+
+                            for (size_t f3 = 0; f3 < obs.at(s3).size(); f3++, idx++) {
+                                size_t bf3 = f3 + bf3_first;
+
+                                for (size_t c = 0; c < nat; c++) for (size_t d = 0; d < 3; d++) {
+                                    double val = 0;
+
+                                    if (atom1 == c) val += res.at(d + 0)[idx];
+                                    if (atom2 == c) val += res.at(d + 3)[idx];
+                                    if (atom3 == c) val += res.at(d + 6)[idx];
+
+                                    I[(3 * c + d) * nbf * nbf * naux + bf2 * nbf * naux + bf3 * naux + bf1] = val;
+                                    I[(3 * c + d) * nbf * nbf * naux + bf3 * nbf * naux + bf2 * naux + bf1] = val;
                                 }
                             }
                         }
@@ -966,6 +1208,30 @@ extern "C" {
         Engine engine(Operator::coulomb, sys->obs.max_nprim(), sys->obs.max_l(), 1, 1e-14);
 
         twoelec_deriv(I, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
+    }
+
+    void libint_coulomb_2c_deriv(double *I, SystemData *sys, const char *aux_basis, size_t nthreads) {
+        if (!sys) return; libint2::initialize();
+
+        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+
+        Engine engine(Operator::coulomb, aux.max_nprim(), aux.max_l(), 1, 1e-14, default_params(Operator::coulomb), BraKet::xs_xs);
+
+        twoelec_2c_deriv(I, engine, aux, sys->atoms, nthreads); libint2::finalize();
+    }
+
+    void libint_coulomb_3c_deriv(double *I, SystemData *sys, const char *aux_basis, size_t nthreads) {
+        if (!sys) return; libint2::initialize();
+
+        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+
+        size_t max_prim = std::max(sys->obs.max_nprim(), aux.max_nprim());
+        size_t max_l    = std::max(sys->obs.max_l(    ), aux.max_l(    ));
+
+        Engine engine(Operator::coulomb, max_prim, max_l, 1, 1e-14,
+                      default_params(Operator::coulomb), BraKet::xs_xx);
+
+        twoelec_3c_deriv(I, engine, sys->obs, aux, sys->atoms, nthreads); libint2::finalize();
     }
 
     void libint_kinetic_deriv(double *I, SystemData *sys, size_t nthreads) {

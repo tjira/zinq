@@ -131,6 +131,66 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
 
+        /// Calculates the two-center Coulomb repulsion integrals over auxiliary basis functions.
+        pub fn coulomb2c(self: @This(), aux_basis: []const u8, nthreads: usize, gpa: Allocator) !Matrix(T) {
+            const aux_c = try gpa.dupeSentinel(u8, aux_basis, 0);
+            defer gpa.free(aux_c);
+
+            const naux = libint.libint_aux_nbf(self.ptr, aux_c.ptr);
+
+            var J = try Matrix(T).initZero(naux, naux, gpa);
+            errdefer J.deinit(gpa);
+
+            libint.libint_coulomb_2c(J.data.ptr, self.ptr, aux_c.ptr, nthreads);
+
+            return J;
+        }
+
+        /// Computes first-order derivatives of two-center Coulomb integrals over auxiliary basis functions.
+        pub fn coulomb2cD1(self: @This(), aux_basis: []const u8, nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
+            const aux_c = try gpa.dupeSentinel(u8, aux_basis, 0);
+            defer gpa.free(aux_c);
+
+            const naux = libint.libint_aux_nbf(self.ptr, aux_c.ptr);
+
+            var J = try Tensor(T, 3).initZero(.{ 3 * libint.libint_nat(self.ptr), naux, naux }, gpa);
+            errdefer J.deinit(gpa);
+
+            libint.libint_coulomb_2c_deriv(J.data.ptr, self.ptr, aux_c.ptr, nthreads);
+
+            return J;
+        }
+
+        /// Calculates three-center two-electron Coulomb repulsion integrals over orbital and auxiliary basis functions.
+        pub fn coulomb3c(self: @This(), aux_basis: []const u8, nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
+            const aux_c = try gpa.dupeSentinel(u8, aux_basis, 0);
+            defer gpa.free(aux_c);
+
+            const naux = libint.libint_aux_nbf(self.ptr, aux_c.ptr);
+
+            var I = try Tensor(T, 3).initZero(.{ self.nbf, self.nbf, naux }, gpa);
+            errdefer I.deinit(gpa);
+
+            libint.libint_coulomb_3c(I.data.ptr, self.ptr, aux_c.ptr, nthreads);
+
+            return I;
+        }
+
+        /// Computes first-order derivatives of three-center Coulomb integrals over orbital and auxiliary basis functions.
+        pub fn coulomb3cD1(self: @This(), aux_basis: []const u8, nthreads: usize, gpa: Allocator) !Tensor(T, 4) {
+            const aux_c = try gpa.dupeSentinel(u8, aux_basis, 0);
+            defer gpa.free(aux_c);
+
+            const naux = libint.libint_aux_nbf(self.ptr, aux_c.ptr);
+
+            var I = try Tensor(T, 4).initZero(.{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf, naux }, gpa);
+            errdefer I.deinit(gpa);
+
+            libint.libint_coulomb_3c_deriv(I.data.ptr, self.ptr, aux_c.ptr, nthreads);
+
+            return I;
+        }
+
         /// Computes the first-order derivatives of the two-electron Coulomb integrals with respect to nuclear coordinates.
         pub fn coulombD1(self: @This(), nthreads: usize, gpa: Allocator) !Tensor(T, 5) {
             const shape = .{ 3 * libint.libint_nat(self.ptr), self.nbf, self.nbf, self.nbf, self.nbf };

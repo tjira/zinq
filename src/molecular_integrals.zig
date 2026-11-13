@@ -3,6 +3,8 @@
 const embed = @import("embed");
 const std = @import("std");
 
+const cblas = @import("cimport.zig").cblas;
+
 const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
@@ -10,6 +12,8 @@ const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const Tensor = @import("tensor.zig").Tensor;
 const validation = @import("validation.zig");
 
+const contractMetric = @import("density_fitting.zig").contractMetric;
+const invertMetric = @import("density_fitting.zig").invertMetric;
 const printMatrix = @import("read_write.zig").printMatrix;
 const printTensor = @import("read_write.zig").printTensor;
 const printf = @import("read_write.zig").printf;
@@ -18,6 +22,7 @@ const writeTensor = @import("read_write.zig").writeTensor;
 
 /// Configuration parameters specifying molecular geometry, basis sets, spin properties, and task selectors for integral calculation.
 pub const Options = struct {
+    aux_basis: ?[]const u8 = null,
     basis: []const u8,
     calculate: Calculate = .{},
     charge: i32 = 0,
@@ -32,7 +37,13 @@ pub const Options = struct {
 /// Specifier of boolean flags to select which one-electron and two-electron molecular integrals and derivatives to compute.
 pub const Calculate = struct {
     coulomb: bool = true,
+    coulomb_2c: bool = false,
+    coulomb_2c_d1: bool = false,
+    coulomb_3c: bool = false,
+    coulomb_3c_d1: bool = false,
     coulomb_d1: bool = false,
+    coulomb_ri: bool = false,
+    coulomb_ri_d1: bool = false,
     hamiltonian: bool = true,
     hamiltonian_d1: bool = false,
     kinetic: bool = true,
@@ -46,7 +57,13 @@ pub const Calculate = struct {
 /// Flags specifying which calculated molecular integrals and derivatives to print to standard output.
 pub const Log = struct {
     coulomb: bool = false,
+    coulomb_2c: bool = false,
+    coulomb_2c_d1: bool = false,
+    coulomb_3c: bool = false,
+    coulomb_3c_d1: bool = false,
     coulomb_d1: bool = false,
+    coulomb_ri: bool = false,
+    coulomb_ri_d1: bool = false,
     hamiltonian: bool = false,
     hamiltonian_d1: bool = false,
     kinetic: bool = false,
@@ -60,7 +77,13 @@ pub const Log = struct {
 /// Options specifying the output file paths for writing calculated molecular integrals and their derivatives.
 pub const Write = struct {
     coulomb: ?[]const u8 = null,
+    coulomb_2c: ?[]const u8 = null,
+    coulomb_2c_d1: ?[]const u8 = null,
+    coulomb_3c: ?[]const u8 = null,
+    coulomb_3c_d1: ?[]const u8 = null,
     coulomb_d1: ?[]const u8 = null,
+    coulomb_ri: ?[]const u8 = null,
+    coulomb_ri_d1: ?[]const u8 = null,
     hamiltonian: ?[]const u8 = null,
     hamiltonian_d1: ?[]const u8 = null,
     kinetic: ?[]const u8 = null,
@@ -80,14 +103,18 @@ pub fn Result(comptime T: type) type {
         K: ?Matrix(T) = null,
         V: ?Matrix(T) = null,
         H: ?Matrix(T) = null,
+        J: ?Matrix(T) = null,
 
+        B: ?Tensor(T, 3) = null,
+        I: ?Tensor(T, 3) = null,
         g: ?Tensor(T, 4) = null,
 
         dS: ?Tensor(T, 3) = null,
         dK: ?Tensor(T, 3) = null,
         dV: ?Tensor(T, 3) = null,
         dH: ?Tensor(T, 3) = null,
-
+        dJ: ?Tensor(T, 3) = null,
+        dI: ?Tensor(T, 4) = null,
         dg: ?Tensor(T, 5) = null,
 
         /// Deallocates the computed one-electron and two-electron molecular integral tensors stored in the Result struct.
@@ -97,53 +124,38 @@ pub fn Result(comptime T: type) type {
             if (self.S) |*S| S.deinit(gpa);
             if (self.K) |*K| K.deinit(gpa);
             if (self.V) |*V| V.deinit(gpa);
-            if (self.g) |*g| g.deinit(gpa);
             if (self.H) |*H| H.deinit(gpa);
+            if (self.J) |*J| J.deinit(gpa);
+            if (self.g) |*g| g.deinit(gpa);
+            if (self.B) |*B| B.deinit(gpa);
+            if (self.I) |*I| I.deinit(gpa);
 
             if (self.dS) |*dS| dS.deinit(gpa);
             if (self.dK) |*dK| dK.deinit(gpa);
             if (self.dV) |*dV| dV.deinit(gpa);
             if (self.dH) |*dH| dH.deinit(gpa);
+            if (self.dJ) |*dJ| dJ.deinit(gpa);
+            if (self.dI) |*dI| dI.deinit(gpa);
             if (self.dg) |*dg| dg.deinit(gpa);
         }
     };
 }
 
+/// Automatically extracts and writes an auxiliary builtin basis set to a temporary file if specified.
+pub fn exportAuxIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
+    return exportBuiltin(io, basis, "aux_basis.g94", true, gpa);
+}
+
 /// Automatically extracts and writes a builtin basis set to a temporary file if specified.
 pub fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
-    if (std.mem.startsWith(u8, basis, "builtin:")) {
-        var result = try gpa.alloc(u8, basis["builtin:".len..].len);
-        defer gpa.free(result);
-
-        for (basis["builtin:".len..], 0..) |char, i| {
-            if (char == '+') result[i] = 'p';
-            if (char == '*') result[i] = 's';
-
-            if (char != '+' and char != '*') {
-                result[i] = std.ascii.toLower(char);
-            }
-        }
-
-        const content = embed.bases.get(result) orelse {
-            std.log.err("BUILTIN BASIS SET '{s}' NOT FOUND", .{result});
-
-            return error.InvalidInput;
-        };
-
-        var file = try std.Io.Dir.cwd().createFile(io, "basis.g94", .{});
-        defer file.close(io);
-
-        try file.writeStreamingAll(io, content);
-
-        return "basis.g94";
-    }
-
-    return basis;
+    return exportBuiltin(io, basis, "basis.g94", false, gpa);
 }
 
 /// Computes molecular integrals and nuclear derivatives from a geometry file and basis set path.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try validation.checkInvalidInput(opt);
+
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
     const basis_path = try exportIfBuiltin(io, opt.basis, gpa);
 
@@ -168,6 +180,8 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
 /// Evaluates molecular integrals and gradients directly on an initialized molecular system.
 pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularSystem(T), log: bool, gpa: Allocator) !Result(T) {
     try validation.checkInvalidInput(opt);
+
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
     var ints: Result(T) = .{ .sys = try sys.clone(gpa) };
     errdefer ints.deinit(gpa);
@@ -212,6 +226,64 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
         ints.g = if (opt.generalized) try sys.coulombSpin(opt.nthreads, gpa) else try sys.coulomb(opt.nthreads, gpa);
 
         if (log) try printf(io, "COULOMB INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    const needs_aux = opt.calculate.coulomb_2c or opt.calculate.coulomb_3c or opt.calculate.coulomb_ri;
+
+    if (needs_aux) {
+        const aux = opt.aux_basis orelse return error.AuxiliaryBasisNotSpecified;
+
+        const aux_path = try exportAuxIfBuiltin(io, aux, gpa);
+
+        defer if (std.mem.startsWith(u8, aux, "builtin:")) {
+            std.Io.Dir.cwd().deleteFile(io, aux_path) catch {};
+        };
+
+        if (opt.calculate.coulomb_2c) {
+            timer = std.Io.Timestamp.now(io, .real);
+
+            ints.J = try sys.coulomb2c(aux_path, opt.nthreads, gpa);
+
+            if (log) try printf(io, "COULOMB 2C MATRIX: {f}\n", .{timer.untilNow(io, .real)});
+        }
+
+        if (opt.calculate.coulomb_3c) {
+            timer = std.Io.Timestamp.now(io, .real);
+
+            ints.I = try sys.coulomb3c(aux_path, opt.nthreads, gpa);
+
+            if (log) try printf(io, "COULOMB 3C TENSOR: {f}\n", .{timer.untilNow(io, .real)});
+        }
+
+        if (opt.calculate.coulomb_ri) {
+            timer = std.Io.Timestamp.now(io, .real);
+
+            if (ints.J == null) ints.J = try sys.coulomb2c(aux_path, opt.nthreads, gpa);
+
+            var J_inv_half = try invertMetric(T, ints.J.?, gpa);
+            defer J_inv_half.deinit(gpa);
+
+            var I_local: ?Tensor(T, 3) = null;
+            defer if (I_local) |*it| it.deinit(gpa);
+
+            const I_ref = if (ints.I) |it| it else blk: {
+                if (opt.calculate.coulomb_ri_d1 or opt.calculate.coulomb_3c) {
+                    ints.I = try sys.coulomb3c(aux_path, opt.nthreads, gpa);
+
+                    break :blk ints.I.?;
+                }
+
+                I_local = try sys.coulomb3c(aux_path, opt.nthreads, gpa);
+
+                break :blk I_local.?;
+            };
+
+            ints.B = try Tensor(T, 3).initZero(I_ref.shape, gpa);
+
+            contractMetric(T, &ints.B.?, I_ref, J_inv_half);
+
+            if (log) try printf(io, "FITTING INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
+        }
     }
 
     if (opt.calculate.hamiltonian) {
@@ -278,6 +350,44 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
         if (log) try printf(io, "COULOMB INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
 
+    const needs_aux_d1 = opt.calculate.coulomb_2c_d1 or opt.calculate.coulomb_3c_d1 or opt.calculate.coulomb_ri_d1;
+
+    if (needs_aux_d1) {
+        const aux = opt.aux_basis orelse return error.AuxiliaryBasisNotSpecified;
+
+        const aux_path = try exportAuxIfBuiltin(io, aux, gpa);
+
+        defer if (std.mem.startsWith(u8, aux, "builtin:")) {
+            std.Io.Dir.cwd().deleteFile(io, aux_path) catch {};
+        };
+
+        if (opt.calculate.coulomb_2c_d1) {
+            timer = std.Io.Timestamp.now(io, .real);
+
+            ints.dJ = try sys.coulomb2cD1(aux_path, opt.nthreads, gpa);
+
+            if (log) try printf(io, "COULOMB 2C DERIVATIVE TENSOR: {f}\n", .{timer.untilNow(io, .real)});
+        }
+
+        if (opt.calculate.coulomb_3c_d1) {
+            timer = std.Io.Timestamp.now(io, .real);
+
+            ints.dI = try sys.coulomb3cD1(aux_path, opt.nthreads, gpa);
+
+            if (log) try printf(io, "COULOMB 3C DERIVATIVE TENSOR: {f}\n", .{timer.untilNow(io, .real)});
+        }
+
+        if (opt.calculate.coulomb_ri_d1) {
+            timer = std.Io.Timestamp.now(io, .real);
+
+            if (ints.dJ == null) ints.dJ = try sys.coulomb2cD1(aux_path, opt.nthreads, gpa);
+            if (ints.dI == null) ints.dI = try sys.coulomb3cD1(aux_path, opt.nthreads, gpa);
+            if (ints.I == null) ints.I = try sys.coulomb3c(aux_path, opt.nthreads, gpa);
+
+            if (log) try printf(io, "FITTING INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
+        }
+    }
+
     if (opt.calculate.hamiltonian_d1) {
         ints.dH = try Tensor(T, 3).init(ints.dK.?.shape, gpa);
 
@@ -291,6 +401,40 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     try writeIntegralsToFiles(T, io, opt, ints, log);
 
     return ints;
+}
+
+/// Extracts and writes an embedded Gaussian 94 basis library to a temporary file on the local filesystem.
+fn exportBuiltin(io: std.Io, basis: []const u8, fname: []const u8, is_aux: bool, gpa: Allocator) ![]const u8 {
+    if (std.mem.startsWith(u8, basis, "builtin:")) {
+        var result = try gpa.alloc(u8, basis["builtin:".len..].len);
+        defer gpa.free(result);
+
+        for (basis["builtin:".len..], 0..) |char, i| {
+            if (char == '+') result[i] = 'p';
+            if (char == '*') result[i] = 's';
+
+            if (char != '+' and char != '*') {
+                result[i] = std.ascii.toLower(char);
+            }
+        }
+
+        const content = embed.bases.get(result) orelse {
+            const kind = if (is_aux) "AUXILIARY " else "";
+
+            std.log.err("BUILTIN {s}BASIS SET '{s}' NOT FOUND", .{ kind, result });
+
+            return error.InvalidInput;
+        };
+
+        var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
+        defer file.close(io);
+
+        try file.writeStreamingAll(io, content);
+
+        return fname;
+    }
+
+    return basis;
 }
 
 /// Prints requested molecular integral matrices and derivative tensors to standard output.
@@ -325,6 +469,30 @@ fn printIntegrals(comptime T: type, io: std.Io, opt: Options, ints: Result(T)) !
         try printf(io, "\nCOULOMB INTEGRALS:\n", .{});
 
         try printTensor(T, 4, io, g);
+    }
+
+    if (opt.log.coulomb_2c) {
+        const J = ints.J orelse return error.CoulombMatrixNotCalculated;
+
+        try printf(io, "\nCOULOMB 2-CENTER INTEGRALS:\n", .{});
+
+        try printMatrix(T, io, J);
+    }
+
+    if (opt.log.coulomb_3c) {
+        const I = ints.I orelse return error.DensityFittingIntegralsNotCalculated;
+
+        try printf(io, "\nCOULOMB 3-CENTER INTEGRALS:\n", .{});
+
+        try printTensor(T, 3, io, I);
+    }
+
+    if (opt.log.coulomb_ri) {
+        const B = ints.B orelse return error.DensityFittingIntegralsNotCalculated;
+
+        try printf(io, "\nFITTING INTEGRALS:\n", .{});
+
+        try printTensor(T, 3, io, B);
     }
 
     if (opt.log.hamiltonian) {
@@ -365,6 +533,35 @@ fn printIntegrals(comptime T: type, io: std.Io, opt: Options, ints: Result(T)) !
         try printf(io, "\nCOULOMB DERIVATIVE INTEGRALS:\n", .{});
 
         try printTensor(T, 5, io, dg);
+    }
+
+    if (opt.log.coulomb_2c_d1) {
+        const dJ = ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated;
+
+        try printf(io, "\nCOULOMB 2-CENTER DERIVATIVE INTEGRALS:\n", .{});
+
+        try printTensor(T, 3, io, dJ);
+    }
+
+    if (opt.log.coulomb_3c_d1) {
+        const dI = ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated;
+
+        try printf(io, "\nCOULOMB 3-CENTER DERIVATIVE INTEGRALS:\n", .{});
+
+        try printTensor(T, 4, io, dI);
+    }
+
+    if (opt.log.coulomb_ri_d1) {
+        const dJ = ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated;
+        const dI = ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated;
+
+        try printf(io, "\nCOULOMB 2-CENTER DERIVATIVE INTEGRALS:\n", .{});
+
+        try printTensor(T, 3, io, dJ);
+
+        try printf(io, "\nCOULOMB 3-CENTER DERIVATIVE INTEGRALS:\n", .{});
+
+        try printTensor(T, 4, io, dI);
     }
 
     if (opt.log.hamiltonian_d1) {
@@ -428,6 +625,36 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
         if (log) try printf(io, "COULOMB INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
+    timer = std.Io.Timestamp.now(io, .real);
+
+    if (opt.write.coulomb_2c) |fname| {
+        const J = ints.J orelse return error.CoulombMatrixNotCalculated;
+
+        try writeMatrix(T, io, fname, J);
+
+        if (log) try printf(io, "COULOMB 2C MATRIX WRITING: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    if (opt.write.coulomb_3c) |fname| {
+        const I = ints.I orelse return error.DensityFittingIntegralsNotCalculated;
+
+        try writeTensor(T, 3, io, fname, I);
+
+        if (log) try printf(io, "COULOMB 3C TENSOR WRITING: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    if (opt.write.coulomb_ri) |fname| {
+        const B = ints.B orelse return error.DensityFittingIntegralsNotCalculated;
+
+        try writeTensor(T, 3, io, fname, B);
+
+        if (log) try printf(io, "FITTING INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
     if (opt.write.hamiltonian) |fname| {
         const H = ints.H orelse return error.HamiltonianNotCalculated;
 
@@ -486,6 +713,36 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
         try writeTensor(T, 5, io, fname, dg);
 
         if (log) try printf(io, "COULOMB DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    if (opt.write.coulomb_2c_d1) |fname| {
+        const dJ = ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated;
+
+        try writeTensor(T, 3, io, fname, dJ);
+
+        if (log) try printf(io, "COULOMB 2C DERIVATIVE WRITING MATRIX: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    if (opt.write.coulomb_3c_d1) |fname| {
+        const dI = ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated;
+
+        try writeTensor(T, 4, io, fname, dI);
+
+        if (log) try printf(io, "COULOMB 3C DERIVATIVE WRITING TENSOR: {f}\n", .{timer.untilNow(io, .real)});
+    }
+
+    timer = std.Io.Timestamp.now(io, .real);
+
+    if (opt.write.coulomb_ri_d1) |fname| {
+        const dI = ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated;
+
+        try writeTensor(T, 4, io, fname, dI);
+
+        if (log) try printf(io, "FITTING DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
     if (opt.write.hamiltonian_d1) |fname| {

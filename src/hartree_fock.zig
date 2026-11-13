@@ -2,6 +2,8 @@
 
 const std = @import("std");
 
+const cblas = @import("cimport.zig").cblas;
+
 const Allocator = std.mem.Allocator;
 
 const DftPotential = @import("density_functional_theory.zig").DftPotential;
@@ -13,6 +15,8 @@ const MolecularIntegralsOptions = @import("molecular_integrals.zig").Options;
 const MolecularIntegralsWrite = @import("molecular_integrals.zig").Write;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
+const RiFlags = @import("density_fitting.zig").RiFlags;
+const RiWorkspace = @import("density_fitting.zig").RiWorkspace;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
@@ -43,6 +47,7 @@ const AU2CM = @import("constants.zig").AU2CM;
 
 /// Parameters governing the self-consistent field (SCF) calculation convergence and method options.
 pub const Options = struct {
+    aux_basis: ?[]const u8 = null,
     basis: []const u8,
     charge: i32 = 0,
     dft: ?DftOptions = null,
@@ -179,6 +184,8 @@ fn ScfWorkspace(comptime T: type) type {
         F: *Matrix(T),
         C: *Matrix(T),
         e: *Vector(T),
+
+        ri: ?*RiWorkspace(T) = null,
     };
 }
 
@@ -204,22 +211,26 @@ pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWor
     buildEnergyWeightedDensity(T, &W, ws.C.*, ws.e.*, nocc, generalized);
 
     for (0..ints.sys.atoms.len) |A| for (0..3) |alpha| {
-        const offset = (3 * A + alpha) * dS.shape[1] * dS.shape[2];
+        const coord = 3 * A + alpha;
 
-        const h_G = dot(T, ws.P.asVector(), Vector(T).fromSlice(dH.data[offset .. offset + ws.P.data.len]));
+        const h_G = dot(T, ws.P.asVector(), dH.slice(coord).asVector());
 
-        const s_G = dot(T, W.asVector(), Vector(T).fromSlice(dS.data[offset .. offset + W.data.len]));
+        const s_G = dot(T, W.asVector(), dS.slice(coord).asVector());
 
         var g_G: T = 0;
 
         if (ints.dg) |dg| {
-            g_G += contractTwoElectronGradient(T, dg, 3 * A + alpha, ws.P.*, exch_factor);
+            g_G += contractTwoElectronGradient(T, dg, coord, ws.P.*, exch_factor);
         }
 
         G.ptr(A, alpha).* += h_G + g_G - s_G;
     };
 
-    if (ints.dg == null) {
+    if (ints.dJ != null and ints.dI != null) {
+        try ws.ri.?.contractGradient(&G, ints, ws.C.*, ws.P.*, exch_factor, gpa);
+    }
+
+    if (ints.dg == null and ints.dI == null) {
         if (generalized) {
             ints.sys.coulombGradientGhf(&G, ws.P.*, exch_factor, nthreads);
         }
@@ -234,22 +245,29 @@ pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWor
 
 /// Computes the self-consistent field molecular orbitals, density matrix, and ground-state electronic energy.
 pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), guess: ?Matrix(T), log: bool, gpa: Allocator) !Result(T) {
+    cblas.openblas_set_num_threads(@intCast(opt.nthreads));
+
     const analytic_grad = if (opt.gradient) |g| g == .analytic else false;
+
+    const needs_derivs = analytic_grad or opt.response != null;
 
     const molopts = MolecularIntegralsOptions{
         .system = opt.system,
         .basis = opt.basis,
+        .aux_basis = opt.aux_basis,
         .generalized = opt.generalized,
         .charge = opt.charge,
         .multiplicity = opt.multiplicity,
         .nthreads = opt.nthreads,
         .calculate = .{
-            .coulomb = !opt.integral_direct,
-            .coulomb_d1 = !opt.integral_direct and analytic_grad,
-            .hamiltonian_d1 = analytic_grad,
-            .kinetic_d1 = analytic_grad,
-            .nuclear_d1 = analytic_grad,
-            .overlap_d1 = analytic_grad,
+            .coulomb = !opt.integral_direct and opt.aux_basis == null,
+            .coulomb_d1 = !opt.integral_direct and opt.aux_basis == null and needs_derivs,
+            .coulomb_ri = opt.aux_basis != null,
+            .coulomb_ri_d1 = opt.aux_basis != null and needs_derivs,
+            .hamiltonian_d1 = needs_derivs,
+            .kinetic_d1 = needs_derivs,
+            .nuclear_d1 = needs_derivs,
+            .overlap_d1 = needs_derivs,
         },
         .write = opt.write.integrals,
     };
@@ -315,6 +333,10 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     if (guess) |p| {
         @memcpy(P.data, p.data);
+
+        if (ints.B != null) {
+            try extractOrbitalsFromDensity(T, &C, &e, p, ints.S.?, &B);
+        }
     }
 
     if (guess == null) {
@@ -323,7 +345,29 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         buildDensityMatrix(T, &P, C, nocc, opt.generalized);
     }
 
-    const ws: ScfWorkspace(T) = .{ .P = &P, .F = &F, .C = &C, .e = &e };
+    var exch_factor: T = if (opt.generalized) 1 else 0.5;
+
+    if (dft) |pot| {
+        exch_factor *= pot.a_x;
+    }
+
+    const ri_flags = RiFlags{
+        .coulomb = true,
+        .exchange = exch_factor > 0,
+        .generalized = opt.generalized,
+    };
+
+    var ri_ws = if (ints.B != null) try RiWorkspace(T).init(ints.sys.nbf, ints.B.?.shape[2], nocc, ri_flags, gpa) else null;
+    defer if (ri_ws) |*w| w.deinit(gpa);
+
+    const ws: ScfWorkspace(T) = .{
+        .P = &P,
+        .F = &F,
+        .C = &C,
+        .e = &e,
+
+        .ri = if (ri_ws) |*w| w else null,
+    };
 
     energy[0] = try scf(T, io, opt, ints, ws, if (dft) |*d| d else null, log, gpa);
 
@@ -423,16 +467,16 @@ fn buildEnergyWeightedDensity(comptime T: type, W: *Matrix(T), C: Matrix(T), e: 
 }
 
 /// Constructs the effective one-electron Fock matrix from core Hamiltonian, Coulomb, exchange, and DFT potentials.
-fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matrix(T), opt: Options, dft: ?*DftPotential(T), gpa: Allocator) !void {
+fn buildFockMatrix(comptime T: type, ints: Integrals(T), ws: ScfWorkspace(T), opt: Options, dft: ?*DftPotential(T), gpa: Allocator) !void {
     const nbf = ints.H.?.shape[0];
 
-    std.debug.assert(F.shape[0] == nbf);
-    std.debug.assert(F.shape[1] == nbf);
-    std.debug.assert(P.shape[0] == nbf);
-    std.debug.assert(P.shape[1] == nbf);
+    std.debug.assert(ws.F.shape[0] == nbf);
+    std.debug.assert(ws.F.shape[1] == nbf);
+    std.debug.assert(ws.P.shape[0] == nbf);
+    std.debug.assert(ws.P.shape[1] == nbf);
 
     for (0..nbf) |mu| for (0..nbf) |nu| {
-        F.ptr(mu, nu).* = ints.H.?.at(mu, nu);
+        ws.F.ptr(mu, nu).* = ints.H.?.at(mu, nu);
     };
 
     var exch_factor: T = if (opt.generalized) 1 else 0.5;
@@ -441,25 +485,33 @@ fn buildFockMatrix(comptime T: type, F: *Matrix(T), ints: Integrals(T), P: Matri
         exch_factor *= pot.a_x;
     }
 
+    if (ints.B) |B| {
+        ws.ri.?.contractCoulomb(ws.F, B, ws.P.*);
+
+        if (exch_factor > 0) {
+            ws.ri.?.contractExchange(ws.F, B, ws.C.*, exch_factor);
+        }
+    }
+
+    if (ints.g) |g| {
+        contractTwoElectronFock(T, ws.F, g, ws.P.*, exch_factor);
+    }
+
     if (opt.integral_direct) {
         if (opt.generalized) {
-            ints.sys.fockGhf(F, P, exch_factor, opt.nthreads);
+            ints.sys.fockGhf(ws.F, ws.P.*, exch_factor, opt.nthreads);
         }
 
         if (!opt.generalized) {
-            ints.sys.fockRhf(F, P, exch_factor, opt.nthreads);
+            ints.sys.fockRhf(ws.F, ws.P.*, exch_factor, opt.nthreads);
         }
     }
 
-    if (!opt.integral_direct) {
-        contractTwoElectronFock(T, F, ints.g.?, P, exch_factor);
-    }
-
     if (dft) |pot| {
-        try addDftPotential(T, F, pot, P, ints.sys, gpa);
+        try addDftPotential(T, ws.F, pot, ws.P.*, ints.sys, gpa);
     }
 
-    F.symmetrize();
+    ws.F.symmetrize();
 }
 
 /// Computes the electronic energy expectation value from density, core Hamiltonian, and Fock matrices.
@@ -575,6 +627,25 @@ fn exportMatrices(comptime T: type, io: std.Io, write: Write, C: Matrix(T), P: M
     }
 }
 
+/// Extracts occupied molecular orbitals from a density matrix guess by solving the generalized eigenproblem PS = SC.
+fn extractOrbitalsFromDensity(comptime T: type, C: *Matrix(T), e: *Vector(T), P: Matrix(T), S: Matrix(T), B: *Matrix(T)) !void {
+    @memcpy(B.data, S.data);
+
+    try sygvd(T, e, C, P, B);
+
+    const n = C.shape[0];
+
+    for (0..n) |i| {
+        for (0..n / 2) |j| {
+            const temp = C.at(i, j);
+
+            C.ptr(i, j).* = C.at(i, n - 1 - j);
+
+            C.ptr(i, n - 1 - j).* = temp;
+        }
+    }
+}
+
 /// Solves the self-consistent field equations iteratively using a density-driven approach.
 fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWorkspace(T), dft: ?*DftPotential(T), log: bool, gpa: Allocator) !T {
     const VN = try ints.sys.nrep();
@@ -610,7 +681,7 @@ fn scf(comptime T: type, io: std.Io, opt: Options, ints: Integrals(T), ws: ScfWo
     for (0..opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
-        try buildFockMatrix(T, ws.F, ints, ws.P.*, opt, dft, gpa);
+        try buildFockMatrix(T, ints, ws, opt, dft, gpa);
 
         e_new = calculateElectronicEnergy(T, ints, ws.F.*, ws.P.*, dft) + VN;
 

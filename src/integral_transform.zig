@@ -9,6 +9,7 @@ const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 
 const contract = @import("tensor_contraction.zig").contract;
+const gemm = @import("linear_algebra.zig").gemm;
 
 /// Transforms a one-electron operator from the spatial atomic orbital basis to the atomic spin-orbital basis.
 pub fn ao2as_1e(comptime T: type, A_as: *Matrix(T), A_ao: Matrix(T)) void {
@@ -230,6 +231,78 @@ pub fn ao2mo_oovv(comptime T: type, g_oovv: *Tensor(T, 4), g_ao: Tensor(T, 4), C
     for (0..nocc) |i| for (0..nocc) |j| for (0..nvir) |a| for (0..N) |sigma| for (nocc..N) |b| {
         addTo(g_oovv.ptr(.{ i, j, a, b - nocc }), C.at(sigma, b), g_3mo.at(.{ i, j, a, sigma }));
     };
+}
+
+/// Transforms three-center density fitting tensors from the atomic orbital basis to occupied-virtual molecular orbitals.
+pub fn ao2mo_ov_3c(comptime T: type, B_mo: *Tensor(T, 3), B_ao: Tensor(T, 3), C: Matrix(T), gpa: Allocator) !void {
+    const nocc, const nvir = .{ B_mo.shape[0], B_mo.shape[1] };
+
+    const nbf, const naux = .{ B_ao.shape[0], B_ao.shape[2] };
+
+    const nblocks: usize = if (C.shape[0] != nbf) 2 else 1;
+
+    var C_occ = try Matrix(T).init(nbf, nocc, gpa);
+    defer C_occ.deinit(gpa);
+
+    var C_vir = try Matrix(T).init(nbf, nvir, gpa);
+    defer C_vir.deinit(gpa);
+
+    var B1 = try Tensor(T, 3).initZero(.{ nocc, nbf, naux }, gpa);
+    defer B1.deinit(gpa);
+
+    const B_mat = B_ao.matrixView(nbf, nbf * naux);
+
+    var B1_mat = B1.matrixView(nocc, nbf * naux);
+
+    B_mo.zero();
+
+    for (0..nblocks) |b| {
+        const row_off = b * nbf;
+
+        for (0..nbf) |mu| {
+            for (0..nocc) |i| {
+                C_occ.ptr(mu, i).* = C.at(row_off + mu, i);
+            }
+
+            for (0..nvir) |a| {
+                C_vir.ptr(mu, a).* = C.at(row_off + mu, nocc + a);
+            }
+        }
+
+        if (comptime T == f64) {
+            gemm(T, &B1_mat, C_occ, B_mat, 1, 0, true, false);
+
+            for (0..nocc) |i| {
+                const B1_i = B1.slice(i).asMatrix();
+
+                var B_mo_i = B_mo.slice(i).asMatrix();
+
+                gemm(T, &B_mo_i, C_vir, B1_i, 1, 1, true, false);
+            }
+        }
+
+        if (comptime T != f64) {
+            for (0..nocc) |i| for (0..nbf) |nu| for (0..naux) |P| {
+                var sum = Value(T).fromFloat(0);
+
+                for (0..nbf) |mu| {
+                    sum = sum.add(Value(T).init(C_occ.at(mu, i)).mul(Value(T).init(B_ao.at(.{ mu, nu, P }))));
+                }
+
+                B1.ptr(.{ i, nu, P }).* = sum.val;
+            };
+
+            for (0..nocc) |i| for (0..nvir) |a| for (0..naux) |P| {
+                var sum = Value(T).init(B_mo.at(.{ i, a, P }));
+
+                for (0..nbf) |nu| {
+                    sum = sum.add(Value(T).init(C_vir.at(nu, a)).mul(Value(T).init(B1.at(.{ i, nu, P }))));
+                }
+
+                B_mo.ptr(.{ i, a, P }).* = sum.val;
+            };
+        }
+    }
 }
 
 /// Transforms a one-electron operator matrix from the molecular orbital basis back to the atomic orbital basis.

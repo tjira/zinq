@@ -749,6 +749,12 @@ fn checkConfigurationInteraction(opt: configuration_interaction.Options) !void {
 
 /// Validates self-consistent field convergence parameters, spin multiplicity, and integral direct settings.
 fn checkHartreeFock(opt: hartree_fock.Options) !void {
+    if (opt.integral_direct and opt.aux_basis != null) {
+        std.log.err("INTEGRAL DIRECT AND DENSITY FITTING (RI) ARE MUTUALLY EXCLUSIVE", .{});
+
+        return error.InvalidInput;
+    }
+
     if (opt.integral_direct) {
         if (opt.response != null) {
             std.log.err("CPHF RESPONSE PROPERTIES ARE NOT SUPPORTED FOR INTEGRAL DIRECT HARTREE-FOCK", .{});
@@ -918,15 +924,35 @@ fn checkMolecularIntegrals(opt: molecular_integrals.Options) !void {
         return error.InvalidInput;
     }
 
+    const is_c_ri = opt.calculate.coulomb_ri or opt.calculate.coulomb_ri_d1;
+    const is_c_2c = opt.calculate.coulomb_2c or opt.calculate.coulomb_2c_d1;
+    const is_c_3c = opt.calculate.coulomb_3c or opt.calculate.coulomb_3c_d1;
+
+    const needs_aux = is_c_ri or is_c_2c or is_c_3c;
+
+    if (needs_aux and opt.aux_basis == null) {
+        std.log.err("DENSITY FITTING REQUIRES AN AUXILIARY BASIS", .{});
+
+        return error.InvalidInput;
+    }
+
     inline for (@typeInfo(@TypeOf(opt.calculate)).@"struct".field_names) |name| {
-        const upper = comptime switch (name[0]) {
-            'c' => "COULOMB",
-            'h' => "HAMILTONIAN",
-            'k' => "KINETIC",
-            'n' => "NUCLEAR",
-            'o' => "OVERLAP",
-            else => unreachable,
+        const upper = comptime blk: {
+            if (std.mem.indexOf(u8, name, "_ri") != null) break :blk "FITTING";
+
+            if (std.mem.indexOf(u8, name, "_2c") != null) break :blk "COULOMB 2-CENTER";
+            if (std.mem.indexOf(u8, name, "_3c") != null) break :blk "COULOMB 3-CENTER";
+
+            break :blk switch (name[0]) {
+                'c' => "COULOMB",
+                'h' => "HAMILTONIAN",
+                'k' => "KINETIC",
+                'n' => "NUCLEAR",
+                'o' => "OVERLAP",
+                else => unreachable,
+            };
         };
+
         const kind = comptime if (std.mem.endsWith(u8, name, "_d1")) "DERIVATIVE" else "INTEGRALS";
 
         const target_name = upper ++ " " ++ kind;
@@ -952,6 +978,26 @@ fn checkMolecularIntegrals(opt: molecular_integrals.Options) !void {
 fn checkMollerPlesset(opt: moller_plesset.Options) !void {
     if (opt.hartree_fock.integral_direct) {
         std.log.err("INTEGRAL DIRECT CALCULATION IS NOT SUPPORTED FOR MOLLER-PLESSET PERTURBATION THEORY", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.hartree_fock.aux_basis != null and opt.aux_basis == null) {
+        std.log.err("HARTREE-FOCK USES AUX_BASIS BUT MPPT AUX_BASIS IS NOT SPECIFIED", .{});
+
+        return error.InvalidInput;
+    }
+
+    if (opt.hartree_fock.aux_basis != null and opt.aux_basis != null) {
+        if (!std.mem.eql(u8, opt.hartree_fock.aux_basis.?, opt.aux_basis.?)) {
+            std.log.err("HARTREE-FOCK AUX_BASIS AND MPPT AUX_BASIS MUST MATCH", .{});
+
+            return error.InvalidInput;
+        }
+    }
+
+    if (opt.aux_basis != null and opt.order > 2) {
+        std.log.err("RI APPROXIMATION IS CURRENTLY ONLY SUPPORTED FOR SECOND-ORDER MOLLER-PLESSET (MP2)", .{});
 
         return error.InvalidInput;
     }

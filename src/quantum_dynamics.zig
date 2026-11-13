@@ -253,7 +253,7 @@ fn History(comptime T: type) type {
             if (self.flux_acc) |*accum| {
                 const flux_opt, const phases = .{ opt.flux_analysis.?, self.flux_phs.? };
 
-                const n_energies, const n_states, const n_grid = .{ phases.length(), wfn.W.nrow(), wfn.W.ncol() };
+                const n_energies, const n_states = .{ phases.length(), wfn.W.nrow() };
 
                 for (0..n_energies) |ei| {
                     const E = FluxAnalysis(T).getCollisionEnergy(flux_opt, ei) + self.e_thrs;
@@ -262,11 +262,7 @@ fn History(comptime T: type) type {
                 }
 
                 for (0..n_states) |f| {
-                    const offset = f * n_energies * n_grid;
-
-                    const slice = accum.data[offset .. offset + n_energies * n_grid];
-
-                    var a_mat = Matrix(Complex(T)).fromSlice(n_energies, n_grid, slice);
+                    var a_mat = accum.sliceRows(f * n_energies, n_energies);
 
                     geru(Complex(T), &a_mat, phases, wfn.W.row(f), Complex(T).init(1, 0));
                 }
