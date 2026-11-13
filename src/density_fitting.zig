@@ -279,53 +279,6 @@ pub fn RiWorkspace(comptime T: type) type {
             }
         }
 
-        /// Transforms 3-center fitting tensors to half-MO basis scratch buffers.
-        pub fn updateExchange(self: *@This(), B: Tensor(T, 3), C: Matrix(T)) void {
-            const nbf, const naux = .{ B.shape[0], B.shape[2] };
-
-            const nspin, const nocc = .{ self.C_occ.?.shape[0], self.C_occ.?.shape[1] };
-
-            if (nspin == nbf) {
-                for (0..nbf) |nu| {
-                    for (0..nocc) |i| {
-                        self.C_occ.?.ptr(nu, i).* = C.at(nu, i);
-                    }
-                }
-
-                for (0..nbf) |mu| {
-                    const B_mu = B.slice(mu).asMatrix();
-
-                    var W_mu = self.W_exc.?.rowMatrix(mu, nocc, naux);
-
-                    gemm(T, &W_mu, self.C_occ.?, B_mu, 1, 0, true, false);
-                }
-            }
-
-            if (nspin != nbf) {
-                for (0..2 * nbf) |nu| {
-                    for (0..nocc) |i| {
-                        self.C_occ.?.ptr(nu, i).* = C.at(nu, i);
-                    }
-                }
-
-                const C_occ_alpha = self.C_occ.?.sliceRows(0, nbf);
-
-                const C_occ_beta = self.C_occ.?.sliceRows(nbf, nbf);
-
-                for (0..nbf) |mu| {
-                    const B_mu = B.slice(mu).asMatrix();
-
-                    var W_a_mu = self.W_exc.?.rowMatrix(mu, nocc, naux);
-
-                    gemm(T, &W_a_mu, C_occ_alpha, B_mu, 1, 0, true, false);
-
-                    var W_b_mu = self.W_exc.?.rowMatrix(nbf + mu, nocc, naux);
-
-                    gemm(T, &W_b_mu, C_occ_beta, B_mu, 1, 0, true, false);
-                }
-            }
-        }
-
         /// Contracts 3-center and 2-center derivative integrals with density and fitting coefficients for gradients.
         pub fn contractGradient(self: *@This(), G: *Matrix(T), ints: anytype, C: Matrix(T), P: Matrix(T), exch_factor: T, gpa: Allocator) !void {
             const nbf, const naux, const nat = .{ ints.B.?.shape[0], ints.J.?.nrow(), G.nrow() };
@@ -452,7 +405,89 @@ pub fn RiWorkspace(comptime T: type) type {
                 G.ptr(A_atom, alpha).* += term1 + term2;
             };
         }
+
+        /// Transforms 3-center fitting tensors to half-MO basis scratch buffers.
+        pub fn updateExchange(self: *@This(), B: Tensor(T, 3), C: Matrix(T)) void {
+            const nbf, const naux = .{ B.shape[0], B.shape[2] };
+
+            const nspin, const nocc = .{ self.C_occ.?.shape[0], self.C_occ.?.shape[1] };
+
+            if (nspin == nbf) {
+                for (0..nbf) |nu| {
+                    for (0..nocc) |i| {
+                        self.C_occ.?.ptr(nu, i).* = C.at(nu, i);
+                    }
+                }
+
+                for (0..nbf) |mu| {
+                    const B_mu = B.slice(mu).asMatrix();
+
+                    var W_mu = self.W_exc.?.rowMatrix(mu, nocc, naux);
+
+                    gemm(T, &W_mu, self.C_occ.?, B_mu, 1, 0, true, false);
+                }
+            }
+
+            if (nspin != nbf) {
+                for (0..2 * nbf) |nu| {
+                    for (0..nocc) |i| {
+                        self.C_occ.?.ptr(nu, i).* = C.at(nu, i);
+                    }
+                }
+
+                const C_occ_alpha = self.C_occ.?.sliceRows(0, nbf);
+
+                const C_occ_beta = self.C_occ.?.sliceRows(nbf, nbf);
+
+                for (0..nbf) |mu| {
+                    const B_mu = B.slice(mu).asMatrix();
+
+                    var W_a_mu = self.W_exc.?.rowMatrix(mu, nocc, naux);
+
+                    gemm(T, &W_a_mu, C_occ_alpha, B_mu, 1, 0, true, false);
+
+                    var W_b_mu = self.W_exc.?.rowMatrix(nbf + mu, nocc, naux);
+
+                    gemm(T, &W_b_mu, C_occ_beta, B_mu, 1, 0, true, false);
+                }
+            }
+        }
     };
+}
+
+/// Evaluates and assigns auxiliary Coulomb integrals and derivatives for density fitting.
+pub fn buildFittingIntegrals(comptime T: type, io: std.Io, ints: anytype, aux_basis: []const u8, needs_derivs: bool, nthreads: usize, gpa: Allocator) !void {
+    const aux_path = try exportAuxIfBuiltin(io, aux_basis, gpa);
+
+    defer if (std.mem.startsWith(u8, aux_basis, "builtin:")) {
+        std.Io.Dir.cwd().deleteFile(io, aux_path) catch {};
+    };
+
+    if (ints.J == null) {
+        ints.J = try ints.sys.coulomb2c(aux_path, nthreads, gpa);
+    }
+
+    if (ints.I == null and (ints.B == null or needs_derivs)) {
+        ints.I = try ints.sys.coulomb3c(aux_path, nthreads, gpa);
+    }
+
+    if (ints.B == null) {
+        var J_inv_half = try invertMetric(T, ints.J.?, gpa);
+        defer J_inv_half.deinit(gpa);
+
+        ints.B = try Tensor(T, 3).initZero(ints.I.?.shape, gpa);
+        contractMetric(T, &ints.B.?, ints.I.?, J_inv_half);
+    }
+
+    if (needs_derivs) {
+        if (ints.dJ == null) {
+            ints.dJ = try ints.sys.coulomb2cD1(aux_path, nthreads, gpa);
+        }
+
+        if (ints.dI == null) {
+            ints.dI = try ints.sys.coulomb3cD1(aux_path, nthreads, gpa);
+        }
+    }
 }
 
 /// Evaluates and contracts auxiliary Coulomb integrals to form the atomic orbital fitting tensor.

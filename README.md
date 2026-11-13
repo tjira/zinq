@@ -45,10 +45,10 @@ Zinq provides tools for both time-independent and time-dependent quantum mechani
 ### Time-Independent Quantum Mechanics
 
 * **Electronic Structure & Correlation**  
-  RHF/GHF (DIIS), Kohn–Sham DFT (LDA/GGA/mGGA/hybrids), arbitrary-order MPn, CI, and CASSCF.
+  RHF/GHF (DIIS/RI), Kohn–Sham DFT (LDA/GGA/mGGA/hybrids), MPn (RI-MP2), CI, and CASSCF.
 
 * **Integrals, Derivatives & Vibrations**  
-  1e/2e Gaussian integrals, geometric derivatives, gradients, Hessians, and vibrational analysis.
+  1e/2e/RI Gaussian integrals, geometric derivatives, gradients, Hessians, and vibrational analysis.
 
 * **Geometry & Chemical Bonding**  
   BFGS/steepest descent optimization, Mulliken/Löwdin populations, and Mayer/Wiberg bond orders.

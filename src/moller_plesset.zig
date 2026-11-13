@@ -19,7 +19,7 @@ const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_oovv = @import("integral_transform.zig").ao2mo_oovv;
 const ao2mo_ov_3c = @import("integral_transform.zig").ao2mo_ov_3c;
-const buildFittingTensor = @import("density_fitting.zig").buildFittingTensor;
+const buildFittingIntegrals = @import("density_fitting.zig").buildFittingIntegrals;
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
 const buildMetricDerivKernel = @import("density_fitting.zig").buildMetricDerivKernel;
 const evaluateFittingTensorDeriv = @import("density_fitting.zig").evaluateFittingTensorDeriv;
@@ -166,6 +166,12 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
         gpa.free(g);
     };
+
+    const analytic_grad = if (opt.gradient) |g| g == .analytic else false;
+
+    if (opt.aux_basis) |aux| {
+        try buildFittingIntegrals(T, io, &hfres.ints, aux, analytic_grad, opt.nthreads, gpa);
+    }
 
     if (opt.gradient) |g| switch (g) {
         .analytic => {
@@ -549,14 +555,7 @@ fn evaluateEnergyCorrection(comptime T: type, m: usize, H_dets: Matrix(T), c_det
 
 /// Evaluates the second-order Møller-Plesset correlation energy and gradient with density fitting.
 fn evaluateRiMp2(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockResult(T), energy: []T, grad: []Matrix(T), grads: ?[]Matrix(T), log: bool, gpa: Allocator) !void {
-    var B_local: ?Tensor(T, 3) = null;
-    defer if (B_local) |*b| b.deinit(gpa);
-
-    const B_ao = if (hfres.ints.B) |b| b else blk: {
-        B_local = try buildFittingTensor(T, io, hfres.ints.sys, opt.aux_basis.?, opt.nthreads, gpa);
-
-        break :blk B_local.?;
-    };
+    const B_ao = hfres.ints.B.?;
 
     const generalized = opt.hartree_fock.generalized;
 
