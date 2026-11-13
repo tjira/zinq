@@ -15,7 +15,7 @@
 - **Formatting:** Write clean, readable code. Assume `zig fmt` will be run on all outputs; do not obsess over manual whitespace alignment. 
 - **File Structure:** Define all `Options` structs at the very top. Following that, strictly order the file: public structs, private structs, public functions, private functions.
 - **Struct Organization:** State/fields first, `init`/`deinit` functions second, then public functions, then private functions.
-- **Function Design:** Minimize function arguments (group into structs if needed) and strictly limit the number of local variables in a given scope. Keep signatures on a single line where practical, but prioritize readability.
+- **Function Design:** Minimize function arguments and strictly limit the number of local variables in a given scope. Keep signatures on a single line where practical, but prioritize readability.
 - **Documentation:** Every new file, struct, or function needs a physically or mathematically motivated docstring (max ~150 chars). 
 
 ## Documentation & Markdown Style

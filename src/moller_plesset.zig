@@ -126,6 +126,8 @@ pub fn calculateNuclearGradient(comptime T: type, order: usize, hfres: HartreeFo
         };
     }
 
+    errdefer for (0..order + 1) |k| grads[k].deinit(gpa);
+
     if (hfres.ints.B == null) {
         try calculateCanonicalMpGradient(T, grads, order, hfres, nocc, generalized, gpa);
     }
@@ -170,11 +172,14 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
             var g0 = try hfres.grad[0].clone(gpa);
             errdefer g0.deinit(gpa);
 
-            grad = try gpa.alloc(Matrix(T), 1);
-
-            grad[0] = g0;
+            const g_arr = try gpa.alloc(Matrix(T), 1);
+            errdefer gpa.free(g_arr);
 
             grads = try calculateNuclearGradient(T, opt.order, hfres, gpa);
+
+            g_arr[0] = g0;
+
+            grad = g_arr;
         },
         .numeric => {},
     };
