@@ -10,6 +10,7 @@ const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
+const MetricDecomposition = @import("density_fitting.zig").MetricDecomposition;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
 const ScalarDual = @import("dual.zig").ScalarDual;
@@ -27,7 +28,6 @@ const evaluateMetricDeriv = @import("density_fitting.zig").evaluateMetricDeriv;
 const gemm = @import("linear_algebra.zig").gemm;
 const generateDets = @import("determinant.zig").generateDets;
 const printf = @import("read_write.zig").printf;
-const syevd = @import("linear_algebra.zig").syevd;
 const transformInts = @import("integral_transform.zig").transformInts;
 
 const AU2CM = @import("constants.zig").AU2CM;
@@ -434,33 +434,10 @@ fn calculateRiMp2Gradient(comptime T: type, grads: []Matrix(T), hfres: HartreeFo
 
     const nmo = hfres.C_mo.shape[0];
 
-    var W_vec = try Vector(T).init(naux, gpa);
-    defer W_vec.deinit(gpa);
+    var decomp = try MetricDecomposition(T).init(J, gpa);
+    defer decomp.deinit(gpa);
 
-    var U_mat = try Matrix(T).init(naux, naux, gpa);
-    defer U_mat.deinit(gpa);
-
-    try syevd(T, &W_vec, &U_mat, J);
-
-    var work = try Matrix(T).init(naux, naux, gpa);
-    defer work.deinit(gpa);
-
-    var J_inv_half = try Matrix(T).initZero(naux, naux, gpa);
-    defer J_inv_half.deinit(gpa);
-
-    for (0..naux) |p| {
-        for (0..naux) |k| {
-            const w_val = W_vec.at(k);
-
-            const scale = if (w_val > 1e-14) 1.0 / @sqrt(w_val) else 0.0;
-
-            work.ptr(p, k).* = U_mat.at(p, k) * scale;
-        }
-    }
-
-    gemm(T, &J_inv_half, work, U_mat, 1, 0, false, true);
-
-    var M_kernel = try buildMetricDerivKernel(T, W_vec, gpa);
+    var M_kernel = try buildMetricDerivKernel(T, decomp.W, gpa);
     defer M_kernel.deinit(gpa);
 
     var dJ_inv_half = try Matrix(T).init(naux, naux, gpa);
@@ -470,9 +447,9 @@ fn calculateRiMp2Gradient(comptime T: type, grads: []Matrix(T), hfres: HartreeFo
     defer dB_ao.deinit(gpa);
 
     for (0..3 * hfres.ints.sys.atoms.len) |coord| {
-        try evaluateMetricDeriv(T, &dJ_inv_half, dJ.slice(coord).asMatrix(), U_mat, M_kernel, gpa);
+        try evaluateMetricDeriv(T, &dJ_inv_half, dJ.slice(coord).asMatrix(), decomp.U, M_kernel, gpa);
 
-        evaluateFittingTensorDeriv(T, &dB_ao, dI.slice(coord), I_3c, J_inv_half, dJ_inv_half);
+        evaluateFittingTensorDeriv(T, &dB_ao, dI.slice(coord), I_3c, decomp.J_inv_half, dJ_inv_half);
 
         var B_d = try Tensor(ScalarDual(T), 3).init(B.shape, gpa);
         defer B_d.deinit(gpa);

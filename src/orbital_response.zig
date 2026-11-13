@@ -7,6 +7,7 @@ const Allocator = std.mem.Allocator;
 const Diis = @import("diis.zig").Diis;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
+const MetricDecomposition = @import("density_fitting.zig").MetricDecomposition;
 const RiFlags = @import("density_fitting.zig").RiFlags;
 const RiWorkspace = @import("density_fitting.zig").RiWorkspace;
 const Tensor = @import("tensor.zig").Tensor;
@@ -17,10 +18,8 @@ const buildMetricDerivKernel = @import("density_fitting.zig").buildMetricDerivKe
 const contractTwoElectronResponse = @import("two_electron_contraction.zig").contractTwoElectronResponse;
 const evaluateFittingTensorDeriv = @import("density_fitting.zig").evaluateFittingTensorDeriv;
 const evaluateMetricDeriv = @import("density_fitting.zig").evaluateMetricDeriv;
-const gemm = @import("linear_algebra.zig").gemm;
 const mo2ao_1e = @import("integral_transform.zig").mo2ao_1e;
 const printf = @import("read_write.zig").printf;
-const syevd = @import("linear_algebra.zig").syevd;
 
 /// Scratch memory buffers for storing perturbed density, potential, and orbital rotation matrices during CPHF iterations.
 fn CphfWorkspace(comptime T: type) type {
@@ -137,14 +136,11 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
     var ri_ws: ?RiWorkspace(T) = null;
     defer if (ri_ws) |*w| w.deinit(gpa);
 
-    var U_mat: ?Matrix(T) = null;
-    defer if (U_mat) |*m| m.deinit(gpa);
+    var decomp: ?MetricDecomposition(T) = null;
+    defer if (decomp) |*d| d.deinit(gpa);
 
     var M_kernel: ?Matrix(T) = null;
     defer if (M_kernel) |*m| m.deinit(gpa);
-
-    var J_inv_half: ?Matrix(T) = null;
-    defer if (J_inv_half) |*m| m.deinit(gpa);
 
     var dJ_inv_half: ?Matrix(T) = null;
     defer if (dJ_inv_half) |*m| m.deinit(gpa);
@@ -162,30 +158,9 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
         const naux = J.nrow();
 
-        var W_vec = try Vector(T).init(naux, gpa);
-        defer W_vec.deinit(gpa);
+        decomp = try MetricDecomposition(T).init(J, gpa);
 
-        U_mat = try Matrix(T).init(naux, naux, gpa);
-        try syevd(T, &W_vec, &U_mat.?, J);
-
-        var work = try Matrix(T).init(naux, naux, gpa);
-        defer work.deinit(gpa);
-
-        J_inv_half = try Matrix(T).initZero(naux, naux, gpa);
-
-        for (0..naux) |p| {
-            for (0..naux) |k| {
-                const w_val = W_vec.at(k);
-
-                const scale = if (w_val > 1e-14) 1.0 / @sqrt(w_val) else 0.0;
-
-                work.ptr(p, k).* = U_mat.?.at(p, k) * scale;
-            }
-        }
-
-        gemm(T, &J_inv_half.?, work, U_mat.?, 1, 0, false, true);
-
-        M_kernel = try buildMetricDerivKernel(T, W_vec, gpa);
+        M_kernel = try buildMetricDerivKernel(T, decomp.?.W, gpa);
 
         const flags: RiFlags = .{
             .coulomb = true,
@@ -225,9 +200,9 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
             const I_3c = hfres.ints.I.?;
 
-            try evaluateMetricDeriv(T, &dJ_inv_half.?, dJ.slice(c).asMatrix(), U_mat.?, M_kernel.?, gpa);
+            try evaluateMetricDeriv(T, &dJ_inv_half.?, dJ.slice(c).asMatrix(), decomp.?.U, M_kernel.?, gpa);
 
-            evaluateFittingTensorDeriv(T, &dB_ao.?, dI.slice(c), I_3c, J_inv_half.?, dJ_inv_half.?);
+            evaluateFittingTensorDeriv(T, &dB_ao.?, dI.slice(c), I_3c, decomp.?.J_inv_half, dJ_inv_half.?);
 
             ri_ws.?.contractFockDerivative(&ws.F_x, B, dB_ao.?, P, C);
         }

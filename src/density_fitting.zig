@@ -23,6 +23,57 @@ pub const RiFlags = struct {
     response: bool = false,
 };
 
+/// Spectral decomposition and inverse square root of the auxiliary Coulomb metric.
+pub fn MetricDecomposition(comptime T: type) type {
+    return struct {
+        J_inv_half: Matrix(T),
+
+        U: Matrix(T),
+        W: Vector(T),
+
+        /// Decomposes the auxiliary Coulomb metric into eigenvectors, eigenvalues, and inverse square root.
+        pub fn init(J: Matrix(T), gpa: Allocator) !@This() {
+            const naux = J.nrow();
+
+            var W = try Vector(T).init(naux, gpa);
+            errdefer W.deinit(gpa);
+
+            var U = try Matrix(T).init(naux, naux, gpa);
+            errdefer U.deinit(gpa);
+
+            var work = try Matrix(T).init(naux, naux, gpa);
+            defer work.deinit(gpa);
+
+            var J_inv_half = try Matrix(T).initZero(naux, naux, gpa);
+            errdefer J_inv_half.deinit(gpa);
+
+            try syevd(T, &W, &U, J);
+
+            for (0..naux) |p| {
+                for (0..naux) |k| {
+                    const w_val = W.at(k);
+
+                    const scale = if (w_val > 1e-14) 1.0 / @sqrt(w_val) else 0.0;
+
+                    work.ptr(p, k).* = U.at(p, k) * scale;
+                }
+            }
+
+            gemm(T, &J_inv_half, work, U, 1, 0, false, true);
+
+            return .{ .J_inv_half = J_inv_half, .U = U, .W = W };
+        }
+
+        /// Deallocates the decomposed metric matrices and eigenvalue vector.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.J_inv_half.deinit(gpa);
+
+            self.U.deinit(gpa);
+            self.W.deinit(gpa);
+        }
+    };
+}
+
 /// Preallocated scratch buffers and auxiliary metric matrices for density fitting evaluation.
 pub fn RiWorkspace(comptime T: type) type {
     return struct {
@@ -476,6 +527,7 @@ pub fn buildFittingIntegrals(comptime T: type, io: std.Io, ints: anytype, aux_ba
         defer J_inv_half.deinit(gpa);
 
         ints.B = try Tensor(T, 3).initZero(ints.I.?.shape, gpa);
+
         contractMetric(T, &ints.B.?, ints.I.?, J_inv_half);
     }
 
@@ -488,31 +540,6 @@ pub fn buildFittingIntegrals(comptime T: type, io: std.Io, ints: anytype, aux_ba
             ints.dI = try ints.sys.coulomb3cD1(aux_path, nthreads, gpa);
         }
     }
-}
-
-/// Evaluates and contracts auxiliary Coulomb integrals to form the atomic orbital fitting tensor.
-pub fn buildFittingTensor(comptime T: type, io: std.Io, sys: anytype, aux_basis: []const u8, nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
-    const aux_path = try exportAuxIfBuiltin(io, aux_basis, gpa);
-
-    defer if (std.mem.startsWith(u8, aux_basis, "builtin:")) {
-        std.Io.Dir.cwd().deleteFile(io, aux_path) catch {};
-    };
-
-    var J_aux = try sys.coulomb2c(aux_path, nthreads, gpa);
-    defer J_aux.deinit(gpa);
-
-    var J_inv_half = try invertMetric(T, J_aux, gpa);
-    defer J_inv_half.deinit(gpa);
-
-    var I_3c = try sys.coulomb3c(aux_path, nthreads, gpa);
-    defer I_3c.deinit(gpa);
-
-    var B_ao = try Tensor(T, 3).initZero(I_3c.shape, gpa);
-    errdefer B_ao.deinit(gpa);
-
-    contractMetric(T, &B_ao, I_3c, J_inv_half);
-
-    return B_ao;
 }
 
 /// Evaluates Daleckii-Krein kernel matrix for the matrix inverse square root derivative.
@@ -589,33 +616,12 @@ pub fn evaluateMetricDeriv(comptime T: type, dJ_inv_half: *Matrix(T), dJ: Matrix
 
 /// Inverts the auxiliary Coulomb metric matrix and evaluates its symmetric inverse square root via diagonalization.
 pub fn invertMetric(comptime T: type, J: Matrix(T), gpa: Allocator) !Matrix(T) {
-    const naux = J.nrow();
+    var decomp = try MetricDecomposition(T).init(J, gpa);
 
-    var W = try Vector(T).init(naux, gpa);
-    defer W.deinit(gpa);
-
-    var U = try Matrix(T).init(naux, naux, gpa);
-    defer U.deinit(gpa);
-
-    var work = try Matrix(T).init(naux, naux, gpa);
-    defer work.deinit(gpa);
-
-    var J_inv_half = try Matrix(T).initZero(naux, naux, gpa);
-    errdefer J_inv_half.deinit(gpa);
-
-    try syevd(T, &W, &U, J);
-
-    for (0..naux) |p| {
-        for (0..naux) |k| {
-            const w_val = W.at(k);
-
-            const scale = if (w_val > 1e-14) 1.0 / @sqrt(w_val) else 0.0;
-
-            work.ptr(p, k).* = U.at(p, k) * scale;
-        }
+    defer {
+        decomp.U.deinit(gpa);
+        decomp.W.deinit(gpa);
     }
 
-    gemm(T, &J_inv_half, work, U, 1, 0, false, true);
-
-    return J_inv_half;
+    return decomp.J_inv_half;
 }
