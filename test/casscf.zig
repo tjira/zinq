@@ -41,3 +41,42 @@ test "CASSCF(2, 2) on Water with Analytical Gradient (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
 }
+
+test "CASSCF(2, 2) on Water with RI Analytical Gradient (STO-3G)" {
+    const opt = zinq.casscf.Options{
+        .hartree_fock = .{
+            .system = "example/molecule/water.xyz",
+            .basis = "builtin:sto-3g",
+            .aux_basis = "builtin:cc-pvdz-rifit",
+        },
+        .aux_basis = "builtin:cc-pvdz-rifit",
+        .active_electrons = 2,
+        .active_orbitals = 2,
+        .nstate = 2,
+        .gradient = .{ .analytic = .{} },
+    };
+
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+        -0.0042269612574142, -0.0014665515246569, -0.0016899950586880,
+         0.0024377319100645, -0.0009556526996609,  0.0014946669908785,
+         0.0017892293475791,  0.0024222042237652,  0.0001953280677754,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-74.9614650952427000, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-74.6004456626998100, res.energy[1], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}

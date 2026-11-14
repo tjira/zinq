@@ -207,3 +207,13 @@ $$
 $$
 
 Combining the derivative fitting tensor with first-order orbital responses $\partial\mathbf{C}/\partial X$ and $\partial\boldsymbol{\epsilon}/\partial X$ obtained from Coupled-Perturbed Hartree–Fock equations allows the exact evaluation of the RI-MP2 analytical nuclear gradient via the dual-number boundary wrapper approach. For each Cartesian coordinate $X$, the unperturbed tensors and their first derivatives are packaged into first-order dual numbers as $\mathbf{B}_d=\mathbf{B}+\frac{\partial\mathbf{B}}{\partial X}\epsilon$, $\mathbf{C}_d=\mathbf{C}+\frac{\partial\mathbf{C}}{\partial X}\epsilon$, and $\boldsymbol{\epsilon}_d=\boldsymbol{\epsilon}+\frac{\partial\boldsymbol{\epsilon}}{\partial X}\epsilon$. Evaluating the RI-MP2 correlation energy function directly with these dual tensors automatically yields $E_d=E_{\text{corr}}^{\text{RI-MP2}}+\frac{\partial E_{\text{corr}}^{\text{RI-MP2}}}{\partial X}\epsilon$, extracting the exact analytical correlation energy gradient from the dual component without constructing four-center integral derivatives or unrelaxed correlation density matrices.
+
+### 8. Higher-Order Perturbation Theory with Density Fitting
+
+For higher perturbation orders such as MP3 and MP4, the correlation energy corrections are evaluated by applying Rayleigh–Schrödinger perturbation theory in the Slater determinant basis. In the density fitting formulation, the four-center two-electron integrals entering the determinant Hamiltonian matrix $\mathbf{H}_{\text{dets}}$ are reconstructed directly from the molecular orbital three-center fitting tensor as
+
+$$
+\langle pq|rs\rangle\approx\sum_Q B_{pr,Q}B_{qs,Q}
+$$
+
+which bypasses the construction of full four-center repulsion tensors while rigorously preserving the perturbation expansion. Analytical nuclear gradients for arbitrary perturbation orders are evaluated by promoting the core Hamiltonian, molecular orbital coefficients, orbital energies, and three-center fitting tensors to first-order dual numbers $\tilde{\mathbf{H}}$, $\tilde{\mathbf{C}}$, $\tilde{\boldsymbol{\epsilon}}$, and $\tilde{\mathbf{B}}$. Evaluating the determinant Hamiltonian matrix and Rayleigh–Schrödinger recurrence relations in dual arithmetic extracts the exact analytical nuclear gradients for arbitrary orders $n \ge 3$ directly from the dual component of the $n$-th order correlation energy.

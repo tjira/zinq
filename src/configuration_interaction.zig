@@ -9,6 +9,7 @@ const Allocator = std.mem.Allocator;
 const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
+const Integrals = @import("molecular_integrals.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
@@ -17,8 +18,12 @@ const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
+const ao2mo_1e = @import("integral_transform.zig").ao2mo_1e;
 const applySpinPenalty = @import("slater_condon.zig").applySpinPenalty;
+const buildFittingIntegrals = @import("density_fitting.zig").buildFittingIntegrals;
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
+const calculateCanonicalCiGradient = @import("ci_gradient.zig").calculateCanonicalCiGradient;
+const calculateRiCiGradient = @import("ci_gradient.zig").calculateRiCiGradient;
 const generateCasDets = @import("determinant.zig").generateCasDets;
 const generateDets = @import("determinant.zig").generateDets;
 const printDeterminants = @import("determinant.zig").printDeterminants;
@@ -26,9 +31,11 @@ const printf = @import("read_write.zig").printf;
 const slater = @import("slater_condon.zig").slater;
 const syevd = @import("linear_algebra.zig").syevd;
 const transformInts = @import("integral_transform.zig").transformInts;
+const transformIntsRi = @import("integral_transform.zig").transformIntsRi;
 
 /// Configurations for CI determinant subspaces, active spaces, optimization, and derivative settings.
 pub const Options = struct {
+    aux_basis: ?[]const u8 = null,
     frequency: ?FrequencyOptions = null,
     gradient: ?GradientOptions = null,
     hartree_fock: HartreeFockOptions,
@@ -257,6 +264,78 @@ pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, det
     return .{ E, C_ci };
 }
 
+/// Computes CI state energies and coefficients using density fitting for active-space integrals.
+pub fn computeCiRi(comptime T: type, dets: []const []const usize, C: Matrix(T), H_ao: Matrix(T), B_mo: Tensor(T, 3), VN: T, penalty: ?f64, s2_target: f64, ncore: usize, nact: usize, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+    const nocc = ncore + nact;
+    const nsp = 2 * nocc;
+    const naux = B_mo.shape[2];
+
+    var h_mo = try Matrix(T).init(C.ncol(), C.ncol(), gpa);
+    defer h_mo.deinit(gpa);
+
+    ao2mo_1e(T, &h_mo, H_ao, C);
+
+    var h_ms = try Matrix(T).initZero(nsp, nsp, gpa);
+    defer h_ms.deinit(gpa);
+
+    for (0..nocc) |p| for (0..nocc) |q| {
+        h_ms.ptr(2 * p, 2 * q).* = h_mo.at(p, q);
+        h_ms.ptr(2 * p + 1, 2 * q + 1).* = h_mo.at(p, q);
+    };
+
+    var g_ms = try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer g_ms.deinit(gpa);
+
+    for (0..nocc) |p| for (0..nocc) |r| {
+        for (0..nocc) |q| for (0..nocc) |s| {
+            var val: T = 0;
+
+            for (0..naux) |P| {
+                val += B_mo.at(.{ p, r, P }) * B_mo.at(.{ q, s, P });
+            }
+
+            g_ms.ptr(.{ 2 * p + 0, 2 * q + 0, 2 * r + 0, 2 * s + 0 }).* = val;
+            g_ms.ptr(.{ 2 * p + 0, 2 * q + 1, 2 * r + 0, 2 * s + 1 }).* = val;
+            g_ms.ptr(.{ 2 * p + 1, 2 * q + 0, 2 * r + 1, 2 * s + 0 }).* = val;
+            g_ms.ptr(.{ 2 * p + 1, 2 * q + 1, 2 * r + 1, 2 * s + 1 }).* = val;
+        };
+    };
+
+    var H_ci = try buildHamiltonianMatrix(T, dets, h_ms, g_ms, gpa);
+    defer H_ci.deinit(gpa);
+
+    var H_orig = if (penalty != null) try Matrix(T).init(dets.len, dets.len, gpa) else undefined;
+    defer if (penalty != null) H_orig.deinit(gpa);
+
+    if (penalty) |pen| {
+        @memcpy(H_orig.data, H_ci.data);
+
+        applySpinPenalty(T, &H_ci, dets, pen, s2_target);
+    }
+
+    var E, var C_ci = try solveEigenvalueProblem(T, H_ci, VN, gpa);
+
+    errdefer {
+        E.deinit(gpa);
+
+        C_ci.deinit(gpa);
+    }
+
+    if (penalty != null) for (0..E.length()) |k| {
+        var phys_e: T = 0;
+
+        for (0..dets.len) |i| for (0..dets.len) |j| {
+            const c_prod = Value(T).init(C_ci.at(i, k)).mul(Value(T).init(C_ci.at(j, k)));
+
+            phys_e = Value(T).init(phys_e).add(c_prod.mul(Value(T).init(H_orig.at(i, j)))).val;
+        };
+
+        E.ptr(k).* = Value(T).init(phys_e).add(Value(T).init(VN)).val;
+    };
+
+    return .{ E, C_ci };
+}
+
 /// Solves the Configuration Interaction Hamiltonian eigenvalue problem over the determinant space.
 pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), log: bool, gpa: Allocator) !Result(T) {
     _ = sys;
@@ -337,7 +416,21 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     const io_ci = if (log) io else null;
 
-    var E, var C_ci = try computeCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
+    const analytic_grad = if (opt.gradient) |g| g == .analytic else false;
+
+    if (opt.aux_basis) |aux| {
+        try buildFittingIntegrals(T, io, &hfres.ints, aux, analytic_grad, opt.nthreads, gpa);
+    }
+
+    var E: Vector(T), var C_ci: Matrix(T) = .{ undefined, undefined };
+
+    if (opt.aux_basis == null) {
+        E, C_ci = try computeCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
+    }
+
+    if (opt.aux_basis != null) {
+        E, C_ci = try computeCiWithRi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
+    }
 
     errdefer {
         E.deinit(gpa);
@@ -382,7 +475,17 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     }
 
     if (opt.gradient) |g| switch (g) {
-        .analytic => |a| grad = try calculateNuclearGradient(T, hfres, C_ci, dets, a.states orelse &[_]u32{0}, gpa),
+        .analytic => |a| {
+            const states = a.states orelse &[_]u32{0};
+
+            if (opt.aux_basis == null) {
+                grad = try calculateCanonicalCiGradient(T, hfres, C_ci, dets.items, states, gpa);
+            }
+
+            if (opt.aux_basis != null) {
+                grad = try calculateRiCiGradient(T, hfres, C_ci, dets.items, states, gpa);
+            }
+        },
         .numeric => {},
     };
 
@@ -415,70 +518,66 @@ pub fn solveEigenvalueProblem(comptime T: type, H_ci: Matrix(T), VN: T, gpa: All
     return .{ E, C_ci };
 }
 
-/// Computes analytic nuclear gradients of CI state energies using dual number differentiation.
-fn calculateNuclearGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matrix(T), dets: std.ArrayList([]const usize), states: []const u32, gpa: Allocator) ![]Matrix(T) {
-    const generalized = hfres.ints.sys.nbf != hfres.C_mo.shape[0];
+/// Computes CI state energies and coefficients using resolution of the identity three-center tensors.
+fn computeCiWithRi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: Integrals(T), dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+    var timer = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
 
-    var grads = try gpa.alloc(Matrix(T), states.len);
-    errdefer gpa.free(grads);
+    var h_ms, var g_ms = try transformIntsRi(T, C, ints.H.?, ints.B.?, generalized, gpa);
 
-    var grads_done: usize = 0;
-
-    errdefer for (0..grads_done) |k| grads[k].deinit(gpa);
-
-    for (0..states.len) |idx| {
-        grads[idx] = try hfres.ints.sys.nuclearRepulsionGradient(gpa);
-
-        grads_done += 1;
+    defer {
+        h_ms.deinit(gpa);
+        g_ms.deinit(gpa);
     }
 
-    var H_d = try Matrix(ScalarDual(T)).init(hfres.ints.H.?.nrow(), hfres.ints.H.?.ncol(), gpa);
-    defer H_d.deinit(gpa);
+    if (io) |out| {
+        try printf(out, " {f}\nCI MATRIX ASSEMBLY TIME:", .{timer.untilNow(out, .real)});
 
-    var g_d = try Tensor(ScalarDual(T), 4).init(hfres.ints.g.?.shape, gpa);
-    defer g_d.deinit(gpa);
-
-    var C_d = try Matrix(ScalarDual(T)).init(hfres.C_mo.nrow(), hfres.C_mo.ncol(), gpa);
-    defer C_d.deinit(gpa);
-
-    for (0..3 * hfres.ints.sys.atoms.len) |coord| {
-        for (0..H_d.nrow()) |mu| for (0..H_d.ncol()) |nu| {
-            H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
-        };
-
-        const nao = g_d.shape[0];
-
-        for (0..nao) |mu| for (0..nao) |lambda| for (0..nao) |nu| for (0..nao) |sigma| {
-            const indices = .{ mu, lambda, nu, sigma };
-
-            const val = hfres.ints.g.?.at(indices);
-
-            g_d.ptr(indices).* = ScalarDual(T).init(val, hfres.ints.dg.?.at(.{ coord, mu, lambda, nu, sigma }));
-        };
-
-        for (0..C_d.nrow()) |mu| for (0..C_d.ncol()) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ coord, mu, p }));
-        };
-
-        var h_ms_d, var g_ms_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, generalized, gpa);
-
-        defer {
-            h_ms_d.deinit(gpa);
-            g_ms_d.deinit(gpa);
-        }
-
-        for (0..dets.items.len) |m| for (m..dets.items.len) |n| {
-            const factor: T = if (m == n) 1 else 2;
-
-            const val = slater(ScalarDual(T), dets.items[m], dets.items[n], h_ms_d, g_ms_d);
-
-            for (states, 0..) |k, k_idx| {
-                grads[k_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, k) * C_ci.at(n, k) * val.der;
-            }
-        };
+        timer = std.Io.Timestamp.now(out, .real);
     }
 
-    return grads;
+    var H_ci = try buildHamiltonianMatrix(T, dets, h_ms, g_ms, gpa);
+    defer H_ci.deinit(gpa);
+
+    var H_orig = if (penalty != null) try Matrix(T).init(dets.len, dets.len, gpa) else undefined;
+    defer if (penalty != null) H_orig.deinit(gpa);
+
+    if (penalty) |pen| {
+        @memcpy(H_orig.data, H_ci.data);
+
+        applySpinPenalty(T, &H_ci, dets, pen, s2_target);
+    }
+
+    if (io) |out| {
+        try printf(out, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(out, .real)});
+
+        timer = std.Io.Timestamp.now(out, .real);
+    }
+
+    var E, var C_ci = try solveEigenvalueProblem(T, H_ci, VN, gpa);
+
+    errdefer {
+        E.deinit(gpa);
+
+        C_ci.deinit(gpa);
+    }
+
+    if (penalty != null) for (0..E.length()) |k| {
+        var phys_e: T = 0;
+
+        for (0..dets.len) |i| for (0..dets.len) |j| {
+            const c_prod = Value(T).init(C_ci.at(i, k)).mul(Value(T).init(C_ci.at(j, k)));
+
+            phys_e = Value(T).init(phys_e).add(c_prod.mul(Value(T).init(H_orig.at(i, j)))).val;
+        };
+
+        E.ptr(k).* = Value(T).init(phys_e).add(Value(T).init(VN)).val;
+    };
+
+    if (io) |out| {
+        try printf(out, " {f}\n", .{timer.untilNow(out, .real)});
+    }
+
+    return .{ E, C_ci };
 }
 
 /// Validates orbital space partitioning consistency for Complete Active Space calculations.

@@ -10,10 +10,8 @@ const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
-const MetricDecomposition = @import("density_fitting.zig").MetricDecomposition;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
-const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
@@ -22,13 +20,13 @@ const ao2mo_oovv = @import("integral_transform.zig").ao2mo_oovv;
 const ao2mo_ov_3c = @import("integral_transform.zig").ao2mo_ov_3c;
 const buildFittingIntegrals = @import("density_fitting.zig").buildFittingIntegrals;
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
-const buildMetricDerivKernel = @import("density_fitting.zig").buildMetricDerivKernel;
-const evaluateFittingTensorDeriv = @import("density_fitting.zig").evaluateFittingTensorDeriv;
-const evaluateMetricDeriv = @import("density_fitting.zig").evaluateMetricDeriv;
+const calculateCanonicalMpGradient = @import("moller_plesset_gradient.zig").calculateCanonicalMpGradient;
+const calculateRiMpGradient = @import("moller_plesset_gradient.zig").calculateRiMpGradient;
 const gemm = @import("linear_algebra.zig").gemm;
 const generateDets = @import("determinant.zig").generateDets;
 const printf = @import("read_write.zig").printf;
 const transformInts = @import("integral_transform.zig").transformInts;
+const transformIntsRi = @import("integral_transform.zig").transformIntsRi;
 
 const AU2CM = @import("constants.zig").AU2CM;
 
@@ -130,7 +128,7 @@ pub fn calculateNuclearGradient(comptime T: type, order: usize, hfres: HartreeFo
     }
 
     if (hfres.ints.B != null) {
-        try calculateRiMp2Gradient(T, grads, hfres, nocc, generalized, gpa);
+        try calculateRiMpGradient(T, grads, order, hfres, nocc, generalized, gpa);
     }
 
     return grads;
@@ -194,14 +192,14 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     }
 
     if (opt.aux_basis != null) {
-        try evaluateRiMp2(T, io, opt, hfres, energy, grad, grads, log, gpa);
+        try evaluateRiMp(T, io, opt, hfres, energy, grad, grads, log, gpa);
     }
 
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = &.{} };
 }
 
 /// Evaluates canonical second-order Møller-Plesset correlation energy from two-electron integrals.
-fn calculateCanonicalMp2Energy(comptime T: type, g_ao: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) !T {
+pub fn calculateCanonicalMp2Energy(comptime T: type, g_ao: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) !T {
     const N = C.shape[0];
 
     const nvir = N - nocc;
@@ -235,54 +233,8 @@ fn calculateCanonicalMp2Energy(comptime T: type, g_ao: Tensor(T, 4), C: Matrix(T
     return e_corr.val;
 }
 
-/// Evaluates canonical Møller-Plesset analytical nuclear gradients across perturbation orders using dual numbers.
-fn calculateCanonicalMpGradient(comptime T: type, grads: []Matrix(T), order: usize, hfres: HartreeFockResult(T), nocc: usize, generalized: bool, gpa: Allocator) !void {
-    const nbf = hfres.C_mo.shape[0];
-
-    for (0..3 * hfres.ints.sys.atoms.len) |coord| {
-        var H_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
-        defer H_d.deinit(gpa);
-
-        for (0..nbf) |mu| for (0..nbf) |nu| {
-            H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
-        };
-
-        var C_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
-        defer C_d.deinit(gpa);
-
-        for (0..nbf) |mu| for (0..nbf) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ coord, mu, p }));
-        };
-
-        var e_d = try Vector(ScalarDual(T)).init(nbf, gpa);
-        defer e_d.deinit(gpa);
-
-        for (0..nbf) |p| {
-            e_d.ptr(p).* = ScalarDual(T).init(hfres.e_mo.at(p), hfres.de_mo.?.at(coord, p));
-        }
-
-        var g_d = try Tensor(ScalarDual(T), 4).init(hfres.ints.g.?.shape, gpa);
-        defer g_d.deinit(gpa);
-
-        for (0..nbf) |mu| for (0..nbf) |lambda| for (0..nbf) |nu| for (0..nbf) |sigma| {
-            const idx = .{ mu, lambda, nu, sigma };
-
-            const dg_x = hfres.ints.dg.?.at(.{ coord, mu, lambda, nu, sigma });
-
-            g_d.ptr(idx).* = ScalarDual(T).init(hfres.ints.g.?.at(idx), dg_x);
-        };
-
-        const corr = try calculateCorrelationEnergies(ScalarDual(T), order, H_d, g_d, C_d, e_d, nocc, generalized, gpa);
-        defer gpa.free(corr);
-
-        for (2..order + 1) |k| {
-            grads[k].ptr(coord / 3, coord % 3).* = corr[k].der;
-        }
-    }
-}
-
 /// Computes Møller-Plesset correlation energy corrections up to the requested perturbation order.
-fn calculateCorrelationEnergies(comptime T: type, order: usize, H: Matrix(T), g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
+pub fn calculateCorrelationEnergies(comptime T: type, order: usize, H: Matrix(T), g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
     if (order == 2) {
         const energies = try gpa.alloc(T, 3);
         errdefer gpa.free(energies);
@@ -343,7 +295,7 @@ fn calculateCorrelationEnergies(comptime T: type, order: usize, H: Matrix(T), g:
 }
 
 /// Evaluates the second-order Møller-Plesset correlation energy using resolution-of-the-identity density fitting.
-fn calculateRiMp2Energy(comptime T: type, B_ao: Tensor(T, 3), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) !T {
+pub fn calculateRiMp2Energy(comptime T: type, B_ao: Tensor(T, 3), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) !T {
     const nbf, const naux = .{ B_ao.shape[0], B_ao.shape[2] };
 
     const nvir = if (generalized) 2 * nbf - nocc else nbf - nocc;
@@ -416,63 +368,65 @@ fn calculateRiMp2Energy(comptime T: type, B_ao: Tensor(T, 3), C: Matrix(T), e: V
     return e_corr.val;
 }
 
-/// Evaluates resolution-of-the-identity MP2 nuclear gradients using dual number differentiation.
-fn calculateRiMp2Gradient(comptime T: type, grads: []Matrix(T), hfres: HartreeFockResult(T), nocc: usize, generalized: bool, gpa: Allocator) !void {
-    const B = hfres.ints.B.?;
+/// Computes Møller-Plesset correlation energy corrections up to requested perturbation order using density fitting.
+pub fn calculateCorrelationEnergiesRi(comptime T: type, order: usize, H: Matrix(T), B: Tensor(T, 3), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
+    if (order == 2) {
+        const energies = try gpa.alloc(T, 3);
+        errdefer gpa.free(energies);
 
-    const J = hfres.ints.J orelse unreachable;
+        energies[0] = Value(T).fromFloat(0).val;
+        energies[1] = Value(T).fromFloat(0).val;
 
-    const dI = hfres.ints.dI orelse unreachable;
-    const dJ = hfres.ints.dJ orelse unreachable;
+        energies[2] = try calculateRiMp2Energy(T, B, C, e, nocc, generalized, gpa);
 
-    const I_3c = hfres.ints.I orelse unreachable;
-
-    const nbf, const naux = .{ B.shape[0], B.shape[2] };
-
-    const nmo = hfres.C_mo.shape[0];
-
-    var decomp = try MetricDecomposition(T).init(J, gpa);
-    defer decomp.deinit(gpa);
-
-    var M_kernel = try buildMetricDerivKernel(T, decomp.W, gpa);
-    defer M_kernel.deinit(gpa);
-
-    var dJ_inv_half = try Matrix(T).init(naux, naux, gpa);
-    defer dJ_inv_half.deinit(gpa);
-
-    var dB_ao = try Tensor(T, 3).initZero(B.shape, gpa);
-    defer dB_ao.deinit(gpa);
-
-    for (0..3 * hfres.ints.sys.atoms.len) |coord| {
-        try evaluateMetricDeriv(T, &dJ_inv_half, dJ.slice(coord).asMatrix(), decomp.U, M_kernel, gpa);
-
-        evaluateFittingTensorDeriv(T, &dB_ao, dI.slice(coord), I_3c, decomp.J_inv_half, dJ_inv_half);
-
-        var B_d = try Tensor(ScalarDual(T), 3).init(B.shape, gpa);
-        defer B_d.deinit(gpa);
-
-        for (0..nbf) |mu| for (0..nbf) |nu| for (0..naux) |P| {
-            B_d.ptr(.{ mu, nu, P }).* = ScalarDual(T).init(B.at(.{ mu, nu, P }), dB_ao.at(.{ mu, nu, P }));
-        };
-
-        var C_d = try Matrix(ScalarDual(T)).init(nmo, nmo, gpa);
-        defer C_d.deinit(gpa);
-
-        for (0..nmo) |mu| for (0..nmo) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ coord, mu, p }));
-        };
-
-        var e_d = try Vector(ScalarDual(T)).init(nmo, gpa);
-        defer e_d.deinit(gpa);
-
-        for (0..nmo) |p| {
-            e_d.ptr(p).* = ScalarDual(T).init(hfres.e_mo.at(p), hfres.de_mo.?.at(coord, p));
-        }
-
-        const e_corr = try calculateRiMp2Energy(ScalarDual(T), B_d, C_d, e_d, nocc, generalized, gpa);
-
-        grads[2].ptr(coord / 3, coord % 3).* = e_corr.der;
+        return energies;
     }
+
+    const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
+
+    var h_ms, var g_ms = try transformIntsRi(T, C, H, B, generalized, gpa);
+
+    defer {
+        h_ms.deinit(gpa);
+        g_ms.deinit(gpa);
+    }
+
+    var e_ms = try Vector(T).init(nsp, gpa);
+    defer e_ms.deinit(gpa);
+
+    if (generalized) for (0..nsp) |p| {
+        e_ms.ptr(p).* = e.at(p);
+    };
+
+    if (!generalized) for (0..C.shape[0]) |p| {
+        e_ms.ptr(2 * p + 0).* = e.at(p);
+        e_ms.ptr(2 * p + 1).* = e.at(p);
+    };
+
+    var excitations = try gpa.alloc(u32, @min(order, @min(nel, nsp - nel)));
+    defer gpa.free(excitations);
+
+    for (0..excitations.len) |i| {
+        excitations[i] = @intCast(i + 1);
+    }
+
+    var dets = try generateDets(nel, nsp, excitations, gpa);
+
+    defer {
+        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
+
+        dets.deinit(gpa);
+    }
+
+    var H_dets = try buildHamiltonianMatrix(T, dets.items, h_ms, g_ms, gpa);
+    defer H_dets.deinit(gpa);
+
+    const E0 = try gpa.alloc(Value(T), dets.items.len);
+    defer gpa.free(E0);
+
+    calculateZerothOrderEnergies(T, E0, dets.items, e_ms);
+
+    return try solveRayleighSchrodinger(T, H_dets, E0, order, gpa);
 }
 
 /// Evaluates unperturbed zeroth-order energies of Slater determinants under the unperturbed Fock Hamiltonian.
@@ -527,26 +481,47 @@ fn evaluateEnergyCorrection(comptime T: type, m: usize, H_dets: Matrix(T), c_det
     return sum;
 }
 
-/// Evaluates the second-order Møller-Plesset correlation energy and gradient with density fitting.
-fn evaluateRiMp2(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockResult(T), energy: []T, grad: []Matrix(T), grads: ?[]Matrix(T), log: bool, gpa: Allocator) !void {
+/// Evaluates Møller-Plesset correlation energies and nuclear gradients across perturbation orders with density fitting.
+fn evaluateRiMp(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockResult(T), energy: []T, grad: []Matrix(T), grads: ?[]Matrix(T), log: bool, gpa: Allocator) !void {
     const B_ao = hfres.ints.B.?;
 
     const generalized = opt.hartree_fock.generalized;
 
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
 
-    const e_corr = try calculateRiMp2Energy(T, B_ao, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
+    if (opt.order == 2) {
+        const e_corr = try calculateRiMp2Energy(T, B_ao, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
 
-    energy[0] += e_corr;
+        energy[0] += e_corr;
 
-    if (log) {
-        try printf(io, "\nMP02 TOTAL ENERGY: {d:.14} Eh\n", .{energy[0]});
+        if (log) {
+            try printf(io, "\nMP02 TOTAL ENERGY: {d:.14} Eh\n", .{energy[0]});
+        }
+
+        if (grads) |g| {
+            for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
+                grad[0].ptr(j, k).* += g[2].at(j, k);
+            };
+        }
+
+        return;
     }
 
-    if (grads) |g| {
-        for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-            grad[0].ptr(j, k).* += g[2].at(j, k);
-        };
+    const energies = try calculateCorrelationEnergiesRi(T, opt.order, hfres.ints.H.?, B_ao, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
+    defer gpa.free(energies);
+
+    for (2..opt.order + 1) |i| {
+        energy[0] += energies[i];
+
+        if (log) {
+            try printf(io, "\nMP{d:02} TOTAL ENERGY: {d:.14} Eh\n", .{ i, energy[0] });
+        }
+
+        if (grads) |g| {
+            for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
+                grad[0].ptr(j, k).* += g[i].at(j, k);
+            };
+        }
     }
 }
 

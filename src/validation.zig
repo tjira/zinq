@@ -63,10 +63,18 @@ fn checkCasscf(opt: casscf.Options) !void {
         return error.InvalidInput;
     }
 
-    if (opt.hartree_fock.aux_basis != null) {
-        std.log.err("DENSITY FITTING (RI) IS NOT SUPPORTED FOR CASSCF", .{});
+    if (opt.hartree_fock.aux_basis != null and opt.aux_basis == null) {
+        std.log.err("HARTREE-FOCK USES AUX_BASIS BUT CASSCF AUX_BASIS IS NOT SPECIFIED", .{});
 
         return error.InvalidInput;
+    }
+
+    if (opt.hartree_fock.aux_basis != null and opt.aux_basis != null) {
+        if (!std.mem.eql(u8, opt.hartree_fock.aux_basis.?, opt.aux_basis.?)) {
+            std.log.err("HARTREE-FOCK AUX_BASIS AND CASSCF AUX_BASIS MUST MATCH", .{});
+
+            return error.InvalidInput;
+        }
     }
 
     if (opt.active_electrons == 0 or opt.active_orbitals == 0) {
@@ -683,10 +691,18 @@ fn checkConfigurationInteraction(opt: configuration_interaction.Options) !void {
         return error.InvalidInput;
     }
 
-    if (opt.hartree_fock.aux_basis != null) {
-        std.log.err("DENSITY FITTING (RI) IS NOT SUPPORTED FOR CONFIGURATION INTERACTION", .{});
+    if (opt.hartree_fock.aux_basis != null and opt.aux_basis == null) {
+        std.log.err("HARTREE-FOCK USES AUX_BASIS BUT CI AUX_BASIS IS NOT SPECIFIED", .{});
 
         return error.InvalidInput;
+    }
+
+    if (opt.hartree_fock.aux_basis != null and opt.aux_basis != null) {
+        if (!std.mem.eql(u8, opt.hartree_fock.aux_basis.?, opt.aux_basis.?)) {
+            std.log.err("HARTREE-FOCK AUX_BASIS AND CI AUX_BASIS MUST MATCH", .{});
+
+            return error.InvalidInput;
+        }
     }
 
     try checkWriteCalculated(opt);
@@ -1006,12 +1022,6 @@ fn checkMollerPlesset(opt: moller_plesset.Options) !void {
 
             return error.InvalidInput;
         }
-    }
-
-    if (opt.aux_basis != null and opt.order > 2) {
-        std.log.err("RI APPROXIMATION IS CURRENTLY ONLY SUPPORTED FOR SECOND-ORDER MOLLER-PLESSET (MP2)", .{});
-
-        return error.InvalidInput;
     }
 
     try checkWriteCalculated(opt);

@@ -125,3 +125,27 @@ $$
 $$
 
 where $\mathbf{H}_{\text{CI}}$ is the Hamiltonian matrix representation in the chosen determinant basis, $\mathbf{c}_k$ is the normalized eigenvector of configuration coefficients, and $E_k$ is the corresponding electronic energy eigenvalue. By the Hylleraas–Undheim–MacDonald theorem, each calculated eigenvalue $E_k$ provides a rigorous variational upper bound to the exact $k$-th electronic state energy of the physical Hamiltonian, $E_k\ge E_k^{\text{exact}}$. Diagonalizing $\mathbf{H}_{\text{CI}}$ yields the correlated ground state and all electronically excited states simultaneously as mutually orthogonal eigenvectors.
+
+---
+
+## IV. Resolution of the Identity and Analytical Gradients
+
+### 7. Density Fitting Approximation for CI Matrix Elements
+
+To eliminate the prohibitive four-center two-electron integral storage and transformation bottlenecks, the Resolution of the Identity expands product densities in an auxiliary basis set, expressing two-electron repulsion integrals in physicist notation as
+
+$$
+\langle pq|rs\rangle=(pr|qs)\approx\sum_P B_{pr}^P B_{qs}^P
+$$
+
+where $B_{pq}^P=\sum_Q(pq|Q)[\mathbf{J}^{-1/2}]_{QP}$ is the three-center fitting tensor in the molecular orbital basis formed by contracting three-center electron repulsion integrals $(pq|Q)$ with the inverse square root of the auxiliary Coulomb metric $\mathbf{J}$. For restricted spatial references, the spin-orbital integrals $\langle p_\sigma q_{\sigma'}|r_\sigma s_{\sigma'}\rangle$ are assembled directly from the spatial components, whereas for generalized references the spin-summed molecular orbital three-center intermediate is used. The Hamiltonian matrix elements $\langle\Phi_m|\hat{H}|\Phi_n\rangle$ are then evaluated via Slater–Condon rules without constructing or storing four-center repulsion tensors.
+
+### 8. Analytical Nuclear Gradients with Dual Numbers
+
+The analytical nuclear gradient of the $k$-th electronic CI state energy $E_k$ with normalized configuration eigenvector $\mathbf{c}_k$ with respect to a nuclear coordinate $X$ is given by Hellmann–Feynman differentiation over the determinant basis as
+
+$$
+\frac{d E_k}{d X}=\sum_{m \le n}(2-\delta_{mn})c_{mk}c_{nk}\frac{\partial H_{mn}}{\partial X}
+$$
+
+where the derivative matrix elements $\partial H_{mn}/\partial X$ arise from the nuclear coordinate derivatives of the core Hamiltonian $\mathbf{H}$, molecular orbital coefficients $\mathbf{C}$, and fitting tensor $\mathbf{B}$. Using forward-mode automatic differentiation, the unperturbed quantities and their geometric derivatives are packaged into first-order dual numbers as $\tilde{\mathbf{H}}=\mathbf{H}+\frac{\partial\mathbf{H}}{\partial X}\epsilon$, $\tilde{\mathbf{C}}=\mathbf{C}+\frac{\partial\mathbf{C}}{\partial X}\epsilon$, and $\tilde{\mathbf{B}}=\mathbf{B}+\frac{\partial\mathbf{B}}{\partial X}\epsilon$. Transforming the dual core Hamiltonian and three-center fitting tensor into the molecular spin-orbital basis automatically yields the dual determinant Hamiltonian matrix elements $\tilde{H}_{mn}=H_{mn}+\frac{\partial H_{mn}}{\partial X}\epsilon$, enabling exact nuclear gradients for ground and excited states without computing four-center integral derivatives.

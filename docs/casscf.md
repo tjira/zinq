@@ -127,3 +127,91 @@ $$
 $$
 
 which is solved efficiently by LU factorization. In the absence of external magnetic fields, the molecular orbitals can be chosen strictly real, where $\mathbf{C}^\dagger\mathbf{S}\mathbf{C}=\mathbf{I}$ reduces to $\mathbf{C}^T\mathbf{S}\mathbf{C}=\mathbf{I}$ and $\mathbf{U}$ is an orthogonal matrix. The molecular orbital coefficients are updated as $\mathbf{C}\leftarrow\mathbf{C}\mathbf{U}$, and the macro-iteration cycle is repeated until the maximum orbital gradient element $\max|g_{pq}|$ and the energy change drop below the convergence threshold, completing the self-consistent multiconfigurational solution.
+
+---
+
+## IV. Resolution of the Identity Density Fitting
+
+### 7. Density Fitting Representation of Molecular Integrals
+
+To avoid the prohibitive storage and fifth-order scaling of four-index two-electron repulsion integrals, the Resolution of the Identity (RI) or density fitting approximation expands orbital product densities in an auxiliary basis set. The two-electron repulsion integrals in physicist notation are approximated as
+
+$$
+\langle pq|rs\rangle=(pr|qs)\approx\sum_P B_{pr}^P B_{qs}^P
+$$
+
+where $B_{pq}^P=\sum_Q(pq|Q)[\mathbf{J}^{-1/2}]_{QP}$ is the three-center fitting tensor in the spatial molecular orbital basis, $(pq|Q)$ denotes the three-center Coulomb integral, and $\mathbf{J}$ represents the auxiliary Coulomb metric matrix. In hybrid RI-CASSCF, the molecular orbitals from conventional Hartree–Fock serve as the starting guess, while subsequent macro-iterations utilize the fitting tensor $\mathbf{B}$ directly.
+
+### 8. Generalized Fock Matrix and Configuration Interaction with Density Fitting
+
+Within the density fitting framework, the core Fock matrix is constructed as
+
+$$
+F_{pq}^{\text{core}}=h_{pq}+\sum_P B_{pq}^P v_P^{\text{core}}-\sum_{i \in \text{core}}\sum_P B_{pi}^P B_{qi}^P
+$$
+
+where $v_P^{\text{core}}=2\sum_{i \in \text{core}}B_{ii}^P$ contracts closed core shells with the auxiliary basis. The core columns of the generalized Fock matrix are evaluated by contracting the active one-particle reduced density matrix as
+
+$$
+F_{pj}=2\left(F_{pj}^{\text{core}}+\sum_P B_{pj}^P v_P^{\text{act}}-\frac{1}{2}\sum_{v \in \text{act}}\sum_P B_{p,n_{\text{core}}+v}^P W_{vj}^P\right)
+$$
+
+where $v_P^{\text{act}}=\sum_{u,v \in \text{act}}D_{uv}B_{n_{\text{core}}+u,n_{\text{core}}+v}^P$ and $W_{vj}^P=\sum_{u \in \text{act}}D_{uv}B_{n_{\text{core}}+u,j}^P$. The active columns are assembled from the two-particle reduced density matrix as
+
+$$
+F_{pu}=\sum_{v \in \text{act}}F_{pv}^{\text{core}}D_{vu}+\sum_{v \in \text{act}}\sum_P B_{p,n_{\text{core}}+v}^P Q_{uv}^P
+$$
+
+where $Q_{uv}^P=\sum_{w,x \in \text{act}}d_{uvwx}B_{n_{\text{core}}+w,n_{\text{core}}+x}^P$. Active-space configuration interaction integrals are evaluated on the fly by contracting the transformed three-center tensors, completely bypassing the formation of four-index electron repulsion tensors.
+
+---
+
+## V. Analytic Nuclear Gradients with Density Fitting
+
+### 9. Dual-Number Forward Automatic Differentiation
+
+The analytic nuclear gradient of the converged single-state CASSCF energy with respect to a nuclear coordinate $x$ is evaluated by differentiating the electronic energy functional while enforcing the molecular orbital orthonormality constraints. Because the CASSCF energy is fully variational with respect to both the configuration interaction coefficients $\mathbf{c}$ and non-redundant orbital rotations $\boldsymbol{\kappa}$ at convergence, the Hellmann–Feynman theorem guarantees that the implicit response contributions $\frac{\partial E}{\partial\mathbf{c}}\frac{\partial\mathbf{c}}{\partial x}=0$ and $\frac{\partial E}{\partial\boldsymbol{\kappa}}\frac{\partial\boldsymbol{\kappa}}{\partial x}=0$ vanish identically, eliminating the need to solve coupled-perturbed multiconfigurational equations.
+
+The geometric derivatives of the molecular orbital coefficients originate solely from preserving the orbital orthonormality condition $\mathbf{C}^T\mathbf{S}\mathbf{C}=\mathbf{I}$, yielding the connection matrix derivative
+
+$$
+\frac{\partial\mathbf{C}}{\partial x}=-\frac{1}{2}\mathbf{C}\left(\mathbf{C}^T\frac{\partial\mathbf{S}}{\partial x}\mathbf{C}\right)
+$$
+
+which is assembled using the derivative atomic orbital overlap matrix $\frac{\partial\mathbf{S}}{\partial x}$. Forward-mode automatic differentiation represents each atomic orbital quantity as a dual number $\tilde{a}=a+\epsilon\frac{\partial a}{\partial x}$ with dual unit $\epsilon^2=0$, bundling the baseline integrals and nuclear derivatives into unified algebraic objects.
+
+### 10. Density Fitting Three-Center Tensor Derivatives
+
+In Resolution of the Identity density fitting, the three-center fitting tensor in the atomic orbital basis is given by $\mathbf{B}=\mathbf{I}_{3c}\mathbf{J}^{-1/2}$, where $\mathbf{I}_{3c}$ contains the three-center two-electron repulsion integrals and $\mathbf{J}$ represents the Coulomb metric matrix. Differentiating this fitting tensor with respect to nuclear coordinate $x$ via the product rule yields
+
+$$
+\frac{\partial B_{\mu\nu}^P}{\partial x}=\sum_Q\frac{\partial(\mu\nu|Q)}{\partial x}[\mathbf{J}^{-1/2}]_{QP}+\sum_Q(\mu\nu|Q)\frac{\partial[\mathbf{J}^{-1/2}]_{QP}}{\partial x}
+$$
+
+where the derivative of the inverse square-root Coulomb metric $\frac{\partial\mathbf{J}^{-1/2}}{\partial x}$ is evaluated from the spectral decomposition of $\mathbf{J}=\mathbf{U}\mathbf{W}\mathbf{U}^T$ and derivative metric integrals $\frac{\partial\mathbf{J}}{\partial x}$.
+
+The atomic orbital dual core Hamiltonian $\tilde{\mathbf{H}}$ and dual fitting tensor $\tilde{\mathbf{B}}$ are subsequently transformed to the molecular orbital basis using the dual coefficient matrix $\tilde{\mathbf{C}}=\mathbf{C}+\epsilon\frac{\partial\mathbf{C}}{\partial x}$ through forward dual integral transformations. The active-space configuration interaction Hamiltonian elements between Slater determinants $|\Phi_m\rangle$ and $|\Phi_n\rangle$ are evaluated with dual Slater–Condon rules, directly yielding the total nuclear gradient
+
+$$
+\frac{\partial E}{\partial x}=\frac{\partial V_{\text{nuc}}}{\partial x}+\sum_{m \le n}(2-\delta_{mn})c_m c_n\left[\frac{\partial\langle\Phi_m|\hat{H}|\Phi_n\rangle}{\partial x}\right]_{\epsilon}
+$$
+
+where $\frac{\partial V_{\text{nuc}}}{\partial x}$ is the nuclear repulsion gradient and $[\cdot]_\epsilon$ extracts the first-order dual derivative component.
+
+### 11. State-Averaged Excited State Gradients and Coupled-Perturbed MCSCF
+
+For state-averaged CASSCF with multiple target electronic states, the molecular orbitals are optimized for the weighted ensemble average energy $\bar{E}=\sum_I w_I E_I$, meaning that the orbital gradient $\mathbf{g}^{(s)}$ of an individual electronic state $s$ does not vanish. To incorporate the resulting orbital relaxation without explicitly evaluating derivative orbital coefficients, the coupled-perturbed MCSCF Z-vector response equation is solved as
+
+$$
+\mathbf{A}_{\text{SA}}\mathbf{Z}^{(s)}=-\mathbf{g}^{(s)}
+$$
+
+where $\mathbf{A}_{\text{SA}}$ represents the orbital Hessian of the state-averaged energy and $\mathbf{Z}^{(s)}$ is the orbital response Lagrange multiplier vector.
+
+The total analytical gradient for target state $s$ is obtained by appending the orbital relaxation contraction to the dual Hellmann–Feynman derivative as
+
+$$
+\frac{\partial E_s}{\partial x}=\left[\frac{\partial E_s}{\partial x}\right]_{\text{HF}}-\sum_k Z_k^{(s)}B_k^{[x]}
+$$
+
+where $B_k^{[x]}=2(dF_{pq}-dF_{qp})$ is the derivative generalized Fock response assembled from the dual core Hamiltonian derivative $d\mathbf{h}_{\text{mo}}$ and derivative density fitting two-electron integrals $dg_{pqrs}=\sum_P\left(dB_{pr}^P B_{qs}^P+B_{pr}^P dB_{qs}^P\right)$.

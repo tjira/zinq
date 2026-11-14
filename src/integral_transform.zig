@@ -305,6 +305,52 @@ pub fn ao2mo_ov_3c(comptime T: type, B_mo: *Tensor(T, 3), B_ao: Tensor(T, 3), C:
     }
 }
 
+/// Transforms three-center density fitting tensors from the atomic orbital basis to the molecular orbital basis.
+pub fn ao2mo_3c(comptime T: type, B_mo: *Tensor(T, 3), B_ao: Tensor(T, 3), C: Matrix(T), gpa: Allocator) !void {
+    const nbf, const naux, const nmo = .{ B_ao.shape[0], B_ao.shape[2], C.shape[1] };
+
+    var B1 = try Tensor(T, 3).initZero(.{ nmo, nbf, naux }, gpa);
+    defer B1.deinit(gpa);
+
+    if (comptime T == f64) {
+        const B_mat = B_ao.matrixView(nbf, nbf * naux);
+
+        var B1_mat = B1.matrixView(nmo, nbf * naux);
+
+        gemm(T, &B1_mat, C, B_mat, 1, 0, true, false);
+
+        for (0..nmo) |p| {
+            const B1_p = B1.slice(p).asMatrix();
+
+            var B_mo_p = B_mo.slice(p).asMatrix();
+
+            gemm(T, &B_mo_p, C, B1_p, 1, 0, true, false);
+        }
+
+        return;
+    }
+
+    for (0..nmo) |p| for (0..nbf) |nu| for (0..naux) |P| {
+        var sum = Value(T).fromFloat(0);
+
+        for (0..nbf) |mu| {
+            sum = sum.add(Value(T).init(C.at(mu, p)).mul(Value(T).init(B_ao.at(.{ mu, nu, P }))));
+        }
+
+        B1.ptr(.{ p, nu, P }).* = sum.val;
+    };
+
+    for (0..nmo) |p| for (0..nmo) |q| for (0..naux) |P| {
+        var sum = Value(T).fromFloat(0);
+
+        for (0..nbf) |nu| {
+            sum = sum.add(Value(T).init(C.at(nu, q)).mul(Value(T).init(B1.at(.{ p, nu, P }))));
+        }
+
+        B_mo.ptr(.{ p, q, P }).* = sum.val;
+    };
+}
+
 /// Transforms a one-electron operator matrix from the molecular orbital basis back to the atomic orbital basis.
 pub fn mo2ao_1e(comptime T: type, A_ao: *Matrix(T), A_mo: Matrix(T), C: Matrix(T)) !void {
     const N = C.shape[0];
@@ -385,6 +431,106 @@ pub fn transformInts(comptime T: type, C: Matrix(T), H: Matrix(T), g: Tensor(T, 
     errdefer g_ms.deinit(gpa);
 
     try ao2mo_2e(T, &g_ms, g_as, C_ms, gpa);
+
+    return .{ h_ms, g_ms };
+}
+
+/// Transforms core Hamiltonian and density fitting three-center tensors to the molecular spin-orbital basis.
+pub fn transformIntsRi(comptime T: type, C: Matrix(T), H: Matrix(T), B_ao: Tensor(T, 3), generalized: bool, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+    const naux = B_ao.shape[2];
+
+    if (!generalized) {
+        const nmo = C.shape[1];
+        const nsp = 2 * nmo;
+
+        var h_mo = try Matrix(T).init(nmo, nmo, gpa);
+        defer h_mo.deinit(gpa);
+
+        ao2mo_1e(T, &h_mo, H, C);
+
+        var h_ms = try Matrix(T).initZero(nsp, nsp, gpa);
+        errdefer h_ms.deinit(gpa);
+
+        for (0..nmo) |p| for (0..nmo) |q| {
+            h_ms.ptr(2 * p, 2 * q).* = h_mo.at(p, q);
+            h_ms.ptr(2 * p + 1, 2 * q + 1).* = h_mo.at(p, q);
+        };
+
+        var B_mo = try Tensor(T, 3).initZero(.{ nmo, nmo, naux }, gpa);
+        defer B_mo.deinit(gpa);
+
+        try ao2mo_3c(T, &B_mo, B_ao, C, gpa);
+
+        var g_ms = try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+        errdefer g_ms.deinit(gpa);
+
+        for (0..nmo) |p| for (0..nmo) |r| {
+            for (0..nmo) |q| for (0..nmo) |s| {
+                var sum = Value(T).fromFloat(0);
+
+                for (0..naux) |P| {
+                    const b_pr = Value(T).init(B_mo.at(.{ p, r, P }));
+                    const b_qs = Value(T).init(B_mo.at(.{ q, s, P }));
+
+                    sum = sum.add(b_pr.mul(b_qs));
+                }
+
+                g_ms.ptr(.{ 2 * p, 2 * q, 2 * r, 2 * s }).* = sum.val;
+                g_ms.ptr(.{ 2 * p + 1, 2 * q + 1, 2 * r + 1, 2 * s + 1 }).* = sum.val;
+                g_ms.ptr(.{ 2 * p, 2 * q + 1, 2 * r, 2 * s + 1 }).* = sum.val;
+                g_ms.ptr(.{ 2 * p + 1, 2 * q, 2 * r + 1, 2 * s }).* = sum.val;
+            };
+        };
+
+        return .{ h_ms, g_ms };
+    }
+
+    const nbf = B_ao.shape[0];
+    const nsp = C.shape[1];
+
+    var h_ms = try Matrix(T).init(nsp, nsp, gpa);
+    errdefer h_ms.deinit(gpa);
+
+    ao2mo_1e(T, &h_ms, H, C);
+
+    var C_a = try Matrix(T).init(nbf, nsp, gpa);
+    defer C_a.deinit(gpa);
+
+    var C_b = try Matrix(T).init(nbf, nsp, gpa);
+    defer C_b.deinit(gpa);
+
+    for (0..nbf) |mu| for (0..nsp) |p| {
+        C_a.ptr(mu, p).* = C.at(mu, p);
+        C_b.ptr(mu, p).* = C.at(nbf + mu, p);
+    };
+
+    var B_a = try Tensor(T, 3).initZero(.{ nsp, nsp, naux }, gpa);
+    defer B_a.deinit(gpa);
+
+    try ao2mo_3c(T, &B_a, B_ao, C_a, gpa);
+
+    var B_b = try Tensor(T, 3).initZero(.{ nsp, nsp, naux }, gpa);
+    defer B_b.deinit(gpa);
+
+    try ao2mo_3c(T, &B_b, B_ao, C_b, gpa);
+
+    var g_ms = try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    errdefer g_ms.deinit(gpa);
+
+    for (0..nsp) |p| for (0..nsp) |r| {
+        for (0..nsp) |q| for (0..nsp) |s| {
+            var sum = Value(T).fromFloat(0);
+
+            for (0..naux) |P| {
+                const b_pr = Value(T).init(B_a.at(.{ p, r, P })).add(Value(T).init(B_b.at(.{ p, r, P })));
+                const b_qs = Value(T).init(B_a.at(.{ q, s, P })).add(Value(T).init(B_b.at(.{ q, s, P })));
+
+                sum = sum.add(b_pr.mul(b_qs));
+            }
+
+            g_ms.ptr(.{ p, q, r, s }).* = sum.val;
+        };
+    };
 
     return .{ h_ms, g_ms };
 }

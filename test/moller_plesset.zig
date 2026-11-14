@@ -1,3 +1,5 @@
+//! Validates second-order through fourth-order Møller-Plesset perturbation theory energies and gradients.
+
 const std = @import("std");
 const zinq = @import("zinq");
 
@@ -60,6 +62,79 @@ test "Generalized MP2 on Water with Analytical Gradient (STO-3G)" {
     // zig fmt: on
 
     try std.testing.expectApproxEqAbs(-75.0048550569062000, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
+test "Restricted MP2 on Water with RI Analytical Gradient (cc-pVDZ)" {
+    const opt = zinq.moller_plesset.Options{
+        .hartree_fock = .{
+            .system = "example/molecule/water.xyz",
+            .basis = "builtin:cc-pvdz",
+            .aux_basis = "builtin:cc-pvdz-rifit",
+        },
+        .aux_basis = "builtin:cc-pvdz-rifit",
+        .order = 2,
+        .gradient = .{ .analytic = .{} },
+    };
+
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+        -0.0272067670316267, -0.0094267851981183, -0.0108812772612261,
+         0.0164932526733273, -0.0103015114970594,  0.0112199328626281,
+         0.0107135143840926,  0.0197282967121463, -0.0003386555830109,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-76.2309052042436300, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
+test "Generalized MP2 on Water with RI Analytical Gradient (cc-pVDZ)" {
+    const opt = zinq.moller_plesset.Options{
+        .hartree_fock = .{
+            .system = "example/molecule/water.xyz",
+            .basis = "builtin:cc-pvdz",
+            .aux_basis = "builtin:cc-pvdz-rifit",
+            .generalized = true,
+        },
+        .aux_basis = "builtin:cc-pvdz-rifit",
+        .order = 2,
+        .gradient = .{ .analytic = .{} },
+    };
+
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+        -0.0272067697921982, -0.0094267861254141, -0.0108812783402855,
+         0.0164932539756880, -0.0103015100898535,  0.0112199332200071,
+         0.0107135160047341,  0.0197282963026694, -0.0003386546486028,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-76.2309052041282800, res.energy[0], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
@@ -141,6 +216,79 @@ test "Generalized MP3 on Water with Analytical Gradient (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
 }
 
+test "Restricted MP3 on Water with RI Analytical Gradient (STO-3G)" {
+    const opt = zinq.moller_plesset.Options{
+        .hartree_fock = .{
+            .system = "example/molecule/water.xyz",
+            .basis = "builtin:sto-3g",
+            .aux_basis = "builtin:cc-pvdz-rifit",
+        },
+        .aux_basis = "builtin:cc-pvdz-rifit",
+        .order = 3,
+        .gradient = .{ .analytic = .{} },
+    };
+
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+         0.0435052437389536,  0.0150707620693148,  0.0174007439194937,
+        -0.0253060746780585,  0.0109213494634788, -0.0158050116507825,
+        -0.0181991690571762, -0.0259921115313802, -0.0015957322616143,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-75.0159264238554300, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
+test "Generalized MP3 on Water with RI Analytical Gradient (STO-3G)" {
+    const opt = zinq.moller_plesset.Options{
+        .hartree_fock = .{
+            .system = "example/molecule/water.xyz",
+            .basis = "builtin:sto-3g",
+            .aux_basis = "builtin:cc-pvdz-rifit",
+            .generalized = true,
+        },
+        .aux_basis = "builtin:cc-pvdz-rifit",
+        .order = 3,
+        .gradient = .{ .analytic = .{} },
+    };
+
+    var res = try zinq.electronic_structure.run(f64, std.testing.io, opt, false, std.testing.allocator);
+    defer res.deinit(std.testing.allocator);
+
+    // zig fmt: off
+    const expected_grad = [_]f64{
+         0.0435052437412016,  0.0150707620634032,  0.0174007439223254,
+        -0.0253060746794830,  0.0109213494895334, -0.0158050116590179,
+        -0.0181991690592543, -0.0259921115495681, -0.0015957322562120,
+    };
+    // zig fmt: on
+
+    try std.testing.expectApproxEqAbs(-75.0159264238545000, res.energy[0], TEST_TOLERANCE);
+
+    try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[2], res.grad[0].at(0, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[3], res.grad[0].at(1, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[4], res.grad[0].at(1, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[5], res.grad[0].at(1, 2), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[6], res.grad[0].at(2, 0), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[7], res.grad[0].at(2, 1), TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
+}
+
 test "Restricted MP4 on Water with Analytical Gradient (STO-3G)" {
     const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
@@ -210,15 +358,15 @@ test "Generalized MP4 on Water with Analytical Gradient (STO-3G)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Restricted MP2 on Water with RI Analytical Gradient (cc-pVDZ)" {
+test "Restricted MP4 on Water with RI Analytical Gradient (STO-3G)" {
     const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "builtin:cc-pvdz",
+            .basis = "builtin:sto-3g",
             .aux_basis = "builtin:cc-pvdz-rifit",
         },
         .aux_basis = "builtin:cc-pvdz-rifit",
-        .order = 2,
+        .order = 4,
         .gradient = .{ .analytic = .{} },
     };
 
@@ -227,13 +375,13 @@ test "Restricted MP2 on Water with RI Analytical Gradient (cc-pVDZ)" {
 
     // zig fmt: off
     const expected_grad = [_]f64{
-        -0.0272067670316267, -0.0094267851981183, -0.0108812772612261,
-         0.0164932526733273, -0.0103015114970594,  0.0112199328626281,
-         0.0107135143840926,  0.0197282967121463, -0.0003386555830109,
+         0.0467642555840623,  0.0161998494459112,  0.0187042112326155,
+        -0.0273358660289793,  0.0124362834884923, -0.0172571718592537,
+        -0.0194283895532085, -0.0286361329336933, -0.0014470393693570,
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-76.2309052042436300, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-75.0191758810905500, res.energy[0], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);
@@ -246,16 +394,16 @@ test "Restricted MP2 on Water with RI Analytical Gradient (cc-pVDZ)" {
     try std.testing.expectApproxEqAbs(expected_grad[8], res.grad[0].at(2, 2), TEST_TOLERANCE);
 }
 
-test "Generalized MP2 on Water with RI Analytical Gradient (cc-pVDZ)" {
+test "Generalized MP4 on Water with RI Analytical Gradient (STO-3G)" {
     const opt = zinq.moller_plesset.Options{
         .hartree_fock = .{
             .system = "example/molecule/water.xyz",
-            .basis = "builtin:cc-pvdz",
+            .basis = "builtin:sto-3g",
             .aux_basis = "builtin:cc-pvdz-rifit",
             .generalized = true,
         },
         .aux_basis = "builtin:cc-pvdz-rifit",
-        .order = 2,
+        .order = 4,
         .gradient = .{ .analytic = .{} },
     };
 
@@ -264,13 +412,13 @@ test "Generalized MP2 on Water with RI Analytical Gradient (cc-pVDZ)" {
 
     // zig fmt: off
     const expected_grad = [_]f64{
-        -0.0272067697921982, -0.0094267861254141, -0.0108812783402855,
-         0.0164932539756880, -0.0103015100898535,  0.0112199332200071,
-         0.0107135160047341,  0.0197282963026694, -0.0003386546486028,
+         0.0467642555880723,  0.0161998494405884,  0.0187042112361582,
+        -0.0273358660313160,  0.0124362835145229, -0.0172571718679383,
+        -0.0194283895551707, -0.0286361329533932, -0.0014470393642164,
     };
     // zig fmt: on
 
-    try std.testing.expectApproxEqAbs(-76.2309052041282800, res.energy[0], TEST_TOLERANCE);
+    try std.testing.expectApproxEqAbs(-75.0191758810899600, res.energy[0], TEST_TOLERANCE);
 
     try std.testing.expectApproxEqAbs(expected_grad[0], res.grad[0].at(0, 0), TEST_TOLERANCE);
     try std.testing.expectApproxEqAbs(expected_grad[1], res.grad[0].at(0, 1), TEST_TOLERANCE);

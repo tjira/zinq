@@ -65,3 +65,4 @@
 - [x] Implement analytical nuclear gradients for RI-MP2 using density fitting and CPHF response.
 - [ ] Find a reason for the double free when running MP3 with c-pVDZ basis set.
 - [x] Check if the CPHF solver can be modularized as there is some code duplication.
+- [ ] Refactor, modularize and overall improve the complete RI implementation.
