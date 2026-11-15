@@ -67,3 +67,7 @@
 - [x] Check if the CPHF solver can be modularized as there is some code duplication.
 - [x] Check if CI ca use the CasSpace struct.
 - [x] Adopt the CasSpace struct across CASSCF.
+- [ ] Add stricter compile-time guard in linear_algebra.zig.
+- [ ] Accelerate b2ms (spin-orbital integral reconstruction) with BLAS.
+- [ ] Full analytic Hessian (Newton–Raphson) macro-iterations in CASSCF.
+- [ ] De-interleave dual tensors to enable BLAS for analytic gradients.
