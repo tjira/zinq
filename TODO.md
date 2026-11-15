@@ -63,6 +63,7 @@
 - [ ] The libint auxiliary basis set function to calculate the number of basis functions should probably not read the basis from disk.
 - [x] Write to AGENTS.md to write modularized code in imperative style.
 - [x] Implement analytical nuclear gradients for RI-MP2 using density fitting and CPHF response.
-- [ ] Find a reason for the double free when running MP3 with c-pVDZ basis set.
+- [x] Find a reason for the double free when running MP3 with c-pVDZ basis set.
 - [x] Check if the CPHF solver can be modularized as there is some code duplication.
-- [ ] Refactor, modularize and overall improve the complete RI implementation.
+- [x] Check if CI ca use the CasSpace struct.
+- [x] Adopt the CasSpace struct across CASSCF.

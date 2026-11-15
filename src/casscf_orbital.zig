@@ -20,7 +20,9 @@ const syevd = @import("linear_algebra.zig").syevd;
 /// Defines orbital subspace dimensions partitioned into core, active, and molecular orbital counts.
 pub const CasSpace = struct {
     ncore: usize,
+
     nact: usize,
+
     nmo: usize,
 
     /// Returns the total number of occupied spatial orbitals including core and active subspaces.
@@ -39,6 +41,87 @@ pub const OrbitalPair = struct {
     p: usize,
     q: usize,
 };
+
+/// Intermediate density fitting contractions with active density matrices for generalized Fock derivative evaluations.
+pub fn GeneralizedFockRiWorkspace(comptime T: type) type {
+    return struct {
+        v_core: Vector(T),
+
+        W: Tensor(T, 3),
+        Q: Tensor(T, 3),
+
+        v_act: Vector(T),
+
+        /// Precomputes and caches 3-center contractions with active 1- and 2-RDMs for derivative evaluations.
+        pub fn init(B_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace, gpa: Allocator) !@This() {
+            const nact, const naux = .{ space.nact, B_mo.shape[2] };
+
+            var v_core = try Vector(T).initZero(naux, gpa);
+            errdefer v_core.deinit(gpa);
+
+            for (0..space.ncore) |i| for (0..naux) |P| {
+                v_core.ptr(P).* += 2 * B_mo.at(.{ i, i, P });
+            };
+
+            var v_act = try Vector(T).initZero(naux, gpa);
+            errdefer v_act.deinit(gpa);
+
+            for (0..nact) |u| for (0..nact) |v| {
+                const val_D = D_act.at(u, v);
+
+                if (val_D == 0) continue;
+
+                const U, const V = .{ space.ncore + u, space.ncore + v };
+
+                for (0..naux) |P| {
+                    v_act.ptr(P).* += val_D * B_mo.at(.{ U, V, P });
+                }
+            };
+
+            var W = try Tensor(T, 3).initZero(.{ nact, space.ncore, naux }, gpa);
+            errdefer W.deinit(gpa);
+
+            for (0..nact) |u| for (0..nact) |v| {
+                const val_D = D_act.at(u, v);
+
+                if (val_D == 0) continue;
+
+                const U = space.ncore + u;
+
+                for (0..space.ncore) |j| for (0..naux) |P| {
+                    W.ptr(.{ v, j, P }).* += val_D * B_mo.at(.{ U, j, P });
+                };
+            };
+
+            var Q = try Tensor(T, 3).initZero(.{ nact, nact, naux }, gpa);
+            errdefer Q.deinit(gpa);
+
+            for (0..nact) |u| for (0..nact) |v| for (0..nact) |w| for (0..nact) |x| {
+                const val_d = d_act.at(.{ u, v, w, x });
+
+                if (val_d == 0) continue;
+
+                const W_idx, const X_idx = .{ space.ncore + w, space.ncore + x };
+
+                for (0..naux) |P| {
+                    Q.ptr(.{ u, v, P }).* += val_d * B_mo.at(.{ W_idx, X_idx, P });
+                }
+            };
+
+            return .{ .v_core = v_core, .v_act = v_act, .W = W, .Q = Q };
+        }
+
+        /// Releases cached density fitting intermediate tensors.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.v_core.deinit(gpa);
+
+            self.W.deinit(gpa);
+            self.Q.deinit(gpa);
+
+            self.v_act.deinit(gpa);
+        }
+    };
+}
 
 /// Applies a unitary Cayley transform to update molecular orbital coefficients from rotation generator kappa.
 pub fn applyCayleyTransform(comptime T: type, C: *Matrix(T), kappa: Matrix(T), gpa: Allocator) !void {
@@ -74,13 +157,13 @@ pub fn applyCayleyTransform(comptime T: type, C: *Matrix(T), kappa: Matrix(T), g
 }
 
 /// Constructs the core Fock matrix by contracting one-electron integrals with closed-shell core orbitals.
-pub fn buildCoreFock(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), ncore: usize) void {
-    const nmo = h_mo.nrow();
+pub fn buildCoreFock(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), space: CasSpace) void {
+    const nmo = space.nmo;
 
     for (0..nmo) |p| for (0..nmo) |q| {
         var sum = h_mo.at(p, q);
 
-        for (0..ncore) |i| {
+        for (0..space.ncore) |i| {
             sum += 2 * g_mo.at(.{ p, i, q, i }) - g_mo.at(.{ p, i, i, q });
         }
 
@@ -89,13 +172,13 @@ pub fn buildCoreFock(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), g_mo
 }
 
 /// Constructs core Fock matrix in molecular orbital basis using density fitting 3-center integrals.
-pub fn buildCoreFockRi(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), B_mo: Tensor(T, 3), ncore: usize, gpa: Allocator) !void {
-    const nmo, const naux = .{ h_mo.nrow(), B_mo.shape[2] };
+pub fn buildCoreFockRi(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), B_mo: Tensor(T, 3), space: CasSpace, gpa: Allocator) !void {
+    const nmo, const naux = .{ space.nmo, B_mo.shape[2] };
 
     var v_core = try Vector(T).initZero(naux, gpa);
     defer v_core.deinit(gpa);
 
-    for (0..ncore) |i| for (0..naux) |P| {
+    for (0..space.ncore) |i| for (0..naux) |P| {
         v_core.ptr(P).* += 2 * B_mo.at(.{ i, i, P });
     };
 
@@ -106,7 +189,7 @@ pub fn buildCoreFockRi(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), B_
             sum += B_mo.at(.{ p, q, P }) * v_core.at(P);
         }
 
-        for (0..ncore) |i| for (0..naux) |P| {
+        for (0..space.ncore) |i| for (0..naux) |P| {
             sum -= B_mo.at(.{ p, i, P }) * B_mo.at(.{ q, i, P });
         };
 
@@ -115,19 +198,14 @@ pub fn buildCoreFockRi(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), B_
 }
 
 /// Constructs diagonal Fock matrix elements for orbital rotation preconditioner.
-pub fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), ncore: usize, gpa: Allocator) !void {
-    const nmo, const nact = .{ h_mo.nrow(), D_act.nrow() };
-
-    var F_core = try Matrix(T).init(nmo, nmo, gpa);
-    defer F_core.deinit(gpa);
-
-    buildCoreFock(T, &F_core, h_mo, g_mo, ncore);
+pub fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), space: CasSpace) void {
+    const nmo, const nact = .{ space.nmo, space.nact };
 
     for (0..nmo) |p| {
         var sum_diag = F_core.at(p, p);
 
         for (0..nact) |u| for (0..nact) |v| {
-            const U, const V = .{ ncore + u, ncore + v };
+            const U, const V = .{ space.ncore + u, space.ncore + v };
 
             sum_diag += D_act.at(u, v) * (g_mo.at(.{ p, U, p, V }) - 0.5 * g_mo.at(.{ p, U, V, p }));
         };
@@ -137,15 +215,10 @@ pub fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), h_mo: Matrix(T), 
 }
 
 /// Constructs diagonal Fock matrix elements for orbital rotation preconditioner using density fitting.
-pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), h_mo: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), ncore: usize, gpa: Allocator) !void {
-    const nmo, const nact = .{ h_mo.nrow(), D_act.nrow() };
+pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), F_core: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), space: CasSpace, gpa: Allocator) !void {
+    const nmo, const nact = .{ space.nmo, space.nact };
 
     const naux = B_mo.shape[2];
-
-    var F_core = try Matrix(T).init(nmo, nmo, gpa);
-    defer F_core.deinit(gpa);
-
-    try buildCoreFockRi(T, &F_core, h_mo, B_mo, ncore, gpa);
 
     var v_act = try Vector(T).initZero(naux, gpa);
     defer v_act.deinit(gpa);
@@ -155,7 +228,7 @@ pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), h_mo: Matrix(T)
 
         if (val_D == 0) continue;
 
-        const U, const V = .{ ncore + u, ncore + v };
+        const U, const V = .{ space.ncore + u, space.ncore + v };
 
         for (0..naux) |P| {
             v_act.ptr(P).* += val_D * B_mo.at(.{ U, V, P });
@@ -174,7 +247,7 @@ pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), h_mo: Matrix(T)
 
             if (val_D == 0) continue;
 
-            const U, const V = .{ ncore + u, ncore + v };
+            const U, const V = .{ space.ncore + u, space.ncore + v };
 
             for (0..naux) |P| {
                 sum_diag -= 0.5 * val_D * B_mo.at(.{ p, U, P }) * B_mo.at(.{ p, V, P });
@@ -186,56 +259,72 @@ pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), h_mo: Matrix(T)
 }
 
 /// Constructs the generalized Fock matrix using active reduced density matrices.
-pub fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), ncore: usize, gpa: Allocator) !void {
-    const nmo = h_mo.nrow();
+pub fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace, gpa: Allocator) !void {
+    const nmo = space.nmo;
 
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
 
-    buildCoreFock(T, &F_core, h_mo, g_mo, ncore);
+    buildCoreFock(T, &F_core, h_mo, g_mo, space);
 
     @memset(F_gen.data, 0);
 
-    buildCoreColumns(T, F_gen, F_core, g_mo, D_act, ncore);
+    buildCoreColumns(T, F_gen, F_core, g_mo, D_act, space);
 
-    buildActColumns(T, F_gen, F_core, g_mo, D_act, d_act, ncore);
+    buildActColumns(T, F_gen, F_core, g_mo, D_act, d_act, space);
 }
 
 /// Constructs generalized Fock matrix using active reduced density matrices and density fitting integrals.
-pub fn buildGeneralizedFockRi(comptime T: type, F_gen: *Matrix(T), h_mo: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), ncore: usize, gpa: Allocator) !void {
-    const nmo = h_mo.nrow();
+pub fn buildGeneralizedFockRi(comptime T: type, F_gen: *Matrix(T), h_mo: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace, gpa: Allocator) !void {
+    const nmo = space.nmo;
 
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
 
-    try buildCoreFockRi(T, &F_core, h_mo, B_mo, ncore, gpa);
+    try buildCoreFockRi(T, &F_core, h_mo, B_mo, space, gpa);
 
     @memset(F_gen.data, 0);
 
-    try buildCoreColumnsRi(T, F_gen, F_core, B_mo, D_act, ncore, gpa);
+    try buildCoreColumnsRi(T, F_gen, F_core, B_mo, D_act, space, gpa);
 
-    try buildActColumnsRi(T, F_gen, F_core, B_mo, D_act, d_act, ncore, gpa);
+    try buildActColumnsRi(T, F_gen, F_core, B_mo, D_act, d_act, space, gpa);
+}
+
+/// Evaluates the generalized Fock matrix derivative using density fitting and precomputed intermediate contractions.
+pub fn buildGeneralizedFockDerivRi(comptime T: type, dF_gen: *Matrix(T), dh_mo: Matrix(T), B_mo: Tensor(T, 3), dB_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace, ws: GeneralizedFockRiWorkspace(T), gpa: Allocator) !void {
+    const nmo = space.nmo;
+
+    var dF_core = try Matrix(T).init(nmo, nmo, gpa);
+    defer dF_core.deinit(gpa);
+
+    try buildCoreFockDerivRi(T, &dF_core, dh_mo, B_mo, dB_mo, ws.v_core, space, gpa);
+
+    @memset(dF_gen.data, 0);
+
+    try buildCoreColumnsDerivRi(T, dF_gen, dF_core, B_mo, dB_mo, D_act, ws.v_act, ws.W, space, gpa);
+
+    try buildActColumnsDerivRi(T, dF_gen, dF_core, B_mo, dB_mo, D_act, d_act, ws.Q, space, gpa);
 }
 
 /// Enumerates non-redundant orbital pairs across core-virtual, active-virtual, and core-active subspaces.
-pub fn buildNonRedundantPairs(ncore: usize, nact: usize, nmo: usize, gpa: Allocator) ![]OrbitalPair {
-    const total = ncore * (nmo - ncore - nact) + nact * (nmo - ncore - nact) + ncore * nact;
+pub fn buildNonRedundantPairs(space: CasSpace, gpa: Allocator) ![]OrbitalPair {
+    const total = space.ncore * space.nvir() + space.nact * space.nvir() + space.ncore * space.nact;
 
     var pairs, var idx: usize = .{ try gpa.alloc(OrbitalPair, total), 0 };
 
-    for (0..ncore) |j| for (ncore + nact..nmo) |b| {
+    for (0..space.ncore) |j| for (space.nocc()..space.nmo) |b| {
         pairs[idx] = .{ .p = b, .q = j };
 
         idx += 1;
     };
 
-    for (ncore..ncore + nact) |u| for (ncore + nact..nmo) |b| {
+    for (space.ncore..space.nocc()) |u| for (space.nocc()..space.nmo) |b| {
         pairs[idx] = .{ .p = b, .q = u };
 
         idx += 1;
     };
 
-    for (0..ncore) |j| for (ncore..ncore + nact) |u| {
+    for (0..space.ncore) |j| for (space.ncore..space.nocc()) |u| {
         pairs[idx] = .{ .p = u, .q = j };
 
         idx += 1;
@@ -245,8 +334,8 @@ pub fn buildNonRedundantPairs(ncore: usize, nact: usize, nmo: usize, gpa: Alloca
 }
 
 /// Evaluates the exact analytic orbital Hessian of the state-averaged energy with respect to orbital rotations.
-pub fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, ncore: usize, gpa: Allocator) !void {
-    const nmo, const nrot = .{ h_mo.ncol(), pairs.len };
+pub fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, space: CasSpace, gpa: Allocator) !void {
+    const nmo, const nrot = .{ space.nmo, pairs.len };
 
     var dh = try Matrix(T).initZero(nmo, nmo, gpa);
     defer dh.deinit(gpa);
@@ -287,7 +376,59 @@ pub fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), g_m
 
         @memset(dF_gen.data, 0);
 
-        try buildGeneralizedFock(T, &dF_gen, dh, dg, D_act, d_act, ncore, gpa);
+        try buildGeneralizedFock(T, &dF_gen, dh, dg, D_act, d_act, space, gpa);
+
+        for (pairs, 0..) |pair_i, i| {
+            A.ptr(i, j).* = 2 * (dF_gen.at(pair_i.p, pair_i.q) - dF_gen.at(pair_i.q, pair_i.p));
+        }
+    }
+
+    for (0..nrot) |i| for (i + 1..nrot) |j| {
+        const avg = 0.5 * (A.at(i, j) + A.at(j, i));
+
+        A.ptr(i, j).* = avg;
+        A.ptr(j, i).* = avg;
+    };
+}
+
+/// Evaluates the analytic orbital Hessian of the state-averaged energy with respect to orbital rotations using density fitting.
+pub fn buildOrbitalHessianRi(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, space: CasSpace, gpa: Allocator) !void {
+    const nmo, const nrot, const naux = .{ space.nmo, pairs.len, B_mo.shape[2] };
+
+    var ws = try GeneralizedFockRiWorkspace(T).init(B_mo, D_act, d_act, space, gpa);
+    defer ws.deinit(gpa);
+
+    var dh = try Matrix(T).initZero(nmo, nmo, gpa);
+    defer dh.deinit(gpa);
+
+    var dB = try Tensor(T, 3).initZero(.{ nmo, nmo, naux }, gpa);
+    defer dB.deinit(gpa);
+
+    var dF_gen = try Matrix(T).initZero(nmo, nmo, gpa);
+    defer dF_gen.deinit(gpa);
+
+    for (pairs, 0..) |pair_j, j| {
+        const p, const q = .{ pair_j.p, pair_j.q };
+
+        @memset(dh.data, 0);
+
+        for (0..nmo) |idx| {
+            dh.ptr(p, idx).* += h_mo.at(q, idx);
+            dh.ptr(q, idx).* -= h_mo.at(p, idx);
+            dh.ptr(idx, p).* += h_mo.at(idx, q);
+            dh.ptr(idx, q).* -= h_mo.at(idx, p);
+        }
+
+        @memset(dB.data, 0);
+
+        for (0..nmo) |idx| for (0..naux) |P| {
+            dB.ptr(.{ p, idx, P }).* += B_mo.at(.{ q, idx, P });
+            dB.ptr(.{ q, idx, P }).* -= B_mo.at(.{ p, idx, P });
+            dB.ptr(.{ idx, p, P }).* += B_mo.at(.{ idx, q, P });
+            dB.ptr(.{ idx, q, P }).* -= B_mo.at(.{ idx, p, P });
+        };
+
+        try buildGeneralizedFockDerivRi(T, &dF_gen, dh, B_mo, dB, D_act, d_act, space, ws, gpa);
 
         for (pairs, 0..) |pair_i, i| {
             A.ptr(i, j).* = 2 * (dF_gen.at(pair_i.p, pair_i.q) - dF_gen.at(pair_i.q, pair_i.p));
@@ -303,10 +444,8 @@ pub fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), g_m
 }
 
 /// Evaluates the anti-symmetric orbital rotation generator matrix kappa using a diagonal Hessian approximation.
-pub fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb: Matrix(T), F_diag: Vector(T), D_act: Matrix(T), ncore: usize) void {
-    const nmo, const nact = .{ kappa.ncol(), D_act.nrow() };
-
-    for (0..ncore) |j| for (ncore + nact..nmo) |b| {
+pub fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb: Matrix(T), F_diag: Vector(T), D_act: Matrix(T), space: CasSpace) void {
+    for (0..space.ncore) |j| for (space.nocc()..space.nmo) |b| {
         const denom = @max(0.1, @abs(4 * (F_diag.at(b) - F_diag.at(j))));
 
         const step = std.math.clamp(-g_orb.at(b, j) / denom, -0.2, 0.2);
@@ -315,12 +454,12 @@ pub fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb:
         kappa.ptr(j, b).* = 0 - step;
     };
 
-    for (0..nact) |u_idx| {
-        const u = ncore + u_idx;
+    for (0..space.nact) |u_idx| {
+        const u = space.ncore + u_idx;
 
         const Duu = D_act.at(u_idx, u_idx);
 
-        for (ncore + nact..nmo) |b| {
+        for (space.nocc()..space.nmo) |b| {
             const denom = @max(0.1, @abs(2 * Duu * (F_diag.at(b) - F_diag.at(u))));
 
             const step = std.math.clamp(-g_orb.at(b, u) / denom, -0.2, 0.2);
@@ -329,7 +468,7 @@ pub fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb:
             kappa.ptr(u, b).* = 0 - step;
         }
 
-        for (0..ncore) |j| {
+        for (0..space.ncore) |j| {
             const denom = @max(0.1, @abs(2 * (2 - Duu) * (F_diag.at(u) - F_diag.at(j))));
 
             const step = std.math.clamp(-g_orb.at(u, j) / denom, -0.2, 0.2);
@@ -341,8 +480,8 @@ pub fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb:
 }
 
 /// Canonicalizes core and virtual orbital blocks by diagonalizing their respective Fock matrices.
-pub fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, ncore: usize, nact: usize, gpa: Allocator) !void {
-    const nmo = C.ncol();
+pub fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, space: CasSpace, gpa: Allocator) !void {
+    const nmo = space.nmo;
 
     var h_mo = try Matrix(T).init(nmo, nmo, gpa);
     defer h_mo.deinit(gpa);
@@ -357,16 +496,16 @@ pub fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, ncor
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
 
-    buildCoreFock(T, &F_core, h_mo, g_mo, ncore);
+    buildCoreFock(T, &F_core, h_mo, g_mo, space);
 
-    try canonicalizeCoreSubspace(T, C, F_core, ncore, gpa);
+    try canonicalizeCoreSubspace(T, C, F_core, space.ncore, gpa);
 
-    try canonicalizeVirtualSubspace(T, C, F_core, ncore, nact, gpa);
+    try canonicalizeVirtualSubspace(T, C, F_core, space, gpa);
 }
 
 /// Canonicalizes core and virtual orbital blocks using core Fock matrix from density fitting.
-pub fn canonicalizeOrbitalsRi(comptime T: type, C: *Matrix(T), ints: anytype, ncore: usize, nact: usize, gpa: Allocator) !void {
-    const nmo = C.ncol();
+pub fn canonicalizeOrbitalsRi(comptime T: type, C: *Matrix(T), ints: anytype, space: CasSpace, gpa: Allocator) !void {
+    const nmo = space.nmo;
 
     var h_mo = try Matrix(T).init(nmo, nmo, gpa);
     defer h_mo.deinit(gpa);
@@ -381,30 +520,30 @@ pub fn canonicalizeOrbitalsRi(comptime T: type, C: *Matrix(T), ints: anytype, nc
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
 
-    try buildCoreFockRi(T, &F_core, h_mo, B_mo, ncore, gpa);
+    try buildCoreFockRi(T, &F_core, h_mo, B_mo, space, gpa);
 
-    try canonicalizeCoreSubspace(T, C, F_core, ncore, gpa);
+    try canonicalizeCoreSubspace(T, C, F_core, space.ncore, gpa);
 
-    try canonicalizeVirtualSubspace(T, C, F_core, ncore, nact, gpa);
+    try canonicalizeVirtualSubspace(T, C, F_core, space, gpa);
 }
 
 /// Evaluates the orbital gradient matrix and returns the maximum gradient norm among non-redundant pairs.
-pub fn computeOrbitalGradient(comptime T: type, g_orb: *Matrix(T), F_gen: Matrix(T), ncore: usize, nact: usize) T {
-    const nmo, var max_norm: T = .{ F_gen.nrow(), 0 };
+pub fn computeOrbitalGradient(comptime T: type, g_orb: *Matrix(T), F_gen: Matrix(T), space: CasSpace) T {
+    const nmo, var max_norm: T = .{ space.nmo, 0 };
 
     for (0..nmo) |p| for (0..nmo) |q| {
         g_orb.ptr(p, q).* = 2 * (F_gen.at(p, q) - F_gen.at(q, p));
     };
 
-    for (0..ncore) |j| for (ncore + nact..nmo) |b| {
+    for (0..space.ncore) |j| for (space.nocc()..space.nmo) |b| {
         max_norm = @max(max_norm, @abs(g_orb.at(b, j)));
     };
 
-    for (ncore..ncore + nact) |u| for (ncore + nact..nmo) |b| {
+    for (space.ncore..space.nocc()) |u| for (space.nocc()..space.nmo) |b| {
         max_norm = @max(max_norm, @abs(g_orb.at(b, u)));
     };
 
-    for (0..ncore) |j| for (ncore..ncore + nact) |u| {
+    for (0..space.ncore) |j| for (space.ncore..space.nocc()) |u| {
         max_norm = @max(max_norm, @abs(g_orb.at(u, j)));
     };
 
@@ -412,19 +551,19 @@ pub fn computeOrbitalGradient(comptime T: type, g_orb: *Matrix(T), F_gen: Matrix
 }
 
 /// Constructs active subspace columns of the generalized Fock matrix from active 1- and 2-RDM contractions.
-fn buildActColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), ncore: usize) void {
-    const nmo, const nact = .{ F_core.nrow(), D_act.nrow() };
+fn buildActColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace) void {
+    const nmo, const nact = .{ space.nmo, space.nact };
 
     for (0..nmo) |p| for (0..nact) |u| {
-        const U = ncore + u;
+        const U = space.ncore + u;
         var sum: T = 0;
 
         for (0..nact) |v| {
-            sum += F_core.at(p, ncore + v) * D_act.at(v, u);
+            sum += F_core.at(p, space.ncore + v) * D_act.at(v, u);
         }
 
         for (0..nact) |v| for (0..nact) |w| for (0..nact) |x| {
-            const V, const W, const X = .{ ncore + v, ncore + w, ncore + x };
+            const V, const W, const X = .{ space.ncore + v, space.ncore + w, space.ncore + x };
 
             sum += g_mo.at(.{ p, W, V, X }) * d_act.at(.{ u, v, w, x });
         };
@@ -434,8 +573,8 @@ fn buildActColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo:
 }
 
 /// Constructs active subspace columns of generalized Fock matrix from active RDMs and fitting integrals.
-fn buildActColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), ncore: usize, gpa: Allocator) !void {
-    const nmo, const nact = .{ F_core.nrow(), D_act.nrow() };
+fn buildActColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace, gpa: Allocator) !void {
+    const nmo, const nact = .{ space.nmo, space.nact };
 
     const naux = B_mo.shape[2];
 
@@ -447,7 +586,7 @@ fn buildActColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_m
 
         if (val_d == 0) continue;
 
-        const W, const X = .{ ncore + w, ncore + x };
+        const W, const X = .{ space.ncore + w, space.ncore + x };
 
         for (0..naux) |P| {
             Q_aux.ptr(.{ u, v, P }).* += val_d * B_mo.at(.{ W, X, P });
@@ -455,14 +594,14 @@ fn buildActColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_m
     };
 
     for (0..nmo) |p| for (0..nact) |u| {
-        const U, var sum: T = .{ ncore + u, 0 };
+        const U, var sum: T = .{ space.ncore + u, 0 };
 
         for (0..nact) |v| {
-            sum += F_core.at(p, ncore + v) * D_act.at(v, u);
+            sum += F_core.at(p, space.ncore + v) * D_act.at(v, u);
         }
 
         for (0..nact) |v| for (0..naux) |P| {
-            sum += B_mo.at(.{ p, ncore + v, P }) * Q_aux.at(.{ u, v, P });
+            sum += B_mo.at(.{ p, space.ncore + v, P }) * Q_aux.at(.{ u, v, P });
         };
 
         F_gen.ptr(p, U).* = sum;
@@ -470,14 +609,14 @@ fn buildActColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_m
 }
 
 /// Constructs core subspace columns of the generalized Fock matrix from active 1-RDM contractions.
-fn buildCoreColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), ncore: usize) void {
-    const nmo, const nact = .{ F_core.nrow(), D_act.nrow() };
+fn buildCoreColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), space: CasSpace) void {
+    const nmo, const nact = .{ space.nmo, space.nact };
 
-    for (0..nmo) |p| for (0..ncore) |j| {
+    for (0..nmo) |p| for (0..space.ncore) |j| {
         var sum = F_core.at(p, j);
 
         for (0..nact) |u| for (0..nact) |v| {
-            const U, const V = .{ ncore + u, ncore + v };
+            const U, const V = .{ space.ncore + u, space.ncore + v };
 
             sum += D_act.at(u, v) * (g_mo.at(.{ p, U, j, V }) - 0.5 * g_mo.at(.{ p, U, V, j }));
         };
@@ -487,8 +626,8 @@ fn buildCoreColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo
 }
 
 /// Constructs core subspace columns of generalized Fock matrix from active 1-RDM and fitting integrals.
-fn buildCoreColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), ncore: usize, gpa: Allocator) !void {
-    const nmo, const nact = .{ F_core.nrow(), D_act.nrow() };
+fn buildCoreColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), space: CasSpace, gpa: Allocator) !void {
+    const nmo, const nact = .{ space.nmo, space.nact };
 
     const naux = B_mo.shape[2];
 
@@ -500,14 +639,14 @@ fn buildCoreColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_
 
         if (val_D == 0) continue;
 
-        const U, const V = .{ ncore + u, ncore + v };
+        const U, const V = .{ space.ncore + u, space.ncore + v };
 
         for (0..naux) |P| {
             v_act.ptr(P).* += val_D * B_mo.at(.{ U, V, P });
         }
     };
 
-    var W = try Tensor(T, 3).initZero(.{ nact, ncore, naux }, gpa);
+    var W = try Tensor(T, 3).initZero(.{ nact, space.ncore, naux }, gpa);
     defer W.deinit(gpa);
 
     for (0..nact) |u| for (0..nact) |v| {
@@ -515,14 +654,14 @@ fn buildCoreColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_
 
         if (val_D == 0) continue;
 
-        const U = ncore + u;
+        const U = space.ncore + u;
 
-        for (0..ncore) |j| for (0..naux) |P| {
+        for (0..space.ncore) |j| for (0..naux) |P| {
             W.ptr(.{ v, j, P }).* += val_D * B_mo.at(.{ U, j, P });
         };
     };
 
-    for (0..nmo) |p| for (0..ncore) |j| {
+    for (0..nmo) |p| for (0..space.ncore) |j| {
         var sum = F_core.at(p, j);
 
         for (0..naux) |P| {
@@ -530,7 +669,7 @@ fn buildCoreColumnsRi(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), B_
         }
 
         for (0..nact) |v| for (0..naux) |P| {
-            sum -= 0.5 * B_mo.at(.{ p, ncore + v, P }) * W.at(.{ v, j, P });
+            sum -= 0.5 * B_mo.at(.{ p, space.ncore + v, P }) * W.at(.{ v, j, P });
         };
 
         F_gen.ptr(p, j).* = 2 * sum;
@@ -576,14 +715,12 @@ fn canonicalizeCoreSubspace(comptime T: type, C: *Matrix(T), F_core: Matrix(T), 
 }
 
 /// Canonicalizes the unoccupied virtual orbital subspace by diagonalizing its core Fock sub-block.
-fn canonicalizeVirtualSubspace(comptime T: type, C: *Matrix(T), F_core: Matrix(T), ncore: usize, nact: usize, gpa: Allocator) !void {
-    const nmo = C.ncol();
-
-    const nvirt = nmo - ncore - nact;
+fn canonicalizeVirtualSubspace(comptime T: type, C: *Matrix(T), F_core: Matrix(T), space: CasSpace, gpa: Allocator) !void {
+    const nvirt = space.nvir();
 
     if (nvirt <= 1) return;
 
-    const nbf, const v_start = .{ C.nrow(), ncore + nact };
+    const nbf, const v_start = .{ C.nrow(), space.nocc() };
 
     var F_vv = try Matrix(T).init(nvirt, nvirt, gpa);
     defer F_vv.deinit(gpa);
@@ -614,5 +751,114 @@ fn canonicalizeVirtualSubspace(comptime T: type, C: *Matrix(T), F_core: Matrix(T
 
     for (0..nbf) |mu| for (0..nvirt) |a| {
         C.ptr(mu, v_start + a).* = C_new.at(mu, a);
+    };
+}
+
+/// Evaluates derivative of core Fock matrix with respect to orbital rotation or nuclear displacement.
+fn buildCoreFockDerivRi(comptime T: type, dF_core: *Matrix(T), dh_mo: Matrix(T), B_mo: Tensor(T, 3), dB_mo: Tensor(T, 3), v_core: Vector(T), space: CasSpace, gpa: Allocator) !void {
+    const nmo, const naux = .{ space.nmo, B_mo.shape[2] };
+
+    var dv_core = try Vector(T).initZero(naux, gpa);
+    defer dv_core.deinit(gpa);
+
+    for (0..space.ncore) |i| for (0..naux) |P| {
+        dv_core.ptr(P).* += 2 * dB_mo.at(.{ i, i, P });
+    };
+
+    for (0..nmo) |p| for (0..nmo) |q| {
+        var sum = dh_mo.at(p, q);
+
+        for (0..naux) |P| {
+            sum += dB_mo.at(.{ p, q, P }) * v_core.at(P) + B_mo.at(.{ p, q, P }) * dv_core.at(P);
+        }
+
+        for (0..space.ncore) |i| for (0..naux) |P| {
+            sum -= dB_mo.at(.{ p, i, P }) * B_mo.at(.{ q, i, P }) + B_mo.at(.{ p, i, P }) * dB_mo.at(.{ q, i, P });
+        };
+
+        dF_core.ptr(p, q).* = sum;
+    };
+}
+
+/// Constructs derivative of core subspace columns of generalized Fock matrix from 3-center fitting derivatives.
+fn buildCoreColumnsDerivRi(comptime T: type, dF_gen: *Matrix(T), dF_core: Matrix(T), B_mo: Tensor(T, 3), dB_mo: Tensor(T, 3), D_act: Matrix(T), v_act: Vector(T), W: Tensor(T, 3), space: CasSpace, gpa: Allocator) !void {
+    const nmo, const nact, const naux = .{ space.nmo, space.nact, B_mo.shape[2] };
+
+    var dv_act = try Vector(T).initZero(naux, gpa);
+    defer dv_act.deinit(gpa);
+
+    for (0..nact) |u| for (0..nact) |v| {
+        const val_D = D_act.at(u, v);
+
+        if (val_D == 0) continue;
+
+        const U, const V = .{ space.ncore + u, space.ncore + v };
+
+        for (0..naux) |P| {
+            dv_act.ptr(P).* += val_D * dB_mo.at(.{ U, V, P });
+        }
+    };
+
+    var dW = try Tensor(T, 3).initZero(.{ nact, space.ncore, naux }, gpa);
+    defer dW.deinit(gpa);
+
+    for (0..nact) |u| for (0..nact) |v| {
+        const val_D = D_act.at(u, v);
+
+        if (val_D == 0) continue;
+
+        const U = space.ncore + u;
+
+        for (0..space.ncore) |j| for (0..naux) |P| {
+            dW.ptr(.{ v, j, P }).* += val_D * dB_mo.at(.{ U, j, P });
+        };
+    };
+
+    for (0..nmo) |p| for (0..space.ncore) |j| {
+        var sum = dF_core.at(p, j);
+
+        for (0..naux) |P| {
+            sum += dB_mo.at(.{ p, j, P }) * v_act.at(P) + B_mo.at(.{ p, j, P }) * dv_act.at(P);
+        }
+
+        for (0..nact) |v| for (0..naux) |P| {
+            sum -= 0.5 * (dB_mo.at(.{ p, space.ncore + v, P }) * W.at(.{ v, j, P }) + B_mo.at(.{ p, space.ncore + v, P }) * dW.at(.{ v, j, P }));
+        };
+
+        dF_gen.ptr(p, j).* = 2 * sum;
+    };
+}
+
+/// Constructs derivative of active subspace columns of generalized Fock matrix from 3-center fitting derivatives.
+fn buildActColumnsDerivRi(comptime T: type, dF_gen: *Matrix(T), dF_core: Matrix(T), B_mo: Tensor(T, 3), dB_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), Q_aux: Tensor(T, 3), space: CasSpace, gpa: Allocator) !void {
+    const nmo, const nact, const naux = .{ space.nmo, space.nact, B_mo.shape[2] };
+
+    var dQ_aux = try Tensor(T, 3).initZero(.{ nact, nact, naux }, gpa);
+    defer dQ_aux.deinit(gpa);
+
+    for (0..nact) |u| for (0..nact) |v| for (0..nact) |w| for (0..nact) |x| {
+        const val_d = d_act.at(.{ u, v, w, x });
+
+        if (val_d == 0) continue;
+
+        const W_idx, const X_idx = .{ space.ncore + w, space.ncore + x };
+
+        for (0..naux) |P| {
+            dQ_aux.ptr(.{ u, v, P }).* += val_d * dB_mo.at(.{ W_idx, X_idx, P });
+        }
+    };
+
+    for (0..nmo) |p| for (0..nact) |u| {
+        const U, var sum: T = .{ space.ncore + u, 0 };
+
+        for (0..nact) |v| {
+            sum += dF_core.at(p, space.ncore + v) * D_act.at(v, u);
+        }
+
+        for (0..nact) |v| for (0..naux) |P| {
+            sum += dB_mo.at(.{ p, space.ncore + v, P }) * Q_aux.at(.{ u, v, P }) + B_mo.at(.{ p, space.ncore + v, P }) * dQ_aux.at(.{ u, v, P });
+        };
+
+        dF_gen.ptr(p, U).* = sum;
     };
 }

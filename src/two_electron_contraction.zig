@@ -83,3 +83,23 @@ pub fn contractTwoElectronResponse(comptime T: type, F_x: *Matrix(T), dg: Tensor
         F_x.ptr(mu, nu).* += P.at(lambda, sigma) * (coul - exch_factor * exch);
     };
 }
+
+/// Contracts two-electron repulsion integrals with the response density to evaluate orbital Hessian response.
+pub fn contractTwoElectronResponseHessian(comptime T: type, V_x: *Matrix(T), g: Tensor(T, 4), P_x: Matrix(T), exch_factor: T) void {
+    const nbf = V_x.nrow();
+
+    std.debug.assert(g.shape[0] == nbf);
+    std.debug.assert(g.shape[1] == nbf);
+    std.debug.assert(g.shape[2] == nbf);
+    std.debug.assert(g.shape[3] == nbf);
+
+    std.debug.assert(P_x.shape[0] == nbf);
+    std.debug.assert(P_x.shape[1] == nbf);
+
+    for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
+        const g_mlns = g.at(.{ mu, lambda, nu, sigma });
+        const g_mnls = g.at(.{ mu, nu, lambda, sigma });
+
+        V_x.ptr(lambda, sigma).* += P_x.at(mu, nu) * (g_mlns - exch_factor * g_mnls);
+    };
+}

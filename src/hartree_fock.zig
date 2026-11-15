@@ -28,7 +28,6 @@ const gemm = @import("linear_algebra.zig").gemm;
 const getSymbol = @import("constants.zig").getSymbol;
 const lowdin = @import("population_analysis.zig").lowdin;
 const mayer = @import("population_analysis.zig").mayer;
-const molecular_integrals_run = @import("molecular_integrals.zig").run;
 const molecular_integrals_runFromSystem = @import("molecular_integrals.zig").runFromSystem;
 const mulliken = @import("population_analysis.zig").mulliken;
 const orbitalResponse = @import("orbital_response.zig").orbitalResponse;

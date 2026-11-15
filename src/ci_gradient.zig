@@ -6,13 +6,11 @@ const Allocator = std.mem.Allocator;
 
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
-const MetricDecomposition = @import("density_fitting.zig").MetricDecomposition;
+const FittingDerivativeWorkspace = @import("density_fitting.zig").FittingDerivativeWorkspace;
 const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 
-const buildMetricDerivKernel = @import("density_fitting.zig").buildMetricDerivKernel;
-const evaluateFittingTensorDeriv = @import("density_fitting.zig").evaluateFittingTensorDeriv;
-const evaluateMetricDeriv = @import("density_fitting.zig").evaluateMetricDeriv;
+const packDualTensor3c = @import("density_fitting.zig").packDualTensor3c;
 const slater = @import("slater_condon.zig").slater;
 const transformInts = @import("integral_transform.zig").transformInts;
 const transformIntsRi = @import("integral_transform.zig").transformIntsRi;
@@ -94,8 +92,6 @@ pub fn calculateRiCiGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci
 
     const I_3c = hfres.ints.I orelse unreachable;
 
-    const nbf, const naux = .{ B.shape[0], B.shape[2] };
-
     var grads = try gpa.alloc(Matrix(T), states.len);
     errdefer gpa.free(grads);
 
@@ -108,17 +104,8 @@ pub fn calculateRiCiGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci
         grads_done += 1;
     }
 
-    var decomp = try MetricDecomposition(T).init(J, gpa);
-    defer decomp.deinit(gpa);
-
-    var M_kernel = try buildMetricDerivKernel(T, decomp.W, gpa);
-    defer M_kernel.deinit(gpa);
-
-    var dJ_inv_half = try Matrix(T).init(naux, naux, gpa);
-    defer dJ_inv_half.deinit(gpa);
-
-    var dB_ao = try Tensor(T, 3).initZero(B.shape, gpa);
-    defer dB_ao.deinit(gpa);
+    var deriv_ws = try FittingDerivativeWorkspace(T).init(J, B.shape, gpa);
+    defer deriv_ws.deinit(gpa);
 
     var B_d = try Tensor(ScalarDual(T), 3).init(B.shape, gpa);
     defer B_d.deinit(gpa);
@@ -130,13 +117,9 @@ pub fn calculateRiCiGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci
     defer C_d.deinit(gpa);
 
     for (0..3 * hfres.ints.sys.atoms.len) |coord| {
-        try evaluateMetricDeriv(T, &dJ_inv_half, dJ.slice(coord).asMatrix(), decomp.U, M_kernel, gpa);
+        try deriv_ws.evaluate(dJ.slice(coord).asMatrix(), dI.slice(coord), I_3c, gpa);
 
-        evaluateFittingTensorDeriv(T, &dB_ao, dI.slice(coord), I_3c, decomp.J_inv_half, dJ_inv_half);
-
-        for (0..nbf) |mu| for (0..nbf) |nu| for (0..naux) |P| {
-            B_d.ptr(.{ mu, nu, P }).* = ScalarDual(T).init(B.at(.{ mu, nu, P }), dB_ao.at(.{ mu, nu, P }));
-        };
+        packDualTensor3c(T, &B_d, B, deriv_ws.dB_ao);
 
         for (0..H_d.nrow()) |mu| for (0..H_d.ncol()) |nu| {
             H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
@@ -147,6 +130,7 @@ pub fn calculateRiCiGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci
         };
 
         var h_ms_d, var g_ms_d = try transformIntsRi(ScalarDual(T), C_d, H_d, B_d, generalized, gpa);
+
         defer {
             h_ms_d.deinit(gpa);
             g_ms_d.deinit(gpa);

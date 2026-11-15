@@ -351,6 +351,29 @@ pub fn ao2mo_3c(comptime T: type, B_mo: *Tensor(T, 3), B_ao: Tensor(T, 3), C: Ma
     };
 }
 
+/// Reconstructs spin-orbital two-electron repulsion integrals from molecular orbital 3-center fitting tensors.
+pub fn b2ms(comptime T: type, g_ms: *Tensor(T, 4), B_mo: Tensor(T, 3)) void {
+    const n, const naux = .{ g_ms.shape[0] / 2, B_mo.shape[2] };
+
+    for (0..n) |p| for (0..n) |r| {
+        for (0..n) |q| for (0..n) |s| {
+            var sum = Value(T).fromFloat(0);
+
+            for (0..naux) |P| {
+                const b_pr = Value(T).init(B_mo.at(.{ p, r, P }));
+                const b_qs = Value(T).init(B_mo.at(.{ q, s, P }));
+
+                sum = sum.add(b_pr.mul(b_qs));
+            }
+
+            g_ms.ptr(.{ 2 * p + 0, 2 * q + 0, 2 * r + 0, 2 * s + 0 }).* = sum.val;
+            g_ms.ptr(.{ 2 * p + 0, 2 * q + 1, 2 * r + 0, 2 * s + 1 }).* = sum.val;
+            g_ms.ptr(.{ 2 * p + 1, 2 * q + 0, 2 * r + 1, 2 * s + 0 }).* = sum.val;
+            g_ms.ptr(.{ 2 * p + 1, 2 * q + 1, 2 * r + 1, 2 * s + 1 }).* = sum.val;
+        };
+    };
+}
+
 /// Transforms a one-electron operator matrix from the molecular orbital basis back to the atomic orbital basis.
 pub fn mo2ao_1e(comptime T: type, A_ao: *Matrix(T), A_mo: Matrix(T), C: Matrix(T)) !void {
     const N = C.shape[0];
@@ -464,23 +487,7 @@ pub fn transformIntsRi(comptime T: type, C: Matrix(T), H: Matrix(T), B_ao: Tenso
         var g_ms = try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
         errdefer g_ms.deinit(gpa);
 
-        for (0..nmo) |p| for (0..nmo) |r| {
-            for (0..nmo) |q| for (0..nmo) |s| {
-                var sum = Value(T).fromFloat(0);
-
-                for (0..naux) |P| {
-                    const b_pr = Value(T).init(B_mo.at(.{ p, r, P }));
-                    const b_qs = Value(T).init(B_mo.at(.{ q, s, P }));
-
-                    sum = sum.add(b_pr.mul(b_qs));
-                }
-
-                g_ms.ptr(.{ 2 * p, 2 * q, 2 * r, 2 * s }).* = sum.val;
-                g_ms.ptr(.{ 2 * p + 1, 2 * q + 1, 2 * r + 1, 2 * s + 1 }).* = sum.val;
-                g_ms.ptr(.{ 2 * p, 2 * q + 1, 2 * r, 2 * s + 1 }).* = sum.val;
-                g_ms.ptr(.{ 2 * p + 1, 2 * q, 2 * r + 1, 2 * s }).* = sum.val;
-            };
-        };
+        b2ms(T, &g_ms, B_mo);
 
         return .{ h_ms, g_ms };
     }

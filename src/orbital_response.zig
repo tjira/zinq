@@ -7,19 +7,52 @@ const Allocator = std.mem.Allocator;
 const Diis = @import("diis.zig").Diis;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
-const MetricDecomposition = @import("density_fitting.zig").MetricDecomposition;
+const FittingDerivativeWorkspace = @import("density_fitting.zig").FittingDerivativeWorkspace;
 const RiFlags = @import("density_fitting.zig").RiFlags;
 const RiWorkspace = @import("density_fitting.zig").RiWorkspace;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_1e = @import("integral_transform.zig").ao2mo_1e;
-const buildMetricDerivKernel = @import("density_fitting.zig").buildMetricDerivKernel;
 const contractTwoElectronResponse = @import("two_electron_contraction.zig").contractTwoElectronResponse;
-const evaluateFittingTensorDeriv = @import("density_fitting.zig").evaluateFittingTensorDeriv;
-const evaluateMetricDeriv = @import("density_fitting.zig").evaluateMetricDeriv;
+const contractTwoElectronResponseHessian = @import("two_electron_contraction.zig").contractTwoElectronResponseHessian;
+const gemm = @import("linear_algebra.zig").gemm;
 const mo2ao_1e = @import("integral_transform.zig").mo2ao_1e;
 const printf = @import("read_write.zig").printf;
+
+/// Scratch memory buffers for evaluating non-relaxed perturbed molecular orbital coefficients.
+pub fn NonRelaxedOrbitalWorkspace(comptime T: type) type {
+    return struct {
+        temp: Matrix(T),
+        S_mo: Matrix(T),
+
+        /// Allocates intermediate scratch matrices for non-relaxed orbital coefficient evaluation.
+        pub fn init(nbf: usize, nmo: usize, gpa: Allocator) !@This() {
+            var temp = try Matrix(T).init(nbf, nmo, gpa);
+            errdefer temp.deinit(gpa);
+
+            var S_mo = try Matrix(T).init(nmo, nmo, gpa);
+            errdefer S_mo.deinit(gpa);
+
+            return .{ .temp = temp, .S_mo = S_mo };
+        }
+
+        /// Deallocates intermediate scratch matrices.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.S_mo.deinit(gpa);
+            self.temp.deinit(gpa);
+        }
+
+        /// Evaluates non-relaxed perturbed coefficients dC = -0.5 * C * (C^T * dS * C).
+        pub fn evaluate(self: *@This(), dC: *Matrix(T), C: Matrix(T), dS_ao: Matrix(T)) void {
+            gemm(T, &self.temp, dS_ao, C, 1, 0, false, false);
+
+            gemm(T, &self.S_mo, C, self.temp, 1, 0, true, false);
+
+            gemm(T, dC, C, self.S_mo, -0.5, 0, false, false);
+        }
+    };
+}
 
 /// Scratch memory buffers for storing perturbed density, potential, and orbital rotation matrices during CPHF iterations.
 fn CphfWorkspace(comptime T: type) type {
@@ -136,17 +169,8 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
     var ri_ws: ?RiWorkspace(T) = null;
     defer if (ri_ws) |*w| w.deinit(gpa);
 
-    var decomp: ?MetricDecomposition(T) = null;
-    defer if (decomp) |*d| d.deinit(gpa);
-
-    var M_kernel: ?Matrix(T) = null;
-    defer if (M_kernel) |*m| m.deinit(gpa);
-
-    var dJ_inv_half: ?Matrix(T) = null;
-    defer if (dJ_inv_half) |*m| m.deinit(gpa);
-
-    var dB_ao: ?Tensor(T, 3) = null;
-    defer if (dB_ao) |*t| t.deinit(gpa);
+    var deriv_ws: ?FittingDerivativeWorkspace(T) = null;
+    defer if (deriv_ws) |*w| w.deinit(gpa);
 
     if (hfres.ints.B) |B| {
         const J = hfres.ints.J orelse return error.MissingIntegrals;
@@ -156,11 +180,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
         _ = hfres.ints.I orelse return error.MissingIntegrals;
 
-        const naux = J.nrow();
-
-        decomp = try MetricDecomposition(T).init(J, gpa);
-
-        M_kernel = try buildMetricDerivKernel(T, decomp.?.W, gpa);
+        deriv_ws = try FittingDerivativeWorkspace(T).init(J, B.shape, gpa);
 
         const flags: RiFlags = .{
             .coulomb = true,
@@ -169,13 +189,9 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             .response = true,
         };
 
-        ri_ws = try RiWorkspace(T).init(hfres.ints.sys.nbf, naux, nocc, flags, gpa);
+        ri_ws = try RiWorkspace(T).init(hfres.ints.sys.nbf, J.nrow(), nocc, flags, gpa);
 
         ri_ws.?.updateExchange(B, C);
-
-        dJ_inv_half = try Matrix(T).init(naux, naux, gpa);
-
-        dB_ao = try Tensor(T, 3).initZero(B.shape, gpa);
     }
 
     for (0..3 * hfres.ints.sys.atoms.len) |c| {
@@ -200,11 +216,9 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
             const I_3c = hfres.ints.I.?;
 
-            try evaluateMetricDeriv(T, &dJ_inv_half.?, dJ.slice(c).asMatrix(), decomp.?.U, M_kernel.?, gpa);
+            try deriv_ws.?.evaluate(dJ.slice(c).asMatrix(), dI.slice(c), I_3c, gpa);
 
-            evaluateFittingTensorDeriv(T, &dB_ao.?, dI.slice(c), I_3c, decomp.?.J_inv_half, dJ_inv_half.?);
-
-            ri_ws.?.contractFockDerivative(&ws.F_x, B, dB_ao.?, P, C);
+            ri_ws.?.contractFockDerivative(&ws.F_x, B, deriv_ws.?.dB_ao, P, C);
         }
 
         if (hfres.ints.dg) |dg| {
@@ -243,12 +257,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             }
 
             if (hfres.ints.g) |g| {
-                for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
-                    const g_mlns = g.at(.{ mu, lambda, nu, sigma });
-                    const g_mnls = g.at(.{ mu, nu, lambda, sigma });
-
-                    ws.V_x.ptr(lambda, sigma).* += ws.P_x.at(mu, nu) * (g_mlns - exch_factor * g_mnls);
-                };
+                contractTwoElectronResponseHessian(T, &ws.V_x, g, ws.P_x, exch_factor);
             }
 
             ws.V_x.symmetrize();

@@ -18,8 +18,8 @@ const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
 
-const ao2mo_1e = @import("integral_transform.zig").ao2mo_1e;
 const applySpinPenalty = @import("slater_condon.zig").applySpinPenalty;
+const b2ms = @import("integral_transform.zig").b2ms;
 const buildFittingIntegrals = @import("density_fitting.zig").buildFittingIntegrals;
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
 const calculateCanonicalCiGradient = @import("ci_gradient.zig").calculateCanonicalCiGradient;
@@ -204,7 +204,7 @@ pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev
 }
 
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
-pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+pub fn computeCanonicalCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
 
     var h_ms, var g_ms = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
@@ -264,16 +264,11 @@ pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, det
     return .{ E, C_ci };
 }
 
+pub const computeCi = computeCanonicalCi;
+
 /// Computes CI state energies and coefficients using density fitting for active-space integrals.
-pub fn computeCiRi(comptime T: type, dets: []const []const usize, C: Matrix(T), H_ao: Matrix(T), B_mo: Tensor(T, 3), VN: T, penalty: ?f64, s2_target: f64, ncore: usize, nact: usize, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
-    const nocc = ncore + nact;
+pub fn computeCasCiRi(comptime T: type, dets: []const []const usize, h_mo: Matrix(T), B_mo: Tensor(T, 3), VN: T, penalty: ?f64, s2_target: f64, nocc: usize, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     const nsp = 2 * nocc;
-    const naux = B_mo.shape[2];
-
-    var h_mo = try Matrix(T).init(C.ncol(), C.ncol(), gpa);
-    defer h_mo.deinit(gpa);
-
-    ao2mo_1e(T, &h_mo, H_ao, C);
 
     var h_ms = try Matrix(T).initZero(nsp, nsp, gpa);
     defer h_ms.deinit(gpa);
@@ -286,20 +281,7 @@ pub fn computeCiRi(comptime T: type, dets: []const []const usize, C: Matrix(T), 
     var g_ms = try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
     defer g_ms.deinit(gpa);
 
-    for (0..nocc) |p| for (0..nocc) |r| {
-        for (0..nocc) |q| for (0..nocc) |s| {
-            var val: T = 0;
-
-            for (0..naux) |P| {
-                val += B_mo.at(.{ p, r, P }) * B_mo.at(.{ q, s, P });
-            }
-
-            g_ms.ptr(.{ 2 * p + 0, 2 * q + 0, 2 * r + 0, 2 * s + 0 }).* = val;
-            g_ms.ptr(.{ 2 * p + 0, 2 * q + 1, 2 * r + 0, 2 * s + 1 }).* = val;
-            g_ms.ptr(.{ 2 * p + 1, 2 * q + 0, 2 * r + 1, 2 * s + 0 }).* = val;
-            g_ms.ptr(.{ 2 * p + 1, 2 * q + 1, 2 * r + 1, 2 * s + 1 }).* = val;
-        };
-    };
+    b2ms(T, &g_ms, B_mo);
 
     var H_ci = try buildHamiltonianMatrix(T, dets, h_ms, g_ms, gpa);
     defer H_ci.deinit(gpa);
@@ -335,6 +317,8 @@ pub fn computeCiRi(comptime T: type, dets: []const []const usize, C: Matrix(T), 
 
     return .{ E, C_ci };
 }
+
+pub const computeCiRi = computeCasCiRi;
 
 /// Solves the Configuration Interaction Hamiltonian eigenvalue problem over the determinant space.
 pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), log: bool, gpa: Allocator) !Result(T) {
@@ -425,11 +409,11 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     var E: Vector(T), var C_ci: Matrix(T) = .{ undefined, undefined };
 
     if (opt.aux_basis == null) {
-        E, C_ci = try computeCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
+        E, C_ci = try computeCanonicalCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
     }
 
     if (opt.aux_basis != null) {
-        E, C_ci = try computeCiWithRi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
+        E, C_ci = try computeRiCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
     }
 
     errdefer {
@@ -519,7 +503,7 @@ pub fn solveEigenvalueProblem(comptime T: type, H_ci: Matrix(T), VN: T, gpa: All
 }
 
 /// Computes CI state energies and coefficients using resolution of the identity three-center tensors.
-fn computeCiWithRi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: Integrals(T), dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+pub fn computeRiCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: Integrals(T), dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     var timer = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
 
     var h_ms, var g_ms = try transformIntsRi(T, C, ints.H.?, ints.B.?, generalized, gpa);

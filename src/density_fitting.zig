@@ -5,6 +5,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
+const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
@@ -70,6 +71,55 @@ pub fn MetricDecomposition(comptime T: type) type {
 
             self.U.deinit(gpa);
             self.W.deinit(gpa);
+        }
+    };
+}
+
+/// Scratch memory buffers and decomposed metric for density fitting derivative evaluation.
+pub fn FittingDerivativeWorkspace(comptime T: type) type {
+    return struct {
+        decomp: MetricDecomposition(T),
+
+        M_kernel: Matrix(T),
+        dB_ao: Tensor(T, 3),
+
+        dJ_inv_half: Matrix(T),
+
+        /// Allocates metric decomposition and intermediate scratch matrices for fitting derivatives.
+        pub fn init(J: Matrix(T), B_shape: [3]usize, gpa: Allocator) !@This() {
+            const naux = J.nrow();
+
+            var decomp = try MetricDecomposition(T).init(J, gpa);
+            errdefer decomp.deinit(gpa);
+
+            var M_kernel = try buildMetricDerivKernel(T, decomp.W, gpa);
+            errdefer M_kernel.deinit(gpa);
+
+            var dJ_inv_half = try Matrix(T).init(naux, naux, gpa);
+            errdefer dJ_inv_half.deinit(gpa);
+
+            var dB_ao = try Tensor(T, 3).initZero(B_shape, gpa);
+            errdefer dB_ao.deinit(gpa);
+
+            return .{ .decomp = decomp, .M_kernel = M_kernel, .dJ_inv_half = dJ_inv_half, .dB_ao = dB_ao };
+        }
+
+        /// Deallocates all decomposed metrics and scratch matrices.
+        pub fn deinit(self: *@This(), gpa: Allocator) void {
+            self.dB_ao.deinit(gpa);
+
+            self.dJ_inv_half.deinit(gpa);
+
+            self.M_kernel.deinit(gpa);
+
+            self.decomp.deinit(gpa);
+        }
+
+        /// Evaluates metric and 3-center integral derivatives for a given nuclear coordinate.
+        pub fn evaluate(self: *@This(), dJ_coord: Matrix(T), dI_coord: Tensor(T, 3), I_3c: Tensor(T, 3), gpa: Allocator) !void {
+            try evaluateMetricDeriv(T, &self.dJ_inv_half, dJ_coord, self.decomp.U, self.M_kernel, gpa);
+
+            evaluateFittingTensorDeriv(T, &self.dB_ao, dI_coord, I_3c, self.decomp.J_inv_half, self.dJ_inv_half);
         }
     };
 }
@@ -624,4 +674,13 @@ pub fn invertMetric(comptime T: type, J: Matrix(T), gpa: Allocator) !Matrix(T) {
     }
 
     return decomp.J_inv_half;
+}
+
+/// Packs 3-center baseline integrals and nuclear derivatives into a dual-number tensor.
+pub fn packDualTensor3c(comptime T: type, B_d: *Tensor(ScalarDual(T), 3), B: Tensor(T, 3), dB: Tensor(T, 3)) void {
+    const n0, const n1, const n2 = .{ B.shape[0], B.shape[1], B.shape[2] };
+
+    for (0..n0) |i| for (0..n1) |j| for (0..n2) |k| {
+        B_d.ptr(.{ i, j, k }).* = ScalarDual(T).init(B.at(.{ i, j, k }), dB.at(.{ i, j, k }));
+    };
 }
