@@ -5,6 +5,8 @@ const std = @import("std");
 const Matrix = @import("tensor.zig").Matrix;
 
 const gemm = @import("linear_algebra.zig").gemm;
+const isDualMatrix = @import("value.zig").isDualMatrix;
+const isDualTensor = @import("value.zig").isDualTensor;
 const primType = @import("value.zig").primType;
 
 /// Specification plan storing tensor index permutations and contraction dimensionality.
@@ -34,7 +36,17 @@ fn ContractionPlan(comptime spec: []const u8) type {
 
 /// Contracts two tensors according to an Einstein summation specification using CBLAS dgemm.
 pub fn contract(comptime T: type, comptime spec: []const u8, C: anytype, A: anytype, B: anytype, alpha: T, beta: T, gpa: ?std.mem.Allocator) !void {
-    if (comptime primType(T) != f64) @compileError("CONTRACT ONLY SUPPORTS F64 NUMBERS");
+    const TenA = if (@typeInfo(@TypeOf(A)) == .pointer) @typeInfo(@TypeOf(A)).pointer.child else @TypeOf(A);
+
+    if (comptime isDualTensor(TenA) or isDualMatrix(TenA)) {
+        try contract(T, spec, &C.val, A.val, B.val, alpha, beta, gpa);
+        try contract(T, spec, &C.der, A.val, B.der, alpha, beta, gpa);
+        try contract(T, spec, &C.der, A.der, B.val, alpha, 1, gpa);
+
+        return;
+    }
+
+    if (comptime T != f64) @compileError("contract only supports f64, found " ++ @typeName(T));
 
     const a_ten, const b_ten, const c_ten = .{ A.asTensor(), B.asTensor(), C.asTensor() };
 

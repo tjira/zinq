@@ -5,13 +5,14 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const CasSpace = @import("casscf_orbital.zig").CasSpace;
+const DualMatrix = @import("dual.zig").DualMatrix;
+const DualTensor = @import("dual.zig").DualTensor;
 const FittingDerivativeWorkspace = @import("density_fitting.zig").FittingDerivativeWorkspace;
 const GeneralizedFockRiWorkspace = @import("casscf_orbital.zig").GeneralizedFockRiWorkspace;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const NonRelaxedOrbitalWorkspace = @import("orbital_response.zig").NonRelaxedOrbitalWorkspace;
 const OrbitalPair = @import("casscf_orbital.zig").OrbitalPair;
-const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 
 const ao2mo_1e = @import("integral_transform.zig").ao2mo_1e;
@@ -28,9 +29,7 @@ const buildOrbitalHessianRi = @import("casscf_orbital.zig").buildOrbitalHessianR
 const buildStateAveragedActRdm = @import("reduced_density_matrix.zig").buildStateAveragedActRdm;
 const getrf = @import("linear_algebra.zig").getrf;
 const getrs = @import("linear_algebra.zig").getrs;
-const packDualTensor3c = @import("density_fitting.zig").packDualTensor3c;
 const slater = @import("slater_condon.zig").slater;
-const transformInts = @import("integral_transform.zig").transformInts;
 
 /// Computes analytic nuclear gradients of CASSCF state energies using dual number differentiation and CP-MCSCF response.
 pub fn calculateCanonicalCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: Matrix(T), dets: []const []const usize, weights: []const T, space: CasSpace, states: []const u32, gpa: Allocator) ![]Matrix(T) {
@@ -48,7 +47,9 @@ pub fn calculateCanonicalCasscfGradient(comptime T: type, hfres: HartreeFockResu
 
     const nbf, const nmo = .{ C.nrow(), space.nmo };
 
-    const natoms = hfres.ints.sys.atoms.len;
+    const natoms, const nocc = .{ hfres.ints.sys.atoms.len, space.nocc() };
+
+    const nsp = 2 * nocc;
 
     const pairs = try buildNonRedundantPairs(space, gpa);
     defer gpa.free(pairs);
@@ -74,7 +75,7 @@ pub fn calculateCanonicalCasscfGradient(comptime T: type, hfres: HartreeFockResu
         var h_mo_conv = try Matrix(T).init(nmo, nmo, gpa);
         defer h_mo_conv.deinit(gpa);
 
-        ao2mo_1e(T, &h_mo_conv, hfres.ints.H.?, C);
+        try ao2mo_1e(T, &h_mo_conv, hfres.ints.H.?, C, gpa);
 
         var g_mo_conv = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
         defer g_mo_conv.deinit(gpa);
@@ -128,78 +129,69 @@ pub fn calculateCanonicalCasscfGradient(comptime T: type, hfres: HartreeFockResu
         }
     }
 
-    var H_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
-    defer H_d.deinit(gpa);
-
-    var g_d = try Tensor(ScalarDual(T), 4).init(.{ nbf, nbf, nbf, nbf }, gpa);
-    defer g_d.deinit(gpa);
-
-    var C_d = try Matrix(ScalarDual(T)).init(nbf, nmo, gpa);
-    defer C_d.deinit(gpa);
-
     var unrel_ws = try NonRelaxedOrbitalWorkspace(T).init(nbf, nmo, gpa);
     defer unrel_ws.deinit(gpa);
 
     var dC = try Matrix(T).init(nbf, nmo, gpa);
     defer dC.deinit(gpa);
 
+    var h_mo_d = try DualMatrix(T).init(nmo, nmo, gpa);
+    defer h_mo_d.deinit(gpa);
+
+    var g_mo_d = try DualTensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
+    defer g_mo_d.deinit(gpa);
+
+    var h_ms = try Matrix(T).initZero(nsp, nsp, gpa);
+    defer h_ms.deinit(gpa);
+
+    var g_ms = try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    defer g_ms.deinit(gpa);
+
+    var dF_gen = if (weights.len > 1 and nrot > 0) try Matrix(T).initZero(nmo, nmo, gpa) else undefined;
+    defer if (weights.len > 1 and nrot > 0) dF_gen.deinit(gpa);
+
     for (0..3 * natoms) |coord| {
         unrel_ws.evaluate(&dC, C, hfres.ints.dS.?.slice(coord).asMatrix());
 
-        for (0..nbf) |mu| for (0..nmo) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(C.at(mu, p), dC.at(mu, p));
+        const C_d = DualMatrix(T).fromMatrices(C, dC);
+
+        const H_d = DualMatrix(T).fromMatrices(hfres.ints.H.?, hfres.ints.dH.?.slice(coord).asMatrix());
+
+        const g_d = DualTensor(T, 4).fromTensors(hfres.ints.g.?, hfres.ints.dg.?.slice(coord));
+
+        try ao2mo_1e(T, &h_mo_d, H_d, C_d, gpa);
+        try ao2mo_2e(T, &g_mo_d, g_d, C_d, gpa);
+
+        h_ms.zero();
+
+        for (0..nocc) |p| for (0..nocc) |q| {
+            h_ms.ptr(2 * p + 0, 2 * q + 0).* = h_mo_d.der.at(p, q);
+            h_ms.ptr(2 * p + 1, 2 * q + 1).* = h_mo_d.der.at(p, q);
         };
 
-        for (0..nbf) |mu| for (0..nbf) |nu| {
-            H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
+        g_ms.zero();
+
+        for (0..nocc) |p| for (0..nocc) |r| for (0..nocc) |q| for (0..nocc) |s| {
+            const val = g_mo_d.der.at(.{ p, q, r, s });
+
+            g_ms.ptr(.{ 2 * p + 0, 2 * q + 0, 2 * r + 0, 2 * s + 0 }).* = val;
+            g_ms.ptr(.{ 2 * p + 0, 2 * q + 1, 2 * r + 0, 2 * s + 1 }).* = val;
+            g_ms.ptr(.{ 2 * p + 1, 2 * q + 0, 2 * r + 1, 2 * s + 0 }).* = val;
+            g_ms.ptr(.{ 2 * p + 1, 2 * q + 1, 2 * r + 1, 2 * s + 1 }).* = val;
         };
-
-        for (0..nbf) |mu| for (0..nbf) |lambda| for (0..nbf) |nu| for (0..nbf) |sigma| {
-            const indices = .{ mu, lambda, nu, sigma };
-
-            const val = hfres.ints.g.?.at(indices);
-
-            const der = hfres.ints.dg.?.at(.{ coord, mu, lambda, nu, sigma });
-
-            g_d.ptr(indices).* = ScalarDual(T).init(val, der);
-        };
-
-        var h_ms_d, var g_ms_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, false, gpa);
-
-        defer {
-            h_ms_d.deinit(gpa);
-            g_ms_d.deinit(gpa);
-        }
 
         for (0..dets.len) |m| for (m..dets.len) |n| {
             const factor: T = if (m == n) 1 else 2;
 
-            const val = slater(ScalarDual(T), dets[m], dets[n], h_ms_d, g_ms_d);
+            const der = slater(T, dets[m], dets[n], h_ms, g_ms);
 
             for (states, 0..) |s, s_idx| {
-                grads[s_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, s) * C_ci.at(n, s) * val.der;
+                grads[s_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, s) * C_ci.at(n, s) * der;
             }
         };
 
         if (weights.len > 1 and nrot > 0) {
-            var dh_mo = try Matrix(T).init(nmo, nmo, gpa);
-            defer dh_mo.deinit(gpa);
-
-            var dg_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
-            defer dg_mo.deinit(gpa);
-
-            for (0..nmo) |p| for (0..nmo) |q| {
-                dh_mo.ptr(p, q).* = h_ms_d.at(2 * p, 2 * q).der;
-            };
-
-            for (0..nmo) |p| for (0..nmo) |q| for (0..nmo) |r| for (0..nmo) |s| {
-                dg_mo.ptr(.{ p, q, r, s }).* = g_ms_d.at(.{ 2 * p, 2 * q, 2 * r, 2 * s }).der;
-            };
-
-            var dF_gen = try Matrix(T).initZero(nmo, nmo, gpa);
-            defer dF_gen.deinit(gpa);
-
-            try buildGeneralizedFock(T, &dF_gen, dh_mo, dg_mo, D_act_sa, d_act_sa, space, gpa);
+            try buildGeneralizedFock(T, &dF_gen, h_mo_d.der, g_mo_d.der, D_act_sa, d_act_sa, space, gpa);
 
             for (states, 0..) |_, s_idx| {
                 var resp: T = 0;
@@ -274,7 +266,7 @@ pub fn calculateRiCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), 
         var h_mo = try Matrix(T).init(nmo, nmo, gpa);
         defer h_mo.deinit(gpa);
 
-        ao2mo_1e(T, &h_mo, hfres.ints.H.?, C);
+        try ao2mo_1e(T, &h_mo, hfres.ints.H.?, C, gpa);
 
         var A_sa = try Matrix(T).initZero(nrot, nrot, gpa);
         defer A_sa.deinit(gpa);
@@ -326,31 +318,22 @@ pub fn calculateRiCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), 
     var deriv_ws = try FittingDerivativeWorkspace(T).init(J, B.shape, gpa);
     defer deriv_ws.deinit(gpa);
 
-    var H_d = try Matrix(ScalarDual(T)).init(nbf, nbf, gpa);
-    defer H_d.deinit(gpa);
-
-    var B_d = try Tensor(ScalarDual(T), 3).init(B.shape, gpa);
-    defer B_d.deinit(gpa);
-
-    var C_d = try Matrix(ScalarDual(T)).init(nbf, nmo, gpa);
-    defer C_d.deinit(gpa);
-
     var unrel_ws = try NonRelaxedOrbitalWorkspace(T).init(nbf, nmo, gpa);
     defer unrel_ws.deinit(gpa);
 
     var dC = try Matrix(T).init(nbf, nmo, gpa);
     defer dC.deinit(gpa);
 
-    var h_mo_d = try Matrix(ScalarDual(T)).init(nmo, nmo, gpa);
+    var h_mo_d = try DualMatrix(T).init(nmo, nmo, gpa);
     defer h_mo_d.deinit(gpa);
 
-    var B_mo_d = try Tensor(ScalarDual(T), 3).initZero(.{ nmo, nmo, naux }, gpa);
+    var B_mo_d = try DualTensor(T, 3).initZero(.{ nmo, nmo, naux }, gpa);
     defer B_mo_d.deinit(gpa);
 
-    var h_ms_d = try Matrix(ScalarDual(T)).initZero(nsp, nsp, gpa);
+    var h_ms_d = try DualMatrix(T).initZero(nsp, nsp, gpa);
     defer h_ms_d.deinit(gpa);
 
-    var g_ms_d = try Tensor(ScalarDual(T), 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
+    var g_ms_d = try DualTensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
     defer g_ms_d.deinit(gpa);
 
     var dh_mo = if (weights.len > 1 and nrot > 0) try Matrix(T).init(nmo, nmo, gpa) else undefined;
@@ -368,47 +351,38 @@ pub fn calculateRiCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), 
     for (0..3 * natoms) |coord| {
         unrel_ws.evaluate(&dC, C, hfres.ints.dS.?.slice(coord).asMatrix());
 
-        for (0..nbf) |mu| for (0..nmo) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(C.at(mu, p), dC.at(mu, p));
-        };
+        const C_d = DualMatrix(T).fromMatrices(C, dC);
 
-        for (0..nbf) |mu| for (0..nbf) |nu| {
-            H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
-        };
+        const H_d = DualMatrix(T).fromMatrices(hfres.ints.H.?, hfres.ints.dH.?.slice(coord).asMatrix());
 
         try deriv_ws.evaluate(dJ.slice(coord).asMatrix(), dI.slice(coord), I_3c, gpa);
 
-        packDualTensor3c(T, &B_d, B, deriv_ws.dB_ao);
+        const B_d = DualTensor(T, 3).fromTensors(B, deriv_ws.dB_ao);
 
-        ao2mo_1e(ScalarDual(T), &h_mo_d, H_d, C_d);
+        try ao2mo_1e(T, &h_mo_d, H_d, C_d, gpa);
 
-        try ao2mo_3c(ScalarDual(T), &B_mo_d, B_d, C_d, gpa);
+        try ao2mo_3c(T, &B_mo_d, B_d, C_d, gpa);
 
         for (0..nocc) |p| for (0..nocc) |q| {
-            h_ms_d.ptr(2 * p + 0, 2 * q + 0).* = h_mo_d.at(p, q);
-            h_ms_d.ptr(2 * p + 1, 2 * q + 1).* = h_mo_d.at(p, q);
+            h_ms_d.set(2 * p + 0, 2 * q + 0, h_mo_d.at(p, q));
+            h_ms_d.set(2 * p + 1, 2 * q + 1, h_mo_d.at(p, q));
         };
 
-        b2ms(ScalarDual(T), &g_ms_d, B_mo_d);
+        try b2ms(T, &g_ms_d, B_mo_d, gpa);
 
         for (0..dets.len) |m| for (m..dets.len) |n| {
             const factor: T = if (m == n) 1 else 2;
 
-            const val = slater(ScalarDual(T), dets[m], dets[n], h_ms_d, g_ms_d);
+            const der = slater(T, dets[m], dets[n], h_ms_d.der, g_ms_d.der);
 
             for (states, 0..) |s, s_idx| {
-                grads[s_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, s) * C_ci.at(n, s) * val.der;
+                grads[s_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, s) * C_ci.at(n, s) * der;
             }
         };
 
         if (weights.len > 1 and nrot > 0) {
-            for (0..nmo) |p| for (0..nmo) |q| {
-                dh_mo.ptr(p, q).* = h_mo_d.at(p, q).der;
-            };
-
-            for (0..nmo) |p| for (0..nmo) |q| for (0..naux) |P| {
-                dB_mo.ptr(.{ p, q, P }).* = B_mo_d.at(.{ p, q, P }).der;
-            };
+            @memcpy(dh_mo.data, h_mo_d.der.data);
+            @memcpy(dB_mo.data, B_mo_d.der.data);
 
             try buildGeneralizedFockDerivRi(T, &dF_gen, dh_mo, B_mo, dB_mo, D_act_sa, d_act_sa, space, fock_ws, gpa);
 

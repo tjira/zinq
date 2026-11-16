@@ -4,13 +4,13 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
+const DualMatrix = @import("dual.zig").DualMatrix;
+const DualTensor = @import("dual.zig").DualTensor;
+const FittingDerivativeWorkspace = @import("density_fitting.zig").FittingDerivativeWorkspace;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
-const FittingDerivativeWorkspace = @import("density_fitting.zig").FittingDerivativeWorkspace;
-const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 
-const packDualTensor3c = @import("density_fitting.zig").packDualTensor3c;
 const slater = @import("slater_condon.zig").slater;
 const transformInts = @import("integral_transform.zig").transformInts;
 const transformIntsRi = @import("integral_transform.zig").transformIntsRi;
@@ -31,35 +31,15 @@ pub fn calculateCanonicalCiGradient(comptime T: type, hfres: HartreeFockResult(T
         grads_done += 1;
     }
 
-    var H_d = try Matrix(ScalarDual(T)).init(hfres.ints.H.?.nrow(), hfres.ints.H.?.ncol(), gpa);
-    defer H_d.deinit(gpa);
-
-    var g_d = try Tensor(ScalarDual(T), 4).init(hfres.ints.g.?.shape, gpa);
-    defer g_d.deinit(gpa);
-
-    var C_d = try Matrix(ScalarDual(T)).init(hfres.C_mo.nrow(), hfres.C_mo.ncol(), gpa);
-    defer C_d.deinit(gpa);
-
     for (0..3 * hfres.ints.sys.atoms.len) |coord| {
-        for (0..H_d.nrow()) |mu| for (0..H_d.ncol()) |nu| {
-            H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
-        };
+        const C_d = DualMatrix(T).fromMatrices(hfres.C_mo, hfres.dC_mo.?.slice(coord).asMatrix());
 
-        const nao = g_d.shape[0];
+        const H_d = DualMatrix(T).fromMatrices(hfres.ints.H.?, hfres.ints.dH.?.slice(coord).asMatrix());
 
-        for (0..nao) |mu| for (0..nao) |lambda| for (0..nao) |nu| for (0..nao) |sigma| {
-            const indices = .{ mu, lambda, nu, sigma };
+        const g_d = DualTensor(T, 4).fromTensors(hfres.ints.g.?, hfres.ints.dg.?.slice(coord));
 
-            const val = hfres.ints.g.?.at(indices);
+        var h_ms_d, var g_ms_d = try transformInts(T, C_d, H_d, g_d, generalized, gpa);
 
-            g_d.ptr(indices).* = ScalarDual(T).init(val, hfres.ints.dg.?.at(.{ coord, mu, lambda, nu, sigma }));
-        };
-
-        for (0..C_d.nrow()) |mu| for (0..C_d.ncol()) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ coord, mu, p }));
-        };
-
-        var h_ms_d, var g_ms_d = try transformInts(ScalarDual(T), C_d, H_d, g_d, generalized, gpa);
         defer {
             h_ms_d.deinit(gpa);
             g_ms_d.deinit(gpa);
@@ -68,10 +48,10 @@ pub fn calculateCanonicalCiGradient(comptime T: type, hfres: HartreeFockResult(T
         for (0..dets.len) |m| for (m..dets.len) |n| {
             const factor: T = if (m == n) 1 else 2;
 
-            const val = slater(ScalarDual(T), dets[m], dets[n], h_ms_d, g_ms_d);
+            const der = slater(T, dets[m], dets[n], h_ms_d.der, g_ms_d.der);
 
             for (states, 0..) |k, k_idx| {
-                grads[k_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, k) * C_ci.at(n, k) * val.der;
+                grads[k_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, k) * C_ci.at(n, k) * der;
             }
         };
     }
@@ -107,29 +87,16 @@ pub fn calculateRiCiGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci
     var deriv_ws = try FittingDerivativeWorkspace(T).init(J, B.shape, gpa);
     defer deriv_ws.deinit(gpa);
 
-    var B_d = try Tensor(ScalarDual(T), 3).init(B.shape, gpa);
-    defer B_d.deinit(gpa);
-
-    var H_d = try Matrix(ScalarDual(T)).init(hfres.ints.H.?.nrow(), hfres.ints.H.?.ncol(), gpa);
-    defer H_d.deinit(gpa);
-
-    var C_d = try Matrix(ScalarDual(T)).init(hfres.C_mo.nrow(), hfres.C_mo.ncol(), gpa);
-    defer C_d.deinit(gpa);
-
     for (0..3 * hfres.ints.sys.atoms.len) |coord| {
         try deriv_ws.evaluate(dJ.slice(coord).asMatrix(), dI.slice(coord), I_3c, gpa);
 
-        packDualTensor3c(T, &B_d, B, deriv_ws.dB_ao);
+        const B_d = DualTensor(T, 3).fromTensors(B, deriv_ws.dB_ao);
 
-        for (0..H_d.nrow()) |mu| for (0..H_d.ncol()) |nu| {
-            H_d.ptr(mu, nu).* = ScalarDual(T).init(hfres.ints.H.?.at(mu, nu), hfres.ints.dH.?.at(.{ coord, mu, nu }));
-        };
+        const H_d = DualMatrix(T).fromMatrices(hfres.ints.H.?, hfres.ints.dH.?.slice(coord).asMatrix());
 
-        for (0..C_d.nrow()) |mu| for (0..C_d.ncol()) |p| {
-            C_d.ptr(mu, p).* = ScalarDual(T).init(hfres.C_mo.at(mu, p), hfres.dC_mo.?.at(.{ coord, mu, p }));
-        };
+        const C_d = DualMatrix(T).fromMatrices(hfres.C_mo, hfres.dC_mo.?.slice(coord).asMatrix());
 
-        var h_ms_d, var g_ms_d = try transformIntsRi(ScalarDual(T), C_d, H_d, B_d, generalized, gpa);
+        var h_ms_d, var g_ms_d = try transformIntsRi(T, C_d, H_d, B_d, generalized, gpa);
 
         defer {
             h_ms_d.deinit(gpa);
@@ -139,10 +106,10 @@ pub fn calculateRiCiGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci
         for (0..dets.len) |m| for (m..dets.len) |n| {
             const factor: T = if (m == n) 1 else 2;
 
-            const val = slater(ScalarDual(T), dets[m], dets[n], h_ms_d, g_ms_d);
+            const der = slater(T, dets[m], dets[n], h_ms_d.der, g_ms_d.der);
 
             for (states, 0..) |k, k_idx| {
-                grads[k_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, k) * C_ci.at(n, k) * val.der;
+                grads[k_idx].ptr(coord / 3, coord % 3).* += factor * C_ci.at(m, k) * C_ci.at(n, k) * der;
             }
         };
     }

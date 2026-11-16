@@ -13,7 +13,6 @@ const Integrals = @import("molecular_integrals.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
-const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
@@ -281,7 +280,7 @@ pub fn computeCasCiRi(comptime T: type, dets: []const []const usize, h_mo: Matri
     var g_ms = try Tensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
     defer g_ms.deinit(gpa);
 
-    b2ms(T, &g_ms, B_mo);
+    try b2ms(T, &g_ms, B_mo, gpa);
 
     var H_ci = try buildHamiltonianMatrix(T, dets, h_ms, g_ms, gpa);
     defer H_ci.deinit(gpa);

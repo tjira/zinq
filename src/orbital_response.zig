@@ -229,9 +229,9 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
         const S_x = dS.slice(c).asMatrix();
 
-        ao2mo_1e(T, &ws.F_x_mo, ws.F_x, C);
+        try ao2mo_1e(T, &ws.F_x_mo, ws.F_x, C, gpa);
 
-        ao2mo_1e(T, &ws.S_x_mo, S_x, C);
+        try ao2mo_1e(T, &ws.S_x_mo, S_x, C, gpa);
 
         initOrbitalRotations(T, &ws.U_x, ws.F_x_mo, ws.S_x_mo, e, nocc);
 
@@ -262,7 +262,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
 
             ws.V_x.symmetrize();
 
-            ao2mo_1e(T, &ws.V_x_mo, ws.V_x, C);
+            try ao2mo_1e(T, &ws.V_x_mo, ws.V_x, C, gpa);
 
             const rms_du = updateOrbitalRotations(T, &ws.U_x, ws.F_x_mo, ws.V_x_mo, ws.S_x_mo, e, nocc);
 

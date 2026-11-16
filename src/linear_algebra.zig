@@ -5,10 +5,13 @@ const std = @import("std");
 const cblas = @import("cimport.zig").cblas;
 const lapacke = @import("cimport.zig").lapacke;
 
+const DualMatrix = @import("dual.zig").DualMatrix;
 const Matrix = @import("tensor.zig").Matrix;
 const Vector = @import("tensor.zig").Vector;
 
 const isComplex = @import("value.zig").isComplex;
+const isDual = @import("value.zig").isDual;
+const isDualMatrix = @import("value.zig").isDualMatrix;
 const primType = @import("value.zig").primType;
 
 const ROW_MAJOR = lapacke.LAPACK_ROW_MAJOR;
@@ -25,7 +28,7 @@ pub fn det(comptime T: type, A: *Matrix(T), ipiv: []i32) !T {
     std.debug.assert(A.nrow() == A.ncol());
     std.debug.assert(ipiv.len == A.nrow());
 
-    if (comptime primType(T) != f64) @compileError("DET NOW ONLY SUPPORTS F64 NUMBERS");
+    ensureF64(T, "det");
 
     const n = A.nrow();
 
@@ -68,7 +71,18 @@ pub fn dot(comptime T: type, x: Vector(T), y: Vector(T)) T {
 }
 
 /// Performs general matrix-matrix multiplication: C = alpha * op(A) * op(B) + beta * C (GEMM).
-pub fn gemm(comptime T: type, C: *Matrix(T), A: Matrix(T), B: Matrix(T), alpha: T, beta: T, ta: bool, tb: bool) void {
+pub fn gemm(comptime T: type, C: anytype, A: anytype, B: anytype, alpha: T, beta: T, ta: bool, tb: bool) void {
+    const MatA = if (@typeInfo(@TypeOf(A)) == .pointer) @typeInfo(@TypeOf(A)).pointer.child else @TypeOf(A);
+
+    if (comptime isDualMatrix(MatA)) {
+        gemm(T, &C.val, A.val, B.val, alpha, beta, ta, tb);
+        gemm(T, &C.der, A.val, B.der, alpha, beta, ta, tb);
+
+        gemm(T, &C.der, A.der, B.val, alpha, 1, ta, tb);
+
+        return;
+    }
+
     const m = if (ta) A.ncol() else A.nrow();
     const k = if (ta) A.nrow() else A.ncol();
     const n = if (tb) B.nrow() else B.ncol();
@@ -175,7 +189,7 @@ pub fn sygvd(comptime T: type, W: *Vector(T), U: *Matrix(T), V: Matrix(T), B: *M
 fn axpySlice(comptime T: type, y: []T, x: []const T, alpha: T) void {
     std.debug.assert(x.len == y.len);
 
-    if (comptime primType(T) != f64) @compileError("AXPY ONLY SUPPORTS F64 PRIMITIVE TYPES");
+    ensureF64OrComplex(T, "axpy");
 
     if (comptime T == f64) {
         return cblas.cblas_daxpy(@intCast(x.len), alpha, x.ptr, 1, y.ptr, 1);
@@ -190,9 +204,35 @@ fn axpySlice(comptime T: type, y: []T, x: []const T, alpha: T) void {
 fn dotSlice(comptime T: type, x: []const T, y: []const T) T {
     std.debug.assert(x.len == y.len);
 
-    if (comptime primType(T) != f64) @compileError("DOT ONLY SUPPORTS F64 PRIMITIVE TYPES");
+    ensureF64(T, "dot");
 
     return cblas.cblas_ddot(@intCast(x.len), x.ptr, 1, y.ptr, 1);
+}
+
+/// Validates that numeric scalar type is strictly 64-bit real floating-point.
+fn ensureF64(comptime T: type, comptime op: []const u8) void {
+    if (comptime isDual(T)) {
+        @compileError(op ++ " does not support dual numbers");
+    }
+
+    if (comptime T != f64) {
+        @compileError(op ++ " only supports f64, found " ++ @typeName(T));
+    }
+}
+
+/// Validates that numeric scalar type is either 64-bit real floating-point or complex double precision.
+fn ensureF64OrComplex(comptime T: type, comptime op: []const u8) void {
+    if (comptime isDual(T)) {
+        @compileError(op ++ " does not support dual numbers");
+    }
+
+    if (comptime T != f64 and !isComplex(T)) {
+        @compileError(op ++ " only supports f64 or Complex(f64), found " ++ @typeName(T));
+    }
+
+    if (comptime isComplex(T) and primType(T) != f64) {
+        @compileError(op ++ " complex operations require f64 components, found " ++ @typeName(T));
+    }
 }
 
 /// Performs general matrix-matrix multiplication on raw contiguous slices using CBLAS dgemm.
@@ -201,7 +241,7 @@ fn gemmSlice(comptime T: type, C: []T, A: []const T, B: []const T, m: usize, n: 
     std.debug.assert(B.len == k * n);
     std.debug.assert(C.len == m * n);
 
-    if (comptime primType(T) != f64) @compileError("GEMM ONLY SUPPORTS F64 NUMBERS");
+    ensureF64(T, "gemm");
 
     const at: c_uint = if (ta) @intCast(cblas.CblasTrans) else @intCast(cblas.CblasNoTrans);
     const bt: c_uint = if (tb) @intCast(cblas.CblasTrans) else @intCast(cblas.CblasNoTrans);
@@ -225,7 +265,7 @@ fn gemmSlice(comptime T: type, C: []T, A: []const T, B: []const T, m: usize, n: 
 
 /// Performs general matrix-vector multiplication on raw slices using CBLAS dgemv.
 fn gemvSlice(comptime T: type, y: []T, A: []const T, x: []const T, m: usize, n: usize, alpha: T, beta: T, ta: bool) void {
-    if (comptime primType(T) != f64) @compileError("GEMV ONLY SUPPORTS F64 NUMBERS");
+    ensureF64(T, "gemv");
 
     const trans: c_uint = if (ta) @intCast(cblas.CblasTrans) else @intCast(cblas.CblasNoTrans);
 
@@ -241,7 +281,7 @@ fn geruSlice(comptime T: type, A: []T, x: []const T, y: []const T, m: usize, n: 
     std.debug.assert(x.len == m);
     std.debug.assert(y.len == n);
 
-    if (comptime primType(T) != f64) @compileError("GERU ONLY SUPPORTS F64 NUMBERS");
+    ensureF64OrComplex(T, "geru");
 
     const mi: i32 = @intCast(m);
     const ni: i32 = @intCast(n);
@@ -259,7 +299,7 @@ fn geruSlice(comptime T: type, A: []T, x: []const T, y: []const T, m: usize, n: 
 fn getrfSlice(comptime T: type, A: []T, ipiv: []i32) !void {
     std.debug.assert(ipiv.len * ipiv.len == A.len);
 
-    if (primType(T) != f64) @compileError("GETRF NOW ONLY SUPPORTS F64 NUMBERS");
+    ensureF64(T, "getrf");
 
     const n: i32 = @intCast(std.math.sqrt(A.len));
 
@@ -272,7 +312,7 @@ fn getrfSlice(comptime T: type, A: []T, ipiv: []i32) !void {
 fn getrsSlice(comptime T: type, X: []T, LU: []const T, ipiv: []const i32, B: []const T) !void {
     std.debug.assert(ipiv.len * ipiv.len == LU.len);
 
-    if (comptime primType(T) != f64) @compileError("GETRS NOW ONLY SUPPORTS F64 NUMBERS");
+    ensureF64(T, "getrs");
 
     const n: i32 = @intCast(std.math.sqrt(LU.len));
     const nofrhs: i32 = @intCast(B.len / ipiv.len);
@@ -288,7 +328,7 @@ fn getrsSlice(comptime T: type, X: []T, LU: []const T, ipiv: []const i32, B: []c
 
 /// Computes the Euclidean L2 norm of a slice using CBLAS dnrm2.
 fn nrm2Slice(comptime T: type, x: []const T) primType(T) {
-    if (comptime primType(T) != f64) @compileError("NRM2 ONLY SUPPORTS F64 PRIMITIVE TYPES");
+    ensureF64(T, "nrm2");
 
     return cblas.cblas_dnrm2(@intCast(x.len), x.ptr, 1);
 }
@@ -298,7 +338,7 @@ fn syevdSlice(comptime T: type, W: []T, U: []T, V: []T) !void {
     std.debug.assert(V.len == W.len * W.len);
     std.debug.assert(U.len == W.len * W.len);
 
-    if (primType(T) != f64) @compileError("SYEVD NOW ONLY SUPPORTS F64 NUMBERS");
+    ensureF64(T, "syevd");
 
     if (W.len == 1) {
         W[0], U[0] = .{ V[0], 1 };
@@ -339,7 +379,7 @@ fn sygvdSlice(comptime T: type, W: []T, U: []T, V: []T, B: []T) !void {
     std.debug.assert(U.len == W.len * W.len);
     std.debug.assert(B.len == W.len * W.len);
 
-    if (comptime primType(T) != f64) @compileError("SYGVD NOW ONLY SUPPORTS F64 NUMBERS");
+    ensureF64(T, "sygvd");
 
     const n: i32 = @intCast(W.len);
 

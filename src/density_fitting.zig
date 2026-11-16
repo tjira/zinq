@@ -5,7 +5,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
-const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
@@ -674,13 +673,4 @@ pub fn invertMetric(comptime T: type, J: Matrix(T), gpa: Allocator) !Matrix(T) {
     }
 
     return decomp.J_inv_half;
-}
-
-/// Packs 3-center baseline integrals and nuclear derivatives into a dual-number tensor.
-pub fn packDualTensor3c(comptime T: type, B_d: *Tensor(ScalarDual(T), 3), B: Tensor(T, 3), dB: Tensor(T, 3)) void {
-    const n0, const n1, const n2 = .{ B.shape[0], B.shape[1], B.shape[2] };
-
-    for (0..n0) |i| for (0..n1) |j| for (0..n2) |k| {
-        B_d.ptr(.{ i, j, k }).* = ScalarDual(T).init(B.at(.{ i, j, k }), dB.at(.{ i, j, k }));
-    };
 }

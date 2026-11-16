@@ -274,7 +274,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         var h_mo = try Matrix(T).init(space.nmo, space.nmo, gpa);
         defer h_mo.deinit(gpa);
 
-        ao2mo_1e(T, &h_mo, hfres.ints.H.?, C);
+        try ao2mo_1e(T, &h_mo, hfres.ints.H.?, C, gpa);
 
         var B_mo = try Tensor(T, 3).initZero(.{ space.nmo, space.nmo, hfres.ints.B.?.shape[2] }, gpa);
         defer B_mo.deinit(gpa);
@@ -391,7 +391,7 @@ fn evaluateCanonicalCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: an
         var h_mo = try Matrix(T).init(nmo, nmo, gpa);
         defer h_mo.deinit(gpa);
 
-        ao2mo_1e(T, &h_mo, ints.H.?, C.*);
+        try ao2mo_1e(T, &h_mo, ints.H.?, C.*, gpa);
 
         var g_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
         defer g_mo.deinit(gpa);
@@ -458,7 +458,7 @@ fn evaluateRiCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, 
         var h_mo = try Matrix(T).init(nmo, nmo, gpa);
         defer h_mo.deinit(gpa);
 
-        ao2mo_1e(T, &h_mo, ints.H.?, C.*);
+        try ao2mo_1e(T, &h_mo, ints.H.?, C.*, gpa);
 
         var B_mo = try Tensor(T, 3).initZero(.{ nmo, nmo, ints.B.?.shape[2] }, gpa);
         defer B_mo.deinit(gpa);

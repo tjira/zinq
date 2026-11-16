@@ -234,8 +234,32 @@ pub fn isComplex(comptime T: type) bool {
 
 /// Returns true if the type T is a dual number representation.
 pub fn isDual(comptime T: type) bool {
-    if (@typeInfo(T) == .@"struct") {
-        return @hasField(T, "val") and @hasField(T, "der");
+    const Actual = if (@typeInfo(T) == .pointer) @typeInfo(T).pointer.child else T;
+
+    if (@typeInfo(Actual) == .@"struct") {
+        return @hasField(Actual, "val") and @hasField(Actual, "der");
+    }
+
+    return false;
+}
+
+/// Returns true if the type T is a DualMatrix representation.
+pub fn isDualMatrix(comptime T: type) bool {
+    const Actual = if (@typeInfo(T) == .pointer) @typeInfo(T).pointer.child else T;
+
+    if (@typeInfo(Actual) == .@"struct") {
+        return @hasField(Actual, "val") and @hasField(Actual, "der") and @hasDecl(Actual, "nrow");
+    }
+
+    return false;
+}
+
+/// Returns true if the type T is a DualTensor representation.
+pub fn isDualTensor(comptime T: type) bool {
+    const Actual = if (@typeInfo(T) == .pointer) @typeInfo(T).pointer.child else T;
+
+    if (@typeInfo(Actual) == .@"struct") {
+        return @hasField(Actual, "val") and @hasField(Actual, "der") and @hasDecl(Actual, "matrixView");
     }
 
     return false;

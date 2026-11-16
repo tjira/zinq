@@ -5,11 +5,13 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
+const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 
 const calculateDeterminantSpin = @import("determinant.zig").calculateDeterminantSpin;
 const findDeterminantDifferences = @import("determinant.zig").findDeterminantDifferences;
+const isDualMatrix = @import("value.zig").isDualMatrix;
 const primType = @import("value.zig").primType;
 const signOfExcitations = @import("determinant.zig").signOfExcitations;
 
@@ -48,15 +50,29 @@ pub fn applySpinPenalty(comptime T: type, H: *Matrix(T), dets: []const []const u
 }
 
 /// Assembles the electronic Hamiltonian matrix across Slater determinants via the Slater-Condon rules.
-pub fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_ms: Matrix(T), g_ms: Tensor(T, 4), gpa: Allocator) !Matrix(T) {
-    var H = try Matrix(T).init(dets.len, dets.len, gpa);
+pub fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_ms: anytype, g_ms: anytype, gpa: Allocator) !if (isDualMatrix(@TypeOf(h_ms))) Matrix(ScalarDual(T)) else Matrix(T) {
+    const is_dual = comptime isDualMatrix(@TypeOf(h_ms));
+
+    const OutType = if (is_dual) ScalarDual(T) else T;
+
+    var H = try Matrix(OutType).init(dets.len, dets.len, gpa);
     errdefer H.deinit(gpa);
 
     for (0..dets.len) |i| for (i..dets.len) |j| {
-        const val = slater(T, dets[i], dets[j], h_ms, g_ms);
+        if (comptime is_dual) {
+            const val = slater(T, dets[i], dets[j], h_ms.val, g_ms.val);
+            const der = slater(T, dets[i], dets[j], h_ms.der, g_ms.der);
 
-        H.ptr(i, j).* = val;
-        H.ptr(j, i).* = val;
+            H.set(i, j, ScalarDual(T).init(val, der));
+            H.set(j, i, ScalarDual(T).init(val, der));
+        }
+
+        if (!comptime is_dual) {
+            const val = slater(T, dets[i], dets[j], h_ms, g_ms);
+
+            H.set(i, j, val);
+            H.set(j, i, val);
+        }
     };
 
     return H;

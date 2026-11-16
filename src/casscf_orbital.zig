@@ -486,7 +486,7 @@ pub fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, spac
     var h_mo = try Matrix(T).init(nmo, nmo, gpa);
     defer h_mo.deinit(gpa);
 
-    ao2mo_1e(T, &h_mo, ints.H.?, C.*);
+    try ao2mo_1e(T, &h_mo, ints.H.?, C.*, gpa);
 
     var g_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
     defer g_mo.deinit(gpa);
@@ -510,7 +510,7 @@ pub fn canonicalizeOrbitalsRi(comptime T: type, C: *Matrix(T), ints: anytype, sp
     var h_mo = try Matrix(T).init(nmo, nmo, gpa);
     defer h_mo.deinit(gpa);
 
-    ao2mo_1e(T, &h_mo, ints.H.?, C.*);
+    try ao2mo_1e(T, &h_mo, ints.H.?, C.*, gpa);
 
     var B_mo = try Tensor(T, 3).initZero(.{ nmo, nmo, ints.B.?.shape[2] }, gpa);
     defer B_mo.deinit(gpa);

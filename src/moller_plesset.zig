@@ -6,12 +6,16 @@ const cblas = @import("cimport.zig").cblas;
 
 const Allocator = std.mem.Allocator;
 
+const DualMatrix = @import("dual.zig").DualMatrix;
+const DualTensor = @import("dual.zig").DualTensor;
+const DualVector = @import("dual.zig").DualVector;
 const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
+const ScalarDual = @import("dual.zig").ScalarDual;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
@@ -24,6 +28,8 @@ const calculateCanonicalMpGradient = @import("moller_plesset_gradient.zig").calc
 const calculateRiMpGradient = @import("moller_plesset_gradient.zig").calculateRiMpGradient;
 const gemm = @import("linear_algebra.zig").gemm;
 const generateDets = @import("determinant.zig").generateDets;
+const isDualMatrix = @import("value.zig").isDualMatrix;
+const isDualTensor = @import("value.zig").isDualTensor;
 const printf = @import("read_write.zig").printf;
 const transformInts = @import("integral_transform.zig").transformInts;
 const transformIntsRi = @import("integral_transform.zig").transformIntsRi;
@@ -195,48 +201,66 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 }
 
 /// Evaluates canonical second-order Møller-Plesset correlation energy from two-electron integrals.
-pub fn calculateCanonicalMp2Energy(comptime T: type, g_ao: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) !T {
-    const N = C.shape[0];
+pub fn calculateCanonicalMp2Energy(comptime T: type, g_ao: anytype, C: anytype, e: anytype, nocc: usize, generalized: bool, gpa: Allocator) !if (isDualTensor(@TypeOf(g_ao))) ScalarDual(T) else T {
+    const is_dual = comptime isDualTensor(@TypeOf(g_ao));
+    const OutType = if (is_dual) ScalarDual(T) else T;
 
-    const nvir = N - nocc;
+    const nvir = C.shape[0] - nocc;
 
-    var g_mo = try Tensor(T, 4).initZero(.{ nocc, nocc, nvir, nvir }, gpa);
+    var g_mo = try @TypeOf(g_ao).initZero(.{ nocc, nocc, nvir, nvir }, gpa);
     defer g_mo.deinit(gpa);
 
     try ao2mo_oovv(T, &g_mo, g_ao, C, nocc, gpa);
 
-    var e_corr = Value(T).fromFloat(0);
+    var e_corr = Value(OutType).fromFloat(0);
 
-    for (0..nocc) |i| for (0..nocc) |j| for (0..nvir) |a| for (0..nvir) |b| {
-        const denom = Value(T).init(e.at(i)).add(Value(T).init(e.at(j))).sub(Value(T).init(e.at(nocc + a))).sub(Value(T).init(e.at(nocc + b)));
+    for (0..nocc) |i| for (0..nocc) |j| {
+        const val_ei = Value(OutType).init(e.at(i));
+        const val_ej = Value(OutType).init(e.at(j));
 
-        const g_ijab = Value(T).init(g_mo.at(.{ i, j, a, b }));
-        const g_ijba = Value(T).init(g_mo.at(.{ i, j, b, a }));
+        for (0..nvir) |a| {
+            const val_ea = Value(OutType).init(e.at(nocc + a));
 
-        var num: Value(T) = Value(T).fromFloat(0);
+            for (0..nvir) |b| {
+                const val_eb = Value(OutType).init(e.at(nocc + b));
 
-        if (generalized) {
-            num = g_ijab.sub(g_ijba).mul(g_ijab.sub(g_ijba)).muls(0.25);
+                const denom = val_ei.add(val_ej).sub(val_ea).sub(val_eb);
+
+                const g_ijab = Value(OutType).init(g_mo.at(.{ i, j, a, b }));
+                const g_ijba = Value(OutType).init(g_mo.at(.{ i, j, b, a }));
+
+                var num = Value(OutType).fromFloat(0);
+
+                if (generalized) {
+                    const diff = g_ijab.sub(g_ijba);
+                    num = diff.mul(diff).muls(0.25);
+                }
+
+                if (!generalized) {
+                    num = g_ijab.mul(g_ijab.muls(2).sub(g_ijba));
+                }
+
+                e_corr = e_corr.add(num.div(denom));
+            }
         }
-
-        if (!generalized) {
-            num = g_ijab.mul(g_ijab.muls(2).sub(g_ijba));
-        }
-
-        e_corr = e_corr.add(num.div(denom));
     };
 
     return e_corr.val;
 }
 
+pub const calculateCanonicalMp2EnergyDual = calculateCanonicalMp2Energy;
+
 /// Computes Møller-Plesset correlation energy corrections up to the requested perturbation order.
-pub fn calculateCanonicalCorrelationEnergies(comptime T: type, order: usize, H: Matrix(T), g: Tensor(T, 4), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
+pub fn calculateCanonicalCorrelationEnergies(comptime T: type, order: usize, H: anytype, g: anytype, C: anytype, e: anytype, nocc: usize, generalized: bool, gpa: Allocator) !if (isDualTensor(@TypeOf(g))) []ScalarDual(T) else []T {
+    const is_dual = comptime isDualTensor(@TypeOf(g));
+    const OutType = if (is_dual) ScalarDual(T) else T;
+
     if (order == 2) {
-        const energies = try gpa.alloc(T, 3);
+        const energies = try gpa.alloc(OutType, 3);
         errdefer gpa.free(energies);
 
-        energies[0] = Value(T).fromFloat(0).val;
-        energies[1] = Value(T).fromFloat(0).val;
+        energies[0] = Value(OutType).fromFloat(0).val;
+        energies[1] = Value(OutType).fromFloat(0).val;
 
         energies[2] = try calculateCanonicalMp2Energy(T, g, C, e, nocc, generalized, gpa);
 
@@ -252,61 +276,27 @@ pub fn calculateCanonicalCorrelationEnergies(comptime T: type, order: usize, H: 
         g_ms.deinit(gpa);
     }
 
-    var e_ms = try Vector(T).init(nsp, gpa);
-    defer e_ms.deinit(gpa);
-
-    if (generalized) for (0..nsp) |p| {
-        e_ms.ptr(p).* = e.at(p);
-    };
-
-    if (!generalized) for (0..C.shape[0]) |p| {
-        e_ms.ptr(2 * p + 0).* = e.at(p);
-        e_ms.ptr(2 * p + 1).* = e.at(p);
-    };
-
-    var excitations = try gpa.alloc(u32, @min(order, @min(nel, nsp - nel)));
-    defer gpa.free(excitations);
-
-    for (0..excitations.len) |i| {
-        excitations[i] = @intCast(i + 1);
-    }
-
-    var dets = try generateDets(nel, nsp, excitations, gpa);
-
-    defer {
-        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
-
-        dets.deinit(gpa);
-    }
-
-    var H_dets = try buildHamiltonianMatrix(T, dets.items, h_ms, g_ms, gpa);
-    defer H_dets.deinit(gpa);
-
-    const E0 = try gpa.alloc(Value(T), dets.items.len);
-    defer gpa.free(E0);
-
-    calculateZerothOrderEnergies(T, E0, dets.items, e_ms);
-
-    return try solveRayleighSchrodinger(T, H_dets, E0, order, gpa);
+    return try solveHigherOrderRspt(T, OutType, order, nel, nsp, generalized, C.shape[0], h_ms, g_ms, e, gpa);
 }
 
 /// Evaluates the second-order Møller-Plesset correlation energy using resolution-of-the-identity density fitting.
-pub fn calculateRiMp2Energy(comptime T: type, B_ao: Tensor(T, 3), C: Matrix(T), e: Vector(T), nocc: usize, gpa: Allocator) !T {
-    const naux = B_ao.shape[2];
+pub fn calculateRiMp2Energy(comptime T: type, B_ao: anytype, C: anytype, e: anytype, nocc: usize, gpa: Allocator) !if (isDualTensor(@TypeOf(B_ao))) ScalarDual(T) else T {
+    const is_dual, const generalized = .{ comptime isDualTensor(@TypeOf(B_ao)), C.shape[0] != B_ao.shape[0] };
+    const OutType = if (is_dual) ScalarDual(T) else T;
 
-    const generalized = C.nrow() != B_ao.shape[0];
+    const naux, const nvir = .{ B_ao.shape[2], C.shape[1] - nocc };
 
-    const nvir = C.ncol() - nocc;
-
-    var B_mo = try Tensor(T, 3).initZero(.{ nocc, nvir, naux }, gpa);
+    var B_mo = try @TypeOf(B_ao).initZero(.{ nocc, nvir, naux }, gpa);
     defer B_mo.deinit(gpa);
 
     try ao2mo_ov_3c(T, &B_mo, B_ao, C, gpa);
 
-    var e_corr = Value(T).fromFloat(0);
+    const MatType = if (is_dual) DualMatrix(T) else Matrix(T);
 
-    var M_ij = try Matrix(T).initZero(nvir, nvir, gpa);
+    var M_ij = try MatType.initZero(nvir, nvir, gpa);
     defer M_ij.deinit(gpa);
+
+    var e_corr = Value(OutType).fromFloat(0);
 
     for (0..nocc) |i| {
         const B_i = B_mo.slice(i).asMatrix();
@@ -314,43 +304,27 @@ pub fn calculateRiMp2Energy(comptime T: type, B_ao: Tensor(T, 3), C: Matrix(T), 
         for (0..nocc) |j| {
             const B_j = B_mo.slice(j).asMatrix();
 
-            if (comptime T == f64) {
-                gemm(T, &M_ij, B_i, B_j, 1, 0, false, true);
-            }
+            gemm(T, &M_ij, B_i, B_j, 1, 0, false, true);
 
-            if (comptime T != f64) {
-                for (0..nvir) |a| for (0..nvir) |b| {
-                    var sum = Value(T).fromFloat(0);
-
-                    for (0..naux) |P| {
-                        const b_ia = Value(T).init(B_i.at(a, P));
-                        const b_jb = Value(T).init(B_j.at(b, P));
-
-                        sum = sum.add(b_ia.mul(b_jb));
-                    }
-
-                    M_ij.ptr(a, b).* = sum.val;
-                };
-            }
-
-            const val_ei = Value(T).init(e.at(i));
-            const val_ej = Value(T).init(e.at(j));
+            const val_ei = Value(OutType).init(e.at(i));
+            const val_ej = Value(OutType).init(e.at(j));
 
             for (0..nvir) |a| {
-                const val_ea = Value(T).init(e.at(nocc + a));
+                const val_ea = Value(OutType).init(e.at(nocc + a));
 
                 for (0..nvir) |b| {
-                    const val_eb = Value(T).init(e.at(nocc + b));
+                    const val_eb = Value(OutType).init(e.at(nocc + b));
 
                     const denom = val_ei.add(val_ej).sub(val_ea).sub(val_eb);
 
-                    const g_ijab = Value(T).init(M_ij.at(a, b));
-                    const g_ijba = Value(T).init(M_ij.at(b, a));
+                    const g_ijab = Value(OutType).init(M_ij.at(a, b));
+                    const g_ijba = Value(OutType).init(M_ij.at(b, a));
 
-                    var num: Value(T) = Value(T).fromFloat(0);
+                    var num = Value(OutType).fromFloat(0);
 
                     if (generalized) {
-                        num = g_ijab.sub(g_ijba).mul(g_ijab.sub(g_ijba)).muls(0.25);
+                        const diff = g_ijab.sub(g_ijba);
+                        num = diff.mul(diff).muls(0.25);
                     }
 
                     if (!generalized) {
@@ -366,14 +340,19 @@ pub fn calculateRiMp2Energy(comptime T: type, B_ao: Tensor(T, 3), C: Matrix(T), 
     return e_corr.val;
 }
 
+pub const calculateRiMp2EnergyDual = calculateRiMp2Energy;
+
 /// Computes Møller-Plesset correlation energy corrections up to requested perturbation order using density fitting.
-pub fn calculateRiCorrelationEnergies(comptime T: type, order: usize, H: Matrix(T), B: Tensor(T, 3), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool, gpa: Allocator) ![]T {
+pub fn calculateRiCorrelationEnergies(comptime T: type, order: usize, H: anytype, B: anytype, C: anytype, e: anytype, nocc: usize, generalized: bool, gpa: Allocator) !if (isDualTensor(@TypeOf(B))) []ScalarDual(T) else []T {
+    const is_dual = comptime isDualTensor(@TypeOf(B));
+    const OutType = if (is_dual) ScalarDual(T) else T;
+
     if (order == 2) {
-        const energies = try gpa.alloc(T, 3);
+        const energies = try gpa.alloc(OutType, 3);
         errdefer gpa.free(energies);
 
-        energies[0] = Value(T).fromFloat(0).val;
-        energies[1] = Value(T).fromFloat(0).val;
+        energies[0] = Value(OutType).fromFloat(0).val;
+        energies[1] = Value(OutType).fromFloat(0).val;
 
         energies[2] = try calculateRiMp2Energy(T, B, C, e, nocc, gpa);
 
@@ -389,51 +368,16 @@ pub fn calculateRiCorrelationEnergies(comptime T: type, order: usize, H: Matrix(
         g_ms.deinit(gpa);
     }
 
-    var e_ms = try Vector(T).init(nsp, gpa);
-    defer e_ms.deinit(gpa);
-
-    if (generalized) for (0..nsp) |p| {
-        e_ms.ptr(p).* = e.at(p);
-    };
-
-    if (!generalized) for (0..C.shape[0]) |p| {
-        e_ms.ptr(2 * p + 0).* = e.at(p);
-        e_ms.ptr(2 * p + 1).* = e.at(p);
-    };
-
-    var excitations = try gpa.alloc(u32, @min(order, @min(nel, nsp - nel)));
-    defer gpa.free(excitations);
-
-    for (0..excitations.len) |i| {
-        excitations[i] = @intCast(i + 1);
-    }
-
-    var dets = try generateDets(nel, nsp, excitations, gpa);
-
-    defer {
-        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
-
-        dets.deinit(gpa);
-    }
-
-    var H_dets = try buildHamiltonianMatrix(T, dets.items, h_ms, g_ms, gpa);
-    defer H_dets.deinit(gpa);
-
-    const E0 = try gpa.alloc(Value(T), dets.items.len);
-    defer gpa.free(E0);
-
-    calculateZerothOrderEnergies(T, E0, dets.items, e_ms);
-
-    return try solveRayleighSchrodinger(T, H_dets, E0, order, gpa);
+    return try solveHigherOrderRspt(T, OutType, order, nel, nsp, generalized, C.shape[0], h_ms, g_ms, e, gpa);
 }
 
 /// Evaluates unperturbed zeroth-order energies of Slater determinants under the unperturbed Fock Hamiltonian.
-fn calculateZerothOrderEnergies(comptime T: type, E0: []Value(T), dets: []const []const usize, e_ms: Vector(T)) void {
+fn calculateZerothOrderEnergies(comptime OutType: type, E0: []Value(OutType), dets: []const []const usize, e_ms: anytype) void {
     for (0..dets.len) |i| {
-        var sum = Value(T).fromFloat(0);
+        var sum = Value(OutType).fromFloat(0);
 
         for (dets[i]) |p| {
-            sum = sum.add(Value(T).init(e_ms.at(p)));
+            sum = sum.add(Value(OutType).init(e_ms.at(p)));
         }
 
         E0[i] = sum;
@@ -521,6 +465,49 @@ fn evaluateRiMp(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockRe
             };
         }
     }
+}
+
+/// Solves higher-order Rayleigh-Schrödinger perturbation theory across Slater determinants.
+fn solveHigherOrderRspt(comptime T: type, comptime OutType: type, order: usize, nel: usize, nsp: usize, generalized: bool, nbf: usize, h_ms: anytype, g_ms: anytype, e: anytype, gpa: Allocator) ![]OutType {
+    var excitations = try gpa.alloc(u32, @min(order, @min(nel, nsp - nel)));
+    defer gpa.free(excitations);
+
+    for (0..excitations.len) |i| {
+        excitations[i] = @intCast(i + 1);
+    }
+
+    var dets = try generateDets(nel, nsp, excitations, gpa);
+
+    defer {
+        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
+        dets.deinit(gpa);
+    }
+
+    const is_dual = comptime isDualMatrix(@TypeOf(h_ms));
+
+    const VecType = if (is_dual) DualVector(T) else Vector(T);
+
+    var e_ms = try VecType.init(nsp, gpa);
+    defer e_ms.deinit(gpa);
+
+    if (generalized) for (0..nsp) |p| {
+        e_ms.set(p, e.at(p));
+    };
+
+    if (!generalized) for (0..nbf) |p| {
+        e_ms.set(2 * p + 0, e.at(p));
+        e_ms.set(2 * p + 1, e.at(p));
+    };
+
+    var H_dets = try buildHamiltonianMatrix(T, dets.items, h_ms, g_ms, gpa);
+    defer H_dets.deinit(gpa);
+
+    const E0 = try gpa.alloc(Value(OutType), dets.items.len);
+    defer gpa.free(E0);
+
+    calculateZerothOrderEnergies(OutType, E0, dets.items, e_ms);
+
+    return try solveRayleighSchrodinger(OutType, H_dets, E0, order, gpa);
 }
 
 /// Solves Rayleigh-Schrödinger perturbation equations iteratively in the Slater determinant basis.

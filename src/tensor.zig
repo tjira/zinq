@@ -294,6 +294,11 @@ pub fn Matrix(comptime T: type) type {
             return self.data[i * self.shape[1] .. (i + 1) * self.shape[1]];
         }
 
+        /// Assigns scalar matrix element at row i and column j.
+        pub fn set(self: *@This(), i: usize, j: usize, val: T) void {
+            self.ptr(i, j).* = val;
+        }
+
         /// Returns a submatrix view spanning a contiguous range of rows from start to start + count.
         pub fn sliceRows(self: @This(), start: usize, count: usize) @This() {
             std.debug.assert(start + count <= self.shape[0]);
@@ -457,6 +462,11 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
             return self.shape.len;
         }
 
+        /// Assigns scalar tensor element at multi-dimensional coordinate indx.
+        pub fn set(self: *@This(), indx: [N]usize, val: T) void {
+            self.ptr(indx).* = val;
+        }
+
         /// Returns a sub-tensor view along the leading dimension at the specified index.
         pub fn slice(self: @This(), i: usize) if (N > 1) Tensor(T, N - 1) else void {
             if (comptime N <= 1) @compileError("Tensor rank must be greater than 1 to slice");
@@ -567,6 +577,11 @@ pub fn Vector(comptime T: type) type {
             std.debug.assert(rows * cols == self.shape[0]);
 
             return Matrix(T).fromSlice(rows, cols, self.data);
+        }
+
+        /// Assigns scalar vector element at linear coordinate i.
+        pub fn set(self: *@This(), i: usize, val: T) void {
+            self.ptr(i).* = val;
         }
 
         /// Returns a subvector view spanning a contiguous range of elements from start to start + len.
