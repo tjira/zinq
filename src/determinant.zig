@@ -385,6 +385,8 @@ pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), C_mo: Ma
             }
         }.desc);
 
+        const occ_width = @max(10, norbs + 2);
+
         if (nstates == 1) {
             try printf(io, "\nLEADING DETERMINANT CONTRIBUTIONS (|C|^2 >= 0.0100)\n", .{});
         }
@@ -393,7 +395,9 @@ pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), C_mo: Ma
             try printf(io, "\nSTATE {d:2} LEADING DETERMINANT CONTRIBUTIONS (|C|^2 >= 0.0100)\n", .{s});
         }
 
-        try printf(io, "{s:6} {s:18} {s:14} {s:14} {s:8}\n", .{ "DET", "OCCUPATION", "COEF (C)", "WEIGHT (|C|^2)", "<S^2>" });
+        const hdr_fmt = "{[0]s:6} {[1]s:[2]} {[3]s:14} {[4]s:14} {[5]s:8}\n";
+
+        try printf(io, hdr_fmt, .{ "DET", "OCCUPATION", occ_width, "COEF", "WEIGHT (|C|^2)", "<S^2>" });
 
         for (list.items) |item| {
             const desc = try formatDeterminant(dets[item.d_idx], ncore, norbs, gen, gpa);
@@ -403,7 +407,9 @@ pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), C_mo: Ma
 
             const s_val = try calculateDeterminantTotalSpin(T, dets[item.d_idx], C_ms, S_ao, gpa);
 
-            try printf(io, "{d:6} {s:18} {d:14.6} {d:12.2} % {d:8.2}\n", .{ item.d_idx + 1, desc, item.coeff, wght, s_val });
+            const row_fmt = "{[0]d:6} {[1]s:[2]} {[3]d:14.6} {[4]d:12.2} % {[5]d:8.2}\n";
+
+            try printf(io, row_fmt, .{ item.d_idx + 1, desc, occ_width, item.coeff, wght, s_val });
         }
     }
 }
@@ -421,7 +427,7 @@ pub fn signOfExcitations(S: []const usize, U: []const usize) i2 {
 
 /// Formats a Slater determinant into an allocated occupation string representation over specified molecular orbitals.
 fn formatDeterminant(det: []const usize, ncore: usize, norbs: usize, gen: bool, gpa: Allocator) ![]u8 {
-    const len = 2 * norbs + 3;
+    const len = norbs + 2;
 
     var buf = try gpa.alloc(u8, len);
     errdefer gpa.free(buf);
@@ -434,10 +440,6 @@ fn formatDeterminant(det: []const usize, ncore: usize, norbs: usize, gen: bool, 
 
     for (0..norbs) |u| {
         const p = ncore + u;
-
-        buf[pos] = ' ';
-
-        pos += 1;
 
         if (gen) {
             const has_p = std.mem.indexOfScalar(usize, det, p) != null;
@@ -454,10 +456,6 @@ fn formatDeterminant(det: []const usize, ncore: usize, norbs: usize, gen: bool, 
 
         pos += 1;
     }
-
-    buf[pos] = ' ';
-
-    pos += 1;
 
     buf[pos] = '>';
 

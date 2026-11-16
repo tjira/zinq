@@ -71,3 +71,4 @@
 - [x] Accelerate b2ms (spin-orbital integral reconstruction) with BLAS.
 - [ ] Full analytic Hessian (Newton–Raphson) macro-iterations in CASSCF.
 - [x] De-interleave dual tensors to enable BLAS for analytic gradients.
+- [ ] Find a way to not export the basis files to disk when using builtin basis sets.
