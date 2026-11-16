@@ -29,12 +29,10 @@ const buildGeneralizedFock = @import("casscf_orbital.zig").buildGeneralizedFock;
 const buildGeneralizedFockRi = @import("casscf_orbital.zig").buildGeneralizedFockRi;
 const buildOrbitalRotationGenerator = @import("casscf_orbital.zig").buildOrbitalRotationGenerator;
 const buildStateAveragedActRdm = @import("reduced_density_matrix.zig").buildStateAveragedActRdm;
-const calculateCanonicalCasscfGradient = @import("casscf_gradient.zig").calculateCanonicalCasscfGradient;
-const calculateRiCasscfGradient = @import("casscf_gradient.zig").calculateRiCasscfGradient;
+const calculateCasscfGradient = @import("casscf_gradient.zig").calculateCasscfGradient;
 const canonicalizeOrbitals = @import("casscf_orbital.zig").canonicalizeOrbitals;
-const canonicalizeOrbitalsRi = @import("casscf_orbital.zig").canonicalizeOrbitalsRi;
+const computeCasCiRi = @import("configuration_interaction.zig").computeCasCiRi;
 const computeCi = @import("configuration_interaction.zig").computeCi;
-const computeCiRi = @import("configuration_interaction.zig").computeCiRi;
 const computeOrbitalGradient = @import("casscf_orbital.zig").computeOrbitalGradient;
 const gemm = @import("linear_algebra.zig").gemm;
 const generateCasDets = @import("determinant.zig").generateCasDets;
@@ -250,17 +248,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         try buildFittingIntegrals(T, io, &hfres.ints, aux, analytic_grad, opt.nthreads, gpa);
     }
 
-    if (opt.aux_basis != null) {
-        try evaluateRiCasscf(T, io, &C, hfres.ints, dets.items, weights, space, opt, log, gpa);
+    try evaluateCasscf(T, io, &C, hfres.ints, dets.items, weights, space, opt, log, gpa);
 
-        try canonicalizeOrbitalsRi(T, &C, hfres.ints, space, gpa);
-    }
-
-    if (opt.aux_basis == null) {
-        try evaluateCanonicalCasscf(T, io, &C, hfres.ints, dets.items, weights, space, opt, log, gpa);
-
-        try canonicalizeOrbitals(T, &C, hfres.ints, space, gpa);
-    }
+    try canonicalizeOrbitals(T, &C, hfres.ints, space, gpa);
 
     const nrep = try hfres.ints.sys.nrep();
 
@@ -281,7 +271,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
         try ao2mo_3c(T, &B_mo, hfres.ints.B.?, C, gpa);
 
-        final_energies, final_C_ci = try computeCiRi(T, dets.items, h_mo, B_mo, nrep, opt.spin_penalty, s2_target, space.nocc(), gpa);
+        final_energies, final_C_ci = try computeCasCiRi(T, dets.items, h_mo, B_mo, nrep, opt.spin_penalty, s2_target, space.nocc(), gpa);
     }
 
     if (opt.aux_basis == null) {
@@ -330,13 +320,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         .analytic => |a| {
             const states = a.states orelse &[_]u32{0};
 
-            if (opt.aux_basis != null) {
-                grad = try calculateRiCasscfGradient(T, hfres, C, final_C_ci, dets.items, weights, space, states, gpa);
-            }
-
-            if (opt.aux_basis == null) {
-                grad = try calculateCanonicalCasscfGradient(T, hfres, C, final_C_ci, dets.items, weights, space, states, gpa);
-            }
+            grad = try calculateCasscfGradient(T, hfres, C, final_C_ci, dets.items, weights, space, states, gpa);
         },
         .numeric => {},
     };
@@ -353,7 +337,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 }
 
 /// Executes the two-step CASSCF macro-iteration cycle alternating configuration and orbital optimizations.
-fn evaluateCanonicalCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []const []const usize, weights: []const T, space: CasSpace, opt: Options, log: bool, gpa: Allocator) !void {
+fn evaluateCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []const []const usize, weights: []const T, space: CasSpace, opt: Options, log: bool, gpa: Allocator) !void {
     const nmo, var prev_energy: T = .{ space.nmo, 0 };
 
     const s_target = 0.5 * @as(f64, @floatFromInt(opt.multiplicity - 1));
@@ -363,7 +347,30 @@ fn evaluateCanonicalCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: an
     for (0..opt.iterations) |iter| {
         var iter_timer = std.Io.Timestamp.now(io, .real);
 
-        var all_E, var C_ci = try computeCi(T, null, C.*, ints, dets, try ints.sys.nrep(), false, opt.spin_penalty, s2_target, gpa);
+        var h_mo = try Matrix(T).init(nmo, nmo, gpa);
+        defer h_mo.deinit(gpa);
+
+        try ao2mo_1e(T, &h_mo, ints.H.?, C.*, gpa);
+
+        var B_mo: Tensor(T, 3) = undefined;
+
+        if (ints.B != null) {
+            B_mo = try Tensor(T, 3).initZero(.{ nmo, nmo, ints.B.?.shape[2] }, gpa);
+
+            try ao2mo_3c(T, &B_mo, ints.B.?, C.*, gpa);
+        }
+
+        defer if (ints.B != null) B_mo.deinit(gpa);
+
+        var all_E: Vector(T), var C_ci: Matrix(T) = .{ undefined, undefined };
+
+        if (ints.B != null) {
+            all_E, C_ci = try computeCasCiRi(T, dets, h_mo, B_mo, try ints.sys.nrep(), opt.spin_penalty, s2_target, space.nocc(), gpa);
+        }
+
+        if (ints.B == null) {
+            all_E, C_ci = try computeCi(T, null, C.*, ints, dets, try ints.sys.nrep(), false, opt.spin_penalty, s2_target, gpa);
+        }
 
         defer {
             all_E.deinit(gpa);
@@ -388,20 +395,26 @@ fn evaluateCanonicalCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: an
             d_act.deinit(gpa);
         }
 
-        var h_mo = try Matrix(T).init(nmo, nmo, gpa);
-        defer h_mo.deinit(gpa);
+        var g_mo: Tensor(T, 4) = undefined;
 
-        try ao2mo_1e(T, &h_mo, ints.H.?, C.*, gpa);
+        if (ints.B == null) {
+            g_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
 
-        var g_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
-        defer g_mo.deinit(gpa);
+            try ao2mo_2e(T, &g_mo, ints.g.?, C.*, gpa);
+        }
 
-        try ao2mo_2e(T, &g_mo, ints.g.?, C.*, gpa);
+        defer if (ints.B == null) g_mo.deinit(gpa);
 
         var F_gen = try Matrix(T).initZero(nmo, nmo, gpa);
         defer F_gen.deinit(gpa);
 
-        try buildGeneralizedFock(T, &F_gen, h_mo, g_mo, D_act, d_act, space, gpa);
+        if (ints.B != null) {
+            try buildGeneralizedFockRi(T, &F_gen, h_mo, B_mo, D_act, d_act, space, gpa);
+        }
+
+        if (ints.B == null) {
+            try buildGeneralizedFock(T, &F_gen, h_mo, g_mo, D_act, d_act, space, gpa);
+        }
 
         var g_orb = try Matrix(T).initZero(nmo, nmo, gpa);
         defer g_orb.deinit(gpa);
@@ -427,104 +440,20 @@ fn evaluateCanonicalCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: an
             var F_core = try Matrix(T).init(nmo, nmo, gpa);
             defer F_core.deinit(gpa);
 
-            buildCoreFock(T, &F_core, h_mo, g_mo, space);
-
             var F_diag = try Vector(T).init(nmo, gpa);
             defer F_diag.deinit(gpa);
 
-            buildDiagonalFock(T, &F_diag, F_core, g_mo, D_act, space);
+            if (ints.B != null) {
+                try buildCoreFockRi(T, &F_core, h_mo, B_mo, space, gpa);
 
-            var kappa = try Matrix(T).initZero(nmo, nmo, gpa);
-            defer kappa.deinit(gpa);
+                try buildDiagonalFockRi(T, &F_diag, F_core, B_mo, D_act, space, gpa);
+            }
 
-            buildOrbitalRotationGenerator(T, &kappa, g_orb, F_diag, D_act, space);
+            if (ints.B == null) {
+                buildCoreFock(T, &F_core, h_mo, g_mo, space);
 
-            try applyCayleyTransform(T, C, kappa, gpa);
-        }
-    } else return error.CasscfDidNotConverge;
-}
-
-/// Executes two-step CASSCF macro-iterations using density fitting for integral representations.
-fn evaluateRiCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []const []const usize, weights: []const T, space: CasSpace, opt: Options, log: bool, gpa: Allocator) !void {
-    const nmo, var prev_energy: T = .{ space.nmo, 0 };
-
-    const s_target = 0.5 * @as(f64, @floatFromInt(opt.multiplicity - 1));
-
-    const s2_target = s_target * (s_target + 1.0);
-
-    for (0..opt.iterations) |iter| {
-        var iter_timer = std.Io.Timestamp.now(io, .real);
-
-        var h_mo = try Matrix(T).init(nmo, nmo, gpa);
-        defer h_mo.deinit(gpa);
-
-        try ao2mo_1e(T, &h_mo, ints.H.?, C.*, gpa);
-
-        var B_mo = try Tensor(T, 3).initZero(.{ nmo, nmo, ints.B.?.shape[2] }, gpa);
-        defer B_mo.deinit(gpa);
-
-        try ao2mo_3c(T, &B_mo, ints.B.?, C.*, gpa);
-
-        var all_E, var C_ci = try computeCiRi(T, dets, h_mo, B_mo, try ints.sys.nrep(), opt.spin_penalty, s2_target, space.nocc(), gpa);
-
-        defer {
-            all_E.deinit(gpa);
-
-            C_ci.deinit(gpa);
-        }
-
-        var sa_energy: T = 0;
-
-        for (0..opt.nstate) |I| {
-            sa_energy += weights[I] * all_E.at(I);
-        }
-
-        const e_diff = if (iter == 0) sa_energy else @abs(sa_energy - prev_energy);
-
-        prev_energy = sa_energy;
-
-        var D_act, var d_act = try buildStateAveragedActRdm(T, dets, C_ci, weights, space.ncore, space.nact, gpa);
-
-        defer {
-            D_act.deinit(gpa);
-            d_act.deinit(gpa);
-        }
-
-        var F_gen = try Matrix(T).initZero(nmo, nmo, gpa);
-        defer F_gen.deinit(gpa);
-
-        try buildGeneralizedFockRi(T, &F_gen, h_mo, B_mo, D_act, d_act, space, gpa);
-
-        var g_orb = try Matrix(T).initZero(nmo, nmo, gpa);
-        defer g_orb.deinit(gpa);
-
-        const grad_norm = computeOrbitalGradient(T, &g_orb, F_gen, space);
-
-        if (log) {
-            const fmt = "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9}\n";
-
-            const time_str = try std.fmt.allocPrint(gpa, "{f}", .{iter_timer.untilNow(io, .real)});
-            defer gpa.free(time_str);
-
-            const de = if (iter == 0) 0 else e_diff;
-
-            try printf(io, fmt, .{ iter + 1, sa_energy, de, grad_norm, time_str });
-        }
-
-        if (iter > 0 and e_diff < opt.threshold and grad_norm < opt.orbital_threshold) {
-            break;
-        }
-
-        if (iter < opt.iterations - 1) {
-            var F_core = try Matrix(T).init(nmo, nmo, gpa);
-            defer F_core.deinit(gpa);
-
-            try buildCoreFockRi(T, &F_core, h_mo, B_mo, space, gpa);
-
-            var F_diag = try Vector(T).init(nmo, gpa);
-            defer F_diag.deinit(gpa);
-
-            try buildDiagonalFockRi(T, &F_diag, F_core, B_mo, D_act, space, gpa);
+                buildDiagonalFock(T, &F_diag, F_core, g_mo, D_act, space);
+            }
 
             var kappa = try Matrix(T).initZero(nmo, nmo, gpa);
             defer kappa.deinit(gpa);

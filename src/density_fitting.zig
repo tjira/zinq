@@ -385,8 +385,20 @@ pub fn RiWorkspace(comptime T: type) type {
 
             const nbf_sq = nbf * nbf;
 
-            var J_inv_half = try invertMetric(T, ints.J.?, gpa);
-            defer J_inv_half.deinit(gpa);
+            var local_inv: ?Matrix(T) = null;
+            defer if (local_inv) |*it| it.deinit(gpa);
+
+            var J_inv_half: Matrix(T) = undefined;
+
+            if (ints.J_inv_half) |jh| {
+                J_inv_half = jh;
+            }
+
+            if (ints.J_inv_half == null) {
+                local_inv = try invertMetric(T, ints.J.?, gpa);
+
+                J_inv_half = local_inv.?;
+            }
 
             const B_mat = ints.B.?.asMatrix();
 
@@ -572,12 +584,13 @@ pub fn buildFittingIntegrals(comptime T: type, io: std.Io, ints: anytype, aux_ba
     }
 
     if (ints.B == null) {
-        var J_inv_half = try invertMetric(T, ints.J.?, gpa);
-        defer J_inv_half.deinit(gpa);
+        if (ints.J_inv_half == null) {
+            ints.J_inv_half = try invertMetric(T, ints.J.?, gpa);
+        }
 
         ints.B = try Tensor(T, 3).initZero(ints.I.?.shape, gpa);
 
-        contractMetric(T, &ints.B.?, ints.I.?, J_inv_half);
+        contractMetric(T, &ints.B.?, ints.I.?, ints.J_inv_half.?);
     }
 
     if (needs_derivs) {

@@ -24,8 +24,7 @@ const ao2mo_oovv = @import("integral_transform.zig").ao2mo_oovv;
 const ao2mo_ov_3c = @import("integral_transform.zig").ao2mo_ov_3c;
 const buildFittingIntegrals = @import("density_fitting.zig").buildFittingIntegrals;
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
-const calculateCanonicalMpGradient = @import("moller_plesset_gradient.zig").calculateCanonicalMpGradient;
-const calculateRiMpGradient = @import("moller_plesset_gradient.zig").calculateRiMpGradient;
+const calculateMpGradient = @import("moller_plesset_gradient.zig").calculateMpGradient;
 const gemm = @import("linear_algebra.zig").gemm;
 const generateDets = @import("determinant.zig").generateDets;
 const isDualMatrix = @import("value.zig").isDualMatrix;
@@ -125,13 +124,7 @@ pub fn calculateNuclearGradient(comptime T: type, order: usize, hfres: HartreeFo
         initialized += 1;
     }
 
-    if (hfres.ints.B == null) {
-        try calculateCanonicalMpGradient(T, grads, order, hfres, gpa);
-    }
-
-    if (hfres.ints.B != null) {
-        try calculateRiMpGradient(T, grads, order, hfres, gpa);
-    }
+    try calculateMpGradient(T, grads, order, hfres, gpa);
 
     return grads;
 }
@@ -189,13 +182,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     energy[0] = hfres.energy[0];
 
-    if (opt.aux_basis == null) {
-        try evaluateCanonicalMp(T, io, opt, hfres, energy, grad, grads, log, gpa);
-    }
-
-    if (opt.aux_basis != null) {
-        try evaluateRiMp(T, io, opt, hfres, energy, grad, grads, log, gpa);
-    }
+    try evaluateMp(T, io, opt, hfres, energy, grad, grads, log, gpa);
 
     return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = &.{} };
 }
@@ -248,11 +235,10 @@ pub fn calculateCanonicalMp2Energy(comptime T: type, g_ao: anytype, C: anytype, 
     return e_corr.val;
 }
 
-pub const calculateCanonicalMp2EnergyDual = calculateCanonicalMp2Energy;
-
 /// Computes Møller-Plesset correlation energy corrections up to the requested perturbation order.
-pub fn calculateCanonicalCorrelationEnergies(comptime T: type, order: usize, H: anytype, g: anytype, C: anytype, e: anytype, nocc: usize, generalized: bool, gpa: Allocator) !if (isDualTensor(@TypeOf(g))) []ScalarDual(T) else []T {
-    const is_dual = comptime isDualTensor(@TypeOf(g));
+pub fn calculateCorrelationEnergies(comptime T: type, order: usize, H: anytype, ints2e: anytype, C: anytype, e: anytype, nocc: usize, generalized: bool, gpa: Allocator) !if (isDualTensor(@TypeOf(ints2e))) []ScalarDual(T) else []T {
+    const is_dual = comptime isDualTensor(@TypeOf(ints2e));
+
     const OutType = if (is_dual) ScalarDual(T) else T;
 
     if (order == 2) {
@@ -262,14 +248,30 @@ pub fn calculateCanonicalCorrelationEnergies(comptime T: type, order: usize, H: 
         energies[0] = Value(OutType).fromFloat(0).val;
         energies[1] = Value(OutType).fromFloat(0).val;
 
-        energies[2] = try calculateCanonicalMp2Energy(T, g, C, e, nocc, generalized, gpa);
+        if (comptime @TypeOf(ints2e) == Tensor(T, 4) or @TypeOf(ints2e) == DualTensor(T, 4)) {
+            energies[2] = try calculateCanonicalMp2Energy(T, ints2e, C, e, nocc, generalized, gpa);
+        }
+
+        if (comptime @TypeOf(ints2e) == Tensor(T, 3) or @TypeOf(ints2e) == DualTensor(T, 3)) {
+            energies[2] = try calculateRiMp2Energy(T, ints2e, C, e, nocc, gpa);
+        }
 
         return energies;
     }
 
     const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
 
-    var h_ms, var g_ms = try transformInts(T, C, H, g, generalized, gpa);
+    var h_ms: if (is_dual) DualMatrix(T) else Matrix(T) = undefined;
+
+    var g_ms: if (is_dual) DualTensor(T, 4) else Tensor(T, 4) = undefined;
+
+    if (comptime @TypeOf(ints2e) == Tensor(T, 4) or @TypeOf(ints2e) == DualTensor(T, 4)) {
+        h_ms, g_ms = try transformInts(T, C, H, ints2e, generalized, gpa);
+    }
+
+    if (comptime @TypeOf(ints2e) == Tensor(T, 3) or @TypeOf(ints2e) == DualTensor(T, 3)) {
+        h_ms, g_ms = try transformIntsRi(T, C, H, ints2e, generalized, gpa);
+    }
 
     defer {
         h_ms.deinit(gpa);
@@ -340,37 +342,6 @@ pub fn calculateRiMp2Energy(comptime T: type, B_ao: anytype, C: anytype, e: anyt
     return e_corr.val;
 }
 
-pub const calculateRiMp2EnergyDual = calculateRiMp2Energy;
-
-/// Computes Møller-Plesset correlation energy corrections up to requested perturbation order using density fitting.
-pub fn calculateRiCorrelationEnergies(comptime T: type, order: usize, H: anytype, B: anytype, C: anytype, e: anytype, nocc: usize, generalized: bool, gpa: Allocator) !if (isDualTensor(@TypeOf(B))) []ScalarDual(T) else []T {
-    const is_dual = comptime isDualTensor(@TypeOf(B));
-    const OutType = if (is_dual) ScalarDual(T) else T;
-
-    if (order == 2) {
-        const energies = try gpa.alloc(OutType, 3);
-        errdefer gpa.free(energies);
-
-        energies[0] = Value(OutType).fromFloat(0).val;
-        energies[1] = Value(OutType).fromFloat(0).val;
-
-        energies[2] = try calculateRiMp2Energy(T, B, C, e, nocc, gpa);
-
-        return energies;
-    }
-
-    const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
-
-    var h_ms, var g_ms = try transformIntsRi(T, C, H, B, generalized, gpa);
-
-    defer {
-        h_ms.deinit(gpa);
-        g_ms.deinit(gpa);
-    }
-
-    return try solveHigherOrderRspt(T, OutType, order, nel, nsp, generalized, C.shape[0], h_ms, g_ms, e, gpa);
-}
-
 /// Evaluates unperturbed zeroth-order energies of Slater determinants under the unperturbed Fock Hamiltonian.
 fn calculateZerothOrderEnergies(comptime OutType: type, E0: []Value(OutType), dets: []const []const usize, e_ms: anytype) void {
     for (0..dets.len) |i| {
@@ -384,15 +355,22 @@ fn calculateZerothOrderEnergies(comptime OutType: type, E0: []Value(OutType), de
     }
 }
 
-/// Evaluates canonical Møller-Plesset correlation energies and nuclear gradients across perturbation orders.
-fn evaluateCanonicalMp(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockResult(T), energy: []T, grad: []Matrix(T), grads: ?[]Matrix(T), log: bool, gpa: Allocator) !void {
+/// Evaluates Møller-Plesset correlation energies and nuclear gradients across perturbation orders.
+fn evaluateMp(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockResult(T), energy: []T, grad: []Matrix(T), grads: ?[]Matrix(T), log: bool, gpa: Allocator) !void {
     const generalized = opt.hartree_fock.generalized;
 
     const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
 
-    const H_ao, const g_ao, const C_mo, const e_mo = .{ hfres.ints.H.?, hfres.ints.g.?, hfres.C_mo, hfres.e_mo };
+    var energies: []T = undefined;
 
-    const energies = try calculateCanonicalCorrelationEnergies(T, opt.order, H_ao, g_ao, C_mo, e_mo, nocc, generalized, gpa);
+    if (hfres.ints.B) |B_ao| {
+        energies = try calculateCorrelationEnergies(T, opt.order, hfres.ints.H.?, B_ao, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
+    }
+
+    if (hfres.ints.B == null) {
+        energies = try calculateCorrelationEnergies(T, opt.order, hfres.ints.H.?, hfres.ints.g.?, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
+    }
+
     defer gpa.free(energies);
 
     for (2..opt.order + 1) |i| {
@@ -421,50 +399,6 @@ fn evaluateEnergyCorrection(comptime T: type, m: usize, H_dets: Matrix(T), c_det
     }
 
     return sum;
-}
-
-/// Evaluates Møller-Plesset correlation energies and nuclear gradients across perturbation orders with density fitting.
-fn evaluateRiMp(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockResult(T), energy: []T, grad: []Matrix(T), grads: ?[]Matrix(T), log: bool, gpa: Allocator) !void {
-    const B_ao = hfres.ints.B.?;
-
-    const generalized = opt.hartree_fock.generalized;
-
-    const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
-
-    if (opt.order == 2) {
-        const e_corr = try calculateRiMp2Energy(T, B_ao, hfres.C_mo, hfres.e_mo, nocc, gpa);
-
-        energy[0] += e_corr;
-
-        if (log) {
-            try printf(io, "\nMP02 TOTAL ENERGY: {d:.14} Eh\n", .{energy[0]});
-        }
-
-        if (grads) |g| {
-            for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-                grad[0].ptr(j, k).* += g[2].at(j, k);
-            };
-        }
-
-        return;
-    }
-
-    const energies = try calculateRiCorrelationEnergies(T, opt.order, hfres.ints.H.?, B_ao, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
-    defer gpa.free(energies);
-
-    for (2..opt.order + 1) |i| {
-        energy[0] += energies[i];
-
-        if (log) {
-            try printf(io, "\nMP{d:02} TOTAL ENERGY: {d:.14} Eh\n", .{ i, energy[0] });
-        }
-
-        if (grads) |g| {
-            for (0..grad[0].nrow()) |j| for (0..grad[0].ncol()) |k| {
-                grad[0].ptr(j, k).* += g[i].at(j, k);
-            };
-        }
-    }
 }
 
 /// Solves higher-order Rayleigh-Schrödinger perturbation theory across Slater determinants.

@@ -105,6 +105,8 @@ pub fn Result(comptime T: type) type {
         H: ?Matrix(T) = null,
         J: ?Matrix(T) = null,
 
+        J_inv_half: ?Matrix(T) = null,
+
         B: ?Tensor(T, 3) = null,
         I: ?Tensor(T, 3) = null,
         g: ?Tensor(T, 4) = null,
@@ -126,6 +128,9 @@ pub fn Result(comptime T: type) type {
             if (self.V) |*V| V.deinit(gpa);
             if (self.H) |*H| H.deinit(gpa);
             if (self.J) |*J| J.deinit(gpa);
+
+            if (self.J_inv_half) |*jh| jh.deinit(gpa);
+
             if (self.g) |*g| g.deinit(gpa);
             if (self.B) |*B| B.deinit(gpa);
             if (self.I) |*I| I.deinit(gpa);
@@ -260,8 +265,9 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
             if (ints.J == null) ints.J = try sys.coulomb2c(aux_path, opt.nthreads, gpa);
 
-            var J_inv_half = try invertMetric(T, ints.J.?, gpa);
-            defer J_inv_half.deinit(gpa);
+            if (ints.J_inv_half == null) {
+                ints.J_inv_half = try invertMetric(T, ints.J.?, gpa);
+            }
 
             var I_local: ?Tensor(T, 3) = null;
             defer if (I_local) |*it| it.deinit(gpa);
@@ -280,7 +286,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
             ints.B = try Tensor(T, 3).initZero(I_ref.shape, gpa);
 
-            contractMetric(T, &ints.B.?, I_ref, J_inv_half);
+            contractMetric(T, &ints.B.?, I_ref, ints.J_inv_half.?);
 
             if (log) try printf(io, "FITTING INTEGRALS: {f}\n", .{timer.untilNow(io, .real)});
         }
@@ -309,10 +315,13 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.overlap_d1) {
-        ints.dS = if (opt.generalized)
-            try sys.overlapD1Spin(opt.nthreads, gpa)
-        else
-            try sys.overlapD1(opt.nthreads, gpa);
+        if (opt.generalized) {
+            ints.dS = try sys.overlapD1Spin(opt.nthreads, gpa);
+        }
+
+        if (!opt.generalized) {
+            ints.dS = try sys.overlapD1(opt.nthreads, gpa);
+        }
 
         if (log) try printf(io, "OVERLAP INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -320,10 +329,13 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.kinetic_d1 or opt.calculate.hamiltonian_d1) {
-        ints.dK = if (opt.generalized)
-            try sys.kineticD1Spin(opt.nthreads, gpa)
-        else
-            try sys.kineticD1(opt.nthreads, gpa);
+        if (opt.generalized) {
+            ints.dK = try sys.kineticD1Spin(opt.nthreads, gpa);
+        }
+
+        if (!opt.generalized) {
+            ints.dK = try sys.kineticD1(opt.nthreads, gpa);
+        }
 
         if (log) try printf(io, "KINETIC INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -331,10 +343,13 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.nuclear_d1 or opt.calculate.hamiltonian_d1) {
-        ints.dV = if (opt.generalized)
-            try sys.nuclearD1Spin(opt.nthreads, gpa)
-        else
-            try sys.nuclearD1(opt.nthreads, gpa);
+        if (opt.generalized) {
+            ints.dV = try sys.nuclearD1Spin(opt.nthreads, gpa);
+        }
+
+        if (!opt.generalized) {
+            ints.dV = try sys.nuclearD1(opt.nthreads, gpa);
+        }
 
         if (log) try printf(io, "NUCLEAR INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -342,10 +357,13 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.calculate.coulomb_d1) {
-        ints.dg = if (opt.generalized)
-            try sys.coulombD1Spin(opt.nthreads, gpa)
-        else
-            try sys.coulombD1(opt.nthreads, gpa);
+        if (opt.generalized) {
+            ints.dg = try sys.coulombD1Spin(opt.nthreads, gpa);
+        }
+
+        if (!opt.generalized) {
+            ints.dg = try sys.coulombD1(opt.nthreads, gpa);
+        }
 
         if (log) try printf(io, "COULOMB INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -382,6 +400,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
             if (ints.dJ == null) ints.dJ = try sys.coulomb2cD1(aux_path, opt.nthreads, gpa);
             if (ints.dI == null) ints.dI = try sys.coulomb3cD1(aux_path, opt.nthreads, gpa);
+
             if (ints.I == null) ints.I = try sys.coulomb3c(aux_path, opt.nthreads, gpa);
 
             if (log) try printf(io, "FITTING INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
@@ -553,6 +572,7 @@ fn printIntegrals(comptime T: type, io: std.Io, opt: Options, ints: Result(T)) !
 
     if (opt.log.coulomb_ri_d1) {
         const dJ = ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated;
+
         const dI = ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated;
 
         try printf(io, "\nCOULOMB 2-CENTER DERIVATIVE INTEGRALS:\n", .{});

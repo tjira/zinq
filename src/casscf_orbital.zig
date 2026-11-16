@@ -488,39 +488,26 @@ pub fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, spac
 
     try ao2mo_1e(T, &h_mo, ints.H.?, C.*, gpa);
 
-    var g_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
-    defer g_mo.deinit(gpa);
-
-    try ao2mo_2e(T, &g_mo, ints.g.?, C.*, gpa);
-
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
 
-    buildCoreFock(T, &F_core, h_mo, g_mo, space);
+    if (ints.B != null) {
+        var B_mo = try Tensor(T, 3).initZero(.{ nmo, nmo, ints.B.?.shape[2] }, gpa);
+        defer B_mo.deinit(gpa);
 
-    try canonicalizeCoreSubspace(T, C, F_core, space.ncore, gpa);
+        try ao2mo_3c(T, &B_mo, ints.B.?, C.*, gpa);
 
-    try canonicalizeVirtualSubspace(T, C, F_core, space, gpa);
-}
+        try buildCoreFockRi(T, &F_core, h_mo, B_mo, space, gpa);
+    }
 
-/// Canonicalizes core and virtual orbital blocks using core Fock matrix from density fitting.
-pub fn canonicalizeOrbitalsRi(comptime T: type, C: *Matrix(T), ints: anytype, space: CasSpace, gpa: Allocator) !void {
-    const nmo = space.nmo;
+    if (ints.B == null) {
+        var g_mo = try Tensor(T, 4).init(.{ nmo, nmo, nmo, nmo }, gpa);
+        defer g_mo.deinit(gpa);
 
-    var h_mo = try Matrix(T).init(nmo, nmo, gpa);
-    defer h_mo.deinit(gpa);
+        try ao2mo_2e(T, &g_mo, ints.g.?, C.*, gpa);
 
-    try ao2mo_1e(T, &h_mo, ints.H.?, C.*, gpa);
-
-    var B_mo = try Tensor(T, 3).initZero(.{ nmo, nmo, ints.B.?.shape[2] }, gpa);
-    defer B_mo.deinit(gpa);
-
-    try ao2mo_3c(T, &B_mo, ints.B.?, C.*, gpa);
-
-    var F_core = try Matrix(T).init(nmo, nmo, gpa);
-    defer F_core.deinit(gpa);
-
-    try buildCoreFockRi(T, &F_core, h_mo, B_mo, space, gpa);
+        buildCoreFock(T, &F_core, h_mo, g_mo, space);
+    }
 
     try canonicalizeCoreSubspace(T, C, F_core, space.ncore, gpa);
 
@@ -555,8 +542,7 @@ fn buildActColumns(comptime T: type, F_gen: *Matrix(T), F_core: Matrix(T), g_mo:
     const nmo, const nact = .{ space.nmo, space.nact };
 
     for (0..nmo) |p| for (0..nact) |u| {
-        const U = space.ncore + u;
-        var sum: T = 0;
+        const U, var sum: T = .{ space.ncore + u, 0 };
 
         for (0..nact) |v| {
             sum += F_core.at(p, space.ncore + v) * D_act.at(v, u);

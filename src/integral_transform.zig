@@ -23,8 +23,6 @@ pub fn ao2mo_1e(comptime T: type, A_mo: anytype, A_ao: anytype, C: anytype, gpa:
     gemm(T, A_mo, C, W, 1, 0, true, false);
 }
 
-pub const ao2mo_1e_dual = ao2mo_1e;
-
 /// Transforms two-electron repulsion integrals from atomic orbital to molecular orbital basis using BLAS.
 pub fn ao2mo_2e(comptime T: type, g_mo: anytype, g_ao: anytype, C: anytype, gpa: Allocator) !void {
     const N = C.shape[0];
@@ -49,8 +47,6 @@ pub fn ao2mo_2e(comptime T: type, g_mo: anytype, g_ao: anytype, C: anytype, gpa:
 
     try contract(T, "ijas,sb->ijab", g_mo, g_1mo, C, 1, 0, gpa);
 }
-
-pub const ao2mo_2e_dual = ao2mo_2e;
 
 /// Transforms atomic orbital integrals to a restricted molecular orbital subset of occupied and virtual orbitals.
 pub fn ao2mo_oovv(comptime T: type, g_oovv: anytype, g_ao: anytype, C: anytype, nocc: usize, gpa: Allocator) !void {
@@ -101,8 +97,6 @@ pub fn ao2mo_oovv(comptime T: type, g_oovv: anytype, g_ao: anytype, C: anytype, 
     try contract(T, "ijns,na->ijas", &g_3mo, g_2mo, C_vir, 1, 0, gpa);
     try contract(T, "ijas,sb->ijab", g_oovv, g_3mo, C_vir, 1, 0, gpa);
 }
-
-pub const ao2mo_oovv_dual = ao2mo_oovv;
 
 /// Transforms three-center density fitting tensors from the atomic orbital basis to occupied-virtual molecular orbitals.
 pub fn ao2mo_ov_3c(comptime T: type, B_mo: anytype, B_ao: anytype, C: anytype, gpa: Allocator) !void {
@@ -161,8 +155,6 @@ pub fn ao2mo_3c(comptime T: type, B_mo: anytype, B_ao: anytype, C: anytype, gpa:
         gemm(T, &B_mo_p, C, B1.slice(p).asMatrix(), 1, 0, true, false);
     }
 }
-
-pub const ao2mo_3c_dual = ao2mo_3c;
 
 /// Reconstructs spin-orbital two-electron repulsion integrals from 3-center fitting tensors using BLAS GEMM.
 pub fn b2ms(comptime T: type, g_ms: anytype, B_mo: anytype, gpa: Allocator) !void {
@@ -283,8 +275,6 @@ pub fn transformInts(comptime T: type, C: anytype, H: anytype, g: anytype, gener
 
     return .{ h_ms, g_ms };
 }
-
-pub const transformIntsDual = transformInts;
 
 /// Transforms core Hamiltonian and density fitting 3-center tensors to molecular spin-orbital basis using BLAS.
 pub fn transformIntsRi(comptime T: type, C: anytype, H: anytype, B_ao: anytype, generalized: bool, gpa: Allocator) !struct { @TypeOf(H), if (isDualTensor(@TypeOf(B_ao))) DualTensor(T, 4) else Tensor(T, 4) } {

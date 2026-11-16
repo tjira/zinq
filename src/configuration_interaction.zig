@@ -21,8 +21,7 @@ const applySpinPenalty = @import("slater_condon.zig").applySpinPenalty;
 const b2ms = @import("integral_transform.zig").b2ms;
 const buildFittingIntegrals = @import("density_fitting.zig").buildFittingIntegrals;
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
-const calculateCanonicalCiGradient = @import("ci_gradient.zig").calculateCanonicalCiGradient;
-const calculateRiCiGradient = @import("ci_gradient.zig").calculateRiCiGradient;
+const calculateCiGradient = @import("ci_gradient.zig").calculateCiGradient;
 const generateCasDets = @import("determinant.zig").generateCasDets;
 const generateDets = @import("determinant.zig").generateDets;
 const printDeterminants = @import("determinant.zig").printDeterminants;
@@ -203,10 +202,18 @@ pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev
 }
 
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
-pub fn computeCanonicalCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
     var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
 
-    var h_ms, var g_ms = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
+    var h_ms: Matrix(T), var g_ms: Tensor(T, 4) = .{ undefined, undefined };
+
+    if (ints.B != null) {
+        h_ms, g_ms = try transformIntsRi(T, C, ints.H.?, ints.B.?, generalized, gpa);
+    }
+
+    if (ints.B == null) {
+        h_ms, g_ms = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
+    }
 
     defer {
         h_ms.deinit(gpa);
@@ -233,6 +240,7 @@ pub fn computeCanonicalCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: any
 
     if (io) |out| {
         try printf(out, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(out, .real)});
+
         timer = std.Io.Timestamp.now(out, .real);
     }
 
@@ -262,8 +270,6 @@ pub fn computeCanonicalCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: any
 
     return .{ E, C_ci };
 }
-
-pub const computeCi = computeCanonicalCi;
 
 /// Computes CI state energies and coefficients using density fitting for active-space integrals.
 pub fn computeCasCiRi(comptime T: type, dets: []const []const usize, h_mo: Matrix(T), B_mo: Tensor(T, 3), VN: T, penalty: ?f64, s2_target: f64, nocc: usize, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
@@ -316,8 +322,6 @@ pub fn computeCasCiRi(comptime T: type, dets: []const []const usize, h_mo: Matri
 
     return .{ E, C_ci };
 }
-
-pub const computeCiRi = computeCasCiRi;
 
 /// Solves the Configuration Interaction Hamiltonian eigenvalue problem over the determinant space.
 pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T), ref: HartreeFockResult(T), log: bool, gpa: Allocator) !Result(T) {
@@ -407,13 +411,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     var E: Vector(T), var C_ci: Matrix(T) = .{ undefined, undefined };
 
-    if (opt.aux_basis == null) {
-        E, C_ci = try computeCanonicalCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
-    }
-
-    if (opt.aux_basis != null) {
-        E, C_ci = try computeRiCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
-    }
+    E, C_ci = try computeCi(T, io_ci, hfres.C_mo, hfres.ints, dets.items, nrep, generalized, penalty, s2_target, gpa);
 
     errdefer {
         E.deinit(gpa);
@@ -461,13 +459,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         .analytic => |a| {
             const states = a.states orelse &[_]u32{0};
 
-            if (opt.aux_basis == null) {
-                grad = try calculateCanonicalCiGradient(T, hfres, C_ci, dets.items, states, gpa);
-            }
-
-            if (opt.aux_basis != null) {
-                grad = try calculateRiCiGradient(T, hfres, C_ci, dets.items, states, gpa);
-            }
+            grad = try calculateCiGradient(T, hfres, C_ci, dets.items, states, gpa);
         },
         .numeric => {},
     };
@@ -496,68 +488,6 @@ pub fn solveEigenvalueProblem(comptime T: type, H_ci: Matrix(T), VN: T, gpa: All
 
     for (0..E.length()) |i| {
         E.ptr(i).* += VN;
-    }
-
-    return .{ E, C_ci };
-}
-
-/// Computes CI state energies and coefficients using resolution of the identity three-center tensors.
-pub fn computeRiCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: Integrals(T), dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
-    var timer = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
-
-    var h_ms, var g_ms = try transformIntsRi(T, C, ints.H.?, ints.B.?, generalized, gpa);
-
-    defer {
-        h_ms.deinit(gpa);
-        g_ms.deinit(gpa);
-    }
-
-    if (io) |out| {
-        try printf(out, " {f}\nCI MATRIX ASSEMBLY TIME:", .{timer.untilNow(out, .real)});
-
-        timer = std.Io.Timestamp.now(out, .real);
-    }
-
-    var H_ci = try buildHamiltonianMatrix(T, dets, h_ms, g_ms, gpa);
-    defer H_ci.deinit(gpa);
-
-    var H_orig = if (penalty != null) try Matrix(T).init(dets.len, dets.len, gpa) else undefined;
-    defer if (penalty != null) H_orig.deinit(gpa);
-
-    if (penalty) |pen| {
-        @memcpy(H_orig.data, H_ci.data);
-
-        applySpinPenalty(T, &H_ci, dets, pen, s2_target);
-    }
-
-    if (io) |out| {
-        try printf(out, " {f}\nCI DIAGONALIZATION TIME:", .{timer.untilNow(out, .real)});
-
-        timer = std.Io.Timestamp.now(out, .real);
-    }
-
-    var E, var C_ci = try solveEigenvalueProblem(T, H_ci, VN, gpa);
-
-    errdefer {
-        E.deinit(gpa);
-
-        C_ci.deinit(gpa);
-    }
-
-    if (penalty != null) for (0..E.length()) |k| {
-        var phys_e: T = 0;
-
-        for (0..dets.len) |i| for (0..dets.len) |j| {
-            const c_prod = Value(T).init(C_ci.at(i, k)).mul(Value(T).init(C_ci.at(j, k)));
-
-            phys_e = Value(T).init(phys_e).add(c_prod.mul(Value(T).init(H_orig.at(i, j)))).val;
-        };
-
-        E.ptr(k).* = Value(T).init(phys_e).add(Value(T).init(VN)).val;
-    };
-
-    if (io) |out| {
-        try printf(out, " {f}\n", .{timer.untilNow(out, .real)});
     }
 
     return .{ E, C_ci };
