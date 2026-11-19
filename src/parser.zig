@@ -317,29 +317,7 @@ pub const Parser = struct {
             return error.MissingEigenvectorsValue;
         };
 
-        const nthreads_opt = parsed.options.get("-n") orelse parsed.options.get("--nthreads");
-
-        if (nthreads_opt) |t| if (t.len == 0) {
-            try printf(io, "MISSING VALUE FOR NTHREADS OPTION\n", .{});
-
-            return error.MissingNthreadsValue;
-        };
-
-        const nthreads = if (nthreads_opt) |t| blk: {
-            const val = std.fmt.parseInt(u32, t, 10) catch |err| {
-                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
-
-                return err;
-            };
-
-            if (val == 0) {
-                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
-
-                return error.InvalidNthreads;
-            }
-
-            break :blk val;
-        } else 1;
+        const nthreads = try parseNthreads(io, parsed);
 
         const matrix_source: tensor.MatrixSource = if (is_random) blk: {
             const dim = std.fmt.parseInt(usize, parsed.positional[0], 10) catch |err| {
@@ -732,14 +710,6 @@ pub const Parser = struct {
             return error.MissingAlphaValue;
         };
 
-        const nthreads_opt = parsed.options.get("-n") orelse parsed.options.get("--nthreads");
-
-        if (nthreads_opt) |t| if (t.len == 0) {
-            try printf(io, "MISSING VALUE FOR NTHREADS OPTION\n", .{});
-
-            return error.MissingNthreadsValue;
-        };
-
         const output_opt = parsed.options.get("-o") orelse parsed.options.get("--output");
 
         if (output_opt) |o| if (o.len == 0) {
@@ -754,21 +724,7 @@ pub const Parser = struct {
             return err;
         } else 1;
 
-        const nthreads = if (nthreads_opt) |t| blk: {
-            const val = std.fmt.parseInt(u32, t, 10) catch |err| {
-                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
-
-                return err;
-            };
-
-            if (val == 0) {
-                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
-
-                return error.InvalidNthreads;
-            }
-
-            break :blk val;
-        } else 1;
+        const nthreads = try parseNthreads(io, parsed);
 
         var source_a: tensor.MatrixSource = undefined;
         var source_b: tensor.MatrixSource = undefined;
@@ -1004,29 +960,7 @@ pub const Parser = struct {
             return err;
         } else 0;
 
-        const nthreads_opt = parsed.options.get("-n") orelse parsed.options.get("--nthreads");
-
-        if (nthreads_opt) |t| if (t.len == 0) {
-            try printf(io, "MISSING VALUE FOR NTHREADS OPTION\n", .{});
-
-            return error.MissingNthreadsValue;
-        };
-
-        const nthreads = if (nthreads_opt) |t| blk: {
-            const val = std.fmt.parseInt(u32, t, 10) catch |err| {
-                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
-
-                return err;
-            };
-
-            if (val == 0) {
-                try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
-
-                return error.InvalidNthreads;
-            }
-
-            break :blk val;
-        } else 1;
+        const nthreads = try parseNthreads(io, parsed);
 
         const calc = molecular_integrals.Calculate{
             .coulomb = parsed.options.contains("--coulomb"),
@@ -1219,8 +1153,6 @@ pub const Parser = struct {
 
         const aux_basis_resolved = if (aux_basis_opt) |b| try std.fmt.allocPrint(arena, "builtin:{s}", .{b}) else null;
 
-        const is_direct = parsed.options.contains("--direct");
-
         const optimize = parsed.options.contains("--optimize");
 
         const opt_geom_path = if (optimize) try std.fmt.allocPrint(arena, "{s}.opt", .{parsed.positional[0]}) else null;
@@ -1234,7 +1166,7 @@ pub const Parser = struct {
                 .multiplicity = multiplicity,
                 .charge = charge,
                 .generalized = parsed.options.contains("--generalized"),
-                .integral_direct = is_direct,
+                .integral_direct = parsed.options.contains("--direct"),
             },
             .order = order,
             .optimize = if (optimize) .{ .bfgs = .{} } else null,
@@ -1494,6 +1426,31 @@ pub const Parser = struct {
         }
 
         return .{ .positional = try positional.toOwnedSlice(allocator), .options = options };
+    }
+
+    /// Parses and validates the thread count parameter from command options.
+    fn parseNthreads(io: std.Io, parsed: ParsedArgs) !u32 {
+        const opt = parsed.options.get("-n") orelse parsed.options.get("--nthreads") orelse return 1;
+
+        if (opt.len == 0) {
+            try printf(io, "MISSING VALUE FOR NTHREADS OPTION\n", .{});
+
+            return error.MissingNthreadsValue;
+        }
+
+        const val = std.fmt.parseInt(u32, opt, 10) catch |err| {
+            try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+
+            return err;
+        };
+
+        if (val == 0) {
+            try printf(io, "INVALID VALUE FOR NTHREADS OPTION\n", .{});
+
+            return error.InvalidNthreads;
+        }
+
+        return val;
     }
 };
 

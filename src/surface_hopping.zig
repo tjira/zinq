@@ -386,16 +386,14 @@ fn FewestSwitches(comptime T: type) type {
 
                 try checkNorm(T, self.coefics.rowSlice(i), self.normt);
 
-                const rho_cc = self.coefics.at(i, c).squaredMagnitude();
+                const coef_c = self.coefics.at(i, c);
+                const rho_cc = coef_c.squaredMagnitude();
 
                 if (rho_cc >= 1e-14) {
                     for (0..probs.ncol()) |j| {
                         if (c == j) continue;
 
-                        const coef_c = self.coefics.at(i, c);
-                        const coef_j = self.coefics.at(i, j);
-
-                        const flux = self.sigmatdc.at(i, c * probs.ncol() + j) * coef_c.conjugate().mul(coef_j).re;
+                        const flux = self.sigmatdc.at(i, c * probs.ncol() + j) * coef_c.conjugate().mul(self.coefics.at(i, j)).re;
 
                         probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
                     }
@@ -414,17 +412,16 @@ fn FewestSwitches(comptime T: type) type {
 
                 try checkNorm(T, self.coefics.rowSlice(i), self.normt);
 
-                const rho_cc = self.coefics.at(i, c).squaredMagnitude();
+                const coef_c = self.coefics.at(i, c);
+
+                const rho_cc = coef_c.squaredMagnitude();
 
                 if (rho_cc < 1e-14) continue;
 
                 for (0..probs.ncol()) |j| {
                     if (c == j) continue;
 
-                    const coef_c = self.coefics.at(i, c);
-                    const coef_j = self.coefics.at(i, j);
-
-                    const flux = self.hamilton.at(i, c * probs.ncol() + j) * coef_c.mul(coef_j.conjugate()).im;
+                    const flux = self.hamilton.at(i, c * probs.ncol() + j) * coef_c.mul(self.coefics.at(i, j).conjugate()).im;
 
                     probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
                 }
@@ -504,9 +501,8 @@ fn LandauZener(comptime T: type) type {
 
                         if (d2z > 1e-14) {
                             const b = (z2 - z0) / (2 * dt);
-                            const a = d2z / 2;
 
-                            var z_min = z1 - (b * b) / (4 * a);
+                            var z_min = z1 - (b * b) / (2 * d2z);
 
                             if (z_min < 0) z_min = 0;
 
@@ -526,16 +522,14 @@ fn LandauZener(comptime T: type) type {
             for (0..self.history[0].nrow()) |i| {
                 const c = ensemble.s.at(i);
 
+                const v_cc_old = self.history[1].at(i, c * probs.ncol() + c);
+                const v_cc_new = self.history[2].at(i, c * probs.ncol() + c);
+
                 for (0..probs.ncol()) |j| {
                     if (c == j) continue;
 
-                    const v_cc_old = self.history[1].at(i, c * probs.ncol() + c);
-                    const v_cc_new = self.history[2].at(i, c * probs.ncol() + c);
-                    const v_jj_old = self.history[1].at(i, j * probs.ncol() + j);
-                    const v_jj_new = self.history[2].at(i, j * probs.ncol() + j);
-
-                    const gap_old = v_cc_old - v_jj_old;
-                    const gap_new = v_cc_new - v_jj_new;
+                    const gap_old = v_cc_old - self.history[1].at(i, j * probs.ncol() + j);
+                    const gap_new = v_cc_new - self.history[2].at(i, j * probs.ncol() + j);
 
                     if ((gap_old > 0 and gap_new <= 0) or (gap_old < 0 and gap_new >= 0)) {
                         const d_gap = @abs(gap_new - gap_old) / dt;

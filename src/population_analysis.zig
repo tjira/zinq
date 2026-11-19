@@ -106,12 +106,12 @@ pub fn mayer(comptime T: type, sys: MolecularSystem(T), P: Matrix(T), S: Matrix(
                 const B: usize = @intCast(sys.bf2at[nu]);
 
                 if (A != B) {
-                    const term_a = PS_a.at(mu, nu) * PS_a.at(nu, mu);
-                    const term_b = PS_b.at(mu, nu) * PS_b.at(nu, mu);
+                    const pa_mununumu = PS_a.at(mu, nu) * PS_a.at(nu, mu);
+                    const pb_mununumu = PS_b.at(mu, nu) * PS_b.at(nu, mu);
 
-                    const term_ab = PS_ab.at(mu, nu) * PS_ab.at(nu, mu);
+                    const pab_mununumu = PS_ab.at(mu, nu) * PS_ab.at(nu, mu);
 
-                    bo.ptr(A, B).* += 2 * (term_a + term_b + 2 * term_ab);
+                    bo.ptr(A, B).* += 2 * (pa_mununumu + pb_mununumu + 2 * pab_mununumu);
                 }
             }
         }

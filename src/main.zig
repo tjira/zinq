@@ -99,11 +99,9 @@ pub fn main(init: std.process.Init) !void {
 
     var timer = std.Io.Timestamp.now(init.io, .real);
 
-    const v_major = builtin.zig_version.major;
-    const v_minor = builtin.zig_version.minor;
-    const v_patch = builtin.zig_version.patch;
+    const v = builtin.zig_version;
 
-    try printf(init.io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}\n\n", .{ v_major, v_minor, v_patch, config.version });
+    try printf(init.io, "ZIG: v{d}.{d}.{d}, ZINQ: {s}\n\n", .{ v.major, v.minor, v.patch, config.version });
 
     try printf(init.io, "OPENBLAS: {s}, ", .{config.openblas_version});
 

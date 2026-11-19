@@ -189,18 +189,16 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
 /// Evaluates canonical second-order Møller-Plesset correlation energy from two-electron integrals.
 pub fn calculateCanonicalMp2Energy(comptime T: type, g: anytype, C: anytype, e: anytype, nocc: usize, gen: bool, gpa: Allocator) !if (isDual(@TypeOf(g))) ScalarDual(T) else T {
-    const g_ao, const generalized = .{ g, gen };
-
-    const is_dual = comptime isDualTensor(@TypeOf(g_ao));
+    const is_dual = comptime isDualTensor(@TypeOf(g));
 
     const OutType = if (is_dual) ScalarDual(T) else T;
 
     const nvir = C.shape[0] - nocc;
 
-    var g_mo = try @TypeOf(g_ao).initZero(.{ nocc, nocc, nvir, nvir }, gpa);
+    var g_mo = try @TypeOf(g).initZero(.{ nocc, nocc, nvir, nvir }, gpa);
     defer g_mo.deinit(gpa);
 
-    try ao2mo_oovv(T, &g_mo, g_ao, C, nocc, gpa);
+    try ao2mo_oovv(T, &g_mo, g, C, nocc, gpa);
 
     var e_corr = Value(OutType).fromFloat(0);
 
@@ -221,12 +219,12 @@ pub fn calculateCanonicalMp2Energy(comptime T: type, g: anytype, C: anytype, e: 
 
                 var num = Value(OutType).fromFloat(0);
 
-                if (generalized) {
+                if (gen) {
                     const diff = g_ijab.sub(g_ijba);
                     num = diff.mul(diff).muls(0.25);
                 }
 
-                if (!generalized) {
+                if (!gen) {
                     num = g_ijab.mul(g_ijab.muls(2).sub(g_ijba));
                 }
 
@@ -311,12 +309,8 @@ pub fn calculateRiMp2Energy(comptime T: type, B_ao: anytype, C: anytype, e: anyt
     var e_corr = Value(OutType).fromFloat(0);
 
     for (0..nocc) |i| {
-        const B_i = B_mo.slice(i).asMatrix();
-
         for (0..nocc) |j| {
-            const B_j = B_mo.slice(j).asMatrix();
-
-            gemm(T, &M_ij, B_i, B_j, 1, 0, false, true);
+            gemm(T, &M_ij, B_mo.slice(i).asMatrix(), B_mo.slice(j).asMatrix(), 1, 0, false, true);
 
             const val_ei = Value(OutType).init(e.at(i));
             const val_ej = Value(OutType).init(e.at(j));
@@ -373,12 +367,14 @@ fn evaluateMp(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockResu
 
     var energies: []T = undefined;
 
+    const mo_ctx = .{ hfres.C_mo, hfres.e_mo, nocc, generalized };
+
     if (hfres.ints.B) |B| {
-        energies = try calculateCorrelationEnergies(T, opt.order, .{ hfres.ints.H.?, B }, .{ hfres.C_mo, hfres.e_mo, nocc, generalized }, gpa);
+        energies = try calculateCorrelationEnergies(T, opt.order, .{ hfres.ints.H.?, B }, mo_ctx, gpa);
     }
 
     if (hfres.ints.B == null) {
-        energies = try calculateCorrelationEnergies(T, opt.order, .{ hfres.ints.H.?, hfres.ints.g.? }, .{ hfres.C_mo, hfres.e_mo, nocc, generalized }, gpa);
+        energies = try calculateCorrelationEnergies(T, opt.order, .{ hfres.ints.H.?, hfres.ints.g.? }, mo_ctx, gpa);
     }
 
     defer gpa.free(energies);

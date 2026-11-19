@@ -843,7 +843,9 @@ fn buildActColumnsDerivRi(comptime T: type, dF: *Matrix(T), dF_core: Matrix(T), 
         }
 
         for (0..nact) |v| for (0..naux) |P| {
-            sum += dB_mo.at(.{ p, space.ncore + v, P }) * Q_aux.at(.{ u, v, P }) + B_mo.at(.{ p, space.ncore + v, P }) * dQ_aux.at(.{ u, v, P });
+            const q = space.ncore + v;
+
+            sum += dB_mo.at(.{ p, q, P }) * Q_aux.at(.{ u, v, P }) + B_mo.at(.{ p, q, P }) * dQ_aux.at(.{ u, v, P });
         };
 
         dF.ptr(p, U).* = sum;

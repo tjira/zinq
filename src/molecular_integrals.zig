@@ -459,137 +459,103 @@ fn exportBuiltin(io: std.Io, basis: []const u8, fname: []const u8, is_aux: bool,
 /// Prints requested molecular integral matrices and derivative tensors to standard output.
 fn printIntegrals(comptime T: type, io: std.Io, opt: Options, ints: Result(T)) !void {
     if (opt.log.overlap) {
-        const S = ints.S orelse return error.OverlapMatrixNotCalculated;
-
         try printf(io, "\nOVERLAP INTEGRALS:\n", .{});
 
-        try printMatrix(T, io, S);
+        try printMatrix(T, io, ints.S orelse return error.OverlapMatrixNotCalculated);
     }
 
     if (opt.log.kinetic) {
-        const K = ints.K orelse return error.KineticMatrixNotCalculated;
-
         try printf(io, "\nKINETIC INTEGRALS:\n", .{});
 
-        try printMatrix(T, io, K);
+        try printMatrix(T, io, ints.K orelse return error.KineticMatrixNotCalculated);
     }
 
     if (opt.log.nuclear) {
-        const V = ints.V orelse return error.NuclearMatrixNotCalculated;
-
         try printf(io, "\nNUCLEAR INTEGRALS:\n", .{});
 
-        try printMatrix(T, io, V);
+        try printMatrix(T, io, ints.V orelse return error.NuclearMatrixNotCalculated);
     }
 
     if (opt.log.coulomb) {
-        const g = ints.g orelse return error.CoulombMatrixNotCalculated;
-
         try printf(io, "\nCOULOMB INTEGRALS:\n", .{});
 
-        try printTensor(T, 4, io, g);
+        try printTensor(T, 4, io, ints.g orelse return error.CoulombMatrixNotCalculated);
     }
 
     if (opt.log.coulomb_2c) {
-        const J = ints.J orelse return error.CoulombMatrixNotCalculated;
-
         try printf(io, "\nCOULOMB 2-CENTER INTEGRALS:\n", .{});
 
-        try printMatrix(T, io, J);
+        try printMatrix(T, io, ints.J orelse return error.CoulombMatrixNotCalculated);
     }
 
     if (opt.log.coulomb_3c) {
-        const I = ints.I orelse return error.DensityFittingIntegralsNotCalculated;
-
         try printf(io, "\nCOULOMB 3-CENTER INTEGRALS:\n", .{});
 
-        try printTensor(T, 3, io, I);
+        try printTensor(T, 3, io, ints.I orelse return error.DensityFittingIntegralsNotCalculated);
     }
 
     if (opt.log.coulomb_ri) {
-        const B = ints.B orelse return error.DensityFittingIntegralsNotCalculated;
-
         try printf(io, "\nFITTING INTEGRALS:\n", .{});
 
-        try printTensor(T, 3, io, B);
+        try printTensor(T, 3, io, ints.B orelse return error.DensityFittingIntegralsNotCalculated);
     }
 
     if (opt.log.hamiltonian) {
-        const H = ints.H orelse return error.HamiltonianNotCalculated;
-
         try printf(io, "\nHMATRIX INTEGRALS:\n", .{});
 
-        try printMatrix(T, io, H);
+        try printMatrix(T, io, ints.H orelse return error.HamiltonianNotCalculated);
     }
 
     if (opt.log.overlap_d1) {
-        const dS = ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated;
-
         try printf(io, "\nOVERLAP DERIVATIVE INTEGRALS:\n", .{});
 
-        try printTensor(T, 3, io, dS);
+        try printTensor(T, 3, io, ints.dS orelse return error.OverlapDerivativeMatrixNotCalculated);
     }
 
     if (opt.log.kinetic_d1) {
-        const dK = ints.dK orelse return error.KineticDerivativeMatrixNotCalculated;
-
         try printf(io, "\nKINETIC DERIVATIVE INTEGRALS:\n", .{});
 
-        try printTensor(T, 3, io, dK);
+        try printTensor(T, 3, io, ints.dK orelse return error.KineticDerivativeMatrixNotCalculated);
     }
 
     if (opt.log.nuclear_d1) {
-        const dV = ints.dV orelse return error.NuclearDerivativeMatrixNotCalculated;
-
         try printf(io, "\nNUCLEAR DERIVATIVE INTEGRALS:\n", .{});
 
-        try printTensor(T, 3, io, dV);
+        try printTensor(T, 3, io, ints.dV orelse return error.NuclearDerivativeMatrixNotCalculated);
     }
 
     if (opt.log.coulomb_d1) {
-        const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
-
         try printf(io, "\nCOULOMB DERIVATIVE INTEGRALS:\n", .{});
 
-        try printTensor(T, 5, io, dg);
+        try printTensor(T, 5, io, ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated);
     }
 
     if (opt.log.coulomb_2c_d1) {
-        const dJ = ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated;
-
         try printf(io, "\nCOULOMB 2-CENTER DERIVATIVE INTEGRALS:\n", .{});
 
-        try printTensor(T, 3, io, dJ);
+        try printTensor(T, 3, io, ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated);
     }
 
     if (opt.log.coulomb_3c_d1) {
-        const dI = ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated;
-
         try printf(io, "\nCOULOMB 3-CENTER DERIVATIVE INTEGRALS:\n", .{});
 
-        try printTensor(T, 4, io, dI);
+        try printTensor(T, 4, io, ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated);
     }
 
     if (opt.log.coulomb_ri_d1) {
-        const dJ = ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated;
-
-        const dI = ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated;
-
         try printf(io, "\nCOULOMB 2-CENTER DERIVATIVE INTEGRALS:\n", .{});
 
-        try printTensor(T, 3, io, dJ);
+        try printTensor(T, 3, io, ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated);
 
         try printf(io, "\nCOULOMB 3-CENTER DERIVATIVE INTEGRALS:\n", .{});
 
-        try printTensor(T, 4, io, dI);
+        try printTensor(T, 4, io, ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated);
     }
 
     if (opt.log.hamiltonian_d1) {
-        const dH = ints.dH orelse return error.HamiltonianDerivativeNotCalculated;
-
         try printf(io, "\nHMATRIX DERIVATIVE INTEGRALS:\n", .{});
 
-        try printTensor(T, 3, io, dH);
+        try printTensor(T, 3, io, ints.dH orelse return error.HamiltonianDerivativeNotCalculated);
     }
 }
 
@@ -608,9 +574,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     var timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.overlap) |fname| {
-        const S = ints.S orelse return error.OverlapMatrixNotCalculated;
-
-        try writeMatrix(T, io, fname, S);
+        try writeMatrix(T, io, fname, ints.S orelse return error.OverlapMatrixNotCalculated);
 
         if (log) try printf(io, "OVERLAP INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -618,9 +582,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.kinetic) |fname| {
-        const K = ints.K orelse return error.KineticMatrixNotCalculated;
-
-        try writeMatrix(T, io, fname, K);
+        try writeMatrix(T, io, fname, ints.K orelse return error.KineticMatrixNotCalculated);
 
         if (log) try printf(io, "KINETIC INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -628,9 +590,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.nuclear) |fname| {
-        const V = ints.V orelse return error.NuclearMatrixNotCalculated;
-
-        try writeMatrix(T, io, fname, V);
+        try writeMatrix(T, io, fname, ints.V orelse return error.NuclearMatrixNotCalculated);
 
         if (log) try printf(io, "NUCLEAR INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -638,9 +598,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb) |fname| {
-        const g = ints.g orelse return error.CoulombMatrixNotCalculated;
-
-        try writeTensor(T, 4, io, fname, g);
+        try writeTensor(T, 4, io, fname, ints.g orelse return error.CoulombMatrixNotCalculated);
 
         if (log) try printf(io, "COULOMB INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -648,9 +606,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb_2c) |fname| {
-        const J = ints.J orelse return error.CoulombMatrixNotCalculated;
-
-        try writeMatrix(T, io, fname, J);
+        try writeMatrix(T, io, fname, ints.J orelse return error.CoulombMatrixNotCalculated);
 
         if (log) try printf(io, "COULOMB 2C MATRIX WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -658,9 +614,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb_3c) |fname| {
-        const I = ints.I orelse return error.DensityFittingIntegralsNotCalculated;
-
-        try writeTensor(T, 3, io, fname, I);
+        try writeTensor(T, 3, io, fname, ints.I orelse return error.DensityFittingIntegralsNotCalculated);
 
         if (log) try printf(io, "COULOMB 3C TENSOR WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -668,17 +622,13 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb_ri) |fname| {
-        const B = ints.B orelse return error.DensityFittingIntegralsNotCalculated;
-
-        try writeTensor(T, 3, io, fname, B);
+        try writeTensor(T, 3, io, fname, ints.B orelse return error.DensityFittingIntegralsNotCalculated);
 
         if (log) try printf(io, "FITTING INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
     if (opt.write.hamiltonian) |fname| {
-        const H = ints.H orelse return error.HamiltonianNotCalculated;
-
-        try writeMatrix(T, io, fname, H);
+        try writeMatrix(T, io, fname, ints.H orelse return error.HamiltonianNotCalculated);
 
         if (log) try printf(io, "HMATRIX INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -728,9 +678,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb_d1) |fname| {
-        const dg = ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated;
-
-        try writeTensor(T, 5, io, fname, dg);
+        try writeTensor(T, 5, io, fname, ints.dg orelse return error.CoulombDerivativeMatrixNotCalculated);
 
         if (log) try printf(io, "COULOMB DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -738,9 +686,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb_2c_d1) |fname| {
-        const dJ = ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated;
-
-        try writeTensor(T, 3, io, fname, dJ);
+        try writeTensor(T, 3, io, fname, ints.dJ orelse return error.CoulombDerivativeMatrixNotCalculated);
 
         if (log) try printf(io, "COULOMB 2C DERIVATIVE WRITING MATRIX: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -748,9 +694,7 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb_3c_d1) |fname| {
-        const dI = ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated;
-
-        try writeTensor(T, 4, io, fname, dI);
+        try writeTensor(T, 4, io, fname, ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated);
 
         if (log) try printf(io, "COULOMB 3C DERIVATIVE WRITING TENSOR: {f}\n", .{timer.untilNow(io, .real)});
     }
@@ -758,17 +702,13 @@ fn writeIntegralsToFiles(comptime T: type, io: std.Io, opt: Options, ints: Resul
     timer = std.Io.Timestamp.now(io, .real);
 
     if (opt.write.coulomb_ri_d1) |fname| {
-        const dI = ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated;
-
-        try writeTensor(T, 4, io, fname, dI);
+        try writeTensor(T, 4, io, fname, ints.dI orelse return error.DensityFittingDerivativeIntegralsNotCalculated);
 
         if (log) try printf(io, "FITTING DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }
 
     if (opt.write.hamiltonian_d1) |fname| {
-        const dH = ints.dH orelse return error.HamiltonianDerivativeNotCalculated;
-
-        try writeMatrix(T, io, fname, dH.asMatrix());
+        try writeTensor(T, 3, io, fname, ints.dH orelse return error.HamiltonianDerivativeNotCalculated);
 
         if (log) try printf(io, "HMATRIX DERIVATIVE INTEGRALS WRITING: {f}\n", .{timer.untilNow(io, .real)});
     }

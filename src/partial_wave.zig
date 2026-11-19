@@ -106,11 +106,11 @@ pub fn PartialWaveContext(comptime T: type) type {
                     }
                 }
 
-                const r_0, const m_0 = .{ opt.initial_conditions.position[0], opt.mass[0] };
+                const r_0 = opt.initial_conditions.position[0];
 
                 const j_flt = @as(T, @floatFromInt(j));
 
-                const v_cent = if (r_0 != 0) j_flt * (j_flt + 1) / (2 * m_0 * r_0 * r_0) else 0;
+                const v_cent = if (r_0 != 0) j_flt * (j_flt + 1) / (2 * opt.mass[0] * r_0 * r_0) else 0;
 
                 const done = self.completed.fetchAdd(1, .monotonic) + 1;
 

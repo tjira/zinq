@@ -12,10 +12,10 @@
 - **Run tests:** `zig build --release=fast test`
 
 ## Code Architecture & Style
-- **Formatting:** Write clean, readable code. Assume `zig fmt` will be run on all outputs; do not obsess over manual whitespace alignment. 
+- **Formatting:** Write clean, readable code. Assume `zig fmt` will be run on all outputs; do not obsess over manual whitespace alignment. Lines of code must not exceed 140 characters, with the exception of function signatures which can have a maximum of 180 characters.
 - **File Structure:** Define all `Options` structs at the very top. Following that, strictly order the file: public structs, private structs, public functions, private functions.
 - **Struct Organization:** State/fields first, `init`/`deinit` functions second, then public functions, then private functions.
-- **Function Design:** Minimize function arguments and strictly limit the number of local variables in a given scope. Prioritize readability. Function signatures must not be longer than 180 characters.
+- **Function Design:** Minimize function arguments and strictly limit the number of local variables in a given scope. Prioritize readability. Do not wrap function signatures over multiple lines; function signatures can have a maximum of 180 characters.
 - **Documentation:** Every new file, struct, or function needs a physically or mathematically motivated docstring (max ~150 chars). 
 
 ## Documentation & Markdown Style

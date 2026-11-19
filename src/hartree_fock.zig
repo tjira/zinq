@@ -390,13 +390,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     try exportMatrices(T, io, opt.write, C, P, F);
 
     if (analytic_grad) {
-        const pot = if (dft) |*d| d else null;
-
-        const g0 = try calculateNuclearGradient(T, ints, ws, opt.generalized, pot, opt.nthreads, gpa);
-
         grad = try gpa.alloc(Matrix(T), 1);
 
-        grad[0] = g0;
+        grad[0] = try calculateNuclearGradient(T, ints, ws, opt.generalized, if (dft) |*d| d else null, opt.nthreads, gpa);
     }
 
     var result: Result(T) = .{

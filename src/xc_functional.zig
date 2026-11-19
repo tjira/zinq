@@ -81,11 +81,13 @@ pub fn evaluateXCGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_typ
         @memset(vsig_batch, 0);
 
         if (polarized) {
-            const p1, const p2 = .{ inp.rho_val[2 * i ..].ptr, sig_val_unwrapped[3 * i ..].ptr };
+            const p1 = inp.rho_val[2 * i ..].ptr;
 
             const p3 = e_xc_batch.ptr;
             const p4 = vrho_batch.ptr;
             const p5 = vsig_batch.ptr;
+
+            const p2 = sig_val_unwrapped[3 * i ..].ptr;
 
             libxc.xc_gga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5);
 
@@ -102,11 +104,13 @@ pub fn evaluateXCGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_typ
         }
 
         if (!polarized) {
-            const p1, const p2 = .{ inp.rho_val[i..].ptr, sig_val_unwrapped[i..].ptr };
+            const p1 = inp.rho_val[i..].ptr;
 
             const p3 = e_xc_batch.ptr;
             const p4 = vrho_batch.ptr;
             const p5 = vsig_batch.ptr;
+
+            const p2 = sig_val_unwrapped[i..].ptr;
 
             libxc.xc_gga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5);
 
@@ -214,12 +218,9 @@ pub fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_ty
         @memset(vlap_batch, 0);
 
         if (polarized) {
-            const p1 = inp.rho_val[2 * i ..].ptr;
-
-            const p2 = sig_val_unwrapped[3 * i ..].ptr;
-            const p4 = tau_val_unwrapped[2 * i ..].ptr;
-
             @memcpy(lapl_batch, lap_val_unwrapped[2 * i .. 2 * i + vrho_size]);
+
+            const p1 = inp.rho_val[2 * i ..].ptr;
 
             const p3 = lapl_batch.ptr;
             const p5 = e_xc_batch.ptr;
@@ -227,6 +228,9 @@ pub fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_ty
             const p7 = vsig_batch.ptr;
             const p8 = vlap_batch.ptr;
             const p9 = vtau_batch.ptr;
+
+            const p2 = sig_val_unwrapped[3 * i ..].ptr;
+            const p4 = tau_val_unwrapped[2 * i ..].ptr;
 
             libxc.xc_mgga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5, p6, p7, p8, p9);
 
@@ -247,12 +251,9 @@ pub fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_ty
         }
 
         if (!polarized) {
-            const p1 = inp.rho_val[i..].ptr;
-
-            const p2 = sig_val_unwrapped[i..].ptr;
-            const p4 = tau_val_unwrapped[i..].ptr;
-
             @memcpy(lapl_batch, lap_val_unwrapped[i .. i + vrho_size]);
+
+            const p1 = inp.rho_val[i..].ptr;
 
             const p3 = lapl_batch.ptr;
             const p5 = e_xc_batch.ptr;
@@ -260,6 +261,9 @@ pub fn evaluateXCMGGA(comptime T: type, out: XCOutput(T), func: libxc.xc_func_ty
             const p7 = vsig_batch.ptr;
             const p8 = vlap_batch.ptr;
             const p9 = vtau_batch.ptr;
+
+            const p2 = sig_val_unwrapped[i..].ptr;
+            const p4 = tau_val_unwrapped[i..].ptr;
 
             libxc.xc_mgga_exc_vxc(&func, batch_len, p1, p2, p3, p4, p5, p6, p7, p8, p9);
 

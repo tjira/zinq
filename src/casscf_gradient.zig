@@ -9,6 +9,7 @@ const CasState = @import("casscf_orbital.zig").CasState;
 const DualMatrix = @import("dual.zig").DualMatrix;
 const DualTensor = @import("dual.zig").DualTensor;
 const FittingDerivativeWorkspace = @import("density_fitting.zig").FittingDerivativeWorkspace;
+const FittingDeriv = @import("casscf_orbital.zig").FittingDeriv;
 const GeneralizedFockRiWorkspace = @import("casscf_orbital.zig").GeneralizedFockRiWorkspace;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
@@ -234,9 +235,7 @@ pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C:
 
         const C_d = DualMatrix(T).fromMatrices(C, dC);
 
-        const H_d = DualMatrix(T).fromMatrices(hfres.ints.H.?, hfres.ints.dH.?.slice(coord).asMatrix());
-
-        try ao2mo_1e(T, &h_mo_d, H_d, C_d, gpa);
+        try ao2mo_1e(T, &h_mo_d, DualMatrix(T).fromMatrices(hfres.ints.H.?, hfres.ints.dH.?.slice(coord).asMatrix()), C_d, gpa);
 
         h_ms.zero();
 
@@ -246,17 +245,13 @@ pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C:
         };
 
         if (is_ri) {
-            const B_d = try deriv_ws.?.evaluateCoord(hfres.ints, coord, gpa);
-
-            try ao2mo_3c(T, &B_mo_d, B_d, C_d, gpa);
+            try ao2mo_3c(T, &B_mo_d, try deriv_ws.?.evaluateCoord(hfres.ints, coord, gpa), C_d, gpa);
 
             try b2ms(T, &g_ms_d, B_mo_d, gpa);
         }
 
         if (!is_ri) {
-            const g_d = DualTensor(T, 4).fromTensors(hfres.ints.g.?, hfres.ints.dg.?.slice(coord));
-
-            try ao2mo_2e(T, &g_mo_d, g_d, C_d, gpa);
+            try ao2mo_2e(T, &g_mo_d, DualTensor(T, 4).fromTensors(hfres.ints.g.?, hfres.ints.dg.?.slice(coord)), C_d, gpa);
 
             g_ms.zero();
 
@@ -292,7 +287,9 @@ pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C:
 
         if (weights.len > 1 and nrot > 0) {
             if (is_ri) {
-                try buildGeneralizedFockDerivRi(T, &dF_gen, h_mo_d.der, .{ .B = B_mo_conv, .dB = B_mo_d.der }, .{ D_act_sa, d_act_sa }, space, fock_ws.?, gpa);
+                const f_deriv: FittingDeriv(T) = .{ .B = B_mo_conv, .dB = B_mo_d.der };
+
+                try buildGeneralizedFockDerivRi(T, &dF_gen, h_mo_d.der, f_deriv, .{ D_act_sa, d_act_sa }, space, fock_ws.?, gpa);
             }
 
             if (!is_ri) {

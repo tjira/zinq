@@ -143,9 +143,7 @@ pub fn FluxAnalysis(comptime T: type) type {
                 npoint += 1;
             }
 
-            const ne = self.npoint;
-
-            var sigma = try Matrix(T).initZero(ne, wfn_init.nrow(), gpa);
+            var sigma = try Matrix(T).initZero(self.npoint, wfn_init.nrow(), gpa);
             errdefer sigma.deinit(gpa);
 
             var temp_phi = try gpa.alloc(Complex(T), grid.nrow());
@@ -162,8 +160,10 @@ pub fn FluxAnalysis(comptime T: type) type {
             for (0..grid.ncol()) |d| {
                 const s_d = std.math.pow(usize, npoint, grid.ncol() - 1 - d);
 
-                const n_min_f = (self.flux_bounds[d][0] - grid.getR(0, d)) / (grid.getR(s_d, d) - grid.getR(0, d));
-                const n_max_f = (self.flux_bounds[d][1] - grid.getR(0, d)) / (grid.getR(s_d, d) - grid.getR(0, d));
+                const dx_d = grid.getR(s_d, d) - grid.getR(0, d);
+
+                const n_min_f = (self.flux_bounds[d][0] - grid.getR(0, d)) / dx_d;
+                const n_max_f = (self.flux_bounds[d][1] - grid.getR(0, d)) / dx_d;
 
                 if (n_min_f < -0.5 or n_max_f >= @as(T, @floatFromInt(npoint)) - 0.5) {
                     std.log.err("FLUX BOUNDS MUST LIE WITHIN THE GRID BOUNDS", .{});
@@ -174,18 +174,14 @@ pub fn FluxAnalysis(comptime T: type) type {
                 const n_min: usize = @intFromFloat(@round(n_min_f));
                 const n_max: usize = @intFromFloat(@round(n_max_f));
 
-                const dx_d, const m = .{ grid.getR(s_d, d) - grid.getR(0, d), self.mass[0] };
-
-                for (0..ne) |ei| {
-                    const E = self.getCollisionEnergy(ei);
-
-                    const E_local = E - self.asymptotic_offset;
+                for (0..self.npoint) |ei| {
+                    const E_local = self.getCollisionEnergy(ei) - self.asymptotic_offset;
 
                     if (E_local <= 0) {
                         continue;
                     }
 
-                    const k_inc = std.math.sqrt(2 * m * E_local);
+                    const k_inc = std.math.sqrt(2 * self.mass[0] * E_local);
 
                     const exp_arg = -std.math.pow(T, k_inc - self.initk, @as(T, 2)) / (self.gmma[0]);
                     const ak = std.math.sqrt(4 * std.math.pi / self.gmma[0]) * std.math.exp(exp_arg);
@@ -195,7 +191,7 @@ pub fn FluxAnalysis(comptime T: type) type {
                     }
 
                     for (0..wfn_init.nrow()) |f| {
-                        const row, var sum: T = .{ f * ne + ei, 0 };
+                        const row, var sum: T = .{ f * self.npoint + ei, 0 };
 
                         for (0..grid.nrow()) |j| {
                             temp_phi[j] = flux_acc.at(row, j);
@@ -221,7 +217,7 @@ pub fn FluxAnalysis(comptime T: type) type {
                             fftn(T, temp_phi, temp_phi, shape, 1, scratch);
                         }
 
-                        const factor = grid.dr * k_inc * self.dt * self.dt / (m * self.mass[d] * dx_d * ak);
+                        const factor = grid.dr * k_inc * self.dt * self.dt / (self.mass[0] * self.mass[d] * dx_d * ak);
 
                         for (0..grid.nrow()) |i| {
                             var in_bounds = true;

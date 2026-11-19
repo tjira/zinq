@@ -49,10 +49,7 @@ pub fn contractTwoElectronFock(comptime T: type, F: *Matrix(T), g: Tensor(T, 4),
     std.debug.assert(P.shape[1] == nbf);
 
     for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
-        const j_val = g.at(.{ mu, lambda, nu, sigma });
-        const k_val = g.at(.{ mu, lambda, sigma, nu });
-
-        F.ptr(mu, nu).* += P.at(lambda, sigma) * (j_val - exch_factor * k_val);
+        F.ptr(mu, nu).* += P.at(lambda, sigma) * (g.at(.{ mu, lambda, nu, sigma }) - exch_factor * g.at(.{ mu, lambda, sigma, nu }));
     };
 }
 
@@ -63,10 +60,9 @@ pub fn contractTwoElectronGradient(comptime T: type, dg: Tensor(T, 5), coord: us
     var g_val: T = 0;
 
     for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
-        const dg1 = dg.at(.{ coord, mu, lambda, nu, sigma });
-        const dg2 = dg.at(.{ coord, mu, lambda, sigma, nu });
+        const G = dg.at(.{ coord, mu, lambda, nu, sigma }) - exch_factor * dg.at(.{ coord, mu, lambda, sigma, nu });
 
-        g_val += 0.5 * P.at(mu, nu) * P.at(lambda, sigma) * (dg1 - exch_factor * dg2);
+        g_val += 0.5 * P.at(mu, nu) * P.at(lambda, sigma) * G;
     };
 
     return g_val;
@@ -77,10 +73,9 @@ pub fn contractTwoElectronResponse(comptime T: type, F_x: *Matrix(T), dg: Tensor
     const nbf = F_x.nrow();
 
     for (0..nbf) |lambda| for (0..nbf) |sigma| for (0..nbf) |mu| for (0..nbf) |nu| {
-        const coul = dg.at(.{ coord, lambda, mu, sigma, nu });
-        const exch = dg.at(.{ coord, lambda, sigma, mu, nu });
+        const G = dg.at(.{ coord, mu, lambda, nu, sigma }) - exch_factor * dg.at(.{ coord, mu, sigma, lambda, nu });
 
-        F_x.ptr(mu, nu).* += P.at(lambda, sigma) * (coul - exch_factor * exch);
+        F_x.ptr(mu, nu).* += P.at(lambda, sigma) * G;
     };
 }
 
@@ -97,9 +92,6 @@ pub fn contractTwoElectronResponseHessian(comptime T: type, V_x: *Matrix(T), g: 
     std.debug.assert(P_x.shape[1] == nbf);
 
     for (0..nbf) |mu| for (0..nbf) |nu| for (0..nbf) |lambda| for (0..nbf) |sigma| {
-        const g_mlns = g.at(.{ mu, lambda, nu, sigma });
-        const g_mnls = g.at(.{ mu, nu, lambda, sigma });
-
-        V_x.ptr(lambda, sigma).* += P_x.at(mu, nu) * (g_mlns - exch_factor * g_mnls);
+        V_x.ptr(lambda, sigma).* += P_x.at(mu, nu) * (g.at(.{ mu, lambda, nu, sigma }) - exch_factor * g.at(.{ mu, nu, lambda, sigma }));
     };
 }

@@ -149,11 +149,7 @@ pub fn calculateNormalModes(comptime T: type, hessian: Matrix(T), sys: Molecular
             const rz = coors[i * 3 + 2] - com[2];
 
             for (0..3) |k| {
-                const iv_0 = inertia_vecs[0 * 3 + k];
-                const iv_1 = inertia_vecs[1 * 3 + k];
-                const iv_2 = inertia_vecs[2 * 3 + k];
-
-                G[i * 3 + k] = rx * iv_0 + ry * iv_1 + rz * iv_2;
+                G[i * 3 + k] = rx * inertia_vecs[0 * 3 + k] + ry * inertia_vecs[1 * 3 + k] + rz * inertia_vecs[2 * 3 + k];
             }
         }
 
@@ -169,14 +165,10 @@ pub fn calculateNormalModes(comptime T: type, hessian: Matrix(T), sys: Molecular
             TR[(i * 3 + 1) * 6 + 1] = mass_12;
             TR[(i * 3 + 2) * 6 + 2] = mass_12;
 
-            for (0..3) |j| {
-                const g1 = G[i * 3 + 1];
-                const g2 = G[i * 3 + 2];
-                const g0 = G[i * 3 + 0];
+            const g0, const g1, const g2 = .{ G[i * 3 + 0], G[i * 3 + 1], G[i * 3 + 2] };
 
-                const v2 = inertia_vecs[j * 3 + 2];
-                const v1 = inertia_vecs[j * 3 + 1];
-                const v0 = inertia_vecs[j * 3 + 0];
+            for (0..3) |j| {
+                const v0, const v1, const v2 = .{ inertia_vecs[j * 3 + 0], inertia_vecs[j * 3 + 1], inertia_vecs[j * 3 + 2] };
 
                 TR[(i * 3 + j) * 6 + 3] = mass_12 * (g1 * v2 - g2 * v1);
                 TR[(i * 3 + j) * 6 + 4] = mass_12 * (g2 * v0 - g0 * v2);
@@ -372,15 +364,16 @@ pub fn calculateThermochemistry(comptime T: type, opt: Options, sys: MolecularSy
 
     const E_thrm = E_zpve + 1.5 * temp / AU2K + E_rot + E_vib;
 
-    const H_corr, const G_corr = .{ E_thrm + temp / AU2K, E_thrm + temp / AU2K - (temp / AU2K) * S_totl_over_kB };
+    const H_corr = E_thrm + temp / AU2K;
 
     return .{
         .M_mass = total_mass,
 
         .E_thrm = E_thrm,
         .E_zpve = E_zpve,
-        .G_corr = G_corr,
         .H_corr = H_corr,
+
+        .G_corr = H_corr - (temp / AU2K) * S_totl_over_kB,
 
         .S_elec = S_elec_over_kB * R / CAL2J,
         .S_rota = S_rota_over_kB * R / CAL2J,
@@ -402,7 +395,9 @@ pub fn printHarmonicFrequencies(comptime T: type, io: std.Io, freqs: Vector(T), 
 pub fn printThermochemistry(comptime T: type, io: std.Io, opt: Options, th: Thermochemistry(T), energy: T, method_str: []const u8) !void {
     try printf(io, "\n{s} SYSTEM CONDITIONS\n", .{method_str});
 
-    try printf(io, "T_TEMP: {d:20.14} K\nP_PRES: {d:20.14} kPa\nM_MASS: {d:20.14} amu\n", .{ opt.temperature, opt.pressure / 1000, th.M_mass });
+    const fmt = "T_TEMP: {d:20.14} K\nP_PRES: {d:20.14} kPa\nM_MASS: {d:20.14} amu\n";
+
+    try printf(io, fmt, .{ opt.temperature, opt.pressure / 1000, th.M_mass });
 
     try printf(io, "\n{s} THERMAL CORRECTIONS\n", .{method_str});
 
@@ -413,13 +408,12 @@ pub fn printThermochemistry(comptime T: type, io: std.Io, opt: Options, th: Ther
 
     try printf(io, "\n{s} ENTROPIES (cal/(mol K))\n", .{method_str});
 
-    const S_totl = th.S_tran + th.S_rota + th.S_vibr + th.S_elec;
-
     try printf(io, "S_TRAN: {d:20.14}\n", .{th.S_tran});
     try printf(io, "S_ROTA: {d:20.14}\n", .{th.S_rota});
     try printf(io, "S_VIBR: {d:20.14}\n", .{th.S_vibr});
     try printf(io, "S_ELEC: {d:20.14}\n", .{th.S_elec});
-    try printf(io, "S_TOTL: {d:20.14}\n", .{S_totl});
+
+    try printf(io, "S_TOTL: {d:20.14}\n", .{th.S_tran + th.S_rota + th.S_vibr + th.S_elec});
 
     try printf(io, "\n{s} SUM OF ELECTRONIC AND THERMAL ENERGIES\n", .{method_str});
 

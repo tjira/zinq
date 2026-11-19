@@ -337,7 +337,9 @@ pub fn DftPotential(comptime T: type) type {
                 const v_b = ctx.potgd.rho_pot.at(g, 1);
 
                 if (ctx.needs_deriv) {
-                    computeIntermediateGradientVectorPolarized(&X_a.?, &X_b.?, ctx.density.del_rho.?, ctx.basisgrid, ctx.potgd.sig_pot.?, g, ctx.sys.nbf);
+                    const pot = ctx.potgd.sig_pot.?;
+
+                    computeIntermediateGradientVectorPolarized(&X_a.?, &X_b.?, ctx.density.del_rho.?, ctx.basisgrid, pot, g, ctx.sys.nbf);
 
                     const v_tau_a = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(g, 0) else 0.0;
                     const v_tau_b = if (ctx.has_mgga) ctx.potgd.tau_pot.?.at(g, 1) else 0.0;
@@ -354,19 +356,19 @@ pub fn DftPotential(comptime T: type) type {
                         var val_b = v_b * phi_mu * phi_nu + X_b.?.data[mu] * phi_nu + phi_mu * X_b.?.data[nu];
 
                         if (ctx.has_mgga) {
-                            const dx_mu_nu = ctx.basisgrid.dphi_dx.?.at(g, mu) * ctx.basisgrid.dphi_dx.?.at(g, nu);
-                            const dy_mu_nu = ctx.basisgrid.dphi_dy.?.at(g, mu) * ctx.basisgrid.dphi_dy.?.at(g, nu);
-                            const dz_mu_nu = ctx.basisgrid.dphi_dz.?.at(g, mu) * ctx.basisgrid.dphi_dz.?.at(g, nu);
+                            const d_phi_dot_1 = ctx.basisgrid.dphi_dx.?.at(g, mu) * ctx.basisgrid.dphi_dx.?.at(g, nu);
+                            const d_phi_dot_2 = ctx.basisgrid.dphi_dy.?.at(g, mu) * ctx.basisgrid.dphi_dy.?.at(g, nu);
+                            const d_phi_dot_3 = ctx.basisgrid.dphi_dz.?.at(g, mu) * ctx.basisgrid.dphi_dz.?.at(g, nu);
 
-                            const dphi_dot = dx_mu_nu + dy_mu_nu + dz_mu_nu;
+                            const dphi_dot = d_phi_dot_1 + d_phi_dot_2 + d_phi_dot_3;
 
                             val_a += 0.5 * v_tau_a * dphi_dot;
                             val_b += 0.5 * v_tau_b * dphi_dot;
 
-                            const lapl_mu = ctx.basisgrid.lapl.?.at(g, mu);
-                            const lapl_nu = ctx.basisgrid.lapl.?.at(g, nu);
+                            const lapl_gmu = ctx.basisgrid.lapl.?.at(g, mu);
+                            const lapl_gnu = ctx.basisgrid.lapl.?.at(g, nu);
 
-                            const lapl_term = lapl_mu * phi_nu + 2 * dphi_dot + phi_mu * lapl_nu;
+                            const lapl_term = lapl_gmu * phi_nu + 2 * dphi_dot + phi_mu * lapl_gnu;
 
                             val_a += v_lap_a * lapl_term;
                             val_b += v_lap_b * lapl_term;
@@ -426,18 +428,18 @@ pub fn DftPotential(comptime T: type) type {
                         var val = v_rho * phi_mu * phi_nu + X_a.?.data[mu] * phi_nu + phi_mu * X_a.?.data[nu];
 
                         if (ctx.has_mgga) {
-                            const dx_mu_nu = ctx.basisgrid.dphi_dx.?.at(g, mu) * ctx.basisgrid.dphi_dx.?.at(g, nu);
-                            const dy_mu_nu = ctx.basisgrid.dphi_dy.?.at(g, mu) * ctx.basisgrid.dphi_dy.?.at(g, nu);
-                            const dz_mu_nu = ctx.basisgrid.dphi_dz.?.at(g, mu) * ctx.basisgrid.dphi_dz.?.at(g, nu);
+                            const dphi_dot_1 = ctx.basisgrid.dphi_dx.?.at(g, mu) * ctx.basisgrid.dphi_dx.?.at(g, nu);
+                            const dphi_dot_2 = ctx.basisgrid.dphi_dy.?.at(g, mu) * ctx.basisgrid.dphi_dy.?.at(g, nu);
+                            const dphi_dot_3 = ctx.basisgrid.dphi_dz.?.at(g, mu) * ctx.basisgrid.dphi_dz.?.at(g, nu);
 
-                            const dphi_dot = dx_mu_nu + dy_mu_nu + dz_mu_nu;
+                            const dphi_dot = dphi_dot_1 + dphi_dot_2 + dphi_dot_3;
 
                             val += 0.5 * v_tau * dphi_dot;
 
-                            const lapl_mu = ctx.basisgrid.lapl.?.at(g, mu);
-                            const lapl_nu = ctx.basisgrid.lapl.?.at(g, nu);
+                            const lapl_gmu = ctx.basisgrid.lapl.?.at(g, mu);
+                            const lapl_gnu = ctx.basisgrid.lapl.?.at(g, nu);
 
-                            const lapl_term = lapl_mu * phi_nu + 2 * dphi_dot + phi_mu * lapl_nu;
+                            const lapl_term = lapl_gmu * phi_nu + 2 * dphi_dot + phi_mu * lapl_gnu;
 
                             val += v_lap * lapl_term;
                         }

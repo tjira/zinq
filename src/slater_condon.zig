@@ -20,9 +20,7 @@ pub fn applySpinPenalty(comptime T: type, H: *Matrix(T), dets: []const []const u
     const val_lambda = Value(T).fromFloat(lambda);
 
     for (0..dets.len) |i| {
-        const s2_diag = calculateDeterminantSpin(dets[i]);
-
-        const shift_diag = val_lambda.mul(Value(T).fromFloat(s2_diag - s2_target));
+        const shift_diag = val_lambda.mul(Value(T).fromFloat(calculateDeterminantSpin(dets[i]) - s2_target));
 
         H.ptr(i, i).* = Value(T).init(H.at(i, i)).add(shift_diag).val;
 

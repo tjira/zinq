@@ -13,7 +13,6 @@ const A2BOHR = @import("constants.zig").A2BOHR;
 
 /// Generates a MolecularSystem struct type for the given floating-point coordinate precision type T.
 pub fn MolecularSystem(comptime T: type) type {
-    // Molecular system containing atom types, 3D coordinates, basis functions, and electron count.
     return struct {
         ptr: *libint.SystemData,
 
@@ -340,22 +339,12 @@ pub fn MolecularSystem(comptime T: type) type {
             for (0..self.atoms.len) |i| {
                 const Zi = @as(T, @floatFromInt(self.atoms[i]));
 
-                const xi = self.coors[3 * i + 0];
-                const yi = self.coors[3 * i + 1];
-                const zi = self.coors[3 * i + 2];
-
                 for (0..i) |j| {
-                    const Zj = @as(T, @floatFromInt(self.atoms[j]));
+                    const dx = self.coors[3 * i + 0] - self.coors[3 * j + 0];
+                    const dy = self.coors[3 * i + 1] - self.coors[3 * j + 1];
+                    const dz = self.coors[3 * i + 2] - self.coors[3 * j + 2];
 
-                    const xj = self.coors[3 * j + 0];
-                    const yj = self.coors[3 * j + 1];
-                    const zj = self.coors[3 * j + 2];
-
-                    const dx = xi - xj;
-                    const dy = yi - yj;
-                    const dz = zi - zj;
-
-                    energy += (Zi * Zj) / std.math.sqrt(dx * dx + dy * dy + dz * dz);
+                    energy += (Zi * @as(T, @floatFromInt(self.atoms[j]))) / std.math.sqrt(dx * dx + dy * dy + dz * dz);
                 }
             }
 
@@ -411,28 +400,20 @@ pub fn MolecularSystem(comptime T: type) type {
             for (0..self.atoms.len) |A| {
                 const ZA = @as(T, @floatFromInt(self.atoms[A]));
 
-                const xA = self.coors[3 * A + 0];
-                const yA = self.coors[3 * A + 1];
-                const zA = self.coors[3 * A + 2];
-
                 for (0..self.atoms.len) |B| {
                     if (B == A) continue;
 
-                    const ZB = @as(T, @floatFromInt(self.atoms[B]));
-
-                    const xB = self.coors[3 * B + 0];
-                    const yB = self.coors[3 * B + 1];
-                    const zB = self.coors[3 * B + 2];
-
-                    const dx = xA - xB;
-                    const dy = yA - yB;
-                    const dz = zA - zB;
+                    const dx = self.coors[3 * A + 0] - self.coors[3 * B + 0];
+                    const dy = self.coors[3 * A + 1] - self.coors[3 * B + 1];
+                    const dz = self.coors[3 * A + 2] - self.coors[3 * B + 2];
 
                     const dist = std.math.sqrt(dx * dx + dy * dy + dz * dz);
 
-                    dVN.ptr(A, 0).* -= ZA * ZB * dx / (dist * dist * dist);
-                    dVN.ptr(A, 1).* -= ZA * ZB * dy / (dist * dist * dist);
-                    dVN.ptr(A, 2).* -= ZA * ZB * dz / (dist * dist * dist);
+                    const factor = ZA * @as(T, @floatFromInt(self.atoms[B])) / (dist * dist * dist);
+
+                    dVN.ptr(A, 0).* -= dx * factor;
+                    dVN.ptr(A, 1).* -= dy * factor;
+                    dVN.ptr(A, 2).* -= dz * factor;
                 }
             }
 

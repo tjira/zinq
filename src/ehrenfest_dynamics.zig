@@ -26,7 +26,9 @@ pub fn Ehrenfest(comptime T: type) type {
 
         /// Allocates and initializes electronic coefficients, Hamiltonian histories, and Runge-Kutta integrator.
         pub fn init(opt: Options, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: std.mem.Allocator) !@This() {
-            const prop = try ElectronicPropagator(T).init(opt.coupling, opt.integrator, opt.norm_tolerance, opt.nstep, nstate, ntraj, istate, adia, gpa);
+            const Prop = ElectronicPropagator(T);
+
+            const prop = try Prop.init(opt.coupling, opt.integrator, opt.norm_tolerance, opt.nstep, nstate, ntraj, istate, adia, gpa);
 
             return .{ .coefics = prop.coefics, .prop = prop };
         }

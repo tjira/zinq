@@ -516,13 +516,10 @@ pub fn RiWorkspace(comptime T: type) type {
             for (0..nat) |A_atom| for (0..3) |alpha| {
                 const coord = 3 * A_atom + alpha;
 
-                const dI_c = ints.dI.?.slice(coord).asVector();
-                const dJ_c = ints.dJ.?.slice(coord).asVector();
+                const dI_vec = ints.dI.?.slice(coord).asVector();
+                const dJ_vec = ints.dJ.?.slice(coord).asVector();
 
-                const term1 = dot(T, Y_vec, dI_c);
-                const term2 = dot(T, Z_vec, dJ_c);
-
-                G.ptr(A_atom, alpha).* += term1 + term2;
+                G.ptr(A_atom, alpha).* += dot(T, Y_vec, dI_vec) + dot(T, Z_vec, dJ_vec);
             };
         }
 

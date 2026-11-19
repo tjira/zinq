@@ -14,6 +14,7 @@ const HartreeFockResult = @import("hartree_fock.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
+const PrintOptions = @import("determinant.zig").PrintOptions;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
@@ -235,15 +236,11 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     }
 
     if (opt.weights == null) {
-        const uniform_w = 1.0 / @as(T, @floatFromInt(opt.nstate));
-
-        @memset(weights, uniform_w);
+        @memset(weights, 1.0 / @as(T, @floatFromInt(opt.nstate)));
     }
 
     if (opt.aux_basis) |aux| {
-        const analytic_grad = if (opt.gradient) |g| g == .analytic else false;
-
-        try buildFittingIntegrals(T, io, &hfres.ints, aux, analytic_grad, opt.nthreads, gpa);
+        try buildFittingIntegrals(T, io, &hfres.ints, aux, if (opt.gradient) |g| g == .analytic else false, opt.nthreads, gpa);
     }
 
     try evaluateCasscf(T, io, &C, hfres.ints, .{ .dets = dets.items, .weights = weights, .space = space }, opt, log, gpa);
@@ -303,7 +300,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
             try printf(io, "\nSTATE-AVERAGED FINAL CASSCF ENERGY: {d:.14} Eh\n", .{final_sa_energy});
         }
 
-        try printDeterminants(T, io, final_C_ci, C, hfres.ints.S.?, dets.items, .{ .nstates = n_states, .ncore = space.ncore, .norbs = space.nact }, gpa);
+        const prt_opt: PrintOptions = .{ .nstates = n_states, .ncore = space.ncore, .norbs = space.nact };
+
+        try printDeterminants(T, io, final_C_ci, C, hfres.ints.S.?, dets.items, prt_opt, gpa);
     }
 
     var grad: []Matrix(T) = &.{};
@@ -318,7 +317,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         .analytic => |a| {
             const states = a.states orelse &[_]u32{0};
 
-            grad = try calculateCasscfGradient(T, hfres, C, final_C_ci, .{ .dets = dets.items, .weights = weights, .space = space }, states, gpa);
+            const cas_st: CasState(T) = .{ .dets = dets.items, .weights = weights, .space = space };
+
+            grad = try calculateCasscfGradient(T, hfres, C, final_C_ci, cas_st, states, gpa);
         },
         .numeric => {},
     };

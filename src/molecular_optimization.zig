@@ -87,20 +87,15 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
 
         const grad = res.grad[0];
 
-        const max_grad = grad.max();
         const rms_grad = grad.rms();
 
-        const elapsed = timer.untilNow(io, .real);
-
         if (log) {
-            const fmt = "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9}\n";
-
-            const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
+            const time_str = try std.fmt.allocPrint(gpa, "{f}", .{timer.untilNow(io, .real)});
             defer gpa.free(time_str);
 
             const energy = getOptimizedEnergy(run_opt, res.energy);
 
-            try printf(io, fmt, .{ i + 1, energy, rms_grad, max_grad, time_str });
+            try printf(io, "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9}\n", .{ i + 1, energy, rms_grad, grad.max(), time_str });
         }
 
         const P = try getDensity(T, res).clone(gpa);
@@ -221,20 +216,15 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
 
         const grad = res.grad[0];
 
-        const max_grad = grad.max();
         const rms_grad = grad.rms();
 
-        const elapsed = timer.untilNow(io, .real);
-
         if (log) {
-            const fmt = "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9}\n";
-
-            const time_str = try std.fmt.allocPrint(gpa, "{f}", .{elapsed});
+            const time_str = try std.fmt.allocPrint(gpa, "{f}", .{timer.untilNow(io, .real)});
             defer gpa.free(time_str);
 
             const energy = getOptimizedEnergy(run_opt, res.energy);
 
-            try printf(io, fmt, .{ i + 1, energy, rms_grad, max_grad, time_str });
+            try printf(io, "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9}\n", .{ i + 1, energy, rms_grad, grad.max(), time_str });
         }
 
         const P = try getDensity(T, res).clone(gpa);

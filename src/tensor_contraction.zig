@@ -90,13 +90,8 @@ pub fn contract(comptime T: type, comptime spec: []const u8, C: anytype, A: anyt
     const b_slice, const b_buf = try prepareSlice(T, nb, b_ten, plan.perm_b, plan.trans_b, gpa);
     defer if (b_buf) |buf| (gpa.?).free(buf);
 
-    const rows_a = if (plan.trans_a) k else m;
-    const cols_a = if (plan.trans_a) m else k;
-    const rows_b = if (plan.trans_b) n else k;
-    const cols_b = if (plan.trans_b) k else n;
-
-    const A_mat = Matrix(T).fromSlice(rows_a, cols_a, @constCast(a_slice));
-    const B_mat = Matrix(T).fromSlice(rows_b, cols_b, @constCast(b_slice));
+    const A_mat = Matrix(T).fromSlice(if (plan.trans_a) k else m, if (plan.trans_a) m else k, @constCast(a_slice));
+    const B_mat = Matrix(T).fromSlice(if (plan.trans_b) n else k, if (plan.trans_b) k else n, @constCast(b_slice));
 
     if (isIdentity(plan.perm_c)) {
         var C_mat = Matrix(T).fromSlice(m, n, c_ten.data);

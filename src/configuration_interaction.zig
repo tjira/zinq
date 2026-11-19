@@ -16,6 +16,7 @@ const Integrals = @import("molecular_integrals.zig").Result;
 const Matrix = @import("tensor.zig").Matrix;
 const MolecularSystem = @import("molecular_system.zig").MolecularSystem;
 const OptimizeOptions = @import("molecular_optimization.zig").OptimizeOptions(GradientOptions);
+const PrintOptions = @import("determinant.zig").PrintOptions;
 const Tensor = @import("tensor.zig").Tensor;
 const Value = @import("value.zig").Value;
 const Vector = @import("tensor.zig").Vector;
@@ -390,9 +391,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     }
 
     if (log) {
-        const params = .{ timer.untilNow(io, .real), dets.items.len };
-
-        try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nORBITAL TRANSFORMS TIME:", params);
+        try printf(io, " {f}\n\nNUMBER OF DETERMINANTS: {d}\n\nORBITAL TRANSFORMS TIME:", .{ timer.untilNow(io, .real), dets.items.len });
     }
 
     const penalty, const s2_target = switch (opt.space) {
@@ -408,10 +407,8 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     const io_ci = if (log) io else null;
 
-    const analytic_grad = if (opt.gradient) |g| g == .analytic else false;
-
     if (opt.aux_basis) |aux| {
-        try buildFittingIntegrals(T, io, &hfres.ints, aux, analytic_grad, opt.nthreads, gpa);
+        try buildFittingIntegrals(T, io, &hfres.ints, aux, if (opt.gradient) |g| g == .analytic else false, opt.nthreads, gpa);
     }
 
     var E: Vector(T), var C_ci: Matrix(T) = .{ undefined, undefined };
@@ -449,7 +446,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
             .excitations => hfres.C_mo.ncol(),
         };
 
-        try printDeterminants(T, io, C_ci, hfres.C_mo, hfres.ints.S.?, dets.items, .{ .nstates = n_states, .ncore = ncore, .norbs = norbs, .gen = generalized }, gpa);
+        const prt_opt: PrintOptions = .{ .nstates = n_states, .ncore = ncore, .norbs = norbs, .gen = generalized };
+
+        try printDeterminants(T, io, C_ci, hfres.C_mo, hfres.ints.S.?, dets.items, prt_opt, gpa);
     }
 
     var grad: []Matrix(T) = &.{};

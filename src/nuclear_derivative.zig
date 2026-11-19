@@ -27,29 +27,27 @@ pub fn DerivativeContext(comptime T: type) type {
 pub fn calculateNumericalGradient(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt: anytype, states: []const u32) anyerror![]Matrix(T) {
     const generalized = electronic_structure.isGeneralized(opt);
 
-    const io, const sys, const gpa, const log = .{ ctx.io, ctx.sys, ctx.gpa, ctx.log };
-
-    var grad = try gpa.alloc(Matrix(T), states.len);
-    errdefer gpa.free(grad);
+    var grad = try ctx.gpa.alloc(Matrix(T), states.len);
+    errdefer ctx.gpa.free(grad);
 
     var grad_done: usize = 0;
 
-    errdefer for (0..grad_done) |k| grad[k].deinit(gpa);
+    errdefer for (0..grad_done) |k| grad[k].deinit(ctx.gpa);
 
     for (0..states.len) |k| {
-        grad[k] = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
+        grad[k] = try Matrix(T).initZero(ctx.sys.atoms.len, 3, ctx.gpa);
 
         grad_done += 1;
     }
 
     const h = @as(T, @floatCast(opt.gradient.?.numeric.step));
 
-    if (log) try printf(io, "\n", .{});
+    if (ctx.log) try printf(ctx.io, "\n", .{});
 
-    const nbf = if (generalized) 2 * sys.nbf else sys.nbf;
+    const nbf = if (generalized) 2 * ctx.sys.nbf else ctx.sys.nbf;
 
-    var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
-    defer Pg.deinit(gpa);
+    var Pg = try Matrix(T).initZero(nbf, nbf, ctx.gpa);
+    defer Pg.deinit(ctx.gpa);
 
     var max_state: usize = 0;
 
@@ -59,35 +57,31 @@ pub fn calculateNumericalGradient(comptime T: type, ctx: DerivativeContext(T), r
 
     const n = max_state + 1;
 
-    const energies = try gpa.alloc(T, 2 * n);
-    defer gpa.free(energies);
+    const energies = try ctx.gpa.alloc(T, 2 * n);
+    defer ctx.gpa.free(energies);
 
     const ep, const em = .{ energies[0..n], energies[n .. 2 * n] };
 
-    var res_ref = try runFn(T, io, stripSecondaryOptions(opt, .{}), sys, ctx.Pg, ctx.C_mo, false, gpa);
-    defer res_ref.deinit(gpa);
+    var res_ref = try runFn(T, ctx.io, stripSecondaryOptions(opt, .{}), ctx.sys, ctx.Pg, ctx.C_mo, false, ctx.gpa);
+    defer res_ref.deinit(ctx.gpa);
 
     if (res_ref.energy.len <= max_state) {
-        const msg = "STATE REQUESTED FOR NUMERICAL DERIVATIVE IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION";
-
-        std.log.err(msg, .{});
+        std.log.err("STATE REQUESTED FOR NUMERICAL DERIVATIVE IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION", .{});
 
         return error.InvalidInput;
     }
 
     @memcpy(Pg.data, electronic_structure.getDensity(T, res_ref).data);
 
-    for (0..sys.atoms.len) |i| for (0..3) |j| {
-        const d1, const d2 = .{ .{ i * 3 + j, h }, .{ i * 3 + j, -h } };
-
-        try getEnergies(T, ctx, runFn, opt, d1, Pg, ep);
-        try getEnergies(T, ctx, runFn, opt, d2, Pg, em);
+    for (0..ctx.sys.atoms.len) |i| for (0..3) |j| {
+        try getEnergies(T, ctx, runFn, opt, .{ i * 3 + j, 0 + h }, Pg, ep);
+        try getEnergies(T, ctx, runFn, opt, .{ i * 3 + j, 0 - h }, Pg, em);
 
         for (states, 0..) |s, s_idx| {
             grad[s_idx].ptr(i, j).* = (ep[s] - em[s]) / (2 * h);
 
-            if (log) {
-                try logGradient(T, io, opt, sys.atoms, s, i, j, grad[s_idx].at(i, j));
+            if (ctx.log) {
+                try logGradient(T, ctx.io, opt, ctx.sys.atoms, s, i, j, grad[s_idx].at(i, j));
             }
         }
     };
@@ -99,29 +93,27 @@ pub fn calculateNumericalGradient(comptime T: type, ctx: DerivativeContext(T), r
 pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt: anytype, states: []const u32) anyerror![]Matrix(T) {
     const generalized = electronic_structure.isGeneralized(opt);
 
-    const io, const sys, const gpa, const log = .{ ctx.io, ctx.sys, ctx.gpa, ctx.log };
-
-    var hess = try gpa.alloc(Matrix(T), states.len);
-    errdefer gpa.free(hess);
+    var hess = try ctx.gpa.alloc(Matrix(T), states.len);
+    errdefer ctx.gpa.free(hess);
 
     var hess_done: usize = 0;
 
-    errdefer for (0..hess_done) |k| hess[k].deinit(gpa);
+    errdefer for (0..hess_done) |k| hess[k].deinit(ctx.gpa);
 
     for (0..states.len) |k| {
-        hess[k] = try Matrix(T).initZero(3 * sys.atoms.len, 3 * sys.atoms.len, gpa);
+        hess[k] = try Matrix(T).initZero(3 * ctx.sys.atoms.len, 3 * ctx.sys.atoms.len, ctx.gpa);
 
         hess_done += 1;
     }
 
     const h = @as(T, @floatCast(opt.hessian.?.numeric.step));
 
-    if (log) try printf(io, "\n", .{});
+    if (ctx.log) try printf(ctx.io, "\n", .{});
 
-    const nbf = if (generalized) 2 * sys.nbf else sys.nbf;
+    const nbf = if (generalized) 2 * ctx.sys.nbf else ctx.sys.nbf;
 
-    var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
-    defer Pg.deinit(gpa);
+    var Pg = try Matrix(T).initZero(nbf, nbf, ctx.gpa);
+    defer Pg.deinit(ctx.gpa);
 
     var max_state: usize = 0;
 
@@ -131,21 +123,19 @@ pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), ru
 
     const n = max_state + 1;
 
-    const energies = try gpa.alloc(T, 7 * n);
-    defer gpa.free(energies);
+    const energies = try ctx.gpa.alloc(T, 7 * n);
+    defer ctx.gpa.free(energies);
 
     const er, const ep, const em = .{ energies[0..n], energies[n .. 2 * n], energies[2 * n .. 3 * n] };
 
     const epp, const epm = .{ energies[3 * n .. 4 * n], energies[4 * n .. 5 * n] };
     const emp, const emm = .{ energies[5 * n .. 6 * n], energies[6 * n .. 7 * n] };
 
-    var res_ref = try runFn(T, io, stripSecondaryOptions(opt, .{}), sys, ctx.Pg, ctx.C_mo, false, gpa);
-    defer res_ref.deinit(gpa);
+    var res_ref = try runFn(T, ctx.io, stripSecondaryOptions(opt, .{}), ctx.sys, ctx.Pg, ctx.C_mo, false, ctx.gpa);
+    defer res_ref.deinit(ctx.gpa);
 
     if (res_ref.energy.len <= max_state) {
-        const msg = "STATE REQUESTED FOR NUMERICAL DERIVATIVE IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION";
-
-        std.log.err(msg, .{});
+        std.log.err("STATE REQUESTED FOR NUMERICAL DERIVATIVE IS NOT AVAILABLE IN THE ELECTRONIC STRUCTURE CALCULATION", .{});
 
         return error.InvalidInput;
     }
@@ -154,21 +144,19 @@ pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), ru
 
     @memcpy(er, res_ref.energy[0..er.len]);
 
-    for (0..3 * sys.atoms.len) |a| {
-        const d1, const d2 = .{ .{ a, h }, .{ a, -h } };
-
-        try getEnergies(T, ctx, runFn, opt, d1, Pg, ep);
-        try getEnergies(T, ctx, runFn, opt, d2, Pg, em);
+    for (0..3 * ctx.sys.atoms.len) |a| {
+        try getEnergies(T, ctx, runFn, opt, .{ a, 0 + h }, Pg, ep);
+        try getEnergies(T, ctx, runFn, opt, .{ a, 0 - h }, Pg, em);
 
         for (states, 0..) |s, s_idx| {
             hess[s_idx].ptr(a, a).* = (ep[s] - 2 * er[s] + em[s]) / (h * h);
 
-            if (log) {
-                try logHessian(T, io, opt, sys.atoms, s, a, a, hess[s_idx].at(a, a));
+            if (ctx.log) {
+                try logHessian(T, ctx.io, opt, ctx.sys.atoms, s, a, a, hess[s_idx].at(a, a));
             }
         }
 
-        for (a + 1..3 * sys.atoms.len) |b| {
+        for (a + 1..3 * ctx.sys.atoms.len) |b| {
             try getEnergies(T, ctx, runFn, opt, .{ a, h, b, h }, Pg, epp);
 
             try getEnergies(T, ctx, runFn, opt, .{ a, h, b, -h }, Pg, epm);
@@ -182,8 +170,8 @@ pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), ru
                 hess[s_idx].ptr(a, b).* = val;
                 hess[s_idx].ptr(b, a).* = val;
 
-                if (log) {
-                    try logHessian(T, io, opt, sys.atoms, s, a, b, val);
+                if (ctx.log) {
+                    try logHessian(T, ctx.io, opt, ctx.sys.atoms, s, a, b, val);
                 }
             }
         }
@@ -196,17 +184,15 @@ pub fn calculateNumericalHessian(comptime T: type, ctx: DerivativeContext(T), ru
 pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn: anytype, opt: anytype, pairs: []const [2]u32) anyerror![]Matrix(T) {
     const generalized = electronic_structure.isGeneralized(opt);
 
-    const io, const sys, const gpa, const log = .{ ctx.io, ctx.sys, ctx.gpa, ctx.log };
-
-    var nacvs = try gpa.alloc(Matrix(T), pairs.len);
-    errdefer gpa.free(nacvs);
+    var nacvs = try ctx.gpa.alloc(Matrix(T), pairs.len);
+    errdefer ctx.gpa.free(nacvs);
 
     var nacvs_done: usize = 0;
 
-    errdefer for (0..nacvs_done) |k| nacvs[k].deinit(gpa);
+    errdefer for (0..nacvs_done) |k| nacvs[k].deinit(ctx.gpa);
 
     for (0..pairs.len) |k| {
-        nacvs[k] = try Matrix(T).initZero(sys.atoms.len, 3, gpa);
+        nacvs[k] = try Matrix(T).initZero(ctx.sys.atoms.len, 3, ctx.gpa);
 
         nacvs_done += 1;
     }
@@ -220,12 +206,12 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         if (pair[1] > max_state) max_state = pair[1];
     }
 
-    if (log) try printf(io, "\n", .{});
+    if (ctx.log) try printf(ctx.io, "\n", .{});
 
-    const nbf = if (generalized) 2 * sys.nbf else sys.nbf;
+    const nbf = if (generalized) 2 * ctx.sys.nbf else ctx.sys.nbf;
 
-    var Pg = try Matrix(T).initZero(nbf, nbf, gpa);
-    defer Pg.deinit(gpa);
+    var Pg = try Matrix(T).initZero(nbf, nbf, ctx.gpa);
+    defer Pg.deinit(ctx.gpa);
 
     const modified_opt = stripSecondaryOptions(opt, .{});
 
@@ -239,8 +225,8 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         }
     }
 
-    var res_ref = try runFn(T, io, modified_opt, sys, ctx.Pg, ctx.C_mo, false, gpa);
-    defer res_ref.deinit(gpa);
+    var res_ref = try runFn(T, ctx.io, modified_opt, ctx.sys, ctx.Pg, ctx.C_mo, false, ctx.gpa);
+    defer res_ref.deinit(ctx.gpa);
 
     @memcpy(Pg.data, electronic_structure.getDensity(T, res_ref).data);
 
@@ -252,12 +238,12 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         return error.InvalidInput;
     }
 
-    var dets = try electronic_structure.generateDeterminants(sys.nel, sys.nbf, opt, gpa);
+    var dets = try electronic_structure.generateDeterminants(ctx.sys.nel, ctx.sys.nbf, opt, ctx.gpa);
 
     defer {
-        for (0..dets.items.len) |i| gpa.free(dets.items[i]);
+        for (0..dets.items.len) |i| ctx.gpa.free(dets.items[i]);
 
-        dets.deinit(gpa);
+        dets.deinit(ctx.gpa);
     }
 
     for (pairs) |pair| {
@@ -265,45 +251,47 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         const s2_1 = calculateStateSpin(T, C_ci_ref, pair[1], dets.items);
 
         if (@abs(s2_0 - s2_1) > 0.5) {
-            std.log.err("NONADIABATIC COUPLING REQUIRES STATES WITH THE SAME SPIN MULTIPLICITY (<S^2> = {d:.2} vs {d:.2})", .{ s2_0, s2_1 });
+            const params = .{ s2_0, s2_1 };
+
+            std.log.err("NONADIABATIC COUPLING REQUIRES STATES WITH THE SAME SPIN MULTIPLICITY (<S^2> = {d:.2} vs {d:.2})", params);
 
             return error.InvalidInput;
         }
     }
 
-    var sys_m = try sys.clone(gpa);
-    defer sys_m.deinit(gpa);
+    var sys_m = try ctx.sys.clone(ctx.gpa);
+    defer sys_m.deinit(ctx.gpa);
 
-    var sys_p = try sys.clone(gpa);
-    defer sys_p.deinit(gpa);
+    var sys_p = try ctx.sys.clone(ctx.gpa);
+    defer sys_p.deinit(ctx.gpa);
 
     const nthreads = if (@hasField(@TypeOf(opt), "nthreads")) opt.nthreads else 1;
 
-    const nsp = 2 * sys.nbf;
+    const nsp = 2 * ctx.sys.nbf;
 
     const C_ref = electronic_structure.getOrbitals(T, res_ref);
 
-    var C_ref_ms = if (generalized) C_ref else try Matrix(T).initZero(nsp, nsp, gpa);
-    defer if (!generalized) C_ref_ms.deinit(gpa);
+    var C_ref_ms = if (generalized) C_ref else try Matrix(T).initZero(nsp, nsp, ctx.gpa);
+    defer if (!generalized) C_ref_ms.deinit(ctx.gpa);
 
     if (!generalized) mo2ms_coef(T, &C_ref_ms, C_ref);
 
-    var S_ms = try Matrix(T).init(nsp, nsp, gpa);
-    defer S_ms.deinit(gpa);
+    var S_ms = try Matrix(T).init(nsp, nsp, ctx.gpa);
+    defer S_ms.deinit(ctx.gpa);
 
-    var tmp = try Matrix(T).init(nsp, nsp, gpa);
-    defer tmp.deinit(gpa);
+    var tmp = try Matrix(T).init(nsp, nsp, ctx.gpa);
+    defer tmp.deinit(ctx.gpa);
 
-    var C_m_buf = if (!generalized) try Matrix(T).initZero(nsp, nsp, gpa) else undefined;
-    defer if (!generalized) C_m_buf.deinit(gpa);
+    var C_m_buf = if (!generalized) try Matrix(T).initZero(nsp, nsp, ctx.gpa) else undefined;
+    defer if (!generalized) C_m_buf.deinit(ctx.gpa);
 
-    var C_p_buf = if (!generalized) try Matrix(T).initZero(nsp, nsp, gpa) else undefined;
-    defer if (!generalized) C_p_buf.deinit(gpa);
+    var C_p_buf = if (!generalized) try Matrix(T).initZero(nsp, nsp, ctx.gpa) else undefined;
+    defer if (!generalized) C_p_buf.deinit(ctx.gpa);
 
-    const couplings = try gpa.alloc(T, pairs.len);
-    defer gpa.free(couplings);
+    const couplings = try ctx.gpa.alloc(T, pairs.len);
+    defer ctx.gpa.free(couplings);
 
-    for (0..sys.atoms.len) |i| for (0..3) |j| {
+    for (0..ctx.sys.atoms.len) |i| for (0..3) |j| {
         const coord_idx = i * 3 + j;
 
         sys_m.coors[coord_idx] -= h;
@@ -326,14 +314,14 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
             libint.libint_update_coords(sys_p.ptr, sys_p.coors.ptr);
         }
 
-        var res_m = try runFn(T, io, modified_opt, &sys_m, Pg, C_ref, false, gpa);
-        defer res_m.deinit(gpa);
+        var res_m = try runFn(T, ctx.io, modified_opt, &sys_m, Pg, C_ref, false, ctx.gpa);
+        defer res_m.deinit(ctx.gpa);
 
-        var res_p = try runFn(T, io, modified_opt, &sys_p, Pg, C_ref, false, gpa);
-        defer res_p.deinit(gpa);
+        var res_p = try runFn(T, ctx.io, modified_opt, &sys_p, Pg, C_ref, false, ctx.gpa);
+        defer res_p.deinit(ctx.gpa);
 
-        var S_as = try sys_m.overlapBetweenSpin(sys_p, nthreads, gpa);
-        defer S_as.deinit(gpa);
+        var S_as = try sys_m.overlapBetweenSpin(sys_p, nthreads, ctx.gpa);
+        defer S_as.deinit(ctx.gpa);
 
         const C_m = electronic_structure.getOrbitals(T, res_m);
         const C_p = electronic_structure.getOrbitals(T, res_p);
@@ -352,21 +340,21 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
 
         gemm(T, &S_ms, C_m_ms, tmp, 1, 0, true, false);
 
-        try accumulateNacv(T, couplings, S_ms, .{ res_m.C_ci, res_p.C_ci }, dets.items, pairs, gpa);
+        try accumulateNacv(T, couplings, S_ms, .{ res_m.C_ci, res_p.C_ci }, dets.items, pairs, ctx.gpa);
 
         for (0..pairs.len) |p_idx| {
             nacvs[p_idx].ptr(i, j).* = couplings[p_idx] / (4 * h);
         }
 
-        if (log) {
-            const sym = try getSymbol(sys.atoms[i]);
-
-            const dirs = &[_][]const u8{ "'x'", "'y'", "'z'" };
+        if (ctx.log) {
+            const sym = try getSymbol(ctx.sys.atoms[i]);
 
             const fmt = "NONADIABATIC COUPLING STATES {d}/{d} FOR ATOM {d:02} ({s:2}) IN DIRECTION {s}: {d:20.14}\n";
 
+            const dirs = [_][]const u8{ "'x'", "'y'", "'z'" };
+
             for (pairs, 0..) |pair, p_idx| {
-                try printf(io, fmt, .{ pair[0], pair[1], i, sym, dirs[j], nacvs[p_idx].at(i, j) });
+                try printf(ctx.io, fmt, .{ pair[0], pair[1], i, sym, dirs[j], nacvs[p_idx].at(i, j) });
             }
         }
     };
