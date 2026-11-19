@@ -10,6 +10,14 @@ const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
 const mo2ms_coef = @import("integral_transform.zig").mo2ms_coef;
 const printf = @import("read_write.zig").printf;
 
+/// Options configuring leading determinant printing and active space partitioning.
+pub const PrintOptions = struct {
+    nstates: usize,
+    ncore: usize,
+    norbs: usize,
+    gen: bool = false,
+};
+
 /// Holds determinant index, expansion coefficient, and contribution weight for printing.
 const DetContrib = struct { d_idx: usize, coeff: f64, weight: f64 };
 
@@ -27,13 +35,16 @@ pub fn calculateDeterminantSpin(det: []const usize) f64 {
             if (std.mem.indexOfScalar(usize, det, k + 1) != null) {
                 n_pair += 1;
             }
-        } else {
+        }
+
+        if (k % 2 == 1) {
             n_b += 1;
         }
     }
 
     const n_a_f = @as(f64, @floatFromInt(n_a));
     const n_b_f = @as(f64, @floatFromInt(n_b));
+
     const n_p_f = @as(f64, @floatFromInt(n_pair));
 
     const ms = 0.5 * (n_a_f - n_b_f);
@@ -340,7 +351,9 @@ pub fn generatePairs(n: usize, gpa: Allocator) ![][2]u32 {
 }
 
 /// Prints leading electronic determinants, configuration interaction coefficients, and weights for each state.
-pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), C_mo: Matrix(T), S_ao: Matrix(T), dets: []const []const usize, nstates: usize, ncore: usize, norbs: usize, gen: bool, gpa: Allocator) !void {
+pub fn printDeterminants(comptime T: type, io: std.Io, C_ci: Matrix(T), C_mo: Matrix(T), S_ao: Matrix(T), dets: []const []const usize, opt: PrintOptions, gpa: Allocator) !void {
+    const nstates, const ncore, const norbs, const gen = .{ opt.nstates, opt.ncore, opt.norbs, opt.gen };
+
     const threshold: f64 = 0.01;
 
     const nsp = if (gen) C_mo.shape[0] else 2 * C_mo.shape[0];

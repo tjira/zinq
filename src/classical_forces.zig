@@ -87,7 +87,7 @@ pub fn GradientBuffer(comptime T: type) type {
             for (0..ensemble.r.nrow()) |i| for (0..ensemble.r.ncol()) |j| {
                 if (coefs) |coef| {
                     if (self.adia) {
-                        applyAdiabaticEhrenfestForces(T, ensemble, self.grad_V, self.W, coef, i, j, nstate);
+                        applyAdiabaticEhrenfestForces(T, ensemble, self.grad_V, self.W, coef.*, i, j, nstate);
                     }
 
                     if (!self.adia) {
@@ -239,7 +239,7 @@ fn alignEigenvectorPhases(comptime T: type, U: *Matrix(T), U_prev: *Matrix(T), n
 }
 
 /// Applies adiabatic mean-field Ehrenfest forces to trajectories.
-fn applyAdiabaticEhrenfestForces(comptime T: type, ensemble: *Ensemble(T), grad_V: Matrix(T), W: Matrix(T), coef: *const Matrix(Complex(T)), i: usize, j: usize, nstate: usize) void {
+fn applyAdiabaticEhrenfestForces(comptime T: type, ensemble: *Ensemble(T), grad_V: Matrix(T), W: Matrix(T), coef: Matrix(Complex(T)), i: usize, j: usize, nstate: usize) void {
     var der: T = 0;
 
     for (0..nstate) |m| for (0..nstate) |n| {

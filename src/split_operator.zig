@@ -28,7 +28,7 @@ pub fn SplitOperator(comptime T: type) type {
                 const r_buf = try gpa.alloc(Complex(T), pot.nstate() * pot.nstate());
                 errdefer gpa.free(r_buf);
 
-                return @This(){ .R = null, .K = null, .cap_weight = null, .r_buf = r_buf, .dt = dt };
+                return .{ .R = null, .K = null, .cap_weight = null, .r_buf = r_buf, .dt = dt };
             }
 
             const nstate = pot.nstate();
@@ -46,7 +46,7 @@ pub fn SplitOperator(comptime T: type) type {
                 K.data[i] = std.math.complex.exp(Complex(T).init(0, -ham.getK(grid, i)).mul(dt));
             }
 
-            var prop = @This(){ .R = R, .K = K, .cap_weight = cap_weight, .r_buf = null, .dt = dt };
+            var prop: @This() = .{ .R = R, .K = K, .cap_weight = cap_weight, .r_buf = null, .dt = dt };
 
             try prop.update(grid, ham, pot, 0, capopt);
 

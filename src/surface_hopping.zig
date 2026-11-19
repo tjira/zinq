@@ -100,17 +100,15 @@ pub fn SurfaceHopping(comptime T: type) type {
             const probs = try Matrix(T).init(ntraj, nstate, gpa);
             errdefer probs.deinit(gpa);
 
-            var sh: @This() = undefined;
-
-            sh.adia_alg = adia;
-            sh.method = method;
-            sh.nosteps = nstep;
-
-            sh.reflect_frustrated = reflect_frustrated;
-
-            sh.rng, sh.probs, sh.targets = .{ rng, probs, targets };
-
-            return sh;
+            return .{
+                .adia_alg = adia,
+                .method = method,
+                .nosteps = nstep,
+                .reflect_frustrated = reflect_frustrated,
+                .rng = rng,
+                .probs = probs,
+                .targets = targets,
+            };
         }
 
         /// Deallocates surface hopping state variables and method buffers.

@@ -11,7 +11,7 @@ const findDeterminantDifferences = @import("determinant.zig").findDeterminantDif
 const signOfExcitations = @import("determinant.zig").signOfExcitations;
 
 /// Builds active-space 1-particle and 2-particle reduced density matrices from CAS-CI coefficients.
-pub fn buildActRdm(comptime T: type, dets: []const []const usize, C_ci: Matrix(T), state: usize, ncore: usize, nact: usize, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+pub fn buildActRdm(comptime T: type, dets: anytype, C_ci: Matrix(T), state: usize, ncore: usize, nact: usize, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
     var D_act = try Matrix(T).initZero(nact, nact, gpa);
     errdefer D_act.deinit(gpa);
 
@@ -42,7 +42,9 @@ pub fn buildActRdm(comptime T: type, dets: []const []const usize, C_ci: Matrix(T
 }
 
 /// Assembles state-averaged 1- and 2-particle reduced density matrices across active configurations.
-pub fn buildStateAveragedActRdm(comptime T: type, dets: []const []const usize, C_ci: Matrix(T), weights: []const T, ncore: usize, nact: usize, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+pub fn buildStateAveragedActRdm(comptime T: type, dets: anytype, C_ci: Matrix(T), w: []const T, ncore: usize, nact: usize, gpa: Allocator) !struct { Matrix(T), Tensor(T, 4) } {
+    const weights = w;
+
     var D_act = try Matrix(T).initZero(nact, nact, gpa);
     errdefer D_act.deinit(gpa);
 

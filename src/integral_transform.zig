@@ -11,6 +11,7 @@ const Tensor = @import("tensor.zig").Tensor;
 
 const contract = @import("tensor_contraction.zig").contract;
 const gemm = @import("linear_algebra.zig").gemm;
+const isDual = @import("value.zig").isDual;
 const isDualTensor = @import("value.zig").isDualTensor;
 
 /// Transforms a one-electron operator matrix from atomic orbital to molecular orbital basis using BLAS.
@@ -219,14 +220,16 @@ pub fn mo2ms_coef(comptime T: type, C_ms: *Matrix(T), C_mo: Matrix(T)) void {
 }
 
 /// Transforms core Hamiltonian and two-electron repulsion or fitting tensors to molecular spin-orbital basis.
-pub fn transformInts(comptime T: type, C: anytype, H: anytype, two_e: anytype, generalized: bool, gpa: Allocator) !struct { @TypeOf(H), if (isDualTensor(@TypeOf(two_e))) DualTensor(T, 4) else Tensor(T, 4) } {
-    if (two_e.shape.len == 3) {
-        return transformIntsRi(T, C, H, two_e, generalized, gpa);
+pub fn transformInts(comptime T: type, mo: anytype, H: anytype, g: anytype, gpa: Allocator) !struct { @TypeOf(H), if (isDual(@TypeOf(H))) DualTensor(T, 4) else Tensor(T, 4) } {
+    if (g.shape.len == 3) {
+        return transformIntsRi(T, mo, H, g, gpa);
     }
 
-    const MatType, const TenType = .{ @TypeOf(H), @TypeOf(two_e) };
+    const C, const gen = mo;
 
-    if (!generalized) {
+    const MatType, const TenType = .{ @TypeOf(H), @TypeOf(g) };
+
+    if (!gen) {
         const nmo, const nsp = .{ C.shape[1], 2 * C.shape[1] };
 
         var h_mo = try MatType.init(nmo, nmo, gpa);
@@ -245,7 +248,7 @@ pub fn transformInts(comptime T: type, C: anytype, H: anytype, two_e: anytype, g
         var g_mo = try TenType.init(.{ nmo, nmo, nmo, nmo }, gpa);
         defer g_mo.deinit(gpa);
 
-        try ao2mo_2e(T, &g_mo, two_e, C, gpa);
+        try ao2mo_2e(T, &g_mo, g, C, gpa);
 
         var g_ms = try TenType.initZero(.{ nsp, nsp, nsp, nsp }, gpa);
         errdefer g_ms.deinit(gpa);
@@ -274,20 +277,22 @@ pub fn transformInts(comptime T: type, C: anytype, H: anytype, two_e: anytype, g
     var g_ms = try TenType.init(.{ nsp, nsp, nsp, nsp }, gpa);
     errdefer g_ms.deinit(gpa);
 
-    try ao2mo_2e(T, &g_ms, two_e, C, gpa);
+    try ao2mo_2e(T, &g_ms, g, C, gpa);
 
     return .{ h_ms, g_ms };
 }
 
 /// Transforms core Hamiltonian and density fitting 3-center tensors to molecular spin-orbital basis using BLAS.
-pub fn transformIntsRi(comptime T: type, C: anytype, H: anytype, B_ao: anytype, generalized: bool, gpa: Allocator) !struct { @TypeOf(H), if (isDualTensor(@TypeOf(B_ao))) DualTensor(T, 4) else Tensor(T, 4) } {
-    const Ten4Type = if (comptime isDualTensor(@TypeOf(B_ao))) DualTensor(T, 4) else Tensor(T, 4);
+pub fn transformIntsRi(comptime T: type, mo: anytype, H: anytype, B: anytype, gpa: Allocator) !struct { @TypeOf(H), if (isDual(@TypeOf(H))) DualTensor(T, 4) else Tensor(T, 4) } {
+    const C, const gen = mo;
 
-    const MatType, const naux = .{ @TypeOf(H), B_ao.shape[2] };
+    const Ten4Type = if (comptime isDualTensor(@TypeOf(B))) DualTensor(T, 4) else Tensor(T, 4);
 
-    const Ten3Type = @TypeOf(B_ao);
+    const MatType, const naux = .{ @TypeOf(H), B.shape[2] };
 
-    if (!generalized) {
+    const Ten3Type = @TypeOf(B);
+
+    if (!gen) {
         const nmo, const nsp = .{ C.shape[1], 2 * C.shape[1] };
 
         var h_mo = try MatType.init(nmo, nmo, gpa);
@@ -306,7 +311,7 @@ pub fn transformIntsRi(comptime T: type, C: anytype, H: anytype, B_ao: anytype, 
         var B_mo = try Ten3Type.initZero(.{ nmo, nmo, naux }, gpa);
         defer B_mo.deinit(gpa);
 
-        try ao2mo_3c(T, &B_mo, B_ao, C, gpa);
+        try ao2mo_3c(T, &B_mo, B, C, gpa);
 
         var g_ms = try Ten4Type.initZero(.{ nsp, nsp, nsp, nsp }, gpa);
         errdefer g_ms.deinit(gpa);
@@ -316,7 +321,7 @@ pub fn transformIntsRi(comptime T: type, C: anytype, H: anytype, B_ao: anytype, 
         return .{ h_ms, g_ms };
     }
 
-    const nbf, const nsp = .{ B_ao.shape[0], C.shape[1] };
+    const nbf, const nsp = .{ B.shape[0], C.shape[1] };
 
     var h_ms = try MatType.init(nsp, nsp, gpa);
     errdefer h_ms.deinit(gpa);
@@ -338,12 +343,12 @@ pub fn transformIntsRi(comptime T: type, C: anytype, H: anytype, B_ao: anytype, 
     var B_a = try Ten3Type.initZero(.{ nsp, nsp, naux }, gpa);
     defer B_a.deinit(gpa);
 
-    try ao2mo_3c(T, &B_a, B_ao, C_a, gpa);
+    try ao2mo_3c(T, &B_a, B, C_a, gpa);
 
     var B_b = try Ten3Type.initZero(.{ nsp, nsp, naux }, gpa);
     defer B_b.deinit(gpa);
 
-    try ao2mo_3c(T, &B_b, B_ao, C_b, gpa);
+    try ao2mo_3c(T, &B_b, B, C_b, gpa);
 
     var g_ms = try Ten4Type.initZero(.{ nsp, nsp, nsp, nsp }, gpa);
     errdefer g_ms.deinit(gpa);

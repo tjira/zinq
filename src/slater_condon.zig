@@ -50,7 +50,9 @@ pub fn applySpinPenalty(comptime T: type, H: *Matrix(T), dets: []const []const u
 }
 
 /// Assembles the electronic Hamiltonian matrix across Slater determinants via the Slater-Condon rules.
-pub fn buildHamiltonianMatrix(comptime T: type, dets: []const []const usize, h_ms: anytype, g_ms: anytype, gpa: Allocator) !if (isDualMatrix(@TypeOf(h_ms))) Matrix(ScalarDual(T)) else Matrix(T) {
+pub fn buildHamiltonianMatrix(comptime T: type, dets: anytype, h: anytype, g: anytype, gpa: Allocator) !if (isDualMatrix(@TypeOf(h))) Matrix(ScalarDual(T)) else Matrix(T) {
+    const h_ms, const g_ms = .{ h, g };
+
     const is_dual = comptime isDualMatrix(@TypeOf(h_ms));
 
     const OutType = if (is_dual) ScalarDual(T) else T;

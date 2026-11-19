@@ -79,19 +79,19 @@ fn RungeKutta(comptime T: type, comptime tab: anytype) type {
 
         /// Allocates stage derivative storage and temporary vectors needed for Runge-Kutta steps.
         pub fn init(nstate: usize, gpa: Allocator) !@This() {
-            var self: @This() = undefined;
-
             const k_mem = try gpa.alloc(T, tab.b.len * nstate);
             errdefer gpa.free(k_mem);
 
-            for (0..self.k.len) |i| {
-                self.k[i] = k_mem[i * nstate .. (i + 1) * nstate];
+            var k: [tab.b.len][]T = undefined;
+
+            for (0..tab.b.len) |i| {
+                k[i] = k_mem[i * nstate .. (i + 1) * nstate];
             }
 
-            self.tmp = try gpa.alloc(T, nstate);
-            errdefer gpa.free(self.tmp);
+            const tmp = try gpa.alloc(T, nstate);
+            errdefer gpa.free(tmp);
 
-            return self;
+            return .{ .k = k, .tmp = tmp };
         }
 
         /// Frees stage derivative and temporary vectors from memory.

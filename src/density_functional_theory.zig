@@ -95,20 +95,17 @@ pub fn DftPotential(comptime T: type) type {
             var V_xc = try Matrix(T).init(nbf, nbf, gpa);
             errdefer V_xc.deinit(gpa);
 
-            var dft: @This() = undefined;
-
-            dft.exch = exch_func;
-            dft.corr = corr_func;
-            dft.exco = exco_func;
-
-            dft.pts = grid[0];
-            dft.wgh = grid[1];
-
-            dft.V_xc, dft.polarized, dft.a_x = .{ V_xc, polarized, exx };
-
-            dft.E_xc = 0;
-
-            return dft;
+            return .{
+                .exch = exch_func,
+                .corr = corr_func,
+                .exco = exco_func,
+                .pts = grid[0],
+                .wgh = grid[1],
+                .V_xc = V_xc,
+                .polarized = polarized,
+                .a_x = exx,
+                .E_xc = 0,
+            };
         }
 
         /// Frees all allocated grid arrays and libxc functional resources.

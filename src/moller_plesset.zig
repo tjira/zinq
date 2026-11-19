@@ -27,6 +27,7 @@ const buildFittingIntegrals = @import("density_fitting.zig").buildFittingIntegra
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
 const gemm = @import("linear_algebra.zig").gemm;
 const generateDets = @import("determinant.zig").generateDets;
+const isDual = @import("value.zig").isDual;
 const isDualMatrix = @import("value.zig").isDualMatrix;
 const isDualTensor = @import("value.zig").isDualTensor;
 const printf = @import("read_write.zig").printf;
@@ -183,11 +184,13 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
     try evaluateMp(T, io, opt, hfres, energy, grad, grads, log, gpa);
 
-    return Result(T){ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = &.{} };
+    return .{ .hartree_fock = hfres, .energy = energy, .grad = grad, .hess = &.{} };
 }
 
 /// Evaluates canonical second-order Møller-Plesset correlation energy from two-electron integrals.
-pub fn calculateCanonicalMp2Energy(comptime T: type, g_ao: anytype, C: anytype, e: anytype, nocc: usize, generalized: bool, gpa: Allocator) !if (isDualTensor(@TypeOf(g_ao))) ScalarDual(T) else T {
+pub fn calculateCanonicalMp2Energy(comptime T: type, g: anytype, C: anytype, e: anytype, nocc: usize, gen: bool, gpa: Allocator) !if (isDual(@TypeOf(g))) ScalarDual(T) else T {
+    const g_ao, const generalized = .{ g, gen };
+
     const is_dual = comptime isDualTensor(@TypeOf(g_ao));
 
     const OutType = if (is_dual) ScalarDual(T) else T;
@@ -236,51 +239,55 @@ pub fn calculateCanonicalMp2Energy(comptime T: type, g_ao: anytype, C: anytype, 
 }
 
 /// Computes Møller-Plesset correlation energy corrections up to the requested perturbation order.
-pub fn calculateCorrelationEnergies(comptime T: type, order: usize, H: anytype, ints2e: anytype, C: anytype, e: anytype, nocc: usize, generalized: bool, gpa: Allocator) !if (isDualTensor(@TypeOf(ints2e))) []ScalarDual(T) else []T {
-    const is_dual = comptime isDualTensor(@TypeOf(ints2e));
+pub fn calculateCorrelationEnergies(comptime T: type, ord: usize, ints: anytype, mo: anytype, gpa: Allocator) !if (isDualTensor(@TypeOf(ints[1]))) []ScalarDual(T) else []T {
+    const H, const g = ints;
+
+    const C, const e, const nocc, const gen = mo;
+
+    const is_dual = comptime isDualTensor(@TypeOf(g));
 
     const OutType = if (is_dual) ScalarDual(T) else T;
 
-    if (order == 2) {
+    if (ord == 2) {
         const energies = try gpa.alloc(OutType, 3);
         errdefer gpa.free(energies);
 
         energies[0] = Value(OutType).fromFloat(0).val;
         energies[1] = Value(OutType).fromFloat(0).val;
 
-        if (comptime isDualTensor(@TypeOf(ints2e))) {
-            if (ints2e.val.shape.len == 4) {
-                energies[2] = try calculateCanonicalMp2Energy(T, ints2e, C, e, nocc, generalized, gpa);
+        if (comptime isDualTensor(@TypeOf(g))) {
+            if (g.val.shape.len == 4) {
+                energies[2] = try calculateCanonicalMp2Energy(T, g, C, e, nocc, gen, gpa);
             }
 
-            if (ints2e.val.shape.len == 3) {
-                energies[2] = try calculateRiMp2Energy(T, ints2e, C, e, nocc, gpa);
+            if (g.val.shape.len == 3) {
+                energies[2] = try calculateRiMp2Energy(T, g, C, e, nocc, gpa);
             }
         }
 
-        if (comptime !isDualTensor(@TypeOf(ints2e))) {
-            if (ints2e.shape.len == 4) {
-                energies[2] = try calculateCanonicalMp2Energy(T, ints2e, C, e, nocc, generalized, gpa);
+        if (comptime !isDualTensor(@TypeOf(g))) {
+            if (g.shape.len == 4) {
+                energies[2] = try calculateCanonicalMp2Energy(T, g, C, e, nocc, gen, gpa);
             }
 
-            if (ints2e.shape.len == 3) {
-                energies[2] = try calculateRiMp2Energy(T, ints2e, C, e, nocc, gpa);
+            if (g.shape.len == 3) {
+                energies[2] = try calculateRiMp2Energy(T, g, C, e, nocc, gpa);
             }
         }
 
         return energies;
     }
 
-    const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
+    const nsp, const nel = if (gen) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
 
-    var h_ms, var g_ms = try transformInts(T, C, H, ints2e, generalized, gpa);
+    var h_ms, var g_ms = try transformInts(T, .{ C, gen }, H, g, gpa);
 
     defer {
         h_ms.deinit(gpa);
         g_ms.deinit(gpa);
     }
 
-    return try solveHigherOrderRspt(T, OutType, order, nel, nsp, generalized, C.shape[0], h_ms, g_ms, e, gpa);
+    return try solveHigherOrderRspt(T, OutType, ord, nel, nsp, gen, h_ms, g_ms, e, gpa);
 }
 
 /// Evaluates the second-order Møller-Plesset correlation energy using resolution-of-the-identity density fitting.
@@ -367,11 +374,11 @@ fn evaluateMp(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockResu
     var energies: []T = undefined;
 
     if (hfres.ints.B) |B| {
-        energies = try calculateCorrelationEnergies(T, opt.order, hfres.ints.H.?, B, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
+        energies = try calculateCorrelationEnergies(T, opt.order, .{ hfres.ints.H.?, B }, .{ hfres.C_mo, hfres.e_mo, nocc, generalized }, gpa);
     }
 
     if (hfres.ints.B == null) {
-        energies = try calculateCorrelationEnergies(T, opt.order, hfres.ints.H.?, hfres.ints.g.?, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
+        energies = try calculateCorrelationEnergies(T, opt.order, .{ hfres.ints.H.?, hfres.ints.g.? }, .{ hfres.C_mo, hfres.e_mo, nocc, generalized }, gpa);
     }
 
     defer gpa.free(energies);
@@ -405,7 +412,7 @@ fn evaluateEnergyCorrection(comptime T: type, m: usize, H_dets: Matrix(T), c_det
 }
 
 /// Solves higher-order Rayleigh-Schrödinger perturbation theory across Slater determinants.
-fn solveHigherOrderRspt(comptime T: type, comptime OutType: type, order: usize, nel: usize, nsp: usize, generalized: bool, nbf: usize, h_ms: anytype, g_ms: anytype, e: anytype, gpa: Allocator) ![]OutType {
+fn solveHigherOrderRspt(comptime T: type, comptime Out: type, order: usize, nel: usize, nsp: usize, gen: bool, h_ms: anytype, g_ms: anytype, e: anytype, gpa: Allocator) ![]Out {
     var excitations = try gpa.alloc(u32, @min(order, @min(nel, nsp - nel)));
     defer gpa.free(excitations);
 
@@ -427,11 +434,11 @@ fn solveHigherOrderRspt(comptime T: type, comptime OutType: type, order: usize, 
     var e_ms = try VecType.init(nsp, gpa);
     defer e_ms.deinit(gpa);
 
-    if (generalized) for (0..nsp) |p| {
+    if (gen) for (0..nsp) |p| {
         e_ms.set(p, e.at(p));
     };
 
-    if (!generalized) for (0..nbf) |p| {
+    if (!gen) for (0..nsp / 2) |p| {
         e_ms.set(2 * p + 0, e.at(p));
         e_ms.set(2 * p + 1, e.at(p));
     };
@@ -439,12 +446,12 @@ fn solveHigherOrderRspt(comptime T: type, comptime OutType: type, order: usize, 
     var H_dets = try buildHamiltonianMatrix(T, dets.items, h_ms, g_ms, gpa);
     defer H_dets.deinit(gpa);
 
-    const E0 = try gpa.alloc(Value(OutType), dets.items.len);
+    const E0 = try gpa.alloc(Value(Out), dets.items.len);
     defer gpa.free(E0);
 
-    calculateZerothOrderEnergies(OutType, E0, dets.items, e_ms);
+    calculateZerothOrderEnergies(Out, E0, dets.items, e_ms);
 
-    return try solveRayleighSchrodinger(OutType, H_dets, E0, order, gpa);
+    return try solveRayleighSchrodinger(Out, H_dets, E0, order, gpa);
 }
 
 /// Solves Rayleigh-Schrödinger perturbation equations iteratively in the Slater determinant basis.
@@ -552,13 +559,13 @@ fn calculateMpGradient(comptime T: type, grads: []Matrix(T), order: usize, hfres
             if (deriv_ws) |*w| {
                 const B_d = try w.evaluateCoord(hfres.ints, coord, gpa);
 
-                corr = try calculateCorrelationEnergies(T, order, H_d, B_d, C_d, e_d, nocc, generalized, gpa);
+                corr = try calculateCorrelationEnergies(T, order, .{ H_d, B_d }, .{ C_d, e_d, nocc, generalized }, gpa);
             }
 
             if (deriv_ws == null) {
                 const g_d = DualTensor(T, 4).fromTensors(hfres.ints.g.?, hfres.ints.dg.?.slice(coord));
 
-                corr = try calculateCorrelationEnergies(T, order, H_d, g_d, C_d, e_d, nocc, generalized, gpa);
+                corr = try calculateCorrelationEnergies(T, order, .{ H_d, g_d }, .{ C_d, e_d, nocc, generalized }, gpa);
             }
 
             defer gpa.free(corr);

@@ -37,12 +37,12 @@ pub fn ElectronicPropagator(comptime T: type) type {
         coupling: ?std.meta.Tag(CouplingOptions),
 
         /// Allocates electronic coefficients, Hamiltonian histories, and Runge-Kutta workspaces.
-        pub fn init(coupling_opt: ?CouplingOptions, itg_tag: std.meta.Tag(Integrator(f64).Method), norm_tol: ?f64, nstep: u32, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
-            if (adia and coupling_opt == null) {
+        pub fn init(cpl: ?CouplingOptions, itg_m: anytype, tol: ?f64, nstep: u32, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
+            if (adia and cpl == null) {
                 return error.InvalidInput;
             }
 
-            if (!adia and coupling_opt != null) {
+            if (!adia and cpl != null) {
                 return error.InvalidInput;
             }
 
@@ -60,7 +60,7 @@ pub fn ElectronicPropagator(comptime T: type) type {
             var ham = try Matrix(T).init(ntraj, cols, gpa);
             errdefer ham.deinit(gpa);
 
-            const coupling: ?std.meta.Tag(CouplingOptions) = if (coupling_opt) |c| switch (c) {
+            const coupling: ?std.meta.Tag(CouplingOptions) = if (cpl) |c| switch (c) {
                 inline else => |_, tag| tag,
             } else null;
 
@@ -78,7 +78,7 @@ pub fn ElectronicPropagator(comptime T: type) type {
             var sigmatdc = try Matrix(T).init(ntraj, nstate * nstate, gpa);
             errdefer sigmatdc.deinit(gpa);
 
-            const tag = switch (itg_tag) {
+            const tag = switch (itg_m) {
                 inline else => |t| @field(std.meta.Tag(Integrator(Complex(T)).Method), @tagName(t)),
             };
 
@@ -90,7 +90,7 @@ pub fn ElectronicPropagator(comptime T: type) type {
                 .coupling = coupling,
                 .ham = ham,
                 .itg = itg,
-                .norm_toler = if (norm_tol) |tol| @floatCast(tol) else null,
+                .norm_toler = if (tol) |t| @floatCast(t) else null,
                 .nosteps = nstep,
                 .sigmatdc = sigmatdc,
                 .uhist = uhist,

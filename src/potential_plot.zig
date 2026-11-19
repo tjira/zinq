@@ -104,5 +104,5 @@ pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator
         }
     }
 
-    return Result(T){ .U = U };
+    return .{ .U = U };
 }

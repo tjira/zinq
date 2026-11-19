@@ -537,14 +537,15 @@ fn init(comptime T: type, io: std.Io, opt: Options, gpa: Allocator) !SimulationS
     var pop_apabs = try Vector(T).initZero(pot.nstate(), gpa);
     errdefer pop_apabs.deinit(gpa);
 
-    var ss: SimulationState(T) = undefined;
-
-    ss.epoten = pot;
-    ss.propg = prop;
-
-    ss.wfn, ss.wfn_kpgrids, ss.hams, ss.pop_apabs, ss.orthw = .{ wfn, grid, ham, pop_apabs, .empty };
-
-    return ss;
+    return .{
+        .epoten = pot,
+        .propg = prop,
+        .wfn = wfn,
+        .wfn_kpgrids = grid,
+        .hams = ham,
+        .pop_apabs = pop_apabs,
+        .orthw = .empty,
+    };
 }
 
 /// Prints final energies of target vibronic states to stdout.
@@ -732,7 +733,7 @@ fn runPartialWaves(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: A
         }
     };
 
-    return Result(T){ .observables = .empty, .cross_section = total };
+    return .{ .observables = .empty, .cross_section = total };
 }
 
 /// Propagates the wavepacket over the specified iterations using split-operator steps.

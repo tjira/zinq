@@ -7,6 +7,7 @@ const cblas = @import("cimport.zig").cblas;
 const Allocator = std.mem.Allocator;
 
 const CasSpace = @import("casscf_orbital.zig").CasSpace;
+const CasState = @import("casscf_orbital.zig").CasState;
 const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
@@ -245,7 +246,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         try buildFittingIntegrals(T, io, &hfres.ints, aux, analytic_grad, opt.nthreads, gpa);
     }
 
-    try evaluateCasscf(T, io, &C, hfres.ints, dets.items, weights, space, opt, log, gpa);
+    try evaluateCasscf(T, io, &C, hfres.ints, .{ .dets = dets.items, .weights = weights, .space = space }, opt, log, gpa);
 
     try canonicalizeOrbitals(T, &C, hfres.ints, space, gpa);
 
@@ -302,7 +303,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
             try printf(io, "\nSTATE-AVERAGED FINAL CASSCF ENERGY: {d:.14} Eh\n", .{final_sa_energy});
         }
 
-        try printDeterminants(T, io, final_C_ci, C, hfres.ints.S.?, dets.items, n_states, space.ncore, space.nact, false, gpa);
+        try printDeterminants(T, io, final_C_ci, C, hfres.ints.S.?, dets.items, .{ .nstates = n_states, .ncore = space.ncore, .norbs = space.nact }, gpa);
     }
 
     var grad: []Matrix(T) = &.{};
@@ -317,12 +318,12 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         .analytic => |a| {
             const states = a.states orelse &[_]u32{0};
 
-            grad = try calculateCasscfGradient(T, hfres, C, final_C_ci, dets.items, weights, space, states, gpa);
+            grad = try calculateCasscfGradient(T, hfres, C, final_C_ci, .{ .dets = dets.items, .weights = weights, .space = space }, states, gpa);
         },
         .numeric => {},
     };
 
-    return Result(T){
+    return .{
         .hartree_fock = hfres,
         .energy = final_energies.data,
         .C_mo = C,
@@ -334,7 +335,9 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 }
 
 /// Executes the two-step CASSCF macro-iteration cycle alternating configuration and orbital optimizations.
-fn evaluateCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, dets: []const []const usize, weights: []const T, space: CasSpace, opt: Options, log: bool, gpa: Allocator) !void {
+fn evaluateCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, cas: CasState(T), opt: Options, log: bool, gpa: Allocator) !void {
+    const dets, const weights, const space = .{ cas.dets, cas.weights, cas.space };
+
     const nmo, var prev_energy: T = .{ space.nmo, 0 };
 
     const s_target = 0.5 * @as(f64, @floatFromInt(opt.multiplicity - 1));

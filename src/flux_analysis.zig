@@ -56,22 +56,19 @@ pub fn FluxAnalysis(comptime T: type) type {
 
             const weight = if (opt.grid.cylindrical) (std.math.pi / gammas[gammas.len - 1]) / r_perp else 1 / r_perp;
 
-            var ctx: @This() = undefined;
-
-            ctx.e_min = @floatCast(flux_opt.e_min);
-            ctx.e_max = @floatCast(flux_opt.e_max);
-
-            ctx.asymptotic_offset = @floatCast(flux_opt.asymptotic_offset);
-
-            ctx.npoint, ctx.logarithmic = .{ flux_opt.npoint, flux_opt.logarithmic };
-
-            ctx.dt = @floatCast(opt.time_step);
-
-            ctx.gmma, ctx.weight, ctx.mass, ctx.flux_bounds = .{ gammas, weight, mass, f_bounds };
-
-            ctx.initk = @abs(opt.initial_conditions.momentum[0]);
-
-            return ctx;
+            return .{
+                .e_min = @floatCast(flux_opt.e_min),
+                .e_max = @floatCast(flux_opt.e_max),
+                .asymptotic_offset = @floatCast(flux_opt.asymptotic_offset),
+                .npoint = flux_opt.npoint,
+                .logarithmic = flux_opt.logarithmic,
+                .dt = @floatCast(opt.time_step),
+                .gmma = gammas,
+                .weight = weight,
+                .mass = mass,
+                .flux_bounds = f_bounds,
+                .initk = @abs(opt.initial_conditions.momentum[0]),
+            };
         }
 
         /// Deallocates the dynamically allocated slices in the context.

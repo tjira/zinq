@@ -698,7 +698,7 @@ pub fn runEig(comptime T: type, io: std.Io, opt: EigOptions, log: bool, gpa: All
 
     tensors[0], tensors[1] = .{ W.asMatrix(), U };
 
-    return Result(T){ .tensors = tensors };
+    return .{ .tensors = tensors };
 }
 
 /// Formats an input tensor from a file to standardized representation and saves it.
@@ -779,7 +779,7 @@ pub fn runMatmul(comptime T: type, io: std.Io, opt: MatmulOptions, log: bool, gp
 
     tensors[0] = C;
 
-    return Result(T){ .tensors = tensors };
+    return .{ .tensors = tensors };
 }
 
 /// Generates a random matrix with specified dimensions and probability distribution.
@@ -864,7 +864,7 @@ pub fn runRandom(comptime T: type, io: std.Io, opt: RandomOptions, log: bool, gp
 
     tensors[0] = A;
 
-    return Result(T){ .tensors = tensors };
+    return .{ .tensors = tensors };
 }
 
 /// Loads a matrix operator from a storage file or generates it using random distributions.
@@ -917,7 +917,7 @@ fn runFormatComplex(comptime T: type, comptime N: usize, io: std.Io, opt: Format
 
     const tensors = try gpa.alloc(Matrix(T), 0);
 
-    return Result(T){ .tensors = tensors };
+    return .{ .tensors = tensors };
 }
 
 /// Reads an N-dimensional tensor from disk, standardizes formatting, and writes to target file.
@@ -963,5 +963,5 @@ fn runFormatRank(comptime T: type, comptime N: usize, io: std.Io, opt: FormatOpt
 
     tensors[0] = A.asMatrix();
 
-    return Result(T){ .tensors = tensors };
+    return .{ .tensors = tensors };
 }

@@ -5,6 +5,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const CasSpace = @import("casscf_orbital.zig").CasSpace;
+const CasState = @import("casscf_orbital.zig").CasState;
 const DualMatrix = @import("dual.zig").DualMatrix;
 const DualTensor = @import("dual.zig").DualTensor;
 const FittingDerivativeWorkspace = @import("density_fitting.zig").FittingDerivativeWorkspace;
@@ -30,7 +31,9 @@ const getrs = @import("linear_algebra.zig").getrs;
 const slater = @import("slater_condon.zig").slater;
 
 /// Computes analytic nuclear gradients of CASSCF state energies using dual number differentiation and CP-MCSCF response.
-pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: Matrix(T), dets: []const []const usize, weights: []const T, space: CasSpace, states: []const u32, gpa: Allocator) ![]Matrix(T) {
+pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C: Matrix(T), C_ci: Matrix(T), cas: CasState(T), states: []const u32, gpa: Allocator) ![]Matrix(T) {
+    const dets, const weights, const space = .{ cas.dets, cas.weights, cas.space };
+
     var grads = try gpa.alloc(Matrix(T), states.len);
     errdefer gpa.free(grads);
 
@@ -105,13 +108,13 @@ pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C:
         if (is_ri) {
             try ao2mo_3c(T, &B_mo_conv, hfres.ints.B.?, C, gpa);
 
-            try buildOrbitalHessian(T, &A_sa, h_mo_conv, B_mo_conv, D_act_sa, d_act_sa, pairs, space, gpa);
+            try buildOrbitalHessian(T, &A_sa, h_mo_conv, B_mo_conv, .{ D_act_sa, d_act_sa }, pairs, space, gpa);
         }
 
         if (!is_ri) {
             try ao2mo_2e(T, &g_mo_conv, hfres.ints.g.?, C, gpa);
 
-            try buildOrbitalHessian(T, &A_sa, h_mo_conv, g_mo_conv, D_act_sa, d_act_sa, pairs, space, gpa);
+            try buildOrbitalHessian(T, &A_sa, h_mo_conv, g_mo_conv, .{ D_act_sa, d_act_sa }, pairs, space, gpa);
         }
 
         var F_gen_s = try Matrix(T).initZero(nmo, nmo, gpa);
@@ -289,7 +292,7 @@ pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C:
 
         if (weights.len > 1 and nrot > 0) {
             if (is_ri) {
-                try buildGeneralizedFockDerivRi(T, &dF_gen, h_mo_d.der, B_mo_conv, B_mo_d.der, D_act_sa, d_act_sa, space, fock_ws.?, gpa);
+                try buildGeneralizedFockDerivRi(T, &dF_gen, h_mo_d.der, .{ .B = B_mo_conv, .dB = B_mo_d.der }, .{ D_act_sa, d_act_sa }, space, fock_ws.?, gpa);
             }
 
             if (!is_ri) {

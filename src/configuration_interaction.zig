@@ -203,17 +203,19 @@ pub fn alignPhases(comptime T: type, C_mo: *Matrix(T), C_ci: *Matrix(T), mo_prev
 }
 
 /// Evaluates Hamiltonian matrix elements in the determinant basis and diagonalizes to get CI state energies.
-pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: []const []const usize, VN: T, generalized: bool, penalty: ?f64, s2_target: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, dets: anytype, VN: T, gen: bool, sp: ?f64, s2: f64, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+    const penalty = sp;
+
     var timer: std.Io.Timestamp = if (io) |out| std.Io.Timestamp.now(out, .real) else undefined;
 
     var h_ms: Matrix(T), var g_ms: Tensor(T, 4) = .{ undefined, undefined };
 
     if (ints.B) |B| {
-        h_ms, g_ms = try transformInts(T, C, ints.H.?, B, generalized, gpa);
+        h_ms, g_ms = try transformInts(T, .{ C, gen }, ints.H.?, B, gpa);
     }
 
     if (ints.B == null) {
-        h_ms, g_ms = try transformInts(T, C, ints.H.?, ints.g.?, generalized, gpa);
+        h_ms, g_ms = try transformInts(T, .{ C, gen }, ints.H.?, ints.g.?, gpa);
     }
 
     defer {
@@ -236,7 +238,7 @@ pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, det
     if (penalty) |pen| {
         @memcpy(H_orig.data, H_ci.data);
 
-        applySpinPenalty(T, &H_ci, dets, pen, s2_target);
+        applySpinPenalty(T, &H_ci, dets, pen, s2);
     }
 
     if (io) |out| {
@@ -273,7 +275,9 @@ pub fn computeCi(comptime T: type, io: ?std.Io, C: Matrix(T), ints: anytype, det
 }
 
 /// Computes CI state energies and coefficients using density fitting for active-space integrals.
-pub fn computeCasCiRi(comptime T: type, dets: []const []const usize, h_mo: Matrix(T), B_mo: Tensor(T, 3), VN: T, penalty: ?f64, s2_target: f64, nocc: usize, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+pub fn computeCasCiRi(comptime T: type, dets: anytype, h: Matrix(T), B: Tensor(T, 3), VN: T, sp: ?f64, s2: f64, nocc: usize, gpa: Allocator) !struct { Vector(T), Matrix(T) } {
+    const h_mo, const B_mo, const penalty = .{ h, B, sp };
+
     const nsp = 2 * nocc;
 
     var h_ms = try Matrix(T).initZero(nsp, nsp, gpa);
@@ -298,7 +302,7 @@ pub fn computeCasCiRi(comptime T: type, dets: []const []const usize, h_mo: Matri
     if (penalty) |pen| {
         @memcpy(H_orig.data, H_ci.data);
 
-        applySpinPenalty(T, &H_ci, dets, pen, s2_target);
+        applySpinPenalty(T, &H_ci, dets, pen, s2);
     }
 
     var E, var C_ci = try solveEigenvalueProblem(T, H_ci, VN, gpa);
@@ -445,7 +449,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
             .excitations => hfres.C_mo.ncol(),
         };
 
-        try printDeterminants(T, io, C_ci, hfres.C_mo, hfres.ints.S.?, dets.items, n_states, ncore, norbs, generalized, gpa);
+        try printDeterminants(T, io, C_ci, hfres.C_mo, hfres.ints.S.?, dets.items, .{ .nstates = n_states, .ncore = ncore, .norbs = norbs, .gen = generalized }, gpa);
     }
 
     var grad: []Matrix(T) = &.{};
@@ -465,7 +469,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         .numeric => {},
     };
 
-    return Result(T){
+    return .{
         .hartree_fock = hfres,
 
         .C_ci = C_ci,
@@ -551,13 +555,13 @@ fn calculateCiGradient(comptime T: type, hfres: HartreeFockResult(T), C_ci: Matr
         if (deriv_ws) |*w| {
             const B_d = try w.evaluateCoord(hfres.ints, coord, gpa);
 
-            h_ms_d, g_ms_d = try transformInts(T, C_d, H_d, B_d, generalized, gpa);
+            h_ms_d, g_ms_d = try transformInts(T, .{ C_d, generalized }, H_d, B_d, gpa);
         }
 
         if (deriv_ws == null) {
             const g_d = DualTensor(T, 4).fromTensors(hfres.ints.g.?, hfres.ints.dg.?.slice(coord));
 
-            h_ms_d, g_ms_d = try transformInts(T, C_d, H_d, g_d, generalized, gpa);
+            h_ms_d, g_ms_d = try transformInts(T, .{ C_d, generalized }, H_d, g_d, gpa);
         }
 
         defer {

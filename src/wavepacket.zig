@@ -48,19 +48,15 @@ pub fn Grid(comptime T: type) type {
             const dk = dr / @as(T, @floatFromInt(total_points));
 
             if (optimize_memory) {
-                var grid: @This() = undefined;
-
-                grid.r = null;
-                grid.k = null;
-
-                grid.lim, grid.npoint = .{ bounds_copy, npoint };
-
-                grid.dr = dr;
-                grid.dk = dk;
-
-                grid.cylindrical = cylindrical;
-
-                return grid;
+                return .{
+                    .r = null,
+                    .k = null,
+                    .lim = bounds_copy,
+                    .npoint = npoint,
+                    .dr = dr,
+                    .dk = dk,
+                    .cylindrical = cylindrical,
+                };
             }
 
             var r = try Matrix(T).init(total_points, bounds.len, gpa);
@@ -90,19 +86,15 @@ pub fn Grid(comptime T: type) type {
                 }
             }
 
-            var grid: @This() = undefined;
-
-            grid.r = r;
-            grid.k = k;
-
-            grid.lim, grid.npoint = .{ bounds_copy, npoint };
-
-            grid.dr = dr;
-            grid.dk = dk;
-
-            grid.cylindrical = cylindrical;
-
-            return grid;
+            return .{
+                .r = r,
+                .k = k,
+                .lim = bounds_copy,
+                .npoint = npoint,
+                .dr = dr,
+                .dk = dk,
+                .cylindrical = cylindrical,
+            };
         }
 
         /// Deallocates coordinate and momentum space grid matrices and boundaries.
@@ -207,21 +199,19 @@ pub fn Hamiltonian(comptime T: type) type {
                 const r_buf = try gpa.alloc(T, grid.ncol());
                 errdefer gpa.free(r_buf);
 
-                var ham: @This() = undefined;
-
-                ham.V = null;
-                ham.W = null;
-                ham.U = null;
-                ham.K = null;
-
-                ham.mass, ham.cylindric, ham.j_quantn = .{ mass, grid.cylindrical, j_quantn };
-
-                ham.w_buf = w_buf;
-                ham.u_buf = u_buf;
-                ham.v_buf = v_buf;
-                ham.r_buf = r_buf;
-
-                return ham;
+                return .{
+                    .V = null,
+                    .W = null,
+                    .U = null,
+                    .K = null,
+                    .mass = mass,
+                    .cylindric = grid.cylindrical,
+                    .j_quantn = j_quantn,
+                    .w_buf = w_buf,
+                    .u_buf = u_buf,
+                    .v_buf = v_buf,
+                    .r_buf = r_buf,
+                };
             }
 
             var V = try Matrix(T).init(grid.nrow(), pot.nstate() * pot.nstate(), gpa);
@@ -248,19 +238,19 @@ pub fn Hamiltonian(comptime T: type) type {
                 K.ptr(i).* = sum;
             }
 
-            var ham: @This() = undefined;
-
-            ham.V = V;
-            ham.W = W;
-            ham.U = U;
-            ham.K = K;
-
-            ham.mass, ham.cylindric, ham.j_quantn = .{ mass, grid.cylindrical, j_quantn };
-
-            ham.w_buf = null;
-            ham.u_buf = null;
-            ham.v_buf = null;
-            ham.r_buf = null;
+            var ham: @This() = .{
+                .V = V,
+                .W = W,
+                .U = U,
+                .K = K,
+                .mass = mass,
+                .cylindric = grid.cylindrical,
+                .j_quantn = j_quantn,
+                .w_buf = null,
+                .u_buf = null,
+                .v_buf = null,
+                .r_buf = null,
+            };
 
             try ham.update(grid, pot, 0, gpa);
 

@@ -330,5 +330,5 @@ fn runRank(comptime T: type, comptime N: usize, io: std.Io, opt: Options, log: b
         try printComplexTensor(primType(T), N, io, A);
     }
 
-    return Result(T){ .matrix = A.asMatrix() };
+    return .{ .matrix = A.asMatrix() };
 }

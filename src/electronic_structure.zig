@@ -218,7 +218,7 @@ pub fn run(comptime T: type, io: std.Io, opt: anytype, log: bool, gpa: Allocator
 }
 
 /// Executes an electronic structure calculation and nuclear derivatives on an initialized system.
-pub fn runFromSystem(comptime T: type, io: std.Io, opt: anytype, sys: *MolecularSystem(T), Pg: ?Matrix(T), C_mo: ?Matrix(T), log: bool, gpa: Allocator) !getMethod(@TypeOf(opt)).Result(T) {
+pub fn runFromSystem(comptime T: type, io: std.Io, opt: anytype, sys: anytype, Pg: ?Matrix(T), C: ?Matrix(T), log: bool, gpa: Allocator) !getMethod(@TypeOf(opt)).Result(T) {
     const Method = getMethod(@TypeOf(opt));
 
     try validation.checkInvalidInput(opt);
@@ -247,7 +247,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: anytype, sys: *Molecular
         const ref = try computeHfReference(T, io, opt, sys, final_Pg orelse Pg, log, gpa);
 
         if (comptime getMethodKind(@TypeOf(opt)) == .casscf) {
-            break :blk try Method.solve(T, io, opt, sys, ref, C_mo, log, gpa);
+            break :blk try Method.solve(T, io, opt, sys, ref, C, log, gpa);
         }
 
         break :blk try Method.solve(T, io, opt, sys, ref, log, gpa);
