@@ -1,5 +1,8 @@
 #include <libint2.hpp>
 
+#include <sstream>
+#include <cstring>
+
 #ifdef _OPENMP
 #include <omp.h>
 #else
@@ -9,6 +12,88 @@ inline int omp_get_thread_num() { return 0; }
 struct SystemData {
     std::vector<libint2::Atom> atoms; libint2::BasisSet obs;
 };
+
+static std::vector<std::vector<libint2::Shell>> read_g94_basis_stream(std::istream& is, bool force_cart_d = false) {
+    std::vector<std::vector<libint2::Shell>> ref_shells; std::string line, tag; size_t Z = 0;
+
+    while (is >> tag) {
+        if (tag[0] == '!') {
+            std::getline(is, line); continue;
+        }
+
+        if (tag == "****") { Z = 0; continue; }
+
+        if (Z == 0) {
+            for (const auto& e : libint2::chemistry::get_element_info()) {
+                if (strcaseequal(e.symbol, tag)) { Z = e.Z; break; }
+            }
+
+            std::getline(is, line);
+
+            continue;
+        }
+
+        if (tag.size() > 2) {
+            while (std::getline(is, line) && line != "****") {}
+
+            Z = 0;
+
+            continue;
+        }
+
+        size_t nprim = 0; is >> nprim; std::getline(is, line);
+
+        bool is_sp = (tag == "SP" || tag == "sp");
+
+        int l = is_sp ? 0 : ((tag[0] == 'j' || tag[0] == 'J') ? 7 : libint2::Shell::am_symbol_to_l(tag[0]));
+
+        if (l >= 7 && tag[0] != 'j' && tag[0] != 'J') l++;
+
+        libint2::svector<double> exps, c1, c2;
+
+        for (size_t p = 0; p < nprim; ++p) {
+            while (std::getline(is, line) && (line.empty() || line[0] == '!')) {}
+
+            libint2::fortran_dfloats_to_efloats(line); std::istringstream iss(line);
+
+            double e = 0, ca = 0, cb = 0; iss >> e >> ca;
+
+            exps.push_back(e); c1.push_back(ca);
+
+            if (is_sp) { iss >> cb; c2.push_back(cb); }
+        }
+
+        if (Z >= ref_shells.size()) ref_shells.resize(Z + 1);
+
+        bool pure = force_cart_d ? (l > 2) : (l > 1);
+
+        ref_shells[Z].push_back(libint2::Shell{is_sp ? exps : std::move(exps), {{l, pure, std::move(c1)}}, {{0, 0, 0}}});
+
+        if (is_sp) {
+            ref_shells[Z].push_back(libint2::Shell{std::move(exps), {{1, false, std::move(c2)}}, {{0, 0, 0}}});
+        }
+    }
+
+    return ref_shells;
+}
+
+static std::vector<std::vector<libint2::Shell>> load_basis(const char *basis_str) {
+    if (!basis_str) return {};
+
+    if (std::strchr(basis_str, '\n')) {
+        std::istringstream iss(basis_str);
+
+        return read_g94_basis_stream(iss);
+    }
+
+    std::ifstream file(basis_str);
+
+    if (file.is_open()) return read_g94_basis_stream(file);
+
+    std::istringstream iss(basis_str);
+
+    return read_g94_basis_stream(iss);
+}
 
 extern "C" {
     using namespace libint2;
@@ -20,7 +105,7 @@ extern "C" {
 
         std::vector<Atom> atoms = read_dotxyz(file, bohr_to_angstrom);
 
-        return new SystemData{atoms, BasisSet(atoms, BasisSet::read_g94_basis_library(basis))};
+        return new SystemData{atoms, BasisSet(atoms, load_basis(basis))};
     }
 
     void libint_deinit(SystemData *sys) {
@@ -42,7 +127,7 @@ extern "C" {
     size_t libint_aux_nbf(SystemData *sys, const char *aux_basis) {
         if (!sys) return 0; libint2::initialize();
 
-        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+        BasisSet aux(sys->atoms, load_basis(aux_basis));
 
         size_t nbf = aux.nbf(); libint2::finalize();
 
@@ -583,7 +668,7 @@ extern "C" {
     void libint_coulomb_2c(double *J, SystemData *sys, const char *aux_basis, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
-        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+        BasisSet aux(sys->atoms, load_basis(aux_basis));
 
         size_t max_prim = aux.max_nprim();
         size_t max_l    = aux.max_l(    );
@@ -596,7 +681,7 @@ extern "C" {
     void libint_coulomb_3c(double *I, SystemData *sys, const char *aux_basis, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
-        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+        BasisSet aux(sys->atoms, load_basis(aux_basis));
 
         size_t max_prim = std::max(sys->obs.max_nprim(), aux.max_nprim());
         size_t max_l    = std::max(sys->obs.max_l(    ), aux.max_l(    ));
@@ -1213,7 +1298,7 @@ extern "C" {
     void libint_coulomb_2c_deriv(double *I, SystemData *sys, const char *aux_basis, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
-        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+        BasisSet aux(sys->atoms, load_basis(aux_basis));
 
         Engine engine(Operator::coulomb, aux.max_nprim(), aux.max_l(), 1, 1e-14, default_params(Operator::coulomb), BraKet::xs_xs);
 
@@ -1223,7 +1308,7 @@ extern "C" {
     void libint_coulomb_3c_deriv(double *I, SystemData *sys, const char *aux_basis, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
-        BasisSet aux(sys->atoms, BasisSet::read_g94_basis_library(aux_basis));
+        BasisSet aux(sys->atoms, load_basis(aux_basis));
 
         size_t max_prim = std::max(sys->obs.max_nprim(), aux.max_nprim());
         size_t max_l    = std::max(sys->obs.max_l(    ), aux.max_l(    ));

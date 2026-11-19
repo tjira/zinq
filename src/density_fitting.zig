@@ -10,7 +10,6 @@ const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const dot = @import("linear_algebra.zig").dot;
-const exportAuxIfBuiltin = @import("molecular_integrals.zig").exportAuxIfBuiltin;
 const gemm = @import("linear_algebra.zig").gemm;
 const gemv = @import("linear_algebra.zig").gemv;
 const geru = @import("linear_algebra.zig").geru;
@@ -573,19 +572,13 @@ pub fn RiWorkspace(comptime T: type) type {
 }
 
 /// Evaluates and assigns auxiliary Coulomb integrals and derivatives for density fitting.
-pub fn buildFittingIntegrals(comptime T: type, io: std.Io, ints: anytype, aux_basis: []const u8, needs_derivs: bool, nthreads: usize, gpa: Allocator) !void {
-    const aux_path = try exportAuxIfBuiltin(io, aux_basis, gpa);
-
-    defer if (std.mem.startsWith(u8, aux_basis, "builtin:")) {
-        std.Io.Dir.cwd().deleteFile(io, aux_path) catch {};
-    };
-
+pub fn buildFittingIntegrals(comptime T: type, ints: anytype, aux_basis: []const u8, needs_derivs: bool, nthreads: usize, gpa: Allocator) !void {
     if (ints.J == null) {
-        ints.J = try ints.sys.coulomb2c(aux_path, nthreads, gpa);
+        ints.J = try ints.sys.coulomb2c(aux_basis, nthreads, gpa);
     }
 
     if (ints.I == null and (ints.B == null or needs_derivs)) {
-        ints.I = try ints.sys.coulomb3c(aux_path, nthreads, gpa);
+        ints.I = try ints.sys.coulomb3c(aux_basis, nthreads, gpa);
     }
 
     if (ints.B == null) {
@@ -600,11 +593,11 @@ pub fn buildFittingIntegrals(comptime T: type, io: std.Io, ints: anytype, aux_ba
 
     if (needs_derivs) {
         if (ints.dJ == null) {
-            ints.dJ = try ints.sys.coulomb2cD1(aux_path, nthreads, gpa);
+            ints.dJ = try ints.sys.coulomb2cD1(aux_basis, nthreads, gpa);
         }
 
         if (ints.dI == null) {
-            ints.dI = try ints.sys.coulomb3cD1(aux_path, nthreads, gpa);
+            ints.dI = try ints.sys.coulomb3cD1(aux_basis, nthreads, gpa);
         }
     }
 }

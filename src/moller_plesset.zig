@@ -160,7 +160,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     const analytic_grad = if (opt.gradient) |g| g == .analytic else false;
 
     if (opt.aux_basis) |aux| {
-        try buildFittingIntegrals(T, io, &hfres.ints, aux, analytic_grad, opt.nthreads, gpa);
+        try buildFittingIntegrals(T, &hfres.ints, aux, analytic_grad, opt.nthreads, gpa);
     }
 
     if (opt.gradient) |g| switch (g) {

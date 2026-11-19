@@ -1,6 +1,5 @@
 //! Calculates and exports molecular integrals including overlap, kinetic energy, nuclear attraction, and Coulomb repulsion.
 
-const embed = @import("embed");
 const std = @import("std");
 
 const cblas = @import("cimport.zig").cblas;
@@ -146,36 +145,16 @@ pub fn Result(comptime T: type) type {
     };
 }
 
-/// Automatically extracts and writes an auxiliary builtin basis set to a temporary file if specified.
-pub fn exportAuxIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
-    return exportBuiltin(io, basis, "aux_basis.g94", true, gpa);
-}
-
-/// Automatically extracts and writes a builtin basis set to a temporary file if specified.
-pub fn exportIfBuiltin(io: std.Io, basis: []const u8, gpa: Allocator) ![]const u8 {
-    return exportBuiltin(io, basis, "basis.g94", false, gpa);
-}
-
 /// Computes molecular integrals and nuclear derivatives from a geometry file and basis set path.
 pub fn run(comptime T: type, io: std.Io, opt: Options, log: bool, gpa: Allocator) !Result(T) {
     try validation.checkInvalidInput(opt);
 
     cblas.openblas_set_num_threads(@intCast(opt.nthreads));
 
-    const basis_path = try exportIfBuiltin(io, opt.basis, gpa);
-
-    defer if (std.mem.startsWith(u8, opt.basis, "builtin:")) {
-        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
-    };
-
     var timer = std.Io.Timestamp.now(io, .real);
 
-    var sys = try MolecularSystem(T).init(io, opt.system, basis_path, opt.charge, opt.multiplicity, gpa);
+    var sys = try MolecularSystem(T).init(io, opt.system, opt.basis, opt.charge, opt.multiplicity, gpa);
     defer sys.deinit(gpa);
-
-    if (std.mem.startsWith(u8, opt.basis, "builtin:")) {
-        try std.Io.Dir.cwd().deleteFile(io, basis_path);
-    }
 
     if (log) try printf(io, "\nSYSTEM INITIALIZATION: {f}\n", .{timer.untilNow(io, .real)});
 
@@ -238,16 +217,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     if (needs_aux) {
         const aux = opt.aux_basis orelse return error.AuxiliaryBasisNotSpecified;
 
-        const aux_path = try exportAuxIfBuiltin(io, aux, gpa);
-
-        defer if (std.mem.startsWith(u8, aux, "builtin:")) {
-            std.Io.Dir.cwd().deleteFile(io, aux_path) catch {};
-        };
-
         if (opt.calculate.coulomb_2c) {
             timer = std.Io.Timestamp.now(io, .real);
 
-            ints.J = try sys.coulomb2c(aux_path, opt.nthreads, gpa);
+            ints.J = try sys.coulomb2c(aux, opt.nthreads, gpa);
 
             if (log) try printf(io, "COULOMB 2C MATRIX: {f}\n", .{timer.untilNow(io, .real)});
         }
@@ -255,7 +228,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
         if (opt.calculate.coulomb_3c) {
             timer = std.Io.Timestamp.now(io, .real);
 
-            ints.I = try sys.coulomb3c(aux_path, opt.nthreads, gpa);
+            ints.I = try sys.coulomb3c(aux, opt.nthreads, gpa);
 
             if (log) try printf(io, "COULOMB 3C TENSOR: {f}\n", .{timer.untilNow(io, .real)});
         }
@@ -263,7 +236,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
         if (opt.calculate.coulomb_ri) {
             timer = std.Io.Timestamp.now(io, .real);
 
-            if (ints.J == null) ints.J = try sys.coulomb2c(aux_path, opt.nthreads, gpa);
+            if (ints.J == null) ints.J = try sys.coulomb2c(aux, opt.nthreads, gpa);
 
             if (ints.J_inv_half == null) {
                 ints.J_inv_half = try invertMetric(T, ints.J.?, gpa);
@@ -274,12 +247,12 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
 
             const I_ref = if (ints.I) |it| it else blk: {
                 if (opt.calculate.coulomb_ri_d1 or opt.calculate.coulomb_3c) {
-                    ints.I = try sys.coulomb3c(aux_path, opt.nthreads, gpa);
+                    ints.I = try sys.coulomb3c(aux, opt.nthreads, gpa);
 
                     break :blk ints.I.?;
                 }
 
-                I_local = try sys.coulomb3c(aux_path, opt.nthreads, gpa);
+                I_local = try sys.coulomb3c(aux, opt.nthreads, gpa);
 
                 break :blk I_local.?;
             };
@@ -373,16 +346,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     if (needs_aux_d1) {
         const aux = opt.aux_basis orelse return error.AuxiliaryBasisNotSpecified;
 
-        const aux_path = try exportAuxIfBuiltin(io, aux, gpa);
-
-        defer if (std.mem.startsWith(u8, aux, "builtin:")) {
-            std.Io.Dir.cwd().deleteFile(io, aux_path) catch {};
-        };
-
         if (opt.calculate.coulomb_2c_d1) {
             timer = std.Io.Timestamp.now(io, .real);
 
-            ints.dJ = try sys.coulomb2cD1(aux_path, opt.nthreads, gpa);
+            ints.dJ = try sys.coulomb2cD1(aux, opt.nthreads, gpa);
 
             if (log) try printf(io, "COULOMB 2C DERIVATIVE TENSOR: {f}\n", .{timer.untilNow(io, .real)});
         }
@@ -390,7 +357,7 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
         if (opt.calculate.coulomb_3c_d1) {
             timer = std.Io.Timestamp.now(io, .real);
 
-            ints.dI = try sys.coulomb3cD1(aux_path, opt.nthreads, gpa);
+            ints.dI = try sys.coulomb3cD1(aux, opt.nthreads, gpa);
 
             if (log) try printf(io, "COULOMB 3C DERIVATIVE TENSOR: {f}\n", .{timer.untilNow(io, .real)});
         }
@@ -398,10 +365,10 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
         if (opt.calculate.coulomb_ri_d1) {
             timer = std.Io.Timestamp.now(io, .real);
 
-            if (ints.dJ == null) ints.dJ = try sys.coulomb2cD1(aux_path, opt.nthreads, gpa);
-            if (ints.dI == null) ints.dI = try sys.coulomb3cD1(aux_path, opt.nthreads, gpa);
+            if (ints.dJ == null) ints.dJ = try sys.coulomb2cD1(aux, opt.nthreads, gpa);
+            if (ints.dI == null) ints.dI = try sys.coulomb3cD1(aux, opt.nthreads, gpa);
 
-            if (ints.I == null) ints.I = try sys.coulomb3c(aux_path, opt.nthreads, gpa);
+            if (ints.I == null) ints.I = try sys.coulomb3c(aux, opt.nthreads, gpa);
 
             if (log) try printf(io, "FITTING INTEGRALS DERIVATIVE: {f}\n", .{timer.untilNow(io, .real)});
         }
@@ -420,40 +387,6 @@ pub fn runFromSystem(comptime T: type, io: std.Io, opt: Options, sys: MolecularS
     try writeIntegralsToFiles(T, io, opt, ints, log);
 
     return ints;
-}
-
-/// Extracts and writes an embedded Gaussian 94 basis library to a temporary file on the local filesystem.
-fn exportBuiltin(io: std.Io, basis: []const u8, fname: []const u8, is_aux: bool, gpa: Allocator) ![]const u8 {
-    if (std.mem.startsWith(u8, basis, "builtin:")) {
-        var result = try gpa.alloc(u8, basis["builtin:".len..].len);
-        defer gpa.free(result);
-
-        for (basis["builtin:".len..], 0..) |char, i| {
-            if (char == '+') result[i] = 'p';
-            if (char == '*') result[i] = 's';
-
-            if (char != '+' and char != '*') {
-                result[i] = std.ascii.toLower(char);
-            }
-        }
-
-        const content = embed.bases.get(result) orelse {
-            const kind = if (is_aux) "AUXILIARY " else "";
-
-            std.log.err("BUILTIN {s}BASIS SET '{s}' NOT FOUND", .{ kind, result });
-
-            return error.InvalidInput;
-        };
-
-        var file = try std.Io.Dir.cwd().createFile(io, fname, .{});
-        defer file.close(io);
-
-        try file.writeStreamingAll(io, content);
-
-        return fname;
-    }
-
-    return basis;
 }
 
 /// Prints requested molecular integral matrices and derivative tensors to standard output.

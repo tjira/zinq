@@ -60,7 +60,7 @@
 - [ ] Implement electronic state tracking (root following via CI wavefunction overlaps) in CASSCF and excited-state dynamics to prevent root flipping at crossings.
 - [x] Implement an $\hat{S}^2$ penalty operator in CASSCF to explicitly isolate pure singlet or triplet states.
 - [x] Check the situation with NACVS, because it can now be calculated between arbitrary pairs of states regardless of multiplicity, so it is probably not entirely correct.
-- [ ] The libint auxiliary basis set function to calculate the number of basis functions should probably not read the basis from disk.
+- [x] The libint auxiliary basis set function to calculate the number of basis functions should probably not read the basis from disk.
 - [x] Write to AGENTS.md to write modularized code in imperative style.
 - [x] Implement analytical nuclear gradients for RI-MP2 using density fitting and CPHF response.
 - [x] Find a reason for the double free when running MP3 with c-pVDZ basis set.
@@ -71,4 +71,4 @@
 - [x] Accelerate b2ms (spin-orbital integral reconstruction) with BLAS.
 - [ ] Full analytic Hessian (Newton–Raphson) macro-iterations in CASSCF.
 - [x] De-interleave dual tensors to enable BLAS for analytic gradients.
-- [ ] Find a way to not export the basis files to disk when using builtin basis sets.
+- [x] Find a way to not export the basis files to disk when using builtin basis sets.

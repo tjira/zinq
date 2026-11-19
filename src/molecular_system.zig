@@ -1,5 +1,6 @@
 //! Represents a molecular system, managing its nuclear geometry, basis set information, and quantum chemical operators.
 
+const embed = @import("embed");
 const std = @import("std");
 
 const libint = @import("cimport.zig").libint;
@@ -37,7 +38,9 @@ pub fn MolecularSystem(comptime T: type) type {
             const sys_c = try gpa.dupeSentinel(u8, system, 0);
             defer gpa.free(sys_c);
 
-            const bas_c = try gpa.dupeSentinel(u8, basis, 0);
+            const bas_content = try resolveBasis(basis);
+
+            const bas_c = try gpa.dupeSentinel(u8, bas_content, 0);
             defer gpa.free(bas_c);
 
             const ptr = libint.libint_init(sys_c.ptr, bas_c.ptr, 1.0 / A2BOHR) orelse return error.InitializationFailed;
@@ -132,7 +135,9 @@ pub fn MolecularSystem(comptime T: type) type {
 
         /// Calculates the two-center Coulomb repulsion integrals over auxiliary basis functions.
         pub fn coulomb2c(self: @This(), aux_basis: []const u8, nthreads: usize, gpa: Allocator) !Matrix(T) {
-            const aux_c = try gpa.dupeSentinel(u8, aux_basis, 0);
+            const aux_content = try resolveBasis(aux_basis);
+
+            const aux_c = try gpa.dupeSentinel(u8, aux_content, 0);
             defer gpa.free(aux_c);
 
             const naux = libint.libint_aux_nbf(self.ptr, aux_c.ptr);
@@ -147,7 +152,9 @@ pub fn MolecularSystem(comptime T: type) type {
 
         /// Computes first-order derivatives of two-center Coulomb integrals over auxiliary basis functions.
         pub fn coulomb2cD1(self: @This(), aux_basis: []const u8, nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
-            const aux_c = try gpa.dupeSentinel(u8, aux_basis, 0);
+            const aux_content = try resolveBasis(aux_basis);
+
+            const aux_c = try gpa.dupeSentinel(u8, aux_content, 0);
             defer gpa.free(aux_c);
 
             const naux = libint.libint_aux_nbf(self.ptr, aux_c.ptr);
@@ -162,7 +169,9 @@ pub fn MolecularSystem(comptime T: type) type {
 
         /// Calculates three-center two-electron Coulomb repulsion integrals over orbital and auxiliary basis functions.
         pub fn coulomb3c(self: @This(), aux_basis: []const u8, nthreads: usize, gpa: Allocator) !Tensor(T, 3) {
-            const aux_c = try gpa.dupeSentinel(u8, aux_basis, 0);
+            const aux_content = try resolveBasis(aux_basis);
+
+            const aux_c = try gpa.dupeSentinel(u8, aux_content, 0);
             defer gpa.free(aux_c);
 
             const naux = libint.libint_aux_nbf(self.ptr, aux_c.ptr);
@@ -177,7 +186,9 @@ pub fn MolecularSystem(comptime T: type) type {
 
         /// Computes first-order derivatives of three-center Coulomb integrals over orbital and auxiliary basis functions.
         pub fn coulomb3cD1(self: @This(), aux_basis: []const u8, nthreads: usize, gpa: Allocator) !Tensor(T, 4) {
-            const aux_c = try gpa.dupeSentinel(u8, aux_basis, 0);
+            const aux_content = try resolveBasis(aux_basis);
+
+            const aux_c = try gpa.dupeSentinel(u8, aux_content, 0);
             defer gpa.free(aux_c);
 
             const naux = libint.libint_aux_nbf(self.ptr, aux_c.ptr);
@@ -522,4 +533,35 @@ pub fn MolecularSystem(comptime T: type) type {
             return I;
         }
     };
+}
+
+/// Resolves an atomic orbital basis set specification into embedded Gaussian 94 data or returns the file path.
+fn resolveBasis(basis: []const u8) ![]const u8 {
+    if (std.mem.startsWith(u8, basis, "builtin:")) {
+        const raw = basis["builtin:".len..];
+
+        for (embed.bases.keys(), embed.bases.values()) |key, content| {
+            if (raw.len != key.len) continue;
+
+            var match = true;
+
+            for (raw, key) |r, k| {
+                const norm = if (r == '+') 'p' else if (r == '*') 's' else std.ascii.toLower(r);
+
+                if (norm != k) {
+                    match = false;
+
+                    break;
+                }
+            }
+
+            if (match) return content;
+        }
+
+        std.log.err("BUILTIN BASIS SET '{s}' NOT FOUND", .{raw});
+
+        return error.InvalidInput;
+    }
+
+    return basis;
 }

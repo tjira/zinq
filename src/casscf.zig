@@ -240,7 +240,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     }
 
     if (opt.aux_basis) |aux| {
-        try buildFittingIntegrals(T, io, &hfres.ints, aux, if (opt.gradient) |g| g == .analytic else false, opt.nthreads, gpa);
+        try buildFittingIntegrals(T, &hfres.ints, aux, if (opt.gradient) |g| g == .analytic else false, opt.nthreads, gpa);
     }
 
     try evaluateCasscf(T, io, &C, hfres.ints, .{ .dets = dets.items, .weights = weights, .space = space }, opt, log, gpa);

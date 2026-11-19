@@ -408,7 +408,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     const io_ci = if (log) io else null;
 
     if (opt.aux_basis) |aux| {
-        try buildFittingIntegrals(T, io, &hfres.ints, aux, if (opt.gradient) |g| g == .analytic else false, opt.nthreads, gpa);
+        try buildFittingIntegrals(T, &hfres.ints, aux, if (opt.gradient) |g| g == .analytic else false, opt.nthreads, gpa);
     }
 
     var E: Vector(T), var C_ci: Matrix(T) = .{ undefined, undefined };

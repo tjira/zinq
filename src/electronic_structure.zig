@@ -22,7 +22,6 @@ const calculateNumericalGradient = @import("nuclear_derivative.zig").calculateNu
 const calculateNumericalHessian = @import("nuclear_derivative.zig").calculateNumericalHessian;
 const calculateNumericalNacv = @import("nuclear_derivative.zig").calculateNumericalNacv;
 const calculateThermochemistry = @import("frequency_analysis.zig").calculateThermochemistry;
-const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const generateCasDets = @import("determinant.zig").generateCasDets;
 const generateDets = @import("determinant.zig").generateDets;
 const printGeometry = @import("read_write.zig").printGeometry;
@@ -205,13 +204,7 @@ pub fn run(comptime T: type, io: std.Io, opt: anytype, log: bool, gpa: Allocator
 
     const params = getSystemParams(opt);
 
-    const basis_path = try exportIfBuiltin(io, params.basis, gpa);
-
-    defer if (std.mem.startsWith(u8, params.basis, "builtin:")) {
-        std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
-    };
-
-    var sys = try MolecularSystem(T).init(io, params.system, basis_path, params.charge, params.multiplicity, gpa);
+    var sys = try MolecularSystem(T).init(io, params.system, params.basis, params.charge, params.multiplicity, gpa);
     defer sys.deinit(gpa);
 
     return try runFromSystem(T, io, opt, &sys, null, null, log, gpa);

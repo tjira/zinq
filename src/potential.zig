@@ -18,7 +18,6 @@ const MollerPlessetOptions = @import("moller_plesset.zig").Options;
 const Value = @import("value.zig").Value;
 
 const alignPhases = @import("configuration_interaction.zig").alignPhases;
-const exportIfBuiltin = @import("molecular_integrals.zig").exportIfBuiltin;
 const generatePairs = @import("determinant.zig").generatePairs;
 const isDual = @import("value.zig").isDual;
 const readMatrix = @import("read_write.zig").readMatrix;
@@ -249,18 +248,8 @@ fn AbInitio(comptime T: type) type {
                 inline else => |opt| electronic_structure.getSystemParams(opt),
             };
 
-            const basis_path = try exportIfBuiltin(io, params.basis, gpa);
-
-            defer if (std.mem.startsWith(u8, params.basis, "builtin:")) {
-                std.Io.Dir.cwd().deleteFile(io, basis_path) catch {};
-            };
-
-            var msys = try MolecularSystem(T).init(io, params.system, basis_path, params.charge, params.multiplicity, gpa);
+            var msys = try MolecularSystem(T).init(io, params.system, params.basis, params.charge, params.multiplicity, gpa);
             errdefer msys.deinit(gpa);
-
-            if (std.mem.startsWith(u8, params.basis, "builtin:")) {
-                try std.Io.Dir.cwd().deleteFile(io, basis_path);
-            }
 
             const C_ci_list = try gpa.create(std.ArrayList(?Matrix(T)));
             errdefer gpa.destroy(C_ci_list);
