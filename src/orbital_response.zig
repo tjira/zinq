@@ -211,12 +211,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
         };
 
         if (hfres.ints.B) |B| {
-            const dI = hfres.ints.dI.?;
-            const dJ = hfres.ints.dJ.?;
-
-            const I_3c = hfres.ints.I.?;
-
-            try deriv_ws.?.evaluate(dJ.slice(c).asMatrix(), dI.slice(c), I_3c, gpa);
+            _ = try deriv_ws.?.evaluateCoord(hfres.ints, c, gpa);
 
             ri_ws.?.contractFockDerivative(&ws.F_x, B, deriv_ws.?.dB_ao, P, C);
         }

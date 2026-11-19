@@ -4,6 +4,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
+const DualTensor = @import("dual.zig").DualTensor;
 const Matrix = @import("tensor.zig").Matrix;
 const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
@@ -119,6 +120,13 @@ pub fn FittingDerivativeWorkspace(comptime T: type) type {
             try evaluateMetricDeriv(T, &self.dJ_inv_half, dJ_coord, self.decomp.U, self.M_kernel, gpa);
 
             evaluateFittingTensorDeriv(T, &self.dB_ao, dI_coord, I_3c, self.decomp.J_inv_half, self.dJ_inv_half);
+        }
+
+        /// Evaluates 3-center fitting tensor derivatives for a Cartesian coordinate and returns a dual tensor.
+        pub fn evaluateCoord(self: *@This(), ints: anytype, coord: usize, gpa: Allocator) !DualTensor(T, 3) {
+            try self.evaluate(ints.dJ.?.slice(coord).asMatrix(), ints.dI.?.slice(coord), ints.I.?, gpa);
+
+            return DualTensor(T, 3).fromTensors(ints.B.?, self.dB_ao);
         }
     };
 }

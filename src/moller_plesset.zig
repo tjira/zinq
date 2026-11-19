@@ -9,6 +9,7 @@ const Allocator = std.mem.Allocator;
 const DualMatrix = @import("dual.zig").DualMatrix;
 const DualTensor = @import("dual.zig").DualTensor;
 const DualVector = @import("dual.zig").DualVector;
+const FittingDerivativeWorkspace = @import("density_fitting.zig").FittingDerivativeWorkspace;
 const FrequencyOptions = @import("frequency_analysis.zig").Options;
 const HartreeFockOptions = @import("hartree_fock.zig").Options;
 const HartreeFockResult = @import("hartree_fock.zig").Result;
@@ -24,14 +25,12 @@ const ao2mo_oovv = @import("integral_transform.zig").ao2mo_oovv;
 const ao2mo_ov_3c = @import("integral_transform.zig").ao2mo_ov_3c;
 const buildFittingIntegrals = @import("density_fitting.zig").buildFittingIntegrals;
 const buildHamiltonianMatrix = @import("slater_condon.zig").buildHamiltonianMatrix;
-const calculateMpGradient = @import("moller_plesset_gradient.zig").calculateMpGradient;
 const gemm = @import("linear_algebra.zig").gemm;
 const generateDets = @import("determinant.zig").generateDets;
 const isDualMatrix = @import("value.zig").isDualMatrix;
 const isDualTensor = @import("value.zig").isDualTensor;
 const printf = @import("read_write.zig").printf;
 const transformInts = @import("integral_transform.zig").transformInts;
-const transformIntsRi = @import("integral_transform.zig").transformIntsRi;
 
 const AU2CM = @import("constants.zig").AU2CM;
 
@@ -190,6 +189,7 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 /// Evaluates canonical second-order Møller-Plesset correlation energy from two-electron integrals.
 pub fn calculateCanonicalMp2Energy(comptime T: type, g_ao: anytype, C: anytype, e: anytype, nocc: usize, generalized: bool, gpa: Allocator) !if (isDualTensor(@TypeOf(g_ao))) ScalarDual(T) else T {
     const is_dual = comptime isDualTensor(@TypeOf(g_ao));
+
     const OutType = if (is_dual) ScalarDual(T) else T;
 
     const nvir = C.shape[0] - nocc;
@@ -248,12 +248,24 @@ pub fn calculateCorrelationEnergies(comptime T: type, order: usize, H: anytype, 
         energies[0] = Value(OutType).fromFloat(0).val;
         energies[1] = Value(OutType).fromFloat(0).val;
 
-        if (comptime @TypeOf(ints2e) == Tensor(T, 4) or @TypeOf(ints2e) == DualTensor(T, 4)) {
-            energies[2] = try calculateCanonicalMp2Energy(T, ints2e, C, e, nocc, generalized, gpa);
+        if (comptime isDualTensor(@TypeOf(ints2e))) {
+            if (ints2e.val.shape.len == 4) {
+                energies[2] = try calculateCanonicalMp2Energy(T, ints2e, C, e, nocc, generalized, gpa);
+            }
+
+            if (ints2e.val.shape.len == 3) {
+                energies[2] = try calculateRiMp2Energy(T, ints2e, C, e, nocc, gpa);
+            }
         }
 
-        if (comptime @TypeOf(ints2e) == Tensor(T, 3) or @TypeOf(ints2e) == DualTensor(T, 3)) {
-            energies[2] = try calculateRiMp2Energy(T, ints2e, C, e, nocc, gpa);
+        if (comptime !isDualTensor(@TypeOf(ints2e))) {
+            if (ints2e.shape.len == 4) {
+                energies[2] = try calculateCanonicalMp2Energy(T, ints2e, C, e, nocc, generalized, gpa);
+            }
+
+            if (ints2e.shape.len == 3) {
+                energies[2] = try calculateRiMp2Energy(T, ints2e, C, e, nocc, gpa);
+            }
         }
 
         return energies;
@@ -261,17 +273,7 @@ pub fn calculateCorrelationEnergies(comptime T: type, order: usize, H: anytype, 
 
     const nsp, const nel = if (generalized) .{ C.shape[0], nocc } else .{ 2 * C.shape[0], 2 * nocc };
 
-    var h_ms: if (is_dual) DualMatrix(T) else Matrix(T) = undefined;
-
-    var g_ms: if (is_dual) DualTensor(T, 4) else Tensor(T, 4) = undefined;
-
-    if (comptime @TypeOf(ints2e) == Tensor(T, 4) or @TypeOf(ints2e) == DualTensor(T, 4)) {
-        h_ms, g_ms = try transformInts(T, C, H, ints2e, generalized, gpa);
-    }
-
-    if (comptime @TypeOf(ints2e) == Tensor(T, 3) or @TypeOf(ints2e) == DualTensor(T, 3)) {
-        h_ms, g_ms = try transformIntsRi(T, C, H, ints2e, generalized, gpa);
-    }
+    var h_ms, var g_ms = try transformInts(T, C, H, ints2e, generalized, gpa);
 
     defer {
         h_ms.deinit(gpa);
@@ -284,6 +286,7 @@ pub fn calculateCorrelationEnergies(comptime T: type, order: usize, H: anytype, 
 /// Evaluates the second-order Møller-Plesset correlation energy using resolution-of-the-identity density fitting.
 pub fn calculateRiMp2Energy(comptime T: type, B_ao: anytype, C: anytype, e: anytype, nocc: usize, gpa: Allocator) !if (isDualTensor(@TypeOf(B_ao))) ScalarDual(T) else T {
     const is_dual, const generalized = .{ comptime isDualTensor(@TypeOf(B_ao)), C.shape[0] != B_ao.shape[0] };
+
     const OutType = if (is_dual) ScalarDual(T) else T;
 
     const naux, const nvir = .{ B_ao.shape[2], C.shape[1] - nocc };
@@ -363,8 +366,8 @@ fn evaluateMp(comptime T: type, io: std.Io, opt: Options, hfres: HartreeFockResu
 
     var energies: []T = undefined;
 
-    if (hfres.ints.B) |B_ao| {
-        energies = try calculateCorrelationEnergies(T, opt.order, hfres.ints.H.?, B_ao, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
+    if (hfres.ints.B) |B| {
+        energies = try calculateCorrelationEnergies(T, opt.order, hfres.ints.H.?, B, hfres.C_mo, hfres.e_mo, nocc, generalized, gpa);
     }
 
     if (hfres.ints.B == null) {
@@ -501,5 +504,68 @@ fn updateAmplitudes(comptime T: type, m: usize, H_dets: Matrix(T), E0: []const V
         }
 
         c_dets[m * ndets + i] = h_psi.sub(h0_psi).sub(e_psi).div(E0[0].sub(E0[i]));
+    }
+}
+
+/// Evaluates Møller-Plesset analytical nuclear gradients across perturbation orders using dual numbers.
+fn calculateMpGradient(comptime T: type, grads: []Matrix(T), order: usize, hfres: HartreeFockResult(T), gpa: Allocator) !void {
+    const generalized = hfres.ints.sys.nbf != hfres.C_mo.shape[0];
+
+    const nocc = if (generalized) hfres.ints.sys.nel else hfres.ints.sys.nel / 2;
+
+    var deriv_ws: ?FittingDerivativeWorkspace(T) = null;
+
+    if (hfres.ints.B) |B| {
+        deriv_ws = try FittingDerivativeWorkspace(T).init(hfres.ints.J.?, B.shape, gpa);
+    }
+
+    defer if (deriv_ws) |*w| w.deinit(gpa);
+
+    for (0..3 * hfres.ints.sys.atoms.len) |coord| {
+        const C_d = DualMatrix(T).fromMatrices(hfres.C_mo, hfres.dC_mo.?.slice(coord).asMatrix());
+
+        const e_d = DualVector(T).fromVectors(hfres.e_mo, hfres.de_mo.?.row(coord));
+
+        if (order == 2) {
+            var der: T = undefined;
+
+            if (deriv_ws) |*w| {
+                const B_d = try w.evaluateCoord(hfres.ints, coord, gpa);
+
+                der = (try calculateRiMp2Energy(T, B_d, C_d, e_d, nocc, gpa)).der;
+            }
+
+            if (deriv_ws == null) {
+                const g_d = DualTensor(T, 4).fromTensors(hfres.ints.g.?, hfres.ints.dg.?.slice(coord));
+
+                der = (try calculateCanonicalMp2Energy(T, g_d, C_d, e_d, nocc, generalized, gpa)).der;
+            }
+
+            grads[2].ptr(coord / 3, coord % 3).* = der;
+        }
+
+        if (order > 2) {
+            const H_d = DualMatrix(T).fromMatrices(hfres.ints.H.?, hfres.ints.dH.?.slice(coord).asMatrix());
+
+            var corr: []ScalarDual(T) = undefined;
+
+            if (deriv_ws) |*w| {
+                const B_d = try w.evaluateCoord(hfres.ints, coord, gpa);
+
+                corr = try calculateCorrelationEnergies(T, order, H_d, B_d, C_d, e_d, nocc, generalized, gpa);
+            }
+
+            if (deriv_ws == null) {
+                const g_d = DualTensor(T, 4).fromTensors(hfres.ints.g.?, hfres.ints.dg.?.slice(coord));
+
+                corr = try calculateCorrelationEnergies(T, order, H_d, g_d, C_d, e_d, nocc, generalized, gpa);
+            }
+
+            defer gpa.free(corr);
+
+            for (2..order + 1) |k| {
+                grads[k].ptr(coord / 3, coord % 3).* = corr[k].der;
+            }
+        }
     }
 }

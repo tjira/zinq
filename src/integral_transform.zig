@@ -218,10 +218,13 @@ pub fn mo2ms_coef(comptime T: type, C_ms: *Matrix(T), C_mo: Matrix(T)) void {
     }
 }
 
-/// Transforms core Hamiltonian and two-electron repulsion tensors to molecular spin-orbital basis using BLAS.
-pub fn transformInts(comptime T: type, C: anytype, H: anytype, g: anytype, generalized: bool, gpa: Allocator) !struct { @TypeOf(H), @TypeOf(g) } {
-    const MatType = @TypeOf(H);
-    const TenType = @TypeOf(g);
+/// Transforms core Hamiltonian and two-electron repulsion or fitting tensors to molecular spin-orbital basis.
+pub fn transformInts(comptime T: type, C: anytype, H: anytype, two_e: anytype, generalized: bool, gpa: Allocator) !struct { @TypeOf(H), if (isDualTensor(@TypeOf(two_e))) DualTensor(T, 4) else Tensor(T, 4) } {
+    if (two_e.shape.len == 3) {
+        return transformIntsRi(T, C, H, two_e, generalized, gpa);
+    }
+
+    const MatType, const TenType = .{ @TypeOf(H), @TypeOf(two_e) };
 
     if (!generalized) {
         const nmo, const nsp = .{ C.shape[1], 2 * C.shape[1] };
@@ -242,7 +245,7 @@ pub fn transformInts(comptime T: type, C: anytype, H: anytype, g: anytype, gener
         var g_mo = try TenType.init(.{ nmo, nmo, nmo, nmo }, gpa);
         defer g_mo.deinit(gpa);
 
-        try ao2mo_2e(T, &g_mo, g, C, gpa);
+        try ao2mo_2e(T, &g_mo, two_e, C, gpa);
 
         var g_ms = try TenType.initZero(.{ nsp, nsp, nsp, nsp }, gpa);
         errdefer g_ms.deinit(gpa);
@@ -271,7 +274,7 @@ pub fn transformInts(comptime T: type, C: anytype, H: anytype, g: anytype, gener
     var g_ms = try TenType.init(.{ nsp, nsp, nsp, nsp }, gpa);
     errdefer g_ms.deinit(gpa);
 
-    try ao2mo_2e(T, &g_ms, g, C, gpa);
+    try ao2mo_2e(T, &g_ms, two_e, C, gpa);
 
     return .{ h_ms, g_ms };
 }

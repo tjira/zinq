@@ -21,12 +21,9 @@ const ao2mo_2e = @import("integral_transform.zig").ao2mo_2e;
 const ao2mo_3c = @import("integral_transform.zig").ao2mo_3c;
 const applyCayleyTransform = @import("casscf_orbital.zig").applyCayleyTransform;
 const buildCoreFock = @import("casscf_orbital.zig").buildCoreFock;
-const buildCoreFockRi = @import("casscf_orbital.zig").buildCoreFockRi;
 const buildDiagonalFock = @import("casscf_orbital.zig").buildDiagonalFock;
-const buildDiagonalFockRi = @import("casscf_orbital.zig").buildDiagonalFockRi;
 const buildFittingIntegrals = @import("density_fitting.zig").buildFittingIntegrals;
 const buildGeneralizedFock = @import("casscf_orbital.zig").buildGeneralizedFock;
-const buildGeneralizedFockRi = @import("casscf_orbital.zig").buildGeneralizedFockRi;
 const buildOrbitalRotationGenerator = @import("casscf_orbital.zig").buildOrbitalRotationGenerator;
 const buildStateAveragedActRdm = @import("reduced_density_matrix.zig").buildStateAveragedActRdm;
 const calculateCasscfGradient = @import("casscf_gradient.zig").calculateCasscfGradient;
@@ -409,7 +406,7 @@ fn evaluateCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, de
         defer F_gen.deinit(gpa);
 
         if (ints.B != null) {
-            try buildGeneralizedFockRi(T, &F_gen, h_mo, B_mo, D_act, d_act, space, gpa);
+            try buildGeneralizedFock(T, &F_gen, h_mo, B_mo, D_act, d_act, space, gpa);
         }
 
         if (ints.B == null) {
@@ -444,15 +441,15 @@ fn evaluateCasscf(comptime T: type, io: std.Io, C: *Matrix(T), ints: anytype, de
             defer F_diag.deinit(gpa);
 
             if (ints.B != null) {
-                try buildCoreFockRi(T, &F_core, h_mo, B_mo, space, gpa);
+                try buildCoreFock(T, &F_core, h_mo, B_mo, space, gpa);
 
-                try buildDiagonalFockRi(T, &F_diag, F_core, B_mo, D_act, space, gpa);
+                try buildDiagonalFock(T, &F_diag, F_core, B_mo, D_act, space, gpa);
             }
 
             if (ints.B == null) {
-                buildCoreFock(T, &F_core, h_mo, g_mo, space);
+                try buildCoreFock(T, &F_core, h_mo, g_mo, space, gpa);
 
-                buildDiagonalFock(T, &F_diag, F_core, g_mo, D_act, space);
+                try buildDiagonalFock(T, &F_diag, F_core, g_mo, D_act, space, gpa);
             }
 
             var kappa = try Matrix(T).initZero(nmo, nmo, gpa);

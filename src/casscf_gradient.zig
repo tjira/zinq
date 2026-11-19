@@ -22,10 +22,8 @@ const b2ms = @import("integral_transform.zig").b2ms;
 const buildActRdm = @import("reduced_density_matrix.zig").buildActRdm;
 const buildGeneralizedFock = @import("casscf_orbital.zig").buildGeneralizedFock;
 const buildGeneralizedFockDerivRi = @import("casscf_orbital.zig").buildGeneralizedFockDerivRi;
-const buildGeneralizedFockRi = @import("casscf_orbital.zig").buildGeneralizedFockRi;
 const buildNonRedundantPairs = @import("casscf_orbital.zig").buildNonRedundantPairs;
 const buildOrbitalHessian = @import("casscf_orbital.zig").buildOrbitalHessian;
-const buildOrbitalHessianRi = @import("casscf_orbital.zig").buildOrbitalHessianRi;
 const buildStateAveragedActRdm = @import("reduced_density_matrix.zig").buildStateAveragedActRdm;
 const getrf = @import("linear_algebra.zig").getrf;
 const getrs = @import("linear_algebra.zig").getrs;
@@ -107,7 +105,7 @@ pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C:
         if (is_ri) {
             try ao2mo_3c(T, &B_mo_conv, hfres.ints.B.?, C, gpa);
 
-            try buildOrbitalHessianRi(T, &A_sa, h_mo_conv, B_mo_conv, D_act_sa, d_act_sa, pairs, space, gpa);
+            try buildOrbitalHessian(T, &A_sa, h_mo_conv, B_mo_conv, D_act_sa, d_act_sa, pairs, space, gpa);
         }
 
         if (!is_ri) {
@@ -140,7 +138,7 @@ pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C:
             }
 
             if (is_ri) {
-                try buildGeneralizedFockRi(T, &F_gen_s, h_mo_conv, B_mo_conv, D_s, d_s, space, gpa);
+                try buildGeneralizedFock(T, &F_gen_s, h_mo_conv, B_mo_conv, D_s, d_s, space, gpa);
             }
 
             if (!is_ri) {
@@ -195,6 +193,7 @@ pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C:
 
     if (is_ri) {
         B_mo_d = try DualTensor(T, 3).initZero(.{ nmo, nmo, naux }, gpa);
+
         g_ms_d = try DualTensor(T, 4).initZero(.{ nsp, nsp, nsp, nsp }, gpa);
     }
 
@@ -244,9 +243,7 @@ pub fn calculateCasscfGradient(comptime T: type, hfres: HartreeFockResult(T), C:
         };
 
         if (is_ri) {
-            try deriv_ws.?.evaluate(hfres.ints.dJ.?.slice(coord).asMatrix(), hfres.ints.dI.?.slice(coord), hfres.ints.I.?, gpa);
-
-            const B_d = DualTensor(T, 3).fromTensors(hfres.ints.B.?, deriv_ws.?.dB_ao);
+            const B_d = try deriv_ws.?.evaluateCoord(hfres.ints, coord, gpa);
 
             try ao2mo_3c(T, &B_mo_d, B_d, C_d, gpa);
 

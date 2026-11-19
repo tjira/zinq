@@ -156,69 +156,69 @@ pub fn applyCayleyTransform(comptime T: type, C: *Matrix(T), kappa: Matrix(T), g
     @memcpy(C.data, C_new.data);
 }
 
-/// Constructs the core Fock matrix by contracting one-electron integrals with closed-shell core orbitals.
-pub fn buildCoreFock(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), space: CasSpace) void {
+/// Constructs core Fock matrix in molecular orbital basis from 4-center or 3-center integrals.
+pub fn buildCoreFock(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), two_e: anytype, space: CasSpace, gpa: Allocator) !void {
     const nmo = space.nmo;
 
-    for (0..nmo) |p| for (0..nmo) |q| {
-        var sum = h_mo.at(p, q);
+    if (two_e.shape.len == 4) {
+        for (0..nmo) |p| for (0..nmo) |q| {
+            var sum = h_mo.at(p, q);
 
-        for (0..space.ncore) |i| {
-            sum += 2 * g_mo.at(.{ p, i, q, i }) - g_mo.at(.{ p, i, i, q });
-        }
+            for (0..space.ncore) |i| {
+                sum += 2 * two_e.at(.{ p, i, q, i }) - two_e.at(.{ p, i, i, q });
+            }
 
-        F_core.ptr(p, q).* = sum;
-    };
-}
+            F_core.ptr(p, q).* = sum;
+        };
 
-/// Constructs core Fock matrix in molecular orbital basis using density fitting 3-center integrals.
-pub fn buildCoreFockRi(comptime T: type, F_core: *Matrix(T), h_mo: Matrix(T), B_mo: Tensor(T, 3), space: CasSpace, gpa: Allocator) !void {
-    const nmo, const naux = .{ space.nmo, B_mo.shape[2] };
+        return;
+    }
+
+    const naux = two_e.shape[2];
 
     var v_core = try Vector(T).initZero(naux, gpa);
     defer v_core.deinit(gpa);
 
     for (0..space.ncore) |i| for (0..naux) |P| {
-        v_core.ptr(P).* += 2 * B_mo.at(.{ i, i, P });
+        v_core.ptr(P).* += 2 * two_e.at(.{ i, i, P });
     };
 
     for (0..nmo) |p| for (0..nmo) |q| {
         var sum = h_mo.at(p, q);
 
         for (0..naux) |P| {
-            sum += B_mo.at(.{ p, q, P }) * v_core.at(P);
+            sum += two_e.at(.{ p, q, P }) * v_core.at(P);
         }
 
         for (0..space.ncore) |i| for (0..naux) |P| {
-            sum -= B_mo.at(.{ p, i, P }) * B_mo.at(.{ q, i, P });
+            sum -= two_e.at(.{ p, i, P }) * two_e.at(.{ q, i, P });
         };
 
         F_core.ptr(p, q).* = sum;
     };
 }
 
-/// Constructs diagonal Fock matrix elements for orbital rotation preconditioner.
-pub fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), F_core: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), space: CasSpace) void {
+/// Constructs diagonal Fock matrix elements for orbital rotation preconditioner from 4-center or 3-center integrals.
+pub fn buildDiagonalFock(comptime T: type, F_diag: *Vector(T), F_core: Matrix(T), two_e: anytype, D_act: Matrix(T), space: CasSpace, gpa: Allocator) !void {
     const nmo, const nact = .{ space.nmo, space.nact };
 
-    for (0..nmo) |p| {
-        var sum_diag = F_core.at(p, p);
+    if (two_e.shape.len == 4) {
+        for (0..nmo) |p| {
+            var sum_diag = F_core.at(p, p);
 
-        for (0..nact) |u| for (0..nact) |v| {
-            const U, const V = .{ space.ncore + u, space.ncore + v };
+            for (0..nact) |u| for (0..nact) |v| {
+                const U, const V = .{ space.ncore + u, space.ncore + v };
 
-            sum_diag += D_act.at(u, v) * (g_mo.at(.{ p, U, p, V }) - 0.5 * g_mo.at(.{ p, U, V, p }));
-        };
+                sum_diag += D_act.at(u, v) * (two_e.at(.{ p, U, p, V }) - 0.5 * two_e.at(.{ p, U, V, p }));
+            };
 
-        F_diag.ptr(p).* = sum_diag;
+            F_diag.ptr(p).* = sum_diag;
+        }
+
+        return;
     }
-}
 
-/// Constructs diagonal Fock matrix elements for orbital rotation preconditioner using density fitting.
-pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), F_core: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), space: CasSpace, gpa: Allocator) !void {
-    const nmo, const nact = .{ space.nmo, space.nact };
-
-    const naux = B_mo.shape[2];
+    const naux = two_e.shape[2];
 
     var v_act = try Vector(T).initZero(naux, gpa);
     defer v_act.deinit(gpa);
@@ -231,7 +231,7 @@ pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), F_core: Matrix(
         const U, const V = .{ space.ncore + u, space.ncore + v };
 
         for (0..naux) |P| {
-            v_act.ptr(P).* += val_D * B_mo.at(.{ U, V, P });
+            v_act.ptr(P).* += val_D * two_e.at(.{ U, V, P });
         }
     };
 
@@ -239,7 +239,7 @@ pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), F_core: Matrix(
         var sum_diag = F_core.at(p, p);
 
         for (0..naux) |P| {
-            sum_diag += B_mo.at(.{ p, p, P }) * v_act.at(P);
+            sum_diag += two_e.at(.{ p, p, P }) * v_act.at(P);
         }
 
         for (0..nact) |u| for (0..nact) |v| {
@@ -250,7 +250,7 @@ pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), F_core: Matrix(
             const U, const V = .{ space.ncore + u, space.ncore + v };
 
             for (0..naux) |P| {
-                sum_diag -= 0.5 * val_D * B_mo.at(.{ p, U, P }) * B_mo.at(.{ p, V, P });
+                sum_diag -= 0.5 * val_D * two_e.at(.{ p, U, P }) * two_e.at(.{ p, V, P });
             }
         };
 
@@ -258,36 +258,28 @@ pub fn buildDiagonalFockRi(comptime T: type, F_diag: *Vector(T), F_core: Matrix(
     }
 }
 
-/// Constructs the generalized Fock matrix using active reduced density matrices.
-pub fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace, gpa: Allocator) !void {
+/// Constructs generalized Fock matrix from active RDMs and 4-center or 3-center integrals.
+pub fn buildGeneralizedFock(comptime T: type, F_gen: *Matrix(T), h_mo: Matrix(T), two_e: anytype, D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace, gpa: Allocator) !void {
     const nmo = space.nmo;
 
     var F_core = try Matrix(T).init(nmo, nmo, gpa);
     defer F_core.deinit(gpa);
 
-    buildCoreFock(T, &F_core, h_mo, g_mo, space);
+    try buildCoreFock(T, &F_core, h_mo, two_e, space, gpa);
 
     @memset(F_gen.data, 0);
 
-    buildCoreColumns(T, F_gen, F_core, g_mo, D_act, space);
+    if (two_e.shape.len == 4) {
+        buildCoreColumns(T, F_gen, F_core, two_e, D_act, space);
 
-    buildActColumns(T, F_gen, F_core, g_mo, D_act, d_act, space);
-}
+        buildActColumns(T, F_gen, F_core, two_e, D_act, d_act, space);
+    }
 
-/// Constructs generalized Fock matrix using active reduced density matrices and density fitting integrals.
-pub fn buildGeneralizedFockRi(comptime T: type, F_gen: *Matrix(T), h_mo: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace, gpa: Allocator) !void {
-    const nmo = space.nmo;
+    if (two_e.shape.len == 3) {
+        try buildCoreColumnsRi(T, F_gen, F_core, two_e, D_act, space, gpa);
 
-    var F_core = try Matrix(T).init(nmo, nmo, gpa);
-    defer F_core.deinit(gpa);
-
-    try buildCoreFockRi(T, &F_core, h_mo, B_mo, space, gpa);
-
-    @memset(F_gen.data, 0);
-
-    try buildCoreColumnsRi(T, F_gen, F_core, B_mo, D_act, space, gpa);
-
-    try buildActColumnsRi(T, F_gen, F_core, B_mo, D_act, d_act, space, gpa);
+        try buildActColumnsRi(T, F_gen, F_core, two_e, D_act, d_act, space, gpa);
+    }
 }
 
 /// Evaluates the generalized Fock matrix derivative using density fitting and precomputed intermediate contractions.
@@ -333,53 +325,91 @@ pub fn buildNonRedundantPairs(space: CasSpace, gpa: Allocator) ![]OrbitalPair {
     return pairs;
 }
 
-/// Evaluates the exact analytic orbital Hessian of the state-averaged energy with respect to orbital rotations.
-pub fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), g_mo: Tensor(T, 4), D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, space: CasSpace, gpa: Allocator) !void {
+/// Evaluates the analytic orbital Hessian of the state-averaged energy with respect to orbital rotations.
+pub fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), two_e: anytype, D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, space: CasSpace, gpa: Allocator) !void {
     const nmo, const nrot = .{ space.nmo, pairs.len };
 
     var dh = try Matrix(T).initZero(nmo, nmo, gpa);
     defer dh.deinit(gpa);
 
-    var dg = try Tensor(T, 4).initZero(.{ nmo, nmo, nmo, nmo }, gpa);
-    defer dg.deinit(gpa);
-
     var dF_gen = try Matrix(T).initZero(nmo, nmo, gpa);
     defer dF_gen.deinit(gpa);
 
-    for (pairs, 0..) |pair_j, j| {
-        const p, const q = .{ pair_j.p, pair_j.q };
+    if (two_e.shape.len == 4) {
+        var dg = try Tensor(T, 4).initZero(.{ nmo, nmo, nmo, nmo }, gpa);
+        defer dg.deinit(gpa);
 
-        @memset(dh.data, 0);
+        for (pairs, 0..) |pair_j, j| {
+            const p, const q = .{ pair_j.p, pair_j.q };
 
-        for (0..nmo) |idx| {
-            dh.ptr(p, idx).* += h_mo.at(q, idx);
-            dh.ptr(q, idx).* -= h_mo.at(p, idx);
-            dh.ptr(idx, p).* += h_mo.at(idx, q);
-            dh.ptr(idx, q).* -= h_mo.at(idx, p);
+            @memset(dh.data, 0);
+
+            for (0..nmo) |idx| {
+                dh.ptr(p, idx).* += h_mo.at(q, idx);
+                dh.ptr(q, idx).* -= h_mo.at(p, idx);
+                dh.ptr(idx, p).* += h_mo.at(idx, q);
+                dh.ptr(idx, q).* -= h_mo.at(idx, p);
+            }
+
+            @memset(dg.data, 0);
+
+            for (0..nmo) |idx_a| for (0..nmo) |idx_b| for (0..nmo) |idx_c| {
+                dg.ptr(.{ p, idx_a, idx_b, idx_c }).* += two_e.at(.{ q, idx_a, idx_b, idx_c });
+                dg.ptr(.{ q, idx_a, idx_b, idx_c }).* -= two_e.at(.{ p, idx_a, idx_b, idx_c });
+
+                dg.ptr(.{ idx_a, p, idx_b, idx_c }).* += two_e.at(.{ idx_a, q, idx_b, idx_c });
+                dg.ptr(.{ idx_a, q, idx_b, idx_c }).* -= two_e.at(.{ idx_a, p, idx_b, idx_c });
+
+                dg.ptr(.{ idx_a, idx_b, p, idx_c }).* += two_e.at(.{ idx_a, idx_b, q, idx_c });
+                dg.ptr(.{ idx_a, idx_b, q, idx_c }).* -= two_e.at(.{ idx_a, idx_b, p, idx_c });
+
+                dg.ptr(.{ idx_a, idx_b, idx_c, p }).* += two_e.at(.{ idx_a, idx_b, idx_c, q });
+                dg.ptr(.{ idx_a, idx_b, idx_c, q }).* -= two_e.at(.{ idx_a, idx_b, idx_c, p });
+            };
+
+            @memset(dF_gen.data, 0);
+
+            try buildGeneralizedFock(T, &dF_gen, dh, dg, D_act, d_act, space, gpa);
+
+            for (pairs, 0..) |pair_i, i| {
+                A.ptr(i, j).* = 2 * (dF_gen.at(pair_i.p, pair_i.q) - dF_gen.at(pair_i.q, pair_i.p));
+            }
         }
+    } else {
+        const naux = two_e.shape[2];
 
-        @memset(dg.data, 0);
+        var ws = try GeneralizedFockRiWorkspace(T).init(two_e, D_act, d_act, space, gpa);
+        defer ws.deinit(gpa);
 
-        for (0..nmo) |idx_a| for (0..nmo) |idx_b| for (0..nmo) |idx_c| {
-            dg.ptr(.{ p, idx_a, idx_b, idx_c }).* += g_mo.at(.{ q, idx_a, idx_b, idx_c });
-            dg.ptr(.{ q, idx_a, idx_b, idx_c }).* -= g_mo.at(.{ p, idx_a, idx_b, idx_c });
+        var dB = try Tensor(T, 3).initZero(.{ nmo, nmo, naux }, gpa);
+        defer dB.deinit(gpa);
 
-            dg.ptr(.{ idx_a, p, idx_b, idx_c }).* += g_mo.at(.{ idx_a, q, idx_b, idx_c });
-            dg.ptr(.{ idx_a, q, idx_b, idx_c }).* -= g_mo.at(.{ idx_a, p, idx_b, idx_c });
+        for (pairs, 0..) |pair_j, j| {
+            const p, const q = .{ pair_j.p, pair_j.q };
 
-            dg.ptr(.{ idx_a, idx_b, p, idx_c }).* += g_mo.at(.{ idx_a, idx_b, q, idx_c });
-            dg.ptr(.{ idx_a, idx_b, q, idx_c }).* -= g_mo.at(.{ idx_a, idx_b, p, idx_c });
+            @memset(dh.data, 0);
 
-            dg.ptr(.{ idx_a, idx_b, idx_c, p }).* += g_mo.at(.{ idx_a, idx_b, idx_c, q });
-            dg.ptr(.{ idx_a, idx_b, idx_c, q }).* -= g_mo.at(.{ idx_a, idx_b, idx_c, p });
-        };
+            for (0..nmo) |idx| {
+                dh.ptr(p, idx).* += h_mo.at(q, idx);
+                dh.ptr(q, idx).* -= h_mo.at(p, idx);
+                dh.ptr(idx, p).* += h_mo.at(idx, q);
+                dh.ptr(idx, q).* -= h_mo.at(idx, p);
+            }
 
-        @memset(dF_gen.data, 0);
+            @memset(dB.data, 0);
 
-        try buildGeneralizedFock(T, &dF_gen, dh, dg, D_act, d_act, space, gpa);
+            for (0..nmo) |idx| for (0..naux) |P| {
+                dB.ptr(.{ p, idx, P }).* += two_e.at(.{ q, idx, P });
+                dB.ptr(.{ q, idx, P }).* -= two_e.at(.{ p, idx, P });
+                dB.ptr(.{ idx, p, P }).* += two_e.at(.{ idx, q, P });
+                dB.ptr(.{ idx, q, P }).* -= two_e.at(.{ idx, p, P });
+            };
 
-        for (pairs, 0..) |pair_i, i| {
-            A.ptr(i, j).* = 2 * (dF_gen.at(pair_i.p, pair_i.q) - dF_gen.at(pair_i.q, pair_i.p));
+            try buildGeneralizedFockDerivRi(T, &dF_gen, dh, two_e, dB, D_act, d_act, space, ws, gpa);
+
+            for (pairs, 0..) |pair_i, i| {
+                A.ptr(i, j).* = 2 * (dF_gen.at(pair_i.p, pair_i.q) - dF_gen.at(pair_i.q, pair_i.p));
+            }
         }
     }
 
@@ -391,57 +421,7 @@ pub fn buildOrbitalHessian(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), g_m
     };
 }
 
-/// Evaluates the analytic orbital Hessian of the state-averaged energy with respect to orbital rotations using density fitting.
-pub fn buildOrbitalHessianRi(comptime T: type, A: *Matrix(T), h_mo: Matrix(T), B_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), pairs: []const OrbitalPair, space: CasSpace, gpa: Allocator) !void {
-    const nmo, const nrot, const naux = .{ space.nmo, pairs.len, B_mo.shape[2] };
-
-    var ws = try GeneralizedFockRiWorkspace(T).init(B_mo, D_act, d_act, space, gpa);
-    defer ws.deinit(gpa);
-
-    var dh = try Matrix(T).initZero(nmo, nmo, gpa);
-    defer dh.deinit(gpa);
-
-    var dB = try Tensor(T, 3).initZero(.{ nmo, nmo, naux }, gpa);
-    defer dB.deinit(gpa);
-
-    var dF_gen = try Matrix(T).initZero(nmo, nmo, gpa);
-    defer dF_gen.deinit(gpa);
-
-    for (pairs, 0..) |pair_j, j| {
-        const p, const q = .{ pair_j.p, pair_j.q };
-
-        @memset(dh.data, 0);
-
-        for (0..nmo) |idx| {
-            dh.ptr(p, idx).* += h_mo.at(q, idx);
-            dh.ptr(q, idx).* -= h_mo.at(p, idx);
-            dh.ptr(idx, p).* += h_mo.at(idx, q);
-            dh.ptr(idx, q).* -= h_mo.at(idx, p);
-        }
-
-        @memset(dB.data, 0);
-
-        for (0..nmo) |idx| for (0..naux) |P| {
-            dB.ptr(.{ p, idx, P }).* += B_mo.at(.{ q, idx, P });
-            dB.ptr(.{ q, idx, P }).* -= B_mo.at(.{ p, idx, P });
-            dB.ptr(.{ idx, p, P }).* += B_mo.at(.{ idx, q, P });
-            dB.ptr(.{ idx, q, P }).* -= B_mo.at(.{ idx, p, P });
-        };
-
-        try buildGeneralizedFockDerivRi(T, &dF_gen, dh, B_mo, dB, D_act, d_act, space, ws, gpa);
-
-        for (pairs, 0..) |pair_i, i| {
-            A.ptr(i, j).* = 2 * (dF_gen.at(pair_i.p, pair_i.q) - dF_gen.at(pair_i.q, pair_i.p));
-        }
-    }
-
-    for (0..nrot) |i| for (i + 1..nrot) |j| {
-        const avg = 0.5 * (A.at(i, j) + A.at(j, i));
-
-        A.ptr(i, j).* = avg;
-        A.ptr(j, i).* = avg;
-    };
-}
+pub const buildOrbitalHessianRi = buildOrbitalHessian;
 
 /// Evaluates the anti-symmetric orbital rotation generator matrix kappa using a diagonal Hessian approximation.
 pub fn buildOrbitalRotationGenerator(comptime T: type, kappa: *Matrix(T), g_orb: Matrix(T), F_diag: Vector(T), D_act: Matrix(T), space: CasSpace) void {
@@ -497,7 +477,7 @@ pub fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, spac
 
         try ao2mo_3c(T, &B_mo, ints.B.?, C.*, gpa);
 
-        try buildCoreFockRi(T, &F_core, h_mo, B_mo, space, gpa);
+        try buildCoreFock(T, &F_core, h_mo, B_mo, space, gpa);
     }
 
     if (ints.B == null) {
@@ -506,7 +486,7 @@ pub fn canonicalizeOrbitals(comptime T: type, C: *Matrix(T), ints: anytype, spac
 
         try ao2mo_2e(T, &g_mo, ints.g.?, C.*, gpa);
 
-        buildCoreFock(T, &F_core, h_mo, g_mo, space);
+        try buildCoreFock(T, &F_core, h_mo, g_mo, space, gpa);
     }
 
     try canonicalizeCoreSubspace(T, C, F_core, space.ncore, gpa);
