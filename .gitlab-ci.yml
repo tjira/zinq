@@ -18,7 +18,7 @@ setup:libs:
     - apt update && apt install curl make unzip -y
 
   script:
-    - make external-x86_64-linux
+    - rm -rf external-x86_64-linux && make external-x86_64-linux
 
 setup:zig:
   stage: setup
