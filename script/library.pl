@@ -312,9 +312,6 @@ sub compile_libint {
         "-DCMAKE_DISABLE_FIND_PACKAGE_Boost=True"
     );
 
-    # FIX COMPILATION ON WINDOWS
-    push @args, "-DLIBINT2_ALIGN_SIZE=0" if $target =~ /windows/;
-
     # RUN CONFIGURE
     system(@args) == 0 or die "LIBINT CONFIGURE FAILED";
 
@@ -323,12 +320,6 @@ sub compile_libint {
 
     # INSTALL THE LIBRARY
     system("cmake", "--install", "build") == 0 or die "LIBINT INSTALL FAILED";
-
-    # PATCH BOYS.H AND BASIS.H TO CORRECTLY RECOGNIZE WINDOWS
-    if ($target =~ /windows/) {
-        system("perl", "-pi", "-e", "s/#ifdef _MSC_VER/#if defined(_MSC_VER) || defined(__MINGW32__)/g", "$prefix/include/libint2/boys.h" );
-        system("perl", "-pi", "-e", "s/#ifdef _MSC_VER/#if defined(_MSC_VER) || defined(__MINGW32__)/g", "$prefix/include/libint2/basis.h");
-    }
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
