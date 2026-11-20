@@ -599,6 +599,7 @@ fn buildSadGuess(comptime T: type, io: std.Io, P: *Matrix(T), C: *Matrix(T), e: 
             const val = 0.5 * P_target.at(mu, nu);
 
             P.ptr(mu, nu).* = val;
+
             P.ptr(mu + ints.sys.nbf, nu + ints.sys.nbf).* = val;
         };
     }
