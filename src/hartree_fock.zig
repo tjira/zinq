@@ -3,6 +3,7 @@
 const std = @import("std");
 
 const cblas = @import("cimport.zig").cblas;
+const libint = @import("cimport.zig").libint;
 
 const Allocator = std.mem.Allocator;
 
@@ -25,6 +26,8 @@ const contractFock = @import("two_electron_contraction.zig").contractFock;
 const contractGradient = @import("two_electron_contraction.zig").contractGradient;
 const dot = @import("linear_algebra.zig").dot;
 const gemm = @import("linear_algebra.zig").gemm;
+const getrf = @import("linear_algebra.zig").getrf;
+const getrs = @import("linear_algebra.zig").getrs;
 const getSymbol = @import("constants.zig").getSymbol;
 const lowdin = @import("population_analysis.zig").lowdin;
 const mayer = @import("population_analysis.zig").mayer;
@@ -54,6 +57,7 @@ pub const Options = struct {
     frequency: ?FrequencyOptions = null,
     generalized: bool = false,
     gradient: ?GradientOptions = null,
+    guess: Guess = .sad,
     hessian: ?HessianOptions = null,
     integral_direct: bool = false,
     iterations: u32 = 100,
@@ -74,6 +78,12 @@ pub const Options = struct {
 pub const GradientOptions = union(enum) {
     analytic: GradientAnalyticOptions,
     numeric: GradientNumericOptions,
+};
+
+/// Initial guess method for the self-consistent field density matrix.
+pub const Guess = enum {
+    core,
+    sad,
 };
 
 /// Tagged union specifying nuclear Hessian calculation methods.
@@ -339,9 +349,10 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
     }
 
     if (guess == null) {
-        try solveRoothaanHall(T, &e, &C, ints.H.?, ints.S.?, &B);
-
-        buildDensityMatrix(T, &P, C, nocc, opt.generalized);
+        switch (opt.guess) {
+            .core => try buildCoreGuess(T, &P, &C, &e, ints.H.?, ints.S.?, &B, nocc, opt.generalized),
+            .sad => try buildSadGuess(T, io, &P, &C, &e, ints, &B, opt, nocc, gpa),
+        }
     }
 
     var exch_factor: T = if (opt.generalized) 1 else 0.5;
@@ -428,6 +439,13 @@ fn addDftPotential(comptime T: type, F: *Matrix(T), dft: *DftPotential(T), P: Ma
     };
 }
 
+/// Constructs the initial density matrix and orbitals from the non-interacting one-electron core Hamiltonian.
+fn buildCoreGuess(comptime T: type, P: *Matrix(T), C: *Matrix(T), e: *Vector(T), H: Matrix(T), S: Matrix(T), B: *Matrix(T), nocc: usize, generalized: bool) !void {
+    try solveRoothaanHall(T, e, C, H, S, B);
+
+    buildDensityMatrix(T, P, C.*, nocc, generalized);
+}
+
 /// Constructs the one-particle reduced density matrix in the atomic basis from molecular orbital coefficients.
 fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) void {
     std.debug.assert(C.shape[0] == P.shape[0]);
@@ -503,6 +521,93 @@ fn buildFockMatrix(comptime T: type, ints: Integrals(T), ws: ScfWorkspace(T), op
     }
 
     ws.F.symmetrize();
+}
+
+/// Constructs the initial density matrix by projecting spherically averaged atomic electron densities onto the molecular basis.
+fn buildSadGuess(comptime T: type, io: std.Io, P: *Matrix(T), C: *Matrix(T), e: *Vector(T), ints: Integrals(T), B: *Matrix(T), opt: Options, nocc: usize, gpa: Allocator) !void {
+    for (ints.sys.atoms) |z| {
+        if (z > 53 or z <= 0) {
+            return buildCoreGuess(T, P, C, e, ints.H.?, ints.S.?, B, nocc, opt.generalized);
+        }
+    }
+
+    var neutral_nel: usize = 0;
+
+    for (ints.sys.atoms) |z| {
+        neutral_nel += @intCast(z);
+    }
+
+    const min_mult: u32 = if (neutral_nel % 2 == 0) 1 else 2;
+
+    var sys_min = MolecularSystem(T).init(io, opt.system, "builtin:sto-3g", 0, min_mult, gpa) catch {
+        return buildCoreGuess(T, P, C, e, ints.H.?, ints.S.?, B, nocc, opt.generalized);
+    };
+
+    defer sys_min.deinit(gpa);
+
+    libint.libint_update_coords(sys_min.ptr, @ptrCast(ints.sys.coors.ptr));
+
+    var P_min = try Matrix(T).initZero(sys_min.nbf, sys_min.nbf, gpa);
+    defer P_min.deinit(gpa);
+
+    libint.libint_soad_density(P_min.data.ptr, sys_min.ptr);
+
+    var S_cross = try ints.sys.overlapBetween(sys_min, opt.nthreads, gpa);
+    defer S_cross.deinit(gpa);
+
+    var S_spatial = try ints.sys.overlap(opt.nthreads, gpa);
+    defer S_spatial.deinit(gpa);
+
+    var S_copy = try S_spatial.clone(gpa);
+    defer S_copy.deinit(gpa);
+
+    const ipiv = try gpa.alloc(i32, ints.sys.nbf);
+    defer gpa.free(ipiv);
+
+    try getrf(T, &S_copy, ipiv);
+
+    var W = try Matrix(T).init(ints.sys.nbf, sys_min.nbf, gpa);
+    defer W.deinit(gpa);
+
+    try getrs(T, &W, S_copy, ipiv, S_cross);
+
+    for (0..ints.sys.nbf) |i| for (0..sys_min.nbf) |j| {
+        W.ptr(i, j).* *= @sqrt(P_min.at(j, j));
+    };
+
+    var P_target = try Matrix(T).initZero(ints.sys.nbf, ints.sys.nbf, gpa);
+    defer P_target.deinit(gpa);
+
+    gemm(T, &P_target, W, W, 1, 0, false, true);
+
+    var tr: T = 0;
+
+    for (0..ints.sys.nbf) |mu| for (0..ints.sys.nbf) |nu| {
+        tr += P_target.at(mu, nu) * S_spatial.at(nu, mu);
+    };
+
+    if (tr > 1e-12) {
+        const scale = @as(T, @floatFromInt(ints.sys.nel)) / tr;
+
+        for (P_target.data) |*val| val.* *= scale;
+    }
+
+    if (opt.generalized) {
+        @memset(P.data, 0);
+
+        for (0..ints.sys.nbf) |mu| for (0..ints.sys.nbf) |nu| {
+            const val = 0.5 * P_target.at(mu, nu);
+
+            P.ptr(mu, nu).* = val;
+            P.ptr(mu + ints.sys.nbf, nu + ints.sys.nbf).* = val;
+        };
+    }
+
+    if (!opt.generalized) {
+        @memcpy(P.data, P_target.data);
+    }
+
+    try extractOrbitalsFromDensity(T, C, e, P.*, ints.S.?, B);
 }
 
 /// Computes the electronic energy expectation value from density, core Hamiltonian, and Fock matrices.

@@ -1,5 +1,7 @@
 #include <libint2.hpp>
 
+#include <libint2/chemistry/sto3g_atomic_density.h>
+
 #include <sstream>
 #include <cstring>
 
@@ -122,6 +124,34 @@ extern "C" {
 
     size_t libint_nbf(SystemData *sys) {
         if (!sys) return 0; return sys->obs.nbf();
+    }
+
+    size_t libint_num_ao(int Z) {
+        if (Z <= 0 || Z > 53) return 0;
+
+        return libint2::sto3g_num_ao(Z);
+    }
+
+    void libint_soad_density(double *D, SystemData *sys) {
+        if (!sys) return;
+
+        size_t nao = sys->obs.nbf();
+
+        std::fill(D, D + nao * nao, 0);
+
+        size_t ao_offset = 0;
+
+        for (const auto &atom : sys->atoms) {
+            const auto Z = atom.atomic_number;
+
+            if (Z <= 0 || Z > 53) continue;
+
+            const auto &occvec = libint2::sto3g_ao_occupation_vector(Z);
+
+            for (const auto &occ : occvec) {
+                D[ao_offset * nao + ao_offset] = occ; ++ao_offset;
+            }
+        }
     }
 
     size_t libint_aux_nbf(SystemData *sys, const char *aux_basis) {

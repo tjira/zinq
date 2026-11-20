@@ -46,3 +46,5 @@ void libint_update_coords(SystemData *sys, const double *coords);
 void libint_evaluate_basis_v  (double *phi,                                                                      double x, double y, double z, SystemData *sys);
 void libint_evaluate_basis_vg (double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz,                   double x, double y, double z, SystemData *sys);
 void libint_evaluate_basis_vgl(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double *lapl_phi, double x, double y, double z, SystemData *sys);
+
+size_t libint_num_ao(int Z); void libint_soad_density(double *D, SystemData *sys);

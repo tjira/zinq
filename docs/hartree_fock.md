@@ -367,3 +367,15 @@ V_{\mu\nu}^{\text{x},V}=\sum_{i=1}^{N_{\text{occ}}}\sum_Q\left(W_{\mu i,Q}^V W_{
 $$
 
 scaling as $\mathcal{O}(N_{\text{occ}} N_{\text{AO}}^2 N_{\text{aux}})$ per iteration and eliminating all four-center integrals from orbital response theory.
+
+### 10. Initial Guess Density and Superposition of Atomic Densities (SAD)
+
+The iterative self-consistent field procedure requires an initial trial density matrix $\mathbf{P}_0$ to construct the first Fock matrix. While the traditional core Hamiltonian guess solves the non-interacting one-electron Roothaan–Hall problem $\mathbf{H}\mathbf{C}=\mathbf{S}\mathbf{C}\boldsymbol{\epsilon}$ with $\hat{h}=-\frac{1}{2}\nabla^2-\sum_A\frac{Z_A}{|\mathbf{r}-\mathbf{R}_A|}$, ignoring interelectronic repulsion often concentrates unphysical electron density around heavy nuclei and degrades SCF convergence. The Superposition of Atomic Densities (SAD) method overcomes this limitation by initializing the molecular electron density as a sum of spherically averaged ground-state neutral atomic densities $\rho_A(\mathbf{r})$ centered at each atomic nucleus $\mathbf{R}_A$.
+
+In a minimal atomic orbital basis set such as STO-3G, atomic subshells possess predefined spherical ground-state occupations $w_\mu$ derived from neutral atomic configurations evaluated directly via Libint2, yielding a diagonal minimal density matrix $P_{\mu\nu}^{\text{min}}=w_\mu\delta_{\mu\nu}$ with trace $\text{Tr}(\mathbf{P}^{\text{min}})=\sum_A Z_A$. To map this reference atomic density into an arbitrary target molecular orbital basis $\{\chi_\mu\}$, we evaluate the rectangular cross-overlap metric matrix $(S_{\text{cross}})_{\mu p}=\langle\chi_\mu|\phi_p\rangle$ between target basis states $\chi_\mu$ and minimal basis states $\phi_p$. The expansion coefficient matrix $\mathbf{W}=\mathbf{S}^{-1}\mathbf{S}_{\text{cross}}$ projects the minimal density into the target atomic orbital basis via the metric transformation
+
+$$
+\mathbf{P}^{\text{target}}=\mathbf{W}\mathbf{P}^{\text{min}}\mathbf{W}^T=\mathbf{S}^{-1}\mathbf{S}_{\text{cross}}\mathbf{P}^{\text{min}}\mathbf{S}_{\text{cross}}^T\mathbf{S}^{-1}
+$$
+
+which preserves positive semi-definiteness and symmetric character. Scaling the projected density by the factor $N_{\text{el}}/\text{Tr}(\mathbf{P}^{\text{target}}\mathbf{S})$ ensures that the initial density integrates to the exact target electron count $N_{\text{el}}$ of the molecular system, where Restricted Hartree–Fock assigns $\mathbf{P}=\mathbf{P}^{\text{target}}$ and Generalized Hartree–Fock forms spin-diagonal blocks $\mathbf{P}_{\alpha\alpha}=\mathbf{P}_{\beta\beta}=\frac{1}{2}\mathbf{P}^{\text{target}}$ before extracting orthonormal trial molecular orbitals via the generalized eigenvalue equation $\mathbf{P}\mathbf{C}=\mathbf{S}\mathbf{C}\boldsymbol{\lambda}$.
