@@ -21,8 +21,8 @@ const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const calculateTotalSpin = @import("spin_analysis.zig").calculateTotalSpin;
-const contractTwoElectronFock = @import("two_electron_contraction.zig").contractTwoElectronFock;
-const contractTwoElectronGradient = @import("two_electron_contraction.zig").contractTwoElectronGradient;
+const contractFock = @import("two_electron_contraction.zig").contractFock;
+const contractGradient = @import("two_electron_contraction.zig").contractGradient;
 const dot = @import("linear_algebra.zig").dot;
 const gemm = @import("linear_algebra.zig").gemm;
 const getSymbol = @import("constants.zig").getSymbol;
@@ -219,7 +219,7 @@ pub fn calculateNuclearGradient(comptime T: type, ints: Integrals(T), ws: ScfWor
         var g_G: T = 0;
 
         if (ints.dg) |dg| {
-            g_G += contractTwoElectronGradient(T, dg, coord, ws.P.*, exch_factor);
+            g_G += contractGradient(T, dg, coord, ws.P.*, exch_factor);
         }
 
         G.ptr(A, alpha).* += h_G + g_G - s_G;
@@ -481,15 +481,11 @@ fn buildFockMatrix(comptime T: type, ints: Integrals(T), ws: ScfWorkspace(T), op
     }
 
     if (ints.B) |B| {
-        ws.ri.?.contractCoulomb(ws.F, B, ws.P.*);
-
-        if (exch_factor > 0) {
-            ws.ri.?.contractExchange(ws.F, B, ws.C.*, exch_factor);
-        }
+        ws.ri.?.contractFock(ws.F, B, ws.P.*, ws.C.*, exch_factor);
     }
 
     if (ints.g) |g| {
-        contractTwoElectronFock(T, ws.F, g, ws.P.*, exch_factor);
+        contractFock(T, ws.F, g, ws.P.*, exch_factor);
     }
 
     if (opt.integral_direct) {

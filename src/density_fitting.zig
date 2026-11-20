@@ -263,6 +263,15 @@ pub fn RiWorkspace(comptime T: type) type {
             gemm(T, F, self.W_exc.?, self.W_exc.?, scale, 1, false, true);
         }
 
+        /// Contracts 3-center fitting tensors with density and orbitals to form the Coulomb and exchange Fock matrix.
+        pub fn contractFock(self: *@This(), F: *Matrix(T), B: Tensor(T, 3), P: Matrix(T), C: Matrix(T), exch_factor: T) void {
+            self.contractCoulomb(F, B, P);
+
+            if (exch_factor > 0) {
+                self.contractExchange(F, B, C, exch_factor);
+            }
+        }
+
         /// Contracts fitting tensors with perturbed MO coefficients to evaluate exchange response.
         pub fn contractExchangeResponse(self: *@This(), V_x: *Matrix(T), B: Tensor(T, 3), dC_x: Matrix(T)) void {
             const nbf, const naux = .{ B.shape[0], B.shape[2] };
@@ -303,6 +312,13 @@ pub fn RiWorkspace(comptime T: type) type {
 
             gemm(T, V_x, self.W_resp.?, self.W_exc.?, -1.0, 1.0, false, true);
             gemm(T, V_x, self.W_exc.?, self.W_resp.?, -1.0, 1.0, false, true);
+        }
+
+        /// Contracts 3-center fitting tensors with response density and perturbed orbitals for Hessian response.
+        pub fn contractResponseHessian(self: *@This(), V_x: *Matrix(T), B: Tensor(T, 3), P_x: Matrix(T), dC_x: Matrix(T)) void {
+            self.contractCoulomb(V_x, B, P_x);
+
+            self.contractExchangeResponse(V_x, B, dC_x);
         }
 
         /// Contracts fitting tensor derivatives with density and orbitals to form the 2e Fock response.

@@ -14,8 +14,8 @@ const Tensor = @import("tensor.zig").Tensor;
 const Vector = @import("tensor.zig").Vector;
 
 const ao2mo_1e = @import("integral_transform.zig").ao2mo_1e;
-const contractTwoElectronResponse = @import("two_electron_contraction.zig").contractTwoElectronResponse;
-const contractTwoElectronResponseHessian = @import("two_electron_contraction.zig").contractTwoElectronResponseHessian;
+const contractFockDerivative = @import("two_electron_contraction.zig").contractFockDerivative;
+const contractResponseHessian = @import("two_electron_contraction.zig").contractResponseHessian;
 const gemm = @import("linear_algebra.zig").gemm;
 const mo2ao_1e = @import("integral_transform.zig").mo2ao_1e;
 const printf = @import("read_write.zig").printf;
@@ -217,7 +217,7 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
         }
 
         if (hfres.ints.dg) |dg| {
-            contractTwoElectronResponse(T, &ws.F_x, dg, c, P, exch_factor);
+            contractFockDerivative(T, &ws.F_x, dg, c, P, exch_factor);
         }
 
         ws.F_x.symmetrize();
@@ -244,13 +244,11 @@ pub fn solveCPHF(comptime T: type, io: std.Io, dC: *Tensor(T, 3), de: *Matrix(T)
             ws.V_x.zero();
 
             if (hfres.ints.B) |B| {
-                ri_ws.?.contractCoulomb(&ws.V_x, B, ws.P_x);
-
-                ri_ws.?.contractExchangeResponse(&ws.V_x, B, ws.dC_x);
+                ri_ws.?.contractResponseHessian(&ws.V_x, B, ws.P_x, ws.dC_x);
             }
 
             if (hfres.ints.g) |g| {
-                contractTwoElectronResponseHessian(T, &ws.V_x, g, ws.P_x, exch_factor);
+                contractResponseHessian(T, &ws.V_x, g, ws.P_x, exch_factor);
             }
 
             ws.V_x.symmetrize();
