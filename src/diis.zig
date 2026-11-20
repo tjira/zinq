@@ -5,32 +5,30 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Matrix = @import("tensor.zig").Matrix;
+const Vector = @import("tensor.zig").Vector;
 
 const axpy = @import("linear_algebra.zig").axpy;
 const dot = @import("linear_algebra.zig").dot;
 const getrf = @import("linear_algebra.zig").getrf;
 const getrs = @import("linear_algebra.zig").getrs;
 
-/// Manages iterative subspace histories and extrapolates solution matrices via DIIS error minimization.
+/// Manages iterative subspace histories and extrapolates solution vectors via DIIS error minimization.
 pub fn Diis(comptime T: type) type {
     return struct {
-        fck_hist: std.ArrayList(Matrix(T)),
-        err_hist: std.ArrayList(Matrix(T)),
+        fck_hist: std.ArrayList(Vector(T)),
+        err_hist: std.ArrayList(Vector(T)),
+
         max_diis: usize,
 
         /// Initializes the DIIS accelerator with a fixed history subspace capacity.
         pub fn init(max_diis: usize) @This() {
-            return .{
-                .fck_hist = .empty,
-                .err_hist = .empty,
-                .max_diis = max_diis,
-            };
+            return .{ .fck_hist = .empty, .err_hist = .empty, .max_diis = max_diis };
         }
 
-        /// Frees all history matrices and deallocates the subspace storage.
+        /// Frees all history vectors and deallocates the subspace storage.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            for (self.fck_hist.items) |*m| m.deinit(gpa);
-            for (self.err_hist.items) |*m| m.deinit(gpa);
+            for (self.fck_hist.items) |*v| v.deinit(gpa);
+            for (self.err_hist.items) |*v| v.deinit(gpa);
 
             self.fck_hist.deinit(gpa);
             self.err_hist.deinit(gpa);
@@ -38,24 +36,26 @@ pub fn Diis(comptime T: type) type {
 
         /// Clears the subspace histories and resets the accelerator state upon numerical failure.
         pub fn reset(self: *@This(), gpa: Allocator) void {
-            for (self.fck_hist.items) |*m| m.deinit(gpa);
-            for (self.err_hist.items) |*m| m.deinit(gpa);
+            for (self.fck_hist.items) |*v| v.deinit(gpa);
+            for (self.err_hist.items) |*v| v.deinit(gpa);
 
             self.fck_hist.clearRetainingCapacity();
             self.err_hist.clearRetainingCapacity();
         }
 
-        /// Appends an iterate and error matrix, updating the target matrix via subspace extrapolation.
-        pub fn update(self: *@This(), target: *Matrix(T), err: Matrix(T), symmetric: bool, gpa: Allocator) !void {
-            const nbf = target.nrow();
+        /// Appends an iterate and error vector, updating the target via subspace extrapolation.
+        pub fn update(self: *@This(), target: anytype, err: anytype, symmetric: bool, gpa: Allocator) !void {
+            var target_vec, var err_vec = .{ Vector(T).fromSlice(target.data), Vector(T).fromSlice(err.data) };
+
+            std.debug.assert(target_vec.length() == err_vec.length());
 
             try self.fck_hist.ensureUnusedCapacity(gpa, 1);
             try self.err_hist.ensureUnusedCapacity(gpa, 1);
 
-            var f_copy = try Matrix(T).init(nbf, nbf, gpa);
+            var f_copy = try Vector(T).init(target_vec.length(), gpa);
             errdefer f_copy.deinit(gpa);
 
-            @memcpy(f_copy.data, target.data);
+            @memcpy(f_copy.data, target_vec.data);
 
             if (self.fck_hist.items.len >= self.max_diis) {
                 var old_f = self.fck_hist.orderedRemove(0);
@@ -66,10 +66,10 @@ pub fn Diis(comptime T: type) type {
             }
 
             self.fck_hist.appendAssumeCapacity(f_copy);
-            self.err_hist.appendAssumeCapacity(err);
+            self.err_hist.appendAssumeCapacity(err_vec);
 
             if (self.fck_hist.items.len >= 2) {
-                extrapolate(T, self.fck_hist.items, self.err_hist.items, target, symmetric, gpa) catch {
+                extrapolate(T, self.fck_hist.items, self.err_hist.items, &target_vec, gpa) catch {
                     const last_f = self.fck_hist.pop().?;
                     const last_e = self.err_hist.pop().?;
 
@@ -79,10 +79,16 @@ pub fn Diis(comptime T: type) type {
                     self.err_hist.appendAssumeCapacity(last_e);
                 };
             }
+
+            if (symmetric) {
+                if (comptime @hasDecl(@TypeOf(target.*), "symmetrize")) {
+                    target.symmetrize();
+                }
+            }
         }
 
         /// Computes linear combination coefficients from the B matrix and extrapolates the target.
-        fn extrapolate(comptime TF: type, fck_hist: []const Matrix(TF), err_hist: []const Matrix(TF), F: *Matrix(TF), symmetric: bool, gpa: Allocator) !void {
+        fn extrapolate(comptime TF: type, fck_hist: []const Vector(TF), err_hist: []const Vector(TF), target_vec: *Vector(TF), gpa: Allocator) !void {
             const n = fck_hist.len;
 
             var B = try Matrix(TF).initZero(n + 1, n + 1, gpa);
@@ -92,7 +98,7 @@ pub fn Diis(comptime T: type) type {
             defer b.deinit(gpa);
 
             for (0..n) |i| for (i..n) |j| {
-                const s = dot(TF, err_hist[i].asVector(), err_hist[j].asVector());
+                const s = dot(TF, err_hist[i], err_hist[j]);
 
                 B.ptr(i, j).* = s;
                 B.ptr(j, i).* = s;
@@ -115,15 +121,11 @@ pub fn Diis(comptime T: type) type {
 
             try getrs(TF, &c, B, ipiv, b);
 
-            F.zero();
+            target_vec.zero();
 
             for (0..n) |i| {
-                var f_vec = F.asVector();
-
-                axpy(TF, &f_vec, fck_hist[i].asVector(), c.at(i, 0));
+                axpy(TF, target_vec, fck_hist[i], c.at(i, 0));
             }
-
-            if (symmetric) F.symmetrize();
         }
     };
 }
