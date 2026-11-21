@@ -379,3 +379,31 @@ $$
 $$
 
 which preserves positive semi-definiteness and symmetric character. Scaling the projected density by the factor $N_{\text{el}}/\text{Tr}(\mathbf{P}^{\text{target}}\mathbf{S})$ ensures that the initial density integrates to the exact target electron count $N_{\text{el}}$ of the molecular system, where Restricted Hartree–Fock assigns $\mathbf{P}=\mathbf{P}^{\text{target}}$ and Generalized Hartree–Fock forms spin-diagonal blocks $\mathbf{P}_{\alpha\alpha}=\mathbf{P}_{\beta\beta}=\frac{1}{2}\mathbf{P}^{\text{target}}$ before extracting orthonormal trial molecular orbitals via the generalized eigenvalue equation $\mathbf{P}\mathbf{C}=\mathbf{S}\mathbf{C}\boldsymbol{\lambda}$.
+
+### 11. Chain-of-Spheres Semi-Numerical Exchange (COSX and RIJCOSX)
+
+Although density fitting with three-center intermediate tensors accelerates the evaluation of exact exchange, the storage and contraction of the fitting tensor $B_{\mu\nu,Q}$ scaling as $\mathcal{O}(N_{\text{aux}} N_{\text{AO}}^2)$ imposes an enormous memory footprint that quickly exhausts available random-access memory for extended molecular systems. The Chain-of-Spheres (COSX) approximation overcomes this memory bottleneck by replacing analytical four-center or three-center exchange integrals with a semi-numerical quadrature over atom-centered numerical grids, eliminating the need to store or transform auxiliary exchange tensors. Expressing the exchange matrix in terms of occupied molecular orbitals $\psi_i(\mathbf{r})=\sum_\mu C_{\mu i}\phi_\mu(\mathbf{r})$ yields
+
+$$
+K_{\mu\nu}=\sum_{i=1}^{N_{\text{occ}}}\iint\phi_\mu(\mathbf{r}_1)\psi_i(\mathbf{r}_1)\frac{1}{|\mathbf{r}_1-\mathbf{r}_2|}\phi_\nu(\mathbf{r}_2)\psi_i(\mathbf{r}_2)d\mathbf{r}_1 d\mathbf{r}_2
+$$
+
+where the double spatial integration is discretized over a multicenter Becke numerical integration grid consisting of Cartesian coordinates $\mathbf{r}_g$ and quadrature weights $w_g$. Projecting atomic basis functions $\phi_\mu$ onto the grid points defines the rectangular collocation matrix $\mathbf{\Phi}$ with dimensions $N_{\text{grid}}\times N_{\text{AO}}$, enabling the efficient evaluation of occupied molecular orbital amplitudes on the entire numerical grid via a single matrix-matrix multiplication as
+
+$$
+\mathbf{\Psi}=\mathbf{\Phi}\mathbf{C}_{\text{occ}}
+$$
+
+where $\Psi_{gi}=\psi_i(\mathbf{r}_g)$. The electronic exchange potential produced by orbital pair density $\rho_i(\mathbf{r},\nu)=\phi_\nu(\mathbf{r})\psi_i(\mathbf{r})$ at grid point $\mathbf{r}_g$ is evaluated by discretizing the singular Coulomb kernel $\frac{1}{|\mathbf{r}_1-\mathbf{r}_2|}$ over the numerical grid as
+
+$$
+A_{gi,\nu}=\sum_{g'=1}^{N_{\text{grid}}}W_{gg'}\phi_\nu(\mathbf{r}_{g'})\psi_i(\mathbf{r}_{g'})
+$$
+
+where the discrete Coulomb kernel matrix $\mathbf{W}$ contains the off-diagonal volume-weighted Coulomb factors $W_{gg'}=w_{g'}/|\mathbf{r}_g-\mathbf{r}_{g'}|$ for $g\neq g'$ and regularizes the diagonal self-interaction singularity over a spherical Voronoi cell of volume $w_g$ as $W_{gg}=2\pi(3w_g/4\pi)^{2/3}$. Defining the weighted grid-orbital product matrix $Q_{\nu g,i}=w_g\phi_\nu(\mathbf{r}_g)\psi_i(\mathbf{r}_g)$, the contribution of each occupied orbital $i$ to the exchange matrix evaluates through consecutive Level-3 BLAS matrix-matrix multiplications as
+
+$$
+\mathbf{A}_i=\mathbf{W}\mathbf{\rho}_i,\quad\mathbf{K}_i=\mathbf{Q}_i\mathbf{A}_i
+$$
+
+where summing over all occupied molecular orbitals and symmetrizing the total matrix as $\mathbf{K}=\frac{1}{2}\sum_i(\mathbf{K}_i+\mathbf{K}_i^T)$ eliminates numerical grid noise and guarantees exact Hermiticity of the resulting Fock operator. In the RIJCOSX scheme, Coulomb repulsion is computed through resolution-of-the-identity density fitting using a compact auxiliary Coulomb basis while exchange is computed via the Chain-of-Spheres numerical integration, combining the high throughput of analytical density-fitted Coulomb potentials with the minimal memory footprint and favorable scaling of semi-numerical exchange.

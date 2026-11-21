@@ -7,6 +7,8 @@ const libint = @import("cimport.zig").libint;
 
 const Allocator = std.mem.Allocator;
 
+const ChainOfSpheres = @import("chain_of_spheres.zig").ChainOfSpheres;
+const CosxOptions = @import("chain_of_spheres.zig").Options;
 const DftPotential = @import("density_functional_theory.zig").DftPotential;
 const Diis = @import("diis.zig").Diis;
 const FrequencyOptions = @import("frequency_analysis.zig").Options;
@@ -52,6 +54,7 @@ pub const Options = struct {
     aux_basis: ?[]const u8 = null,
     basis: []const u8,
     charge: i32 = 0,
+    cosx: ?CosxOptions = null,
     dft: ?DftOptions = null,
     diis: ?u32 = 8,
     frequency: ?FrequencyOptions = null,
@@ -195,6 +198,8 @@ fn ScfWorkspace(comptime T: type) type {
         e: *Vector(T),
 
         ri: ?*RiWorkspace(T) = null,
+
+        cosx: ?*ChainOfSpheres(T) = null,
     };
 }
 
@@ -361,9 +366,17 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         exch_factor *= pot.a_x;
     }
 
+    var cosx_ws: ?ChainOfSpheres(T) = null;
+
+    if (opt.cosx) |c_opt| {
+        cosx_ws = try ChainOfSpheres(T).init(sys.*, c_opt, gpa);
+    }
+
+    defer if (cosx_ws) |*w| w.deinit(gpa);
+
     const ri_flags = RiFlags{
         .coulomb = true,
-        .exchange = exch_factor > 0,
+        .exchange = exch_factor > 0 and opt.cosx == null,
         .generalized = opt.generalized,
     };
 
@@ -377,6 +390,8 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
         .e = &e,
 
         .ri = if (ri_ws) |*w| w else null,
+
+        .cosx = if (cosx_ws) |*w| w else null,
     };
 
     energy[0] = try scf(T, io, opt, ints, ws, if (dft) |*d| d else null, log, gpa);
@@ -499,21 +514,37 @@ fn buildFockMatrix(comptime T: type, ints: Integrals(T), ws: ScfWorkspace(T), op
     }
 
     if (ints.B) |B| {
-        ws.ri.?.contractFock(ws.F, B, ws.P.*, ws.C.*, exch_factor);
+        if (ws.cosx != null) {
+            ws.ri.?.contractCoulomb(ws.F, B, ws.P.*);
+        }
+
+        if (ws.cosx == null) {
+            ws.ri.?.contractFock(ws.F, B, ws.P.*, ws.C.*, exch_factor);
+        }
     }
 
     if (ints.g) |g| {
-        contractFock(T, ws.F, g, ws.P.*, exch_factor);
+        const in_core_exch = if (ws.cosx != null) 0 else exch_factor;
+
+        contractFock(T, ws.F, g, ws.P.*, in_core_exch);
     }
 
     if (opt.integral_direct) {
+        const dir_exch = if (ws.cosx != null) 0 else exch_factor;
+
         if (opt.generalized) {
-            ints.sys.fockGhf(ws.F, ws.P.*, exch_factor, opt.nthreads);
+            ints.sys.fockGhf(ws.F, ws.P.*, dir_exch, opt.nthreads);
         }
 
         if (!opt.generalized) {
-            ints.sys.fockRhf(ws.F, ws.P.*, exch_factor, opt.nthreads);
+            ints.sys.fockRhf(ws.F, ws.P.*, dir_exch, opt.nthreads);
         }
+    }
+
+    if (ws.cosx) |cosx| {
+        const nocc = if (opt.generalized) ints.sys.nel else ints.sys.nel / 2;
+
+        try cosx.contractExchange(ws.F, ws.C.*, nocc, exch_factor, gpa);
     }
 
     if (dft) |pot| {

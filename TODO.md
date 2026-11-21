@@ -72,7 +72,7 @@
 - [ ] Full analytic Hessian (Newton–Raphson) macro-iterations in CASSCF.
 - [x] De-interleave dual tensors to enable BLAS for analytic gradients.
 - [x] Find a way to not export the basis files to disk when using builtin basis sets.
-- [ ] Implement the RIJCOSX approximation (RI-J with Chain-of-Spheres numerical exchange COSX) to accelerate Hartree–Fock and DFT calculations.
+- [x] Implement the RIJCOSX approximation (RI-J with Chain-of-Spheres numerical exchange COSX) to accelerate Hartree–Fock and DFT calculations.
 - [x] Optimize in-core two-electron Fock contraction by exploiting 8-fold permutational symmetry and contiguous memory traversal.
 - [ ] Implement Cauchy–Schwarz integral screening and incremental Fock builds ($\Delta\mathbf{P}$) in direct SCF.
 - [ ] Implement Superposition of Atomic Densities (SAD) initial guess to accelerate SCF convergence.
