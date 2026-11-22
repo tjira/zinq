@@ -77,6 +77,8 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
     var g_old = try Matrix(T).init(sys.atoms.len, 3, gpa);
     defer g_old.deinit(gpa);
 
+    var energy_old: T, var alpha: T = .{ std.math.inf(T), @as(T, @floatCast(bfgs_opt.step)) };
+
     for (0..bfgs_opt.iterations) |i| {
         var timer = std.Io.Timestamp.now(io, .real);
 
@@ -87,18 +89,36 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
 
         const grad = res.grad[0];
 
-        const rms_grad = grad.rms();
+        const rms_grad, const energy = .{ grad.rms(), getOptimizedEnergy(run_opt, res.energy) };
 
         if (log) {
             const time_str = try std.fmt.allocPrint(gpa, "{f}", .{timer.untilNow(io, .real)});
             defer gpa.free(time_str);
 
-            const energy = getOptimizedEnergy(run_opt, res.energy);
-
             try printf(io, "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9}\n", .{ i + 1, energy, rms_grad, grad.max(), time_str });
         }
 
-        const P = try getDensity(T, res).clone(gpa);
+        if (i > 0 and energy > energy_old) {
+            for (0..sys.atoms.len) |j| for (0..3) |k| {
+                sys.coors[3 * j + k] = x_old.at(j, k);
+            };
+
+            for (0..H.nrow()) |j| for (0..H.ncol()) |k| {
+                H.ptr(j, k).* = if (j == k) 1.0 else 0.0;
+            };
+
+            alpha = @max(alpha * 0.5, 0.1);
+
+            for (0..sys.atoms.len) |j| for (0..3) |k| {
+                sys.coors[3 * j + k] -= alpha * g_old.at(j, k);
+            };
+
+            libint.libint_update_coords(sys.ptr, sys.coors.ptr);
+
+            continue;
+        }
+
+        energy_old, const P = .{ energy, try getDensity(T, res).clone(gpa) };
 
         if (guess_density) |*p| p.deinit(gpa);
 
@@ -125,6 +145,8 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
         defer g_new.deinit(gpa);
 
         if (i > 0) {
+            alpha = @min(alpha * 1.1, @as(T, @floatCast(bfgs_opt.step)));
+
             var s = try Vector(T).init(3 * sys.atoms.len, gpa);
             defer s.deinit(gpa);
 
@@ -140,11 +162,19 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
 
             var y_dot_s: T = 0;
 
+            var s_sq: T = 0;
+            var y_sq: T = 0;
+
             for (0..s.length()) |j| {
                 y_dot_s += y.at(j) * s.at(j);
+
+                s_sq += s.at(j) * s.at(j);
+                y_sq += y.at(j) * y.at(j);
             }
 
-            if (y_dot_s > 1e-12) {
+            const cos_theta = if (s_sq * y_sq > 1e-24) y_dot_s / @sqrt(s_sq * y_sq) else 0;
+
+            if (y_dot_s > 1e-12 and cos_theta > 0.05) {
                 var u = try Vector(T).init(s.length(), gpa);
                 defer u.deinit(gpa);
 
@@ -177,7 +207,7 @@ pub fn bfgs(comptime T: type, io: std.Io, runFn: anytype, opt: anytype, sys: *Mo
         gemv(T, &p, H, g_new.asVector(), -1, 0, false);
 
         for (0..p.length()) |j| {
-            sys.coors[j] += bfgs_opt.step * p.at(j);
+            sys.coors[j] += alpha * p.at(j);
         }
 
         libint.libint_update_coords(sys.ptr, sys.coors.ptr);
@@ -218,11 +248,11 @@ pub fn steepestDescent(comptime T: type, io: std.Io, runFn: anytype, opt: anytyp
 
         const rms_grad = grad.rms();
 
+        const energy = getOptimizedEnergy(run_opt, res.energy);
+
         if (log) {
             const time_str = try std.fmt.allocPrint(gpa, "{f}", .{timer.untilNow(io, .real)});
             defer gpa.free(time_str);
-
-            const energy = getOptimizedEnergy(run_opt, res.energy);
 
             try printf(io, "{d:4} {d:20.14} {e:9.3} {e:9.3} {s:9}\n", .{ i + 1, energy, rms_grad, grad.max(), time_str });
         }
