@@ -11,7 +11,7 @@ use Getopt::Long qw(GetOptions      );
 use JSON::PP     qw(decode_json     );
 
 # DEFINE LIBRARY NAMES
-my @lib_names = qw(eigen libint libxc openblas exprtk openmp);
+my @lib_names = qw(eigen libint libxc openblas exprtk openmp glad glfw);
 
 # DEFINE BUILD OPTIONS
 my (%build, %versions, $generic);
@@ -52,6 +52,8 @@ rmtree("lib") if -d "lib";
 # COMPILE EACH PROGRAM
 compile_exprtk  ($prefix,         $pwd          ) if $build{exprtk};
 compile_eigen   ($prefix, $cores, $pwd          ) if $build{eigen};
+compile_glad    ($prefix,         $pwd          ) if $build{glad};
+compile_glfw    ($prefix, $cores, $pwd          ) if $build{glfw};
 compile_libint  ($prefix, $cores, $pwd          ) if $build{libint};
 compile_libxc   ($prefix, $cores, $pwd          ) if $build{libxc};
 compile_openblas($prefix, $cores, $pwd, $generic) if $build{openblas};
@@ -125,7 +127,7 @@ sub write_versions_json {
     my $file = "$prefix/versions.json";
 
     # READ AND DECODE EXISTING VERSIONS IF FILE EXISTS
-    my %merged = -s $file ? %{decode_json(qx(cat '$file'))} : ();
+    my %merged = -s $file ? %{decode_json(scalar qx(cat '$file'))} : ();
 
     # MERGE NEW VERSIONS
     $merged{$_} = $versions->{$_} for keys %$versions;
@@ -474,6 +476,112 @@ sub compile_openmp {
 
     # INSTALL THE LIBRARY
     system("cmake", "--install", "build", "--component", "openmp") == 0 or die "OPENMP INSTALL FAILED";
+
+    # CHANGE BACK TO ORIGINAL DIRECTORY
+    chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
+}
+
+sub compile_glad {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $pwd) = @_;
+
+    # DEFINE THE URL AND COMMIT FOR THE GLAD REPOSITORY
+    my $url    =      "https://github.com/Dav1dde/glad.git";
+    my $commit = "2348b07c1ab4504d60398713781d8a57880234fa";
+
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "glad");
+
+    # CHANGE DIRECTORY TO THE CLONED LIBRARY
+    chdir "lib/glad" or die "CANNOT CHDIR TO 'lib/glad': $!";
+
+    # DEFINE GLAD GENERATION ARGUMENTS
+    my @glad_args = ("python", "-m", "glad", "--out-path", "build", "--api", "gl:core=4.2", "--reproducible", "c");
+
+    # GENERATE GLAD SOURCES
+    system(@glad_args) == 0 or die "GLAD CODE GENERATION FAILED";
+
+    # CREATE TARGET DIRECTORIES IF THEY DO NOT EXIST
+    make_path("$prefix/include/glad", "$prefix/include/GL", "$prefix/include/KHR", "$prefix/lib");
+
+    # INSTALL HEADERS
+    copy("build/include/glad/gl.h", "$prefix/include/glad/gl.h") or die "FAILED TO COPY GLAD SOURCE";
+    copy("build/include/glad/gl.h", "$prefix/include/GL/gl.h")   or die "FAILED TO COPY GLAD SOURCE";
+
+    # INSTALL KHR PLATFORM HEADER
+    copy("build/include/KHR/khrplatform.h", "$prefix/include/KHR/khrplatform.h") or die "FAILED TO COPY KHR PLATFORM HEADER";
+
+    # COMPILE GLAD SOURCE FILE
+    system($ENV{CC}, "-Ibuild/include", "-c", "build/src/gl.c", "-o", "build/gl.o") == 0 or die "GLAD COMPILATION FAILED";
+
+    # CREATE STATIC LIBRARY
+    system($ENV{AR}, "rcs", "$prefix/lib/libglad.a", "build/gl.o") == 0 or die "GLAD ARCHIVE CREATION FAILED";
+
+    # UPDATE ARCHIVE INDEX
+    system($ENV{RANLIB}, "$prefix/lib/libglad.a") == 0 or die "GLAD RANLIB FAILED";
+
+    # CHANGE BACK TO ORIGINAL DIRECTORY
+    chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
+}
+
+sub compile_glfw {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $cores, $pwd) = @_;
+
+    # MAP TARGET ARCHITECTURE AND OPERATING SYSTEM TO CMAKE CONVENTIONS
+    my $system_name = $target =~ /windows/i ? "Windows" : $target =~ /macos/i ? "Darwin" : "Linux";
+
+    # MAP TARGET ARCHITECTURE TO CMAKE CONVENTIONS
+    my $system_proc = $target =~ /aarch64/i ? "arm64" : "x86_64";
+
+    # CHECK IF CROSS-COMPILING FOR MACOS ON NON-DARWIN HOST WITHOUT SDK
+    if ($system_name eq "Darwin" && $^O ne "darwin" && !$ENV{SDKROOT}) {
+        warn "SKIPPING GLFW FOR MACOS SINCE SDKROOT IS NOT SET ON NON-DARWIN HOST\n"; return;
+    }
+
+    # GET HOST ARCHITECTURE
+    my $host_proc = qx(uname -m); chomp $host_proc;
+
+    # GET PATH TO X11 INCLUDE DIRECTORY FOR CROSS-COMPILATION
+    my $x11_inc = "/usr/$system_proc-linux-gnu/include/X11";
+
+    # CHECK IF CROSS-COMPILING FOR LINUX ON DIFFERENT ARCHITECTURE WITHOUT TARGET X11 HEADERS
+    if ($system_name eq "Linux" && $^O eq "linux" && $target =~ /linux/ && $target !~ /^$host_proc/ && !-d $x11_inc) {
+        warn "SKIPPING GLFW FOR '$target' SINCE X11 TARGET HEADERS NOT FOUND FOR CROSS-COMPILATION\n"; return;
+    }
+
+    # DEFINE THE URL AND COMMIT FOR THE GLFW REPOSITORY
+    my $url    =         "https://github.com/glfw/glfw.git";
+    my $commit = "3eaf1255b29fdf5c2895856c7be7d7185ef2b241";
+
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "glfw");
+
+    # CHANGE DIRECTORY TO THE CLONED LIBRARY
+    chdir "lib/glfw" or die "CANNOT CHDIR TO 'lib/glfw': $!";
+
+    # CONFIGURE COMMAND
+    my @args = (
+        cmake_common_options($prefix, $pwd),
+        "-DCMAKE_SYSTEM_NAME=$system_name",
+        "-DCMAKE_SYSTEM_PROCESSOR=$system_proc",
+        "-DGLFW_BUILD_EXAMPLES=OFF",
+        "-DGLFW_BUILD_TESTS=OFF",
+        "-DGLFW_BUILD_DOCS=OFF",
+        "-DGLFW_INSTALL=ON",
+    );
+
+    # PASS SYSROOT IF TARGETING MACOS AND SDKROOT IS DEFINED
+    push @args, "-DCMAKE_OSX_SYSROOT=$ENV{SDKROOT}" if $system_name eq "Darwin" && $ENV{SDKROOT};
+
+    # RUN CONFIGURE
+    system(@args) == 0 or die "GLFW CONFIGURE FAILED";
+
+    # RUN BUILD
+    system("cmake", "--build", "build", "--parallel", $cores) == 0 or die "GLFW BUILD FAILED";
+
+    # INSTALL THE LIBRARY
+    system("cmake", "--install", "build") == 0 or die "GLFW INSTALL FAILED";
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
