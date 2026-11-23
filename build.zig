@@ -84,7 +84,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
 
     const os_enum = module.resolved_target.?.result.os.tag;
 
-    const is_linux, const is_windows = .{ os_enum == .linux, os_enum == .windows };
+    const is_linux, const is_windows, const is_macos = .{ os_enum == .linux, os_enum == .windows, os_enum == .macos };
 
     module.addLibraryPath(.{ .cwd_relative = dir0 });
     module.addIncludePath(.{ .cwd_relative = dir1 });
@@ -98,10 +98,16 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });
     module.addCSourceFile(.{ .file = b.path("src/viewer.cpp"), .flags = flags });
 
-    const libs = [_][]const u8{ "glad", "glfw3", "int2", "openblas", "xc" };
+    const base_libs = [_][]const u8{ "int2", "openblas", "xc" };
 
-    for (libs) |lib| {
+    for (base_libs) |lib| {
         module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static, .use_pkg_config = .no });
+    }
+
+    if (!is_macos) {
+        inline for (.{ "glad", "glfw3" }) |lib| {
+            module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static, .use_pkg_config = .no });
+        }
     }
 
     if (is_linux) {

@@ -1,5 +1,15 @@
 #include "viewer.h"
 
+#ifdef __APPLE__
+
+extern "C" {
+    bool viewer_open_window(void) {
+        return false;
+    }
+}
+
+#else
+
 #include <glad/gl.h>
 
 #define GLFW_INCLUDE_NONE
@@ -14,10 +24,6 @@ extern "C" {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-#ifdef __APPLE__
-        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#endif
 
         GLFWwindow* window = glfwCreateWindow(800, 600, "Zinq Viewer", nullptr, nullptr);
 
@@ -42,3 +48,5 @@ extern "C" {
         glfwDestroyWindow(window); glfwTerminate(); return true;
     }
 }
+
+#endif

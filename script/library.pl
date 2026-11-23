@@ -545,11 +545,8 @@ sub compile_glfw {
     # MAP TARGET ARCHITECTURE TO GNU TRIPLET FOR LINUX
     my $triplet = $target =~ /aarch64/i ? "aarch64-linux-gnu" : "x86_64-linux-gnu";
 
-    # GET PATH TO X11 INCLUDE DIRECTORY FOR CROSS-COMPILATION
-    my $x11_inc = "/usr/$triplet/include/X11";
-
     # CHECK IF CROSS-COMPILING FOR LINUX ON DIFFERENT ARCHITECTURE WITHOUT TARGET X11 HEADERS
-    if ($system_name eq "Linux" && $^O eq "linux" && $target =~ /linux/ && $target !~ /^$host_proc/ && !-d $x11_inc) {
+    if ($system_name eq "Linux" && $^O eq "linux" && $target !~ /^$host_proc/ && !-d "/usr/$triplet/include/X11") {
         warn "SKIPPING GLFW FOR '$target' SINCE X11 TARGET HEADERS NOT FOUND FOR CROSS-COMPILATION\n"; return;
     }
 
@@ -577,19 +574,14 @@ sub compile_glfw {
     # PASS SYSROOT IF TARGETING MACOS AND SDKROOT IS DEFINED
     push @args, "-DCMAKE_OSX_SYSROOT=$ENV{SDKROOT}" if $system_name eq "Darwin" && $ENV{SDKROOT};
 
-    # PASS LIBRARY PATH IF TARGETING LINUX AND MULTIARCH DIRECTORY EXISTS
-    if ($system_name eq "Linux" && -d "/usr/lib/$triplet") {
-        push @args, "-DCMAKE_LIBRARY_PATH=/usr/lib/$triplet";
+    # LIBRARY PATHS FOR CROSS-COMPILING ON LINUX HOSTS
+    if ($system_name eq "Linux") {
+        push @args, "-DCMAKE_LIBRARY_PATH=/usr/lib/$triplet" if -d "/usr/lib/$triplet";
     }
 
-    # PASS MULTIARCH LIBRARY ARCHITECTURE ON DEBIAN/UBUNTU LINUX HOSTS
-    if ($system_name eq "Linux" && -d "/usr/lib/$triplet") {
-        push @args, "-DCMAKE_LIBRARY_ARCHITECTURE=$triplet";
-    }
-
-    # PASS MULTIARCH INCLUDE PATH ON DEBIAN/UBUNTU LINUX HOSTS
-    if ($system_name eq "Linux" && -d "/usr/include/$triplet") {
-        push @args, "-DCMAKE_C_FLAGS=-I/usr/include/$triplet";
+    # PASS INCLUDE PATHS FOR CROSS-COMPILING ON LINUX HOSTS
+    if ($system_name eq "Linux") {
+        push @args, "-DCMAKE_C_FLAGS=-I/usr/include/$triplet" if -d "/usr/include/$triplet";
     }
 
     # RUN CONFIGURE
