@@ -587,6 +587,11 @@ sub compile_glfw {
         push @args, "-DCMAKE_LIBRARY_ARCHITECTURE=$triplet";
     }
 
+    # PASS MULTIARCH INCLUDE PATH ON DEBIAN/UBUNTU LINUX HOSTS
+    if ($system_name eq "Linux" && -d "/usr/include/$triplet") {
+        push @args, "-DCMAKE_C_FLAGS=-I/usr/include/$triplet";
+    }
+
     # RUN CONFIGURE
     system(@args) == 0 or die "GLFW CONFIGURE FAILED";
 
