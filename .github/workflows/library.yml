@@ -46,7 +46,7 @@ jobs:
           key: libs-${{matrix.target}}-${{hashFiles('script/library.pl')}}
 
       - name: Install Dependencies
-        run: sudo apt update && sudo apt install libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
+        run: sudo apt update && sudo apt install libx11-dev libxcursor-dev libxi-dev libxinerama-dev libxrandr-dev
 
       - name: Install Boost
         id: install-boost
