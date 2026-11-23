@@ -61,7 +61,7 @@ fn getVersion(b: *std.Build) ![]const u8 {
     return version;
 }
 
-fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
+fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
     const dirs = [_][]const u8{ "lib", "include", "include/eigen3" };
 
     const arch, const os = .{ @tagName(module.resolved_target.?.result.cpu.arch), @tagName(module.resolved_target.?.result.os.tag) };
@@ -94,9 +94,30 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
 
     const flags: []const []const u8 = if (is_linux) lin_flags else if (is_windows) win_flags else &.{};
 
+    const has_glad = blk: {
+        const path = std.fmt.allocPrint(b.allocator, "{s}/libglad.a", .{dir0}) catch break :blk false;
+
+        std.Io.Dir.cwd().access(b.graph.io, path, .{}) catch break :blk false;
+
+        break :blk true;
+    };
+
+    const has_glfw = blk: {
+        const path = std.fmt.allocPrint(b.allocator, "{s}/libglfw3.a", .{dir0}) catch break :blk false;
+
+        std.Io.Dir.cwd().access(b.graph.io, path, .{}) catch break :blk false;
+
+        break :blk true;
+    };
+
+    const has_graphics = has_glad and has_glfw;
+
     module.addCSourceFile(.{ .file = b.path("src/libint.cpp"), .flags = flags });
     module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });
-    module.addCSourceFile(.{ .file = b.path("src/viewer.cpp"), .flags = flags });
+
+    if (has_graphics) {
+        module.addCSourceFile(.{ .file = b.path("src/viewer.cpp"), .flags = flags });
+    }
 
     const base_libs = [_][]const u8{ "int2", "openblas", "xc" };
 
@@ -104,7 +125,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
         module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static, .use_pkg_config = .no });
     }
 
-    if (!is_macos) {
+    if (has_graphics) {
         inline for (.{ "glad", "glfw3" }) |lib| {
             module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static, .use_pkg_config = .no });
         }
@@ -118,6 +139,8 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
     inline for (.{ "cblas", "exprtk", "lapacke", "libint", "libxc", "viewer" }) |name| {
         module.addImport(name, translateHeader(b, module, b.path("src/" ++ name ++ ".h"), dir1));
     }
+
+    return has_graphics;
 }
 
 fn setupTests(b: *std.Build, zinq_module: *std.Build.Module) void {
@@ -160,7 +183,7 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
 
     const docs = b.addLibrary(.{ .name = "main", .root_module = zinq_module }).getEmittedDocs();
 
-    try linkDependencies(b, zinq_module);
+    const has_graphics = try linkDependencies(b, zinq_module);
 
     const arch, const os = .{ @tagName(target.result.cpu.arch), @tagName(target.result.os.tag) };
 
@@ -177,6 +200,7 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
     options.addOption([]const u8, l1, v1);
     options.addOption([]const u8, l2, v2);
     options.addOption([]const u8, l3, v3);
+    options.addOption(bool, "has_graphics", has_graphics);
 
     zinq_module.addOptions("config", options);
 
