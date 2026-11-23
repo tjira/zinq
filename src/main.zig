@@ -60,6 +60,7 @@ pub const thermostat = @import("thermostat.zig");
 pub const two_electron_contraction = @import("two_electron_contraction.zig");
 pub const validation = @import("validation.zig");
 pub const value = @import("value.zig");
+pub const viewer = @import("viewer.zig");
 pub const wavepacket = @import("wavepacket.zig");
 pub const xc_functional = @import("xc_functional.zig");
 

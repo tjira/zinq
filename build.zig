@@ -96,18 +96,20 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !void {
 
     module.addCSourceFile(.{ .file = b.path("src/libint.cpp"), .flags = flags });
     module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });
+    module.addCSourceFile(.{ .file = b.path("src/viewer.cpp"), .flags = flags });
 
-    const libs = [_][]const u8{ "int2", "openblas", "xc" };
+    const libs = [_][]const u8{ "glad", "glfw3", "int2", "openblas", "xc" };
 
     for (libs) |lib| {
         module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static, .use_pkg_config = .no });
     }
 
     if (is_linux) {
+        module.linkSystemLibrary("dl", .{ .use_pkg_config = .no });
         module.linkSystemLibrary("omp", .{ .preferred_link_mode = .static, .use_pkg_config = .no });
     }
 
-    inline for (.{ "cblas", "exprtk", "lapacke", "libint", "libxc" }) |name| {
+    inline for (.{ "cblas", "exprtk", "lapacke", "libint", "libxc", "viewer" }) |name| {
         module.addImport(name, translateHeader(b, module, b.path("src/" ++ name ++ ".h"), dir1));
     }
 }

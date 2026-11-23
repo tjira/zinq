@@ -5,3 +5,4 @@ pub const exprtk = @import("exprtk");
 pub const lapacke = @import("lapacke");
 pub const libint = @import("libint");
 pub const libxc = @import("libxc");
+pub const viewer = @import("viewer");

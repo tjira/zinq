@@ -512,7 +512,7 @@ sub compile_glad {
     copy("build/include/KHR/khrplatform.h", "$prefix/include/KHR/khrplatform.h") or die "FAILED TO COPY KHR PLATFORM HEADER";
 
     # COMPILE GLAD SOURCE FILE
-    system($ENV{CC}, "-Ibuild/include", "-c", "build/src/gl.c", "-o", "build/gl.o") == 0 or die "GLAD COMPILATION FAILED";
+    system($ENV{CC}, "-fno-sanitize=undefined", "-Ibuild/include", "-c", "build/src/gl.c", "-o", "build/gl.o") == 0 or die "GLAD COMPILATION FAILED";
 
     # CREATE STATIC LIBRARY
     system($ENV{AR}, "rcs", "$prefix/lib/libglad.a", "build/gl.o") == 0 or die "GLAD ARCHIVE CREATION FAILED";

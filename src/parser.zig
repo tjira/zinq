@@ -13,6 +13,7 @@ const main = @import("main.zig");
 const molecular_integrals = @import("molecular_integrals.zig");
 const moller_plesset = @import("moller_plesset.zig");
 const tensor = @import("tensor.zig");
+const viewer = @import("viewer.zig");
 
 const printf = @import("read_write.zig").printf;
 
@@ -54,6 +55,7 @@ pub const Parser = struct {
         \\  molint        CALCULATE MOLECULAR INTEGRALS DIRECTLY ON MOLECULAR COORDINATES
         \\  mp            RUN MOLLER-PLESSET PERTURBATION THEORY ON MOLECULAR COORDINATES
         \\  randn         GENERATE PSEUDORANDOM GAUSSIAN MATRICES
+        \\  view          OPEN GRAPHICAL MOLECULAR AND TENSOR VIEWER
         \\
     ;
 
@@ -224,6 +226,16 @@ pub const Parser = struct {
         \\ARGUMENTS:
         \\  rows                  NUMBER OF MATRIX ROWS
         \\  cols                  NUMBER OF MATRIX COLUMNS
+        \\
+    ;
+
+    /// Help message for the interactive graphical viewer subcommand, detailing usage and options.
+    pub const help_view =
+        \\
+        \\USAGE: zinq view [OPTIONS]
+        \\
+        \\OPTIONS:
+        \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
     ;
 
@@ -1270,6 +1282,25 @@ pub const Parser = struct {
         defer result.deinit(gpa);
     }
 
+    /// Executes the interactive graphical viewer or reports unavailability if the graphics stack is disabled.
+    pub fn runView(io: std.Io, _: Allocator, arena: Allocator, sub: SubcommandAction) !void {
+        const allowed_options = &.{};
+
+        const allowed_flags = &.{};
+
+        const parsed = try parseArgs(io, sub.args, arena, allowed_options, allowed_flags);
+
+        if (parsed.options.contains("-h") or parsed.options.contains("--help")) {
+            try runHelp(io, help_view);
+
+            return;
+        }
+
+        if (!viewer.openWindow()) {
+            try printf(io, "VIEWER IS NOT AVAILABLE\n", .{});
+        }
+    }
+
     /// Enforces specific subcommand constraints on physical parameter evaluation.
     pub fn runSubcommand(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         switch (sub.name) {
@@ -1281,6 +1312,7 @@ pub const Parser = struct {
             .molint => try runMolint(io, gpa, arena, sub),
             .mp => try runMollerPlesset(io, gpa, arena, sub),
             .randn => try runRandn(io, gpa, arena, sub),
+            .view => try runView(io, gpa, arena, sub),
         }
     }
 
@@ -1343,6 +1375,10 @@ pub const Parser = struct {
 
         if (std.mem.eql(u8, args[1], "randn")) {
             return .{ .subcommand = .{ .name = .randn, .args = args[2..] } };
+        }
+
+        if (std.mem.eql(u8, args[1], "view")) {
+            return .{ .subcommand = .{ .name = .view, .args = args[2..] } };
         }
 
         for (args[1..]) |arg| if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
@@ -1464,6 +1500,7 @@ pub const Subcommand = enum {
     molint,
     mp,
     randn,
+    view,
 };
 
 /// Represents subcommand arguments mapped to physical actions.
