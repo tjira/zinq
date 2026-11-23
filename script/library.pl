@@ -542,8 +542,11 @@ sub compile_glfw {
     # GET HOST ARCHITECTURE
     my $host_proc = qx(uname -m); chomp $host_proc;
 
+    # MAP TARGET ARCHITECTURE TO GNU TRIPLET FOR LINUX
+    my $triplet = $target =~ /aarch64/i ? "aarch64-linux-gnu" : "x86_64-linux-gnu";
+
     # GET PATH TO X11 INCLUDE DIRECTORY FOR CROSS-COMPILATION
-    my $x11_inc = "/usr/$system_proc-linux-gnu/include/X11";
+    my $x11_inc = "/usr/$triplet/include/X11";
 
     # CHECK IF CROSS-COMPILING FOR LINUX ON DIFFERENT ARCHITECTURE WITHOUT TARGET X11 HEADERS
     if ($system_name eq "Linux" && $^O eq "linux" && $target =~ /linux/ && $target !~ /^$host_proc/ && !-d $x11_inc) {
@@ -573,6 +576,16 @@ sub compile_glfw {
 
     # PASS SYSROOT IF TARGETING MACOS AND SDKROOT IS DEFINED
     push @args, "-DCMAKE_OSX_SYSROOT=$ENV{SDKROOT}" if $system_name eq "Darwin" && $ENV{SDKROOT};
+
+    # PASS LIBRARY PATH IF TARGETING LINUX AND MULTIARCH DIRECTORY EXISTS
+    if ($system_name eq "Linux" && -d "/usr/lib/$triplet") {
+        push @args, "-DCMAKE_LIBRARY_PATH=/usr/lib/$triplet";
+    }
+
+    # PASS MULTIARCH LIBRARY ARCHITECTURE ON DEBIAN/UBUNTU LINUX HOSTS
+    if ($system_name eq "Linux" && -d "/usr/lib/$triplet") {
+        push @args, "-DCMAKE_LIBRARY_ARCHITECTURE=$triplet";
+    }
 
     # RUN CONFIGURE
     system(@args) == 0 or die "GLFW CONFIGURE FAILED";
