@@ -84,7 +84,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
 
     const os_enum = module.resolved_target.?.result.os.tag;
 
-    const is_linux, const is_windows, const is_macos = .{ os_enum == .linux, os_enum == .windows, os_enum == .macos };
+    const is_linux, const is_windows = .{ os_enum == .linux, os_enum == .windows };
 
     module.addLibraryPath(.{ .cwd_relative = dir0 });
     module.addIncludePath(.{ .cwd_relative = dir1 });
