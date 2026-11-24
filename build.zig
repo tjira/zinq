@@ -117,6 +117,13 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
 
     if (has_graphics) {
         module.addCSourceFile(.{ .file = b.path("src/viewer.cpp"), .flags = flags });
+
+        module.addCSourceFile(.{ .file = b.path("src/viewer_ptable.cpp"), .flags = flags });
+        module.addCSourceFile(.{ .file = b.path("src/viewer_shader.cpp"), .flags = flags });
+
+        module.addCSourceFile(.{ .file = b.path("src/viewer_mesh.cpp"), .flags = flags });
+
+        module.addCSourceFile(.{ .file = b.path("src/viewer_trajectory.cpp"), .flags = flags });
     }
 
     const base_libs = [_][]const u8{ "int2", "openblas", "xc" };

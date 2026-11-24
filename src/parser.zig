@@ -232,10 +232,13 @@ pub const Parser = struct {
     /// Help message for the interactive graphical viewer subcommand, detailing usage and options.
     pub const help_view =
         \\
-        \\USAGE: zinq view [OPTIONS]
+        \\USAGE: zinq view [ARGUMENTS] [OPTIONS]
         \\
         \\OPTIONS:
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
+        \\
+        \\ARGUMENTS:
+        \\  file                  INPUT MOLECULE OR TRAJECTORY IN XYZ FORMAT (.xyz)
         \\
     ;
 
@@ -1283,7 +1286,7 @@ pub const Parser = struct {
     }
 
     /// Executes the interactive graphical viewer or reports unavailability if the graphics stack is disabled.
-    pub fn runView(io: std.Io, _: Allocator, arena: Allocator, sub: SubcommandAction) !void {
+    pub fn runView(io: std.Io, gpa: Allocator, arena: Allocator, sub: SubcommandAction) !void {
         const allowed_options = &.{};
 
         const allowed_flags = &.{};
@@ -1296,8 +1299,28 @@ pub const Parser = struct {
             return;
         }
 
-        if (!viewer.openWindow()) {
-            try printf(io, "\nVIEWER IS NOT AVAILABLE\n", .{});
+        if (parsed.positional.len != 1) {
+            try printf(io, "\nERROR: EXPECTED EXACTLY ONE POSITIONAL ARGUMENT (.xyz FILE)\n", .{});
+
+            try runHelp(io, help_view);
+
+            return;
+        }
+
+        const path = parsed.positional[0];
+
+        std.Io.Dir.cwd().access(io, path, .{}) catch |err| {
+            if (err == error.FileNotFound) {
+                try printf(io, "\nINPUT FILE '{s}' NOT FOUND\n", .{path});
+
+                return;
+            }
+
+            return err;
+        };
+
+        if (!try viewer.openWindow(path, gpa)) {
+            try printf(io, "\nVIEWER IS NOT AVAILABLE OR FAILED TO OPEN\n", .{});
         }
     }
 
