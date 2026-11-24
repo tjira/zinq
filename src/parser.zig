@@ -240,6 +240,20 @@ pub const Parser = struct {
         \\ARGUMENTS:
         \\  file                  INPUT MOLECULE OR TRAJECTORY IN XYZ FORMAT (.xyz)
         \\
+        \\CONTROLS:
+        \\  Left Drag             ORBIT ROTATION
+        \\  Right Drag            PAN TRANSLATION
+        \\  Scroll Wheel          SMOOTH ZOOM
+        \\  Space                 PLAY / PAUSE TRAJECTORY
+        \\  Left Arrow            PREVIOUS FRAME
+        \\  Right Arrow           NEXT FRAME
+        \\  Up Arrow              INCREASE SPEED
+        \\  Down Arrow            DECREASE SPEED
+        \\  R                     RESET CAMERA VIEW
+        \\  B                     TOGGLE BACKGROUND
+        \\  Tab                   CYCLE STYLE
+        \\  Esc                   QUIT VIEWER
+        \\
     ;
 
     /// Initializes the parser by mapping the raw argument space $\mathcal{P}$ to a parsed action.

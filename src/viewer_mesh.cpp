@@ -3,23 +3,26 @@
 
 #include <glad/gl.h>
 
-#include <algorithm>
+#include <cmath>
+#include <vector>
 
 Buffer::Buffer() {
-    generate();
+    std::vector<Vertex> empty; generate(empty);
 }
 
-Buffer::Buffer(const std::vector<Vertex>& data) : data(data) {
-    generate();
+Buffer::Buffer(const std::vector<Vertex>& data) {
+    generate(data);
 }
 
-Buffer::Buffer(const Buffer& other) : data(other.data) {
-    generate();
+Buffer::Buffer(const Buffer& other) {
+    std::vector<Vertex> empty; generate(empty);
 }
 
-Buffer::Buffer(Buffer&& other) noexcept : data(std::move(other.data)), vao(other.vao), vbo(other.vbo) {
+Buffer::Buffer(Buffer&& other) noexcept : vao(other.vao), vbo(other.vbo), count(other.count) {
     other.vao = 0;
     other.vbo = 0;
+
+    other.count = 0;
 }
 
 Buffer::~Buffer() {
@@ -28,7 +31,7 @@ Buffer::~Buffer() {
 
 Buffer& Buffer::operator=(const Buffer& other) {
     if (this != &other) {
-        destroy(); data = other.data; generate();
+        destroy(); std::vector<Vertex> empty; generate(empty);
     }
 
     return *this;
@@ -38,13 +41,15 @@ Buffer& Buffer::operator=(Buffer&& other) noexcept {
     if (this != &other) {
         destroy();
 
-        data = std::move(other.data);
-
         vao = other.vao;
         vbo = other.vbo;
 
+        count = other.count;
+
         other.vao = 0;
         other.vbo = 0;
+
+        other.count = 0;
     }
 
     return *this;
@@ -54,72 +59,95 @@ void Buffer::bind() const {
     glBindVertexArray(vao);
 }
 
-void Buffer::generate() {
-    glGenVertexArrays(1, &vao); glGenBuffers(1, &vbo); glBindVertexArray(vao); glBindBuffer(GL_ARRAY_BUFFER, vbo);
+void Buffer::generate(const std::vector<Vertex>& data) {
+    count = data.size();
+
+    glGenVertexArrays(1, &vao);
+    glGenBuffers     (1, &vbo);
+
+    glBindVertexArray(vao);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
-
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal  ));
 
     glEnableVertexAttribArray(0);
     glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
 
-    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(Vertex), data.data(), GL_STATIC_DRAW);
+    if (!data.empty()) {
+        glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(Vertex), data.data(), GL_STATIC_DRAW);
+    }
 }
 
 void Buffer::destroy() {
     if (vbo) {
-        glDeleteBuffers(1, &vbo); vbo = 0;
+        glDeleteBuffers(1, &vbo);
+
+        vbo = 0;
     }
 
     if (vao) {
-        glDeleteVertexArrays(1, &vao); vao = 0;
+        glDeleteVertexArrays(1, &vao);
+
+        vao = 0;
     }
+
+    count = 0;
 }
 
 Mesh::Mesh(const std::vector<Vertex>& data) : buffer(data) {}
 
 Mesh Mesh::Cylinder(int sectors, bool smooth) {
-    std::vector<Vertex> data;
+    std::vector<Vertex> data; data.reserve(sectors * 12);
 
     for (int j = 0; j < sectors; j++) {
         float theta0 = 2 * static_cast<float>(M_PI) / static_cast<float>(sectors) * static_cast<float>(j + 0);
         float theta1 = 2 * static_cast<float>(M_PI) / static_cast<float>(sectors) * static_cast<float>(j + 1);
 
-        data.push_back({ { std::cos(theta0),  1, std::sin(theta0) } });
-        data.push_back({ { std::cos(theta1),  1, std::sin(theta1) } });
-        data.push_back({ { std::cos(theta1), -1, std::sin(theta1) } });
+        float c0 = std::cos(theta0), s0 = std::sin(theta0);
+        float c1 = std::cos(theta1), s1 = std::sin(theta1);
 
-        data.push_back({ { std::cos(theta0),  1, std::sin(theta0) } });
-        data.push_back({ { std::cos(theta1), -1, std::sin(theta1) } });
-        data.push_back({ { std::cos(theta0), -1, std::sin(theta0) } });
-    }
+        vec3 p0_top = { c0,  1, s0 };
+        vec3 p1_top = { c1,  1, s1 };
+        vec3 p1_bot = { c1, -1, s1 };
+        vec3 p0_bot = { c0, -1, s0 };
 
-    for (size_t i = 0; i < data.size(); i += 3) {
-        vec3 v1 = data[i + 1].position - data[i].position;
-        vec3 v2 = data[i + 2].position - data[i].position;
+        vec3 n0 = smooth ? vec3(c0, 0, s0) : normalize(cross(p1_top - p0_top, p1_bot - p0_top));
 
-        vec3 n = smooth ? vec3(data[i].position.x, 0.0, data[i].position.z) : cross(v1, v2);
+        vec3 n1 = smooth ? vec3(c1, 0, s1) : n0;
 
-        data[i + 0].normal = normalize(smooth ? vec3(data[i + 0].position.x, 0.0, data[i + 0].position.z) : n);
-        data[i + 1].normal = normalize(smooth ? vec3(data[i + 1].position.x, 0.0, data[i + 1].position.z) : n);
-        data[i + 2].normal = normalize(smooth ? vec3(data[i + 2].position.x, 0.0, data[i + 2].position.z) : n);
+        data.push_back({ p0_top, n0 });
+        data.push_back({ p1_top, n1 });
+        data.push_back({ p1_bot, n1 });
+
+        data.push_back({ p0_top, n0 });
+        data.push_back({ p1_bot, n1 });
+        data.push_back({ p0_bot, n0 });
+
+        data.push_back({ { 0.0f, 1.0f, 0.0f }, { 0.0f, 1.0f, 0.0f } });
+
+        data.push_back({ p0_top, { 0.0f, 1.0f, 0.0f } });
+        data.push_back({ p1_top, { 0.0f, 1.0f, 0.0f } });
+
+        data.push_back({ { 0.0f, -1.0f, 0.0f }, { 0.0f, -1.0f, 0.0f } });
+
+        data.push_back({ p1_bot, { 0.0f, -1.0f, 0.0f } });
+        data.push_back({ p0_bot, { 0.0f, -1.0f, 0.0f } });
     }
 
     return Mesh(data);
 }
 
 Mesh Mesh::Icosphere(int subdivisions, bool smooth) {
-    std::vector<Vertex> data;
+    std::vector<vec3> positions;
 
-    float k = (1.0 + std::sqrt(5.0)) / 2.0;
+    float k = (1 + std::sqrt(5)) / 2;
 
     auto push_tri = [&](vec3 a, vec3 b, vec3 c) {
-        data.push_back({ normalize(a) });
-        data.push_back({ normalize(b) });
-        data.push_back({ normalize(c) });
+        positions.push_back(normalize(a));
+        positions.push_back(normalize(b));
+        positions.push_back(normalize(c));
     };
 
     push_tri({ -1,  k,  0 }, { -k,  0,  1 }, {  0,  1,  k });
@@ -147,54 +175,48 @@ Mesh Mesh::Icosphere(int subdivisions, bool smooth) {
     push_tri({  1, -k,  0 }, {  k,  0,  1 }, {  0, -1,  k });
 
     for (int s = 0; s < subdivisions; ++s) {
-        std::vector<Vertex> subdivided;
+        std::vector<vec3> subdivided; subdivided.reserve(positions.size() * 4);
 
-        for (size_t j = 0; j < data.size(); j += 3) {
-            vec3 p1 = data[j + 0].position;
-            vec3 p2 = data[j + 1].position;
-            vec3 p3 = data[j + 2].position;
+        for (size_t j = 0; j < positions.size(); j += 3) {
+            vec3 p1 = positions[j + 0];
+            vec3 p2 = positions[j + 1];
+            vec3 p3 = positions[j + 2];
 
-            vec3 p4 = normalize((p1 + p2) * 0.5);
-            vec3 p5 = normalize((p2 + p3) * 0.5);
-            vec3 p6 = normalize((p3 + p1) * 0.5);
+            vec3 p4 = normalize((p1 + p2) * 0.5f);
+            vec3 p5 = normalize((p2 + p3) * 0.5f);
+            vec3 p6 = normalize((p3 + p1) * 0.5f);
 
-            subdivided.push_back({ p1 }); subdivided.push_back({ p4 }); subdivided.push_back({ p6 });
-            subdivided.push_back({ p4 }); subdivided.push_back({ p2 }); subdivided.push_back({ p5 });
-            subdivided.push_back({ p6 }); subdivided.push_back({ p5 }); subdivided.push_back({ p3 });
-            subdivided.push_back({ p4 }); subdivided.push_back({ p5 }); subdivided.push_back({ p6 });
+            subdivided.push_back(p1); subdivided.push_back(p4); subdivided.push_back(p6);
+            subdivided.push_back(p4); subdivided.push_back(p2); subdivided.push_back(p5);
+            subdivided.push_back(p6); subdivided.push_back(p5); subdivided.push_back(p3);
+            subdivided.push_back(p4); subdivided.push_back(p5); subdivided.push_back(p6);
         }
 
-        data = subdivided;
+        positions = std::move(subdivided);
     }
 
-    for (size_t i = 0; i < data.size(); i += 3) {
-        vec3 v1 = data[i + 1].position - data[i].position;
-        vec3 v2 = data[i + 2].position - data[i].position;
+    std::vector<Vertex> data; data.reserve(positions.size());
 
-        vec3 n = normalize(cross(v1, v2));
+    for (size_t i = 0; i < positions.size(); i += 3) {
+        vec3 p1 = positions[i + 0];
+        vec3 p2 = positions[i + 1];
+        vec3 p3 = positions[i + 2];
 
-        data[i + 0].normal = smooth ? data[i + 0].position : n;
-        data[i + 1].normal = smooth ? data[i + 1].position : n;
-        data[i + 2].normal = smooth ? data[i + 2].position : n;
+        vec3 flat_n = normalize(cross(p2 - p1, p3 - p1));
+
+        data.push_back({ p1, smooth ? p1 : flat_n });
+        data.push_back({ p2, smooth ? p2 : flat_n });
+        data.push_back({ p3, smooth ? p3 : flat_n });
     }
 
     return Mesh(data);
 }
 
-void Mesh::setColor(const vec3& color) {
-    std::vector<Vertex> data = buffer.getData();
-
-    for (auto& v : data) {
-        v.color = color;
-    }
-
-    buffer = Buffer(data);
-}
-
-void Mesh::render(const Shader& shader, const mat4& transform) const {
-    shader.use(); shader.set("u_model", transform);
+void Mesh::render(const Shader& shader, const mat4& transform, const vec3& color) const {
+    shader.set("u_model", transform);
+    shader.set("u_color", color    );
 
     buffer.bind();
 
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)buffer.getSize());
+    glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(buffer.getSize()));
 }

@@ -1,33 +1,36 @@
 #include "viewer_trajectory.hpp"
 #include "viewer_ptable.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 
-#define BINDINGFACTOR 0.013
-#define BONDSIZE 0.09
-#define ATOMSIZEFACTOR 0.007
+static constexpr float kBindingFactor  = 0.013f;
+static constexpr float kBondSize       = 0.090f;
+static constexpr float kAtomSizeFactor = 0.007f;
 
 Geometry Geometry::Load(std::istream& is, int natoms) {
-    Geometry geom; std::string line;
+    Geometry geom; geom.atoms.reserve(natoms);
+
+    std::string line;
 
     for (int i = 0; i < natoms; ++i) {
         if (!std::getline(is, line)) break;
 
-        std::istringstream iss(line); std::string atom;
+        std::istringstream iss(line); std::string symbol;
 
         float x = 0, y = 0, z = 0;
 
-        if (!(iss >> atom >> x >> y >> z)) continue;
+        if (!(iss >> symbol >> x >> y >> z)) continue;
 
-        const AtomInfo& info = get_atom_info(atom);
+        const AtomInfo& info = get_atom_info(symbol);
 
-        mat4 sc = scale(mat4(1.0), vec3(ATOMSIZEFACTOR * info.radius)); mat4 tr = translate(mat4(1.0), vec3(x, y, z));
+        bool dummy = (symbol == "El" || symbol == "el");
 
-        geom.objects.push_back({ tr, mat4(1.0), sc, atom });
+        geom.atoms.push_back({ vec3(x, y, z), info.color, kAtomSizeFactor * info.radius, info.covalent, dummy });
     }
 
-    geom.rebind(BINDINGFACTOR);
+    geom.rebind(kBindingFactor);
 
     return geom;
 }
@@ -35,11 +38,11 @@ Geometry Geometry::Load(std::istream& is, int natoms) {
 vec3 Geometry::getCenter() const {
     vec3 center(0);
 
-    float count = 0.0;
+    float count = 0;
 
-    for (const auto& obj : objects) {
-        if (obj.name != "bond" && obj.name != "El") {
-            center += obj.getPosition(); count += 1;
+    for (const auto& atom : atoms) {
+        if (!atom.is_dummy) {
+            center += atom.position; count += 1;
         }
     }
 
@@ -47,30 +50,34 @@ vec3 Geometry::getCenter() const {
 }
 
 void Geometry::moveBy(const vec3& offset) {
-    for (auto& obj : objects) {
-        obj.translate = translate(obj.translate, offset);
+    for (auto& atom : atoms) {
+        atom.position += offset;
+    }
+
+    for (auto& bond : bonds) {
+        bond.model.at(0, 3) += offset.x;
+        bond.model.at(1, 3) += offset.y;
+        bond.model.at(2, 3) += offset.z;
     }
 }
 
 void Geometry::rebind(float factor) {
-    std::vector<Object> atoms;
+    bonds.clear();
 
-    for (const auto& obj : objects) {
-        if (obj.name != "bond") {
-            atoms.push_back(obj);
-        }
-    }
+    size_t n = atoms.size();
 
-    std::vector<Object> all_objects = atoms;
+    if (n < 2) return;
 
-    size_t n_atoms = atoms.size();
+    bonds.reserve(n * 2);
 
-    for (size_t i = 0; i < n_atoms; ++i) {
-        for (size_t j = i + 1; j < n_atoms; ++j) {
-            if (atoms[i].name == "El" || atoms[j].name == "El") continue;
+    for (size_t i = 0; i < n; ++i) {
+        if (atoms[i].is_dummy) continue;
 
-            vec3 pi = atoms[i].getPosition();
-            vec3 pj = atoms[j].getPosition();
+        for (size_t j = i + 1; j < n; ++j) {
+            if (atoms[j].is_dummy) continue;
+
+            vec3 pi = atoms[i].position;
+            vec3 pj = atoms[j].position;
 
             vec3 vector = pj - pi;
 
@@ -78,10 +85,7 @@ void Geometry::rebind(float factor) {
 
             if (dist < 1e-4) continue;
 
-            const AtomInfo& info_i = get_atom_info(atoms[i].name);
-            const AtomInfo& info_j = get_atom_info(atoms[j].name);
-
-            float thresh = factor * (info_i.covalent + info_j.covalent);
+            float thresh = factor * (atoms[i].covalent + atoms[j].covalent);
 
             if (dist < thresh) {
                 vec3 mid = (pi + pj) * 0.5; vec3 up(0, 1, 0);
@@ -103,24 +107,26 @@ void Geometry::rebind(float factor) {
                     rot = rotate(mat4(1), static_cast<float>(M_PI), vec3(1, 0, 0));
                 }
 
-                mat4 sc = scale(mat4(1), vec3(BONDSIZE, dist * 0.5, BONDSIZE));
+                mat4 sc = scale(mat4(1), vec3(kBondSize, dist * 0.5, kBondSize)); mat4 tr = translate(mat4(1), mid);
 
-                mat4 tr = translate(mat4(1), mid);
-
-                all_objects.push_back({ tr, rot, sc, "bond" });
+                bonds.push_back({ tr * rot * sc });
             }
         }
     }
-
-    objects = std::move(all_objects);
 }
 
-void Geometry::render(const Shader& shader, const std::unordered_map<std::string, Mesh>& meshes) const {
-    for (const auto& obj : objects) {
-        auto it = meshes.find(obj.name);
+void Geometry::render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) const {
+    for (const auto& atom : atoms) {
+        mat4 model = translate(mat4(1.0f), atom.position);
 
-        if (it != meshes.end()) {
-            it->second.render(shader, obj.getModel());
+        model = scale(model, vec3(atom.radius * atom_scale));
+
+        sphere.render(shader, model, atom.color);
+    }
+
+    if (show_bonds) {
+        for (const auto& bond : bonds) {
+            cylinder.render(shader, bond.model, bond_color);
         }
     }
 }
@@ -155,6 +161,32 @@ Trajectory Trajectory::Load(const std::string& filename) {
     return traj;
 }
 
+void Trajectory::stepFrame(int delta) {
+    if (geoms.empty()) return;
+
+    int n = static_cast<int>(geoms.size());
+
+    frame = (frame + delta) % n;
+
+    if (frame < 0) frame += n;
+
+    timestamp = std::chrono::high_resolution_clock::now();
+}
+
+void Trajectory::setFrame(int f) {
+    if (geoms.empty()) return;
+
+    int n = static_cast<int>(geoms.size());
+
+    frame = std::clamp(f, 0, n - 1);
+
+    timestamp = std::chrono::high_resolution_clock::now();
+}
+
+void Trajectory::adjustSpeed(float factor) {
+    wait_ms = std::clamp(wait_ms * factor, 4.0f, 500.0f);
+}
+
 void Trajectory::moveBy(const vec3& offset) {
     for (auto& g : geoms) {
         g.moveBy(offset);
@@ -166,29 +198,37 @@ float Trajectory::getMaxRadius() const {
 
     float max_r = 0;
 
-    for (const auto& obj : geoms[0].getObjects()) {
-        if (obj.name != "bond") {
-            max_r = std::max(max_r, length(obj.getPosition()));
+    for (const auto& geom : geoms) {
+        for (const auto& atom : geom.getAtoms()) {
+            if (!atom.is_dummy) {
+                max_r = std::max(max_r, length(atom.position));
+            }
         }
     }
 
     return max_r > 0 ? max_r : 3;
 }
 
-void Trajectory::render(const Shader& shader, const std::unordered_map<std::string, Mesh>& meshes) {
+void Trajectory::render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) {
     if (geoms.empty()) return;
 
-    auto now = std::chrono::high_resolution_clock::now();
+    if (!paused && geoms.size() > 1) {
+        auto now = std::chrono::high_resolution_clock::now();
 
-    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - timestamp).count();
+        float elapsed = std::chrono::duration<float, std::milli>(now - timestamp).count();
 
-    if (elapsed > wait) {
-        if (!paused && geoms.size() > 1) {
-            frame = (frame + (int)(elapsed / wait)) % (int)geoms.size();
+        if (elapsed >= wait_ms) {
+            int advance = static_cast<int>(elapsed / wait_ms);
+
+            frame = (frame + advance) % static_cast<int>(geoms.size());
+
+            timestamp += std::chrono::milliseconds(static_cast<long long>(advance * wait_ms));
         }
-
-        timestamp = now;
     }
 
-    geoms.at(frame).render(shader, meshes);
+    else {
+        timestamp = std::chrono::high_resolution_clock::now();
+    }
+
+    geoms.at(frame).render(shader, sphere, cylinder, atom_scale, show_bonds, bond_color);
 }
