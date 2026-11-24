@@ -212,26 +212,26 @@ fn dotSlice(comptime T: type, x: []const T, y: []const T) T {
 /// Validates that numeric scalar type is strictly 64-bit real floating-point.
 fn ensureF64(comptime T: type, comptime op: []const u8) void {
     if (comptime isDual(T)) {
-        @compileError(op ++ " does not support dual numbers");
+        @compileError("OPERATION '" ++ op ++ "' DOES NOT SUPPORT DUAL NUMBERS");
     }
 
     if (comptime T != f64) {
-        @compileError(op ++ " only supports f64, found " ++ @typeName(T));
+        @compileError("OPERATION '" ++ op ++ "' ONLY SUPPORTS F64, FOUND TYPE '" ++ @typeName(T) ++ "' INSTEAD");
     }
 }
 
 /// Validates that numeric scalar type is either 64-bit real floating-point or complex double precision.
 fn ensureF64OrComplex(comptime T: type, comptime op: []const u8) void {
     if (comptime isDual(T)) {
-        @compileError(op ++ " does not support dual numbers");
+        @compileError("OPERATION '" ++ op ++ "' DOES NOT SUPPORT DUAL NUMBERS");
     }
 
     if (comptime T != f64 and !isComplex(T)) {
-        @compileError(op ++ " only supports f64 or Complex(f64), found " ++ @typeName(T));
+        @compileError("OPERATION '" ++ op ++ "' ONLY SUPPORTS F64 OR COMPLEX(F64), FOUND TYPE '" ++ @typeName(T) ++ "' INSTEAD");
     }
 
     if (comptime isComplex(T) and primType(T) != f64) {
-        @compileError(op ++ " complex operations require f64 components, found " ++ @typeName(T));
+        @compileError("OPERATION '" ++ op ++ "' COMPLEX OPERATIONS REQUIRE F64, FOUND TYPE '" ++ @typeName(T) ++ "' INSTEAD");
     }
 }
 

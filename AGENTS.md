@@ -16,7 +16,8 @@
 - **File Structure:** Define all `Options` structs at the very top. Following that, strictly order the file: public structs, private structs, public functions, private functions.
 - **Struct Organization:** State/fields first, `init`/`deinit` functions second, then public functions, then private functions.
 - **Function Design:** Minimize function arguments and strictly limit the number of local variables in a given scope. Prioritize readability. Do not wrap function signatures over multiple lines; function signatures can have a maximum of 180 characters.
-- **Documentation:** Every new file, struct, or function needs a physically or mathematically motivated docstring (max ~150 chars). 
+- **Documentation:** Every file, struct, or function declaration needs a physically or mathematically motivated docstring (max ~150 chars), including in C++.
+- **Error Handling:** All error messages (including compile-time errors) must be written in capital letters. Any error details or variables printed with the message must be enclosed in single quotes somewhere in the middle of the message, not at the end.
 
 ## Documentation & Markdown Style
 - **Math Formatting:** Use `\mathbf{}` for matrices/vectors and normal font for operators (e.g., `\hat{H}`). Do not add unnecessary whitespace inside equations.

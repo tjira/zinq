@@ -9,6 +9,7 @@ static constexpr float kBindingFactor  = 0.013f;
 static constexpr float kBondSize       = 0.090f;
 static constexpr float kAtomSizeFactor = 0.007f;
 
+/// Parses an XYZ format stream to construct a molecular geometry with connectivity bonds.
 Geometry Geometry::Load(std::istream& is, int natoms) {
     Geometry geom; geom.atoms.reserve(natoms);
 
@@ -35,6 +36,7 @@ Geometry Geometry::Load(std::istream& is, int natoms) {
     return geom;
 }
 
+/// Calculates the geometric centroid of all atoms in the geometry.
 vec3 Geometry::getCenter() const {
     vec3 center(0);
 
@@ -49,6 +51,7 @@ vec3 Geometry::getCenter() const {
     return count > 0 ? center / count : vec3(0);
 }
 
+/// Translates all atom positions and bond models by a spatial offset vector.
 void Geometry::moveBy(const vec3& offset) {
     for (auto& atom : atoms) {
         atom.position += offset;
@@ -61,6 +64,7 @@ void Geometry::moveBy(const vec3& offset) {
     }
 }
 
+/// Computes covalent bond connectivity models based on pairwise covalent radii.
 void Geometry::rebind(float factor) {
     bonds.clear();
 
@@ -115,6 +119,7 @@ void Geometry::rebind(float factor) {
     }
 }
 
+/// Renders atoms as spheres and covalent bonds as cylinders using the active shader.
 void Geometry::render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) const {
     for (const auto& atom : atoms) {
         mat4 model = translate(mat4(1.0f), atom.position);
@@ -131,6 +136,7 @@ void Geometry::render(const Shader& shader, const Mesh& sphere, const Mesh& cyli
     }
 }
 
+/// Reads a multi-frame molecular trajectory file from disk.
 Trajectory Trajectory::Load(const std::string& filename) {
     Trajectory traj;
 
@@ -161,6 +167,7 @@ Trajectory Trajectory::Load(const std::string& filename) {
     return traj;
 }
 
+/// Advances or rewinds the active frame by the specified frame count.
 void Trajectory::stepFrame(int delta) {
     if (geoms.empty()) return;
 
@@ -173,6 +180,7 @@ void Trajectory::stepFrame(int delta) {
     timestamp = std::chrono::high_resolution_clock::now();
 }
 
+/// Clamps and sets the active trajectory frame index.
 void Trajectory::setFrame(int f) {
     if (geoms.empty()) return;
 
@@ -183,16 +191,19 @@ void Trajectory::setFrame(int f) {
     timestamp = std::chrono::high_resolution_clock::now();
 }
 
+/// Multiplies playback frame delay by a scaling factor.
 void Trajectory::adjustSpeed(float factor) {
     wait_ms = std::clamp(wait_ms * factor, 4.0f, 500.0f);
 }
 
+/// Centers and translates all geometry frames by a spatial offset vector.
 void Trajectory::moveBy(const vec3& offset) {
     for (auto& g : geoms) {
         g.moveBy(offset);
     }
 }
 
+/// Calculates the maximum radial distance from origin across all atoms in all frames.
 float Trajectory::getMaxRadius() const {
     if (geoms.empty()) return 3;
 
@@ -209,6 +220,7 @@ float Trajectory::getMaxRadius() const {
     return max_r > 0 ? max_r : 3;
 }
 
+/// Advances frame timing and dispatches geometry render calls for the current frame.
 void Trajectory::render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) {
     if (geoms.empty()) return;
 

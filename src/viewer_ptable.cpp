@@ -78,6 +78,7 @@ const std::unordered_map<std::string, AtomInfo> ptable = {
 
 static const AtomInfo default_atom = { 60, 75, { 0.85, 0.40, 0.85 }, 12 };
 
+/// Retrieves element properties by chemical symbol with a fallback for unknown elements.
 const AtomInfo& get_atom_info(const std::string& symbol) {
     std::string norm = symbol;
 

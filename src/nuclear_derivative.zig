@@ -253,7 +253,7 @@ pub fn calculateNumericalNacv(comptime T: type, ctx: DerivativeContext(T), runFn
         if (@abs(s2_0 - s2_1) > 0.5) {
             const params = .{ s2_0, s2_1 };
 
-            std.log.err("NONADIABATIC COUPLING REQUIRES STATES WITH THE SAME SPIN MULTIPLICITY (<S^2> = {d:.2} vs {d:.2})", params);
+            std.log.err("NONADIABATIC COUPLING REQUIRES STATES WITH MATCHING SPIN MULTIPLICITY (<S^2> = '{d:.2}' VS '{d:.2}') ACROSS PAIRS", params);
 
             return error.InvalidInput;
         }

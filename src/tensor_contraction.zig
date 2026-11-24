@@ -46,7 +46,7 @@ pub fn contract(comptime T: type, comptime spec: []const u8, C: anytype, A: anyt
         return;
     }
 
-    if (comptime T != f64) @compileError("contract only supports f64, found " ++ @typeName(T));
+    if (comptime T != f64) @compileError("CONTRACT OPERATION ONLY SUPPORTS F64, FOUND TYPE '" ++ @typeName(T) ++ "' INSTEAD");
 
     const a_ten, const b_ten, const c_ten = .{ A.asTensor(), B.asTensor(), C.asTensor() };
 

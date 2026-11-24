@@ -15,6 +15,7 @@ struct SystemData {
     std::vector<libint2::Atom> atoms; libint2::BasisSet obs;
 };
 
+/// Parses a Gaussian 94 format basis set stream into Libint shell specifications.
 static std::vector<std::vector<libint2::Shell>> read_g94_basis_stream(std::istream& is, bool force_cart_d = false) {
     std::vector<std::vector<libint2::Shell>> ref_shells; std::string line, tag; size_t Z = 0;
 
@@ -79,6 +80,7 @@ static std::vector<std::vector<libint2::Shell>> read_g94_basis_stream(std::istre
     return ref_shells;
 }
 
+/// Loads and parses basis set shells from an inline string or file path.
 static std::vector<std::vector<libint2::Shell>> load_basis(const char *basis_str) {
     if (!basis_str) return {};
 
@@ -100,6 +102,7 @@ static std::vector<std::vector<libint2::Shell>> load_basis(const char *basis_str
 extern "C" {
     using namespace libint2;
 
+    /// Initializes the Libint molecular integral environment, atomic coordinates, and basis set.
     SystemData* libint_init(const char *system, const char *basis, double bohr_to_angstrom) {
         std::ifstream file(system);
 
@@ -110,28 +113,34 @@ extern "C" {
         return new SystemData{atoms, BasisSet(atoms, load_basis(basis))};
     }
 
+    /// Releases Libint molecular system resources and frees allocated memory.
     void libint_deinit(SystemData *sys) {
         if (!sys) return; delete sys;
     }
 
+    /// Creates a deep copy of the molecular system and orbital basis structures.
     SystemData* libint_clone(SystemData *sys) {
         if (!sys) return nullptr; return new SystemData(*sys);
     }
 
+    /// Returns the number of atoms in the molecular system.
     size_t libint_nat(SystemData *sys) {
         if (!sys) return 0; return sys->atoms.size();
     }
 
+    /// Returns the total number of contracted basis functions in the primary basis.
     size_t libint_nbf(SystemData *sys) {
         if (!sys) return 0; return sys->obs.nbf();
     }
 
+    /// Computes the number of atomic orbitals for an element in the STO-3G minimal basis.
     size_t libint_num_ao(int Z) {
         if (Z <= 0 || Z > 53) return 0;
 
         return libint2::sto3g_num_ao(Z);
     }
 
+    /// Constructs the initial Superposition of Atomic Densities (SAD) guess density matrix.
     void libint_soad_density(double *D, SystemData *sys) {
         if (!sys) return;
 
@@ -154,6 +163,7 @@ extern "C" {
         }
     }
 
+    /// Returns the number of contracted basis functions in the auxiliary basis set.
     size_t libint_aux_nbf(SystemData *sys, const char *aux_basis) {
         if (!sys) return 0; libint2::initialize();
 
@@ -164,6 +174,7 @@ extern "C" {
         return nbf;
     }
 
+    /// Retrieves atomic numbers for all atoms in the molecular system.
     void libint_atoms(int *atoms, SystemData *sys) {
         if (!sys) return;
 
@@ -172,6 +183,7 @@ extern "C" {
         }
     }
 
+    /// Retrieves Cartesian coordinates in Bohr for all atoms in the molecular system.
     void libint_coors(double *coords, SystemData *sys) {
         if (!sys) return;
 
@@ -182,6 +194,7 @@ extern "C" {
         }
     }
 
+    /// Maps each basis function index to its parent atom index in the molecular system.
     void libint_bf2at(int *map, SystemData *sys) {
         if (!sys) return;
 
@@ -192,6 +205,7 @@ extern "C" {
         }
     }
 
+    /// Updates nuclear Cartesian coordinates and recalculates basis shell center origins.
     void libint_update_coords(SystemData *sys, const double *coords) {
         if (!sys) return;
 
@@ -214,6 +228,7 @@ extern "C" {
 extern "C" {
     using namespace libint2;
 
+    /// Evaluates one-electron integrals over basis shells using multithreaded Libint engines.
     void oneelec(double *I, libint2::Engine &engine, const BasisSet &obs, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -254,6 +269,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates one-electron overlap integrals between two distinct molecular basis sets.
     void oneelec_2sys(double *I, libint2::Engine &engine, const BasisSet &obs1, const BasisSet &obs2, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -295,6 +311,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates four-center two-electron Coulomb repulsion integrals over basis shells.
     void twoelec(double *I, libint2::Engine &engine, const BasisSet &obs, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -357,6 +374,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates two-center two-electron Coulomb metric integrals over auxiliary basis shells.
     void twoelec_2c(double *J, libint2::Engine &engine, const BasisSet &aux, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -399,6 +417,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates three-center two-electron Coulomb integrals over orbital and auxiliary shells.
     void twoelec_3c(double *I, libint2::Engine &engine, const BasisSet &obs, const BasisSet &aux, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -451,6 +470,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates generalized Hartree-Fock two-electron Coulomb and exchange Fock matrix contributions.
     void twoelec_fock_ghf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -595,6 +615,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates restricted Hartree-Fock two-electron Coulomb and exchange Fock matrix contributions.
     void twoelec_fock_rhf(double *F, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -687,6 +708,7 @@ extern "C" {
         }
     }
 
+    /// Computes four-center two-electron electron repulsion integrals over contracted basis functions.
     void libint_coulomb(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -695,6 +717,7 @@ extern "C" {
         twoelec(I, engine, sys->obs, nthreads); libint2::finalize();
     }
 
+    /// Computes two-center two-electron Coulomb metric integrals over auxiliary basis functions.
     void libint_coulomb_2c(double *J, SystemData *sys, const char *aux_basis, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -708,6 +731,7 @@ extern "C" {
         twoelec_2c(J, engine, aux, nthreads); libint2::finalize();
     }
 
+    /// Computes three-center two-electron Coulomb integrals over orbital and auxiliary bases.
     void libint_coulomb_3c(double *I, SystemData *sys, const char *aux_basis, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -721,6 +745,7 @@ extern "C" {
         twoelec_3c(I, engine, sys->obs, aux, nthreads); libint2::finalize();
     }
 
+    /// Computes the generalized Hartree-Fock two-electron Fock matrix from the density matrix.
     void libint_fock_ghf(double *F, const double *P, double exch_factor, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -729,6 +754,7 @@ extern "C" {
         twoelec_fock_ghf(F, P, exch_factor, engine, sys->obs, nthreads); libint2::finalize();
     }
 
+    /// Computes the restricted Hartree-Fock two-electron Fock matrix from the density matrix.
     void libint_fock_rhf(double *F, const double *P, double exch_factor, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -737,6 +763,7 @@ extern "C" {
         twoelec_fock_rhf(F, P, exch_factor, engine, sys->obs, nthreads); libint2::finalize();
     }
 
+    /// Computes one-electron kinetic energy integrals over contracted basis functions.
     void libint_kinetic(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -745,6 +772,7 @@ extern "C" {
         oneelec(I, engine, sys->obs, nthreads); libint2::finalize();
     }
 
+    /// Computes one-electron nuclear attraction integrals over contracted basis functions.
     void libint_nuclear(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -755,6 +783,7 @@ extern "C" {
         oneelec(I, engine, sys->obs, nthreads); libint2::finalize();
     }
 
+    /// Computes one-electron overlap integrals between contracted basis functions.
     void libint_overlap(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -763,6 +792,7 @@ extern "C" {
         oneelec(I, engine, sys->obs, nthreads); libint2::finalize();
     }
 
+    /// Computes the overlap integral matrix between basis sets of two distinct molecular systems.
     void libint_overlap_2sys(double *I, SystemData *sys1, SystemData *sys2, size_t nthreads) {
         if (!sys1 || !sys2) return; libint2::initialize();
 
@@ -779,6 +809,7 @@ extern "C" {
 extern "C" {
     using namespace libint2;
 
+    /// Evaluates first geometric derivatives of one-electron integrals with respect to nuclei.
     void oneelec_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -834,6 +865,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates first geometric derivatives of four-center two-electron Coulomb integrals.
     void twoelec_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -933,6 +965,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates first geometric derivatives of two-center two-electron Coulomb metric integrals.
     void twoelec_2c_deriv(double *I, libint2::Engine &engine, const BasisSet &aux, const std::vector<Atom> &atoms, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -983,6 +1016,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates first geometric derivatives of three-center two-electron Coulomb integrals.
     void twoelec_3c_deriv(double *I, libint2::Engine &engine, const BasisSet &obs, const BasisSet &aux, const std::vector<Atom> &atoms, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -1045,6 +1079,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates generalized Hartree-Fock two-electron energy gradient contributions.
     void twoelec_gradient_ghf(double *G, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -1189,6 +1224,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates restricted Hartree-Fock two-electron energy gradient contributions.
     void twoelec_gradient_rhf(double *G, const double *P, double exch_factor, libint2::Engine &engine, const BasisSet &obs, const std::vector<Atom> &atoms, size_t nthreads) {
         nthreads = std::max<size_t>(1, nthreads);
 
@@ -1301,6 +1337,7 @@ extern "C" {
         }
     }
 
+    /// Computes the generalized Hartree-Fock two-electron energy gradient with respect to nuclear coordinates.
     void libint_coulomb_gradient_ghf(double *G, const double *P, double exch_factor, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -1309,6 +1346,7 @@ extern "C" {
         twoelec_gradient_ghf(G, P, exch_factor, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
     }
 
+    /// Computes the restricted Hartree-Fock two-electron energy gradient with respect to nuclear coordinates.
     void libint_coulomb_gradient_rhf(double *G, const double *P, double exch_factor, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -1317,6 +1355,7 @@ extern "C" {
         twoelec_gradient_rhf(G, P, exch_factor, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
     }
 
+    /// Computes first geometric derivatives of four-center two-electron Coulomb repulsion integrals.
     void libint_coulomb_deriv(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -1325,6 +1364,7 @@ extern "C" {
         twoelec_deriv(I, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
     }
 
+    /// Computes first geometric derivatives of two-center two-electron Coulomb metric integrals.
     void libint_coulomb_2c_deriv(double *I, SystemData *sys, const char *aux_basis, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -1335,6 +1375,7 @@ extern "C" {
         twoelec_2c_deriv(I, engine, aux, sys->atoms, nthreads); libint2::finalize();
     }
 
+    /// Computes first geometric derivatives of three-center two-electron Coulomb integrals.
     void libint_coulomb_3c_deriv(double *I, SystemData *sys, const char *aux_basis, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -1349,6 +1390,7 @@ extern "C" {
         twoelec_3c_deriv(I, engine, sys->obs, aux, sys->atoms, nthreads); libint2::finalize();
     }
 
+    /// Computes first geometric derivatives of one-electron kinetic energy integrals.
     void libint_kinetic_deriv(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -1357,6 +1399,7 @@ extern "C" {
         oneelec_deriv(I, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
     }
 
+    /// Computes first geometric derivatives of one-electron overlap integrals.
     void libint_overlap_deriv(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -1365,6 +1408,7 @@ extern "C" {
         oneelec_deriv(I, engine, sys->obs, sys->atoms, nthreads); libint2::finalize();
     }
 
+    /// Computes first geometric derivatives of one-electron nuclear attraction integrals.
     void libint_nuclear_deriv(double *I, SystemData *sys, size_t nthreads) {
         if (!sys) return; libint2::initialize();
 
@@ -1379,6 +1423,7 @@ extern "C" {
 extern "C" {
     using namespace libint2; using namespace libint2::solidharmonics;
 
+    /// Evaluates molecular orbital basis function amplitudes at a Cartesian spatial coordinate.
     void libint_evaluate_basis_v(double *phi, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
@@ -1448,6 +1493,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates basis function amplitudes and spatial gradient components at a Cartesian coordinate.
     void libint_evaluate_basis_vg(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 
@@ -1549,6 +1595,7 @@ extern "C" {
         }
     }
 
+    /// Evaluates basis function amplitudes, spatial gradients, and Laplacian values at a point.
     void libint_evaluate_basis_vgl(double *phi, double *dphi_dx, double *dphi_dy, double *dphi_dz, double *lapl_phi, double x, double y, double z, SystemData *sys) {
         if (!sys) return;
 

@@ -90,6 +90,7 @@ struct OrbitCamera {
     float initial_yaw      =  0;
     float initial_pitch    =  0;
 
+    /// Resets camera position, orientation, and zoom distance to initial values.
     void reset() {
         target   =   initial_target;
         distance = initial_distance;
@@ -97,6 +98,7 @@ struct OrbitCamera {
         pitch    =    initial_pitch;
     }
 
+    /// Computes the 3D Cartesian eye coordinates from spherical angles and target.
     vec3 getEye() const {
         float cp = std::cos(pitch);
         float sp = std::sin(pitch);
@@ -107,10 +109,12 @@ struct OrbitCamera {
         return target + distance * vec3(cp * sy, sp, cp * cy);
     }
 
+    /// Constructs the view matrix for camera transform looking toward target.
     mat4 getViewMatrix() const {
         return lookAt(getEye(), target, vec3(0, 1, 0));
     }
 
+    /// Rotates the camera orbit angles around the target center.
     void orbit(float dx, float dy) {
         yaw   -= dx * 0.008;
         pitch += dy * 0.008;
@@ -120,6 +124,7 @@ struct OrbitCamera {
         pitch = std::clamp(pitch, -max_pitch, max_pitch);
     }
 
+    /// Shifts the camera target along camera screen-aligned plane vectors.
     void pan(float dx, float dy) {
         vec3 eye = getEye();
 
@@ -133,6 +138,7 @@ struct OrbitCamera {
         target += (-dx * r + dy * u) * factor;
     }
 
+    /// Adjusts the camera view distance from the orbital center.
     void zoom(float dy) {
         distance *= std::pow(0.9, dy);
 
@@ -171,6 +177,7 @@ struct ViewerState {
 
     bool last_reported_pause = false;
 
+    /// Updates the window title with filename, frame progress, pause, and FPS status.
     void updateTitle(GLFWwindow* window) {
         int cur_frame = trajectory.currentFrame();
 
@@ -202,6 +209,7 @@ struct ViewerState {
     }
 };
 
+/// Handles mouse button press and release events for camera interaction.
 static void mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
@@ -223,6 +231,7 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
     }
 }
 
+/// Handles mouse motion events to orbit or pan the camera.
 static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
@@ -245,6 +254,7 @@ static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     }
 }
 
+/// Handles mouse wheel scroll events for interactive camera zoom.
 static void scrollCallback(GLFWwindow* window, double, double dy) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
@@ -253,6 +263,7 @@ static void scrollCallback(GLFWwindow* window, double, double dy) {
     }
 }
 
+/// Adjusts the OpenGL viewport and projection matrix on window resize.
 static void resizeCallback(GLFWwindow* window, int width, int height) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
@@ -266,6 +277,7 @@ static void resizeCallback(GLFWwindow* window, int width, int height) {
     }
 }
 
+/// Handles keyboard input events for trajectory playback and rendering mode.
 static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
@@ -295,6 +307,7 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     }
 }
 
+/// Uploads camera view, projection, and illumination uniforms to the shader.
 static void setUniforms(const Shader& shader, const ViewerState& state) {
     shader.use();
 
@@ -313,6 +326,7 @@ static void setUniforms(const Shader& shader, const ViewerState& state) {
 }
 
 extern "C" {
+    /// Opens an interactive OpenGL viewport rendering the molecular system or trajectory at the given file path.
     bool viewer_open_window(const char *filename) {
         if (!filename) return false;
 
@@ -320,7 +334,7 @@ extern "C" {
             Trajectory traj = Trajectory::Load(filename);
 
             if (traj.empty()) {
-                std::cerr << "Error: No molecular coordinates found in " << filename << std::endl;
+                std::cerr << "NO MOLECULAR COORDINATES FOUND IN '" << filename << "' STRUCTURE FILE" << std::endl;
 
                 return false;
             }
@@ -428,7 +442,7 @@ extern "C" {
             glfwDestroyWindow(window); glfwTerminate(); return true;
 
         } catch (const std::exception& e) {
-            std::cerr << "Viewer runtime error: " << e.what() << std::endl; glfwTerminate(); return false;
+            std::cerr << "VIEWER RUNTIME ERROR '" << e.what() << "' OCCURRED" << std::endl; glfwTerminate(); return false;
         }
     }
 }

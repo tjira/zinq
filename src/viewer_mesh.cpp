@@ -6,18 +6,22 @@
 #include <cmath>
 #include <vector>
 
+/// Initializes an empty OpenGL vertex array and buffer object.
 Buffer::Buffer() {
     std::vector<Vertex> empty; generate(empty);
 }
 
+/// Allocates and uploads vertex coordinate and normal data to GPU buffers.
 Buffer::Buffer(const std::vector<Vertex>& data) {
     generate(data);
 }
 
+/// Copy constructor creating an independent vertex buffer instance.
 Buffer::Buffer(const Buffer& other) {
     std::vector<Vertex> empty; generate(empty);
 }
 
+/// Move constructor transferring GPU vertex array and buffer ownership.
 Buffer::Buffer(Buffer&& other) noexcept : vao(other.vao), vbo(other.vbo), count(other.count) {
     other.vao = 0;
     other.vbo = 0;
@@ -25,10 +29,12 @@ Buffer::Buffer(Buffer&& other) noexcept : vao(other.vao), vbo(other.vbo), count(
     other.count = 0;
 }
 
+/// Destroys OpenGL buffer objects and releases GPU memory.
 Buffer::~Buffer() {
     destroy();
 }
 
+/// Copy assignment reallocating vertex buffer state.
 Buffer& Buffer::operator=(const Buffer& other) {
     if (this != &other) {
         destroy(); std::vector<Vertex> empty; generate(empty);
@@ -37,6 +43,7 @@ Buffer& Buffer::operator=(const Buffer& other) {
     return *this;
 }
 
+/// Move assignment transferring GPU buffer resource handles.
 Buffer& Buffer::operator=(Buffer&& other) noexcept {
     if (this != &other) {
         destroy();
@@ -55,10 +62,12 @@ Buffer& Buffer::operator=(Buffer&& other) noexcept {
     return *this;
 }
 
+/// Binds the OpenGL vertex array object for draw dispatch.
 void Buffer::bind() const {
     glBindVertexArray(vao);
 }
 
+/// Generates GPU vertex attributes and uploads triangle vertex records.
 void Buffer::generate(const std::vector<Vertex>& data) {
     count = data.size();
 
@@ -80,6 +89,7 @@ void Buffer::generate(const std::vector<Vertex>& data) {
     }
 }
 
+/// Deletes GPU vertex array and vertex buffer resources.
 void Buffer::destroy() {
     if (vbo) {
         glDeleteBuffers(1, &vbo);
@@ -96,8 +106,10 @@ void Buffer::destroy() {
     count = 0;
 }
 
+/// Constructs a polygonal mesh initialized with given vertex geometry data.
 Mesh::Mesh(const std::vector<Vertex>& data) : buffer(data) {}
 
+/// Procedurally generates a cylindrical polygonal mesh for molecular bonds.
 Mesh Mesh::Cylinder(int sectors, bool smooth) {
     std::vector<Vertex> data; data.reserve(sectors * 12);
 
@@ -139,6 +151,7 @@ Mesh Mesh::Cylinder(int sectors, bool smooth) {
     return Mesh(data);
 }
 
+/// Procedurally generates an icosphere mesh for spherical atom centers.
 Mesh Mesh::Icosphere(int subdivisions, bool smooth) {
     std::vector<vec3> positions;
 
@@ -212,6 +225,7 @@ Mesh Mesh::Icosphere(int subdivisions, bool smooth) {
     return Mesh(data);
 }
 
+/// Dispatches drawing commands for the mesh using active shader uniforms.
 void Mesh::render(const Shader& shader, const mat4& transform, const vec3& color) const {
     shader.set("u_model", transform);
     shader.set("u_color", color    );

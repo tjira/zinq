@@ -67,7 +67,7 @@ pub fn generateDeterminants(nel: usize, nbf: usize, opt: anytype, gpa: Allocator
         };
     }
 
-    @compileError("DETERMINANT GENERATION NOT IMPLEMENTED FOR OPTIONS TYPE: " ++ @typeName(@TypeOf(opt)));
+    @compileError("DETERMINANT GENERATION FOR OPTIONS TYPE '" ++ @typeName(@TypeOf(opt)) ++ "' IS NOT IMPLEMENTED");
 }
 
 /// Extracts the one-particle reduced density matrix from an electronic structure result.
@@ -91,7 +91,7 @@ pub fn getMethodKind(comptime OptType: type) MethodKind {
         configuration_interaction.Options => .configuration_interaction,
         hartree_fock.Options => .hartree_fock,
         moller_plesset.Options => .moller_plesset,
-        else => @compileError("UNSUPPORTED OPTIONS TYPE: " ++ @typeName(OptType)),
+        else => @compileError("OPTIONS TYPE '" ++ @typeName(OptType) ++ "' IS NOT SUPPORTED"),
     };
 }
 
@@ -192,7 +192,7 @@ pub fn isPostScf(comptime Opt: type) bool {
     return switch (Opt) {
         casscf.Options, configuration_interaction.Options, moller_plesset.Options => true,
         hartree_fock.Options => false,
-        else => @compileError("UNSUPPORTED OPTIONS TYPE: " ++ @typeName(Opt)),
+        else => @compileError("OPTIONS TYPE '" ++ @typeName(Opt) ++ "' IS NOT SUPPORTED"),
     };
 }
 
@@ -505,7 +505,7 @@ fn getMethod(comptime OptType: type) type {
         configuration_interaction.Options => configuration_interaction,
         hartree_fock.Options => hartree_fock,
         moller_plesset.Options => moller_plesset,
-        else => @compileError("UNSUPPORTED OPTIONS TYPE: " ++ @typeName(OptType)),
+        else => @compileError("OPTIONS TYPE '" ++ @typeName(OptType) ++ "' IS NOT SUPPORTED"),
     };
 }
 

@@ -75,7 +75,7 @@ pub fn PartialWaveContext(comptime T: type) type {
                 var sim = initFn(T, io, opt_j, alloc) catch |err| {
                     self.in_mutx.unlock(io);
 
-                    std.log.err("FAILED TO INITIALIZE SIMULATION FOR J={d} ({s})", .{ j, @errorName(err) });
+                    std.log.err("FAILED TO INITIALIZE SIMULATION WITH ERROR '{s}' FOR J={d}", .{ @errorName(err), j });
 
                     continue;
                 };
@@ -85,7 +85,7 @@ pub fn PartialWaveContext(comptime T: type) type {
                 defer sim.deinit(alloc);
 
                 var res = solveFn(T, io, .{ .opt = opt_j, .sim = &sim, .eigs = 0, .log = false }, alloc) catch |err| {
-                    std.log.err("SIMULATION FAILED FOR J={d} ({s})", .{ j, @errorName(err) });
+                    std.log.err("SIMULATION FAILED WITH ERROR '{s}' FOR J={d}", .{ @errorName(err), j });
 
                     continue;
                 };

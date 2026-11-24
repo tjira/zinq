@@ -469,7 +469,8 @@ pub fn Tensor(comptime T: type, comptime N: usize) type {
 
         /// Returns a sub-tensor view along the leading dimension at the specified index.
         pub fn slice(self: @This(), i: usize) if (N > 1) Tensor(T, N - 1) else void {
-            if (comptime N <= 1) @compileError("Tensor rank must be greater than 1 to slice");
+            if (comptime N <= 1) @compileError("TENSOR RANK MUST BE GREATER THAN 1 TO SLICE");
+
             std.debug.assert(i < self.shape[0]);
 
             var sub_shape: [N - 1]usize, var sub_size: usize = .{ undefined, 1 };
