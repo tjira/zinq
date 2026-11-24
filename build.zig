@@ -82,9 +82,9 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
 
     module.addIncludePath(b.path("src"));
 
-    const os_enum = module.resolved_target.?.result.os.tag;
+    const target = module.resolved_target.?.result;
 
-    const is_linux, const is_windows = .{ os_enum == .linux, os_enum == .windows };
+    const is_linux, const is_windows, const is_gnu = .{ target.os.tag == .linux, target.os.tag == .windows, target.isGnuLibC() };
 
     module.addLibraryPath(.{ .cwd_relative = dir0 });
     module.addIncludePath(.{ .cwd_relative = dir1 });
@@ -132,8 +132,15 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
     }
 
     if (is_linux) {
-        module.linkSystemLibrary("dl", .{ .use_pkg_config = .no });
         module.linkSystemLibrary("omp", .{ .preferred_link_mode = .static, .use_pkg_config = .no });
+
+        if (is_gnu) {
+            module.linkSystemLibrary("dl", .{ .use_pkg_config = .no });
+        }
+    }
+
+    if (is_windows and has_graphics) {
+        module.linkSystemLibrary("gdi32", .{ .use_pkg_config = .no });
     }
 
     inline for (.{ "cblas", "exprtk", "lapacke", "libint", "libxc", "viewer" }) |name| {

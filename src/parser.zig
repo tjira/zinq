@@ -1297,7 +1297,7 @@ pub const Parser = struct {
         }
 
         if (!viewer.openWindow()) {
-            try printf(io, "VIEWER IS NOT AVAILABLE\n", .{});
+            try printf(io, "\nVIEWER IS NOT AVAILABLE\n", .{});
         }
     }
 
