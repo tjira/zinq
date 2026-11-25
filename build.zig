@@ -90,7 +90,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
     module.addIncludePath(.{ .cwd_relative = dir1 });
     module.addIncludePath(.{ .cwd_relative = dir2 });
 
-    const lin_flags, const win_flags = .{ &.{ "-fopenmp", "-DNDEBUG" }, &.{ "-DNDEBUG" } };
+    const lin_flags, const win_flags = .{ &.{ "-fopenmp", "-DNDEBUG" }, &.{"-DNDEBUG"} };
 
     const flags: []const []const u8 = if (is_linux) lin_flags else if (is_windows) win_flags else &.{};
 
@@ -110,7 +110,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
         break :blk true;
     };
 
-    const has_graphics = has_glad and has_glfw;
+    const has_graphics = has_glad and has_glfw and (!is_linux or is_gnu);
 
     module.addCSourceFile(.{ .file = b.path("src/libint.cpp"), .flags = flags });
     module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });
