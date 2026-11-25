@@ -14,7 +14,7 @@ use JSON::PP     qw(decode_json     );
 my @lib_names = qw(eigen libint libxc openblas exprtk openmp glad glfw);
 
 # DEFINE BUILD OPTIONS
-my (%build, %versions, $generic);
+my (%build, %versions);
 
 # DEFINE DEFAULT TARGET
 my $target = qx(uname -m); chomp $target; $target .= "-$^O";
@@ -27,7 +27,6 @@ GetOptions(
     (map {$_ => \$build{$_}} @lib_names),
     "target=s" => \$target,
     "cores|j=i"=> \$cores,
-    "generic"  => \$generic,
 );
 
 # IF NO FLAGS ARE PROVIDED, BUILD EVERYTHING
@@ -50,14 +49,14 @@ create_compiler_wrappers($target, $pwd);
 rmtree("lib") if -d "lib";
 
 # COMPILE EACH PROGRAM
-compile_exprtk  ($prefix,         $pwd          ) if $build{exprtk};
-compile_eigen   ($prefix, $cores, $pwd          ) if $build{eigen};
-compile_glad    ($prefix,         $pwd          ) if $build{glad};
-compile_glfw    ($prefix, $cores, $pwd          ) if $build{glfw};
-compile_libint  ($prefix, $cores, $pwd          ) if $build{libint};
-compile_libxc   ($prefix, $cores, $pwd          ) if $build{libxc};
-compile_openblas($prefix, $cores, $pwd, $generic) if $build{openblas};
-compile_openmp  ($prefix, $cores, $pwd          ) if $build{openmp};
+compile_exprtk  ($prefix,         $pwd) if $build{exprtk};
+compile_eigen   ($prefix, $cores, $pwd) if $build{eigen};
+compile_glad    ($prefix,         $pwd) if $build{glad};
+compile_glfw    ($prefix, $cores, $pwd) if $build{glfw};
+compile_libint  ($prefix, $cores, $pwd) if $build{libint};
+compile_libxc   ($prefix, $cores, $pwd) if $build{libxc};
+compile_openblas($prefix, $cores, $pwd) if $build{openblas};
+compile_openmp  ($prefix, $cores, $pwd) if $build{openmp};
 
 # WRITE LIBRARY VERSIONS METADATA
 write_versions_json($prefix, \%versions);
@@ -366,7 +365,7 @@ sub compile_libxc {
 
 sub compile_openblas {
     # EXTRACT ARGUMENTS
-    my ($prefix, $cores, $pwd, $generic) = @_;
+    my ($prefix, $cores, $pwd) = @_;
 
     # DEFINE THE URL AND COMMIT FOR THE OPENBLAS REPOSITORY
     my $url    = "https://github.com/OpenMathLib/OpenBLAS.git";
@@ -374,6 +373,9 @@ sub compile_openblas {
 
     # CLONE THE LIBRARY
     clone_library($url, $commit, "openblas");
+
+    # REMOVE ARMV9SME TO PREVENT UNKNOWN CPU ERROR WITH ZIG CC ON AARCH64
+    system($^X, "-pi", "-e", 's/ARMV9SME//g', "lib/openblas/cmake/arch.cmake") if $target =~ /aarch64/i;
 
     # CHANGE DIRECTORY TO THE CLONED LIBRARY
     chdir "lib/openblas" or die "CANNOT CHDIR TO 'lib/openblas': $!";
@@ -394,12 +396,12 @@ sub compile_openblas {
         "-DCMAKE_SYSTEM_NAME=$system_name",
         "-DCMAKE_SYSTEM_PROCESSOR=$system_proc",
         "-DC_LAPACK=ON",
+        "-DDYNAMIC_ARCH=ON",
         "-DNOFORTRAN=ON",
         "-DNO_AFFINITY=ON",
         "-DNUM_THREADS=128",
         "-DTARGET=$base_target",
         "-DUSE_THREAD=ON",
-        $generic ? "-DDYNAMIC_ARCH=OFF" : "-DDYNAMIC_ARCH=ON",
         $target =~ /windows/i ? "-DMINGW64=ON" : (),
     );
 

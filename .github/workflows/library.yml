@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   compile:
-    name: ${{matrix.os}} / ${{matrix.target}}${{matrix.generic && ' / generic' || ''}}
+    name: ${{matrix.os}} / ${{matrix.target}}
     runs-on: ${{matrix.os}}
 
     strategy:
@@ -19,40 +19,16 @@ jobs:
         include:
           - os: ubuntu-latest
             target: x86_64-linux
-            generic: false
-          - os: ubuntu-latest
-            target: x86_64-linux
-            generic: true
           - os: ubuntu-latest
             target: aarch64-linux
-            generic: false
-          - os: ubuntu-latest
-            target: aarch64-linux
-            generic: true
           - os: ubuntu-latest
             target: x86_64-macos
-            generic: false
-          - os: ubuntu-latest
-            target: x86_64-macos
-            generic: true
           - os: ubuntu-latest
             target: aarch64-macos
-            generic: false
-          - os: ubuntu-latest
-            target: aarch64-macos
-            generic: true
           - os: ubuntu-latest
             target: x86_64-windows
-            generic: false
-          - os: ubuntu-latest
-            target: x86_64-windows
-            generic: true
           - os: ubuntu-latest
             target: aarch64-windows
-            generic: false
-          - os: ubuntu-latest
-            target: aarch64-windows
-            generic: true
 
     steps:
       - uses: actions/checkout@v7
@@ -67,7 +43,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: external-${{matrix.target}}
-          key: libs-${{matrix.target}}-${{matrix.generic && 'generic' || 'dynamic'}}-${{hashFiles('script/library.pl')}}
+          key: libs-${{matrix.target}}-${{hashFiles('script/library.pl')}}
 
       - name: Install Dependencies
         run: sudo apt update && sudo apt-get install llvm xorg-dev
@@ -84,7 +60,7 @@ jobs:
         if: steps.cache-libs.outputs.cache-hit != 'true'
         env:
           BOOST_ROOT: ${{steps.install-boost.outputs.BOOST_ROOT}}
-        run: ./script/library.pl --target ${{matrix.target}} ${{matrix.generic && '--generic' || ''}} -j 1
+        run: ./script/library.pl --target ${{matrix.target}} -j 1
 
       - name: Remove Unnecessary Files
         working-directory: external-${{matrix.target}}
@@ -104,5 +80,5 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: external-${{matrix.target}}${{matrix.generic && '-generic' || ''}}
+          name: external-${{matrix.target}}
           path: staging
