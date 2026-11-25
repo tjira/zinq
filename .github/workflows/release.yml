@@ -20,27 +20,35 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-linux
             abi: musl
+            cpu: x86_64_v3
           - os: ubuntu-latest
             target: x86_64-linux
             abi: gnu
+            cpu: x86_64_v3
           - os: ubuntu-latest
             target: aarch64-linux
             abi: musl
+            cpu: baseline
           - os: ubuntu-latest
             target: aarch64-linux
             abi: gnu
+            cpu: baseline
           - os: ubuntu-latest
             target: x86_64-macos
             abi: none
+            cpu: x86_64_v3
           - os: ubuntu-latest
             target: aarch64-macos
             abi: none
+            cpu: baseline
           - os: ubuntu-latest
             target: x86_64-windows
             abi: gnu
+            cpu: x86_64_v3
           - os: ubuntu-latest
             target: aarch64-windows
             abi: gnu
+            cpu: baseline
 
     steps:
       - uses: actions/checkout@v7
@@ -76,7 +84,7 @@ jobs:
         run: ./script/library.pl --target ${{matrix.target}} -j 1
 
       - name: Compile Zinq
-        run: zig build --release=fast -Dtarget=${{matrix.target}}-${{matrix.abi}}
+        run: zig build --release=fast -Dtarget=${{matrix.target}}-${{matrix.abi}} -Dcpu=${{matrix.cpu}}
 
       - name: Move Binary
         run: |

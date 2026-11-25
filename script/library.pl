@@ -270,8 +270,12 @@ sub compile_libint {
         "-DLIBINT2_ENABLE_ERI2=1",
         "-DLIBINT2_ENABLE_ERI3=1",
         "-DLIBINT2_ENABLE_ONEBODY=1",
-        "-DLIBINT2_MAX_AM=6"
+        "-DLIBINT2_MAX_AM=6",
+        "-DLIBINT2_GENERATE_FMA=ON",
     );
+
+    # ENABLE AVX2 VECTORIZATION FOR X86_64 TARGETS
+    push @compiler_args, "-DLIBINT2_VECTOR_LENGTH=4" if $target =~ /x86_64/;
 
     # RUN CONFIGURE FOR LIBINT COMPILER
     system(@compiler_args) == 0 or die "LIBINT COMPILER CONFIGURE FAILED";
@@ -378,8 +382,8 @@ sub compile_openblas {
     # CLONE THE LIBRARY
     clone_library($url, $commit, "openblas");
 
-    # REMOVE ARMV9SME AND VORTEXM4 TO PREVENT UNKNOWN CPU ERROR WITH ZIG CC ON AARCH64
-    system($^X, "-pi", "-e", 's/ARMV9SME|VORTEXM4//g', "lib/openblas/cmake/arch.cmake") if $target =~ /aarch64/i;
+    # REMOVE ARMV9SME, VORTEXM4, AND NEOVERSE TO PREVENT UNKNOWN CPU ERROR WITH ZIG CC ON AARCH64
+    system($^X, "-pi", "-e", 's/ARMV9SME|VORTEXM4|NEOVERSE\w*//g', "lib/openblas/cmake/arch.cmake") if $target =~ /aarch64/i;
 
     # CHANGE DIRECTORY TO THE CLONED LIBRARY
     chdir "lib/openblas" or die "CANNOT CHDIR TO 'lib/openblas': $!";
