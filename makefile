@@ -3,7 +3,8 @@
 ARGS  ?=
 NODE  ?=
 
-DEBUG ?= 0
+DEBUG   ?= 0
+GENERIC ?= 0
 
 SHELL := $(if $(filter $(OS),Windows_NT),powershell.exe,sh)
 
@@ -41,10 +42,10 @@ test: $(if $(HAS_ZIG),,.zig-bin/zig$(if $(filter $(OS),windows),.exe)) external-
 
 ifeq ($(OS),windows)
 external-$(ARCH)-$(OS):
-	@curl.exe -L# -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip ; tar -xf external.zip ; rm external.zip
+	@curl.exe -L# -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS)$(if $(filter 1,$(GENERIC)),-generic).zip ; tar -xf external.zip ; rm external.zip
 else
 external-$(ARCH)-$(OS):
-	@curl -L# -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS).zip ; unzip -q external.zip ; rm external.zip
+	@curl -L# -o external.zip https://nightly.link/tjira/zinq/workflows/library/master/external-$(ARCH)-$(OS)$(if $(filter 1,$(GENERIC)),-generic).zip ; unzip -q external.zip ; rm external.zip
 endif
 
 # ENVIRONMENT SCRIPTS ==========================================================================================================================================
