@@ -397,6 +397,8 @@ pub fn DensityGrid(comptime T: type) type {
 
         /// Evaluates the electron density rho at a grid point by contracting the density matrix with basis functions.
         fn contractDensity(P: Matrix(T), basis: BasisGrid(T), offset: usize, g: usize, nbf: usize) T {
+            @setFloatMode(.optimized);
+
             var rho: T = 0;
 
             for (0..nbf) |mu| for (0..nbf) |nu| {
@@ -408,6 +410,8 @@ pub fn DensityGrid(comptime T: type) type {
 
         /// Contracts atomic orbital gradients with the density matrix at a grid point to evaluate grad(rho).
         fn contractDensityGradient(P: Matrix(T), basis: BasisGrid(T), offset: usize, g: usize, nbf: usize) [3]T {
+            @setFloatMode(.optimized);
+
             var del_rho = [3]T{ 0, 0, 0 };
 
             for (0..nbf) |mu| {
@@ -429,6 +433,8 @@ pub fn DensityGrid(comptime T: type) type {
 
         /// Contracts atomic orbital gradients and Laplacians with the density matrix to evaluate tau and lapl(rho).
         fn contractKineticEnergyDensity(P: Matrix(T), basis: BasisGrid(T), offset: usize, g: usize, nbf: usize) struct { tau: T, lapl: T } {
+            @setFloatMode(.optimized);
+
             var tau: T, var lapl_sum: T = .{ 0, 0 };
 
             for (0..nbf) |mu| {

@@ -51,6 +51,8 @@ pub fn ChainOfSpheres(comptime T: type) type {
             var kernel = try Matrix(T).init(n_grid, n_grid, gpa);
             errdefer kernel.deinit(gpa);
 
+            @setFloatMode(.optimized);
+
             for (0..n_grid) |a| {
                 const xa = grid[0].at(a, 0);
                 const ya = grid[0].at(a, 1);

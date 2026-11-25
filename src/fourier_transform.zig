@@ -69,6 +69,8 @@ pub fn Result(comptime T: type) type {
 
 /// Computes the one-dimensional discrete Fourier transform using the radix-2 Cooley-Tukey algorithm.
 pub fn fft(comptime T: type, output: []Complex(T), input: []const Complex(T), comptime exp: i32) void {
+    @setFloatMode(.optimized);
+
     std.debug.assert(output.len == input.len);
 
     if (output.len <= 1) return;

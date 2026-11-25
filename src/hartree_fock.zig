@@ -463,6 +463,8 @@ fn buildCoreGuess(comptime T: type, P: *Matrix(T), C: *Matrix(T), e: *Vector(T),
 
 /// Constructs the one-particle reduced density matrix in the atomic basis from molecular orbital coefficients.
 fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize, generalized: bool) void {
+    @setFloatMode(.optimized);
+
     std.debug.assert(C.shape[0] == P.shape[0]);
     std.debug.assert(C.shape[1] == P.shape[1]);
 
@@ -481,6 +483,8 @@ fn buildDensityMatrix(comptime T: type, P: *Matrix(T), C: Matrix(T), nocc: usize
 
 /// Evaluates the Pulay energy-weighted density matrix from orbital energies and molecular orbital coefficients.
 fn buildEnergyWeightedDensity(comptime T: type, W: *Matrix(T), C: Matrix(T), e: Vector(T), nocc: usize, generalized: bool) void {
+    @setFloatMode(.optimized);
+
     const factor: T = if (generalized) 1 else 2;
 
     for (0..W.nrow()) |mu| for (0..W.ncol()) |nu| {

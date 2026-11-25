@@ -68,6 +68,8 @@ pub fn GeneralizedFockRiWorkspace(comptime T: type) type {
 
         /// Precomputes and caches 3-center contractions with active 1- and 2-RDMs for derivative evaluations.
         pub fn init(B_mo: Tensor(T, 3), D_act: Matrix(T), d_act: Tensor(T, 4), space: CasSpace, gpa: Allocator) !@This() {
+            @setFloatMode(.optimized);
+
             const nact, const naux = .{ space.nact, B_mo.shape[2] };
 
             var v_core = try Vector(T).initZero(naux, gpa);

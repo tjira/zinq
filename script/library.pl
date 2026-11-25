@@ -55,8 +55,8 @@ compile_glad    ($prefix,         $pwd) if $build{glad};
 compile_glfw    ($prefix, $cores, $pwd) if $build{glfw};
 compile_libint  ($prefix, $cores, $pwd) if $build{libint};
 compile_libxc   ($prefix, $cores, $pwd) if $build{libxc};
-compile_openblas($prefix, $cores, $pwd) if $build{openblas};
 compile_openmp  ($prefix, $cores, $pwd) if $build{openmp};
+compile_openblas($prefix, $cores, $pwd) if $build{openblas};
 
 # WRITE LIBRARY VERSIONS METADATA
 write_versions_json($prefix, \%versions);
@@ -207,6 +207,7 @@ sub cmake_common_options {
         "-DCMAKE_RANLIB=$pwd/zigranlib",
         "-DCMAKE_BUILD_TYPE=Release",
         "-DCMAKE_INSTALL_PREFIX=$prefix",
+        "-DCMAKE_PREFIX_PATH=$prefix",
         "-DBUILD_SHARED_LIBS=False",
         "-DBUILD_TESTING=False",
     );

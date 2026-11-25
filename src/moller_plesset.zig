@@ -189,6 +189,8 @@ pub fn solve(comptime T: type, io: std.Io, opt: Options, sys: *MolecularSystem(T
 
 /// Evaluates canonical second-order Møller-Plesset correlation energy from two-electron integrals.
 pub fn calculateCanonicalMp2Energy(comptime T: type, g: anytype, C: anytype, e: anytype, nocc: usize, gen: bool, gpa: Allocator) !if (isDual(@TypeOf(g))) ScalarDual(T) else T {
+    @setFloatMode(.optimized);
+
     const is_dual = comptime isDualTensor(@TypeOf(g));
 
     const OutType = if (is_dual) ScalarDual(T) else T;
@@ -290,6 +292,8 @@ pub fn calculateCorrelationEnergies(comptime T: type, ord: usize, ints: anytype,
 
 /// Evaluates the second-order Møller-Plesset correlation energy using resolution-of-the-identity density fitting.
 pub fn calculateRiMp2Energy(comptime T: type, B_ao: anytype, C: anytype, e: anytype, nocc: usize, gpa: Allocator) !if (isDualTensor(@TypeOf(B_ao))) ScalarDual(T) else T {
+    @setFloatMode(.optimized);
+
     const is_dual, const generalized = .{ comptime isDualTensor(@TypeOf(B_ao)), C.shape[0] != B_ao.shape[0] };
 
     const OutType = if (is_dual) ScalarDual(T) else T;

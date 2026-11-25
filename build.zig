@@ -93,11 +93,11 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
     var flags: []const []const u8 = undefined;
 
     if (is_linux) {
-        flags = &.{ "-fopenmp", "-DNDEBUG", "-ffast-math", "-fno-math-errno", "-fno-trapping-math" };
+        flags = &.{ "-fopenmp", "-DNDEBUG", "-ffast-math", "-fno-math-errno", "-fno-trapping-math", "-Dexprtk_disable_string_capabilities" };
     }
 
     if (!is_linux) {
-        flags = &.{ "-DNDEBUG", "-ffast-math", "-fno-math-errno", "-fno-trapping-math" };
+        flags = &.{ "-DNDEBUG", "-ffast-math", "-fno-math-errno", "-fno-trapping-math", "-Dexprtk_disable_string_capabilities" };
     }
 
     const has_glad = blk: {
@@ -229,6 +229,10 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
         .root_module = zinq_module,
         .use_llvm = true,
     });
+
+    if (opt == .fast or opt == .small) {
+        exe_zinq.lto = .thin;
+    }
 
     if (target.query.cpu_arch == null) {
         b.installArtifact(exe_zinq);

@@ -7,6 +7,8 @@ const Tensor = @import("tensor.zig").Tensor;
 
 /// Contracts two-electron repulsion integrals with density using 8-fold permutational symmetry and contiguous traversal.
 pub fn contractFock(comptime T: type, F: *Matrix(T), g: Tensor(T, 4), P: Matrix(T), exch_factor: T) void {
+    @setFloatMode(.optimized);
+
     const nbf = F.nrow();
 
     std.debug.assert(g.shape[0] == nbf and g.shape[1] == nbf and g.shape[2] == nbf and g.shape[3] == nbf);
@@ -73,6 +75,8 @@ pub fn contractFock(comptime T: type, F: *Matrix(T), g: Tensor(T, 4), P: Matrix(
 
 /// Contracts two-electron integral derivatives with density matrices to evaluate nuclear gradient contributions.
 pub fn contractGradient(comptime T: type, dg: Tensor(T, 5), coord: usize, P: Matrix(T), exch_factor: T) T {
+    @setFloatMode(.optimized);
+
     const nbf = P.nrow();
 
     var g_val: T = 0;
@@ -88,6 +92,8 @@ pub fn contractGradient(comptime T: type, dg: Tensor(T, 5), coord: usize, P: Mat
 
 /// Contracts two-electron integral derivatives with the density matrix to form first-order Fock response matrices.
 pub fn contractFockDerivative(comptime T: type, F_x: *Matrix(T), dg: Tensor(T, 5), coord: usize, P: Matrix(T), exch_factor: T) void {
+    @setFloatMode(.optimized);
+
     const nbf = F_x.nrow();
 
     for (0..nbf) |lambda| for (0..nbf) |sigma| for (0..nbf) |mu| for (0..nbf) |nu| {
@@ -99,6 +105,8 @@ pub fn contractFockDerivative(comptime T: type, F_x: *Matrix(T), dg: Tensor(T, 5
 
 /// Contracts two-electron repulsion integrals with the response density to evaluate orbital Hessian response.
 pub fn contractResponseHessian(comptime T: type, V_x: *Matrix(T), g: Tensor(T, 4), P_x: Matrix(T), exch_factor: T) void {
+    @setFloatMode(.optimized);
+
     const nbf = V_x.nrow();
 
     std.debug.assert(g.shape[0] == nbf);
