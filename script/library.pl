@@ -17,7 +17,7 @@ my @lib_names = qw(eigen libint libxc openblas exprtk openmp glad glfw);
 my (%build, %versions);
 
 # DEFINE DEFAULT TARGET
-my $target = qx(uname -m); chomp $target; $target .= "-$^O";
+my $host_arch = qx(uname -m); chomp $host_arch; my $target = "$host_arch-$^O";
 
 # GET THE NUMBER OF CPU CORES
 my $cores = qx(nproc --all); chomp $cores; $cores ||= 1;
@@ -25,8 +25,8 @@ my $cores = qx(nproc --all); chomp $cores; $cores ||= 1;
 # PARSE COMMAND-LINE OPTIONS
 GetOptions(
     (map {$_ => \$build{$_}} @lib_names),
-    "target=s" => \$target,
-    "cores|j=i"=> \$cores,
+    "target=s"  => \$target,
+    "cores|j=i" => \$cores,
 );
 
 # IF NO FLAGS ARE PROVIDED, BUILD EVERYTHING
@@ -148,12 +148,15 @@ sub create_compiler_wrappers {
     # DEFINE ZIG COMPILER PATH
     my $zig = -f "$pwd/.zig-bin/zig.exe" ? "$pwd/.zig-bin/zig.exe" : -f "$pwd/.zig-bin/zig" ? "$pwd/.zig-bin/zig" : "zig";
 
+    # DETERMINE CPU ARCHITECTURE FLAG
+    my $cpu_flag = $target =~ /^$host_arch/ ? "-march=native" : "";
+
     # DEFINE WRAPPER CONTENTS
     my %wrappers = (
-        zigar     => "#!/usr/bin/env bash\n\n$zig ar                      \"\$@\"\n",
-        zigcc     => "#!/usr/bin/env bash\n\n$zig cc  -w --target=$target \"\$@\"\n",
-        zigcpp    => "#!/usr/bin/env bash\n\n$zig c++ -w --target=$target \"\$@\"\n",
-        zigranlib => "#!/usr/bin/env bash\n\n$zig ranlib                  \"\$@\"\n",
+        zigar     => "#!/usr/bin/env bash\n\n$zig ar                                   \"\$@\"\n",
+        zigcc     => "#!/usr/bin/env bash\n\n$zig cc     -w --target=$target $cpu_flag \"\$@\"\n",
+        zigcpp    => "#!/usr/bin/env bash\n\n$zig c++    -w --target=$target $cpu_flag \"\$@\"\n",
+        zigranlib => "#!/usr/bin/env bash\n\n$zig ranlib                               \"\$@\"\n",
     );
 
     # LOOP OVER WRAPPERS
@@ -541,14 +544,11 @@ sub compile_glfw {
         warn "SKIPPING GLFW FOR MACOS SINCE SDKROOT IS NOT SET ON NON-DARWIN HOST\n"; return;
     }
 
-    # GET HOST ARCHITECTURE
-    my $host_proc = qx(uname -m); chomp $host_proc;
-
     # MAP TARGET ARCHITECTURE TO GNU TRIPLET FOR LINUX
     my $triplet = $target =~ /aarch64/i ? "aarch64-linux-gnu" : "x86_64-linux-gnu";
 
     # CHECK IF CROSS-COMPILING FOR LINUX ON DIFFERENT ARCHITECTURE WITHOUT TARGET X11 HEADERS
-    if ($system_name eq "Linux" && $^O eq "linux" && $target !~ /^$host_proc/ && !-d "/usr/$triplet/include/X11") {
+    if ($system_name eq "Linux" && $^O eq "linux" && $target !~ /^$host_arch/ && !-d "/usr/$triplet/include/X11") {
         warn "SKIPPING GLFW FOR '$target' SINCE X11 TARGET HEADERS NOT FOUND FOR CROSS-COMPILATION\n"; return;
     }
 

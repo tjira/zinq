@@ -90,9 +90,15 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
     module.addIncludePath(.{ .cwd_relative = dir1 });
     module.addIncludePath(.{ .cwd_relative = dir2 });
 
-    const lin_flags, const win_flags = .{ &.{ "-fopenmp", "-DNDEBUG" }, &.{"-DNDEBUG"} };
+    var flags: []const []const u8 = undefined;
 
-    const flags: []const []const u8 = if (is_linux) lin_flags else if (is_windows) win_flags else &.{};
+    if (is_linux) {
+        flags = &.{ "-fopenmp", "-DNDEBUG", "-ffast-math", "-fno-math-errno", "-fno-trapping-math" };
+    }
+
+    if (!is_linux) {
+        flags = &.{ "-DNDEBUG", "-ffast-math", "-fno-math-errno", "-fno-trapping-math" };
+    }
 
     const has_glad = blk: {
         const path = std.fmt.allocPrint(b.allocator, "{s}/libglad.a", .{dir0}) catch break :blk false;
