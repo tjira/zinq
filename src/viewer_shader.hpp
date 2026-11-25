@@ -16,6 +16,9 @@ public:
     /// Activates the compiled shader program in the OpenGL rendering pipeline.
     void use() const;
 
+    /// Checks whether the OpenGL shader program was successfully compiled and linked.
+    bool isValid() const { return id != 0; }
+
     /// Sets a floating-point scalar uniform variable in the shader program.
     void set(const std::string& name, float value) const;
 
@@ -29,5 +32,5 @@ private:
     unsigned int id = 0;
 
     /// Queries and verifies shader compilation or program link status.
-    void errorCheck(unsigned int shader, const std::string& stage) const;
+    bool errorCheck(unsigned int shader, const std::string& stage) const;
 };

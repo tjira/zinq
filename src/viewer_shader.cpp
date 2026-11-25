@@ -2,6 +2,7 @@
 
 #include <glad/gl.h>
 
+#include <iostream>
 #include <vector>
 
 /// Compiles vertex and fragment shaders and links them into an executable shader program.
@@ -10,9 +11,17 @@ Shader::Shader(const std::string& vertex_src, const std::string& fragment_src) :
 
     unsigned int vs = glCreateShader(GL_VERTEX_SHADER); unsigned int fs = glCreateShader(GL_FRAGMENT_SHADER);
 
-    glShaderSource(vs, 1, &vs_code, nullptr); glCompileShader(vs); errorCheck(vs, "VERTEX");
+    glShaderSource(vs, 1, &vs_code, nullptr); glCompileShader(vs);
 
-    glShaderSource(fs, 1, &fs_code, nullptr); glCompileShader(fs); errorCheck(fs, "FRAGMENT");
+    if (!errorCheck(vs, "VERTEX")) {
+        glDeleteShader(vs); glDeleteShader(fs); glDeleteProgram(id); id = 0; return;
+    }
+
+    glShaderSource(fs, 1, &fs_code, nullptr); glCompileShader(fs);
+
+    if (!errorCheck(fs, "FRAGMENT")) {
+        glDeleteShader(vs); glDeleteShader(fs); glDeleteProgram(id); id = 0; return;
+    }
 
     glAttachShader(id, vs);
     glAttachShader(id, fs);
@@ -32,10 +41,15 @@ Shader::Shader(const std::string& vertex_src, const std::string& fragment_src) :
 
         glGetProgramInfoLog(id, length, &length, log.data());
 
+        std::cerr << "SHADER PROGRAM LINK ERROR '" << log.data() << "' OCCURRED" << std::endl;
+
+        glDetachShader(id, vs);
+        glDetachShader(id, fs);
+
         glDeleteShader(vs);
         glDeleteShader(fs);
 
-        throw std::runtime_error(std::string("SHADER PROGRAM LINK ERROR '") + log.data() + "' OCCURRED");
+        glDeleteProgram(id); id = 0; return;
     }
 
     glDetachShader(id, vs);
@@ -53,7 +67,7 @@ Shader::~Shader() {
 }
 
 /// Queries and verifies shader compilation or program link status.
-void Shader::errorCheck(unsigned int shader, const std::string& stage) const {
+bool Shader::errorCheck(unsigned int shader, const std::string& stage) const {
     int success = 0;
 
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
@@ -67,8 +81,12 @@ void Shader::errorCheck(unsigned int shader, const std::string& stage) const {
 
         glGetShaderInfoLog(shader, length, &length, log.data());
 
-        throw std::runtime_error(std::string("SHADER '") + stage + "' COMPILE ERROR '" + log.data() + "' OCCURRED");
+        std::cerr << "SHADER '" << stage << "' COMPILE ERROR '" << log.data() << "' OCCURRED" << std::endl;
+
+        return false;
     }
+
+    return true;
 }
 
 /// Activates the compiled shader program in the OpenGL rendering pipeline.

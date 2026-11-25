@@ -209,6 +209,21 @@ struct ViewerState {
     }
 };
 
+/// Manages GLFW window and context lifecycle with automated resource reclamation.
+struct WindowContext {
+    GLFWwindow* window = nullptr;
+
+    /// Releases GLFW window resources and shuts down the GLFW subsystem.
+    ~WindowContext() {
+        if (window) {
+            glfwSetWindowUserPointer(window, nullptr);
+            glfwDestroyWindow(window);
+        }
+
+        glfwTerminate();
+    }
+};
+
 /// Handles mouse button press and release events for camera interaction.
 static void mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
@@ -330,119 +345,114 @@ extern "C" {
     bool viewer_open_window(const char *filename) {
         if (!filename) return false;
 
-        try {
-            Trajectory traj = Trajectory::Load(filename);
+        Trajectory traj = Trajectory::Load(filename);
 
-            if (traj.empty()) {
-                std::cerr << "NO MOLECULAR COORDINATES FOUND IN '" << filename << "' STRUCTURE FILE" << std::endl;
+        if (traj.empty()) {
+            std::cerr << "NO MOLECULAR COORDINATES FOUND IN '" << filename << "' STRUCTURE FILE" << std::endl;
 
-                return false;
-            }
+            return false;
+        }
 
-            if (!glfwInit()) return false;
+        if (!glfwInit()) return false;
 
-            glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-            glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 
-            glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-            glfwWindowHint(GLFW_SAMPLES, 4);
+        glfwWindowHint(GLFW_SAMPLES, 4);
 
 #ifdef __APPLE__
-            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-            GLFWwindow* window = glfwCreateWindow(1280, 720, "Zinq Viewer", nullptr, nullptr);
+        WindowContext ctx;
 
-            if (!window) {
-                glfwTerminate(); return false;
+        ctx.window = glfwCreateWindow(1280, 720, "Zinq Viewer", nullptr, nullptr);
+
+        if (!ctx.window) return false;
+
+        glfwMakeContextCurrent(ctx.window);
+
+        if (!gladLoadGL(reinterpret_cast<GLADloadfunc>(glfwGetProcAddress))) return false;
+
+        glEnable(GL_DEPTH_TEST); glEnable(GL_CULL_FACE); glfwSwapInterval(1);
+
+        std::cout << "\nCONTROLS:\n"
+                  << "  Left Drag             ORBIT ROTATION\n"
+                  << "  Right Drag            PAN TRANSLATION\n"
+                  << "  Scroll Wheel          SMOOTH ZOOM\n"
+                  << "  Space                 PLAY / PAUSE TRAJECTORY\n"
+                  << "  Left Arrow            PREVIOUS FRAME\n"
+                  << "  Right Arrow           NEXT FRAME\n"
+                  << "  Up Arrow              INCREASE SPEED\n"
+                  << "  Down Arrow            DECREASE SPEED\n"
+                  << "  R                     RESET CAMERA VIEW\n"
+                  << "  B                     TOGGLE BACKGROUND\n"
+                  << "  Tab                   CYCLE STYLE\n"
+                  << "  Esc                   QUIT VIEWER"
+        << std::endl;
+
+        ViewerState state; state.filename = filename;
+
+        state.trajectory = std::move(traj);
+
+        float camera_dist = std::max(6.0f, state.trajectory.getMaxRadius() * 2.5f);
+
+        state.camera.distance         = camera_dist;
+        state.camera.initial_distance = camera_dist;
+
+        state.proj = perspective(45 * static_cast<float>(M_PI) / 180, 1280.0 / 720, 0.05, 2000);
+
+        glfwSetWindowUserPointer(ctx.window, &state);
+
+        glfwSetMouseButtonCallback(ctx.window, mouseButtonCallback);
+
+        glfwSetCursorPosCallback(ctx.window, cursorPosCallback);
+
+        glfwSetScrollCallback(ctx.window, scrollCallback);
+
+        glfwSetWindowSizeCallback(ctx.window, resizeCallback);
+
+        glfwSetKeyCallback(ctx.window, keyCallback);
+
+        Shader shader(vertex_shader_src, fragment_shader_src);
+
+        if (!shader.isValid()) return false;
+
+        Mesh sphere_mesh   = Mesh::Icosphere(2, true);
+        Mesh cylinder_mesh = Mesh::Cylinder(16, true);
+
+        while (!glfwWindowShouldClose(ctx.window)) {
+            vec3 bg = state.dark_mode ? vec3(0, 0, 0) : vec3(1, 1, 1);
+
+            glClearColor(bg.x, bg.y, bg.z, 1);
+
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+            if (state.style == ViewStyle::Wireframe) {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
             }
 
-            glfwMakeContextCurrent(window);
-
-            if (!gladLoadGL(reinterpret_cast<GLADloadfunc>(glfwGetProcAddress))) {
-                glfwDestroyWindow(window); glfwTerminate(); return false;
+            if (state.style == ViewStyle::BallAndStick || state.style == ViewStyle::SpaceFilling) {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
             }
 
-            glEnable(GL_DEPTH_TEST); glEnable(GL_CULL_FACE); glfwSwapInterval(1);
+            setUniforms(shader, state);
 
-            std::cout << "\nCONTROLS:\n"
-                      << "  Left Drag             ORBIT ROTATION\n"
-                      << "  Right Drag            PAN TRANSLATION\n"
-                      << "  Scroll Wheel          SMOOTH ZOOM\n"
-                      << "  Space                 PLAY / PAUSE TRAJECTORY\n"
-                      << "  Left Arrow            PREVIOUS FRAME\n"
-                      << "  Right Arrow           NEXT FRAME\n"
-                      << "  Up Arrow              INCREASE SPEED\n"
-                      << "  Down Arrow            DECREASE SPEED\n"
-                      << "  R                     RESET CAMERA VIEW\n"
-                      << "  B                     TOGGLE BACKGROUND\n"
-                      << "  Tab                   CYCLE STYLE\n"
-                      << "  Esc                   QUIT VIEWER"
-            << std::endl;
+            float atom_scale = (state.style == ViewStyle::SpaceFilling) ? 2.4 : 1;
 
-            ViewerState state; state.filename = filename;
+            bool show_bonds = (state.style != ViewStyle::SpaceFilling);
 
-            state.trajectory = std::move(traj);
+            vec3 bond_color = state.dark_mode ? vec3(0.85, 0.85, 0.85) : vec3(0.35, 0.35, 0.35);
 
-            float camera_dist = std::max(6.0f, state.trajectory.getMaxRadius() * 2.5f);
+            state.trajectory.render(shader, sphere_mesh, cylinder_mesh, atom_scale, show_bonds, bond_color);
 
-            state.camera.distance         = camera_dist;
-            state.camera.initial_distance = camera_dist;
+            state.updateTitle(ctx.window);
 
-            state.proj = perspective(45 * static_cast<float>(M_PI) / 180, 1280.0 / 720, 0.05, 2000);
-
-            glfwSetWindowUserPointer(window, &state);
-
-            glfwSetMouseButtonCallback(window, mouseButtonCallback);
-
-            glfwSetCursorPosCallback(window, cursorPosCallback);
-
-            glfwSetScrollCallback(window, scrollCallback);
-
-            glfwSetWindowSizeCallback(window, resizeCallback);
-
-            glfwSetKeyCallback(window, keyCallback);
-
-            Mesh sphere_mesh   = Mesh::Icosphere(2, true);
-            Mesh cylinder_mesh = Mesh::Cylinder(16, true);
-
-            Shader shader(vertex_shader_src, fragment_shader_src);
-
-            while (!glfwWindowShouldClose(window)) {
-                vec3 bg = state.dark_mode ? vec3(0, 0, 0) : vec3(1, 1, 1);
-
-                glClearColor(bg.x, bg.y, bg.z, 1);
-
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-                if (state.style == ViewStyle::Wireframe) {
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-                }
-
-                if (state.style == ViewStyle::BallAndStick || state.style == ViewStyle::SpaceFilling) {
-                    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-                }
-
-                setUniforms(shader, state);
-
-                float atom_scale = (state.style == ViewStyle::SpaceFilling) ? 2.4 : 1;
-
-                bool show_bonds = (state.style != ViewStyle::SpaceFilling);
-
-                vec3 bond_color = state.dark_mode ? vec3(0.85, 0.85, 0.85) : vec3(0.35, 0.35, 0.35);
-
-                state.trajectory.render(shader, sphere_mesh, cylinder_mesh, atom_scale, show_bonds, bond_color);
-
-                state.updateTitle(window);
-
-                glfwSwapBuffers(window); glfwPollEvents();
-            }
-
-            glfwDestroyWindow(window); glfwTerminate(); return true;
-
-        } catch (const std::exception& e) {
-            std::cerr << "VIEWER RUNTIME ERROR '" << e.what() << "' OCCURRED" << std::endl; glfwTerminate(); return false;
+            glfwSwapBuffers(ctx.window); glfwPollEvents();
         }
+
+        return true;
     }
 }
