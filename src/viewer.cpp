@@ -52,9 +52,13 @@ static const std::string fragment_shader_src = R"(
 in vec3 v_position;
 in vec3   v_normal;
 
-uniform vec3     u_color;
-uniform vec3    u_camera;
-uniform vec3 u_light_dir;
+uniform vec3      u_color;
+uniform vec3     u_camera;
+uniform vec3  u_light_dir;
+uniform float   u_ambient;
+uniform float   u_diffuse;
+uniform float  u_specular;
+uniform float u_shininess;
 
 out vec4 o_color;
 
@@ -66,12 +70,13 @@ void main() {
 
     float diff = max(dot(n, l), 0.0);
 
-    float spec = diff > 0.0 ? pow(max(dot(n, h), 0.0), 32.0) : 0.0;
+    float spec = (diff > 0.0 && u_shininess > 0.0) ? pow(max(dot(n, h), 0.0), u_shininess) : 0.0;
 
-    vec3 ambient  = 0.35 * u_color;
+    vec3 ambient  = u_ambient * u_color;
 
-    vec3 diffuse  = 0.55 * diff * u_color;
-    vec3 specular = 0.25 * spec * vec3(1);
+    vec3 diffuse  = u_diffuse * diff * u_color;
+
+    vec3 specular = u_specular * spec * vec3(1.0);
 
     o_color = vec4(ambient + diffuse + specular, 1.0);
 }
@@ -192,7 +197,7 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     if (key == GLFW_KEY_S) {
         if ((state->gui.isFileDialogOpen() || state->gui.isScreenshotDialogOpen()) && state->gui.wantsTextInput()) return;
 
-        state->gui.openScreenshotDialog(); return;
+        state->gui.toggleScreenshotDialog(); return;
     }
 
     if (state->gui.isVisible() && state->gui.wantsCaptureKeyboard()) return;
@@ -283,9 +288,13 @@ static void setUniforms(const Shader& shader, const ViewerState& state) {
 
     vec3 u = cross(r, f);
 
-    vec3 light_dir = normalize(-f + 0.4 * r + 0.7 * u);
+    vec3 light_dir = normalize(-f + state.light_offset.x * r + state.light_offset.y * u + state.light_offset.z * (-f));
 
-    shader.set("u_light_dir", light_dir);
+    shader.set("u_light_dir",  light_dir               );
+    shader.set("u_ambient",    state.ambient_intensity );
+    shader.set("u_diffuse",    state.diffuse_intensity );
+    shader.set("u_specular",   state.specular_intensity);
+    shader.set("u_shininess",  state.shininess         );
 }
 
 extern "C" {
@@ -373,10 +382,17 @@ extern "C" {
 
         if (!shader.isValid()) return false;
 
-        Mesh sphere_mesh   = Mesh::Icosphere(2, true);
-        Mesh cylinder_mesh = Mesh::Cylinder(16, true);
+        Mesh sphere_mesh   = Mesh::Icosphere(state.sphere_subdivisions, state.smooth_shading);
+        Mesh cylinder_mesh = Mesh::Cylinder(state.cylinder_sectors,     state.smooth_shading);
 
         while (!glfwWindowShouldClose(ctx.window)) {
+            if (state.mesh_dirty) {
+                sphere_mesh   = Mesh::Icosphere(state.sphere_subdivisions, state.smooth_shading);
+                cylinder_mesh = Mesh::Cylinder(state.cylinder_sectors,     state.smooth_shading);
+
+                state.mesh_dirty = false;
+            }
+
             vec3 bg = state.dark_mode ? vec3(0, 0, 0) : vec3(1, 1, 1);
 
             glClearColor(bg.x, bg.y, bg.z, 0);
@@ -393,7 +409,9 @@ extern "C" {
 
             setUniforms(shader, state);
 
-            float atom_scale = (state.style == ViewStyle::SpaceFilling) ? 2.4 : 1;
+            float base_scale = (state.style == ViewStyle::SpaceFilling) ? 2.4f : 1.0f;
+
+            float atom_scale = base_scale * state.atom_scale;
 
             bool show_bonds = (state.style != ViewStyle::SpaceFilling);
 

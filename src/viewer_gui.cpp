@@ -72,6 +72,16 @@ bool ViewerGui::isFileDialogOpen() const {
     return ImGuiFileDialog::Instance()->IsOpened("xyz");
 }
 
+void ViewerGui::toggleScreenshotDialog() {
+    if (isScreenshotDialogOpen()) {
+        closeScreenshotDialog();
+    }
+
+    else {
+        openScreenshotDialog();
+    }
+}
+
 void ViewerGui::openScreenshotDialog() {
     IGFD::FileDialogConfig config;
 
@@ -102,9 +112,13 @@ void ViewerGui::render(ViewerState& state) {
     if (!isVisible()) return;
 
     if (show_controls) {
-        ImGui::SetNextWindowSize(ImVec2(360, 480), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(380, 560), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin("Molecular Viewer Controls", &show_controls)) {
+            if (ImGui::Button("Open Molecule / Trajectory (O)", ImVec2(-1, 0))) {
+                openFileDialog();
+            }
+
             int total = state.trajectory.frameCount();
             int cur = state.trajectory.currentFrame();
 
@@ -144,7 +158,7 @@ void ViewerGui::render(ViewerState& state) {
                 }
             }
 
-            if (ImGui::CollapsingHeader("Display Style", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::CollapsingHeader("Display & Meshing", ImGuiTreeNodeFlags_DefaultOpen)) {
                 const char* styles[] = { "Ball and Stick", "Space Filling", "Wireframe" };
 
                 int style_idx = static_cast<int>(state.style);
@@ -155,8 +169,58 @@ void ViewerGui::render(ViewerState& state) {
 
                 ImGui::Checkbox("Dark Background", &state.dark_mode);
 
+                ImGui::SliderFloat("Atom Scale", &state.atom_scale, 0.2f, 3.0f, "%.2f");
+
+                if (ImGui::Checkbox("Smooth Shading", &state.smooth_shading)) {
+                    state.mesh_dirty = true;
+                }
+
+                if (ImGui::SliderInt("Sphere Subdiv", &state.sphere_subdivisions, 0, 4)) {
+                    state.mesh_dirty = true;
+                }
+
+                if (ImGui::SliderInt("Cylinder Sectors", &state.cylinder_sectors, 4, 48)) {
+                    state.mesh_dirty = true;
+                }
+
                 if (ImGui::Button("Save Screenshot (S)")) {
                     openScreenshotDialog();
+                }
+            }
+
+            if (ImGui::CollapsingHeader("Lighting & Shading", ImGuiTreeNodeFlags_DefaultOpen)) {
+                ImGui::SliderFloat("Ambient",   &state.ambient_intensity,  0.0f,   1.0f, "%.2f");
+                ImGui::SliderFloat("Diffuse",   &state.diffuse_intensity,  0.0f,   1.0f, "%.2f");
+                ImGui::SliderFloat("Specular",  &state.specular_intensity, 0.0f,   1.0f, "%.2f");
+                ImGui::SliderFloat("Shininess", &state.shininess,          1.0f, 128.0f, "%.1f");
+
+                ImGui::SliderFloat("Light Offset X", &state.light_offset.x, -2.0f, 2.0f, "%.2f");
+                ImGui::SliderFloat("Light Offset Y", &state.light_offset.y, -2.0f, 2.0f, "%.2f");
+
+                if (ImGui::Button("Reset Lighting")) {
+                    state.ambient_intensity  = 0.35f;
+                    state.diffuse_intensity  = 0.55f;
+                    state.specular_intensity = 0.25f;
+                    state.shininess          = 32.0f;
+
+                    state.light_offset = vec3(0.4f, 0.7f, 0.0f);
+                }
+            }
+
+            if (ImGui::CollapsingHeader("Bonding & Connectivity", ImGuiTreeNodeFlags_DefaultOpen)) {
+                if (ImGui::SliderFloat("Binding Factor", &state.binding_factor, 0.005f, 0.035f, "%.4f")) {
+                    state.trajectory.rebind(state.binding_factor, state.bond_radius);
+                }
+
+                if (ImGui::SliderFloat("Bond Radius", &state.bond_radius, 0.01f, 0.30f, "%.3f")) {
+                    state.trajectory.rebind(state.binding_factor, state.bond_radius);
+                }
+
+                if (ImGui::Button("Reset Bonds")) {
+                    state.binding_factor = 0.013f;
+                    state.bond_radius    = 0.090f;
+
+                    state.trajectory.rebind(state.binding_factor, state.bond_radius);
                 }
             }
 

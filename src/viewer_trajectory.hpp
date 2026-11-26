@@ -44,7 +44,7 @@ public:
     void moveBy(const vec3& offset);
 
     /// Computes covalent bond connectivity models based on pairwise covalent radii.
-    void rebind(float factor);
+    void rebind(float factor, float bond_size = 0.090f);
 
     /// Renders atoms as spheres and covalent bonds as cylinders using the active shader.
     void render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) const;
@@ -98,6 +98,9 @@ public:
 
     /// Calculates the maximum radial distance from origin across all atoms in all frames.
     float getMaxRadius() const;
+
+    /// Recomputes covalent bond connectivity models across all trajectory frames using given bonding parameters.
+    void rebind(float factor, float bond_size = 0.090f);
 
     /// Advances frame timing and dispatches geometry render calls for the current frame.
     void render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color);

@@ -65,7 +65,7 @@ void Geometry::moveBy(const vec3& offset) {
 }
 
 /// Computes covalent bond connectivity models based on pairwise covalent radii.
-void Geometry::rebind(float factor) {
+void Geometry::rebind(float factor, float bond_size) {
     bonds.clear();
 
     size_t n = atoms.size();
@@ -111,7 +111,7 @@ void Geometry::rebind(float factor) {
                     rot = rotate(mat4(1), static_cast<float>(M_PI), vec3(1, 0, 0));
                 }
 
-                mat4 sc = scale(mat4(1), vec3(kBondSize, dist * 0.5, kBondSize)); mat4 tr = translate(mat4(1), mid);
+                mat4 sc = scale(mat4(1), vec3(bond_size, dist * 0.5, bond_size)); mat4 tr = translate(mat4(1), mid);
 
                 bonds.push_back({ tr * rot * sc });
             }
@@ -218,6 +218,13 @@ float Trajectory::getMaxRadius() const {
     }
 
     return max_r > 0 ? max_r : 3;
+}
+
+/// Recomputes covalent bond connectivity models across all trajectory frames using given bonding parameters.
+void Trajectory::rebind(float factor, float bond_size) {
+    for (auto& g : geoms) {
+        g.rebind(factor, bond_size);
+    }
 }
 
 /// Advances frame timing and dispatches geometry render calls for the current frame.

@@ -114,6 +114,23 @@ struct ViewerState {
 
     bool dark_mode = true;
 
+    float ambient_intensity  = 0.35f;
+    float diffuse_intensity  = 0.55f;
+    float specular_intensity = 0.25f;
+    float shininess          = 32.0f;
+
+    vec3 light_offset = vec3(0.4f, 0.7f, 0.0f);
+
+    int sphere_subdivisions = 2;
+    int cylinder_sectors    = 16;
+
+    bool smooth_shading = true;
+    bool mesh_dirty     = false;
+
+    float binding_factor = 0.013f;
+    float bond_radius    = 0.090f;
+    float atom_scale     = 1.000f;
+
     Trajectory trajectory;
 
     ViewerGui gui;
@@ -134,6 +151,8 @@ struct ViewerState {
         }
 
         trajectory = std::move(new_traj);
+
+        trajectory.rebind(binding_factor, bond_radius);
 
         filename = new_path;
 
