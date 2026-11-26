@@ -266,11 +266,16 @@ sub compile_libint {
     # CONFIGURE LIBINT COMPILER
     my @compiler_args = (
         cmake_common_options($prefix, $pwd),
-        "-DLIBINT2_ENABLE_ERI=1",
-        "-DLIBINT2_ENABLE_ERI2=1",
-        "-DLIBINT2_ENABLE_ERI3=1",
+        "-DLIBINT2_ENABLE_GENERIC_CODE=ON",
         "-DLIBINT2_ENABLE_ONEBODY=1",
-        "-DLIBINT2_MAX_AM=6",
+        "-DLIBINT2_ENABLE_ERI=1",
+        "-DLIBINT2_ENABLE_ERI3=1",
+        "-DLIBINT2_ENABLE_ERI2=1",
+        "-DLIBINT2_ERI3_PURE_SH=ON",
+        "-DLIBINT2_ERI2_PURE_SH=ON",
+        "-DLIBINT2_MAX_AM=6;4",
+        "-DLIBINT2_ERI3_MAX_AM=8;6",
+        "-DLIBINT2_ERI2_MAX_AM=8;6",
         "-DLIBINT2_GENERATE_FMA=ON",
     );
 
