@@ -253,7 +253,37 @@ void Trajectory::render(const Mesh& sphere, const Mesh& cylinder, float atom_sca
         if (elapsed >= wait_ms) {
             int advance = static_cast<int>(elapsed / wait_ms);
 
-            frame = (frame + advance) % static_cast<int>(geoms.size());
+            int n = static_cast<int>(geoms.size());
+
+            if (loop_mode == LoopMode::Loop) {
+                frame = (frame + advance) % n;
+            }
+
+            else if (loop_mode == LoopMode::PingPong) {
+                for (int i = 0; i < advance; ++i) {
+                    if (direction > 0 && frame >= n - 1) {
+                        direction = -1;
+                    }
+
+                    else if (direction < 0 && frame <= 0) {
+                        direction = 1;
+                    }
+
+                    frame += direction;
+                }
+
+                frame = std::clamp(frame, 0, n - 1);
+            }
+
+            else if (loop_mode == LoopMode::Once) {
+                if (frame + advance >= n - 1) {
+                    frame = n - 1; paused = true;
+                }
+
+                else {
+                    frame += advance;
+                }
+            }
 
             timestamp += std::chrono::milliseconds(static_cast<long long>(advance * wait_ms));
         }

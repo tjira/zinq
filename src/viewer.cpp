@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -183,60 +184,80 @@ static void resizeCallback(GLFWwindow* window, int width, int height) {
 static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
-    if (!state || action != GLFW_PRESS) return;
+    if (!state || (action != GLFW_PRESS && action != GLFW_REPEAT)) return;
 
-    if (key == GLFW_KEY_G) {
+    if (action == GLFW_REPEAT && key != GLFW_KEY_LEFT && key != GLFW_KEY_RIGHT) return;
+
+    if (key == GLFW_KEY_F1) {
         state->gui.toggleVisible(); return;
     }
 
-    if (key == GLFW_KEY_O) {
-        if (state->gui.isFileDialogOpen() && state->gui.wantsTextInput()) return;
+    if (key == GLFW_KEY_ESCAPE) {
+        if (state->gui.isFileDialogOpen()) {
+            state->gui.closeFileDialog(); return;
+        }
 
+        if (state->gui.isScreenshotDialogOpen()) {
+            state->gui.closeScreenshotDialog(); return;
+        }
+
+        glfwSetWindowShouldClose(window, GLFW_TRUE); return;
+    }
+
+    if (state->gui.wantsTextInput()) return;
+
+    if (key == GLFW_KEY_O) {
         state->gui.toggleFileDialog(); return;
     }
 
     if (key == GLFW_KEY_S) {
-        if ((state->gui.isFileDialogOpen() || state->gui.isScreenshotDialogOpen()) && state->gui.wantsTextInput()) return;
-
         state->gui.toggleScreenshotDialog(); return;
     }
 
-    if (state->gui.isVisible() && state->gui.wantsCaptureKeyboard()) return;
+    if (key == GLFW_KEY_F12) {
+        std::time_t raw_time = std::time(nullptr);
+
+        std::tm* time_info = std::localtime(&raw_time);
+
+        char time_buf[64];
+
+        std::strftime(time_buf, sizeof(time_buf), "screenshot_%Y%m%d_%H%M%S.png", time_info);
+
+        state->pending_screenshot_path = time_buf; return;
+    }
+
+    if (state->gui.wantsCaptureKeyboard()) return;
 
     switch (key) {
         case GLFW_KEY_SPACE:
             state->trajectory.togglePause(); break;
         case GLFW_KEY_LEFT:
-            state->trajectory.stepFrame(-1); state->trajectory.setPaused(true);break;
+            state->trajectory.stepFrame(-1); state->trajectory.setPaused(true); break;
         case GLFW_KEY_RIGHT:
             state->trajectory.stepFrame(1); state->trajectory.setPaused(true); break;
+        case GLFW_KEY_HOME:
+            state->trajectory.setFrame(0); state->trajectory.setPaused(true); break;
+        case GLFW_KEY_END:
+            state->trajectory.setFrame(state->trajectory.frameCount() - 1); state->trajectory.setPaused(true); break;
         case GLFW_KEY_UP:
             state->trajectory.adjustSpeed(0.8f); break;
         case GLFW_KEY_DOWN:
             state->trajectory.adjustSpeed(1.25f); break;
         case GLFW_KEY_R:
             state->camera.reset(); break;
+        case GLFW_KEY_P:
+            state->camera.projection = (state->camera.projection == ProjectionMode::Perspective) ? ProjectionMode::Orthographic : ProjectionMode::Perspective; break;
         case GLFW_KEY_B:
-            state->dark_mode = !state->dark_mode; break;
+            state->dark_mode = !state->dark_mode; state->bg_color = state->dark_mode ? vec3(0.0f) : vec3(1.0f); break;
         case GLFW_KEY_TAB:
             state->style = static_cast<ViewStyle>((static_cast<int>(state->style) + 1) % 3); break;
-        case GLFW_KEY_ESCAPE:
-            if (state->gui.isFileDialogOpen()) {
-                state->gui.closeFileDialog(); break;
-            }
-
-            if (state->gui.isScreenshotDialogOpen()) {
-                state->gui.closeScreenshotDialog(); break;
-            }
-
-            glfwSetWindowShouldClose(window, GLFW_TRUE); break;
         default:
             break;
     }
 }
 
 /// Captures active OpenGL framebuffer raster pixels and encodes uncompressed RGBA image data to a PNG file.
-static bool saveScreenshot(const std::string& filepath, int width, int height) {
+static bool saveScreenshot(const std::string& filepath, int width, int height, bool transparent) {
     if (width <= 0 || height <= 0) return false;
 
     std::vector<unsigned char> pixels(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
@@ -246,7 +267,11 @@ static bool saveScreenshot(const std::string& filepath, int width, int height) {
     glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
     for (size_t i = 0; i < pixels.size(); i += 4) {
-        if (pixels[i + 3] == 0) {
+        if (!transparent) {
+            pixels[i + 3] = 255;
+        }
+
+        else if (pixels[i + 3] == 0) {
             pixels[i] = 0; pixels[i + 1] = 0; pixels[i + 2] = 0;
         }
     }
@@ -331,13 +356,16 @@ extern "C" {
                   << "  Space                 PLAY / PAUSE TRAJECTORY\n"
                   << "  Left Arrow            PREVIOUS FRAME\n"
                   << "  Right Arrow           NEXT FRAME\n"
+                  << "  Home / End            FIRST / LAST FRAME\n"
                   << "  Up Arrow              INCREASE SPEED\n"
                   << "  Down Arrow            DECREASE SPEED\n"
                   << "  R                     RESET CAMERA VIEW\n"
+                  << "  P                     TOGGLE PROJECTION\n"
                   << "  B                     TOGGLE BACKGROUND\n"
-                  << "  G                     TOGGLE GUI OVERLAY\n"
+                  << "  F1                    TOGGLE GUI OVERLAY\n"
+                  << "  F12                   QUICK SCREENSHOT\n"
                   << "  O                     OPEN FILE DIALOG\n"
-                  << "  S                     SAVE SCREENSHOT\n"
+                  << "  S                     SAVE SCREENSHOT DIALOG\n"
                   << "  Tab                   CYCLE STYLE\n"
                   << "  Esc                   QUIT VIEWER"
         << std::endl;
@@ -380,9 +408,11 @@ extern "C" {
                 state.mesh_dirty = false;
             }
 
-            vec3 bg = state.dark_mode ? vec3(0.0f) : vec3(1.0f);
+            vec3 bg = state.bg_color;
 
-            glClearColor(bg.x, bg.y, bg.z, 0.0f);
+            float alpha = state.transparent_bg ? 0.0f : 1.0f;
+
+            glClearColor(bg.x, bg.y, bg.z, alpha);
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -402,16 +432,14 @@ extern "C" {
 
             bool show_bonds = (state.style != ViewStyle::SpaceFilling);
 
-            vec3 bond_color = state.dark_mode ? vec3(0.85f, 0.85f, 0.85f) : vec3(0.35f, 0.35f, 0.35f);
-
-            state.trajectory.render(sphere_mesh, cylinder_mesh, atom_scale, show_bonds, bond_color);
+            state.trajectory.render(sphere_mesh, cylinder_mesh, atom_scale, show_bonds, state.bond_color);
 
             if (!state.pending_screenshot_path.empty()) {
                 int fb_w = 0, fb_h = 0;
 
                 glfwGetFramebufferSize(ctx.window, &fb_w, &fb_h);
 
-                saveScreenshot(state.pending_screenshot_path, fb_w, fb_h);
+                saveScreenshot(state.pending_screenshot_path, fb_w, fb_h, state.transparent_bg);
 
                 state.pending_screenshot_path.clear();
             }

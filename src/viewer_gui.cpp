@@ -17,9 +17,11 @@ bool ViewerGui::init(GLFWwindow* window) {
     IMGUI_CHECKVERSION(); ImGui::CreateContext();
 
     ImGuiIO& io = ImGui::GetIO();
-    io.IniFilename = nullptr;
 
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+    io.IniFilename              = nullptr;
+    io.ConfigNavCaptureKeyboard =   false;
 
     ImGui::StyleColorsDark();
 
@@ -151,6 +153,14 @@ void ViewerGui::render(ViewerState& state) {
                     if (ImGui::SliderInt("Speed (FPS)", &fps, 1, 120)) {
                         state.trajectory.adjustSpeed((1000.0f / static_cast<float>(fps)) / wait_ms);
                     }
+
+                    const char* loop_modes[] = { "Loop", "Ping-Pong", "Once" };
+
+                    int mode_idx = static_cast<int>(state.trajectory.getLoopMode());
+
+                    if (ImGui::Combo("Loop Mode", &mode_idx, loop_modes, 3)) {
+                        state.trajectory.setLoopMode(static_cast<LoopMode>(mode_idx));
+                    }
                 }
 
                 else {
@@ -167,7 +177,11 @@ void ViewerGui::render(ViewerState& state) {
                     state.style = static_cast<ViewStyle>(style_idx);
                 }
 
-                ImGui::Checkbox("Dark Background", &state.dark_mode);
+                if (ImGui::ColorEdit3("Background Color", &state.bg_color.x)) {
+                    state.dark_mode = (state.bg_color.x + state.bg_color.y + state.bg_color.z) < 1.5f;
+                }
+
+                ImGui::Checkbox("Transparent Background", &state.transparent_bg);
 
                 ImGui::SliderFloat("Atom Scale", &state.atom_scale, 0.2f, 3.0f, "%.2f");
 
@@ -216,18 +230,34 @@ void ViewerGui::render(ViewerState& state) {
                     state.trajectory.rebind(state.binding_factor, state.bond_radius);
                 }
 
+                ImGui::ColorEdit3("Bond Color", &state.bond_color.x);
+
                 if (ImGui::Button("Reset Bonds")) {
                     state.binding_factor = 0.013f;
                     state.bond_radius    = 0.090f;
+
+                    state.bond_color = vec3(0.65f, 0.65f, 0.65f);
 
                     state.trajectory.rebind(state.binding_factor, state.bond_radius);
                 }
             }
 
-            if (ImGui::CollapsingHeader("Camera Orbit", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::CollapsingHeader("Camera & Optics", ImGuiTreeNodeFlags_DefaultOpen)) {
                 if (ImGui::Button("Reset Camera (R)")) {
                     state.camera.reset();
                 }
+
+                const char* proj_modes[] = { "Perspective", "Orthographic" };
+
+                int proj_idx = static_cast<int>(state.camera.projection);
+
+                if (ImGui::Combo("Projection (P)", &proj_idx, proj_modes, 2)) {
+                    state.camera.projection = static_cast<ProjectionMode>(proj_idx);
+                }
+
+                ImGui::SliderFloat("Field of View", &state.camera.fov_deg, 10.0f,   120.0f, "%.1f deg");
+                ImGui::SliderFloat("Near Plane",    &state.camera.z_near,   0.01f,   10.0f, "%.2f"    );
+                ImGui::SliderFloat("Far Plane",     &state.camera.z_far,  100.00f, 5000.0f, "%.0f"    );
 
                 ImGui::Text("Distance: %.2f", state.camera.distance);
 

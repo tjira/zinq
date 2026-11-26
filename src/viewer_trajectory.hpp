@@ -53,6 +53,13 @@ private:
     std::vector<Bond> bonds;
 };
 
+/// Defines playback loop wrapping behavior for multi-frame molecular trajectory visualization.
+enum class LoopMode {
+    Loop     = 0,
+    PingPong = 1,
+    Once     = 2
+};
+
 /// Encapsulates a multi-frame molecular trajectory with frame timing, centering, and render dispatch.
 class Trajectory {
 public:
@@ -73,6 +80,12 @@ public:
 
     /// Checks whether trajectory playback is paused.
     bool isPaused() const { return paused; }
+
+    /// Returns the active trajectory playback loop mode.
+    LoopMode getLoopMode() const { return loop_mode; }
+
+    /// Sets the trajectory playback loop mode.
+    void setLoopMode(LoopMode m) { loop_mode = m; }
 
     /// Returns the playback wait interval between consecutive frames in milliseconds.
     float getWaitMs() const { return wait_ms; }
@@ -110,4 +123,8 @@ private:
     std::vector<Geometry> geoms;
 
     bool paused = false; float wait_ms = 16.0f; int frame = 0;
+
+    LoopMode loop_mode = LoopMode::Loop;
+
+    int direction = 1;
 };

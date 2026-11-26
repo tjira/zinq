@@ -155,6 +155,23 @@ inline mat4 perspective(float fovy_rad, float aspect, float zNear, float zFar) {
     return r;
 }
 
+/// Constructs an orthographic projection matrix defining a parallel-projection viewing box.
+inline mat4 ortho(float left, float right, float bottom, float top, float zNear, float zFar) {
+    mat4 r;
+
+    r.at(0, 0) =  2.0f / (right - left);
+    r.at(1, 1) =  2.0f / (top - bottom);
+    r.at(2, 2) = -2.0f / (zFar - zNear);
+
+    r.at(0, 3) = -(right + left) / (right - left);
+    r.at(1, 3) = -(top + bottom) / (top - bottom);
+    r.at(2, 3) = -(zFar + zNear) / (zFar - zNear);
+
+    r.at(3, 3) =  1.0f;
+
+    return r;
+}
+
 /// Constructs a camera view transformation matrix looking from eye toward center.
 inline mat4 lookAt(const vec3& eye, const vec3& center, const vec3& up) {
     vec3 f = normalize(center - eye);

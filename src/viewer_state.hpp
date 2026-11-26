@@ -18,6 +18,12 @@ enum class ViewStyle {
     Wireframe    = 2
 };
 
+/// Specifies the geometric projection mapping for 3D viewport rendering.
+enum class ProjectionMode {
+    Perspective  = 0,
+    Orthographic = 1
+};
+
 /// Computes spherical coordinate camera orbits, target pans, and projection matrix transformations.
 struct OrbitCamera {
     vec3 target = vec3(0.0f);
@@ -32,12 +38,22 @@ struct OrbitCamera {
     float initial_yaw      =  0.0f;
     float initial_pitch    =  0.0f;
 
+    ProjectionMode projection = ProjectionMode::Perspective;
+
     float fov_deg =   45.00f;
     float z_near  =    0.05f;
     float z_far   = 2000.00f;
 
-    /// Evaluates the perspective projection matrix for the given viewport aspect ratio.
+    /// Evaluates the perspective or orthographic projection matrix for the given viewport aspect ratio.
     mat4 getProjMatrix(float aspect) const {
+        if (projection == ProjectionMode::Orthographic) {
+            float half_h = distance * std::tan(fov_deg * static_cast<float>(M_PI) / 360.0f);
+
+            float half_w = half_h * aspect;
+
+            return ortho(-half_w, half_w, -half_h, half_h, z_near, z_far);
+        }
+
         return perspective(fov_deg * static_cast<float>(M_PI) / 180.0f, aspect, z_near, z_far);
     }
 
@@ -120,6 +136,12 @@ struct ViewerState {
     ViewStyle style = ViewStyle::BallAndStick;
 
     bool dark_mode = true;
+
+    vec3 bg_color = vec3(0.0f);
+
+    bool transparent_bg = true;
+
+    vec3 bond_color = vec3(0.65f, 0.65f, 0.65f);
 
     float ambient_intensity  = 0.35f;
     float diffuse_intensity  = 0.55f;
