@@ -242,7 +242,7 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
         .use_llvm = true,
     });
 
-    if (opt == .fast or opt == .small) {
+    if (target.result.os.tag != .windows and (opt == .fast or opt == .small)) {
         exe_zinq.lto = .thin;
     }
 

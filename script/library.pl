@@ -151,7 +151,7 @@ sub create_compiler_wrappers {
     my $zig = -f "$pwd/.zig-bin/zig.exe" ? "$pwd/.zig-bin/zig.exe" : -f "$pwd/.zig-bin/zig" ? "$pwd/.zig-bin/zig" : "zig";
 
     # DETERMINE CPU ARCHITECTURE FLAG
-    my $cpu_flag = $target =~ /^$host_arch/ ? "-march=native" : "";
+    my $cpu_flag = $target =~ /^x86_64/ ? "-march=x86_64_v3" : "";
 
     # DEFINE WRAPPER CONTENTS
     my %wrappers = (
