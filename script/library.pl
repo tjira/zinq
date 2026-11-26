@@ -614,6 +614,11 @@ sub compile_imgui {
     # EXTRACT ARGUMENTS
     my ($prefix, $cores, $pwd) = @_;
 
+    # CHECK IF GLFW IS AVAILABLE
+    if (! -f "$prefix/include/GLFW/glfw3.h") {
+        warn "SKIPPING IMGUI FOR '$target' SINCE GLFW IS NOT AVAILABLE\n"; return;
+    }
+
     # DEFINE THE URL AND COMMIT FOR THE IMGUI REPOSITORY
     my $url    =     "https://github.com/ocornut/imgui.git";
     my $commit = "c1aaac65e896a45f81f47a4d68f9959e0f86c859";
@@ -629,7 +634,10 @@ sub compile_imgui {
     clone_library($ifd_url, $ifd_commit, "imguifiledialog");
 
     # CREATE TARGET DIRECTORIES IF THEY DO NOT EXIST
-    make_path("$prefix/include/imgui", "$prefix/lib");
+    make_path("lib/imgui/dirent", "$prefix/include/imgui", "$prefix/lib");
+
+    # COPY DIRENT HEADER FOR WINDOWS COMPILATION
+    copy("lib/imguifiledialog/dirent/dirent.h", "lib/imgui/dirent/dirent.h") or die "FAILED TO COPY 'dirent.h' SOURCE: $!";
 
     # COPY IMGUIFILEDIALOG HEADERS TO TARGET PREFIX
     copy("lib/imguifiledialog/$_", "$prefix/include/imgui/$_") or die "FAILED TO COPY '$_' HEADER: $!" for qw(ImGuiFileDialog.h ImGuiFileDialogConfig.h);
