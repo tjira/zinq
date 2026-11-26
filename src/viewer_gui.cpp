@@ -115,7 +115,7 @@ void ViewerGui::render(ViewerState& state) {
         ImGui::SetNextWindowSize(ImVec2(380, 560), ImGuiCond_FirstUseEver);
 
         if (ImGui::Begin("Molecular Viewer Controls", &show_controls)) {
-            if (ImGui::Button("Open Molecule / Trajectory (O)", ImVec2(-1, 0))) {
+            if (ImGui::Button("Open Molecule / Trajectory (O)", ImVec2(-1.0f, 0.0f))) {
                 openFileDialog();
             }
 
@@ -146,10 +146,10 @@ void ViewerGui::render(ViewerState& state) {
                         state.trajectory.stepFrame(1); state.trajectory.setPaused(true);
                     }
 
-                    int fps = static_cast<int>(std::round(1000 / wait_ms));
+                    int fps = static_cast<int>(std::round(1000.0f / wait_ms));
 
                     if (ImGui::SliderInt("Speed (FPS)", &fps, 1, 120)) {
-                        state.trajectory.adjustSpeed((1000 / fps) / wait_ms);
+                        state.trajectory.adjustSpeed((1000.0f / static_cast<float>(fps)) / wait_ms);
                     }
                 }
 
@@ -239,8 +239,8 @@ void ViewerGui::render(ViewerState& state) {
     }
 
     if (isFileDialogOpen()) {
-        ImVec2 min_size = ImVec2(500,  350);
-        ImVec2 max_size = ImVec2(1000, 700);
+        ImVec2 min_size = ImVec2( 500.0f, 350.0f);
+        ImVec2 max_size = ImVec2(1000.0f, 700.0f);
 
         if (ImGuiFileDialog::Instance()->Display("xyz", ImGuiWindowFlags_NoCollapse, min_size, max_size)) {
             if (ImGuiFileDialog::Instance()->IsOk()) {
@@ -252,8 +252,8 @@ void ViewerGui::render(ViewerState& state) {
     }
 
     if (isScreenshotDialogOpen()) {
-        ImVec2 min_size = ImVec2(500,  350);
-        ImVec2 max_size = ImVec2(1000, 700);
+        ImVec2 min_size = ImVec2( 500.0f, 350.0f);
+        ImVec2 max_size = ImVec2(1000.0f, 700.0f);
 
         if (ImGuiFileDialog::Instance()->Display("screenshot", ImGuiWindowFlags_NoCollapse, min_size, max_size)) {
             if (ImGuiFileDialog::Instance()->IsOk()) {

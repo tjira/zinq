@@ -20,7 +20,7 @@ Geometry Geometry::Load(std::istream& is, int natoms) {
 
         std::istringstream iss(line); std::string symbol;
 
-        float x = 0, y = 0, z = 0;
+        float x = 0.0f, y = 0.0f, z = 0.0f;
 
         if (!(iss >> symbol >> x >> y >> z)) continue;
 
@@ -38,17 +38,17 @@ Geometry Geometry::Load(std::istream& is, int natoms) {
 
 /// Calculates the geometric centroid of all atoms in the geometry.
 vec3 Geometry::getCenter() const {
-    vec3 center(0);
+    vec3 center(0.0f);
 
-    float count = 0;
+    float count = 0.0f;
 
     for (const auto& atom : atoms) {
         if (!atom.is_dummy) {
-            center += atom.position; count += 1;
+            center += atom.position; count += 1.0f;
         }
     }
 
-    return count > 0 ? center / count : vec3(0);
+    return count > 0.0f ? center / count : vec3(0.0f);
 }
 
 /// Translates all atom positions and bond models by a spatial offset vector.
@@ -87,31 +87,31 @@ void Geometry::rebind(float factor, float bond_size) {
 
             float dist = length(vector);
 
-            if (dist < 1e-4) continue;
+            if (dist < 1e-4f) continue;
 
             float thresh = factor * (atoms[i].covalent + atoms[j].covalent);
 
             if (dist < thresh) {
-                vec3 mid = (pi + pj) * 0.5; vec3 up(0, 1, 0);
+                vec3 mid = (pi + pj) * 0.5f; vec3 up(0.0f, 1.0f, 0.0f);
 
                 vec3 v_norm = vector / dist;
                 vec3 cr = cross(up, v_norm);
 
                 float cr_len = length(cr);
 
-                mat4 rot(1);
+                mat4 rot(1.0f);
 
-                if (cr_len > 1e-6) {
+                if (cr_len > 1e-6f) {
                     float angle = std::atan2(cr_len, dot(up, v_norm));
 
-                    rot = rotate(mat4(1), angle, cr / cr_len);
+                    rot = rotate(mat4(1.0f), angle, cr / cr_len);
                 }
 
-                else if (v_norm.y < 0) {
-                    rot = rotate(mat4(1), static_cast<float>(M_PI), vec3(1, 0, 0));
+                else if (v_norm.y < 0.0f) {
+                    rot = rotate(mat4(1.0f), static_cast<float>(M_PI), vec3(1.0f, 0.0f, 0.0f));
                 }
 
-                mat4 sc = scale(mat4(1), vec3(bond_size, dist * 0.5, bond_size)); mat4 tr = translate(mat4(1), mid);
+                mat4 sc = scale(mat4(1.0f), vec3(bond_size, dist * 0.5f, bond_size)); mat4 tr = translate(mat4(1.0f), mid);
 
                 bonds.push_back({ tr * rot * sc });
             }
@@ -119,20 +119,34 @@ void Geometry::rebind(float factor, float bond_size) {
     }
 }
 
-/// Renders atoms as spheres and covalent bonds as cylinders using the active shader.
-void Geometry::render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) const {
-    for (const auto& atom : atoms) {
-        mat4 model = translate(mat4(1.0f), atom.position);
+/// Renders atoms as spheres and covalent bonds as cylinders using instanced draw calls.
+void Geometry::render(const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) const {
+    if (!atoms.empty()) {
+        std::vector<InstanceData> atom_instances;
 
-        model = scale(model, vec3(atom.radius * atom_scale));
+        atom_instances.reserve(atoms.size());
 
-        sphere.render(shader, model, atom.color);
+        for (const auto& atom : atoms) {
+            mat4 model = translate(mat4(1.0f), atom.position);
+
+            model = scale(model, vec3(atom.radius * atom_scale));
+
+            atom_instances.push_back({ model, atom.color });
+        }
+
+        sphere.renderInstanced(atom_instances);
     }
 
-    if (show_bonds) {
+    if (show_bonds && !bonds.empty()) {
+        std::vector<InstanceData> bond_instances;
+
+        bond_instances.reserve(bonds.size());
+
         for (const auto& bond : bonds) {
-            cylinder.render(shader, bond.model, bond_color);
+            bond_instances.push_back({ bond.model, bond_color });
         }
+
+        cylinder.renderInstanced(bond_instances);
     }
 }
 
@@ -205,9 +219,9 @@ void Trajectory::moveBy(const vec3& offset) {
 
 /// Calculates the maximum radial distance from origin across all atoms in all frames.
 float Trajectory::getMaxRadius() const {
-    if (geoms.empty()) return 3;
+    if (geoms.empty()) return 3.0f;
 
-    float max_r = 0;
+    float max_r = 0.0f;
 
     for (const auto& geom : geoms) {
         for (const auto& atom : geom.getAtoms()) {
@@ -217,7 +231,7 @@ float Trajectory::getMaxRadius() const {
         }
     }
 
-    return max_r > 0 ? max_r : 3;
+    return max_r > 0.0f ? max_r : 3.0f;
 }
 
 /// Recomputes covalent bond connectivity models across all trajectory frames using given bonding parameters.
@@ -228,7 +242,7 @@ void Trajectory::rebind(float factor, float bond_size) {
 }
 
 /// Advances frame timing and dispatches geometry render calls for the current frame.
-void Trajectory::render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) {
+void Trajectory::render(const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) {
     if (geoms.empty()) return;
 
     if (!paused && geoms.size() > 1) {
@@ -249,5 +263,5 @@ void Trajectory::render(const Shader& shader, const Mesh& sphere, const Mesh& cy
         timestamp = std::chrono::high_resolution_clock::now();
     }
 
-    geoms.at(frame).render(shader, sphere, cylinder, atom_scale, show_bonds, bond_color);
+    geoms.at(frame).render(sphere, cylinder, atom_scale, show_bonds, bond_color);
 }

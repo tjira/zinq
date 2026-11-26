@@ -20,17 +20,26 @@ enum class ViewStyle {
 
 /// Computes spherical coordinate camera orbits, target pans, and projection matrix transformations.
 struct OrbitCamera {
-    vec3 target = vec3(0);
+    vec3 target = vec3(0.0f);
 
-    float distance = 10;
-    float yaw      =  0;
-    float pitch    =  0;
+    float distance = 10.0f;
+    float yaw      =  0.0f;
+    float pitch    =  0.0f;
 
-    vec3 initial_target = vec3(0);
+    vec3 initial_target = vec3(0.0f);
 
-    float initial_distance = 10;
-    float initial_yaw      =  0;
-    float initial_pitch    =  0;
+    float initial_distance = 10.0f;
+    float initial_yaw      =  0.0f;
+    float initial_pitch    =  0.0f;
+
+    float fov_deg =   45.00f;
+    float z_near  =    0.05f;
+    float z_far   = 2000.00f;
+
+    /// Evaluates the perspective projection matrix for the given viewport aspect ratio.
+    mat4 getProjMatrix(float aspect) const {
+        return perspective(fov_deg * static_cast<float>(M_PI) / 180.0f, aspect, z_near, z_far);
+    }
 
     /// Restores the camera distance, target centroid, and spherical orbital angles to initial defaults.
     void reset() {
@@ -53,7 +62,7 @@ struct OrbitCamera {
 
     /// Evaluates the rigid-body view transformation matrix gazing at the target center.
     mat4 getViewMatrix() const {
-        return lookAt(getEye(), target, vec3(0, 1, 0));
+        return lookAt(getEye(), target, vec3(0.0f, 1.0f, 0.0f));
     }
 
     /// Increments spherical polar and azimuthal camera angles with clamped elevation boundaries.
@@ -70,8 +79,8 @@ struct OrbitCamera {
     void pan(float dx, float dy) {
         vec3 eye = getEye();
 
-        vec3 f = normalize(target - eye           );
-        vec3 r = normalize(cross(f, vec3(0, 1, 0)));
+        vec3 f = normalize(target - eye                    );
+        vec3 r = normalize(cross(f, vec3(0.0f, 1.0f, 0.0f)));
 
         vec3 u = cross(r, f);
 
@@ -91,8 +100,8 @@ struct OrbitCamera {
 
 /// Records cursor Cartesian coordinates and active drag button states for viewport interaction.
 struct MouseState {
-    float last_x = 0;
-    float last_y = 0;
+    float last_x = 0.0f;
+    float last_y = 0.0f;
 
     bool dragging_left  = false;
     bool dragging_right = false;
@@ -107,8 +116,6 @@ struct ViewerState {
 
     OrbitCamera camera;
     MouseState   mouse;
-
-    mat4 proj = mat4(1);
 
     ViewStyle style = ViewStyle::BallAndStick;
 
@@ -135,10 +142,17 @@ struct ViewerState {
 
     ViewerGui gui;
 
-    int   last_reported_frame = -1;
-    float last_reported_wait  =  0;
+    int   last_reported_frame =    -1;
+    float last_reported_wait  =  0.0f;
 
     bool last_reported_pause = false;
+
+    /// Evaluates the perspective projection matrix using camera settings and current viewport dimensions.
+    mat4 getProjMatrix() const {
+        float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
+
+        return camera.getProjMatrix(aspect);
+    }
 
     /// Loads a new molecular trajectory from disk, recenters the viewport, and recalculates orbital bounding radius.
     bool loadTrajectory(const std::string& new_path) {

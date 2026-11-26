@@ -2,7 +2,6 @@
 
 #include "viewer_math.hpp"
 #include "viewer_mesh.hpp"
-#include "viewer_shader.hpp"
 
 #include <chrono>
 #include <istream>
@@ -13,16 +12,16 @@
 class Geometry {
 public:
     struct Atom {
-        vec3 position; vec3 color = vec3(1);
+        vec3 position; vec3 color = vec3(1.0f);
 
-        float radius   =  0.5;
-        float covalent = 75.0;
+        float radius   =  0.5f;
+        float covalent = 75.0f;
 
         bool is_dummy = false;
     };
 
     struct Bond {
-        mat4 model = mat4(1);
+        mat4 model = mat4(1.0f);
     };
 
     /// Constructs a default empty molecular geometry structure.
@@ -46,8 +45,8 @@ public:
     /// Computes covalent bond connectivity models based on pairwise covalent radii.
     void rebind(float factor, float bond_size = 0.090f);
 
-    /// Renders atoms as spheres and covalent bonds as cylinders using the active shader.
-    void render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) const;
+    /// Renders atoms as spheres and covalent bonds as cylinders using instanced draw calls.
+    void render(const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) const;
 
 private:
     std::vector<Atom> atoms;
@@ -103,12 +102,12 @@ public:
     void rebind(float factor, float bond_size = 0.090f);
 
     /// Advances frame timing and dispatches geometry render calls for the current frame.
-    void render(const Shader& shader, const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color);
+    void render(const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color);
 
 private:
     std::chrono::high_resolution_clock::time_point timestamp;
 
     std::vector<Geometry> geoms;
 
-    bool paused = false; float wait_ms = 16; int frame = 0;
+    bool paused = false; float wait_ms = 16.0f; int frame = 0;
 };

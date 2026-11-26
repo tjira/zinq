@@ -27,20 +27,24 @@ static const std::string vertex_shader_src = R"(
 
 layout(location = 0) in vec3 i_position;
 layout(location = 1) in vec3   i_normal;
+layout(location = 2) in mat4    i_model;
+layout(location = 6) in vec3    i_color;
 
-uniform mat4 u_model;
 uniform mat4  u_view;
 uniform mat4  u_proj;
 
 out vec3 v_position;
 out vec3   v_normal;
+out vec3    v_color;
 
 void main() {
-    vec4 world_pos = u_model * vec4(i_position, 1.0);
+    vec4 world_pos = i_model * vec4(i_position, 1.0);
 
     v_position = world_pos.xyz;
 
-    v_normal = mat3(u_model) * i_normal;
+    v_normal = mat3(i_model) * i_normal;
+
+    v_color = i_color;
 
     gl_Position = u_proj * u_view * world_pos;
 }
@@ -51,8 +55,8 @@ static const std::string fragment_shader_src = R"(
 
 in vec3 v_position;
 in vec3   v_normal;
+in vec3    v_color;
 
-uniform vec3      u_color;
 uniform vec3     u_camera;
 uniform vec3  u_light_dir;
 uniform float   u_ambient;
@@ -72,9 +76,9 @@ void main() {
 
     float spec = (diff > 0.0 && u_shininess > 0.0) ? pow(max(dot(n, h), 0.0), u_shininess) : 0.0;
 
-    vec3 ambient  = u_ambient * u_color;
+    vec3 ambient  = u_ambient * v_color;
 
-    vec3 diffuse  = u_diffuse * diff * u_color;
+    vec3 diffuse  = u_diffuse * diff * v_color;
 
     vec3 specular = u_specular * spec * vec3(1.0);
 
@@ -89,8 +93,7 @@ struct WindowContext {
     /// Releases GLFW window resources and shuts down the GLFW subsystem.
     ~WindowContext() {
         if (window) {
-            glfwSetWindowUserPointer(window, nullptr);
-            glfwDestroyWindow(window);
+            glfwSetWindowUserPointer(window, nullptr); glfwDestroyWindow(window);
         }
 
         glfwTerminate();
@@ -164,15 +167,13 @@ static void scrollCallback(GLFWwindow* window, double, double dy) {
     }
 }
 
-/// Adjusts the OpenGL viewport and projection matrix on window resize.
+/// Adjusts the OpenGL viewport on window resize.
 static void resizeCallback(GLFWwindow* window, int width, int height) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
     if (state && width > 0 && height > 0) {
         state->width  =  width;
         state->height = height;
-
-        state->proj = perspective(45 * static_cast<float>(M_PI) / 180, static_cast<float>(width) / height, 0.05, 2000);
 
         glViewport(0, 0, width, height);
     }
@@ -210,9 +211,9 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         case GLFW_KEY_RIGHT:
             state->trajectory.stepFrame(1); state->trajectory.setPaused(true); break;
         case GLFW_KEY_UP:
-            state->trajectory.adjustSpeed(0.8); break;
+            state->trajectory.adjustSpeed(0.8f); break;
         case GLFW_KEY_DOWN:
-            state->trajectory.adjustSpeed(1.25); break;
+            state->trajectory.adjustSpeed(1.25f); break;
         case GLFW_KEY_R:
             state->camera.reset(); break;
         case GLFW_KEY_B:
@@ -240,21 +241,9 @@ static bool saveScreenshot(const std::string& filepath, int width, int height) {
 
     std::vector<unsigned char> pixels(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
 
-    std::vector<float> depths(static_cast<size_t>(width) * static_cast<size_t>(height));
-
     glPixelStorei(GL_PACK_ALIGNMENT, 1);
 
     glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-
-    glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depths.data());
-
-    if (glGetError() == GL_NO_ERROR) {
-        for (size_t i = 0; i < depths.size(); ++i) {
-            if (depths[i] >= 1) {
-                pixels[i * 4 + 3] = 0;
-            }
-        }
-    }
 
     for (size_t i = 0; i < pixels.size(); i += 4) {
         if (pixels[i + 3] == 0) {
@@ -280,11 +269,11 @@ static void setUniforms(const Shader& shader, const ViewerState& state) {
     shader.use();
 
     shader.set("u_view", state.camera.getViewMatrix());
-    shader.set("u_proj",                   state.proj);
+    shader.set("u_proj",        state.getProjMatrix());
     shader.set("u_camera",      state.camera.getEye());
 
     vec3 f = normalize(state.camera.target - state.camera.getEye());
-    vec3 r = normalize(cross(f, vec3(0, 1, 0))                    );
+    vec3 r = normalize(cross(f, vec3(0.0f, 1.0f, 0.0f))           );
 
     vec3 u = cross(r, f);
 
@@ -362,8 +351,6 @@ extern "C" {
         state.camera.distance         = camera_dist;
         state.camera.initial_distance = camera_dist;
 
-        state.proj = perspective(45 * static_cast<float>(M_PI) / 180, 1280.0 / 720, 0.05, 2000);
-
         glfwSetWindowUserPointer(ctx.window, &state);
 
         glfwSetMouseButtonCallback(ctx.window, mouseButtonCallback);
@@ -393,9 +380,9 @@ extern "C" {
                 state.mesh_dirty = false;
             }
 
-            vec3 bg = state.dark_mode ? vec3(0, 0, 0) : vec3(1, 1, 1);
+            vec3 bg = state.dark_mode ? vec3(0.0f) : vec3(1.0f);
 
-            glClearColor(bg.x, bg.y, bg.z, 0);
+            glClearColor(bg.x, bg.y, bg.z, 0.0f);
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -415,9 +402,9 @@ extern "C" {
 
             bool show_bonds = (state.style != ViewStyle::SpaceFilling);
 
-            vec3 bond_color = state.dark_mode ? vec3(0.85, 0.85, 0.85) : vec3(0.35, 0.35, 0.35);
+            vec3 bond_color = state.dark_mode ? vec3(0.85f, 0.85f, 0.85f) : vec3(0.35f, 0.35f, 0.35f);
 
-            state.trajectory.render(shader, sphere_mesh, cylinder_mesh, atom_scale, show_bonds, bond_color);
+            state.trajectory.render(sphere_mesh, cylinder_mesh, atom_scale, show_bonds, bond_color);
 
             if (!state.pending_screenshot_path.empty()) {
                 int fb_w = 0, fb_h = 0;
