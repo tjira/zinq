@@ -270,7 +270,7 @@ sub compile_libint {
         "-DLIBINT2_ENABLE_ERI2=1",
         "-DLIBINT2_ENABLE_ERI3=1",
         "-DLIBINT2_ENABLE_ONEBODY=1",
-        "-DLIBINT2_MAX_AM=4",
+        "-DLIBINT2_MAX_AM=6",
         "-DLIBINT2_GENERATE_FMA=ON",
     );
 

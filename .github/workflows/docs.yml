@@ -53,7 +53,7 @@ jobs:
         if: steps.cache-libs.outputs.cache-hit != 'true'
         env:
           BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
-        run: ./script/library.pl --target x86_64-linux -j 1
+        run: ./script/library.pl --target x86_64-linux
 
       - name: Compile Code Documentation
         run: zig build docs
