@@ -72,8 +72,30 @@ bool ViewerGui::isFileDialogOpen() const {
     return ImGuiFileDialog::Instance()->IsOpened("xyz");
 }
 
+void ViewerGui::openScreenshotDialog() {
+    IGFD::FileDialogConfig config;
+
+    config.path = "."; config.fileName = "screenshot.png"; config.countSelectionMax = 1;
+
+    config.flags = ImGuiFileDialogFlags_ConfirmOverwrite;
+
+    ImGuiFileDialog::Instance()->OpenDialog("screenshot", "Save Molecular View Screenshot", ".png", config);
+}
+
+void ViewerGui::closeScreenshotDialog() {
+    if (isScreenshotDialogOpen()) {
+        ImGuiFileDialog::Instance()->Close();
+    }
+}
+
+bool ViewerGui::isScreenshotDialogOpen() const {
+    if (!initialized) return false;
+
+    return ImGuiFileDialog::Instance()->IsOpened("screenshot");
+}
+
 bool ViewerGui::isVisible() const {
-    return show_controls || isFileDialogOpen();
+    return show_controls || isFileDialogOpen() || isScreenshotDialogOpen();
 }
 
 void ViewerGui::render(ViewerState& state) {
@@ -132,6 +154,10 @@ void ViewerGui::render(ViewerState& state) {
                 }
 
                 ImGui::Checkbox("Dark Background", &state.dark_mode);
+
+                if (ImGui::Button("Save Screenshot (S)")) {
+                    openScreenshotDialog();
+                }
             }
 
             if (ImGui::CollapsingHeader("Camera Orbit", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -155,6 +181,19 @@ void ViewerGui::render(ViewerState& state) {
         if (ImGuiFileDialog::Instance()->Display("xyz", ImGuiWindowFlags_NoCollapse, min_size, max_size)) {
             if (ImGuiFileDialog::Instance()->IsOk()) {
                 state.loadTrajectory(ImGuiFileDialog::Instance()->GetFilePathName());
+            }
+
+            ImGuiFileDialog::Instance()->Close();
+        }
+    }
+
+    if (isScreenshotDialogOpen()) {
+        ImVec2 min_size = ImVec2(500,  350);
+        ImVec2 max_size = ImVec2(1000, 700);
+
+        if (ImGuiFileDialog::Instance()->Display("screenshot", ImGuiWindowFlags_NoCollapse, min_size, max_size)) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                state.pending_screenshot_path = ImGuiFileDialog::Instance()->GetFilePathName();
             }
 
             ImGuiFileDialog::Instance()->Close();

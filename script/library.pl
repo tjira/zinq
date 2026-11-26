@@ -11,7 +11,7 @@ use Getopt::Long qw(GetOptions      );
 use JSON::PP     qw(decode_json     );
 
 # DEFINE LIBRARY NAMES
-my @lib_names = qw(eigen libint libxc openblas exprtk openmp glad glfw imgui);
+my @lib_names = qw(eigen libint libxc openblas exprtk openmp glad glfw imgui stb);
 
 # DEFINE BUILD OPTIONS
 my (%build, %versions);
@@ -56,6 +56,7 @@ compile_eigen   ($prefix, $cores, $pwd) if $build{eigen};
 compile_glad    ($prefix,         $pwd) if $build{glad};
 compile_glfw    ($prefix, $cores, $pwd) if $build{glfw};
 compile_imgui   ($prefix, $cores, $pwd) if $build{imgui};
+compile_stb     ($prefix,         $pwd) if $build{stb};
 compile_libint  ($prefix, $cores, $pwd) if $build{libint};
 compile_libxc   ($prefix, $cores, $pwd) if $build{libxc};
 
@@ -679,4 +680,25 @@ sub compile_imgui {
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd' ROOT: $!";
+}
+
+sub compile_stb {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $pwd) = @_;
+
+    # DEFINE THE URL AND COMMIT FOR THE STB REPOSITORY
+    my $url    =      "https://github.com/nothings/stb.git";
+    my $commit = "6b5799bae8a1fe3792691ef4b72ae26434c3e799";
+
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "stb");
+
+    # CREATE INCLUDE DIRECTORY IF IT DOESN'T EXIST
+    make_path("$prefix/include") if ! -d "$prefix/include";
+
+    # DEFINE SOURCE AND DESTINATION PATHS FOR THE HEADER FILE
+    my $src = "lib/stb/stb_image_write.h"; my $dst = "$prefix/include/stb_image_write.h";
+
+    # RUN COPY
+    copy($src, $dst) or die "FAILED TO COPY '$src' TO '$dst': $!";
 }

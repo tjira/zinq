@@ -12,10 +12,15 @@
 
 #include <GLFW/glfw3.h>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+
+#include <stb_image_write.h>
+
 #include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string>
+#include <vector>
 
 static const std::string vertex_shader_src = R"(
 #version 330 core
@@ -184,6 +189,12 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         state->gui.toggleFileDialog(); return;
     }
 
+    if (key == GLFW_KEY_S) {
+        if ((state->gui.isFileDialogOpen() || state->gui.isScreenshotDialogOpen()) && state->gui.wantsTextInput()) return;
+
+        state->gui.openScreenshotDialog(); return;
+    }
+
     if (state->gui.isVisible() && state->gui.wantsCaptureKeyboard()) return;
 
     switch (key) {
@@ -204,10 +215,59 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         case GLFW_KEY_TAB:
             state->style = static_cast<ViewStyle>((static_cast<int>(state->style) + 1) % 3); break;
         case GLFW_KEY_ESCAPE:
-            if (state->gui.isFileDialogOpen()) { state->gui.closeFileDialog(); break; } glfwSetWindowShouldClose(window, GLFW_TRUE); break;
+            if (state->gui.isFileDialogOpen()) {
+                state->gui.closeFileDialog(); break;
+            }
+
+            if (state->gui.isScreenshotDialogOpen()) {
+                state->gui.closeScreenshotDialog(); break;
+            }
+
+            glfwSetWindowShouldClose(window, GLFW_TRUE); break;
         default:
             break;
     }
+}
+
+/// Captures active OpenGL framebuffer raster pixels and encodes uncompressed RGBA image data to a PNG file.
+static bool saveScreenshot(const std::string& filepath, int width, int height) {
+    if (width <= 0 || height <= 0) return false;
+
+    std::vector<unsigned char> pixels(static_cast<size_t>(width) * static_cast<size_t>(height) * 4);
+
+    std::vector<float> depths(static_cast<size_t>(width) * static_cast<size_t>(height));
+
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+
+    glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+    glReadPixels(0, 0, width, height, GL_DEPTH_COMPONENT, GL_FLOAT, depths.data());
+
+    if (glGetError() == GL_NO_ERROR) {
+        for (size_t i = 0; i < depths.size(); ++i) {
+            if (depths[i] >= 1) {
+                pixels[i * 4 + 3] = 0;
+            }
+        }
+    }
+
+    for (size_t i = 0; i < pixels.size(); i += 4) {
+        if (pixels[i + 3] == 0) {
+            pixels[i] = 0; pixels[i + 1] = 0; pixels[i + 2] = 0;
+        }
+    }
+
+    stbi_flip_vertically_on_write(1);
+
+    int stride = width * 4;
+
+    if (!stbi_write_png(filepath.c_str(), width, height, 4, pixels.data(), stride)) {
+        std::cerr << "\nFAILED TO WRITE SCREENSHOT TO '" << filepath << "' IMAGE FILE" << std::endl;
+
+        return false;
+    }
+
+    return true;
 }
 
 /// Uploads camera view, projection, and illumination uniforms to the shader.
@@ -248,7 +308,7 @@ extern "C" {
 
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-        glfwWindowHint(GLFW_SAMPLES, 4);
+        glfwWindowHint(GLFW_SAMPLES, 4); glfwWindowHint(GLFW_ALPHA_BITS, 8);
 
 #ifdef __APPLE__
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
@@ -279,6 +339,7 @@ extern "C" {
                   << "  B                     TOGGLE BACKGROUND\n"
                   << "  G                     TOGGLE GUI OVERLAY\n"
                   << "  O                     OPEN FILE DIALOG\n"
+                  << "  S                     SAVE SCREENSHOT\n"
                   << "  Tab                   CYCLE STYLE\n"
                   << "  Esc                   QUIT VIEWER"
         << std::endl;
@@ -318,7 +379,7 @@ extern "C" {
         while (!glfwWindowShouldClose(ctx.window)) {
             vec3 bg = state.dark_mode ? vec3(0, 0, 0) : vec3(1, 1, 1);
 
-            glClearColor(bg.x, bg.y, bg.z, 1);
+            glClearColor(bg.x, bg.y, bg.z, 0);
 
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -339,6 +400,16 @@ extern "C" {
             vec3 bond_color = state.dark_mode ? vec3(0.85, 0.85, 0.85) : vec3(0.35, 0.35, 0.35);
 
             state.trajectory.render(shader, sphere_mesh, cylinder_mesh, atom_scale, show_bonds, bond_color);
+
+            if (!state.pending_screenshot_path.empty()) {
+                int fb_w = 0, fb_h = 0;
+
+                glfwGetFramebufferSize(ctx.window, &fb_w, &fb_h);
+
+                saveScreenshot(state.pending_screenshot_path, fb_w, fb_h);
+
+                state.pending_screenshot_path.clear();
+            }
 
             if (state.gui.isVisible()) {
                 state.gui.newFrame(); state.gui.render(state); state.gui.draw();

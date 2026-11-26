@@ -43,6 +43,15 @@ public:
     /// Checks whether the modal file selection dialog is currently active and visible.
     bool isFileDialogOpen() const;
 
+    /// Opens the modal file selection dialog for choosing the output destination of a PNG screenshot.
+    void openScreenshotDialog();
+
+    /// Closes the modal screenshot destination file selection dialog if currently displayed.
+    void closeScreenshotDialog();
+
+    /// Checks whether the modal screenshot save dialog is currently active and visible.
+    bool isScreenshotDialogOpen() const;
+
     /// Returns whether any part of the graphical user interface overlay is currently displayed.
     bool isVisible() const;
 

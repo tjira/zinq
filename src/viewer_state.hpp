@@ -103,7 +103,7 @@ struct ViewerState {
     int width = 1280;
     int height = 720;
 
-    std::string filename;
+    std::string filename; std::string pending_screenshot_path;
 
     OrbitCamera camera;
     MouseState   mouse;
@@ -134,15 +134,18 @@ struct ViewerState {
         }
 
         trajectory = std::move(new_traj);
-        filename   = new_path;
+
+        filename = new_path;
 
         float camera_dist = std::max(6.0f, trajectory.getMaxRadius() * 2.5f);
 
         camera.distance         = camera_dist;
         camera.initial_distance = camera_dist;
+
         camera.reset();
 
         last_reported_frame = -1;
+
         return true;
     }
 
