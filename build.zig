@@ -62,7 +62,7 @@ fn getVersion(b: *std.Build) ![]const u8 {
 }
 
 fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
-    const dirs = [_][]const u8{ "lib", "include", "include/eigen3" };
+    const dirs = [_][]const u8{ "lib", "include", "include/eigen3", "include/imgui" };
 
     const arch, const os = .{ @tagName(module.resolved_target.?.result.cpu.arch), @tagName(module.resolved_target.?.result.os.tag) };
 
@@ -79,6 +79,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
     const dir0 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[0] });
     const dir1 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[1] });
     const dir2 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[2] });
+    const dir3 = try std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ ext, dirs[3] });
 
     module.addIncludePath(b.path("src"));
 
@@ -89,6 +90,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
     module.addLibraryPath(.{ .cwd_relative = dir0 });
     module.addIncludePath(.{ .cwd_relative = dir1 });
     module.addIncludePath(.{ .cwd_relative = dir2 });
+    module.addIncludePath(.{ .cwd_relative = dir3 });
 
     var flags: []const []const u8 = undefined;
 
@@ -116,13 +118,23 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
         break :blk true;
     };
 
-    const has_graphics = has_glad and has_glfw and (!is_linux or is_gnu);
+    const has_imgui = blk: {
+        const path = std.fmt.allocPrint(b.allocator, "{s}/libimgui.a", .{dir0}) catch break :blk false;
+
+        std.Io.Dir.cwd().access(b.graph.io, path, .{}) catch break :blk false;
+
+        break :blk true;
+    };
+
+    const has_graphics = has_glad and has_glfw and has_imgui and (!is_linux or is_gnu);
 
     module.addCSourceFile(.{ .file = b.path("src/libint.cpp"), .flags = flags });
     module.addCSourceFile(.{ .file = b.path("src/exprtk.cpp"), .flags = flags });
 
     if (has_graphics) {
         module.addCSourceFile(.{ .file = b.path("src/viewer.cpp"), .flags = flags });
+
+        module.addCSourceFile(.{ .file = b.path("src/viewer_gui.cpp"), .flags = flags });
 
         module.addCSourceFile(.{ .file = b.path("src/viewer_ptable.cpp"), .flags = flags });
         module.addCSourceFile(.{ .file = b.path("src/viewer_shader.cpp"), .flags = flags });
@@ -139,7 +151,7 @@ fn linkDependencies(b: *std.Build, module: *std.Build.Module) !bool {
     }
 
     if (has_graphics) {
-        inline for (.{ "glad", "glfw3" }) |lib| {
+        inline for (.{ "glad", "glfw3", "imgui" }) |lib| {
             module.linkSystemLibrary(lib, .{ .preferred_link_mode = .static, .use_pkg_config = .no });
         }
     }

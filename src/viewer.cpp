@@ -3,6 +3,7 @@
 #include "viewer_mesh.hpp"
 #include "viewer_ptable.hpp"
 #include "viewer_shader.hpp"
+#include "viewer_state.hpp"
 #include "viewer_trajectory.hpp"
 
 #include <glad/gl.h>
@@ -71,144 +72,6 @@ void main() {
 }
 )";
 
-enum class ViewStyle {
-    BallAndStick = 0,
-    SpaceFilling = 1,
-    Wireframe    = 2
-};
-
-struct OrbitCamera {
-    vec3 target = vec3(0);
-
-    float distance = 10;
-    float yaw      =  0;
-    float pitch    =  0;
-
-    vec3 initial_target = vec3(0);
-
-    float initial_distance = 10;
-    float initial_yaw      =  0;
-    float initial_pitch    =  0;
-
-    /// Resets camera position, orientation, and zoom distance to initial values.
-    void reset() {
-        target   =   initial_target;
-        distance = initial_distance;
-        yaw      =      initial_yaw;
-        pitch    =    initial_pitch;
-    }
-
-    /// Computes the 3D Cartesian eye coordinates from spherical angles and target.
-    vec3 getEye() const {
-        float cp = std::cos(pitch);
-        float sp = std::sin(pitch);
-
-        float cy = std::cos(yaw);
-        float sy = std::sin(yaw);
-
-        return target + distance * vec3(cp * sy, sp, cp * cy);
-    }
-
-    /// Constructs the view matrix for camera transform looking toward target.
-    mat4 getViewMatrix() const {
-        return lookAt(getEye(), target, vec3(0, 1, 0));
-    }
-
-    /// Rotates the camera orbit angles around the target center.
-    void orbit(float dx, float dy) {
-        yaw   -= dx * 0.008;
-        pitch += dy * 0.008;
-
-        const float max_pitch = 1.55;
-
-        pitch = std::clamp(pitch, -max_pitch, max_pitch);
-    }
-
-    /// Shifts the camera target along camera screen-aligned plane vectors.
-    void pan(float dx, float dy) {
-        vec3 eye = getEye();
-
-        vec3 f = normalize(target - eye           );
-        vec3 r = normalize(cross(f, vec3(0, 1, 0)));
-
-        vec3 u = cross(r, f);
-
-        float factor = distance * 0.0015;
-
-        target += (-dx * r + dy * u) * factor;
-    }
-
-    /// Adjusts the camera view distance from the orbital center.
-    void zoom(float dy) {
-        distance *= std::pow(0.9, dy);
-
-        if (distance <    0.2) distance =    0.2;
-        if (distance > 2000.0) distance = 2000.0;
-    }
-};
-
-struct MouseState {
-    float last_x = 0;
-    float last_y = 0;
-
-    bool dragging_left  = false;
-    bool dragging_right = false;
-};
-
-struct ViewerState {
-    int width = 1280;
-    int height = 720;
-
-    std::string filename;
-
-    OrbitCamera camera;
-    MouseState   mouse;
-
-    mat4 proj = mat4(1);
-
-    ViewStyle style = ViewStyle::BallAndStick;
-
-    bool dark_mode = true;
-
-    Trajectory trajectory;
-
-    int   last_reported_frame = -1;
-    float last_reported_wait  =  0;
-
-    bool last_reported_pause = false;
-
-    /// Updates the window title with filename, frame progress, pause, and FPS status.
-    void updateTitle(GLFWwindow* window) {
-        int cur_frame = trajectory.currentFrame();
-
-        int total = trajectory.frameCount();
-        bool paused = trajectory.isPaused();
-        float wait = trajectory.getWaitMs();
-
-        if (cur_frame == last_reported_frame && paused == last_reported_pause && wait == last_reported_wait) {
-            return;
-        }
-
-        last_reported_frame = cur_frame;
-        last_reported_pause =    paused;
-        last_reported_wait  =      wait;
-
-        std::string title = "Zinq Viewer - " + filename;
-
-        if (total > 1) {
-            int fps = static_cast<int>(std::round(1000.0f / wait));
-
-            title += " [Frame " + std::to_string(cur_frame + 1) + "/" + std::to_string(total) + "] ";
-
-            title += (paused ? "[Paused]" : "[Playing]");
-
-            title += " [" + std::to_string(fps) + " fps]";
-        }
-
-        glfwSetWindowTitle(window, title.c_str());
-    }
-};
-
 /// Manages GLFW window and context lifecycle with automated resource reclamation.
 struct WindowContext {
     GLFWwindow* window = nullptr;
@@ -230,6 +93,15 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
 
     if (!state) return;
 
+    if (action == GLFW_RELEASE) {
+        if (button == GLFW_MOUSE_BUTTON_LEFT)  state->mouse.dragging_left  = false;
+        if (button == GLFW_MOUSE_BUTTON_RIGHT) state->mouse.dragging_right = false;
+
+        return;
+    }
+
+    if (state->gui.isVisible() && state->gui.wantsCaptureMouse()) return;
+
     double x = 0, y = 0;
 
     glfwGetCursorPos(window, &x, &y);
@@ -238,11 +110,11 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
     state->mouse.last_y = static_cast<float>(y);
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        state->mouse.dragging_left = (action == GLFW_PRESS);
+        state->mouse.dragging_left = true;
     }
 
     else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-        state->mouse.dragging_right = (action == GLFW_PRESS);
+        state->mouse.dragging_right = true;
     }
 }
 
@@ -260,6 +132,10 @@ static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     state->mouse.last_x = fx;
     state->mouse.last_y = fy;
 
+    if (state->gui.isVisible() && state->gui.wantsCaptureMouse() && !state->mouse.dragging_left && !state->mouse.dragging_right) {
+        return;
+    }
+
     if (state->mouse.dragging_left) {
         state->camera.orbit(dx, dy);
     }
@@ -273,7 +149,7 @@ static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
 static void scrollCallback(GLFWwindow* window, double, double dy) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
-    if (state) {
+    if (state && (!state->gui.isVisible() || !state->gui.wantsCaptureMouse())) {
         state->camera.zoom(static_cast<float>(dy));
     }
 }
@@ -298,6 +174,18 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
 
     if (!state || action != GLFW_PRESS) return;
 
+    if (key == GLFW_KEY_G) {
+        state->gui.toggleVisible(); return;
+    }
+
+    if (key == GLFW_KEY_O) {
+        if (state->gui.isFileDialogOpen() && state->gui.wantsTextInput()) return;
+
+        state->gui.toggleFileDialog(); return;
+    }
+
+    if (state->gui.isVisible() && state->gui.wantsCaptureKeyboard()) return;
+
     switch (key) {
         case GLFW_KEY_SPACE:
             state->trajectory.togglePause(); break;
@@ -316,7 +204,7 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         case GLFW_KEY_TAB:
             state->style = static_cast<ViewStyle>((static_cast<int>(state->style) + 1) % 3); break;
         case GLFW_KEY_ESCAPE:
-            glfwSetWindowShouldClose(window, GLFW_TRUE); break;
+            if (state->gui.isFileDialogOpen()) { state->gui.closeFileDialog(); break; } glfwSetWindowShouldClose(window, GLFW_TRUE); break;
         default:
             break;
     }
@@ -389,6 +277,8 @@ extern "C" {
                   << "  Down Arrow            DECREASE SPEED\n"
                   << "  R                     RESET CAMERA VIEW\n"
                   << "  B                     TOGGLE BACKGROUND\n"
+                  << "  G                     TOGGLE GUI OVERLAY\n"
+                  << "  O                     OPEN FILE DIALOG\n"
                   << "  Tab                   CYCLE STYLE\n"
                   << "  Esc                   QUIT VIEWER"
         << std::endl;
@@ -415,6 +305,8 @@ extern "C" {
         glfwSetWindowSizeCallback(ctx.window, resizeCallback);
 
         glfwSetKeyCallback(ctx.window, keyCallback);
+
+        if (!state.gui.init(ctx.window)) return false;
 
         Shader shader(vertex_shader_src, fragment_shader_src);
 
@@ -447,6 +339,10 @@ extern "C" {
             vec3 bond_color = state.dark_mode ? vec3(0.85, 0.85, 0.85) : vec3(0.35, 0.35, 0.35);
 
             state.trajectory.render(shader, sphere_mesh, cylinder_mesh, atom_scale, show_bonds, bond_color);
+
+            if (state.gui.isVisible()) {
+                state.gui.newFrame(); state.gui.render(state); state.gui.draw();
+            }
 
             state.updateTitle(ctx.window);
 
