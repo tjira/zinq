@@ -274,13 +274,11 @@ sub compile_libint {
         "-DLIBINT2_ERI3_PURE_SH=ON",
         "-DLIBINT2_ERI2_PURE_SH=ON",
         "-DLIBINT2_MAX_AM=6;4",
+        "-DLIBINT2_OPT_AM=3;2",
         "-DLIBINT2_ERI3_MAX_AM=8;6",
         "-DLIBINT2_ERI2_MAX_AM=8;6",
         "-DLIBINT2_GENERATE_FMA=ON",
     );
-
-    # ENABLE AVX2 VECTORIZATION FOR X86_64 TARGETS
-    push @compiler_args, "-DLIBINT2_VECTOR_LENGTH=4" if $target =~ /x86_64/;
 
     # RUN CONFIGURE FOR LIBINT COMPILER
     system(@compiler_args) == 0 or die "LIBINT COMPILER CONFIGURE FAILED";
