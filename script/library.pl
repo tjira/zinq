@@ -11,7 +11,7 @@ use Getopt::Long qw(GetOptions      );
 use JSON::PP     qw(decode_json     );
 
 # DEFINE LIBRARY NAMES
-my @lib_names = qw(eigen libint libxc openblas exprtk openmp glad glfw);
+my @lib_names = qw(eigen libint libxc openblas exprtk openmp glad glfw imgui);
 
 # DEFINE BUILD OPTIONS
 my (%build, %versions);
@@ -55,6 +55,7 @@ compile_exprtk  ($prefix,         $pwd) if $build{exprtk};
 compile_eigen   ($prefix, $cores, $pwd) if $build{eigen};
 compile_glad    ($prefix,         $pwd) if $build{glad};
 compile_glfw    ($prefix, $cores, $pwd) if $build{glfw};
+compile_imgui   ($prefix, $cores, $pwd) if $build{imgui};
 compile_libint  ($prefix, $cores, $pwd) if $build{libint};
 compile_libxc   ($prefix, $cores, $pwd) if $build{libxc};
 
@@ -606,4 +607,76 @@ sub compile_glfw {
 
     # CHANGE BACK TO ORIGINAL DIRECTORY
     chdir $pwd or die "CANNOT CHDIR TO '$pwd': $!";
+}
+
+sub compile_imgui {
+    # EXTRACT ARGUMENTS
+    my ($prefix, $cores, $pwd) = @_;
+
+    # DEFINE THE URL AND COMMIT FOR THE IMGUI REPOSITORY
+    my $url    =     "https://github.com/ocornut/imgui.git";
+    my $commit = "c1aaac65e896a45f81f47a4d68f9959e0f86c859";
+
+    # CLONE THE LIBRARY
+    clone_library($url, $commit, "imgui");
+
+    # DEFINE THE URL AND COMMIT FOR IMGUIFILEDIALOG
+    my $ifd_url    = "https://github.com/aiekick/ImGuiFileDialog.git";
+    my $ifd_commit =       "ee77f190861193a995435c388682f1512f6fd29a";
+
+    # CLONE IMGUIFILEDIALOG
+    clone_library($ifd_url, $ifd_commit, "imguifiledialog");
+
+    # CREATE TARGET DIRECTORIES IF THEY DO NOT EXIST
+    make_path("$prefix/include/imgui", "$prefix/lib");
+
+    # COPY IMGUIFILEDIALOG HEADERS TO TARGET PREFIX
+    copy("lib/imguifiledialog/$_", "$prefix/include/imgui/$_") or die "FAILED TO COPY '$_' HEADER: $!" for qw(ImGuiFileDialog.h ImGuiFileDialogConfig.h);
+
+    # COPY IMGUIFILEDIALOG SOURCES TO IMGUI BUILD DIRECTORY
+    copy("lib/imguifiledialog/$_", "lib/imgui/$_") or die "FAILED TO COPY '$_' SOURCE: $!" for qw(ImGuiFileDialog.h ImGuiFileDialogConfig.h ImGuiFileDialog.cpp);
+
+    # CHANGE DIRECTORY TO THE CLONED LIBRARY
+    chdir "lib/imgui" or die "CANNOT CHDIR TO 'lib/imgui' DIRECTORY: $!";
+
+    # DEFINE HEADER FILES TO INSTALL
+    my @headers = qw(imconfig.h imgui.h imgui_internal.h imstb_rectpack.h imstb_textedit.h imstb_truetype.h);
+
+    # INSTALL CORE HEADERS
+    for my $header (@headers) {
+        copy($header, "$prefix/include/imgui/$header") or die "FAILED TO COPY '$header' HEADER FILE: $!";
+    }
+
+    # INSTALL BACKEND HEADERS
+    for my $backend (qw(imgui_impl_glfw.h imgui_impl_opengl3.h imgui_impl_opengl3_loader.h)) {
+        copy("backends/$backend", "$prefix/include/imgui/$backend") or die "FAILED TO COPY '$backend' BACKEND HEADER: $!";
+    }
+
+    # DEFINE IMGUI SOURCE FILES TO COMPILE
+    my @srcs = qw( imgui.cpp imgui_draw.cpp imgui_tables.cpp imgui_widgets.cpp );
+
+    # ADD BACKEND SOURCE FILES
+    push @srcs, qw( backends/imgui_impl_glfw.cpp backends/imgui_impl_opengl3.cpp );
+
+    # ADD IMGUIFILEDIALOG SOURCE FILE
+    push @srcs, qw( ImGuiFileDialog.cpp );
+
+    # DEFINE TARGET OBJECT FILES
+    my @objs = map { s/\.cpp$/.o/r } @srcs;
+
+    # COMPILE SOURCE FILES
+    my @flags = ($ENV{CXX}, "-O3", "-fno-sanitize=undefined", "-I.", "-Ibackends", "-I$prefix/include");
+
+    for my $src (@srcs) {
+        system(@flags, "-c", $src, "-o", $src =~ s/\.cpp$/.o/r) == 0 or die "IMGUI COMPILATION FOR '$src' SOURCE FAILED";
+    }
+
+    # CREATE STATIC LIBRARY
+    system($ENV{AR}, "rcs", "$prefix/lib/libimgui.a", @objs) == 0 or die "IMGUI ARCHIVE CREATION FAILED";
+
+    # UPDATE ARCHIVE INDEX
+    system($ENV{RANLIB}, "$prefix/lib/libimgui.a") == 0 or die "IMGUI RANLIB FAILED";
+
+    # CHANGE BACK TO ORIGINAL DIRECTORY
+    chdir $pwd or die "CANNOT CHDIR TO '$pwd' ROOT: $!";
 }
