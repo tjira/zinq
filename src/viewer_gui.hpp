@@ -56,7 +56,7 @@ public:
     bool isScreenshotDialogOpen() const;
 
     /// Returns whether any part of the graphical user interface overlay is currently displayed.
-    bool isVisible() const;
+    bool isVisible(const ViewerState* state = nullptr) const;
 
     /// Queries whether the Dear ImGui subsystem currently consumes cursor pointing events.
     bool wantsCaptureMouse() const;

@@ -124,6 +124,9 @@ struct MouseState {
     float last_x = 0.0f;
     float last_y = 0.0f;
 
+    float press_x = 0.0f;
+    float press_y = 0.0f;
+
     bool dragging_left  = false;
     bool dragging_right = false;
 };
@@ -145,6 +148,8 @@ struct ViewerState {
     bool transparent_bg = true;
 
     vec3 bond_color = vec3(0.65f, 0.65f, 0.65f);
+
+    vec3 outline_color = vec3(1.0f);
 
     float ambient_intensity  = 0.35f;
     float diffuse_intensity  = 0.55f;
@@ -171,6 +176,8 @@ struct ViewerState {
     float last_reported_wait  =  0.0f;
 
     bool last_reported_pause = false;
+
+    std::vector<int> selected_atoms;
 
     /// Evaluates the perspective projection matrix using camera settings and current viewport dimensions.
     mat4 getProjMatrix() const {
@@ -201,6 +208,8 @@ struct ViewerState {
         camera.reset();
 
         last_reported_frame = -1;
+
+        clearSelection();
 
         return true;
     }
@@ -234,5 +243,108 @@ struct ViewerState {
         }
 
         glfwSetWindowTitle(window, title.c_str());
+    }
+
+    /// Toggles the viewport background color between white and black presets and adjusts outline color.
+    void toggleBackground() {
+        bool was_dark = (bg_color.x + bg_color.y + bg_color.z) < 1.5f;
+
+        bg_color = was_dark ? vec3(1.0f) : vec3(0.0f);
+
+        outline_color = was_dark ? vec3(0.1f) : vec3(1.0f);
+    }
+
+    /// Projects a 3D Cartesian position to 2D screen viewport coordinates.
+    bool projectToScreen(const vec3& pos, float& out_x, float& out_y) const {
+        float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
+
+        mat4 vp = camera.getProjMatrix(aspect) * camera.getViewMatrix();
+
+        vec4 clip = vp * vec4(pos, 1.0f);
+
+        if (clip.w <= 0.001f) return false;
+
+        float ndc_x = clip.x / clip.w;
+        float ndc_y = clip.y / clip.w;
+
+        if (ndc_x < -1.5f || ndc_x > 1.5f || ndc_y < -1.5f || ndc_y > 1.5f) return false;
+
+        out_x = (ndc_x * 0.5f + 0.5f) * static_cast<float>(width);
+
+        out_y = (1.0f - (ndc_y * 0.5f + 0.5f)) * static_cast<float>(height);
+
+        return true;
+    }
+
+    /// Casts an unprojected ray from viewport cursor coordinates into the 3D scene.
+    Ray castRay(float mouse_x, float mouse_y) const {
+        float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
+
+        mat4 view_proj = camera.getProjMatrix(aspect) * camera.getViewMatrix();
+
+        mat4 inv_vp = inverse(view_proj);
+
+        float ndc_x = (2.0f * mouse_x) / static_cast<float>(width) - 1.0f;
+
+        float ndc_y = 1.0f - (2.0f * mouse_y) / static_cast<float>(height);
+
+        vec4 p_near = inv_vp * vec4(ndc_x, ndc_y, -1.0f, 1.0f);
+        vec4 p_far  = inv_vp * vec4(ndc_x, ndc_y,  1.0f, 1.0f);
+
+        vec3 world_near = p_near.w != 0.0f ? p_near.xyz() / p_near.w : p_near.xyz();
+        vec3 world_far  = p_far.w  != 0.0f ? p_far.xyz()  / p_far.w  :  p_far.xyz();
+
+        return Ray{ world_near, normalize(world_far - world_near) };
+    }
+
+    /// Finds the nearest atom intersecting an unprojected screen ray, or -1 if none intersect.
+    int pickAtom(float mouse_x, float mouse_y) const {
+        const Geometry* geom = trajectory.currentGeometry();
+
+        if (!geom) return -1;
+
+        Ray ray = castRay(mouse_x, mouse_y);
+
+        const auto& atoms = geom->getAtoms();
+
+        int best_idx = -1; float min_dist = 1e30f;
+
+        for (size_t i = 0; i < atoms.size(); ++i) {
+            const auto& atom = atoms[i];
+
+            if (atom.is_dummy) continue;
+
+            float t = 0.0f; float r = atom.radius * atom_scale;
+
+            if (ray.intersectSphere(atom.position, r, t) && t < min_dist) {
+                min_dist = t; best_idx = static_cast<int>(i);
+            }
+        }
+
+        return best_idx;
+    }
+
+    /// Toggles the selection status of the atom at the specified index, retaining up to 4 atoms.
+    void toggleAtomSelection(int idx) {
+        if (idx < 0) return;
+
+        auto it = std::find(selected_atoms.begin(), selected_atoms.end(), idx);
+
+        if (it != selected_atoms.end()) {
+            selected_atoms.erase(it);
+        }
+
+        else {
+            if (selected_atoms.size() >= 4) {
+                selected_atoms.erase(selected_atoms.begin());
+            }
+
+            selected_atoms.push_back(idx);
+        }
+    }
+
+    /// Clears the collection of currently selected atom indices.
+    void clearSelection() {
+        selected_atoms.clear();
     }
 };

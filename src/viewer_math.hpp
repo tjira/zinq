@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 
 /// 3D Cartesian floating-point vector for spatial coordinates, normals, and colors.
@@ -195,4 +196,129 @@ inline mat4 lookAt(const vec3& eye, const vec3& center, const vec3& up) {
     r.at(2, 3) = dot(f, eye);
 
     return r;
+}
+
+/// 4D Cartesian floating-point vector for homogeneous spatial coordinates and projections.
+struct vec4 {
+    float x = 0, y = 0, z = 0, w = 0;
+
+    /// Constructs a 4D Cartesian vector initialized to zero, uniform scalar, or specified spatial components.
+    vec4() = default; vec4(float v) : x(v), y(v), z(v), w(v) {}
+
+    /// Constructs a 4D Cartesian vector from specified spatial components and homogeneous coordinate.
+    vec4(float x_, float y_, float z_, float w_) : x(x_), y(y_), z(z_), w(w_) {}
+
+    /// Constructs a 4D Cartesian vector from a 3D vector and homogeneous coordinate.
+    vec4(const vec3& v, float w_) : x(v.x), y(v.y), z(v.z), w(w_) {}
+
+    /// Extracts the 3D spatial components of the 4D homogeneous vector.
+    vec3 xyz() const { return vec3(x, y, z); }
+};
+
+/// Multiplies a 4x4 matrix by a 4D homogeneous vector.
+inline vec4 operator*(const mat4& m, const vec4& v) {
+    return vec4(
+        m.at(0, 0) * v.x + m.at(0, 1) * v.y + m.at(0, 2) * v.z + m.at(0, 3) * v.w,
+        m.at(1, 0) * v.x + m.at(1, 1) * v.y + m.at(1, 2) * v.z + m.at(1, 3) * v.w,
+        m.at(2, 0) * v.x + m.at(2, 1) * v.y + m.at(2, 2) * v.z + m.at(2, 3) * v.w,
+        m.at(3, 0) * v.x + m.at(3, 1) * v.y + m.at(3, 2) * v.z + m.at(3, 3) * v.w
+    );
+}
+
+/// Computes the inverse of a 4x4 transformation matrix using cofactor expansion.
+inline mat4 inverse(const mat4& m) {
+    float a0 = m.at(0, 0) * m.at(1, 1) - m.at(0, 1) * m.at(1, 0);
+    float a1 = m.at(0, 0) * m.at(1, 2) - m.at(0, 2) * m.at(1, 0);
+    float a2 = m.at(0, 0) * m.at(1, 3) - m.at(0, 3) * m.at(1, 0);
+    float a3 = m.at(0, 1) * m.at(1, 2) - m.at(0, 2) * m.at(1, 1);
+    float a4 = m.at(0, 1) * m.at(1, 3) - m.at(0, 3) * m.at(1, 1);
+    float a5 = m.at(0, 2) * m.at(1, 3) - m.at(0, 3) * m.at(1, 2);
+    float b0 = m.at(2, 0) * m.at(3, 1) - m.at(2, 1) * m.at(3, 0);
+    float b1 = m.at(2, 0) * m.at(3, 2) - m.at(2, 2) * m.at(3, 0);
+    float b2 = m.at(2, 0) * m.at(3, 3) - m.at(2, 3) * m.at(3, 0);
+    float b3 = m.at(2, 1) * m.at(3, 2) - m.at(2, 2) * m.at(3, 1);
+    float b4 = m.at(2, 1) * m.at(3, 3) - m.at(2, 3) * m.at(3, 1);
+    float b5 = m.at(2, 2) * m.at(3, 3) - m.at(2, 3) * m.at(3, 2);
+
+    float det = a0 * b5 - a1 * b4 + a2 * b3 + a3 * b2 - a4 * b1 + a5 * b0;
+
+    if (std::abs(det) < 1e-12f) return mat4(1.0f);
+
+    float inv_det = 1.0f / det;
+
+    mat4 r;
+
+    r.at(0, 0) = (+m.at(1, 1) * b5 - m.at(1, 2) * b4 + m.at(1, 3) * b3) * inv_det;
+    r.at(0, 1) = (-m.at(0, 1) * b5 + m.at(0, 2) * b4 - m.at(0, 3) * b3) * inv_det;
+    r.at(0, 2) = (+m.at(3, 1) * a5 - m.at(3, 2) * a4 + m.at(3, 3) * a3) * inv_det;
+    r.at(0, 3) = (-m.at(2, 1) * a5 + m.at(2, 2) * a4 - m.at(2, 3) * a3) * inv_det;
+
+    r.at(1, 0) = (-m.at(1, 0) * b5 + m.at(1, 2) * b2 - m.at(1, 3) * b1) * inv_det;
+    r.at(1, 1) = (+m.at(0, 0) * b5 - m.at(0, 2) * b2 + m.at(0, 3) * b1) * inv_det;
+    r.at(1, 2) = (-m.at(3, 0) * a5 + m.at(3, 2) * a2 - m.at(3, 3) * a1) * inv_det;
+    r.at(1, 3) = (+m.at(2, 0) * a5 - m.at(2, 2) * a2 + m.at(2, 3) * a1) * inv_det;
+
+    r.at(2, 0) = (+m.at(1, 0) * b4 - m.at(1, 1) * b2 + m.at(1, 3) * b0) * inv_det;
+    r.at(2, 1) = (-m.at(0, 0) * b4 + m.at(0, 1) * b2 - m.at(0, 3) * b0) * inv_det;
+    r.at(2, 2) = (+m.at(3, 0) * a4 - m.at(3, 1) * a2 + m.at(3, 3) * a0) * inv_det;
+    r.at(2, 3) = (-m.at(2, 0) * a4 + m.at(2, 1) * a2 - m.at(2, 3) * a0) * inv_det;
+
+    r.at(3, 0) = (-m.at(1, 0) * b3 + m.at(1, 1) * b1 - m.at(1, 2) * b0) * inv_det;
+    r.at(3, 1) = (+m.at(0, 0) * b3 - m.at(0, 1) * b1 + m.at(0, 2) * b0) * inv_det;
+    r.at(3, 2) = (-m.at(3, 0) * a3 + m.at(3, 1) * a1 - m.at(3, 2) * a0) * inv_det;
+    r.at(3, 3) = (+m.at(2, 0) * a3 - m.at(2, 1) * a1 + m.at(2, 2) * a0) * inv_det;
+
+    return r;
+}
+
+/// Semi-infinite 3D ray parameterized by origin and unit direction.
+struct Ray {
+    vec3 origin, direction;
+
+    /// Tests ray intersection with a sphere and returns the nearest positive distance.
+    bool intersectSphere(const vec3& center, float radius, float& t_out) const {
+        vec3 m = origin - center;
+
+        float b = dot(m, direction); float c = dot(m, m) - radius * radius;
+
+        if (c > 0.0f && b > 0.0f) return false;
+
+        float disc = b * b - c;
+
+        if (disc < 0.0f) return false;
+
+        float t = -b - std::sqrt(disc);
+
+        if (t < 0.0f) t = -b + std::sqrt(disc);
+
+        if (t < 0.0f) return false;
+
+        t_out = t;
+
+        return true;
+    }
+};
+
+/// Computes the bond angle in radians formed by three spatial atom positions.
+inline float computeAngle(const vec3& p1, const vec3& p2, const vec3& p3) {
+    vec3 v1 = normalize(p1 - p2);
+    vec3 v2 = normalize(p3 - p2);
+
+    float cos_theta = std::clamp(dot(v1, v2), -1.0f, 1.0f);
+
+    return std::acos(cos_theta);
+}
+
+/// Computes the dihedral angle in radians formed by four sequential spatial atom positions.
+inline float computeDihedral(const vec3& p1, const vec3& p2, const vec3& p3, const vec3& p4) {
+    vec3 b1 = p2 - p1;
+    vec3 b2 = p3 - p2;
+    vec3 b3 = p4 - p3;
+
+    vec3 n1 = cross(b1, b2);
+    vec3 n2 = cross(b2, b3);
+
+    vec3 m1 = cross(n1, normalize(b2));
+
+    return std::atan2(dot(m1, n2), dot(n1, n2));
 }

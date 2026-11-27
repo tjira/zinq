@@ -75,4 +75,4 @@
 - [x] Implement the RIJCOSX approximation (RI-J with Chain-of-Spheres numerical exchange COSX) to accelerate Hartree–Fock and DFT calculations.
 - [x] Optimize in-core two-electron Fock contraction by exploiting 8-fold permutational symmetry and contiguous memory traversal.
 - [ ] Implement Cauchy–Schwarz integral screening and incremental Fock builds ($\Delta\mathbf{P}$) in direct SCF.
-- [ ] Implement Superposition of Atomic Densities (SAD) initial guess to accelerate SCF convergence.
+- [x] Implement Superposition of Atomic Densities (SAD) initial guess to accelerate SCF convergence.

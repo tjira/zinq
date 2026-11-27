@@ -28,7 +28,7 @@ Geometry Geometry::Load(std::istream& is, int natoms) {
 
         bool dummy = (symbol == "El" || symbol == "el");
 
-        geom.atoms.push_back({ vec3(x, y, z), info.color, kAtomSizeFactor * info.radius, info.covalent, dummy });
+        geom.atoms.push_back({ vec3(x, y, z), info.color, kAtomSizeFactor * info.radius, info.covalent, symbol, dummy });
     }
 
     return geom;

@@ -106,12 +106,14 @@ bool ViewerGui::isScreenshotDialogOpen() const {
     return ImGuiFileDialog::Instance()->IsOpened("screenshot");
 }
 
-bool ViewerGui::isVisible() const {
-    return show_controls || isFileDialogOpen() || isScreenshotDialogOpen();
+bool ViewerGui::isVisible(const ViewerState* state) const {
+    bool has_sel = state && !state->selected_atoms.empty();
+
+    return show_controls || has_sel || isFileDialogOpen() || isScreenshotDialogOpen();
 }
 
 void ViewerGui::render(ViewerState& state) {
-    if (!isVisible()) return;
+    if (!isVisible(&state)) return;
 
     if (show_controls) {
         ImGui::SetNextWindowSize(ImVec2(380, 560), ImGuiCond_FirstUseEver);
@@ -291,6 +293,117 @@ void ViewerGui::render(ViewerState& state) {
             ImGuiFileDialog::Instance()->Close();
         }
     }
+
+    if (!state.selected_atoms.empty()) {
+        const Geometry* geom = state.trajectory.currentGeometry();
+
+        if (geom) {
+            const auto& atoms = geom->getAtoms();
+
+            ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
+
+            ImGui::SetNextWindowBgAlpha(0.85f);
+
+            if (ImGui::Begin("Geometric Measurements & Inspector", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+                const float kAng2Bohr = 1.8897261246f; const float kRad2Deg = 180.0f / 3.14159265358979323846f;
+
+                if (state.selected_atoms.size() == 2) {
+                    int i1 = state.selected_atoms[0], i2 = state.selected_atoms[1];
+
+                    int n = static_cast<int>(atoms.size());
+
+                    if (i1 < n && i2 < n) {
+                        float d = length(atoms[i2].position - atoms[i1].position);
+
+                        ImGui::Text("Bond Distance (1-2):"); ImGui::Text("  %.4f Å  (%.4f Bohr)", d, d * kAng2Bohr);
+
+                        ImGui::Separator();
+                    }
+                }
+
+                else if (state.selected_atoms.size() == 3) {
+                    int i1 = state.selected_atoms[0], i2 = state.selected_atoms[1], i3 = state.selected_atoms[2];
+
+                    int n = static_cast<int>(atoms.size());
+
+                    if (i1 < n && i2 < n && i3 < n) {
+                        float th = computeAngle(atoms[i1].position, atoms[i2].position, atoms[i3].position);
+
+                        ImGui::Text("Bond Angle (1-2-3):"); ImGui::Text("  %.2f deg  (%.4f rad)", th * kRad2Deg, th);
+
+                        ImGui::Separator();
+                    }
+                }
+
+                else if (state.selected_atoms.size() == 4) {
+                    int i1 = state.selected_atoms[0], i2 = state.selected_atoms[1];
+                    int i3 = state.selected_atoms[2], i4 = state.selected_atoms[3];
+
+                    int n = static_cast<int>(atoms.size());
+
+                    if (i1 < n && i2 < n && i3 < n && i4 < n) {
+                        float ph = computeDihedral(atoms[i1].position, atoms[i2].position, atoms[i3].position, atoms[i4].position);
+
+                        ImGui::Text("Dihedral Angle (1-2-3-4):"); ImGui::Text("  %.2f deg  (%.4f rad)", ph * kRad2Deg, ph);
+
+                        ImGui::Separator();
+                    }
+                }
+
+                ImGui::TextDisabled("Selected Atoms (%zu):", state.selected_atoms.size());
+
+                for (size_t s = 0; s < state.selected_atoms.size(); ++s) {
+                    int idx = state.selected_atoms[s];
+
+                    if (idx >= 0 && idx < static_cast<int>(atoms.size())) {
+                        const auto& a = atoms[idx];
+
+                        ImGui::Text("[%zu] Atom #%d (%s):", s + 1, idx + 1, a.symbol.c_str());
+
+                        ImGui::Text("    (%.3f, %.3f, %.3f) Å | r_cov: %.1f pm", a.position.x, a.position.y, a.position.z, a.covalent);
+                    }
+                }
+
+                if (ImGui::Button("Clear Selection (C)")) {
+                    state.clearSelection();
+                }
+            }
+
+            ImGui::End();
+
+            ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+
+            for (size_t s = 0; s < state.selected_atoms.size(); ++s) {
+                int idx = state.selected_atoms[s];
+
+                if (idx >= 0 && idx < static_cast<int>(atoms.size())) {
+                    const auto& a = atoms[idx]; float sx = 0.0f, sy = 0.0f;
+
+                    if (state.projectToScreen(a.position, sx, sy)) {
+                        ImVec2 center(sx, sy);
+
+                        std::string num_str = std::to_string(s + 1);
+
+                        std::string tag = "[" + num_str + "] " + a.symbol + std::to_string(idx + 1);
+
+                        ImVec2 text_sz = ImGui::CalcTextSize(tag.c_str());
+
+                        ImVec2 p_min(center.x + 8.0f, center.y - text_sz.y * 0.5f - 2.0f);
+
+                        ImVec2 p_max(p_min.x + text_sz.x + 8.0f, p_min.y + text_sz.y + 4.0f);
+
+                        draw_list->AddCircleFilled(center, 3.5f, IM_COL32(255, 255, 255, 255));
+
+                        draw_list->AddRectFilled(p_min, p_max, IM_COL32(20, 20, 20, 210), 3.0f);
+
+                        draw_list->AddRect(p_min, p_max, IM_COL32(255, 255, 255, 180), 3.0f);
+
+                        draw_list->AddText(ImVec2(p_min.x + 4.0f, p_min.y + 2.0f), IM_COL32(255, 255, 255, 255), tag.c_str());
+                    }
+                }
+            }
+        }
+    }
 }
 
 void ViewerGui::draw() {
@@ -298,7 +411,7 @@ void ViewerGui::draw() {
 }
 
 bool ViewerGui::wantsCaptureMouse() const {
-    if (!initialized || !isVisible()) return false;
+    if (!initialized) return false;
 
     return ImGui::GetIO().WantCaptureMouse;
 }

@@ -19,7 +19,8 @@ my %TEMPLATES = (
         {
             "hartree_fock": {
                 "system": "{{XYZ}}",
-                "basis": "builtin:{{BASIS}}"
+                "basis": "builtin:{{BASIS}}",
+                "integral_direct": true
             }
         }
     ]

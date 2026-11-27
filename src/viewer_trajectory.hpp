@@ -17,6 +17,8 @@ public:
         float radius   =  0.5f;
         float covalent = 75.0f;
 
+        std::string symbol = "X";
+
         bool is_dummy = false;
     };
 
@@ -122,6 +124,9 @@ public:
 
     /// Recomputes covalent bond connectivity models across all trajectory frames using given bonding parameters.
     void rebind(float factor, float bond_size = 0.090f);
+
+    /// Returns a pointer to the active geometry frame or nullptr if empty.
+    const Geometry* currentGeometry() const { return geoms.empty() ? nullptr : &geoms.at(frame); }
 
     /// Advances frame timing and dispatches geometry render calls for the current frame.
     void render(const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color);

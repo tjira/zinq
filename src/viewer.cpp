@@ -87,6 +87,18 @@ void main() {
 }
 )";
 
+static const std::string outline_fragment_shader_src = R"(
+#version 330 core
+
+uniform vec3 u_outline_color;
+
+out vec4 o_color;
+
+void main() {
+    o_color = vec4(u_outline_color, 1.0);
+}
+)";
+
 /// Manages GLFW window and context lifecycle with automated resource reclamation.
 struct WindowContext {
     GLFWwindow* window = nullptr;
@@ -101,27 +113,47 @@ struct WindowContext {
     }
 };
 
-/// Handles mouse button press and release events for camera interaction.
+/// Handles mouse button press and release events for camera interaction and atom selection.
 static void mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
     if (!state) return;
 
     if (action == GLFW_RELEASE) {
-        if (button == GLFW_MOUSE_BUTTON_LEFT)  state->mouse.dragging_left  = false;
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            state->mouse.dragging_left = false;
+
+            double rx = 0, ry = 0;
+
+            glfwGetCursorPos(window, &rx, &ry);
+
+            float dx = static_cast<float>(rx) - state->mouse.press_x;
+            float dy = static_cast<float>(ry) - state->mouse.press_y;
+
+            if (dx * dx + dy * dy < 25.0f && (!state->gui.isVisible(state) || !state->gui.wantsCaptureMouse())) {
+                int picked = state->pickAtom(static_cast<float>(rx), static_cast<float>(ry));
+
+                if (picked >= 0) {
+                    state->toggleAtomSelection(picked);
+                }
+            }
+        }
+
         if (button == GLFW_MOUSE_BUTTON_RIGHT) state->mouse.dragging_right = false;
 
         return;
     }
 
-    if (state->gui.isVisible() && state->gui.wantsCaptureMouse()) return;
+    if (state->gui.isVisible(state) && state->gui.wantsCaptureMouse()) return;
 
     double x = 0, y = 0;
 
     glfwGetCursorPos(window, &x, &y);
 
-    state->mouse.last_x = static_cast<float>(x);
-    state->mouse.last_y = static_cast<float>(y);
+    state->mouse.last_x  = static_cast<float>(x);
+    state->mouse.last_y  = static_cast<float>(y);
+    state->mouse.press_x = static_cast<float>(x);
+    state->mouse.press_y = static_cast<float>(y);
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         state->mouse.dragging_left = true;
@@ -146,7 +178,7 @@ static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     state->mouse.last_x = fx;
     state->mouse.last_y = fy;
 
-    if (state->gui.isVisible() && state->gui.wantsCaptureMouse() && !state->mouse.dragging_left && !state->mouse.dragging_right) {
+    if (state->gui.isVisible(state) && state->gui.wantsCaptureMouse() && !state->mouse.dragging_left && !state->mouse.dragging_right) {
         return;
     }
 
@@ -163,7 +195,7 @@ static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
 static void scrollCallback(GLFWwindow* window, double, double dy) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
 
-    if (state && (!state->gui.isVisible() || !state->gui.wantsCaptureMouse())) {
+    if (state && (!state->gui.isVisible(state) || !state->gui.wantsCaptureMouse())) {
         state->camera.zoom(static_cast<float>(dy));
     }
 }
@@ -248,9 +280,11 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         case GLFW_KEY_P:
             state->camera.toggleProjection(); break;
         case GLFW_KEY_B:
-            state->bg_color = ((state->bg_color.x + state->bg_color.y + state->bg_color.z) < 1.5f) ? vec3(1.0f) : vec3(0.0f); break;
+            state->toggleBackground(); break;
         case GLFW_KEY_TAB:
             state->style = static_cast<ViewStyle>((static_cast<int>(state->style) + 1) % 3); break;
+        case GLFW_KEY_C:
+            state->clearSelection(); break;
         default:
             break;
     }
@@ -311,6 +345,72 @@ static void setUniforms(const Shader& shader, const ViewerState& state) {
     shader.set("u_shininess",  state.shininess         );
 }
 
+/// Renders highlighted outline halos around selected atoms using OpenGL stencil testing.
+static void renderSelectionOutlines(const Mesh& sphere_mesh, const Shader& outline_shader, const ViewerState& state, float atom_scale) {
+    if (state.selected_atoms.empty()) return;
+
+    const Geometry* geom = state.trajectory.currentGeometry();
+
+    if (!geom) return;
+
+    const auto& atoms = geom->getAtoms();
+
+    std::vector<InstanceData> mask_instances, outline_instances;
+
+    for (int idx : state.selected_atoms) {
+        if (idx >= 0 && idx < static_cast<int>(atoms.size())) {
+            const auto& a = atoms[idx];
+
+            mat4 m = translate(mat4(1.0f), a.position);
+
+            float r = a.radius * atom_scale;
+
+            float outline_r = r * 1.07f + 0.02f;
+
+            mask_instances.push_back({ scale(m, vec3(r)), vec3(1.0f) });
+
+            outline_instances.push_back({ scale(m, vec3(outline_r)), state.outline_color });
+        }
+    }
+
+    if (mask_instances.empty()) return;
+
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+    glEnable(GL_STENCIL_TEST); glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+    glStencilFunc(GL_ALWAYS, 1, 0xFF); glStencilMask(0xFF);
+
+    glDepthMask(GL_FALSE); glDepthFunc(GL_LEQUAL);
+
+    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+    sphere_mesh.renderInstanced(mask_instances);
+
+    glStencilFunc(GL_NOTEQUAL, 1, 0xFF); glStencilMask(0x00);
+
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); glDisable(GL_DEPTH_TEST);
+
+    outline_shader.use();
+
+    outline_shader.set("u_view", state.camera.getViewMatrix());
+    outline_shader.set("u_proj",        state.getProjMatrix());
+    outline_shader.set("u_outline_color", state.outline_color);
+
+    sphere_mesh.renderInstanced(outline_instances);
+
+    glEnable(GL_DEPTH_TEST);
+
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+
+    glStencilMask(0xFF); glDisable(GL_STENCIL_TEST);
+
+    if (state.style == ViewStyle::Wireframe) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    }
+}
+
 extern "C" {
     /// Opens an interactive OpenGL viewport rendering the molecular system or trajectory at the given file path.
     bool viewer_open_window(const char *filename) {
@@ -335,7 +435,7 @@ extern "C" {
 
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-        glfwWindowHint(GLFW_SAMPLES, 4); glfwWindowHint(GLFW_ALPHA_BITS, 8);
+        glfwWindowHint(GLFW_SAMPLES, 4); glfwWindowHint(GLFW_ALPHA_BITS, 8); glfwWindowHint(GLFW_STENCIL_BITS, 8);
 
 #ifdef __APPLE__
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
@@ -356,6 +456,7 @@ extern "C" {
         std::cout << "\nCONTROLS:\n"
                   << "  Left Drag             ORBIT ROTATION\n"
                   << "  Right Drag            PAN TRANSLATION\n"
+                  << "  Left Click            PICK ATOM / TOGGLE SELECTION\n"
                   << "  Scroll Wheel          SMOOTH ZOOM\n"
                   << "  Space                 PLAY / PAUSE TRAJECTORY\n"
                   << "  Left Arrow            PREVIOUS FRAME\n"
@@ -366,6 +467,7 @@ extern "C" {
                   << "  R                     RESET CAMERA VIEW\n"
                   << "  P                     TOGGLE PROJECTION\n"
                   << "  B                     TOGGLE BACKGROUND\n"
+                  << "  C                     CLEAR ATOM SELECTION\n"
                   << "  F1                    TOGGLE GUI OVERLAY\n"
                   << "  F12                   QUICK SCREENSHOT\n"
                   << "  O                     OPEN FILE DIALOG\n"
@@ -413,6 +515,10 @@ extern "C" {
 
         if (!shader.isValid()) return false;
 
+        Shader outline_shader(vertex_shader_src, outline_fragment_shader_src);
+
+        if (!outline_shader.isValid()) return false;
+
         Mesh sphere_mesh   = Mesh::Icosphere(state.sphere_subdivisions, state.smooth_shading);
         Mesh cylinder_mesh = Mesh::Cylinder(state.cylinder_sectors,     state.smooth_shading);
 
@@ -430,7 +536,11 @@ extern "C" {
 
             glClearColor(bg.x, bg.y, bg.z, alpha);
 
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glStencilMask(0xFF);
+
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+            glDisable(GL_STENCIL_TEST);
 
             if (state.style == ViewStyle::Wireframe) {
                 glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
@@ -450,6 +560,8 @@ extern "C" {
 
             state.trajectory.render(sphere_mesh, cylinder_mesh, atom_scale, show_bonds, state.bond_color);
 
+            renderSelectionOutlines(sphere_mesh, outline_shader, state, atom_scale);
+
             if (!state.pending_screenshot_path.empty()) {
                 int fb_w = 0, fb_h = 0;
 
@@ -460,7 +572,7 @@ extern "C" {
                 state.pending_screenshot_path.clear();
             }
 
-            if (state.gui.isVisible()) {
+            if (state.gui.isVisible(&state)) {
                 state.gui.newFrame(); state.gui.render(state); state.gui.draw();
             }
 
