@@ -246,7 +246,7 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         case GLFW_KEY_R:
             state->camera.reset(); break;
         case GLFW_KEY_P:
-            state->camera.projection = (state->camera.projection == ProjectionMode::Perspective) ? ProjectionMode::Orthographic : ProjectionMode::Perspective; break;
+            state->camera.toggleProjection(); break;
         case GLFW_KEY_B:
             state->bg_color = ((state->bg_color.x + state->bg_color.y + state->bg_color.z) < 1.5f) ? vec3(1.0f) : vec3(0.0f); break;
         case GLFW_KEY_TAB:

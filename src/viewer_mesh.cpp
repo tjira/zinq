@@ -3,6 +3,7 @@
 #include <glad/gl.h>
 
 #include <cmath>
+#include <utility>
 #include <vector>
 
 /// Initializes an empty OpenGL vertex array and buffer object.
@@ -16,15 +17,8 @@ Buffer::Buffer(const std::vector<Vertex>& data) {
 }
 
 /// Move constructor transferring GPU vertex array and buffer ownership.
-Buffer::Buffer(Buffer&& other) noexcept : vao(other.vao), vbo(other.vbo), instance_vbo(other.instance_vbo), count(other.count), last_instances(other.last_instances), last_instance_count(other.last_instance_count) {
-    other.vao          = 0;
-    other.vbo          = 0;
-    other.instance_vbo = 0;
-
-    other.last_instances      = nullptr;
-    other.last_instance_count =       0;
-
-    other.count = 0;
+Buffer::Buffer(Buffer&& other) noexcept {
+    *this = std::move(other);
 }
 
 /// Destroys OpenGL buffer objects and releases GPU memory.

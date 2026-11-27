@@ -65,6 +65,11 @@ struct OrbitCamera {
         pitch    =    initial_pitch;
     }
 
+    /// Toggles between perspective and orthographic camera projection modes.
+    void toggleProjection() {
+        projection = (projection == ProjectionMode::Perspective) ? ProjectionMode::Orthographic : ProjectionMode::Perspective;
+    }
+
     /// Evaluates the Cartesian 3D eye vector from spherical orbital angles and spatial target position.
     vec3 getEye() const {
         float cp = std::cos(pitch);
