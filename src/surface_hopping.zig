@@ -6,20 +6,15 @@ const Allocator = std.mem.Allocator;
 const Complex = std.math.Complex;
 const DefaultPrng = std.Random.DefaultPrng;
 
-const electronic_propagation = @import("electronic_propagation.zig");
-
+const ElectronicPropagator = @import("electronic_propagation.zig").ElectronicPropagator;
 const Ensemble = @import("ensemble.zig").Ensemble;
 const Integrator = @import("integrator.zig").Integrator;
 const Matrix = @import("tensor.zig").Matrix;
 
-pub const CouplingOptions = electronic_propagation.CouplingOptions;
-pub const HstOptions = electronic_propagation.HstOptions;
-pub const NacvOptions = electronic_propagation.NacvOptions;
-pub const checkNorm = electronic_propagation.checkNorm;
-pub const coefDerAdia = electronic_propagation.coefDerAdia;
-pub const coefDerDia = electronic_propagation.coefDerDia;
-pub const hammesSchifferTully = electronic_propagation.hammesSchifferTully;
-pub const nacvCoupling = electronic_propagation.nacvCoupling;
+const CouplingOptions = @import("electronic_propagation.zig").CouplingOptions;
+const HstOptions = @import("electronic_propagation.zig").HstOptions;
+const NacvOptions = @import("electronic_propagation.zig").NacvOptions;
+const NpiOptions = @import("electronic_propagation.zig").NpiOptions;
 
 /// Options for selecting Fewest Switches Tully hopping or Landau-Zener hopping models.
 pub const Options = union(enum) {
@@ -90,6 +85,7 @@ pub fn SurfaceHopping(comptime T: type) type {
             };
 
             var split_mix = std.Random.SplitMix64.init(seed);
+
             const rng = std.Random.DefaultPrng.init(split_mix.next());
 
             var method: Method = switch (options) {
@@ -109,12 +105,16 @@ pub fn SurfaceHopping(comptime T: type) type {
             errdefer probs.deinit(gpa);
 
             return .{
+                .rng = rng,
+
                 .adia_alg = adia,
                 .method = method,
                 .nosteps = nstep,
+
                 .reflect_frustrated = reflect_frustrated,
-                .rng = rng,
+
                 .probs = probs,
+
                 .targets = targets,
             };
         }
@@ -132,7 +132,7 @@ pub fn SurfaceHopping(comptime T: type) type {
         /// Returns electronic wavefunction coefficients for nonadiabatic dynamics if active.
         pub fn coefs(self: @This()) ?Matrix(Complex(T)) {
             switch (self.method) {
-                .fewest_switches => |fs| return fs.coefics,
+                .fewest_switches => |fs| return fs.prop.coefs(),
                 inline else => return null,
             }
         }
@@ -141,14 +141,18 @@ pub fn SurfaceHopping(comptime T: type) type {
         pub fn hop(self: *@This(), ensemble: *Ensemble(T), V: Matrix(T), W: Matrix(T), U: Matrix(T), grad_V: Matrix(T), is_td: bool, dt: T) !bool {
             self.update(if (self.adia_alg) W else V, U);
 
+            if (self.adia_alg) {
+                try self.calcCouplings(ensemble, grad_V, dt);
+            }
+
             const subdt = dt / @as(T, @floatFromInt(self.nosteps));
 
             for (0..self.targets.len) |i| {
                 self.targets[i] = ensemble.s.at(i);
             }
 
-            for (0..self.nosteps) |step_idx| {
-                try self.calcProbs(ensemble, grad_V, is_td, step_idx, subdt);
+            for (0..self.nosteps) |_| {
+                try self.calcProbs(ensemble, is_td, subdt);
 
                 self.calcTargetStates(ensemble);
             }
@@ -166,6 +170,14 @@ pub fn SurfaceHopping(comptime T: type) type {
         pub fn update(self: *@This(), H: Matrix(T), U: Matrix(T)) void {
             switch (self.method) {
                 inline else => |*field| field.update(H, U),
+            }
+        }
+
+        /// Evaluates nonadiabatic couplings before electronic substepping if supported by the method.
+        fn calcCouplings(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), dt: T) !void {
+            switch (self.method) {
+                .fewest_switches => |*fs| try fs.prop.calcCouplings(ensemble, grad_V, dt),
+                inline else => {},
             }
         }
 
@@ -213,11 +225,11 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         /// Computes state transition probabilities at the current dynamics step.
-        fn calcProbs(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, step_idx: usize, dt: T) !void {
+        fn calcProbs(self: *@This(), ensemble: *Ensemble(T), is_td: bool, dt: T) !void {
             self.probs.zero();
 
             if (self.adia_alg) {
-                try self.calcProbsAdia(ensemble, grad_V, is_td, step_idx, dt);
+                try self.calcProbsAdia(ensemble, is_td, dt);
             }
 
             if (!self.adia_alg) {
@@ -226,18 +238,16 @@ pub fn SurfaceHopping(comptime T: type) type {
         }
 
         /// Computes adiabatic representation state transition probabilities.
-        fn calcProbsAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, step_idx: usize, dt: T) !void {
+        fn calcProbsAdia(self: *@This(), ensemble: *Ensemble(T), is_td: bool, dt: T) !void {
             switch (self.method) {
-                inline else => |*field| {
-                    try field.calcProbsAdia(&self.probs, ensemble, grad_V, is_td, step_idx, self.nosteps, dt);
-                },
+                inline else => |*field| try field.calcProbsAdia(&self.probs, ensemble, is_td, dt),
             }
         }
 
         /// Computes diabatic representation state transition probabilities.
         fn calcProbsDia(self: *@This(), ensemble: *Ensemble(T), dt: T) !void {
             switch (self.method) {
-                inline else => |*field| try field.calcProbsDia(&self.probs, ensemble, self.nosteps, dt),
+                inline else => |*field| try field.calcProbsDia(&self.probs, ensemble, dt),
             }
         }
 
@@ -255,30 +265,14 @@ pub fn SurfaceHopping(comptime T: type) type {
 /// Implements Tully's fewest switches surface hopping algorithm for nonadiabatic dynamics.
 fn FewestSwitches(comptime T: type) type {
     return struct {
-        coefics: Matrix(Complex(T)),
-        itg: Integrator(Complex(T)),
-
         alpha: ?T,
-        normt: ?T,
 
-        hamilton: Matrix(T),
-        sigmatdc: Matrix(T),
-        uhist: [2]Matrix(T),
-
-        coupling: ?std.meta.Tag(CouplingOptions),
+        prop: ElectronicPropagator(T),
 
         /// Allocates and initializes wavefunction coefficients and Tully integrator.
         pub fn init(opt: anytype, nstate: usize, ntraj: usize, istate: usize, adia: bool, gpa: Allocator) !@This() {
             if (opt.alpha) |a| {
                 if (!adia or std.math.isNan(a) or a <= 0) return error.InvalidInput;
-            }
-
-            if (adia and opt.coupling == null) {
-                return error.InvalidInput;
-            }
-
-            if (!adia and opt.coupling != null) {
-                return error.InvalidInput;
             }
 
             const coupling: ?std.meta.Tag(CouplingOptions) = if (opt.coupling) |c| switch (c) {
@@ -289,63 +283,17 @@ fn FewestSwitches(comptime T: type) type {
                 return error.InvalidInput;
             }
 
-            const cols = if (adia) nstate else nstate * nstate;
+            const itg, const nt = .{ opt.integrator, opt.norm_tolerance };
 
-            var ham = try Matrix(T).init(ntraj, cols, gpa);
-            errdefer ham.deinit(gpa);
+            var prop = try ElectronicPropagator(T).init(opt.coupling, itg, nt, opt.nstep, nstate, ntraj, istate, adia, gpa);
+            errdefer prop.deinit(gpa);
 
-            var uhist: [2]Matrix(T) = undefined;
-
-            uhist[0] = try Matrix(T).init(ntraj, nstate * nstate, gpa);
-            errdefer uhist[0].deinit(gpa);
-
-            uhist[1] = try Matrix(T).init(ntraj, nstate * nstate, gpa);
-            errdefer uhist[1].deinit(gpa);
-
-            uhist[0].fill(std.math.nan(T));
-            uhist[1].fill(std.math.nan(T));
-
-            var coef = try Matrix(Complex(T)).init(ntraj, nstate, gpa);
-            errdefer coef.deinit(gpa);
-
-            var sigma = try Matrix(T).init(ntraj, nstate * nstate, gpa);
-            errdefer sigma.deinit(gpa);
-
-            coef.zero();
-
-            for (0..ntraj) |i| {
-                coef.ptr(i, istate).* = Complex(T).init(1, 0);
-            }
-
-            const itg_tag = switch (opt.integrator) {
-                inline else => |tag| @field(std.meta.Tag(Integrator(Complex(T)).Method), @tagName(tag)),
-            };
-
-            const itg = try Integrator(Complex(T)).init(itg_tag, nstate, gpa);
-            errdefer itg.deinit(gpa);
-
-            return .{
-                .alpha = if (opt.alpha) |a| @floatCast(a) else null,
-                .coefics = coef,
-                .coupling = coupling,
-                .hamilton = ham,
-                .itg = itg,
-                .normt = if (opt.norm_tolerance) |tol| @floatCast(tol) else null,
-                .sigmatdc = sigma,
-                .uhist = uhist,
-            };
+            return .{ .alpha = if (opt.alpha) |a| @floatCast(a) else null, .prop = prop };
         }
 
         /// Deallocates Tully fewest switches coefficients and integrator resources.
         pub fn deinit(self: *@This(), gpa: Allocator) void {
-            self.coefics.deinit(gpa);
-
-            self.hamilton.deinit(gpa);
-            self.sigmatdc.deinit(gpa);
-            self.uhist[0].deinit(gpa);
-            self.uhist[1].deinit(gpa);
-
-            self.itg.deinit(gpa);
+            self.prop.deinit(gpa);
         }
 
         /// Damps nonadiabatic electronic state amplitudes according to the Granucci-Persico decoherence time.
@@ -361,66 +309,22 @@ fn FewestSwitches(comptime T: type) type {
 
                 if (ekin <= 1e-4) continue;
 
-                dampStateAmplitudes(T, self.coefics.rowSlice(traj), self.hamilton.rowSlice(traj), ensemble.s.at(traj), ekin, alpha, dt);
+                const c_row, const h_row = .{ self.prop.coefics.rowSlice(traj), self.prop.ham.rowSlice(traj) };
+
+                dampStateAmplitudes(T, c_row, h_row, ensemble.s.at(traj), ekin, alpha, dt);
             }
         }
 
         /// Computes adiabatic transition probabilities using time-derivative couplings.
-        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, step_idx: usize, nstep: usize, dt: T) !void {
-            if (self.coupling.? == .hst and std.math.isNan(self.uhist[0].at(0, 0))) return;
+        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), is_td: bool, dt: T) !void {
+            if (!self.prop.hasHistory()) return;
 
             for (0..ensemble.s.length()) |i| {
                 const c = ensemble.s.at(i);
 
-                const row_sigma = self.sigmatdc.rowSlice(i);
+                try self.prop.stepTrajectoryAdia(i, is_td, dt);
 
-                const row_u_new = self.uhist[1].rowSlice(i);
-                const row_u_old = self.uhist[0].rowSlice(i);
-
-                const eff_dt = dt * @as(T, @floatFromInt(nstep));
-
-                const ham = self.hamilton.rowSlice(i);
-
-                if (step_idx == 0) {
-                    switch (self.coupling.?) {
-                        .hst => hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, eff_dt),
-                        .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), ensemble.p.rowSlice(i), ensemble.m),
-                    }
-                }
-
-                const int_ctx = .{ .ham = ham, .is_td = is_td, .sigma = row_sigma };
-
-                self.itg.step(self.coefics.rowSlice(i), dt, int_ctx, coefDerAdia);
-
-                try checkNorm(T, self.coefics.rowSlice(i), self.normt);
-
-                const coef_c = self.coefics.at(i, c);
-                const rho_cc = coef_c.squaredMagnitude();
-
-                if (rho_cc >= 1e-14) {
-                    for (0..probs.ncol()) |j| {
-                        if (c == j) continue;
-
-                        const flux = self.sigmatdc.at(i, c * probs.ncol() + j) * coef_c.conjugate().mul(self.coefics.at(i, j)).re;
-
-                        probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
-                    }
-                }
-            }
-        }
-
-        /// Computes diabatic transition probabilities using diabatic coupling elements.
-        pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
-            for (0..ensemble.s.length()) |i| {
-                const c = ensemble.s.at(i);
-
-                const int_ctx = .{ .ham = self.hamilton.rowSlice(i) };
-
-                self.itg.step(self.coefics.rowSlice(i), dt, int_ctx, coefDerDia);
-
-                try checkNorm(T, self.coefics.rowSlice(i), self.normt);
-
-                const coef_c = self.coefics.at(i, c);
+                const coef_c = self.prop.coefics.at(i, c);
 
                 const rho_cc = coef_c.squaredMagnitude();
 
@@ -429,7 +333,30 @@ fn FewestSwitches(comptime T: type) type {
                 for (0..probs.ncol()) |j| {
                     if (c == j) continue;
 
-                    const flux = self.hamilton.at(i, c * probs.ncol() + j) * coef_c.mul(self.coefics.at(i, j).conjugate()).im;
+                    const flux = self.prop.sigmatdc.at(i, c * probs.ncol() + j) * coef_c.conjugate().mul(self.prop.coefics.at(i, j)).re;
+
+                    probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
+                }
+            }
+        }
+
+        /// Computes diabatic transition probabilities using diabatic coupling elements.
+        pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), dt: T) !void {
+            for (0..ensemble.s.length()) |i| {
+                const c = ensemble.s.at(i);
+
+                try self.prop.stepTrajectoryDia(i, dt);
+
+                const coef_c = self.prop.coefics.at(i, c);
+
+                const rho_cc = coef_c.squaredMagnitude();
+
+                if (rho_cc < 1e-14) continue;
+
+                for (0..probs.ncol()) |j| {
+                    if (c == j) continue;
+
+                    const flux = self.prop.ham.at(i, c * probs.ncol() + j) * coef_c.mul(self.prop.coefics.at(i, j).conjugate()).im;
 
                     probs.ptr(i, j).* += @max(0, 2 * dt * flux / rho_cc);
                 }
@@ -438,17 +365,7 @@ fn FewestSwitches(comptime T: type) type {
 
         /// Updates Hamiltonian history and eigenvector history for transition probability evaluation.
         pub fn update(self: *@This(), H: Matrix(T), U: Matrix(T)) void {
-            for (0..H.nrow()) |i| for (0..H.ncol()) |j| {
-                self.hamilton.ptr(i, j).* = H.at(i, j);
-            };
-
-            if (self.coupling == null) return;
-
-            for (0..self.uhist[0].nrow()) |i| for (0..self.uhist[0].ncol()) |j| {
-                self.uhist[0].ptr(i, j).* = self.uhist[1].at(i, j);
-
-                self.uhist[1].ptr(i, j).* = U.at(i, j);
-            };
+            self.prop.update(H, U);
         }
     };
 }
@@ -490,7 +407,7 @@ fn LandauZener(comptime T: type) type {
         }
 
         /// Computes transition probabilities from adiabatic energy level curvatures.
-        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: Matrix(T), _: bool, _: usize, _: usize, dt: T) !void {
+        pub fn calcProbsAdia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: bool, dt: T) !void {
             if (std.math.isNan(self.history[0].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {
@@ -557,7 +474,7 @@ fn LandauZener(comptime T: type) type {
         }
 
         /// Computes transition probabilities from diabatic energy level crossings.
-        pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), _: usize, dt: T) !void {
+        pub fn calcProbsDia(self: *@This(), probs: *Matrix(T), ensemble: *Ensemble(T), dt: T) !void {
             if (std.math.isNan(self.history[1].at(0, 0))) return;
 
             for (0..self.history[0].nrow()) |i| {

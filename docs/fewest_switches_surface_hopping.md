@@ -54,7 +54,13 @@ $$
 S_{ij}=\sum_kU_{ki}(t)U_{kj}(t-\Delta t)
 $$
 
-which propagates the electronic amplitudes using only the instantaneous eigenvalues and eigenvectors of the Hamiltonian.
+which propagates the electronic amplitudes using only the instantaneous eigenvalues and eigenvectors of the Hamiltonian. To eliminate finite-difference truncation error and preserve electronic wavefunction normalization across avoided crossings and larger time steps, the norm-preserving interpolation scheme computes the time-derivative couplings directly from the matrix logarithm of the orthogonal state overlap matrix $\mathbf{P}=\mathbf{U}^T(t-\Delta t)\mathbf{U}(t)$ as
+
+$$
+\mathbf{\sigma}(t)=\frac{1}{\Delta t}\ln\mathbf{P}
+$$
+
+where $\ln\mathbf{P}$ is evaluated via real Schur decomposition to yield a strictly skew-symmetric coupling matrix.
 
 ---
 

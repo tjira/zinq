@@ -14,8 +14,6 @@ const isDual = @import("value.zig").isDual;
 const isDualMatrix = @import("value.zig").isDualMatrix;
 const primType = @import("value.zig").primType;
 
-const ROW_MAJOR = lapacke.LAPACK_ROW_MAJOR;
-
 /// Scales a vector and adds it to another: y = alpha * x + y (AXPY operation).
 pub fn axpy(comptime T: type, y: *Vector(T), x: Vector(T), alpha: T) void {
     std.debug.assert(x.length() == y.length());
@@ -44,7 +42,7 @@ pub fn det(comptime T: type, A: *Matrix(T), ipiv: []i32) !T {
         return A.at(0, 0) * A.at(1, 1) - A.at(0, 1) * A.at(1, 0);
     }
 
-    const info = lapacke.LAPACKE_dgetrf(ROW_MAJOR, @intCast(n), @intCast(n), A.data.ptr, @intCast(n), ipiv.ptr);
+    const info = lapacke.LAPACKE_dgetrf(lapacke.LAPACK_ROW_MAJOR, @intCast(n), @intCast(n), A.data.ptr, @intCast(n), ipiv.ptr);
 
     if (info < 0) {
         return error.LapackError;
@@ -68,6 +66,17 @@ pub fn dot(comptime T: type, x: Vector(T), y: Vector(T)) T {
     std.debug.assert(x.length() == y.length());
 
     return dotSlice(T, x.data, y.data);
+}
+
+/// Validates that numeric scalar type is strictly 64-bit real floating-point.
+pub fn ensureF64(comptime T: type, comptime op: []const u8) void {
+    if (comptime isDual(T)) {
+        @compileError("OPERATION '" ++ op ++ "' DOES NOT SUPPORT DUAL NUMBERS");
+    }
+
+    if (comptime T != f64) {
+        @compileError("OPERATION '" ++ op ++ "' ONLY SUPPORTS F64, FOUND TYPE '" ++ @typeName(T) ++ "' INSTEAD");
+    }
 }
 
 /// Computes the real Schur factorization of a square matrix A = Z * T * Z^T using LAPACKE dgees.
@@ -221,17 +230,6 @@ fn dotSlice(comptime T: type, x: []const T, y: []const T) T {
     return cblas.cblas_ddot(@intCast(x.len), x.ptr, 1, y.ptr, 1);
 }
 
-/// Validates that numeric scalar type is strictly 64-bit real floating-point.
-fn ensureF64(comptime T: type, comptime op: []const u8) void {
-    if (comptime isDual(T)) {
-        @compileError("OPERATION '" ++ op ++ "' DOES NOT SUPPORT DUAL NUMBERS");
-    }
-
-    if (comptime T != f64) {
-        @compileError("OPERATION '" ++ op ++ "' ONLY SUPPORTS F64, FOUND TYPE '" ++ @typeName(T) ++ "' INSTEAD");
-    }
-}
-
 /// Validates that numeric scalar type is either 64-bit real floating-point or complex double precision.
 fn ensureF64OrComplex(comptime T: type, comptime op: []const u8) void {
     if (comptime isDual(T)) {
@@ -261,7 +259,7 @@ fn geesSlice(comptime T: type, T_out: []T, Z_out: []T, wr: []T, wi: []T, A_in: [
 
     var sdim: i32 = 0;
 
-    const info = lapacke.LAPACKE_dgees(ROW_MAJOR, 'V', 'N', null, n, T_out.ptr, n, &sdim, wr.ptr, wi.ptr, Z_out.ptr, n);
+    const info = lapacke.LAPACKE_dgees(lapacke.LAPACK_ROW_MAJOR, 'V', 'N', null, n, T_out.ptr, n, &sdim, wr.ptr, wi.ptr, Z_out.ptr, n);
 
     if (info != 0) return error.LapackError;
 }
@@ -352,7 +350,7 @@ fn getrsSlice(comptime T: type, X: []T, LU: []const T, ipiv: []const i32, B: []c
         X[i] = B[i];
     }
 
-    const info = lapacke.LAPACKE_dgetrs(ROW_MAJOR, 'N', n, nofrhs, LU.ptr, n, ipiv.ptr, X.ptr, nofrhs);
+    const info = lapacke.LAPACKE_dgetrs(lapacke.LAPACK_ROW_MAJOR, 'N', n, nofrhs, LU.ptr, n, ipiv.ptr, X.ptr, nofrhs);
 
     if (info != 0) return error.LapackError;
 }
@@ -399,7 +397,7 @@ fn syevdSlice(comptime T: type, W: []T, U: []T, V: []T) !void {
         U[i] = V[i];
     }
 
-    const info = lapacke.LAPACKE_dsyevd(ROW_MAJOR, 'V', 'U', n, U.ptr, n, W.ptr);
+    const info = lapacke.LAPACKE_dsyevd(lapacke.LAPACK_ROW_MAJOR, 'V', 'U', n, U.ptr, n, W.ptr);
 
     if (info != 0) return error.LapackError;
 }

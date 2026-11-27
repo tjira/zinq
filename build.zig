@@ -232,6 +232,7 @@ fn setupZinq(b: *std.Build, opt: std.builtin.OptimizeMode, target: std.Build.Res
     options.addOption([]const u8, l1, v1);
     options.addOption([]const u8, l2, v2);
     options.addOption([]const u8, l3, v3);
+
     options.addOption(bool, "has_graphics", has_graphics);
 
     zinq_module.addOptions("config", options);

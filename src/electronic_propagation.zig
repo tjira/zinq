@@ -9,10 +9,14 @@ const Ensemble = @import("ensemble.zig").Ensemble;
 const Integrator = @import("integrator.zig").Integrator;
 const Matrix = @import("tensor.zig").Matrix;
 
+const logmOrthogonalWithWorkspace = @import("matrix_logarithm.zig").logmOrthogonalWithWorkspace;
+const logmWorkspaceSize = @import("matrix_logarithm.zig").logmWorkspaceSize;
+
 /// Tagged union selecting the time-derivative nonadiabatic coupling scheme.
 pub const CouplingOptions = union(enum) {
     hst: HstOptions,
     nacv: NacvOptions,
+    npi: NpiOptions,
 };
 
 /// Options for Hammes-Schiffer-Tully antisymmetric wavefunction overlap coupling.
@@ -20,6 +24,9 @@ pub const HstOptions = struct {};
 
 /// Options for nonadiabatic coupling vectors time-derivative coupling.
 pub const NacvOptions = struct {};
+
+/// Options for norm-preserving interpolation overlap matrix logarithm coupling.
+pub const NpiOptions = struct {};
 
 /// Manages electronic coefficients, Hamiltonians, and Runge-Kutta propagation along classical trajectories.
 pub fn ElectronicPropagator(comptime T: type) type {
@@ -30,6 +37,8 @@ pub fn ElectronicPropagator(comptime T: type) type {
         ham: Matrix(T),
         norm_toler: ?T,
         nosteps: usize,
+
+        npi_work: ?[]T,
 
         sigmatdc: Matrix(T),
         uhist: [2]Matrix(T),
@@ -82,17 +91,31 @@ pub fn ElectronicPropagator(comptime T: type) type {
                 inline else => |t| @field(std.meta.Tag(Integrator(Complex(T)).Method), @tagName(t)),
             };
 
-            const itg = try Integrator(Complex(T)).init(tag, nstate, gpa);
+            var itg = try Integrator(Complex(T)).init(tag, nstate, gpa);
             errdefer itg.deinit(gpa);
 
+            var npi_work: ?[]T = null;
+
+            if (coupling != null and coupling.? == .npi) {
+                npi_work = try gpa.alloc(T, npiWorkspaceSize(nstate));
+            }
+
+            errdefer if (npi_work) |w| gpa.free(w);
+
             return .{
+                .norm_toler = if (tol) |t| @floatCast(t) else null,
+
                 .coefics = coef,
-                .coupling = coupling,
+
                 .ham = ham,
                 .itg = itg,
-                .norm_toler = if (tol) |t| @floatCast(t) else null,
+
                 .nosteps = nstep,
+
+                .coupling = coupling,
+                .npi_work = npi_work,
                 .sigmatdc = sigmatdc,
+
                 .uhist = uhist,
             };
         }
@@ -104,6 +127,7 @@ pub fn ElectronicPropagator(comptime T: type) type {
             self.ham.deinit(gpa);
             self.itg.deinit(gpa);
 
+            if (self.npi_work) |w| gpa.free(w);
             self.sigmatdc.deinit(gpa);
             self.uhist[0].deinit(gpa);
             self.uhist[1].deinit(gpa);
@@ -114,34 +138,66 @@ pub fn ElectronicPropagator(comptime T: type) type {
             return self.coefics;
         }
 
+        /// Evaluates time-derivative nonadiabatic couplings for a single trajectory.
+        pub fn calcCoupling(self: *@This(), traj: usize, grad_V_row: []const T, p: []const T, m: []const T, dt: T) !void {
+            const row_sigma = self.sigmatdc.rowSlice(traj);
+            const row_u_new = self.uhist[1].rowSlice(traj);
+            const row_u_old = self.uhist[0].rowSlice(traj);
+
+            switch (self.coupling.?) {
+                .hst => hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, dt),
+                .nacv => nacvCoupling(T, row_sigma, grad_V_row, p, m),
+                .npi => try normPreservingInterpolation(T, row_sigma, row_u_new, row_u_old, dt, self.npi_work.?),
+            }
+        }
+
+        /// Checks whether eigenvector history is available for overlap-based coupling methods.
+        pub fn hasHistory(self: @This()) bool {
+            if (self.coupling == null) return true;
+
+            if ((self.coupling.? == .hst or self.coupling.? == .npi) and std.math.isNan(self.uhist[0].at(0, 0))) return false;
+
+            return true;
+        }
+
+        /// Evaluates time-derivative nonadiabatic couplings for all trajectories.
+        pub fn calcCouplings(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), dt: T) !void {
+            if (!self.hasHistory()) return;
+
+            for (0..ensemble.s.length()) |i| {
+                try self.calcCoupling(i, grad_V.rowSlice(i), ensemble.p.rowSlice(i), ensemble.m, dt);
+            }
+        }
+
+        /// Integrates electronic coefficients for a single trajectory in the adiabatic basis.
+        pub fn stepTrajectoryAdia(self: *@This(), traj: usize, is_td: bool, dt: T) !void {
+            const int_ctx = .{ .ham = self.ham.rowSlice(traj), .is_td = is_td, .sigma = self.sigmatdc.rowSlice(traj) };
+
+            self.itg.step(self.coefics.rowSlice(traj), dt, int_ctx, coefDerAdia);
+
+            try checkNorm(T, self.coefics.rowSlice(traj), self.norm_toler);
+        }
+
+        /// Integrates electronic coefficients for a single trajectory in the diabatic basis.
+        pub fn stepTrajectoryDia(self: *@This(), traj: usize, dt: T) !void {
+            const int_ctx = .{ .ham = self.ham.rowSlice(traj) };
+
+            self.itg.step(self.coefics.rowSlice(traj), dt, int_ctx, coefDerDia);
+
+            try checkNorm(T, self.coefics.rowSlice(traj), self.norm_toler);
+        }
+
         /// Integrates electronic coefficients in the adiabatic basis using time-derivative couplings.
         pub fn stepAdia(self: *@This(), ensemble: *Ensemble(T), grad_V: Matrix(T), is_td: bool, dt: T) !void {
-            if (self.coupling.? == .hst and std.math.isNan(self.uhist[0].at(0, 0))) return;
+            if (!self.hasHistory()) return;
+
+            try self.calcCouplings(ensemble, grad_V, dt);
 
             const subdt = dt / @as(T, @floatFromInt(self.nosteps));
 
-            for (0..ensemble.s.length()) |i| {
-                const row_sigma = self.sigmatdc.rowSlice(i);
-                const row_u_new = self.uhist[1].rowSlice(i);
-                const row_u_old = self.uhist[0].rowSlice(i);
-
-                const ham = self.ham.rowSlice(i);
-
-                const p, const m = .{ ensemble.p.rowSlice(i), ensemble.m };
-
-                switch (self.coupling.?) {
-                    .hst => hammesSchifferTully(T, row_sigma, row_u_new, row_u_old, dt),
-                    .nacv => nacvCoupling(T, row_sigma, grad_V.rowSlice(i), p, m),
-                }
-
-                const int_ctx = .{ .ham = ham, .is_td = is_td, .sigma = row_sigma };
-
-                for (0..self.nosteps) |_| {
-                    self.itg.step(self.coefics.rowSlice(i), subdt, int_ctx, coefDerAdia);
-                }
-
-                try checkNorm(T, self.coefics.rowSlice(i), self.norm_toler);
-            }
+            for (0..ensemble.s.length()) |i| for (0..self.nosteps) |_| {
+                try self.stepTrajectoryAdia(i, is_td, subdt);
+            };
         }
 
         /// Integrates electronic coefficients in the diabatic basis using the diabatic potential matrix.
@@ -152,13 +208,9 @@ pub fn ElectronicPropagator(comptime T: type) type {
 
             const subdt = dt / @as(T, @floatFromInt(self.nosteps));
 
-            for (0..self.nosteps) |_| for (0..self.coefics.nrow()) |i| {
-                self.itg.step(self.coefics.rowSlice(i), subdt, .{ .ham = self.ham.rowSlice(i) }, coefDerDia);
+            for (0..self.coefics.nrow()) |i| for (0..self.nosteps) |_| {
+                try self.stepTrajectoryDia(i, subdt);
             };
-
-            for (0..self.coefics.nrow()) |i| {
-                try checkNorm(T, self.coefics.rowSlice(i), self.norm_toler);
-            }
         }
 
         /// Updates Hamiltonian history and eigenvector history for coupling evaluation.
@@ -275,4 +327,80 @@ pub fn nacvCoupling(comptime T: type, sigma: []T, grad_V: []const T, p: []const 
 
         sigma[i * nstate + j] = v_dot_grad;
     };
+}
+
+/// Computes the required workspace slice length for norm-preserving interpolation.
+pub fn npiWorkspaceSize(nstate: usize) usize {
+    return logmWorkspaceSize(nstate) + nstate * nstate;
+}
+
+/// Computes time-derivative couplings via norm-preserving interpolation using the overlap matrix logarithm.
+pub fn normPreservingInterpolation(comptime T: type, sigma: []T, U_new: []const T, U_old: []const T, dt: T, work: []T) !void {
+    const nstate = std.math.sqrt(sigma.len);
+
+    if (nstate == 1) {
+        sigma[0] = 0;
+
+        return;
+    }
+
+    if (nstate == 2) {
+        var p01 = U_old[0] * U_new[1] + U_old[2] * U_new[3];
+        var p11 = U_old[1] * U_new[1] + U_old[3] * U_new[3];
+
+        const p00 = U_old[0] * U_new[0] + U_old[2] * U_new[2];
+        const p10 = U_old[1] * U_new[0] + U_old[3] * U_new[2];
+
+        if (@abs(p01) > 0.5 and @abs(p10) > 0.5 and p01 * p10 > 0) {
+            p01 = -p01;
+            p11 = -p11;
+        }
+
+        const theta = std.math.atan2(p10 - p01, p00 + p11);
+
+        sigma[1] = (0 - theta) / dt;
+        sigma[2] = (0 + theta) / dt;
+
+        sigma[0] = 0;
+        sigma[3] = 0;
+
+        return;
+    }
+
+    std.debug.assert(work.len >= npiWorkspaceSize(nstate));
+
+    const P, const logm_work = .{ work[0 .. nstate * nstate], work[nstate * nstate ..] };
+
+    for (0..nstate) |i| for (0..nstate) |j| {
+        var sum: T = 0;
+
+        for (0..nstate) |k| {
+            sum += U_old[k * nstate + i] * U_new[k * nstate + j];
+        }
+
+        P[i * nstate + j] = sum;
+    };
+
+    for (0..nstate) |i| for (i + 1..nstate) |j| {
+        const pij = P[i * nstate + j];
+        const pji = P[j * nstate + i];
+
+        if (@abs(pij) > 0.5 and @abs(pji) > 0.5 and pij * pji > 0) {
+            for (0..nstate) |row| {
+                P[row * nstate + j] = -P[row * nstate + j];
+            }
+        }
+    };
+
+    var L_mat = Matrix(T){ .data = sigma, .shape = .{ nstate, nstate } };
+
+    const P_matrix = Matrix(T){ .data = P, .shape = .{ nstate, nstate } };
+
+    try logmOrthogonalWithWorkspace(T, &L_mat, P_matrix, logm_work);
+
+    const inv_dt = 1 / dt;
+
+    for (sigma) |*elem| {
+        elem.* *= inv_dt;
+    }
 }
