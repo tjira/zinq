@@ -56,6 +56,24 @@ public:
     /// Checks whether the modal screenshot save dialog is currently active and visible.
     bool isScreenshotDialogOpen() const;
 
+    /// Opens modal file selection dialog to choose output destination for current molecular geometry in XYZ format.
+    void openSaveGeometryDialog();
+
+    /// Closes modal geometry destination file selection dialog if currently displayed.
+    void closeSaveGeometryDialog();
+
+    /// Checks whether modal geometry destination file selection dialog is currently active.
+    bool isSaveGeometryDialogOpen() const;
+
+    /// Opens modal file selection dialog to choose output destination for full molecular trajectory in XYZ format.
+    void openSaveTrajectoryDialog();
+
+    /// Closes modal trajectory destination file selection dialog if currently displayed.
+    void closeSaveTrajectoryDialog();
+
+    /// Checks whether modal trajectory destination file selection dialog is currently active.
+    bool isSaveTrajectoryDialogOpen() const;
+
     /// Returns whether any part of the graphical user interface overlay is currently displayed.
     bool isVisible(const ViewerState* state = nullptr) const;
 

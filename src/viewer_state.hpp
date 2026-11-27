@@ -367,4 +367,32 @@ struct ViewerState {
     void clearSelection() {
         selected_atoms.clear();
     }
+
+    /// Exports the current active molecular geometry frame to an XYZ file on disk.
+    bool saveGeometry(const std::string& filepath) const {
+        const Geometry* geom = trajectory.currentGeometry();
+
+        if (!geom) return false;
+
+        std::string path = filepath;
+
+        if (path.size() < 4 || path.compare(path.size() - 4, 4, ".xyz") != 0) {
+            path += ".xyz";
+        }
+
+        return geom->save(path);
+    }
+
+    /// Exports all trajectory frames to an XYZ file on disk.
+    bool saveTrajectory(const std::string& filepath) const {
+        if (trajectory.empty()) return false;
+
+        std::string path = filepath;
+
+        if (path.size() < 4 || path.compare(path.size() - 4, 4, ".xyz") != 0) {
+            path += ".xyz";
+        }
+
+        return trajectory.save(path);
+    }
 };

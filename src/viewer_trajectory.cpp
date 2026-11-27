@@ -2,7 +2,9 @@
 #include "viewer_ptable.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <fstream>
+#include <iostream>
 #include <sstream>
 
 static constexpr float kBindingFactor  = 0.013f;
@@ -166,6 +168,38 @@ void Geometry::render(const Mesh& sphere, const Mesh& cylinder, float atom_scale
     instances_dirty = false;
 }
 
+/// Exports the molecular geometry coordinates to an output stream in standard XYZ format.
+void Geometry::save(std::ostream& os) const {
+    os << atoms.size() << "\n" << comment << "\n";
+
+    char buf[128];
+
+    for (const auto& atom : atoms) {
+        double x = static_cast<double>(atom.position.x);
+        double y = static_cast<double>(atom.position.y);
+        double z = static_cast<double>(atom.position.z);
+
+        std::snprintf(buf, sizeof(buf), "%2s %20.14f %20.14f %20.14f\n", atom.symbol.c_str(), x, y, z);
+
+        os << buf;
+    }
+}
+
+/// Writes the molecular geometry coordinates to an XYZ file on disk with 20.14 precision.
+bool Geometry::save(const std::string& filename) const {
+    std::ofstream file(filename);
+
+    if (!file) {
+        std::cerr << "FAILED TO OPEN '" << filename << "' GEOMETRY FILE FOR WRITING" << std::endl;
+
+        return false;
+    }
+
+    save(file);
+
+    return true;
+}
+
 /// Reads a multi-frame molecular trajectory file from disk and calculates covalent connectivity.
 Trajectory Trajectory::Load(const std::string& filename, float factor, float bond_size) {
     Trajectory traj;
@@ -183,9 +217,15 @@ Trajectory Trajectory::Load(const std::string& filename, float factor, float bon
 
         if (!(iss >> natoms) || natoms <= 0) continue;
 
-        if (!std::getline(file, line)) break;
+        std::string comment;
 
-        traj.geoms.push_back(Geometry::Load(file, natoms));
+        if (!std::getline(file, comment)) break;
+
+        Geometry geom = Geometry::Load(file, natoms);
+
+        geom.setComment(comment);
+
+        traj.geoms.push_back(std::move(geom));
     }
 
     if (!traj.geoms.empty()) {
@@ -321,4 +361,26 @@ void Trajectory::render(const Mesh& sphere, const Mesh& cylinder, float atom_sca
     }
 
     geoms.at(frame).render(sphere, cylinder, atom_scale, show_bonds, bond_color);
+}
+
+/// Exports all molecular trajectory frames to an output stream in standard XYZ format.
+void Trajectory::save(std::ostream& os) const {
+    for (const auto& geom : geoms) {
+        geom.save(os);
+    }
+}
+
+/// Writes all molecular trajectory frames to an XYZ file on disk with 20.14 precision.
+bool Trajectory::save(const std::string& filename) const {
+    std::ofstream file(filename);
+
+    if (!file) {
+        std::cerr << "FAILED TO OPEN '" << filename << "' TRAJECTORY FILE FOR WRITING" << std::endl;
+
+        return false;
+    }
+
+    save(file);
+
+    return true;
 }

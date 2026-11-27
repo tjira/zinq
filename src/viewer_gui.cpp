@@ -106,10 +106,56 @@ bool ViewerGui::isScreenshotDialogOpen() const {
     return ImGuiFileDialog::Instance()->IsOpened("screenshot");
 }
 
+void ViewerGui::openSaveGeometryDialog() {
+    IGFD::FileDialogConfig config;
+
+    config.path = "."; config.fileName = "geometry.xyz"; config.countSelectionMax = 1;
+
+    config.flags = ImGuiFileDialogFlags_ConfirmOverwrite;
+
+    ImGuiFileDialog::Instance()->OpenDialog("save_geometry", "Save Molecular Geometry", ".xyz", config);
+}
+
+void ViewerGui::closeSaveGeometryDialog() {
+    if (isSaveGeometryDialogOpen()) {
+        ImGuiFileDialog::Instance()->Close();
+    }
+}
+
+bool ViewerGui::isSaveGeometryDialogOpen() const {
+    if (!initialized) return false;
+
+    return ImGuiFileDialog::Instance()->IsOpened("save_geometry");
+}
+
+void ViewerGui::openSaveTrajectoryDialog() {
+    IGFD::FileDialogConfig config;
+
+    config.path = "."; config.fileName = "trajectory.xyz"; config.countSelectionMax = 1;
+
+    config.flags = ImGuiFileDialogFlags_ConfirmOverwrite;
+
+    ImGuiFileDialog::Instance()->OpenDialog("save_trajectory", "Save Molecular Trajectory", ".xyz", config);
+}
+
+void ViewerGui::closeSaveTrajectoryDialog() {
+    if (isSaveTrajectoryDialogOpen()) {
+        ImGuiFileDialog::Instance()->Close();
+    }
+}
+
+bool ViewerGui::isSaveTrajectoryDialogOpen() const {
+    if (!initialized) return false;
+
+    return ImGuiFileDialog::Instance()->IsOpened("save_trajectory");
+}
+
 bool ViewerGui::isVisible(const ViewerState* state) const {
     bool has_sel = state && !state->selected_atoms.empty();
 
-    return show_controls || has_sel || isFileDialogOpen() || isScreenshotDialogOpen();
+    bool dialog_open = isFileDialogOpen() || isScreenshotDialogOpen() || isSaveGeometryDialogOpen() || isSaveTrajectoryDialogOpen();
+
+    return show_controls || has_sel || dialog_open;
 }
 
 void ViewerGui::render(ViewerState& state) {
@@ -149,6 +195,24 @@ void ViewerGui::renderControls(ViewerState& state) {
         if (ImGui::Button("Open Molecule / Trajectory (O)", ImVec2(-1.0f, 0.0f))) {
             openFileDialog();
         }
+
+        bool has_geom = !state.trajectory.empty();
+
+        if (!has_geom) ImGui::BeginDisabled();
+
+        float btn_w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+
+        if (ImGui::Button("Save Geometry", ImVec2(btn_w, 0.0f))) {
+            openSaveGeometryDialog();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Save Trajectory", ImVec2(btn_w, 0.0f))) {
+            openSaveTrajectoryDialog();
+        }
+
+        if (!has_geom) ImGui::EndDisabled();
 
         int total = state.trajectory.frameCount();
         int cur = state.trajectory.currentFrame();
@@ -316,6 +380,32 @@ void ViewerGui::renderFileDialogs(ViewerState& state) {
         if (ImGuiFileDialog::Instance()->Display("screenshot", ImGuiWindowFlags_NoCollapse, min_size, max_size)) {
             if (ImGuiFileDialog::Instance()->IsOk()) {
                 state.pending_screenshot_path = ImGuiFileDialog::Instance()->GetFilePathName();
+            }
+
+            ImGuiFileDialog::Instance()->Close();
+        }
+    }
+
+    if (isSaveGeometryDialogOpen()) {
+        ImVec2 min_size = ImVec2( 500.0f, 350.0f);
+        ImVec2 max_size = ImVec2(1000.0f, 700.0f);
+
+        if (ImGuiFileDialog::Instance()->Display("save_geometry", ImGuiWindowFlags_NoCollapse, min_size, max_size)) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                state.saveGeometry(ImGuiFileDialog::Instance()->GetFilePathName());
+            }
+
+            ImGuiFileDialog::Instance()->Close();
+        }
+    }
+
+    if (isSaveTrajectoryDialogOpen()) {
+        ImVec2 min_size = ImVec2( 500.0f, 350.0f);
+        ImVec2 max_size = ImVec2(1000.0f, 700.0f);
+
+        if (ImGuiFileDialog::Instance()->Display("save_trajectory", ImGuiWindowFlags_NoCollapse, min_size, max_size)) {
+            if (ImGuiFileDialog::Instance()->IsOk()) {
+                state.saveTrajectory(ImGuiFileDialog::Instance()->GetFilePathName());
             }
 
             ImGuiFileDialog::Instance()->Close();

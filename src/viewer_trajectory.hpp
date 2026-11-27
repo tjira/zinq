@@ -47,10 +47,21 @@ public:
     /// Computes covalent bond connectivity models based on pairwise covalent radii.
     void rebind(float factor, float bond_size = 0.090f);
 
+    /// Sets descriptive comment metadata for the geometry frame.
+    void setComment(const std::string& c) { comment = c; }
+
+    /// Exports the molecular geometry coordinates to an output stream in standard XYZ format.
+    void save(std::ostream& os) const;
+
+    /// Writes the molecular geometry coordinates to an XYZ file on disk with 20.14 precision.
+    bool save(const std::string& filename) const;
+
     /// Renders atoms as spheres and covalent bonds as cylinders using instanced draw calls.
     void render(const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) const;
 
 private:
+    std::string comment;
+
     std::vector<Atom> atoms;
     std::vector<Bond> bonds;
 
@@ -127,6 +138,12 @@ public:
 
     /// Returns a pointer to the active geometry frame or nullptr if empty.
     const Geometry* currentGeometry() const { return geoms.empty() ? nullptr : &geoms.at(frame); }
+
+    /// Exports all molecular trajectory frames to an output stream in standard XYZ format.
+    void save(std::ostream& os) const;
+
+    /// Writes all molecular trajectory frames to an XYZ file on disk with 20.14 precision.
+    bool save(const std::string& filename) const;
 
     /// Advances frame timing and dispatches geometry render calls for the current frame.
     void render(const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color);
