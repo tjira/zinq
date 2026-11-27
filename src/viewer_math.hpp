@@ -271,6 +271,55 @@ inline mat4 inverse(const mat4& m) {
     return r;
 }
 
+/// Unit quaternion representing 3D spatial orientation and rotation in SO(3).
+struct quat {
+    float w = 1.0f, x = 0.0f, y = 0.0f, z = 0.0f;
+
+    /// Constructs a unit quaternion initialized to identity or specified scalar components.
+    quat() = default; quat(float w_, float x_, float y_, float z_) : w(w_), x(x_), y(y_), z(z_) {}
+
+    /// Evaluates the Hamilton product of two quaternions representing compound spatial rotation.
+    quat operator*(const quat& b) const {
+        return quat(
+            w * b.w - x * b.x - y * b.y - z * b.z,
+            w * b.x + x * b.w + y * b.z - z * b.y,
+            w * b.y - x * b.z + y * b.w + z * b.x,
+            w * b.z + x * b.y - y * b.x + z * b.w
+        );
+    }
+
+    /// Evaluates the quaternion conjugate representing the inverse spatial rotation.
+    quat conjugate() const { return quat(w, -x, -y, -z); }
+
+    /// Evaluates the Euclidean norm of the four-dimensional quaternion.
+    float length() const { return std::sqrt(w * w + x * x + y * y + z * z); }
+
+    /// Applies the 3D spatial rotation represented by the unit quaternion to a Cartesian vector.
+    vec3 rotate(const vec3& v) const {
+        vec3 qv(x, y, z), t = 2.0f * cross(qv, v);
+
+        return v + w * t + cross(qv, t);
+    }
+
+    /// Constructs a unit quaternion representing spatial rotation around an arbitrary 3D Cartesian axis.
+    static quat fromAxisAngle(const vec3& axis, float angle_rad) {
+        vec3 a = normalize(axis);
+
+        float half = angle_rad * 0.5f;
+
+        float s = std::sin(half);
+
+        return quat(std::cos(half), a.x * s, a.y * s, a.z * s);
+    }
+};
+
+/// Normalizes a quaternion to unit length to preserve rigid-body rotational isometry.
+inline quat normalize(const quat& q) {
+    float len = q.length();
+
+    return len > 1e-8f ? quat(q.w / len, q.x / len, q.y / len, q.z / len) : quat(1.0f, 0.0f, 0.0f, 0.0f);
+}
+
 /// Semi-infinite 3D ray parameterized by origin and unit direction.
 struct Ray {
     vec3 origin, direction;

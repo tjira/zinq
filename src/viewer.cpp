@@ -146,6 +146,8 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
 
         if (button == GLFW_MOUSE_BUTTON_RIGHT) state->mouse.dragging_right = false;
 
+        if (button == GLFW_MOUSE_BUTTON_MIDDLE) state->mouse.dragging_middle = false;
+
         return;
     }
 
@@ -167,6 +169,10 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
     else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
         state->mouse.dragging_right = true;
     }
+
+    else if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+        state->mouse.dragging_middle = true;
+    }
 }
 
 /// Handles mouse motion events to orbit or pan the camera.
@@ -183,11 +189,19 @@ static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     state->mouse.last_x = fx;
     state->mouse.last_y = fy;
 
-    if (state->gui.isVisible(state) && state->gui.wantsCaptureMouse() && !state->mouse.dragging_left && !state->mouse.dragging_right) {
+    bool any_dragging = state->mouse.dragging_left || state->mouse.dragging_right || state->mouse.dragging_middle;
+
+    if (state->gui.isVisible(state) && state->gui.wantsCaptureMouse() && !any_dragging) {
         return;
     }
 
-    if (state->mouse.dragging_left) {
+    bool shift = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
+
+    if (state->mouse.dragging_middle || (state->mouse.dragging_left && shift)) {
+        state->camera.roll(dx);
+    }
+
+    else if (state->mouse.dragging_left) {
         state->camera.orbit(dx, dy);
     }
 
@@ -336,10 +350,9 @@ static void setUniforms(const Shader& shader, const ViewerState& state) {
     shader.set("u_proj",        state.getProjMatrix());
     shader.set("u_camera",      state.camera.getEye());
 
-    vec3 f = normalize(state.camera.target - state.camera.getEye());
-    vec3 r = normalize(cross(f, vec3(0.0f, 1.0f, 0.0f))           );
-
-    vec3 u = cross(r, f);
+    vec3 f = state.camera.getForward();
+    vec3 r =   state.camera.getRight();
+    vec3 u =      state.camera.getUp();
 
     vec3 light_dir = normalize(-f + state.light_offset.x * r + state.light_offset.y * u + state.light_offset.z * (-f));
 

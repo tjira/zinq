@@ -29,14 +29,14 @@ struct OrbitCamera {
     vec3 target = vec3(0.0f);
 
     float distance = 10.0f;
-    float yaw      =  0.0f;
-    float pitch    =  0.0f;
+
+    quat orientation = quat(1.0f, 0.0f, 0.0f, 0.0f);
 
     vec3 initial_target = vec3(0.0f);
 
     float initial_distance = 10.0f;
-    float initial_yaw      =  0.0f;
-    float initial_pitch    =  0.0f;
+
+    quat initial_orientation = quat(1.0f, 0.0f, 0.0f, 0.0f);
 
     ProjectionMode projection = ProjectionMode::Perspective;
 
@@ -57,12 +57,11 @@ struct OrbitCamera {
         return perspective(fov_deg * static_cast<float>(M_PI) / 180.0f, aspect, z_near, z_far);
     }
 
-    /// Restores the camera distance, target centroid, and spherical orbital angles to initial defaults.
+    /// Restores camera distance, target centroid, and spatial orientation to initial defaults.
     void reset() {
-        target   =   initial_target;
-        distance = initial_distance;
-        yaw      =      initial_yaw;
-        pitch    =    initial_pitch;
+        target      =      initial_target;
+        distance    =    initial_distance;
+        orientation = initial_orientation;
     }
 
     /// Toggles between perspective and orthographic camera projection modes.
@@ -70,40 +69,55 @@ struct OrbitCamera {
         projection = (projection == ProjectionMode::Perspective) ? ProjectionMode::Orthographic : ProjectionMode::Perspective;
     }
 
-    /// Evaluates the Cartesian 3D eye vector from spherical orbital angles and spatial target position.
+    /// Evaluates the normalized backward direction vector pointing from target to camera eye.
+    vec3 getBack() const {
+        return orientation.rotate(vec3(0.0f, 0.0f, 1.0f));
+    }
+
+    /// Evaluates the normalized forward line-of-sight vector pointing from camera eye to target.
+    vec3 getForward() const {
+        return -getBack();
+    }
+
+    /// Evaluates the screen-aligned vertical unit vector spanning the camera viewing plane.
+    vec3 getUp() const {
+        return orientation.rotate(vec3(0.0f, 1.0f, 0.0f));
+    }
+
+    /// Evaluates the screen-aligned horizontal unit vector spanning the camera viewing plane.
+    vec3 getRight() const {
+        return orientation.rotate(vec3(1.0f, 0.0f, 0.0f));
+    }
+
+    /// Evaluates the Cartesian 3D eye vector from camera target centroid, radial distance, and orientation.
     vec3 getEye() const {
-        float cp = std::cos(pitch);
-        float sp = std::sin(pitch);
-
-        float cy = std::cos(yaw);
-        float sy = std::sin(yaw);
-
-        return target + distance * vec3(cp * sy, sp, cp * cy);
+        return target + getBack() * distance;
     }
 
     /// Evaluates the rigid-body view transformation matrix gazing at the target center.
     mat4 getViewMatrix() const {
-        return lookAt(getEye(), target, vec3(0.0f, 1.0f, 0.0f));
+        return lookAt(getEye(), target, getUp());
     }
 
-    /// Increments spherical polar and azimuthal camera angles with clamped elevation boundaries.
+    /// Rotates the camera orientation around screen-aligned vertical and horizontal viewport axes.
     void orbit(float dx, float dy) {
-        yaw   -= dx * 0.008f;
-        pitch += dy * 0.008f;
+        quat rot_y = quat::fromAxisAngle(vec3(0.0f, 1.0f, 0.0f), -dx * 0.008f);
+        quat rot_x = quat::fromAxisAngle(vec3(1.0f, 0.0f, 0.0f), -dy * 0.008f);
 
-        const float max_pitch = 1.55f;
+        orientation = normalize(orientation * (rot_x * rot_y));
+    }
 
-        pitch = std::clamp(pitch, -max_pitch, max_pitch);
+    /// Rotates the camera orientation around the line-of-sight view axis.
+    void roll(float d) {
+        quat rot_z = quat::fromAxisAngle(vec3(0.0f, 0.0f, 1.0f), -d * 0.008f);
+
+        orientation = normalize(orientation * rot_z);
     }
 
     /// Displaces the focal target along screen-aligned camera plane basis vectors.
     void pan(float dx, float dy) {
-        vec3 eye = getEye();
-
-        vec3 f = normalize(target - eye                    );
-        vec3 r = normalize(cross(f, vec3(0.0f, 1.0f, 0.0f)));
-
-        vec3 u = cross(r, f);
+        vec3 r = getRight();
+        vec3 u =    getUp();
 
         float factor = distance * 0.0015f;
 
@@ -127,8 +141,9 @@ struct MouseState {
     float press_x = 0.0f;
     float press_y = 0.0f;
 
-    bool dragging_left  = false;
-    bool dragging_right = false;
+    bool dragging_left   = false;
+    bool dragging_right  = false;
+    bool dragging_middle = false;
 };
 
 /// Maintains dynamic state for camera projection, molecular trajectory playback, and GUI overlay.
