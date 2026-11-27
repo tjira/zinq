@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 
 struct ViewerState;
+class Geometry;
 
 /// Manages Dear ImGui context lifecycle, HUD overlay rendering, and user parameter bindings for molecular viewing.
 class ViewerGui {
@@ -70,4 +71,16 @@ public:
 private:
     bool initialized   = false;
     bool show_controls = false;
+
+    /// Constructs parameter tuning and camera optics control panels.
+    void renderControls(ViewerState& state);
+
+    /// Manages structure loading and screenshot export file browser modals.
+    void renderFileDialogs(ViewerState& state);
+
+    /// Constructs the geometric measurement and selected atom inspector overlay.
+    void renderMeasurements(ViewerState& state);
+
+    /// Renders in-viewport floating atom index and symbol identification badges.
+    void renderFloatingLabels(const ViewerState& state, const Geometry& geom);
 };

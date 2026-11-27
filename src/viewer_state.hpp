@@ -186,6 +186,18 @@ struct ViewerState {
         return camera.getProjMatrix(aspect);
     }
 
+    /// Evaluates the combined projection and view transformation matrix for the active viewport.
+    mat4 getViewProjMatrix() const {
+        return getProjMatrix() * camera.getViewMatrix();
+    }
+
+    /// Evaluates the effective atom rendering scale based on visual style and user scale factor.
+    float getEffectiveAtomScale() const {
+        float base = (style == ViewStyle::SpaceFilling) ? 2.4f : 1.0f;
+
+        return base * atom_scale;
+    }
+
     /// Loads a new molecular trajectory from disk, recenters the viewport, and recalculates orbital bounding radius.
     bool loadTrajectory(const std::string& new_path) {
         Trajectory new_traj = Trajectory::Load(new_path, binding_factor, bond_radius);
@@ -256,16 +268,13 @@ struct ViewerState {
 
     /// Projects a 3D Cartesian position to 2D screen viewport coordinates.
     bool projectToScreen(const vec3& pos, float& out_x, float& out_y) const {
-        float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
-
-        mat4 vp = camera.getProjMatrix(aspect) * camera.getViewMatrix();
-
-        vec4 clip = vp * vec4(pos, 1.0f);
+        vec4 clip = getViewProjMatrix() * vec4(pos, 1.0f);
 
         if (clip.w <= 0.001f) return false;
 
-        float ndc_x = clip.x / clip.w;
-        float ndc_y = clip.y / clip.w;
+        float inv_w = 1.0f / clip.w;
+        float ndc_x = clip.x * inv_w;
+        float ndc_y = clip.y * inv_w;
 
         if (ndc_x < -1.5f || ndc_x > 1.5f || ndc_y < -1.5f || ndc_y > 1.5f) return false;
 
@@ -278,11 +287,7 @@ struct ViewerState {
 
     /// Casts an unprojected ray from viewport cursor coordinates into the 3D scene.
     Ray castRay(float mouse_x, float mouse_y) const {
-        float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
-
-        mat4 view_proj = camera.getProjMatrix(aspect) * camera.getViewMatrix();
-
-        mat4 inv_vp = inverse(view_proj);
+        mat4 inv_vp = inverse(getViewProjMatrix());
 
         float ndc_x = (2.0f * mouse_x) / static_cast<float>(width) - 1.0f;
 
@@ -307,14 +312,14 @@ struct ViewerState {
 
         const auto& atoms = geom->getAtoms();
 
-        int best_idx = -1; float min_dist = 1e30f;
+        int best_idx = -1; float min_dist = 1e30f; float effective_scale = getEffectiveAtomScale();
 
         for (size_t i = 0; i < atoms.size(); ++i) {
             const auto& atom = atoms[i];
 
             if (atom.is_dummy) continue;
 
-            float t = 0.0f; float r = atom.radius * atom_scale;
+            float t = 0.0f; float r = atom.radius * effective_scale;
 
             if (ray.intersectSphere(atom.position, r, t) && t < min_dist) {
                 min_dist = t; best_idx = static_cast<int>(i);

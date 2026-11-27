@@ -357,6 +357,10 @@ static void renderSelectionOutlines(const Mesh& sphere_mesh, const Shader& outli
 
     std::vector<InstanceData> mask_instances, outline_instances;
 
+    mask_instances.reserve(state.selected_atoms.size());
+
+    outline_instances.reserve(state.selected_atoms.size());
+
     for (int idx : state.selected_atoms) {
         if (idx >= 0 && idx < static_cast<int>(atoms.size())) {
             const auto& a = atoms[idx];
@@ -552,9 +556,7 @@ extern "C" {
 
             setUniforms(shader, state);
 
-            float base_scale = (state.style == ViewStyle::SpaceFilling) ? 2.4f : 1.0f;
-
-            float atom_scale = base_scale * state.atom_scale;
+            float atom_scale = state.getEffectiveAtomScale();
 
             bool show_bonds = (state.style != ViewStyle::SpaceFilling);
 
