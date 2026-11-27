@@ -113,6 +113,11 @@ struct WindowContext {
     }
 };
 
+/// Stores camera-projected view depth and instance transform data for individual atom selection outlines.
+struct SelectedOutline {
+    float depth = 0.0f; InstanceData mask; InstanceData outline;
+};
+
 /// Handles mouse button press and release events for camera interaction and atom selection.
 static void mouseButtonCallback(GLFWwindow* window, int button, int action, int) {
     auto* state = static_cast<ViewerState*>(glfwGetWindowUserPointer(window));
@@ -345,7 +350,7 @@ static void setUniforms(const Shader& shader, const ViewerState& state) {
     shader.set("u_shininess",  state.shininess         );
 }
 
-/// Renders highlighted outline halos around selected atoms using OpenGL stencil testing.
+/// Renders highlighted outline halos around selected atoms using depth-tested and back-to-front ordered stencil passes.
 static void renderSelectionOutlines(const Mesh& sphere_mesh, const Shader& outline_shader, const ViewerState& state, float atom_scale) {
     if (state.selected_atoms.empty()) return;
 
@@ -355,11 +360,11 @@ static void renderSelectionOutlines(const Mesh& sphere_mesh, const Shader& outli
 
     const auto& atoms = geom->getAtoms();
 
-    std::vector<InstanceData> mask_instances, outline_instances;
+    vec3 eye = state.camera.getEye(), f = normalize(state.camera.target - eye);
 
-    mask_instances.reserve(state.selected_atoms.size());
+    std::vector<SelectedOutline> items;
 
-    outline_instances.reserve(state.selected_atoms.size());
+    items.reserve(state.selected_atoms.size());
 
     for (int idx : state.selected_atoms) {
         if (idx >= 0 && idx < static_cast<int>(atoms.size())) {
@@ -367,33 +372,23 @@ static void renderSelectionOutlines(const Mesh& sphere_mesh, const Shader& outli
 
             mat4 m = translate(mat4(1.0f), a.position);
 
-            float r = a.radius * atom_scale;
+            float r = a.radius * atom_scale, outline_r = r * 1.07f + 0.02f;
 
-            float outline_r = r * 1.07f + 0.02f;
+            float depth = dot(a.position - eye, f);
 
-            mask_instances.push_back({ scale(m, vec3(r)), vec3(1.0f) });
-
-            outline_instances.push_back({ scale(m, vec3(outline_r)), state.outline_color });
+            items.push_back({ depth, { scale(m, vec3(r)), vec3(1.0f) }, { scale(m, vec3(outline_r)), state.outline_color } });
         }
     }
 
-    if (mask_instances.empty()) return;
+    if (items.empty()) return;
+
+    std::sort(items.begin(), items.end(), [](const SelectedOutline& a, const SelectedOutline& b) {
+        return a.depth > b.depth;
+    });
 
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-    glEnable(GL_STENCIL_TEST); glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-
-    glStencilFunc(GL_ALWAYS, 1, 0xFF); glStencilMask(0xFF);
-
-    glDepthMask(GL_FALSE); glDepthFunc(GL_LEQUAL);
-
-    glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-
-    sphere_mesh.renderInstanced(mask_instances);
-
-    glStencilFunc(GL_NOTEQUAL, 1, 0xFF); glStencilMask(0x00);
-
-    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); glDisable(GL_DEPTH_TEST);
+    glEnable(GL_STENCIL_TEST);
 
     outline_shader.use();
 
@@ -401,7 +396,27 @@ static void renderSelectionOutlines(const Mesh& sphere_mesh, const Shader& outli
     outline_shader.set("u_proj",        state.getProjMatrix());
     outline_shader.set("u_outline_color", state.outline_color);
 
-    sphere_mesh.renderInstanced(outline_instances);
+    std::vector<InstanceData> single_mask(1), single_outline(1);
+
+    for (const auto& item : items) {
+        glStencilMask(0xFF);
+
+        glClear(GL_STENCIL_BUFFER_BIT);
+
+        glStencilFunc(GL_ALWAYS, 1, 0xFF); glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+        glDepthMask(GL_FALSE); glEnable(GL_DEPTH_TEST); glDepthFunc(GL_LEQUAL);
+
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
+
+        single_mask[0] = item.mask; sphere_mesh.renderInstanced(single_mask);
+
+        glStencilMask(0x00); glStencilFunc(GL_NOTEQUAL, 1, 0xFF); glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+
+        single_outline[0] = item.outline; sphere_mesh.renderInstanced(single_outline);
+    }
 
     glEnable(GL_DEPTH_TEST);
 
