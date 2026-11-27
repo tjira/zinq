@@ -70,6 +70,18 @@ pub fn dot(comptime T: type, x: Vector(T), y: Vector(T)) T {
     return dotSlice(T, x.data, y.data);
 }
 
+/// Computes the real Schur factorization of a square matrix A = Z * T * Z^T using LAPACKE dgees.
+pub fn gees(comptime T: type, T_mat: *Matrix(T), Z_mat: *Matrix(T), wr: *Vector(T), wi: *Vector(T), A: Matrix(T)) !void {
+    std.debug.assert(A.nrow() == A.ncol());
+
+    std.debug.assert(T_mat.nrow() == A.nrow() and T_mat.ncol() == A.ncol());
+    std.debug.assert(Z_mat.nrow() == A.nrow() and Z_mat.ncol() == A.ncol());
+
+    std.debug.assert(wr.length() == A.nrow() and wi.length() == A.nrow());
+
+    return geesSlice(T, T_mat.data, Z_mat.data, wr.data, wi.data, A.data);
+}
+
 /// Performs general matrix-matrix multiplication: C = alpha * op(A) * op(B) + beta * C (GEMM).
 pub fn gemm(comptime T: type, C: anytype, A: anytype, B: anytype, alpha: T, beta: T, ta: bool, tb: bool) void {
     const MatA = if (@typeInfo(@TypeOf(A)) == .pointer) @typeInfo(@TypeOf(A)).pointer.child else @TypeOf(A);
@@ -233,6 +245,25 @@ fn ensureF64OrComplex(comptime T: type, comptime op: []const u8) void {
     if (comptime isComplex(T) and primType(T) != f64) {
         @compileError("OPERATION '" ++ op ++ "' COMPLEX OPERATIONS REQUIRE F64, FOUND TYPE '" ++ @typeName(T) ++ "' INSTEAD");
     }
+}
+
+/// Computes the real Schur decomposition on contiguous slices using LAPACKE dgees.
+fn geesSlice(comptime T: type, T_out: []T, Z_out: []T, wr: []T, wi: []T, A_in: []const T) !void {
+    std.debug.assert(A_in.len == T_out.len and A_in.len == Z_out.len);
+
+    std.debug.assert(wr.len == wi.len and wr.len * wr.len == A_in.len);
+
+    ensureF64(T, "gees");
+
+    const n: i32 = @intCast(wr.len);
+
+    @memcpy(T_out, A_in);
+
+    var sdim: i32 = 0;
+
+    const info = lapacke.LAPACKE_dgees(ROW_MAJOR, 'V', 'N', null, n, T_out.ptr, n, &sdim, wr.ptr, wi.ptr, Z_out.ptr, n);
+
+    if (info != 0) return error.LapackError;
 }
 
 /// Performs general matrix-matrix multiplication on raw contiguous slices using CBLAS dgemm.

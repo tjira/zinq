@@ -76,3 +76,4 @@
 - [x] Optimize in-core two-electron Fock contraction by exploiting 8-fold permutational symmetry and contiguous memory traversal.
 - [ ] Implement Cauchy–Schwarz integral screening and incremental Fock builds ($\Delta\mathbf{P}$) in direct SCF.
 - [x] Implement Superposition of Atomic Densities (SAD) initial guess to accelerate SCF convergence.
+- [ ] Implement NPI for TDC calculation using the logarithm of the overlap matrix.
