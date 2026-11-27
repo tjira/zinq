@@ -38,8 +38,16 @@ const FewestSwitchesOptions = struct {
     seed: u32 = 1,
 };
 
+/// Multi-state crossing resolution policies for Landau-Zener surface hopping.
+pub const MultiState = enum {
+    normal,
+    nearest,
+    maxdiff,
+};
+
 /// Options configuration for Landau-Zener surface hopping.
 const LandauZenerOptions = struct {
+    multi_state: MultiState = .normal,
     seed: u32 = 1,
 };
 
@@ -450,8 +458,10 @@ fn LandauZener(comptime T: type) type {
     return struct {
         history: [3]Matrix(T),
 
+        multi_state: MultiState,
+
         /// Allocates history matrices for tracking energy levels.
-        pub fn init(_: anytype, nstate: usize, ntraj: usize, _: usize, adia: bool, gpa: Allocator) !@This() {
+        pub fn init(options: LandauZenerOptions, nstate: usize, ntraj: usize, _: usize, adia: bool, gpa: Allocator) !@This() {
             var history: [3]Matrix(T) = undefined;
 
             const cols = if (adia) nstate else nstate * nstate;
@@ -469,7 +479,7 @@ fn LandauZener(comptime T: type) type {
             history[1].fill(std.math.nan(T));
             history[2].fill(std.math.nan(T));
 
-            return .{ .history = history };
+            return .{ .history = history, .multi_state = options.multi_state };
         }
 
         /// Deallocates history matrices used in Landau-Zener calculations.
@@ -485,6 +495,12 @@ fn LandauZener(comptime T: type) type {
 
             for (0..self.history[0].nrow()) |i| {
                 const c = ensemble.s.at(i);
+
+                var best_j: ?usize = null;
+
+                var best_metric: T, var best_prob: T = .{ if (self.multi_state == .nearest) std.math.inf(T) else -std.math.inf(T), 0 };
+
+                var crossing_count: usize = 0;
 
                 for (0..self.history[0].ncol()) |j| {
                     if (c == j) continue;
@@ -508,9 +524,34 @@ fn LandauZener(comptime T: type) type {
 
                             const p = std.math.exp(-(std.math.pi / 2.0) * std.math.sqrt((z_min * z_min * z_min) / d2z));
 
-                            probs.ptr(i, j).* = p;
+                            crossing_count += 1;
+
+                            switch (self.multi_state) {
+                                .normal => probs.ptr(i, j).* = p,
+                                .nearest => if (z_min < best_metric) {
+                                    best_metric, best_j, best_prob = .{ z_min, j, p };
+                                },
+                                .maxdiff => if (d2z > best_metric) {
+                                    best_metric, best_j, best_prob = .{ d2z, j, p };
+                                },
+                            }
                         }
                     }
+                }
+
+                switch (self.multi_state) {
+                    .normal => if (crossing_count > 1) {
+                        var sum: T = 0;
+
+                        for (0..self.history[0].ncol()) |j| sum += probs.at(i, j);
+
+                        if (sum > 1.0) {
+                            for (0..self.history[0].ncol()) |j| probs.ptr(i, j).* /= sum;
+                        }
+                    },
+                    .nearest, .maxdiff => if (best_j) |j| {
+                        probs.ptr(i, j).* = best_prob;
+                    },
                 }
             }
         }

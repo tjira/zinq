@@ -66,7 +66,11 @@ $$
 
 where the coefficients are $a = (Z_2 - 2Z_1 + Z_0) / (2dt^2)$ and $b = (Z_2 - Z_0) / (2dt)$, representing the curvature and slope. The minimum gap and curvature are then plugged into the exponential Landau–Zener formula to compute the hopping probability.
 
-### 4. Diabatic Transition Probability
+### 4. Multi-State Avoided Crossings
+
+When the trajectory encounters avoided crossings between the active state $c$ and multiple target states in the adiabatic representation, multi-state crossing selection options govern how candidate transition channels are resolved. Under the `normal` strategy, transition probabilities to all crossing states are computed independently and normalized if their cumulative sum exceeds unity, preserving transition possibilities to all crossing states. Under the `nearest` strategy, only the target state yielding the minimum avoided crossing gap $Z_{\text{min}}$ is retained while setting all other transition probabilities to zero. Under the `maxdiff` strategy, only the target state exhibiting the maximum energy gap curvature $\ddot{Z}$ is retained while setting all other transition probabilities to zero.
+
+### 5. Diabatic Transition Probability
 
 In the diabatic representation, the program monitors the energy difference $G(t) = H_{cc}(t) - H_{jj}(t)$ between the active state $c$ and target state $j$. A crossing is detected when the sign of $G(t)$ changes between consecutive steps, meaning $G_1 \cdot G_2 \le 0$. The rate of change of the gap is calculated as $d_G = |G_2 - G_1| / dt$, and the transition probability is calculated using the diabatic coupling $V_{cj} = |H_{cj}|$ at the crossing point as
 
@@ -76,7 +80,7 @@ $$
 
 which governs the probability of transitioning to the other diabatic state.
 
-### 5. Momentum Rescaling and Energy Conservation
+### 6. Momentum Rescaling and Energy Conservation
 
 Just as in other surface hopping methods, when a trajectory hops from state $c$ to state $j$, the nuclear momentum vector $\mathbf{p}$ must be scaled to conserve energy. The scaling factor is calculated as
 

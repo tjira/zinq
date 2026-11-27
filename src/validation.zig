@@ -556,7 +556,13 @@ fn checkClassicalDynamics(opt: classical_dynamics.Options) !void {
                 };
             },
 
-            inline else => {},
+            .landau_zener => |lz| {
+                if (!opt.adiabatic and lz.multi_state != .normal) {
+                    std.log.err("MULTI-STATE LANDAU-ZENER SELECTION 'NEAREST' AND 'MAXDIFF' ONLY SUPPORT ADIABATIC BASIS", .{});
+
+                    return error.InvalidInput;
+                }
+            },
         },
 
         .ehrenfest => |eh| {
