@@ -177,9 +177,7 @@ void ViewerGui::render(ViewerState& state) {
                     state.style = static_cast<ViewStyle>(style_idx);
                 }
 
-                if (ImGui::ColorEdit3("Background Color", &state.bg_color.x)) {
-                    state.dark_mode = (state.bg_color.x + state.bg_color.y + state.bg_color.z) < 1.5f;
-                }
+                ImGui::ColorEdit3("Background Color", &state.bg_color.x);
 
                 ImGui::Checkbox("Transparent Background", &state.transparent_bg);
 

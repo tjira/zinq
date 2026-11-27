@@ -16,10 +16,13 @@ Buffer::Buffer(const std::vector<Vertex>& data) {
 }
 
 /// Move constructor transferring GPU vertex array and buffer ownership.
-Buffer::Buffer(Buffer&& other) noexcept : vao(other.vao), vbo(other.vbo), instance_vbo(other.instance_vbo), count(other.count) {
+Buffer::Buffer(Buffer&& other) noexcept : vao(other.vao), vbo(other.vbo), instance_vbo(other.instance_vbo), count(other.count), last_instances(other.last_instances), last_instance_count(other.last_instance_count) {
     other.vao          = 0;
     other.vbo          = 0;
     other.instance_vbo = 0;
+
+    other.last_instances      = nullptr;
+    other.last_instance_count =       0;
 
     other.count = 0;
 }
@@ -41,9 +44,15 @@ Buffer& Buffer::operator=(Buffer&& other) noexcept {
 
         count = other.count;
 
+        last_instances      =      other.last_instances;
+        last_instance_count = other.last_instance_count;
+
         other.vao          = 0;
         other.vbo          = 0;
         other.instance_vbo = 0;
+
+        other.last_instances      = nullptr;
+        other.last_instance_count =       0;
 
         other.count = 0;
     }
@@ -54,6 +63,9 @@ Buffer& Buffer::operator=(Buffer&& other) noexcept {
 /// Generates GPU vertex attributes and uploads triangle vertex records.
 void Buffer::generate(const std::vector<Vertex>& data) {
     count = data.size();
+
+    last_instances      = nullptr;
+    last_instance_count =       0;
 
     glGenVertexArrays(1, &vao         );
     glGenBuffers     (1, &vbo         );
@@ -113,15 +125,23 @@ void Buffer::destroy() {
     }
 
     count = 0;
+
+    last_instances      = nullptr;
+    last_instance_count =       0;
 }
 
 /// Dispatches instanced triangle draw calls using the uploaded instance buffer.
-void Buffer::renderInstanced(const InstanceData* instances, size_t instance_count) const {
+void Buffer::renderInstanced(const InstanceData* instances, size_t instance_count, bool dirty) const {
     if (count == 0 || instance_count == 0) return;
 
-    glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
+    if (dirty || last_instances != instances || last_instance_count != instance_count) {
+        glBindBuffer(GL_ARRAY_BUFFER, instance_vbo);
 
-    glBufferData(GL_ARRAY_BUFFER, instance_count * sizeof(InstanceData), instances, GL_STREAM_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, instance_count * sizeof(InstanceData), instances, GL_STREAM_DRAW);
+
+        last_instances      =      instances;
+        last_instance_count = instance_count;
+    }
 
     glBindVertexArray(vao);
 
@@ -248,6 +268,6 @@ Mesh Mesh::Icosphere(int subdivisions, bool smooth) {
 }
 
 /// Dispatches instanced drawing commands for the mesh geometry.
-void Mesh::renderInstanced(const std::vector<InstanceData>& instances) const {
-    buffer.renderInstanced(instances.data(), instances.size());
+void Mesh::renderInstanced(const std::vector<InstanceData>& instances, bool dirty) const {
+    buffer.renderInstanced(instances.data(), instances.size(), dirty);
 }

@@ -9,6 +9,9 @@ struct vec3 {
     /// Constructs a 3D Cartesian vector initialized to zero, uniform scalar, or specified spatial components.
     vec3() = default; vec3(float v) : x(v), y(v), z(v) {} vec3(float x_, float y_, float z_) : x(x_), y(y_), z(z_) {}
 
+    /// Compares two 3D vectors for equality of all spatial components.
+    bool operator!=(const vec3& b) const { return x != b.x || y != b.y || z != b.z; }
+
     /// Computes the negation of the 3D Cartesian vector.
     vec3 operator-() const { return vec3(-x, -y, -z); }
 

@@ -31,8 +31,6 @@ Geometry Geometry::Load(std::istream& is, int natoms) {
         geom.atoms.push_back({ vec3(x, y, z), info.color, kAtomSizeFactor * info.radius, info.covalent, dummy });
     }
 
-    geom.rebind(kBindingFactor);
-
     return geom;
 }
 
@@ -62,11 +60,15 @@ void Geometry::moveBy(const vec3& offset) {
         bond.model.at(1, 3) += offset.y;
         bond.model.at(2, 3) += offset.z;
     }
+
+    instances_dirty = true;
 }
 
 /// Computes covalent bond connectivity models based on pairwise covalent radii.
 void Geometry::rebind(float factor, float bond_size) {
     bonds.clear();
+
+    instances_dirty = true;
 
     size_t n = atoms.size();
 
@@ -122,36 +124,50 @@ void Geometry::rebind(float factor, float bond_size) {
 /// Renders atoms as spheres and covalent bonds as cylinders using instanced draw calls.
 void Geometry::render(const Mesh& sphere, const Mesh& cylinder, float atom_scale, bool show_bonds, const vec3& bond_color) const {
     if (!atoms.empty()) {
-        std::vector<InstanceData> atom_instances;
+        bool atom_dirty = instances_dirty || (cached_atom_scale != atom_scale) || (cached_atom_instances.size() != atoms.size());
 
-        atom_instances.reserve(atoms.size());
+        if (atom_dirty) {
+            cached_atom_instances.clear();
 
-        for (const auto& atom : atoms) {
-            mat4 model = translate(mat4(1.0f), atom.position);
+            cached_atom_instances.reserve(atoms.size());
 
-            model = scale(model, vec3(atom.radius * atom_scale));
+            for (const auto& atom : atoms) {
+                mat4 model = translate(mat4(1.0f), atom.position);
 
-            atom_instances.push_back({ model, atom.color });
+                model = scale(model, vec3(atom.radius * atom_scale));
+
+                cached_atom_instances.push_back({ model, atom.color });
+            }
+
+            cached_atom_scale = atom_scale;
         }
 
-        sphere.renderInstanced(atom_instances);
+        sphere.renderInstanced(cached_atom_instances, atom_dirty);
     }
 
     if (show_bonds && !bonds.empty()) {
-        std::vector<InstanceData> bond_instances;
+        bool bond_dirty = instances_dirty || (cached_bond_color != bond_color) || (cached_bond_instances.size() != bonds.size());
 
-        bond_instances.reserve(bonds.size());
+        if (bond_dirty) {
+            cached_bond_instances.clear();
 
-        for (const auto& bond : bonds) {
-            bond_instances.push_back({ bond.model, bond_color });
+            cached_bond_instances.reserve(bonds.size());
+
+            for (const auto& bond : bonds) {
+                cached_bond_instances.push_back({ bond.model, bond_color });
+            }
+
+            cached_bond_color = bond_color;
         }
 
-        cylinder.renderInstanced(bond_instances);
+        cylinder.renderInstanced(cached_bond_instances, bond_dirty);
     }
+
+    instances_dirty = false;
 }
 
-/// Reads a multi-frame molecular trajectory file from disk.
-Trajectory Trajectory::Load(const std::string& filename) {
+/// Reads a multi-frame molecular trajectory file from disk and calculates covalent connectivity.
+Trajectory Trajectory::Load(const std::string& filename, float factor, float bond_size) {
     Trajectory traj;
 
     std::ifstream file(filename);
@@ -175,6 +191,8 @@ Trajectory Trajectory::Load(const std::string& filename) {
     if (!traj.geoms.empty()) {
         traj.moveBy(-traj.geoms[0].getCenter());
 
+        traj.rebind(factor, bond_size);
+
         traj.timestamp = std::chrono::high_resolution_clock::now();
     }
 
@@ -192,6 +210,8 @@ void Trajectory::stepFrame(int delta) {
     if (frame < 0) frame += n;
 
     timestamp = std::chrono::high_resolution_clock::now();
+
+    time_accumulator_ms = 0.0;
 }
 
 /// Clamps and sets the active trajectory frame index.
@@ -203,6 +223,8 @@ void Trajectory::setFrame(int f) {
     frame = std::clamp(f, 0, n - 1);
 
     timestamp = std::chrono::high_resolution_clock::now();
+
+    time_accumulator_ms = 0.0;
 }
 
 /// Multiplies playback frame delay by a scaling factor.
@@ -248,10 +270,15 @@ void Trajectory::render(const Mesh& sphere, const Mesh& cylinder, float atom_sca
     if (!paused && geoms.size() > 1) {
         auto now = std::chrono::high_resolution_clock::now();
 
-        float elapsed = std::chrono::duration<float, std::milli>(now - timestamp).count();
+        double elapsed = std::chrono::duration<double, std::milli>(now - timestamp).count();
 
-        if (elapsed >= wait_ms) {
-            int advance = static_cast<int>(elapsed / wait_ms);
+        timestamp = now;
+
+        time_accumulator_ms += elapsed;
+
+        if (time_accumulator_ms >= wait_ms) {
+            int advance = static_cast<int>(time_accumulator_ms / wait_ms);
+            time_accumulator_ms -= static_cast<double>(advance) * wait_ms;
 
             int n = static_cast<int>(geoms.size());
 
@@ -277,20 +304,20 @@ void Trajectory::render(const Mesh& sphere, const Mesh& cylinder, float atom_sca
 
             else if (loop_mode == LoopMode::Once) {
                 if (frame + advance >= n - 1) {
-                    frame = n - 1; paused = true;
+                    frame = n - 1; paused = true; time_accumulator_ms = 0.0;
                 }
 
                 else {
                     frame += advance;
                 }
             }
-
-            timestamp += std::chrono::milliseconds(static_cast<long long>(advance * wait_ms));
         }
     }
 
     else {
         timestamp = std::chrono::high_resolution_clock::now();
+
+        time_accumulator_ms = 0.0;
     }
 
     geoms.at(frame).render(sphere, cylinder, atom_scale, show_bonds, bond_color);

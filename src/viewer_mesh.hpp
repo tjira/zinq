@@ -43,7 +43,7 @@ public:
     size_t getSize() const { return count; }
 
     /// Dispatches instanced triangle draw calls using the uploaded instance buffer.
-    void renderInstanced(const InstanceData* instances, size_t instance_count) const;
+    void renderInstanced(const InstanceData* instances, size_t instance_count, bool dirty = true) const;
 
 private:
     unsigned int vao          = 0;
@@ -51,6 +51,9 @@ private:
     unsigned int instance_vbo = 0;
 
     size_t count = 0;
+
+    mutable const void* last_instances = nullptr;
+    mutable size_t last_instance_count =       0;
 
     /// Generates GPU vertex attributes and uploads triangle vertex records.
     void generate(const std::vector<Vertex>& data);
@@ -87,7 +90,7 @@ public:
     static Mesh Icosphere(int subdivisions, bool smooth);
 
     /// Dispatches instanced drawing commands for the mesh geometry.
-    void renderInstanced(const std::vector<InstanceData>& instances) const;
+    void renderInstanced(const std::vector<InstanceData>& instances, bool dirty = true) const;
 
 private:
     Buffer buffer;

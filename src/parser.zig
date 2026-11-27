@@ -238,7 +238,7 @@ pub const Parser = struct {
         \\  -h, --help            PRINT THIS HELP MESSAGE AND EXIT
         \\
         \\ARGUMENTS:
-        \\  file                  INPUT MOLECULE OR TRAJECTORY IN XYZ FORMAT (.xyz)
+        \\  file                  OPTIONAL INPUT MOLECULE OR TRAJECTORY IN XYZ FORMAT (.xyz)
         \\
         \\CONTROLS:
         \\  Left Drag             ORBIT ROTATION
@@ -1313,25 +1313,27 @@ pub const Parser = struct {
             return;
         }
 
-        if (parsed.positional.len != 1) {
-            try printf(io, "\nERROR: EXPECTED EXACTLY ONE POSITIONAL ARGUMENT (.xyz FILE)\n", .{});
+        if (parsed.positional.len > 1) {
+            try printf(io, "\nERROR: EXPECTED AT MOST ONE POSITIONAL ARGUMENT (.xyz FILE)\n", .{});
 
             try runHelp(io, help_view);
 
             return;
         }
 
-        const path = parsed.positional[0];
+        const path: ?[]const u8 = if (parsed.positional.len == 1) parsed.positional[0] else null;
 
-        std.Io.Dir.cwd().access(io, path, .{}) catch |err| {
-            if (err == error.FileNotFound) {
-                try printf(io, "\nINPUT FILE '{s}' NOT FOUND\n", .{path});
+        if (path) |p| {
+            std.Io.Dir.cwd().access(io, p, .{}) catch |err| {
+                if (err == error.FileNotFound) {
+                    try printf(io, "\nINPUT FILE '{s}' NOT FOUND\n", .{p});
 
-                return;
-            }
+                    return;
+                }
 
-            return err;
-        };
+                return err;
+            };
+        }
 
         if (!try viewer.openWindow(path, gpa)) {
             try printf(io, "\nVIEWER IS NOT AVAILABLE OR FAILED TO OPEN\n", .{});

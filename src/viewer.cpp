@@ -248,7 +248,7 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         case GLFW_KEY_P:
             state->camera.projection = (state->camera.projection == ProjectionMode::Perspective) ? ProjectionMode::Orthographic : ProjectionMode::Perspective; break;
         case GLFW_KEY_B:
-            state->dark_mode = !state->dark_mode; state->bg_color = state->dark_mode ? vec3(0.0f) : vec3(1.0f); break;
+            state->bg_color = ((state->bg_color.x + state->bg_color.y + state->bg_color.z) < 1.5f) ? vec3(1.0f) : vec3(0.0f); break;
         case GLFW_KEY_TAB:
             state->style = static_cast<ViewStyle>((static_cast<int>(state->style) + 1) % 3); break;
         default:
@@ -314,14 +314,18 @@ static void setUniforms(const Shader& shader, const ViewerState& state) {
 extern "C" {
     /// Opens an interactive OpenGL viewport rendering the molecular system or trajectory at the given file path.
     bool viewer_open_window(const char *filename) {
-        if (!filename) return false;
+        Trajectory traj; std::string initial_path;
 
-        Trajectory traj = Trajectory::Load(filename);
+        if (filename && filename[0] != '\0') {
+            traj = Trajectory::Load(filename);
 
-        if (traj.empty()) {
-            std::cerr << "NO MOLECULAR COORDINATES FOUND IN '" << filename << "' STRUCTURE FILE" << std::endl;
+            if (traj.empty()) {
+                std::cerr << "NO MOLECULAR COORDINATES FOUND IN '" << filename << "' STRUCTURE FILE" << std::endl;
 
-            return false;
+                return false;
+            }
+
+            initial_path = filename;
         }
 
         if (!glfwInit()) return false;
@@ -370,14 +374,22 @@ extern "C" {
                   << "  Esc                   QUIT VIEWER"
         << std::endl;
 
-        ViewerState state; state.filename = filename;
+        ViewerState state; state.filename = initial_path;
+
+        glfwGetFramebufferSize(ctx.window, &state.width, &state.height);
+
+        glViewport(0, 0, state.width, state.height);
 
         state.trajectory = std::move(traj);
 
-        float camera_dist = std::max(6.0f, state.trajectory.getMaxRadius() * 2.5f);
+        if (!state.trajectory.empty()) {
+            float camera_dist = std::max(6.0f, state.trajectory.getMaxRadius() * 2.5f);
 
-        state.camera.distance         = camera_dist;
-        state.camera.initial_distance = camera_dist;
+            state.camera.distance         = camera_dist;
+            state.camera.initial_distance = camera_dist;
+
+            state.camera.reset();
+        }
 
         glfwSetWindowUserPointer(ctx.window, &state);
 
@@ -387,11 +399,15 @@ extern "C" {
 
         glfwSetScrollCallback(ctx.window, scrollCallback);
 
-        glfwSetWindowSizeCallback(ctx.window, resizeCallback);
+        glfwSetFramebufferSizeCallback(ctx.window, resizeCallback);
 
         glfwSetKeyCallback(ctx.window, keyCallback);
 
         if (!state.gui.init(ctx.window)) return false;
+
+        if (state.trajectory.empty()) {
+            state.gui.openFileDialog();
+        }
 
         Shader shader(vertex_shader_src, fragment_shader_src);
 

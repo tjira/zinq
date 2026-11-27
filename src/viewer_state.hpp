@@ -135,8 +135,6 @@ struct ViewerState {
 
     ViewStyle style = ViewStyle::BallAndStick;
 
-    bool dark_mode = true;
-
     vec3 bg_color = vec3(0.0f);
 
     bool transparent_bg = true;
@@ -178,7 +176,7 @@ struct ViewerState {
 
     /// Loads a new molecular trajectory from disk, recenters the viewport, and recalculates orbital bounding radius.
     bool loadTrajectory(const std::string& new_path) {
-        Trajectory new_traj = Trajectory::Load(new_path);
+        Trajectory new_traj = Trajectory::Load(new_path, binding_factor, bond_radius);
 
         if (new_traj.empty()) {
             std::cerr << "NO MOLECULAR COORDINATES FOUND IN '" << new_path << "' STRUCTURE FILE" << std::endl;
@@ -187,8 +185,6 @@ struct ViewerState {
         }
 
         trajectory = std::move(new_traj);
-
-        trajectory.rebind(binding_factor, bond_radius);
 
         filename = new_path;
 
@@ -220,7 +216,7 @@ struct ViewerState {
         last_reported_pause =    paused;
         last_reported_wait  =      wait;
 
-        std::string title = "Zinq Viewer - " + filename;
+        std::string title = filename.empty() ? "Zinq Viewer" : ("Zinq Viewer - " + filename);
 
         if (total > 1) {
             int fps = static_cast<int>(std::round(1000.0f / wait));

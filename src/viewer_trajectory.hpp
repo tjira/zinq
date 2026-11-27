@@ -51,6 +51,15 @@ public:
 private:
     std::vector<Atom> atoms;
     std::vector<Bond> bonds;
+
+    mutable std::vector<InstanceData> cached_atom_instances;
+    mutable std::vector<InstanceData> cached_bond_instances;
+
+    mutable float cached_atom_scale = -1.0f;
+
+    mutable vec3 cached_bond_color = vec3(-1.0f);
+
+    mutable bool instances_dirty = true;
 };
 
 /// Defines playback loop wrapping behavior for multi-frame molecular trajectory visualization.
@@ -66,8 +75,8 @@ public:
     /// Constructs a default empty molecular trajectory instance.
     Trajectory() = default;
 
-    /// Reads a multi-frame molecular trajectory file from disk.
-    static Trajectory Load(const std::string& filename);
+    /// Reads a multi-frame molecular trajectory file from disk and calculates covalent connectivity.
+    static Trajectory Load(const std::string& filename, float factor = 0.013f, float bond_size = 0.090f);
 
     /// Checks whether the trajectory contains any geometry frames.
     bool empty() const { return geoms.empty(); }
@@ -123,6 +132,8 @@ private:
     std::vector<Geometry> geoms;
 
     bool paused = false; float wait_ms = 16.0f; int frame = 0;
+
+    double time_accumulator_ms = 0.0;
 
     LoopMode loop_mode = LoopMode::Loop;
 
