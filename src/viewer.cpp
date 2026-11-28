@@ -17,11 +17,9 @@
 #include <stb_image_write.h>
 
 #include <algorithm>
-#include <cmath>
 #include <ctime>
 #include <iostream>
 #include <string>
-#include <vector>
 
 static const std::string vertex_shader_src = R"(
 #version 330 core
@@ -126,7 +124,11 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
 
     if (action == GLFW_RELEASE) {
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
-            state->mouse.dragging_left = false;
+            bool did_move_atoms = state->mouse.drag_moved;
+
+            state->mouse.dragging_left  = false;
+            state->mouse.dragging_atoms = false;
+            state->mouse.drag_moved     = false;
 
             double rx = 0, ry = 0;
 
@@ -135,7 +137,7 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
             float dx = static_cast<float>(rx) - state->mouse.press_x;
             float dy = static_cast<float>(ry) - state->mouse.press_y;
 
-            if (dx * dx + dy * dy < 25.0f && (!state->gui.isVisible(state) || !state->gui.wantsCaptureMouse())) {
+            if (!did_move_atoms && dx * dx + dy * dy < 25.0f && (!state->gui.isVisible(state) || !state->gui.wantsCaptureMouse())) {
                 int picked = state->pickAtom(static_cast<float>(rx), static_cast<float>(ry));
 
                 if (picked >= 0) {
@@ -163,6 +165,24 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
     state->mouse.press_y = static_cast<float>(y);
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        int picked = state->pickAtom(static_cast<float>(x), static_cast<float>(y));
+
+        const Geometry* geom = state->trajectory.currentGeometry();
+
+        if (geom && state->isAtomSelected(picked) && picked < static_cast<int>(geom->getAtoms().size())) {
+            vec3 plane_point  = geom->getAtoms()[picked].position, plane_normal = state->camera.getForward(), hit;
+
+            if (state->castRay(static_cast<float>(x), static_cast<float>(y)).intersectPlane(plane_point, plane_normal, hit)) {
+                state->mouse.dragging_atoms    =         true;
+                state->mouse.drag_moved        =        false;
+                state->mouse.drag_plane_point  =  plane_point;
+                state->mouse.drag_plane_normal = plane_normal;
+                state->mouse.drag_last_hit     =          hit;
+
+                return;
+            }
+        }
+
         state->mouse.dragging_left = true;
     }
 
@@ -189,9 +209,30 @@ static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
     state->mouse.last_x = fx;
     state->mouse.last_y = fy;
 
-    bool any_dragging = state->mouse.dragging_left || state->mouse.dragging_right || state->mouse.dragging_middle;
+    bool any_dragging = state->mouse.dragging_left || state->mouse.dragging_right || state->mouse.dragging_middle || state->mouse.dragging_atoms;
 
     if (state->gui.isVisible(state) && state->gui.wantsCaptureMouse() && !any_dragging) {
+        return;
+    }
+
+    if (state->mouse.dragging_atoms) {
+        if (!state->mouse.drag_moved) {
+            float pdx = fx - state->mouse.press_x;
+            float pdy = fy - state->mouse.press_y;
+
+            if (pdx * pdx + pdy * pdy < 25.0f) return;
+
+            state->mouse.drag_moved = true;
+        }
+
+        vec3 hit_cur;
+
+        if (state->castRay(fx, fy).intersectPlane(state->mouse.drag_plane_point, state->mouse.drag_plane_normal, hit_cur)) {
+            state->moveSelectedAtoms(hit_cur - state->mouse.drag_last_hit);
+
+            state->mouse.drag_last_hit = hit_cur;
+        }
+
         return;
     }
 
@@ -487,6 +528,7 @@ extern "C" {
 
         std::cout << "\nCONTROLS:\n"
                   << "  Left Drag             ORBIT ROTATION\n"
+                  << "  Left Drag (Selected)  MOVE SELECTED ATOMS\n"
                   << "  Right Drag            PAN TRANSLATION\n"
                   << "  Left Click            PICK ATOM / TOGGLE SELECTION\n"
                   << "  Scroll Wheel          SMOOTH ZOOM\n"

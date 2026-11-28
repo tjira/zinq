@@ -346,6 +346,21 @@ struct Ray {
 
         return true;
     }
+
+    /// Tests ray intersection with a plane and outputs the 3D intersection point.
+    bool intersectPlane(const vec3& plane_point, const vec3& plane_normal, vec3& hit_out) const {
+        float denom = dot(direction, plane_normal);
+
+        if (std::abs(denom) < 1e-6f) return false;
+
+        float t = dot(plane_point - origin, plane_normal) / denom;
+
+        if (t < 0.0f) return false;
+
+        hit_out = origin + direction * t;
+
+        return true;
+    }
 };
 
 /// Computes the bond angle in radians formed by three spatial atom positions.

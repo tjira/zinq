@@ -44,6 +44,15 @@ public:
     /// Translates all atom positions and bond models by a spatial offset vector.
     void moveBy(const vec3& offset);
 
+    /// Translates the atoms at the specified indices by a spatial offset vector.
+    void moveAtoms(const std::vector<int>& indices, const vec3& offset);
+
+    /// Records the current atom positions as the baseline geometry for resetting.
+    void saveInitialPositions();
+
+    /// Restores atom positions to their recorded baseline coordinates.
+    void resetPositions();
+
     /// Computes covalent bond connectivity models based on pairwise covalent radii.
     void rebind(float factor, float bond_size = 0.090f);
 
@@ -64,6 +73,8 @@ private:
 
     std::vector<Atom> atoms;
     std::vector<Bond> bonds;
+
+    std::vector<vec3> initial_positions;
 
     mutable std::vector<InstanceData> cached_atom_instances;
     mutable std::vector<InstanceData> cached_bond_instances;
@@ -135,6 +146,9 @@ public:
 
     /// Recomputes covalent bond connectivity models across all trajectory frames using given bonding parameters.
     void rebind(float factor, float bond_size = 0.090f);
+
+    /// Returns a mutable pointer to the active geometry frame or nullptr if empty.
+    Geometry* currentGeometry() { return geoms.empty() ? nullptr : &geoms.at(frame); }
 
     /// Returns a pointer to the active geometry frame or nullptr if empty.
     const Geometry* currentGeometry() const { return geoms.empty() ? nullptr : &geoms.at(frame); }

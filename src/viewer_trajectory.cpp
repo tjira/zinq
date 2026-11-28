@@ -66,6 +66,39 @@ void Geometry::moveBy(const vec3& offset) {
     instances_dirty = true;
 }
 
+/// Translates the atoms at the specified indices by a spatial offset vector.
+void Geometry::moveAtoms(const std::vector<int>& indices, const vec3& offset) {
+    bool moved = false;
+
+    for (int idx : indices) {
+        if (idx >= 0 && idx < static_cast<int>(atoms.size())) {
+            atoms[idx].position += offset; moved = true;
+        }
+    }
+
+    if (moved) instances_dirty = true;
+}
+
+/// Records the current atom positions as the baseline geometry for resetting.
+void Geometry::saveInitialPositions() {
+    initial_positions.resize(atoms.size());
+
+    for (size_t i = 0; i < atoms.size(); ++i) {
+        initial_positions[i] = atoms[i].position;
+    }
+}
+
+/// Restores atom positions to their recorded baseline coordinates.
+void Geometry::resetPositions() {
+    if (initial_positions.size() != atoms.size()) return;
+
+    for (size_t i = 0; i < atoms.size(); ++i) {
+        atoms[i].position = initial_positions[i];
+    }
+
+    instances_dirty = true;
+}
+
 /// Computes covalent bond connectivity models based on pairwise covalent radii.
 void Geometry::rebind(float factor, float bond_size) {
     bonds.clear();
@@ -230,6 +263,10 @@ Trajectory Trajectory::Load(const std::string& filename, float factor, float bon
 
     if (!traj.geoms.empty()) {
         traj.moveBy(-traj.geoms[0].getCenter());
+
+        for (auto& g : traj.geoms) {
+            g.saveInitialPositions();
+        }
 
         traj.rebind(factor, bond_size);
 

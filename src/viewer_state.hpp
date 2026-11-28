@@ -144,6 +144,13 @@ struct MouseState {
     bool dragging_left   = false;
     bool dragging_right  = false;
     bool dragging_middle = false;
+    bool dragging_atoms  = false;
+    bool drag_moved      = false;
+
+    vec3 drag_plane_point  = vec3(0.0f);
+    vec3 drag_last_hit     = vec3(0.0f);
+
+    vec3 drag_plane_normal = vec3(0.0f, 0.0f, -1.0f);
 };
 
 /// Maintains dynamic state for camera projection, molecular trajectory playback, and GUI overlay.
@@ -344,7 +351,12 @@ struct ViewerState {
         return best_idx;
     }
 
-    /// Toggles the selection status of the atom at the specified index, retaining up to 4 atoms.
+    /// Checks whether the atom at the specified index is currently selected.
+    bool isAtomSelected(int idx) const {
+        return idx >= 0 && std::find(selected_atoms.begin(), selected_atoms.end(), idx) != selected_atoms.end();
+    }
+
+    /// Toggles the selection status of the atom at the specified index.
     void toggleAtomSelection(int idx) {
         if (idx < 0) return;
 
@@ -355,17 +367,43 @@ struct ViewerState {
         }
 
         else {
-            if (selected_atoms.size() >= 4) {
-                selected_atoms.erase(selected_atoms.begin());
-            }
-
             selected_atoms.push_back(idx);
         }
+    }
+
+    /// Translates all selected atoms in the active frame and updates covalent bonds.
+    void moveSelectedAtoms(const vec3& offset) {
+        if (selected_atoms.empty()) return;
+
+        Geometry* geom = trajectory.currentGeometry();
+
+        if (!geom) return;
+
+        geom->moveAtoms(selected_atoms, offset);
+
+        geom->rebind(binding_factor, bond_radius);
+    }
+
+    /// Restores the active geometry frame to its loaded atom positions and updates covalent bonds.
+    void resetGeometry() {
+        Geometry* geom = trajectory.currentGeometry();
+
+        if (!geom) return;
+
+        geom->resetPositions();
+
+        geom->rebind(binding_factor, bond_radius);
+
+        mouse.dragging_atoms = false;
+        mouse.drag_moved     = false;
     }
 
     /// Clears the collection of currently selected atom indices.
     void clearSelection() {
         selected_atoms.clear();
+
+        mouse.dragging_atoms = false;
+        mouse.drag_moved     = false;
     }
 
     /// Exports the current active molecular geometry frame to an XYZ file on disk.

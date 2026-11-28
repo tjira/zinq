@@ -6,6 +6,8 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include <algorithm>
+#include <cfloat>
 #include <cmath>
 #include <string>
 
@@ -210,6 +212,10 @@ void ViewerGui::renderControls(ViewerState& state) {
 
         if (ImGui::Button("Save Trajectory", ImVec2(btn_w, 0.0f))) {
             openSaveTrajectoryDialog();
+        }
+
+        if (ImGui::Button("Reset Geometry", ImVec2(-1.0f, 0.0f))) {
+            state.resetGeometry();
         }
 
         if (!has_geom) ImGui::EndDisabled();
@@ -426,6 +432,10 @@ void ViewerGui::renderMeasurements(ViewerState& state) {
 
     ImGui::SetNextWindowPos(ImVec2(16.0f, 16.0f), ImGuiCond_FirstUseEver);
 
+    float max_h = std::max(160.0f, ImGui::GetIO().DisplaySize.y - 32.0f);
+
+    ImGui::SetNextWindowSizeConstraints(ImVec2(0.0f, 0.0f), ImVec2(FLT_MAX, max_h));
+
     ImGui::SetNextWindowBgAlpha(0.85f);
 
     if (ImGui::Begin("Geometric Measurements & Inspector", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -490,6 +500,12 @@ void ViewerGui::renderMeasurements(ViewerState& state) {
 
         if (ImGui::Button("Clear Selection (C)")) {
             state.clearSelection();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Reset Geometry")) {
+            state.resetGeometry();
         }
     }
 

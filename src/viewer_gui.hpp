@@ -2,8 +2,7 @@
 
 #include <GLFW/glfw3.h>
 
-struct ViewerState;
-class Geometry;
+struct ViewerState; class Geometry;
 
 /// Manages Dear ImGui context lifecycle, HUD overlay rendering, and user parameter bindings for molecular viewing.
 class ViewerGui {
