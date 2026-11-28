@@ -1,7 +1,6 @@
 #include "viewer.h"
 #include "viewer_math.hpp"
 #include "viewer_mesh.hpp"
-#include "viewer_ptable.hpp"
 #include "viewer_shader.hpp"
 #include "viewer_state.hpp"
 #include "viewer_trajectory.hpp"
@@ -138,10 +137,16 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
             float dy = static_cast<float>(ry) - state->mouse.press_y;
 
             if (!did_move_atoms && dx * dx + dy * dy < 25.0f && (!state->gui.isVisible(state) || !state->gui.wantsCaptureMouse())) {
-                int picked = state->pickAtom(static_cast<float>(rx), static_cast<float>(ry));
+                if (state->add_mode) {
+                    state->addAtomAtCursor(static_cast<float>(rx), static_cast<float>(ry));
+                }
 
-                if (picked >= 0) {
-                    state->toggleAtomSelection(picked);
+                else {
+                    int picked = state->pickAtom(static_cast<float>(rx), static_cast<float>(ry));
+
+                    if (picked >= 0) {
+                        state->toggleAtomSelection(picked);
+                    }
                 }
             }
         }
@@ -165,21 +170,23 @@ static void mouseButtonCallback(GLFWwindow* window, int button, int action, int)
     state->mouse.press_y = static_cast<float>(y);
 
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        int picked = state->pickAtom(static_cast<float>(x), static_cast<float>(y));
+        if (!state->add_mode) {
+            int picked = state->pickAtom(static_cast<float>(x), static_cast<float>(y));
 
-        const Geometry* geom = state->trajectory.currentGeometry();
+            const Geometry* geom = state->trajectory.currentGeometry();
 
-        if (geom && state->isAtomSelected(picked) && picked < static_cast<int>(geom->getAtoms().size())) {
-            vec3 plane_point  = geom->getAtoms()[picked].position, plane_normal = state->camera.getForward(), hit;
+            if (geom && state->isAtomSelected(picked) && picked < static_cast<int>(geom->getAtoms().size())) {
+                vec3 plane_point  = geom->getAtoms()[picked].position, plane_normal = state->camera.getForward(), hit;
 
-            if (state->castRay(static_cast<float>(x), static_cast<float>(y)).intersectPlane(plane_point, plane_normal, hit)) {
-                state->mouse.dragging_atoms    =         true;
-                state->mouse.drag_moved        =        false;
-                state->mouse.drag_plane_point  =  plane_point;
-                state->mouse.drag_plane_normal = plane_normal;
-                state->mouse.drag_last_hit     =          hit;
+                if (state->castRay(static_cast<float>(x), static_cast<float>(y)).intersectPlane(plane_point, plane_normal, hit)) {
+                    state->mouse.dragging_atoms    =         true;
+                    state->mouse.drag_moved        =        false;
+                    state->mouse.drag_plane_point  =  plane_point;
+                    state->mouse.drag_plane_normal = plane_normal;
+                    state->mouse.drag_last_hit     =          hit;
 
-                return;
+                    return;
+                }
             }
         }
 
@@ -284,6 +291,10 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
         state->gui.toggleVisible(); return;
     }
 
+    if (key == GLFW_KEY_F2) {
+        state->gui.togglePeriodicTable(); return;
+    }
+
     if (key == GLFW_KEY_ESCAPE) {
         if (state->gui.isFileDialogOpen()) {
             state->gui.closeFileDialog(); return;
@@ -291,6 +302,22 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
 
         if (state->gui.isScreenshotDialogOpen()) {
             state->gui.closeScreenshotDialog(); return;
+        }
+
+        if (state->gui.isSaveGeometryDialogOpen()) {
+            state->gui.closeSaveGeometryDialog(); return;
+        }
+
+        if (state->gui.isSaveTrajectoryDialogOpen()) {
+            state->gui.closeSaveTrajectoryDialog(); return;
+        }
+
+        if (state->gui.isPeriodicTableOpen()) {
+            state->gui.closePeriodicTable(); return;
+        }
+
+        if (state->add_mode) {
+            state->add_mode = false; return;
         }
 
         glfwSetWindowShouldClose(window, GLFW_TRUE); return;
@@ -345,6 +372,8 @@ static void keyCallback(GLFWwindow* window, int key, int, int action, int) {
             state->style = static_cast<ViewStyle>((static_cast<int>(state->style) + 1) % 3); break;
         case GLFW_KEY_C:
             state->clearSelection(); break;
+        case GLFW_KEY_DELETE:
+            state->deleteSelectedAtoms(); break;
         default:
             break;
     }
@@ -542,7 +571,9 @@ extern "C" {
                   << "  P                     TOGGLE PROJECTION\n"
                   << "  B                     TOGGLE BACKGROUND\n"
                   << "  C                     CLEAR ATOM SELECTION\n"
+                  << "  Delete                DELETE SELECTED ATOMS\n"
                   << "  F1                    TOGGLE GUI OVERLAY\n"
+                  << "  F2                    PERIODIC TABLE / ADD ATOM\n"
                   << "  F12                   QUICK SCREENSHOT\n"
                   << "  O                     OPEN FILE DIALOG\n"
                   << "  S                     SAVE SCREENSHOT DIALOG\n"
@@ -580,10 +611,6 @@ extern "C" {
         glfwSetKeyCallback(ctx.window, keyCallback);
 
         if (!state.gui.init(ctx.window)) return false;
-
-        if (state.trajectory.empty()) {
-            state.gui.openFileDialog();
-        }
 
         Shader shader(vertex_shader_src, fragment_shader_src);
 

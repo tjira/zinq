@@ -47,6 +47,12 @@ public:
     /// Translates the atoms at the specified indices by a spatial offset vector.
     void moveAtoms(const std::vector<int>& indices, const vec3& offset);
 
+    /// Appends a new atom with the given chemical symbol and Cartesian position, returning its index.
+    int addAtom(const std::string& symbol, const vec3& position);
+
+    /// Removes the atoms at the specified indices from the geometry.
+    void removeAtoms(const std::vector<int>& indices);
+
     /// Records the current atom positions as the baseline geometry for resetting.
     void saveInitialPositions();
 
@@ -74,7 +80,7 @@ private:
     std::vector<Atom> atoms;
     std::vector<Bond> bonds;
 
-    std::vector<vec3> initial_positions;
+    std::vector<Atom> initial_atoms;
 
     mutable std::vector<InstanceData> cached_atom_instances;
     mutable std::vector<InstanceData> cached_bond_instances;
@@ -149,6 +155,9 @@ public:
 
     /// Returns a mutable pointer to the active geometry frame or nullptr if empty.
     Geometry* currentGeometry() { return geoms.empty() ? nullptr : &geoms.at(frame); }
+
+    /// Returns a mutable pointer to the active geometry frame, creating an empty frame if needed.
+    Geometry* ensureCurrentGeometry();
 
     /// Returns a pointer to the active geometry frame or nullptr if empty.
     const Geometry* currentGeometry() const { return geoms.empty() ? nullptr : &geoms.at(frame); }

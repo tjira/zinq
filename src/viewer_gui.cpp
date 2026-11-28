@@ -1,4 +1,5 @@
 #include "viewer_gui.hpp"
+#include "viewer_ptable.hpp"
 #include "viewer_state.hpp"
 
 #include <ImGuiFileDialog.h>
@@ -155,15 +156,17 @@ bool ViewerGui::isSaveTrajectoryDialogOpen() const {
 bool ViewerGui::isVisible(const ViewerState* state) const {
     bool has_sel = state && !state->selected_atoms.empty();
 
+    bool add_active = state && state->add_mode;
+
     bool dialog_open = isFileDialogOpen() || isScreenshotDialogOpen() || isSaveGeometryDialogOpen() || isSaveTrajectoryDialogOpen();
 
-    return show_controls || has_sel || dialog_open;
+    return show_controls || show_ptable || has_sel || add_active || dialog_open;
 }
 
 void ViewerGui::render(ViewerState& state) {
     if (!isVisible(&state)) return;
 
-    renderControls(state); renderFileDialogs(state); renderMeasurements(state);
+    renderControls(state); renderFileDialogs(state); renderPeriodicTable(state); renderAddModeBanner(state); renderMeasurements(state);
 }
 
 void ViewerGui::draw() {
@@ -198,9 +201,11 @@ void ViewerGui::renderControls(ViewerState& state) {
             openFileDialog();
         }
 
-        bool has_geom = !state.trajectory.empty();
+        const Geometry* cur_geom = state.trajectory.currentGeometry();
 
-        if (!has_geom) ImGui::BeginDisabled();
+        bool has_traj  = !state.trajectory.empty(), has_atoms = cur_geom && !cur_geom->getAtoms().empty();
+
+        if (!has_atoms) ImGui::BeginDisabled();
 
         float btn_w = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
 
@@ -214,11 +219,27 @@ void ViewerGui::renderControls(ViewerState& state) {
             openSaveTrajectoryDialog();
         }
 
+        if (!has_atoms) ImGui::EndDisabled();
+
+        if (!has_traj) ImGui::BeginDisabled();
+
         if (ImGui::Button("Reset Geometry", ImVec2(-1.0f, 0.0f))) {
             state.resetGeometry();
         }
 
-        if (!has_geom) ImGui::EndDisabled();
+        if (!has_traj) ImGui::EndDisabled();
+
+        std::string add_label = state.add_mode ? ("Mode: Add " + state.active_element + " (Esc)") : "Mode: Select / Move";
+
+        if (ImGui::Button(add_label.c_str(), ImVec2(btn_w, 0.0f))) {
+            state.add_mode = !state.add_mode;
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Periodic Table (F2)", ImVec2(btn_w, 0.0f))) {
+            togglePeriodicTable();
+        }
 
         int total = state.trajectory.frameCount();
         int cur = state.trajectory.currentFrame();
@@ -504,8 +525,183 @@ void ViewerGui::renderMeasurements(ViewerState& state) {
 
         ImGui::SameLine();
 
+        if (ImGui::Button("Delete (Del)")) {
+            state.deleteSelectedAtoms();
+        }
+
+        ImGui::SameLine();
+
         if (ImGui::Button("Reset Geometry")) {
             state.resetGeometry();
+        }
+    }
+
+    ImGui::End();
+}
+
+void ViewerGui::renderPeriodicTable(ViewerState& state) {
+    if (!show_ptable) return;
+
+    struct ElementCell {
+        const char* symbol; int z; int row; int col;
+    };
+
+    static constexpr ElementCell kElements[] = {
+        { "H",    1, 0,  0 }, { "He",   2, 0, 17 },
+        { "Li",   3, 1,  0 }, { "Be",   4, 1,  1 }, { "B",    5, 1, 12 }, { "C",    6, 1, 13 },
+        { "N",    7, 1, 14 }, { "O",    8, 1, 15 }, { "F",    9, 1, 16 }, { "Ne",  10, 1, 17 },
+        { "Na",  11, 2,  0 }, { "Mg",  12, 2,  1 }, { "Al",  13, 2, 12 }, { "Si",  14, 2, 13 },
+        { "P",   15, 2, 14 }, { "S",   16, 2, 15 }, { "Cl",  17, 2, 16 }, { "Ar",  18, 2, 17 },
+        { "K",   19, 3,  0 }, { "Ca",  20, 3,  1 }, { "Sc",  21, 3,  2 }, { "Ti",  22, 3,  3 },
+        { "V",   23, 3,  4 }, { "Cr",  24, 3,  5 }, { "Mn",  25, 3,  6 }, { "Fe",  26, 3,  7 },
+        { "Co",  27, 3,  8 }, { "Ni",  28, 3,  9 }, { "Cu",  29, 3, 10 }, { "Zn",  30, 3, 11 },
+        { "Ga",  31, 3, 12 }, { "Ge",  32, 3, 13 }, { "As",  33, 3, 14 }, { "Se",  34, 3, 15 },
+        { "Br",  35, 3, 16 }, { "Kr",  36, 3, 17 },
+        { "Rb",  37, 4,  0 }, { "Sr",  38, 4,  1 }, { "Y",   39, 4,  2 }, { "Zr",  40, 4,  3 },
+        { "Nb",  41, 4,  4 }, { "Mo",  42, 4,  5 }, { "Tc",  43, 4,  6 }, { "Ru",  44, 4,  7 },
+        { "Rh",  45, 4,  8 }, { "Pd",  46, 4,  9 }, { "Ag",  47, 4, 10 }, { "Cd",  48, 4, 11 },
+        { "In",  49, 4, 12 }, { "Sn",  50, 4, 13 }, { "Sb",  51, 4, 14 }, { "Te",  52, 4, 15 },
+        { "I",   53, 4, 16 }, { "Xe",  54, 4, 17 },
+        { "Cs",  55, 5,  0 }, { "Ba",  56, 5,  1 }, { "Hf",  72, 5,  3 }, { "Ta",  73, 5,  4 },
+        { "W",   74, 5,  5 }, { "Re",  75, 5,  6 }, { "Os",  76, 5,  7 }, { "Ir",  77, 5,  8 },
+        { "Pt",  78, 5,  9 }, { "Au",  79, 5, 10 }, { "Hg",  80, 5, 11 }, { "Tl",  81, 5, 12 },
+        { "Pb",  82, 5, 13 }, { "Bi",  83, 5, 14 }, { "Po",  84, 5, 15 }, { "At",  85, 5, 16 },
+        { "Rn",  86, 5, 17 },
+        { "Fr",  87, 6,  0 }, { "Ra",  88, 6,  1 }, { "Rf", 104, 6,  3 }, { "Db", 105, 6,  4 },
+        { "Sg", 106, 6,  5 }, { "Bh", 107, 6,  6 }, { "Hs", 108, 6,  7 }, { "Mt", 109, 6,  8 },
+        { "Ds", 110, 6,  9 }, { "Rg", 111, 6, 10 }, { "Cn", 112, 6, 11 }, { "Nh", 113, 6, 12 },
+        { "Fl", 114, 6, 13 }, { "Mc", 115, 6, 14 }, { "Lv", 116, 6, 15 }, { "Ts", 117, 6, 16 },
+        { "Og", 118, 6, 17 },
+        { "La",  57, 7,  3 }, { "Ce",  58, 7,  4 }, { "Pr",  59, 7,  5 }, { "Nd",  60, 7,  6 },
+        { "Pm",  61, 7,  7 }, { "Sm",  62, 7,  8 }, { "Eu",  63, 7,  9 }, { "Gd",  64, 7, 10 },
+        { "Tb",  65, 7, 11 }, { "Dy",  66, 7, 12 }, { "Ho",  67, 7, 13 }, { "Er",  68, 7, 14 },
+        { "Tm",  69, 7, 15 }, { "Yb",  70, 7, 16 }, { "Lu",  71, 7, 17 },
+        { "Ac",  89, 8,  3 }, { "Th",  90, 8,  4 }, { "Pa",  91, 8,  5 }, { "U",   92, 8,  6 },
+        { "Np",  93, 8,  7 }, { "Pu",  94, 8,  8 }, { "Am",  95, 8,  9 }, { "Cm",  96, 8, 10 },
+        { "Bk",  97, 8, 11 }, { "Cf",  98, 8, 12 }, { "Es",  99, 8, 13 }, { "Fm", 100, 8, 14 },
+        { "Md", 101, 8, 15 }, { "No", 102, 8, 16 }, { "Lr", 103, 8, 17 }
+    };
+
+    const ElementCell* grid[9][18] = {};
+
+    for (const auto& cell : kElements) {
+        grid[cell.row][cell.col] = &cell;
+    }
+
+    ImVec2 center(ImGui::GetIO().DisplaySize.x * 0.5f, ImGui::GetIO().DisplaySize.y * 0.5f);
+
+    ImGui::SetNextWindowPos(center, ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+
+    ImGuiWindowFlags flags = ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse;
+
+    if (ImGui::Begin("Select Element to Add (F2)", &show_ptable, flags)) {
+        const float cell_sz = 34.0f; const float spacing = 4.0f;
+
+        ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(spacing, spacing));
+
+        for (int r = 0; r < 9; ++r) {
+            if (r == 7) ImGui::Spacing();
+
+            for (int c = 0; c < 18; ++c) {
+                if (c > 0) ImGui::SameLine();
+
+                const ElementCell* elem = grid[r][c];
+
+                if (!elem) {
+                    if ((r == 5 || r == 6) && c == 2) {
+                        ImGui::BeginDisabled();
+                        ImGui::Button(r == 5 ? "Ln" : "An", ImVec2(cell_sz, cell_sz));
+                        ImGui::EndDisabled();
+                    }
+
+                    else {
+                        ImGui::Dummy(ImVec2(cell_sz, cell_sz));
+                    }
+
+                    continue;
+                }
+
+                const AtomInfo& info = get_atom_info(elem->symbol);
+
+                ImVec4 bg(info.color.x * 0.85f, info.color.y * 0.85f, info.color.z * 0.85f, 1.0f);
+                ImVec4 bg_hov(std::min(1.0f, info.color.x + 0.12f), std::min(1.0f, info.color.y + 0.12f),
+                              std::min(1.0f, info.color.z + 0.12f), 1.0f);
+                ImVec4 bg_act(info.color.x * 0.70f, info.color.y * 0.70f, info.color.z * 0.70f, 1.0f);
+
+                float lum = 0.299f * info.color.x + 0.587f * info.color.y + 0.114f * info.color.z;
+
+                ImVec4 txt = lum > 0.55f ? ImVec4(0.08f, 0.08f, 0.08f, 1.0f) : ImVec4(0.96f, 0.96f, 0.96f, 1.0f);
+
+                bool is_active = (state.active_element == elem->symbol);
+
+                ImGui::PushStyleColor(ImGuiCol_Button, bg);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, bg_hov);
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, bg_act);
+                ImGui::PushStyleColor(ImGuiCol_Text, txt);
+
+                ImGui::PushStyleVar(ImGuiStyleVar_FrameBorderSize, is_active ? 2.5f : 1.0f);
+
+                if (ImGui::Button(elem->symbol, ImVec2(cell_sz, cell_sz))) {
+                    state.active_element = elem->symbol; state.add_mode = true; show_ptable = false;
+                }
+
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor(4);
+
+                if (ImGui::IsItemHovered()) {
+                    ImGui::SetTooltip("%s (Z=%d) | r_cov: %.0f pm | m: %.3f u", elem->symbol, elem->z, info.covalent, info.mass);
+                }
+            }
+        }
+
+        ImGui::PopStyleVar();
+
+        ImGui::Spacing();
+
+        if (ImGui::Button("Dummy Atom (El)")) {
+            state.active_element = "El"; state.add_mode = true; show_ptable = false;
+        }
+
+        ImGui::SameLine();
+
+        if (state.add_mode) {
+            if (ImGui::Button("Exit Add Mode (Esc)")) {
+                state.add_mode = false; show_ptable = false;
+            }
+        }
+    }
+
+    ImGui::End();
+}
+
+void ViewerGui::renderAddModeBanner(ViewerState& state) {
+    if (!state.add_mode) return;
+
+    ImVec2 disp = ImGui::GetIO().DisplaySize;
+
+    ImGui::SetNextWindowPos(ImVec2(disp.x - 16.0f, 16.0f), ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+
+    ImGui::SetNextWindowBgAlpha(0.85f);
+
+    ImGuiWindowFlags flags1 =                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize;
+    ImGuiWindowFlags flags2 = ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
+
+    ImGuiWindowFlags flags = flags1 | flags2;
+                             
+
+    if (ImGui::Begin("##AddAtomBanner", nullptr, flags)) {
+        ImGui::Text("Add Atom: %s (Left Click to place)", state.active_element.c_str());
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("Element (F2)")) {
+            openPeriodicTable();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::SmallButton("Done (Esc)")) {
+            state.add_mode = false;
         }
     }
 

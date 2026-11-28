@@ -1,0 +1,10 @@
+CompileFlags:
+  Add:
+    - -I.
+    - -I../external-x86_64-linux/include
+    - -I../external-x86_64-linux/include/eigen3
+    - -I../external-x86_64-linux/include/imgui
+    - -Dexprtk_disable_string_capabilities
+    - -DLIBINT2_DOES_NOT_INLINE_ENGINE
+    - -DNDEBUG
+    - -fopenmp

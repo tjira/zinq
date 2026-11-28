@@ -31,6 +31,18 @@ public:
     /// Inverts the graphical user interface visibility flag.
     void toggleVisible() { show_controls = !show_controls; }
 
+    /// Toggles the periodic table element selector overlay.
+    void togglePeriodicTable() { show_ptable = !show_ptable; }
+
+    /// Opens the periodic table element selector overlay.
+    void openPeriodicTable() { show_ptable = true; }
+
+    /// Closes the periodic table element selector overlay.
+    void closePeriodicTable() { show_ptable = false; }
+
+    /// Checks whether the periodic table element selector overlay is currently visible.
+    bool isPeriodicTableOpen() const { return show_ptable; }
+
     /// Toggles the modal file selection dialog for opening a molecular structure or trajectory file.
     void toggleFileDialog();
 
@@ -88,12 +100,19 @@ public:
 private:
     bool initialized   = false;
     bool show_controls = false;
+    bool show_ptable   = false;
 
     /// Constructs parameter tuning and camera optics control panels.
     void renderControls(ViewerState& state);
 
     /// Manages structure loading and screenshot export file browser modals.
     void renderFileDialogs(ViewerState& state);
+
+    /// Renders the periodic table element picker window for choosing atoms to add.
+    void renderPeriodicTable(ViewerState& state);
+
+    /// Renders the compact top-right status indicator when add-atom placement mode is active.
+    void renderAddModeBanner(ViewerState& state);
 
     /// Constructs the geometric measurement and selected atom inspector overlay.
     void renderMeasurements(ViewerState& state);

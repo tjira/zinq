@@ -2,6 +2,7 @@
 
 #include "viewer_gui.hpp"
 #include "viewer_math.hpp"
+#include "viewer_ptable.hpp"
 #include "viewer_trajectory.hpp"
 
 #include <GLFW/glfw3.h>
@@ -201,6 +202,10 @@ struct ViewerState {
 
     std::vector<int> selected_atoms;
 
+    bool add_mode = false;
+
+    std::string active_element = "C";
+
     /// Evaluates the perspective projection matrix using camera settings and current viewport dimensions.
     mat4 getProjMatrix() const {
         float aspect = height > 0 ? static_cast<float>(width) / static_cast<float>(height) : 1.0f;
@@ -242,6 +247,8 @@ struct ViewerState {
         camera.reset();
 
         last_reported_frame = -1;
+
+        add_mode = false;
 
         clearSelection();
 
@@ -325,7 +332,7 @@ struct ViewerState {
     }
 
     /// Finds the nearest atom intersecting an unprojected screen ray, or -1 if none intersect.
-    int pickAtom(float mouse_x, float mouse_y) const {
+    int pickAtom(float mouse_x, float mouse_y, float* out_t = nullptr) const {
         const Geometry* geom = trajectory.currentGeometry();
 
         if (!geom) return -1;
@@ -347,6 +354,8 @@ struct ViewerState {
                 min_dist = t; best_idx = static_cast<int>(i);
             }
         }
+
+        if (out_t && best_idx >= 0) *out_t = min_dist;
 
         return best_idx;
     }
@@ -384,6 +393,73 @@ struct ViewerState {
         geom->rebind(binding_factor, bond_radius);
     }
 
+    /// Adds an atom of active_element at the cursor, bonding to clicked atoms or placing on the depth plane.
+    void addAtomAtCursor(float mouse_x, float mouse_y) {
+        Ray ray = castRay(mouse_x, mouse_y);
+
+        float hit_t = 0.0f;
+
+        int base_idx = pickAtom(mouse_x, mouse_y, &hit_t);
+
+        Geometry* geom = trajectory.ensureCurrentGeometry();
+
+        const auto& atoms = geom->getAtoms();
+
+        vec3 new_pos;
+
+        if (base_idx >= 0 && base_idx < static_cast<int>(atoms.size())) {
+            const auto& base = atoms[base_idx];
+
+            const AtomInfo& new_info = get_atom_info(active_element);
+
+            float bond_len = 0.01f * (base.covalent + new_info.covalent);
+
+            vec3 dir = normalize((ray.origin + ray.direction * hit_t) - base.position);
+
+            if (length(dir) < 1e-4f) dir = -camera.getForward();
+
+            new_pos = base.position + dir * bond_len;
+        }
+
+        else {
+            vec3 plane_point = camera.target;
+
+            if (!selected_atoms.empty()) {
+                int last_idx = selected_atoms.back();
+
+                if (last_idx >= 0 && last_idx < static_cast<int>(atoms.size())) {
+                    plane_point = atoms[last_idx].position;
+                }
+            }
+
+            if (!ray.intersectPlane(plane_point, camera.getForward(), new_pos)) return;
+        }
+
+        int new_idx = geom->addAtom(active_element, new_pos);
+
+        geom->rebind(binding_factor, bond_radius);
+
+        selected_atoms = { new_idx };
+
+        mouse.dragging_atoms = false;
+        mouse.drag_moved     = false;
+    }
+
+    /// Removes all currently selected atoms from the active geometry frame and updates covalent bonds.
+    void deleteSelectedAtoms() {
+        if (selected_atoms.empty()) return;
+
+        Geometry* geom = trajectory.currentGeometry();
+
+        if (!geom) return;
+
+        geom->removeAtoms(selected_atoms);
+
+        geom->rebind(binding_factor, bond_radius);
+
+        clearSelection();
+    }
+
     /// Restores the active geometry frame to its loaded atom positions and updates covalent bonds.
     void resetGeometry() {
         Geometry* geom = trajectory.currentGeometry();
@@ -394,8 +470,7 @@ struct ViewerState {
 
         geom->rebind(binding_factor, bond_radius);
 
-        mouse.dragging_atoms = false;
-        mouse.drag_moved     = false;
+        clearSelection();
     }
 
     /// Clears the collection of currently selected atom indices.

@@ -79,22 +79,56 @@ void Geometry::moveAtoms(const std::vector<int>& indices, const vec3& offset) {
     if (moved) instances_dirty = true;
 }
 
-/// Records the current atom positions as the baseline geometry for resetting.
-void Geometry::saveInitialPositions() {
-    initial_positions.resize(atoms.size());
+/// Appends a new atom with the given chemical symbol and Cartesian position, returning its index.
+int Geometry::addAtom(const std::string& symbol, const vec3& position) {
+    const AtomInfo& info = get_atom_info(symbol);
+
+    bool dummy = (symbol == "El" || symbol == "el");
+
+    atoms.push_back({ position, info.color, kAtomSizeFactor * info.radius, info.covalent, symbol, dummy });
+
+    instances_dirty = true;
+
+    return static_cast<int>(atoms.size()) - 1;
+}
+
+/// Removes the atoms at the specified indices from the geometry.
+void Geometry::removeAtoms(const std::vector<int>& indices) {
+    if (indices.empty() || atoms.empty()) return;
+
+    std::vector<bool> remove_mask(atoms.size(), false);
+
+    bool any_removed = false;
+
+    for (int idx : indices) {
+        if (idx >= 0 && idx < static_cast<int>(atoms.size())) {
+            remove_mask[idx] = true; any_removed = true;
+        }
+    }
+
+    if (!any_removed) return;
+
+    std::vector<Atom> kept;
+
+    kept.reserve(atoms.size());
 
     for (size_t i = 0; i < atoms.size(); ++i) {
-        initial_positions[i] = atoms[i].position;
+        if (!remove_mask[i]) kept.push_back(std::move(atoms[i]));
     }
+
+    atoms = std::move(kept);
+
+    instances_dirty = true;
+}
+
+/// Records the current atom positions as the baseline geometry for resetting.
+void Geometry::saveInitialPositions() {
+    initial_atoms = atoms;
 }
 
 /// Restores atom positions to their recorded baseline coordinates.
 void Geometry::resetPositions() {
-    if (initial_positions.size() != atoms.size()) return;
-
-    for (size_t i = 0; i < atoms.size(); ++i) {
-        atoms[i].position = initial_positions[i];
-    }
+    atoms = initial_atoms;
 
     instances_dirty = true;
 }
@@ -338,6 +372,19 @@ void Trajectory::rebind(float factor, float bond_size) {
     for (auto& g : geoms) {
         g.rebind(factor, bond_size);
     }
+}
+
+/// Returns a mutable pointer to the active geometry frame, creating an empty frame if needed.
+Geometry* Trajectory::ensureCurrentGeometry() {
+    if (geoms.empty()) {
+        geoms.emplace_back();
+
+        frame = 0;
+
+        timestamp = std::chrono::high_resolution_clock::now();
+    }
+
+    return &geoms.at(frame);
 }
 
 /// Advances frame timing and dispatches geometry render calls for the current frame.
